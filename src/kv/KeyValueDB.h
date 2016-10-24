@@ -20,6 +20,8 @@ using std::string;
  */
 class KeyValueDB {
 public:
+  typedef void * Shard;
+  
   class TransactionImpl {
   public:
     /// Set Keys
@@ -56,6 +58,14 @@ public:
       const bufferlist &bl    ///< [in] Value to set
       ) = 0;
 
+    /// Set Key in DB shard
+    virtual void set_in_shard(
+      const KeyValueDB::Shard s,
+      const std::string &prefix,
+      const std::string &k,
+      const bufferlist &bl) {
+      assert(0 == "Not implemented");
+    }
 
     /// Removes Keys (via encoded bufferlist)
     void rmkeys(
@@ -87,6 +97,13 @@ public:
       const std::string &prefix,   ///< [in] Prefix to search for
       const std::string &k	      ///< [in] Key to remove
       ) = 0;
+
+    virtual void rmkey_from_shard(
+      const KeyValueDB::Shard s,
+      const std::string &prefix,
+      const std::string &k) {
+      assert(0 == "Not implemented");
+    }
 
     /// Remove Single Key which exists and was not overwritten.
     /// This API is only related to performance optimization, and should only be 
@@ -126,6 +143,22 @@ public:
   virtual int create_and_open(std::ostream &out) = 0;
   virtual void close() { }
 
+  /// Create/open DB shards
+  virtual int open_shards(std::ostream &out, int num_shards,
+			  std::vector<Shard> *shards) {
+    assert(0 == "Not implemented");
+  }
+  virtual int create_and_open_shards(std::ostream &out, int num_shards,
+				     std::vector<Shard> *shards) {
+    assert(0 == "Not implemented");
+  }
+  virtual void close_shard(Shard s) {
+    assert(0 == "Not implemented");
+  }
+  virtual int drop_shard(Shard s) {
+    assert(0 == "Not implemented");
+  }
+
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
   virtual int submit_transaction_sync(Transaction t) {
@@ -152,6 +185,12 @@ public:
       r = -ENOENT;
     }
     return r;
+  }
+  virtual int get_from_shard(const KeyValueDB::Shard s,
+			     const std::string &prefix,
+			     const std::string &key,
+			     bufferlist *value) {
+    assert(0 == "Not implemented");
   }
 
   class GenericIteratorImpl {

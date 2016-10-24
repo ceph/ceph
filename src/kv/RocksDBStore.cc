@@ -228,14 +228,43 @@ int RocksDBStore::create_and_open(ostream &out)
       return r;
     }
   }
-  return do_open(out, true);
+  return do_open(out, true, 0, nullptr);
 }
 
-int RocksDBStore::do_open(ostream &out, bool create_if_missing)
+int RocksDBStore::create_and_open_shards(ostream &out, int num_shards,
+					 vector<KeyValueDB::Shard> *shards)
+{
+  if (env) {
+    unique_ptr<rocksdb::Directory> dir;
+    env->NewDirectory(path, &dir);
+  } else {
+    int r = ::mkdir(path.c_str(), 0755);
+    if (r < 0)
+      r = -errno;
+    if (r < 0 && r != -EEXIST) {
+      derr << __func__ << " failed to create " << path << ": " << cpp_strerror(r)
+	   << dendl;
+      return r;
+    }
+  }
+  return do_open(out, true, num_shards, shards);
+}
+
+int RocksDBStore::do_open(ostream &out, bool create_if_missing,
+			  int num_shards, vector<KeyValueDB::Shard> *shards)
 {
   rocksdb::Options opt;
   rocksdb::Status status;
 
+  if ((num_shards > 1) && (shards == nullptr)) {
+    return -EINVAL;
+  }
+
+  if (num_shards > 0xFF) {
+    derr << __func__ << " num shards(" << num_shards << ") too large" << dendl;
+    return -EINVAL;
+  }
+  
   if (options_str.length()) {
     int r = ParseOptionsFromString(options_str, opt);
     if (r != 0) {
@@ -288,10 +317,64 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
            << " num of cache shards to " << (1 << g_conf->rocksdb_cache_shard_bits) << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
-  status = rocksdb::DB::Open(opt, path, &db);
-  if (!status.ok()) {
-    derr << status.ToString() << dendl;
-    return -EINVAL;
+  
+  int n = 0;
+  char cf_name[5];
+  rocksdb::ColumnFamilyOptions cf_opt = rocksdb::ColumnFamilyOptions();
+  rocksdb::ColumnFamilyHandle *handle = nullptr;
+  KeyValueDB::Shard shard = nullptr;
+  if (create_if_missing && (num_shards > 1)) {
+    status = rocksdb::DB::Open(opt, path, &db);
+    if (!status.ok()) {
+      derr << status.ToString() << dendl;
+      return -EINVAL;
+    }
+    for (n = 0; n < num_shards; n++) {
+      snprintf(cf_name, sizeof(cf_name), "0x%02x", n);
+      status = db->CreateColumnFamily(cf_opt, cf_name, &handle);
+      if (!status.ok()) {
+	derr << status.ToString() << dendl;
+	break;
+      }
+      shard = (KeyValueDB::Shard)handle;
+      shards->push_back(shard);
+    }
+    if (!status.ok()) {
+      while (!shards->empty()) {
+	shard = shards->back();
+	close_shard(shard);
+	shards->pop_back();
+      }
+      return -EINVAL;
+    }
+  } else if (num_shards > 1) {
+    std::vector<rocksdb::ColumnFamilyDescriptor> cfs;
+    std::vector<rocksdb::ColumnFamilyHandle *> handles;
+    for (n = 0; n < num_shards; n++) {
+      snprintf(cf_name, sizeof(cf_name), "0x%02x", n);
+      cfs.push_back(rocksdb::ColumnFamilyDescriptor(cf_name, cf_opt));
+    }
+    // RocksDB requires open all column families
+    cfs.push_back(rocksdb::ColumnFamilyDescriptor(rocksdb::kDefaultColumnFamilyName,
+						  cf_opt));
+    status = rocksdb::DB::Open(opt, path, cfs, &handles, &db);
+    if (!status.ok()) {
+      derr << status.ToString() << dendl;
+      return -EINVAL;
+    }
+    for (std::vector<rocksdb::ColumnFamilyHandle *>::iterator it = handles.begin();
+	 it != handles.end();
+	 it++) {
+      shard = (KeyValueDB::Shard)*it;
+      shards->push_back(shard);
+    }
+    handles.clear();
+  } else {
+    status = rocksdb::DB::Open(opt, path, &db);
+    if (!status.ok()) {
+      derr << status.ToString() << dendl;
+      return -EINVAL;
+    }
   }
 
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
@@ -356,6 +439,23 @@ void RocksDBStore::close()
 
   if (logger)
     cct->get_perfcounters_collection()->remove(logger);
+}
+
+void RocksDBStore::close_shard(KeyValueDB::Shard s)
+{
+  rocksdb::ColumnFamilyHandle *h = (rocksdb::ColumnFamilyHandle *)s;
+  delete h;
+}
+
+int RocksDBStore::drop_shard(KeyValueDB::Shard s)
+{
+  rocksdb::Status status;
+  rocksdb::ColumnFamilyHandle *h = (rocksdb::ColumnFamilyHandle *)s;
+  status = db->DropColumnFamily(h);
+  if (!status.ok()) {
+    derr << __func__ << "error: " << status.ToString() << dendl;
+  }
+  return status.ok() ? 0 : -1;
 }
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
@@ -450,10 +550,40 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   }
 }
 
+void RocksDBStore::RocksDBTransactionImpl::set_in_shard(
+  const KeyValueDB::Shard s,
+  const string &prefix,
+  const string &k,
+  const bufferlist &to_set_bl)
+{
+  string key = combine_strings(prefix, k);
+  rocksdb::ColumnFamilyHandle *h = (rocksdb::ColumnFamilyHandle *)s;
+
+  // bufferlist::c_str() is non-constant, so we can't call c_str()
+  if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
+    bat.Put(h, rocksdb::Slice(key),
+	    rocksdb::Slice(to_set_bl.buffers().front().c_str(),
+			   to_set_bl.length()));
+  } else {
+    // make a copy
+    bufferlist val = to_set_bl;
+    bat.Put(h, rocksdb::Slice(key),
+	    rocksdb::Slice(val.c_str(), val.length()));
+  }
+}
+
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
   bat.Delete(combine_strings(prefix, k));
+}
+
+void RocksDBStore::RocksDBTransactionImpl::rmkey_from_shard(const KeyValueDB::Shard s,
+							    const string &prefix,
+							    const string &k)
+{
+  rocksdb::ColumnFamilyHandle *h = (rocksdb::ColumnFamilyHandle *)s;
+  bat.Delete(h, combine_strings(prefix, k));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
@@ -533,6 +663,28 @@ int RocksDBStore::get(
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_gets);
   logger->tinc(l_rocksdb_get_latency, lat);
+  return r;
+}
+
+int RocksDBStore::get_from_shard(
+    const KeyValueDB::Shard s,
+    const string &prefix,
+    const string &key,
+    bufferlist *out)
+{
+  assert(out && (out->length() == 0));
+  int r = 0;
+  string value, k;
+  rocksdb::Status status;
+  rocksdb::ColumnFamilyHandle *h;
+  k = combine_strings(prefix, key);
+  h = (rocksdb::ColumnFamilyHandle *)s;
+  status = db->Get(rocksdb::ReadOptions(), h, rocksdb::Slice(k), &value);
+  if (status.ok()) {
+    out->append(value);
+  } else {
+    r = -ENOENT;
+  }
   return r;
 }
 
