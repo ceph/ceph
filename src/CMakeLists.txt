@@ -771,8 +771,8 @@ if(WITH_LIBCEPHFS)
     endforeach()
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
-      VERSION 1.0.0
-      SOVERSION 1
+      VERSION 2.0.0
+      SOVERSION 2
       LINK_FLAGS ${CEPHFS_LINK_FLAGS})
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
