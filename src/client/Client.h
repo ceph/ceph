@@ -1144,6 +1144,9 @@ public:
 		unsigned flags, const UserPerm& perms);
   int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr,
 	       Inode **out, const UserPerm& perm);
+  int ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
+		struct ceph_statx *stx, unsigned want, unsigned flags,
+		const UserPerm& perms);
   int ll_symlink(Inode *in, const char *name, const char *value,
 		 struct stat *attr, Inode **out, const UserPerm& perms);
   int ll_unlink(Inode *in, const char *name, const UserPerm& perm);
