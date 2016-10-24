@@ -384,17 +384,17 @@ void CephBroker::rmdir(ResponseCallback *cb, const char *dname) {
 int CephBroker::rmdir_recursive(const char *directory) {
   struct ceph_dir_result *dirp;
   struct dirent de;
-  struct stat st;
+  struct ceph_statx stx;
   int r;
   if ((r = ceph_opendir(cmount, directory, &dirp)) < 0)
     return r; //failed to open
-  while ((r = ceph_readdirplus_r(cmount, dirp, &de, &st, 0)) > 0) {
+  while ((r = ceph_readdirplus_r(cmount, dirp, &de, &stx, CEPH_STATX_INO, AT_NO_ATTR_SYNC)) > 0) {
     String new_dir = de.d_name;
     if(!(new_dir.compare(".")==0 || new_dir.compare("..")==0)) {
       new_dir = directory;
       new_dir += '/';
       new_dir += de.d_name;
-      if (S_ISDIR(st.st_mode)) { //it's a dir, clear it out...
+      if (S_ISDIR(stx.stx_mode)) { //it's a dir, clear it out...
 	if((r=rmdir_recursive(new_dir.c_str())) < 0) return r;
       } else { //delete this file
 	if((r=ceph_unlink(cmount, new_dir.c_str())) < 0) return r;

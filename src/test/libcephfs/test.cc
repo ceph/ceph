@@ -424,9 +424,9 @@ TEST(LibCephFS, DirLs) {
   found.clear();
   while (true) {
     struct dirent rdent;
-    struct stat st;
-    int stmask;
-    int len = ceph_readdirplus_r(cmount, ls_dir, &rdent, &st, &stmask);
+    struct ceph_statx stx;
+    int len = ceph_readdirplus_r(cmount, ls_dir, &rdent, &stx,
+				 CEPH_STATX_SIZE, AT_NO_ATTR_SYNC);
     if (len == 0)
       break;
     ASSERT_EQ(len, 1);
@@ -434,8 +434,9 @@ TEST(LibCephFS, DirLs) {
     found.push_back(name);
     int size;
     sscanf(name, "dirf%d", &size);
-    ASSERT_EQ(st.st_size, size);
-    ASSERT_EQ(st.st_ino, rdent.d_ino);
+    ASSERT_TRUE(stx.stx_mask & CEPH_STATX_SIZE);
+    ASSERT_EQ(stx.stx_size, (size_t)size);
+    ASSERT_EQ(stx.stx_ino, rdent.d_ino);
     //ASSERT_EQ(st.st_mode, (mode_t)0666);
   }
   ASSERT_EQ(found, entries);
@@ -1136,10 +1137,8 @@ TEST(LibCephFS, UseUnmounted) {
   struct dirent rdent;
   EXPECT_EQ(-ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));
 
-  int stmask;
   struct ceph_statx stx;
-  struct stat st;
-  EXPECT_EQ(-ENOTCONN, ceph_readdirplus_r(cmount, dirp, &rdent, &st, &stmask));
+  EXPECT_EQ(-ENOTCONN, ceph_readdirplus_r(cmount, dirp, &rdent, &stx, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_getdents(cmount, dirp, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_getdnames(cmount, dirp, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_telldir(cmount, dirp));

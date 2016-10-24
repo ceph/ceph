@@ -480,13 +480,14 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
  * @param dirp the directory stream pointer from an opendir holding the state of the
  *        next entry to return.
  * @param de the directory entry pointer filled in with the next directory entry of the dirp state.
- * @param st the stats of the file/directory of the entry returned
- * @param stmask a mask that gets filled in with the stats fields that are being set in the st parameter.
+ * @param stx the stats of the file/directory of the entry returned
+ * @param want mask showing desired inode attrs for returned entry
+ * @param flags bitmask of flags to use when filling out attributes
  * @returns 1 if the next entry was filled in, 0 if the end of the directory stream was reached,
  *          and a negative error code on failure.
  */
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
-		       struct stat *st, int *stmask);
+		       struct ceph_statx *stx, unsigned want, unsigned flags);
 
 /**
  * Gets multiple directory entries.
