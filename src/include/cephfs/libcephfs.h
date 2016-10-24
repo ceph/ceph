@@ -1440,7 +1440,7 @@ int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct ceph_statx *stx, int mask, const UserPerm *perms);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
-		 struct Fh **fh, int uid, int gid);
+		 struct Fh **fh, const UserPerm *perms);
 off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		     off_t offset, int whence);
 int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,

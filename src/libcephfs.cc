@@ -1445,10 +1445,9 @@ extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,
 }
 
 extern "C" int ceph_ll_open(class ceph_mount_info *cmount, Inode *in,
-			    int flags, Fh **fh, int uid, int gid)
+			    int flags, Fh **fh, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_open(in, flags, fh, perms));
+  return (cmount->get_client()->ll_open(in, flags, fh, *perms));
 }
 
 extern "C" int ceph_ll_read(class ceph_mount_info *cmount, Fh* filehandle,
