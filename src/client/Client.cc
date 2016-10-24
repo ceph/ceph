@@ -6568,10 +6568,12 @@ force_request:
       CEPH_CAP_FILE_WR;
   }
   if (mask & CEPH_SETATTR_SIZE) {
-    if ((unsigned long)stx->stx_size < mdsmap->get_max_filesize())
+    if ((unsigned long)stx->stx_size < mdsmap->get_max_filesize()) {
       req->head.args.setattr.size = stx->stx_size;
-    else { //too big!
+      ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
+    } else { //too big!
       put_request(req);
+      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
       return -EFBIG;
     }
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
