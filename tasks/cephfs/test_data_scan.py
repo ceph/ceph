@@ -545,3 +545,59 @@ class TestDataScan(CephFSTestCase):
             lines = [l for l in out.split("\n") if l]
             log.info("{0}: {1}".format(pg_str, lines))
             self.assertSetEqual(set(lines), set(pgs_to_files[pg_str]))
+
+    def test_scan_links(self):
+        """
+        The scan_links command fixes linkage errors
+        """
+        self.mount_a.run_shell(["mkdir", "testdir1"])
+        self.mount_a.run_shell(["mkdir", "testdir2"])
+        dir1_ino = self.mount_a.path_to_ino("testdir1")
+        dir2_ino = self.mount_a.path_to_ino("testdir2")
+        dirfrag1_oid = "{0:x}.00000000".format(dir1_ino)
+        dirfrag2_oid = "{0:x}.00000000".format(dir2_ino)
+
+        self.mount_a.run_shell(["touch", "testdir1/file1"])
+        self.mount_a.run_shell(["ln", "testdir1/file1", "testdir1/link1"])
+        self.mount_a.run_shell(["ln", "testdir1/file1", "testdir2/link2"])
+
+        mds_id = self.fs.get_active_names()[0]
+        self.fs.mds_asok(["flush", "journal"], mds_id)
+
+        dirfrag1_keys = self._dirfrag_keys(dirfrag1_oid)
+
+        # introduce duplicated primary link
+        file1_key = "file1_head"
+        self.assertIn(file1_key, dirfrag1_keys)
+        file1_omap_data = self.fs.rados(["getomapval", dirfrag1_oid, file1_key, '-'])
+        self.fs.rados(["setomapval", dirfrag2_oid, file1_key], stdin_data=file1_omap_data)
+        self.assertIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
+
+        # remove a remote link, make inode link count incorrect
+        link1_key = 'link1_head'
+        self.assertIn(link1_key, dirfrag1_keys)
+        self.fs.rados(["rmomapkey", dirfrag1_oid, link1_key])
+
+        # increase good primary link's version
+        self.mount_a.run_shell(["touch", "testdir1/file1"])
+        self.mount_a.umount_wait()
+
+        self.fs.mds_asok(["flush", "journal"], mds_id)
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+
+        # repair linkage errors
+        self.fs.data_scan(["scan_links"])
+
+        # primary link in testdir2 was deleted?
+        self.assertNotIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
+
+        self.fs.mds_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+
+        # link count was adjusted?
+        file1_nlink = self.mount_a.path_to_nlink("testdir1/file1")
+        self.assertEqual(file1_nlink, 2)
