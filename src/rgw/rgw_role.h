@@ -5,6 +5,7 @@ class RGWRole
 {
   static const string role_name_oid_prefix;
   static const string role_oid_prefix;
+  static const string role_path_oid_prefix;
 
   CephContext *cct;
   RGWRados *store;
@@ -18,9 +19,11 @@ class RGWRole
 
   int store_info(bool exclusive);
   int store_name(bool exclusive);
+  int store_path(bool exclusive);
   int read_id(const string& role_name, string& role_id);
   int read_name();
   int read_info();
+  void set_id(const string& id) { this->id = id; }
 
 public:
   RGWRole(CephContext *cct,
@@ -43,6 +46,11 @@ public:
   : cct(cct),
     store(store),
     name(std::move(name)) {}
+
+  RGWRole(CephContext *cct,
+          RGWRados *store)
+  : cct(cct),
+    store(store) {}
 
   RGWRole() {}
 
@@ -91,6 +99,8 @@ public:
 
   static const string& get_names_oid_prefix();
   static const string& get_info_oid_prefix();
+  static const string& get_path_oid_prefix();
+  static int get_roles_by_path_prefix(RGWRados *store, CephContext *cct, const string& path_prefix, vector<RGWRole>& roles);
 };
 WRITE_CLASS_ENCODER(RGWRole)
 #endif /* CEPH_RGW_ROLE_H */

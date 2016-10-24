@@ -20,6 +20,7 @@ using namespace std;
 
 const string RGWRole::role_name_oid_prefix = "role_names.";
 const string RGWRole::role_oid_prefix = "roles.";
+const string RGWRole::role_path_oid_prefix = "role_paths.";
 
 int RGWRole::store_info(bool exclusive)
 {
@@ -42,6 +43,14 @@ int RGWRole::store_name(bool exclusive)
   ::encode(nameToId, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
               bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+}
+
+int RGWRole::store_path(bool exclusive)
+{
+  string oid = get_path_oid_prefix() + path + get_info_oid_prefix() + id;
+
+  return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
+              NULL, 0, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::create(bool exclusive)
@@ -104,6 +113,26 @@ int RGWRole::create(bool exclusive)
     return ret;
   }
 
+  ret = store_path(exclusive);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: storing role path in pool: " << pool.name << ": "
+                  << path << ": " << cpp_strerror(-ret) << dendl;
+    //Delete the role info that was stored in the previous call
+    string oid = get_info_oid_prefix() + id;
+    int info_ret = rgw_delete_system_obj(store, pool, oid, NULL);
+    if (info_ret < 0) {
+      ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
+                  << id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    //Delete role name that was stored in previous call
+    oid = get_names_oid_prefix() + name;
+    int name_ret = rgw_delete_system_obj(store, pool, oid, NULL);
+    if (name_ret < 0) {
+      ldout(cct, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
+                  << name << ": " << cpp_strerror(-name_ret) << dendl;
+    }
+    return ret;
+  }
   return 0;
 }
 
@@ -112,6 +141,11 @@ int RGWRole::delete_obj()
   auto& pool = store->get_zone_params().roles_pool;
 
   int ret = read_name();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = read_info();
   if (ret < 0) {
     return ret;
   }
@@ -132,6 +166,13 @@ int RGWRole::delete_obj()
                   << name << ": " << cpp_strerror(-ret) << dendl;
   }
 
+  // Delete path
+  oid = get_path_oid_prefix() + path + get_info_oid_prefix() + id;
+  ret = rgw_delete_system_obj(store, pool, oid, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
+                  << path << ": " << cpp_strerror(-ret) << dendl;
+  }
   return ret;
 }
 
@@ -307,6 +348,63 @@ void RGWRole::update_trust_policy(string& trust_policy)
   this->trust_policy = trust_policy;
 }
 
+int RGWRole::get_roles_by_path_prefix(RGWRados *store, CephContext *cct, const string& path_prefix, vector<RGWRole>& roles)
+{
+  auto pool = store->get_zone_params().roles_pool;
+  string prefix;
+
+  // List all roles if path prefix is empty
+  if (! path_prefix.empty()) {
+    prefix = role_path_oid_prefix + path_prefix;
+  } else {
+    prefix = role_path_oid_prefix;
+  }
+
+  //Get the filtered objects
+  list<string> result;
+  bool is_truncated;
+  RGWListRawObjsCtx ctx;
+  do {
+    list<string> oids;
+    int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
+                  << prefix << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    for (const auto& iter : oids) {
+      result.push_back(iter.substr(role_path_oid_prefix.size()));
+    }
+  } while (is_truncated);
+
+  for (const auto& it : result) {
+    //Find the role oid prefix from the end
+    size_t pos = it.rfind(role_oid_prefix);
+    if (pos == string::npos) {
+        continue;
+    }
+    // Split the result into path and info_oid + id
+    string path = it.substr(0, pos);
+
+    /*Make sure that prefix is part of path (False results could've been returned)
+      because of the role info oid + id appended to the path)*/
+    if(path_prefix.empty() || path.find(path_prefix) != string::npos) {
+      //Get id from info oid prefix + id
+      string id = it.substr(pos + role_oid_prefix.length());
+
+      RGWRole role(cct, store);
+      role.set_id(id);
+      int ret = role.read_info();
+      if (ret < 0) {
+        return ret;
+      }
+      roles.push_back(std::move(role));
+    }
+  }
+
+  return 0;
+}
+
 const string& RGWRole::get_names_oid_prefix()
 {
   return role_name_oid_prefix;
@@ -315,4 +413,9 @@ const string& RGWRole::get_names_oid_prefix()
 const string& RGWRole::get_info_oid_prefix()
 {
   return role_oid_prefix;
+}
+
+const string& RGWRole::get_path_oid_prefix()
+{
+  return role_path_oid_prefix;
 }

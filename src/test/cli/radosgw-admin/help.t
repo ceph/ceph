@@ -124,6 +124,7 @@
     role create                create a AWS role for use with STS
     role delete                delete a role
     role get                   get a role
+    role list                  list roles with specified path prefix
     role modify                modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
@@ -236,6 +237,7 @@
      --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role
      --policy-name             name of the policy document
      --policy-doc              permission policy document
+     --path-prefix             path prefix for filtering roles
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
