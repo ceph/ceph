@@ -1149,6 +1149,9 @@ public:
 		const UserPerm& perms);
   int ll_symlink(Inode *in, const char *name, const char *value,
 		 struct stat *attr, Inode **out, const UserPerm& perms);
+  int ll_symlinkx(Inode *parent, const char *name, const char *value,
+		  Inode **out, struct ceph_statx *stx, unsigned want,
+		  unsigned flags, const UserPerm& perms);
   int ll_unlink(Inode *in, const char *name, const UserPerm& perm);
   int ll_rmdir(Inode *in, const char *name, const UserPerm& perms);
   int ll_rename(Inode *parent, const char *name, Inode *newparent,

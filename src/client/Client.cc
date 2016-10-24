@@ -11234,6 +11234,40 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   return r;
 }
 
+int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
+			Inode **out, struct ceph_statx *stx, unsigned want,
+			unsigned flags, const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+
+  vinodeno_t vparent = _get_vino(parent);
+
+  ldout(cct, 3) << "ll_symlinkx " << vparent << " " << name << " -> " << value
+		<< dendl;
+  tout(cct) << "ll_symlinkx" << std::endl;
+  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << name << std::endl;
+  tout(cct) << value << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  InodeRef in;
+  int r = _symlink(parent, name, value, perms, &in);
+  if (r == 0) {
+    fill_statx(in, statx_to_mask(flags, want), stx);
+    _ll_get(in.get());
+  }
+  tout(cct) << stx->stx_ino << std::endl;
+  ldout(cct, 3) << "ll_symlinkx " << vparent << " " << name
+	  << " = " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
+  *out = in.get();
+  return r;
+}
+
 int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 {
   ldout(cct, 3) << "_unlink(" << dir->ino << " " << name
