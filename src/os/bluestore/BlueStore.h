@@ -1219,6 +1219,7 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
+    bool id_wait; //need wait nid_max/bloblid_max update completed
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -1229,7 +1230,8 @@ public:
 	onreadable_sync(NULL),
 	wal_txn(NULL),
 	ioc(this),
-	start(ceph_clock_now(g_ceph_context)) {
+	start(ceph_clock_now(g_ceph_context)),
+	id_wait(false) {
     }
     ~TransContext() {
       delete wal_txn;
@@ -1426,6 +1428,8 @@ private:
   vector<Cache*> cache_shards;
 
   std::mutex id_lock;
+  std::condition_variable id_cond;
+  std::atomic<bool> id_wait;
   std::atomic<uint64_t> nid_last = {0};
   uint64_t nid_max = 0;
   std::atomic<uint64_t> blobid_last = {0};
@@ -1473,6 +1477,9 @@ private:
   uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
+
+  bool sync_transaction;  ///< see config option bluestore_sync_transaction
+  bool sync_submit_transaction;  ///<see config option bluestore_sync_submit_transction
 
   // compression options
   enum CompressionMode {
@@ -1549,7 +1556,7 @@ private:
   void _dump_transaction(Transaction *t, int log_level = 30);
 
   TransContext *_txc_create(OpSequencer *osr);
-  void _txc_update_store_statfs(TransContext *txc);
+  void _txc_update_store_statfs(TransContext *txc, TransContext::volatile_statfs *vstatfs);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
