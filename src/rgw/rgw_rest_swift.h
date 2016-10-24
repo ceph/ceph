@@ -260,9 +260,14 @@ protected:
   }
 
   static int init_from_header(struct req_state *s);
+
 public:
   RGWHandler_REST_SWIFT() {}
   virtual ~RGWHandler_REST_SWIFT() {}
+
+  using auth_strategy_t = AuthStrategy<Engine_A, Engine_B>;
+  static auth_strategy_t first_auth_strategy;
+  static auth_strategy_t* current_auth_strategy;
 
   static int validate_bucket_name(const string& bucket);
 
@@ -273,6 +278,7 @@ public:
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
+
 
 class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:

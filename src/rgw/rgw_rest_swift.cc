@@ -28,6 +28,7 @@
 #include <array>
 #include <sstream>
 #include <memory>
+#include <vector>
 
 #include <boost/utility/string_ref.hpp>
 
@@ -2038,22 +2039,45 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
+
+/* This is a makeshit solution targeting the development prrocess only!
+ * The ultimate solution is about extending the interface of RGWHandler
+ * to allow running a global initialization very early, most likely in
+ * rgw_main.cc. Those lines will be made shorter as well. */
+RGWHandler_REST_SWIFT::auth_strategy_t RGWHandler_REST_SWIFT::first_auth_strategy =
+  RGWHandler_REST_SWIFT::auth_strategy_t(std::array<bool, 2> { true, false });
+RGWHandler_REST_SWIFT::auth_strategy_t* RGWHandler_REST_SWIFT::current_auth_strategy =
+  &RGWHandler_REST_SWIFT::first_auth_strategy;
+
 int RGWHandler_REST_SWIFT::authorize()
 {
-  /* Factories. */
-  class SwiftAuthFactory : public RGWTempURLAuthApplier::Factory,
+  /* Extractors. */
+  RGWXAuthTokenExtractor token_extr(s);
+
+  /* Visitor/Factories. */
+  class SwiftAuthVisitor : public auth_strategy_t::Visitor<SwiftAuthVisitor>,
+                           public RGWTempURLAuthApplier::Factory,
                            public RGWLocalAuthApplier::Factory,
                            public RGWRemoteAuthApplier::Factory {
     typedef RGWAuthApplier::aplptr_t aplptr_t;
 
+    /* TODO: take handle on RGWHandler and extract the data from it. */
     RGWRados * const store;
     const std::string acct_override;
+    req_state* const s;
+    RGWXAuthTokenExtractor& token_extr;
+
+    bool is_authed = false;
 
   public:
-    SwiftAuthFactory(RGWRados * const store,
-                     const std::string& acct_override)
+    SwiftAuthVisitor(RGWRados * const store,
+                     const std::string& acct_override,
+                     req_state* const s,
+                     RGWXAuthTokenExtractor& token_extr)
       : store(store),
-        acct_override(acct_override) {
+        acct_override(acct_override),
+        s(s),
+        token_extr(token_extr) {
     }
 
     aplptr_t create_apl_turl(CephContext * const cct,
@@ -2082,89 +2106,93 @@ int RGWHandler_REST_SWIFT::authorize()
           RGWRemoteAuthApplier(cct, store, std::move(acl_alg), info),
           store, acct_override));
     }
-  } aplfact(store, s->account_name);
 
-  /* Extractors. */
-  RGWXAuthTokenExtractor token_extr(s);
 
-  /* Auth engines. */
-  RGWTempURLAuthEngine tempurl(s, store,                    &aplfact);
-  RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &aplfact);
-  RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &aplfact);
-  RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &aplfact);
-  RGWAnonymousAuthEngine anoneng(s->cct,        token_extr, &aplfact);
-
-  /* Pipeline. */
-  constexpr size_t ENGINES_NUM = 5;
-  const std::array<const RGWAuthEngine *, ENGINES_NUM> engines = {
-    &tempurl, &rgwtk, &keystone, &ext, &anoneng
-  };
-
-  for (const auto engine : engines) {
-    if (! engine->is_applicable()) {
-      /* Engine said it isn't suitable for handling this particular
-       * request. Let's try a next one. */
-      continue;
+    void do_auth_load(presel_helper_t<Engine_A>) {
+      return;
     }
 
-    try {
-      ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
+    void do_auth_load(presel_helper_t<Engine_B>) {
+      return;
+    }
 
-      auto applier = engine->authenticate();
-      if (! applier) {
-        /* Access denied is acknowledged by returning a std::unique_ptr with
-         * nullptr inside. */
-        ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
-        return -EPERM;
-      }
 
+    void do_auth_load(presel_helper_t<RGWTempURLAuthEngine>) {
+      RGWTempURLAuthEngine engine(s, store, this);
+      return authorize(&engine);
+    }
+
+    void do_auth_load(presel_helper_t<RGWSignedTokenAuthEngine>) {
+      RGWSignedTokenAuthEngine engine(s->cct, store, token_extr, this);
+      return authorize(&engine);
+    }
+
+    void do_auth_load(presel_helper_t<RGWKeystoneAuthEngine>) {
+      RGWKeystoneAuthEngine engine(s->cct, token_extr, this);
+      return authorize(&engine);
+    }
+
+    void do_auth_load(presel_helper_t<RGWExternalTokenAuthEngine>) {
+      RGWExternalTokenAuthEngine engine(s->cct, store, token_extr, this);
+      return authorize(&engine);
+    }
+
+    void do_auth_load(presel_helper_t<RGWAnonymousAuthEngine>) {
+      RGWAnonymousAuthEngine engine(s->cct, token_extr, this);
+      return authorize(&engine);
+    }
+
+    bool is_authorized() const {
+      return false;
+    }
+
+    void authorize(const RGWAuthEngine* engine) {
+#if 0
       try {
-        /* Account used by a given RGWOp is decoupled from identity employed
-         * in the authorization phase (RGWOp::verify_permissions). */
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
+        ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
 
-        /* This is the signle place where we pass req_state as a pointer
-         * to non-const and thus its modification is allowed. In the time
-         * of writing only RGWTempURLEngine needed that feature. */
-        applier->modify_request_state(s);
-
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
-        return err;
-      }
-    } catch (int err) {
-      ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
-      return err;
-    }
-
-    /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
-    if (s->user->system) {
-      s->system_request = true;
-      ldout(s->cct, 20) << "system request over Swift API" << dendl;
-
-      rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-      if (!euid.empty()) {
-        RGWUserInfo einfo;
-
-        const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed, euid=" << euid
-                           << " ret=" << ret << dendl;
-          return ret;
+        auto applier = engine->authenticate();
+        if (! applier) {
+          /* Access denied is acknowledged by returning a std::unique_ptr with
+           * nullptr inside. */
+          ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
+          is_authed = false;
+          return;
         }
 
-        *(s->user) = einfo;
+        try {
+          /* Account used by a given RGWOp is decoupled from identity employed
+           * in the authorization phase (RGWOp::verify_permissions). */
+          applier->load_acct_info(*s->user);
+          s->perm_mask = applier->get_perm_mask();
+
+          /* This is the signle place where we pass req_state as a pointer
+           * to non-const and thus its modification is allowed. In the time
+           * of writing only RGWTempURLEngine needed that feature. */
+          applier->modify_request_state(s);
+
+          s->auth_identity = std::move(applier);
+        } catch (int err) {
+          ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
+          is_authed = false;
+          return;
+        }
+      } catch (int err) {
+        ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+        is_authed = false;
+        return;
       }
+
+      is_authed = true;
+      return;
+#endif
     }
 
-    return 0;
-  }
+  } swift_visitor(store, s->account_name, s, token_extr);
 
-  /* All engines refused to handle this authentication request by
-   * returning RGWAuthEngine::Status::UNKKOWN. Rather rare case. */
-  return -EPERM;
+  current_auth_strategy->accept_visitor(swift_visitor);
+
+  return swift_visitor.is_authorized() ? 0 : -EPERM;
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()

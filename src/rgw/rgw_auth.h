@@ -5,9 +5,14 @@
 #ifndef CEPH_RGW_AUTH_H
 #define CEPH_RGW_AUTH_H
 
+#include <array>
 #include <functional>
 #include <ostream>
 #include <type_traits>
+#include <vector>
+
+#include <boost/variant.hpp>
+#include <boost/variant/static_visitor.hpp>
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
@@ -346,6 +351,88 @@ public:
   }
 
   RGWAuthApplier::aplptr_t authenticate() const override;
+};
+
+struct Engine_A { static bool can_be_enabled() { return true; } };
+struct Engine_B { static bool can_be_enabled() { return true; } };
+
+template <class... EngineTs>
+class AuthStrategy {
+public:
+  template <class T> struct presel_helper_t {};
+
+  /* The visitor interface. It only wraps the hard-to-grep operator() into
+   * a bit more descriptive name. */
+  template<class VisitorImplT>
+  class Visitor : public boost::static_visitor<> {
+  public:
+    template <class T>
+    using presel_helper_t = AuthStrategy<EngineTs...>::presel_helper_t<T>;
+
+    template <class EngineT>
+    void operator() (presel_helper_t<EngineT>& indicator) {
+     static_cast<VisitorImplT*>(this)->do_auth_load(indicator);
+    }
+  };
+
+  /* Acceptor machinery. */
+  template<class VisitorImplT>
+  void accept_visitor(Visitor<VisitorImplT>& v) const {
+    /* No reference as it wouldn't get any benefit. It's expected that
+     * an enablement indicator will size 1-bytes only. */
+    for (auto indicator : engine_enablement_indicators) {
+      boost::apply_visitor(v, indicator);
+    }
+  }
+
+  template <std::size_t N>
+  AuthStrategy(const std::array<bool, N>& config) {
+    static_assert(N == sizeof...(EngineTs),
+                  "the config array size mismatch number of engine classes");
+    preselect(config);
+  }
+
+private:
+  using presel_variant_t =
+    boost::variant<presel_helper_t<EngineTs>...>;
+
+  /* This vector will contain enablement indicators ONLY for those engines
+   * which are considered as enabled. Each engine should provide this info
+   * via *static* is_enabled() method. It MUST be static due to assumption
+   * that it will be called before any engine's instance is being created! */
+  std::vector<presel_variant_t> engine_enablement_indicators;
+
+  /* Variant of preselect() that will be used when I equals N. For more info,
+   * try google for SFINAE. */
+  template <std::size_t I,
+            std::size_t N>
+  inline typename std::enable_if<I == N>::type
+  preselect(const std::array<bool, N>&) {
+    static_assert(N == sizeof...(EngineTs),
+                  "the config array size mismatch number of engine classes");
+    /* NOP. We finished iterating over EngineTs. */
+  }
+
+  template <std::size_t I = 0,
+            std::size_t N>
+  inline typename std::enable_if<I < N>::type
+  preselect(const std::array<bool, N>& config) {
+    static_assert(N == sizeof...(EngineTs),
+                  "the config array size mismatch number of engine classes");
+    const bool enabled = std::get<I>(config);
+
+    if (enabled) {
+      /* The std::tuple is constructed only because std::get() has overload
+       * allowing to get the I-th element from it. Although we can implement
+       * the same concept for variadic template's parameters pack, in C++11
+       * such thing would look ugly. Nevertheless, I expect that compilers
+       * will optimize the tuple out. */
+      std::tuple<presel_helper_t<EngineTs>...> t;
+      engine_enablement_indicators.emplace_back(std::get<I>(t));
+    }
+
+    return preselect<I + 1>(config);
+  }
 };
 
 #endif /* CEPH_RGW_AUTH_H */
