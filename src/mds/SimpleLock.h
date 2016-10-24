@@ -192,18 +192,17 @@ private:
 			excl_client(-1) {}
   };
 
-  mutable unstable_bits_t *_unstable;
+  mutable std::unique_ptr<unstable_bits_t> _unstable;
 
   bool have_more() const { return _unstable ? true : false; }
   unstable_bits_t *more() const {
     if (!_unstable)
-      _unstable = new unstable_bits_t;
-    return _unstable;
+      _unstable.reset(new unstable_bits_t);
+    return _unstable.get();
   }
   void try_clear_more() {
     if (_unstable && _unstable->empty()) {
-      delete _unstable;
-      _unstable = NULL;
+      _unstable.reset();
     }
   }
 
@@ -223,12 +222,9 @@ public:
     parent(o), 
     state(LOCK_SYNC),
     num_rdlock(0),
-    num_client_lease(0),
-    _unstable(NULL)
+    num_client_lease(0)
   {}
-  virtual ~SimpleLock() {
-    delete _unstable;
-  }
+  virtual ~SimpleLock() {}
 
   virtual bool is_scatterlock() const {
     return false;
