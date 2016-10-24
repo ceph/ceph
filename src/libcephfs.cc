@@ -1610,12 +1610,11 @@ extern "C" int ceph_ll_statfs(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_statfs(in, stbuf, cmount->default_perms));
 }
 
-extern "C" int ceph_ll_readlink(class ceph_mount_info *cmount,
-				Inode *in, char *buf, size_t bufsiz, int uid,
-				int gid)
+extern "C" int ceph_ll_readlink(class ceph_mount_info *cmount, Inode *in,
+				char *buf, size_t bufsiz,
+				const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_readlink(in, buf, bufsiz, perms));
+  return cmount->get_client()->ll_readlink(in, buf, bufsiz, *perms);
 }
 
 extern "C" int ceph_ll_symlink(class ceph_mount_info *cmount,
@@ -1630,10 +1629,9 @@ extern "C" int ceph_ll_symlink(class ceph_mount_info *cmount,
 
 extern "C" int ceph_ll_rmdir(class ceph_mount_info *cmount,
 			     Inode *in, const char *name,
-			     int uid, int gid)
+			     const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_rmdir(in, name, perms));
+  return cmount->get_client()->ll_rmdir(in, name, *perms);
 }
 
 extern "C" int ceph_ll_getxattr(class ceph_mount_info *cmount,
