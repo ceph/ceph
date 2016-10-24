@@ -55,12 +55,12 @@ Options
 
 .. option:: -b block_size
 
-  Set the block size for put/get ops and for write benchmarking.
+  Set the block size for put/get/append ops and for write benchmarking.
 
 .. option:: --striper
 
    Uses the striping API of rados rather than the default one.
-   Available for stat, get, put, truncate, rm, ls and all xattr related operation
+   Available for stat, get, put, append, truncate, rm, ls and all xattr related operation
 
 
 Global commands
@@ -88,6 +88,9 @@ Pool specific commands
 
 :command:`put` *name* *infile*
   Write object name to the cluster with contents from infile.
+
+:command:`append` *name* *infile*
+  Append object name to the cluster with contents from infile.
 
 :command:`rm` *name*
   Remove object name.

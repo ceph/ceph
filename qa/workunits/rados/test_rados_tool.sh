@@ -427,11 +427,113 @@ test_cleanup() {
     $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
 }
 
+function test_append()
+{
+  # rados append test:
+  # replicated pool
+  ceph osd pool create rados_append 100 100 replicated
+  # create object
+  touch ./rados_append_null
+  rados -p rados_append append rados_append_obj ./rados_append_null
+  rados -p rados_append get rados_append_obj ./rados_append_0_out
+  orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
+  rados -p rados_append get rados_append_obj ./rados_append_0_out
+  orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
+  read_size=`ls -l ./rados_append_0_out | awk -F ' '  '{print $5}'`
+  if [ $orig_size -ne $read_size ];
+  then
+    die "Create Failed!"
+  fi
+
+  # append 4k, total size 4k
+  dd if=/dev/zero of=./rados_append_4k bs=4k count=1
+  rados -p rados_append append rados_append_obj ./rados_append_4k
+  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  orig_size=`ls -l ./rados_append_4k  | awk -F ' '  '{print $5}'`
+  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
+  if [ $orig_size -ne $read_size ];
+  then
+    die "Append failed expecting $orig_size read $read_size"
+  fi
+
+  # append 4k, total size 8k
+  rados -p rados_append append rados_append_obj ./rados_append_4k
+  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
+  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
+  if [ 8192 -ne $read_size ];
+  then
+    die "Append failed expecting 8192 read $read_size"
+  fi
+
+  # append 10M, total size 10493952
+  dd if=/dev/zero of=./rados_append_10m bs=10M count=1
+  rados -p rados_append append rados_append_obj ./rados_append_10m
+  rados -p rados_append get rados_append_obj ./rados_append_10m_out
+  read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
+  if [ 10493952 -ne $read_size ];
+  then
+    die "Append failed expecting 10493952 read $read_size"
+  fi
+
+  # cleanup
+  ceph osd pool delete rados_append rados_append --yes-i-really-really-mean-it
+
+  #erasure coded pool
+  ceph osd erasure-code-profile set myprofile k=2 m=1 ruleset-failure-domain=osd
+  ceph osd pool create rados_append 100 100 erasure myprofile
+
+  # create object
+  rados -p rados_append append rados_append_obj ./rados_append_null
+  rados -p rados_append get rados_append_obj ./rados_append_0_out
+  orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
+  read_size=`ls -l ./rados_append_0_out | awk -F ' '  '{print $5}'`
+  if [ $orig_size -ne $read_size ];
+  then
+    die "Create Failed!"
+  fi
+
+  # append 4k, total size 4k
+  rados -p rados_append append rados_append_obj ./rados_append_4k
+  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  orig_size=`ls -l ./rados_append_4k  | awk -F ' '  '{print $5}'`
+  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
+  if [ $orig_size -ne $read_size ];
+  then
+    die "Append failed expecting $orig_size read $read_size"
+  fi
+
+  # append 4k, total size 8k
+  rados -p rados_append append rados_append_obj ./rados_append_4k
+  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
+  if [ 8192 -ne $read_size ];
+  then
+    die "Append failed expecting 8192 read $read_size"
+  fi
+
+  # append 10M, total size 10493952
+  rados -p rados_append append rados_append_obj ./rados_append_10m
+  rados -p rados_append get rados_append_obj ./rados_append_10m_out
+  read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
+  if [ 10493952 -ne $read_size ];
+  then
+    die "Append failed expecting 10493952 read $read_size"
+  fi
+
+  # cleanup
+  ceph osd pool delete rados_append rados_append --yes-i-really-really-mean-it
+  rm -rf ./rados_append_null ./rados_append_0_out
+  rm -rf ./rados_append_4k ./rados_append_4k_out ./rados_append_10m ./rados_append_10m_out
+}
+
 test_xattr
 test_omap
 test_rmobj
 test_ls
 test_cleanup
+test_append
 
 echo "SUCCESS!"
 exit 0
