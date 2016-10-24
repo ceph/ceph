@@ -1620,11 +1620,12 @@ extern "C" int ceph_ll_readlink(class ceph_mount_info *cmount,
 
 extern "C" int ceph_ll_symlink(class ceph_mount_info *cmount,
 			       Inode *in, const char *name,
-			       const char *value, struct stat *attr,
-			       Inode **out, int uid, int gid)
+			       const char *value, Inode **out,
+			       struct ceph_statx *stx, unsigned want,
+			       unsigned flags, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_symlink(in, name, value, attr, out, perms));
+  return (cmount->get_client()->ll_symlinkx(in, name, value, out, stx, want,
+					    flags, *perms));
 }
 
 extern "C" int ceph_ll_rmdir(class ceph_mount_info *cmount,
