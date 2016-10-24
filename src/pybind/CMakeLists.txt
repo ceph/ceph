@@ -29,6 +29,10 @@ foreach(python_version ${py_vers})
     add_subdirectory(cephfs cephfs${PYTHON_VERSION})
     add_dependencies(cython${PYTHON_VERSION}_modules cython${PYTHON_VERSION}_cephfs)
   endif()
+  if(WITH_RADOSGW)
+    add_subdirectory(rgw rgw${PYTHON_VERSION})
+    add_dependencies(cython${PYTHON_VERSION}_modules cython${PYTHON_VERSION}_rgw)
+  endif()
 
   # if CMAKE_INSTALL_PREFIX is an empty string, must replace
   # it with "/" to make PYTHON_INSTALL_TEMPLATE an absolute path to be
