@@ -1650,10 +1650,10 @@ extern "C" int ceph_ll_getxattr(class ceph_mount_info *cmount,
 
 extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
                               Inode *in, char *list,
-                              size_t buf_size, size_t *list_size, int uid, int gid)
+                              size_t buf_size, size_t *list_size,
+			      const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  int res = cmount->get_client()->ll_listxattr(in, list, buf_size, perms);
+  int res = cmount->get_client()->ll_listxattr(in, list, buf_size, *perms);
   if (res >= 0) {
     *list_size = (size_t)res;
     return 0;
@@ -1664,18 +1664,16 @@ extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
 extern "C" int ceph_ll_setxattr(class ceph_mount_info *cmount,
 				Inode *in, const char *name,
 				const void *value, size_t size,
-				int flags, int uid, int gid)
+				int flags, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_setxattr(in, name, value, size, flags, perms));
+  return (cmount->get_client()->ll_setxattr(in, name, value, size, flags, *perms));
 }
 
 extern "C" int ceph_ll_removexattr(class ceph_mount_info *cmount,
 				   Inode *in, const char *name,
-				   int uid, int gid)
+				   const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_removexattr(in, name, perms));
+  return (cmount->get_client()->ll_removexattr(in, name, *perms));
 }
 
 extern "C" int ceph_ll_getlk(struct ceph_mount_info *cmount,
