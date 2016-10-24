@@ -1471,11 +1471,12 @@ int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const UserPerm *perms);
 int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, const void *value, size_t size,
-		     int flags, int uid, int gid);
+		     int flags, const UserPerm *perms);
 int ceph_ll_listxattr(struct ceph_mount_info *cmount, struct Inode *in,
-                      char *list, size_t buf_size, size_t *list_size, int uid, int gid);
+                      char *list, size_t buf_size, size_t *list_size,
+		      const UserPerm *perms);
 int ceph_ll_removexattr(struct ceph_mount_info *cmount, struct Inode *in,
-			const char *name, int uid, int gid);
+			const char *name, const UserPerm *perms);
 int ceph_ll_create(struct ceph_mount_info *cmount, struct Inode *parent,
 		   const char *name, mode_t mode, int flags,
 		   struct stat *attr, struct Inode **out, Fh **fhp,

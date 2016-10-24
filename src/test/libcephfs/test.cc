@@ -583,7 +583,7 @@ TEST(LibCephFS, Xattrs_ll) {
   const char *value = "attrvalue";
   char value_buf[256] = { 0 };
 
-  res = ceph_ll_setxattr(cmount, existent_file_handle, valid_name, value, strlen(value), 0, 0, 0);
+  res = ceph_ll_setxattr(cmount, existent_file_handle, valid_name, value, strlen(value), 0, perms);
   ASSERT_EQ(res, 0);
 
   res = ceph_ll_getxattr(cmount, existent_file_handle, valid_name, value_buf, 256, perms);
