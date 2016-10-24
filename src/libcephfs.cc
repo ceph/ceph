@@ -452,6 +452,11 @@ extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)
   return cmount->is_mounted() ? 1 : 0;
 }
 
+extern "C" struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
+{
+  return &cmount->default_perms;
+}
+
 extern "C" int ceph_statfs(struct ceph_mount_info *cmount, const char *path,
 			   struct statvfs *stbuf)
 {

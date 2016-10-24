@@ -231,6 +231,8 @@ int ceph_init(struct ceph_mount_info *cmount);
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
 
 
+struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
+
 /**
  * Execute a management command remotely on an MDS.
  *
