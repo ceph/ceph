@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_JOURNAL_TYPES_H
 #define CEPH_LIBRBD_JOURNAL_TYPES_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -135,16 +136,17 @@ protected:
 
 struct SnapCreateEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_CREATE;
+  cls::rbd::SnapshotNamespace snap_namespace;
 
   SnapCreateEvent() {
   }
-  SnapCreateEvent(uint64_t op_tid, const std::string &snap_name)
-    : SnapEventBase(op_tid, snap_name) {
+  SnapCreateEvent(uint64_t op_tid, const std::string &snap_name, const cls::rbd::SnapshotNamespace &_snap_namespace)
+    : SnapEventBase(op_tid, snap_name), snap_namespace(_snap_namespace) {
   }
 
-  using SnapEventBase::encode;
-  using SnapEventBase::decode;
-  using SnapEventBase::dump;
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
 struct SnapRemoveEvent : public SnapEventBase {

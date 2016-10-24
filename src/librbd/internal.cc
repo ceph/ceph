@@ -810,6 +810,24 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int get_snap_namespace(ImageCtx *ictx,
+			 const char *snap_name,
+			 cls::rbd::SnapshotNamespace *snap_namespace) {
+    ldout(ictx->cct, 20) << "get_snap_namespace " << ictx << " " << snap_name
+			 << dendl;
+
+    int r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+
+    RWLock::RLocker l(ictx->snap_lock);
+    snap_t snap_id = ictx->get_snap_id(snap_name);
+    if (snap_id == CEPH_NOSNAP)
+      return -ENOENT;
+    r = ictx->get_snap_namespace(snap_id, snap_namespace);
+    return r;
+  }
+
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected)
   {
@@ -1698,6 +1716,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
 
     int r = 0;
+
+    cls::rbd::SnapshotNamespace snap_namespace;
+    r = get_snap_namespace(ictx, snap_name, &snap_namespace);
+    if (r < 0) {
+      return r;
+    }
+    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) == nullptr) {
+      return -EINVAL;
+    }
 
     r = ictx->state->refresh_if_required();
     if (r < 0)

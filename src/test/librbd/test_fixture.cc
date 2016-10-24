@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
 #include <iostream>
@@ -65,7 +66,8 @@ int TestFixture::open_image(const std::string &image_name,
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
                              const std::string &snap_name) {
-  return ictx.operations->snap_create(snap_name.c_str());
+  return ictx.operations->snap_create(snap_name.c_str(),
+				      cls::rbd::UserSnapshotNamespace());
 }
 
 int TestFixture::snap_protect(librbd::ImageCtx &ictx,

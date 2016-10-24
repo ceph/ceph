@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
@@ -84,7 +85,8 @@ int TestFixture::open_image(librados::IoCtx &io_ctx,
 
 int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
                              librados::snap_t *snap_id) {
-  int r = image_ctx->operations->snap_create(snap_name);
+  int r = image_ctx->operations->snap_create(snap_name,
+					     cls::rbd::UserSnapshotNamespace());
   if (r < 0) {
     return r;
   }

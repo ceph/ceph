@@ -104,7 +104,8 @@ namespace librbd {
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
                       parent_spec pspec, set<string>& children);
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
-		      const std::string &snap_name);
+		      const std::string &snap_name,
+		      const cls::rbd::SnapshotNamespace &snap_namespace);
     void snapshot_remove(librados::ObjectWriteOperation *op, snapid_t snap_id);
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
@@ -126,6 +127,15 @@ namespace librbd {
 		      std::vector<uint64_t> *sizes,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
+
+    void snap_namespace_list_start(librados::ObjectReadOperation *op,
+				   const std::vector<snapid_t> &ids);
+    int snap_namespace_list_finish(bufferlist::iterator *it,
+				   const std::vector<snapid_t> &ids,
+				   std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+    int snap_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
+			    const std::vector<snapid_t> &ids,
+			    std::vector<cls::rbd::SnapshotNamespace> *namespaces);
 
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data);

@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/operation/Request.h"
 #include "librbd/parent_types.h"
 #include <string>
@@ -59,7 +60,9 @@ public:
    * (if enabled) and bubble the originating error code back to the client.
    */
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
-		        const std::string &snap_name, uint64_t journal_op_tid,
+		        const std::string &snap_name,
+			const cls::rbd::SnapshotNamespace &snap_namespace,
+			uint64_t journal_op_tid,
                         bool skip_object_map);
 
 protected:
@@ -71,11 +74,12 @@ protected:
     return true;
   }
   virtual journal::Event create_event(uint64_t op_tid) const {
-    return journal::SnapCreateEvent(op_tid, m_snap_name);
+    return journal::SnapCreateEvent(op_tid, m_snap_name, m_snap_namespace);
   }
 
 private:
   std::string m_snap_name;
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   bool m_skip_object_map;
 
   int m_ret_val;

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/WatchNotifyTypes.h"
 #include "include/assert.h"
 #include "include/stringify.h"
@@ -239,6 +240,26 @@ void SnapPayloadBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void SnapCreatePayload::encode(bufferlist &bl) const {
+  SnapPayloadBase::encode(bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+}
+
+void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
+  SnapPayloadBase::decode(version, iter);
+  if (version >= 5) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, iter);
+    snap_namespace = sn.snapshot_namespace;
+  }
+}
+
+void SnapCreatePayload::dump(Formatter *f) const {
+  SnapPayloadBase::dump(f);
+  cls::rbd::SnapshotNamespaceOnDisk sn(snap_namespace);
+  sn.dump(f);
+}
+
 void SnapRenamePayload::encode(bufferlist &bl) const {
   ::encode(snap_id, bl);
   SnapPayloadBase::encode(bl);
@@ -296,7 +317,7 @@ bool NotifyMessage::check_for_refresh() const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(4, 1, bl);
+  ENCODE_START(5, 1, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -379,7 +400,8 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
   o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(SnapCreatePayload("foo")));
+  o.push_back(new NotifyMessage(SnapCreatePayload("foo",
+						  cls::rbd::UserSnapshotNamespace())));
   o.push_back(new NotifyMessage(SnapRemovePayload("foo")));
   o.push_back(new NotifyMessage(SnapProtectPayload("foo")));
   o.push_back(new NotifyMessage(SnapUnprotectPayload("foo")));

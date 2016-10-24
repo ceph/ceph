@@ -481,11 +481,12 @@ namespace librbd {
     }
 
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
-		      const std::string &snap_name)
+		      const std::string &snap_name, const cls::rbd::SnapshotNamespace &snap_namespace)
     {
       bufferlist bl;
       ::encode(snap_name, bl);
       ::encode(snap_id, bl);
+      ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
       op->exec("rbd", "snapshot_add", bl);
     }
 
@@ -550,7 +551,8 @@ namespace librbd {
                              std::vector<string> *names,
                              std::vector<uint64_t> *sizes,
                              std::vector<parent_info> *parents,
-                             std::vector<uint8_t> *protection_statuses) {
+                             std::vector<uint8_t> *protection_statuses)
+    {
       names->resize(ids.size());
       sizes->resize(ids.size());
       parents->resize(ids.size());
@@ -596,6 +598,52 @@ namespace librbd {
       bufferlist::iterator it = out_bl.begin();
       return snapshot_list_finish(&it, ids, names, sizes, parents,
                                   protection_statuses);
+    }
+
+    void snap_namespace_list_start(librados::ObjectReadOperation *op,
+                             const std::vector<snapid_t> &ids)
+    {
+      for (vector<snapid_t>::const_iterator it = ids.begin();
+           it != ids.end(); ++it) {
+        snapid_t snap_id = it->val;
+        bufferlist bl;
+        ::encode(snap_id, bl);
+	op->exec("rbd", "get_snapshot_namespace", bl);
+      }
+    }
+
+    int snap_namespace_list_finish(bufferlist::iterator *it,
+				   const std::vector<snapid_t> &ids,
+				   std::vector<cls::rbd::SnapshotNamespace> *namespaces)
+    {
+      namespaces->resize(ids.size());
+      try {
+	for (size_t i = 0; i < namespaces->size(); ++i) {
+	  cls::rbd::SnapshotNamespaceOnDisk e;
+	  ::decode(e, *it);
+	  (*namespaces)[i] = e.snapshot_namespace;
+	}
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int snap_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
+			    const std::vector<snapid_t> &ids,
+			    std::vector<cls::rbd::SnapshotNamespace> *namespaces)
+    {
+      librados::ObjectReadOperation op;
+      snap_namespace_list_start(&op, ids);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return snap_namespace_list_finish(&it, ids, namespaces);
     }
 
     void old_snapshot_add(librados::ObjectWriteOperation *op,

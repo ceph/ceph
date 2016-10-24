@@ -14,6 +14,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 #include "librbd/parent_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "common/WorkQueue.h"
 
 enum {
@@ -139,6 +140,9 @@ namespace librbd {
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
   int snap_set_limit(ImageCtx *ictx, uint64_t limit);
   int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
+  int get_snap_namespace(ImageCtx *ictx,
+			 const char *snap_name,
+			 cls::rbd::SnapshotNamespace *snap_namespace);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Operations.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -657,7 +658,8 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
 }
 
 template <typename I>
-int Operations<I>::snap_create(const char *snap_name) {
+int Operations<I>::snap_create(const char *snap_name,
+			       const cls::rbd::SnapshotNamespace &snap_namespace) {
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
@@ -668,7 +670,7 @@ int Operations<I>::snap_create(const char *snap_name) {
   }
 
   C_SaferCond ctx;
-  snap_create(snap_name, &ctx);
+  snap_create(snap_name, snap_namespace, &ctx);
   r = ctx.wait();
 
   if (r < 0) {
@@ -680,7 +682,9 @@ int Operations<I>::snap_create(const char *snap_name) {
 }
 
 template <typename I>
-void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
+void Operations<I>::snap_create(const char *snap_name,
+				const cls::rbd::SnapshotNamespace &snap_namespace,
+				Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -700,16 +704,17 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
 
   C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
     m_image_ctx, "snap_create", true,
-    boost::bind(&Operations<I>::execute_snap_create, this, snap_name, _1, 0,
-                false),
+    boost::bind(&Operations<I>::execute_snap_create, this, snap_name,
+		snap_namespace, _1, 0, false),
     boost::bind(&ImageWatcher<I>::notify_snap_create, m_image_ctx.image_watcher,
-                snap_name, _1),
+                snap_name, snap_namespace, _1),
     {-EEXIST}, on_finish);
   req->send();
 }
 
 template <typename I>
 void Operations<I>::execute_snap_create(const std::string &snap_name,
+					const cls::rbd::SnapshotNamespace &snap_namespace,
                                         Context *on_finish,
                                         uint64_t journal_op_tid,
                                         bool skip_object_map) {
@@ -732,7 +737,7 @@ void Operations<I>::execute_snap_create(const std::string &snap_name,
   operation::SnapshotCreateRequest<I> *req =
     new operation::SnapshotCreateRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name,
-      journal_op_tid, skip_object_map);
+      snap_namespace, journal_op_tid, skip_object_map);
   req->send();
 }
 
