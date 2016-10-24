@@ -3813,6 +3813,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       bool equivalent, divergent;
       int memory_newer;
 
+      MDCache *mdcache = in->mdcache;  // For the benefit of dout
+      const inode_t& inode = in->inode;  // For the benefit of dout
+
       // Ignore rval because it's the result of a FAILOK operation
       // from fetch_backtrace_and_tag: the real result is in
       // backtrace.ondisk_read_retval
@@ -3828,6 +3831,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       try {
         bufferlist::iterator p = bl.begin();
         ::decode(results->backtrace.ondisk_value, p);
+        dout(10) << "decoded " << bl.length() << " bytes of backtrace successfully" << dendl;
       } catch (buffer::error&) {
         if (results->backtrace.ondisk_read_retval == 0 && rval != 0) {
           // Cases where something has clearly gone wrong with the overall
@@ -3854,11 +3858,19 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         }
       }
 next:
+
+      if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
+        std::string path;
+        in->make_path_string(path);
+        in->mdcache->mds->clog->warn() << "bad backtrace on inode " << *in
+                           << ", rewriting it at " << path;
+        in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
+                           false);
+      }
+
       // If the inode's number was free in the InoTable, fix that
       // (#15619)
       {
-        const inode_t& inode = in->inode;
-        MDCache *mdcache = in->mdcache;
         InoTable *inotable = mdcache->mds->inotable;
 
         dout(10) << "scrub: inotable ino = 0x" << std::hex << inode.ino << dendl;
