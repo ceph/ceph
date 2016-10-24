@@ -77,6 +77,9 @@ public:
     // message are changed when reencoding with more features than the
     // client had originally.  That should never happen, but we may as
     // well be defensive here.
+    if (con_features != features) {
+      msg->clear_payload();
+    }
     encode_message(msg, features & con_features, payload);
     ::encode(con_features, payload);
     ::encode(entity_name, payload);
