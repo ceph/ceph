@@ -178,6 +178,7 @@ void _usage()
   cout << "  role create                create a AWS role for use with STS\n";
   cout << "  role delete                delete a role\n";
   cout << "  role get                   get a role\n";
+  cout << "  role list                  list roles with specified path prefix\n";
   cout << "  role modify                modify the assume role policy of an existing role\n";
   cout << "  role-policy put            add/update permission policy to role\n";
   cout << "  role-policy list           list policies attached to a role\n";
@@ -290,6 +291,7 @@ void _usage()
   cout << "   --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role\n";
   cout << "   --policy-name             name of the policy document\n";
   cout << "   --policy-doc              permission policy document\n";
+  cout << "   --path-prefix             path prefix for filtering roles\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -456,6 +458,7 @@ enum {
   OPT_ROLE_DELETE,
   OPT_ROLE_GET,
   OPT_ROLE_MODIFY,
+  OPT_ROLE_LIST,
   OPT_ROLE_POLICY_PUT,
   OPT_ROLE_POLICY_LIST,
   OPT_ROLE_POLICY_GET,
@@ -864,6 +867,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ROLE_GET;
     if (strcmp(cmd, "modify") == 0)
       return OPT_ROLE_MODIFY;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ROLE_LIST;
   } else if (strcmp(prev_cmd, "role-policy") == 0) {
     if (strcmp(cmd, "put") == 0)
       return OPT_ROLE_POLICY_PUT;
@@ -961,6 +966,18 @@ static void show_role_info(RGWRole& role, Formatter* formatter)
 {
   formatter->open_object_section("role");
   role.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
+static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
+{
+  formatter->open_array_section("Roles");
+  for (const auto& it : roles) {
+    formatter->open_object_section("role");
+    it.dump(formatter);
+    formatter->close_section();
+  }
   formatter->close_section();
   formatter->flush(cout);
 }
@@ -2339,7 +2356,7 @@ int main(int argc, const char **argv)
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
-  std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc;
+  std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
@@ -2786,6 +2803,8 @@ int main(int argc, const char **argv)
       policy_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*)NULL)) {
       perm_policy_doc = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
+      path_prefix = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4659,6 +4678,16 @@ int main(int argc, const char **argv)
       cout << "Assume role policy document updated successfully for role: " << role_name << std::endl;
       return 0;
     }
+  case OPT_ROLE_LIST:
+    {
+      vector<RGWRole> result;
+      ret = RGWRole::get_roles_by_path_prefix(store, g_ceph_context, path_prefix, result);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_roles_info(result, formatter);
+      return 0;
+    }
   case OPT_ROLE_POLICY_PUT:
     {
       if (role_name.empty() || policy_name.empty() || perm_policy_doc.empty()) {
@@ -4750,7 +4779,7 @@ int main(int argc, const char **argv)
       cout << "Policy: " << policy_name << " successfully deleted for role: "
            << role_name << std::endl;
       return 0;
-    }
+  }
   default:
     output_user_info = false;
   }
