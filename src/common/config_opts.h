@@ -971,13 +971,13 @@ OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate 
 OPTION(bluestore_precondition_bluefs, OPT_U64, 128*1024*1024)  // write this much data at mkfs
 OPTION(bluestore_precondition_bluefs_block, OPT_U64, 1048576)
 OPTION(bluestore_csum_type, OPT_STR, "crc32c") // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
-OPTION(bluestore_min_csum_block, OPT_U32, 4096)
-OPTION(bluestore_max_csum_block, OPT_U32, 64*1024)
+OPTION(bluestore_csum_min_block, OPT_U32, 4096)
+OPTION(bluestore_csum_max_block, OPT_U32, 64*1024)
 OPTION(bluestore_min_alloc_size, OPT_U32, 0)
 OPTION(bluestore_min_alloc_size_hdd, OPT_U32, 64*1024)
 OPTION(bluestore_min_alloc_size_ssd, OPT_U32, 4*1024)
 OPTION(bluestore_max_alloc_size, OPT_U32, 0)
-OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
+OPTION(bluestore_compression_mode, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
 OPTION(bluestore_compression_min_blob_size, OPT_U32, 128*1024)
 OPTION(bluestore_compression_max_blob_size, OPT_U32, 512*1024)
