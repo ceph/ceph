@@ -114,12 +114,13 @@ void RGWFCGXProcess::run()
 
 void RGWFCGXProcess::handle_request(RGWRequest* r)
 {
-  RGWFCGXRequest* req = static_cast<RGWFCGXRequest*>(r);
-  FCGX_Request* fcgx = req->fcgx;
+  RGWFCGXRequest* const req = static_cast<RGWFCGXRequest*>(r);
+
+  RGWFCGX fcgxfe(req->fcgx);
   auto real_client_io = rgw::io::add_reordering(
                           rgw::io::add_buffering(
                             rgw::io::add_chunking(
-                              RGWFCGX(fcgx))));
+                              &fcgxfe)));
   RGWRestfulIO client_io(&real_client_io);
 
  
@@ -129,7 +130,7 @@ void RGWFCGXProcess::handle_request(RGWRequest* r)
     dout(20) << "process_request() returned " << ret << dendl;
   }
 
-  FCGX_Finish_r(fcgx);
+  FCGX_Finish_r(req->fcgx);
 
   delete req;
 } /* RGWFCGXProcess::handle_request */

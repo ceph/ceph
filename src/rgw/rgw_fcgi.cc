@@ -26,6 +26,7 @@ size_t RGWFCGX::read_data(char* const buf, const size_t len)
 
 void RGWFCGX::flush()
 {
+  txbuf.pubsync();
   FCGX_FFlush(fcgx->out);
 }
 
@@ -42,7 +43,7 @@ size_t RGWFCGX::send_status(const int status, const char* const status_name)
   const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
                                   "Status: %d %s\r\n", status, status_name);
 
-  return write_data(statusbuf, statuslen);
+  return txbuf.sputn(statusbuf, statuslen);
 }
 
 size_t RGWFCGX::send_100_continue()
@@ -55,15 +56,17 @@ size_t RGWFCGX::send_100_continue()
 size_t RGWFCGX::send_header(const boost::string_ref& name,
                             const boost::string_ref& value)
 {
-  char hdrbuf[name.size() + 2 + value.size() + 2 + 1];
-  const auto hdrlen = snprintf(hdrbuf, sizeof(hdrbuf),
-                               "%.*s: %.*s\r\n",
-                               static_cast<int>(name.length()),
-                               name.data(),
-                               static_cast<int>(value.length()),
-                               value.data());
+  static constexpr char HEADER_SEP[] = ": ";
+  static constexpr char HEADER_END[] = "\r\n";
 
-  return write_data(hdrbuf, hdrlen);
+  size_t sent = 0;
+
+  sent += txbuf.sputn(name.data(), name.length());
+  sent += txbuf.sputn(HEADER_SEP, sizeof(HEADER_SEP) - 1);
+  sent += txbuf.sputn(value.data(), value.length());
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  return sent;
 }
 
 size_t RGWFCGX::send_content_length(const uint64_t len)
@@ -74,11 +77,14 @@ size_t RGWFCGX::send_content_length(const uint64_t len)
   const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
                                 "Content-Length: %" PRIu64 "\r\n", len);
 
-  return write_data(sizebuf, sizelen);
+  return txbuf.sputn(sizebuf, sizelen);
 }
 
 size_t RGWFCGX::complete_header()
 {
   static constexpr char HEADER_END[] = "\r\n";
-  return write_data(HEADER_END, sizeof(HEADER_END) - 1);
+  const size_t sent = txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  flush();
+  return sent;
 }

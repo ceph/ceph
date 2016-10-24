@@ -11,17 +11,20 @@
 
 struct FCGX_Request;
 
-class RGWFCGX : public rgw::io::RestfulClient
-{
+class RGWFCGX : public rgw::io::RestfulClient,
+                public rgw::io::BuffererSink {
   FCGX_Request *fcgx;
   RGWEnv env;
 
+  rgw::io::StaticOutputBufferer<> txbuf;
+
   size_t read_data(char* buf, size_t len);
-  size_t write_data(const char* buf, size_t len);
+  size_t write_data(const char* buf, size_t len) override;
 
 public:
   explicit RGWFCGX(FCGX_Request* const fcgx)
-    : fcgx(fcgx) {
+    : fcgx(fcgx),
+      txbuf(*this) {
   }
 
   void init_env(CephContext* cct) override;
@@ -40,7 +43,7 @@ public:
     return write_data(buf, len);
   }
 
-  void flush();
+  void flush() override;
 
   RGWEnv& get_env() noexcept override {
     return env;

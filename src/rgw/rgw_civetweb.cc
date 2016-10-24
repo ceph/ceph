@@ -33,7 +33,8 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
   : conn(conn),
     port(port),
     explicit_keepalive(false),
-    explicit_conn_close(false)
+    explicit_conn_close(false),
+    txbuf(*this)
 {
 }
 
@@ -48,6 +49,7 @@ size_t RGWCivetWeb::read_data(char *buf, size_t len)
 
 void RGWCivetWeb::flush()
 {
+  txbuf.pubsync();
 }
 
 size_t RGWCivetWeb::complete_request()
@@ -120,38 +122,42 @@ void RGWCivetWeb::init_env(CephContext *cct)
   }
 }
 
-template <class... Args>
-static inline size_t safe_mg_printf(Args&&... args)
-{
-  const int ret = mg_printf(std::forward<Args>(args)...);
-  if (ret == 0) {
-    /* didn't send anything, error out */
-    throw rgw::io::Exception(EIO, std::system_category());
-  } else if (ret < 0) {
-    throw rgw::io::Exception(-ret, std::system_category());
-  }
-  return static_cast<size_t>(ret);
-}
-
 size_t RGWCivetWeb::send_status(int status, const char *status_name)
 {
   mg_set_http_status(conn, status);
 
-  return safe_mg_printf(conn, "HTTP/1.1 %d %s\r\n", status,
-                        status_name ? status_name : "");
+  static constexpr size_t STATUS_BUF_SIZE = 128;
+
+  char statusbuf[STATUS_BUF_SIZE];
+  const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
+                                  "HTTP/1.1 %d %s\r\n", status, status_name);
+
+  return txbuf.sputn(statusbuf, statuslen);
 }
 
 size_t RGWCivetWeb::send_100_continue()
 {
   const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
-  return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
+  const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
+                                  sizeof(HTTTP_100_CONTINUE) - 1);
+  flush();
+  return sent;
 }
 
 size_t RGWCivetWeb::send_header(const boost::string_ref& name,
                                 const boost::string_ref& value)
 {
-  return safe_mg_printf(conn, "%.*s: %.*s\r\n", name.length(), name.data(),
-                        value.length(), value.data());
+  static constexpr char HEADER_SEP[] = ": ";
+  static constexpr char HEADER_END[] = "\r\n";
+
+  size_t sent = 0;
+
+  sent += txbuf.sputn(name.data(), name.length());
+  sent += txbuf.sputn(HEADER_SEP, sizeof(HEADER_SEP) - 1);
+  sent += txbuf.sputn(value.data(), value.length());
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  return sent;
 }
 
 size_t RGWCivetWeb::dump_date_header()
@@ -171,7 +177,7 @@ size_t RGWCivetWeb::dump_date_header()
     return 0;
   }
 
-  return write_data(timestr, strlen(timestr));
+  return txbuf.sputn(timestr, strlen(timestr));
 }
 
 size_t RGWCivetWeb::complete_header()
@@ -180,17 +186,25 @@ size_t RGWCivetWeb::complete_header()
 
   if (explicit_keepalive) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
-    sent += write_data(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+    sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
   } else if (explicit_conn_close) {
     constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
-    sent += write_data(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
+    sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
 
-  constexpr char HEADER_END[] = "\r\n";
-  return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
+  static constexpr char HEADER_END[] = "\r\n";
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  flush();
+  return sent;
 }
 
 size_t RGWCivetWeb::send_content_length(uint64_t len)
 {
-  return safe_mg_printf(conn, "Content-Length: %" PRIu64 "\r\n", len);
+  static constexpr size_t CONLEN_BUF_SIZE = 128;
+
+  char sizebuf[CONLEN_BUF_SIZE];
+  const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
+                                "Content-Length: %" PRIu64 "\r\n", len);
+  return txbuf.sputn(sizebuf, sizelen);
 }
