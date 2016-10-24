@@ -284,6 +284,17 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
     *outbuflen = outbl.length();
 }
 
+extern "C" UserPerm *ceph_userperm_new(uid_t uid, gid_t gid, int ngids,
+				       gid_t *gidlist)
+{
+  return new (std::nothrow) UserPerm(uid, gid, ngids, gidlist);
+}
+
+extern "C" void ceph_userperm_destroy(UserPerm *perm)
+{
+  delete perm;
+}
+
 extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 {
   int major, minor, patch;

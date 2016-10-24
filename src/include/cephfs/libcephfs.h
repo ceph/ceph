@@ -97,6 +97,9 @@ typedef struct vinodeno_t vinodeno;
 
 #endif /* ! __cplusplus */
 
+struct UserPerm;
+typedef struct UserPerm UserPerm;
+
 struct Inode;
 typedef struct Inode Inode;
 
@@ -120,6 +123,34 @@ struct CephContext;
 # define CEPHFS_ERROR_MON_MAP_BUILD 1000
 # define CEPHFS_ERROR_NEW_CLIENT 1002
 # define CEPHFS_ERROR_MESSENGER_START 1003
+
+/**
+ * Create a UserPerm credential object.
+ *
+ * Some calls (most notably, the ceph_ll_* ones), take a credential object
+ * that represents the credentials that the calling program is using. This
+ * function creates a new credential object for this purpose. Returns a
+ * pointer to the object, or NULL if it can't be allocated.
+ *
+ * Note that the gidlist array is used directly and is not copied. It must
+ * remain valid over the lifetime of the created UserPerm object.
+ *
+ * @param uid uid to be used
+ * @param gid gid to be used
+ * @param ngids number of gids in supplemental grouplist
+ * @param gidlist array of gid_t's in the list of groups
+ */
+UserPerm *ceph_userperm_new(uid_t uid, gid_t gid, int ngids, gid_t *gidlist);
+
+/**
+ * Destroy a UserPerm credential object.
+ *
+ * @param perm pointer to object to be destroyed
+ *
+ * Currently this just frees the object. Note that the gidlist array is not
+ * freed. The caller must do so if it's necessary.
+ */
+void ceph_userperm_destroy(UserPerm *perm);
 
 /**
  * @defgroup libcephfs_h_init Setup and Teardown
