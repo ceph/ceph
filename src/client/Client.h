@@ -1150,6 +1150,9 @@ public:
   int ll_link(Inode *in, Inode *newparent, const char *newname,
 	      struct stat *attr, const UserPerm& perm);
   int ll_open(Inode *in, int flags, Fh **fh, const UserPerm& perms);
+  int _ll_create(Inode *parent, const char *name, mode_t mode,
+	      int flags, InodeRef *in, int caps, Fh **fhp,
+	      const UserPerm& perms);
   int ll_create(Inode *parent, const char *name, mode_t mode, int flags,
 		struct stat *attr, Inode **out, Fh **fhp,
 		const UserPerm& perms);
