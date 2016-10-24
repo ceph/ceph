@@ -2326,7 +2326,9 @@ void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 	dout(10) << " sending commit on " << *m << " " << reply << dendl;
 	osd->send_message_osd_client(reply, m->get_connection());
       }
-      ));
+      ),
+    op
+  );
 }
 
 ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
@@ -8770,10 +8772,12 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
 
 boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
   ObcLockManager &&manager,
+  OpRequestRef &&op,
   boost::optional<std::function<void(void)> > &&on_complete)
 {
   RepGather *repop = new RepGather(
     std::move(manager),
+    std::move(op),
     std::move(on_complete),
     osd->get_tid(),
     info.last_complete);
@@ -8829,7 +8833,8 @@ void ReplicatedPG::simple_opc_submit(OpContextUPtr ctx)
 void ReplicatedPG::submit_log_entries(
   const list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
-  boost::optional<std::function<void(void)> > &&on_complete)
+  boost::optional<std::function<void(void)> > &&on_complete,
+  OpRequestRef op)
 {
   dout(10) << __func__ << entries << dendl;
   assert(is_primary());
@@ -8844,6 +8849,7 @@ void ReplicatedPG::submit_log_entries(
   if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     repop = new_repop(
       std::move(manager),
+      std::move(op),
       std::move(on_complete));
   }
   for (set<pg_shard_t>::const_iterator i = actingbackfill.begin();
@@ -10342,6 +10348,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // this will requeue ops we were working on but didn't finish, and
   // any dups
   apply_and_flush_repops(is_primary());
+  cancel_log_updates();
 
   // do this *after* apply_and_flush_repops so that we catch any newly
   // registered watches.
