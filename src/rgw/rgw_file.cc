@@ -1088,6 +1088,16 @@ namespace rgw {
 /* librgw */
 extern "C" {
 
+void rgwfile_version(int *major, int *minor, int *extra)
+{
+  if (major)
+    *major = LIBRGW_FILE_VER_MAJOR;
+  if (minor)
+    *minor = LIBRGW_FILE_VER_MINOR;
+  if (extra)
+    *extra = LIBRGW_FILE_VER_EXTRA;
+}
+
 /*
  attach rgw namespace
 */

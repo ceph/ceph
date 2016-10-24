@@ -82,6 +82,9 @@ struct rgw_statvfs {
     uint64_t     f_namemax;  /* maximum filename length */
 };
 
+
+void rgwfile_version(int *major, int *minor, int *extra);
+
 /*
   lookup object by name (POSIX style)
 */
