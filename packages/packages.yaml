@@ -8,7 +8,7 @@ ceph:
   - ceph-test
   - radosgw
   - python-ceph
-  - libcephfs1
+  - libcephfs2
   - libcephfs-dev
   - libcephfs-java
   - libcephfs-jni
@@ -21,7 +21,7 @@ ceph:
   - ceph-mon-dbg
   - ceph-osd-dbg
   - ceph-test-dbg
-  - libcephfs1-dbg
+  - libcephfs2-dbg
   - librados2-dbg
   - libradosstriper1-dbg
   - librbd1-dbg
@@ -37,8 +37,8 @@ ceph:
   - ceph-fuse
   - cephfs-java
   - libcephfs_jni1
-  - libcephfs1
-  - libcephfs1-devel
+  - libcephfs2
+  - libcephfs2-devel
   - librados2
   - librbd1
   - python-ceph
