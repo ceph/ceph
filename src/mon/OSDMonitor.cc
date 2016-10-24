@@ -790,8 +790,15 @@ protected:
 
   bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
 			      int64_t* kb_avail) const {
-    if (id >= 0)
+    if (id >= 0) {
+      if (osdmap->is_out(id)) {
+        *kb = 0;
+        *kb_used = 0;
+        *kb_avail = 0;
+        return true;
+      }
       return get_osd_utilization(id, kb, kb_used, kb_avail);
+    }
 
     *kb = 0;
     *kb_used = 0;
@@ -799,7 +806,7 @@ protected:
 
     for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
       int item = osdmap->crush->get_bucket_item(id, k);
-      int64_t kb_i = 0, kb_used_i = 0, kb_avail_i;
+      int64_t kb_i = 0, kb_used_i = 0, kb_avail_i = 0;
       if (!get_bucket_utilization(item, &kb_i, &kb_used_i, &kb_avail_i))
 	return false;
       *kb += kb_i;
