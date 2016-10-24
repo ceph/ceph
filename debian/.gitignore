@@ -21,9 +21,9 @@
 /*.debhelper
 /ceph
 /files
-/libcephfs1-dbg
+/libcephfs2-dbg
 /libcephfs-dev
-/libcephfs1
+/libcephfs2
 /librados2-dbg
 /librados-dev
 /librados2

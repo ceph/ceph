@@ -19,8 +19,8 @@ sudo apt-get -y  purge librados-dev
 sudo apt-get -y  purge librbd1
 sudo apt-get -y  purge librbd1-dbg
 sudo apt-get -y  purge librbd-dev
-sudo apt-get -y  purge libcephfs1
-sudo apt-get -y  purge libcephfs1-dbg
+sudo apt-get -y  purge libcephfs2
+sudo apt-get -y  purge libcephfs2-dbg
 sudo apt-get -y  purge libcephfs-dev
 sudo apt-get -y  purge radosgw
 sudo apt-get -y  purge radosgw-dbg
