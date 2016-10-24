@@ -517,11 +517,12 @@ extern "C" int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_re
 }
 
 extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
-				  struct dirent *de, struct stat *st, int *stmask)
+				  struct dirent *de, struct ceph_statx *stx, unsigned want,
+				  unsigned flags)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, st, stmask);
+  return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags);
 }
 
 extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,

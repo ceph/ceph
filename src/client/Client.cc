@@ -7360,21 +7360,21 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, b
       continue;
     }
 
-    struct stat st;
+    struct ceph_statx stx;
     struct dirent de;
-    int stmask = fill_stat(dn->inode, &st);
+    fill_statx(dn->inode, lazy ? 0 : dn->inode->caps_issued(), &stx);
 
     uint64_t next_off = dn->offset + 1;
     ++pd;
     if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
 
-    fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, next_off);
+    fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
     dn_name = dn->name; // fill in name while we have lock
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
+    int r = cb(p, &de, &stx, next_off);  // _next_ offset
     client_lock.Lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
 		   << " = " << r << dendl;
@@ -7408,9 +7408,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
 		 << " hash_order=" << dirp->hash_order() << dendl;
 
   struct dirent de;
-  struct stat st;
+  struct ceph_statx stx;
   memset(&de, 0, sizeof(de));
-  memset(&st, 0, sizeof(st));
+  memset(&stx, 0, sizeof(stx));
 
   InodeRef& diri = dirp->inode;
 
@@ -7422,11 +7422,11 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
     assert(diri->dn_set.size() < 2); // can't have multiple hard-links to a dir
     uint64_t next_off = 1;
 
-    fill_stat(diri, &st);
-    fill_dirent(&de, ".", S_IFDIR, st.st_ino, next_off);
+    fill_statx(diri, lazy ? 0 : diri->caps_issued(), &stx);
+    fill_dirent(&de, ".", S_IFDIR, stx.stx_ino, next_off);
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, -1, next_off);
+    int r = cb(p, &de, &stx, next_off);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7444,11 +7444,11 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
     else
       in = diri->get_first_parent()->inode;
 
-    fill_stat(in, &st);
-    fill_dirent(&de, "..", S_IFDIR, st.st_ino, next_off);
+    fill_statx(in, lazy ? 0 : in->caps_issued(), &stx);
+    fill_dirent(&de, "..", S_IFDIR, stx.stx_ino, next_off);
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, -1, next_off);
+    int r = cb(p, &de, &stx, next_off);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7495,11 +7495,11 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
       dir_result_t::dentry &entry = *it;
 
       uint64_t next_off = entry.offset + 1;
-      int stmask = fill_stat(entry.inode, &st);
-      fill_dirent(&de, entry.name.c_str(), st.st_mode, st.st_ino, next_off);
+      fill_statx(entry.inode, lazy ? 0 : entry.inode->caps_issued(), &stx);
+      fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
       client_lock.Unlock();
-      int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
+      int r = cb(p, &de, &stx, next_off);  // _next_ offset
       client_lock.Lock();
 
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
@@ -7549,7 +7549,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
 
 int Client::readdir_r(dir_result_t *d, struct dirent *de)
 {  
-  return readdirplus_r(d, de, 0, 0);
+  return readdirplus_r(d, de, 0, 0, 0);
 }
 
 /*
@@ -7563,13 +7563,12 @@ int Client::readdir_r(dir_result_t *d, struct dirent *de)
 
 struct single_readdir {
   struct dirent *de;
-  struct stat *st;
-  int *stmask;
+  struct ceph_statx *stx;
   bool full;
 };
 
-static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st,
-				     int stmask, off_t off)
+static int _readdir_single_dirent_cb(void *p, struct dirent *de,
+				     struct ceph_statx *stx, off_t off)
 {
   single_readdir *c = static_cast<single_readdir *>(p);
 
@@ -7577,10 +7576,8 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
     return -1;  // already filled this dirent
 
   *c->de = *de;
-  if (c->st)
-    *c->st = *st;
-  if (c->stmask)
-    *c->stmask = stmask;
+  if (c->stx)
+    *c->stx = *stx;
   c->full = true;
   return 1;
 }
@@ -7588,13 +7585,10 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
 struct dirent *Client::readdir(dir_result_t *d)
 {
   int ret;
-  static int stmask;
   static struct dirent de;
-  static struct stat st;
   single_readdir sr;
   sr.de = &de;
-  sr.st = &st;
-  sr.stmask = &stmask;
+  sr.stx = NULL;
   sr.full = false;
 
   // our callback fills the dirent and sets sr.full=true on first
@@ -7610,17 +7604,19 @@ struct dirent *Client::readdir(dir_result_t *d)
   return (dirent *) NULL;
 }
 
-int Client::readdirplus_r(dir_result_t *d, struct dirent *de, struct stat *st, int *stmask)
+int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
+			  struct ceph_statx *stx, unsigned want,
+			  unsigned flags)
 {  
   single_readdir sr;
   sr.de = de;
-  sr.st = st;
-  sr.stmask = stmask;
+  sr.stx = stx;
   sr.full = false;
 
   // our callback fills the dirent and sets sr.full=true on first
   // call, and returns -1 the second time around.
-  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
+  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr,
+		       flags & AT_NO_ATTR_SYNC);
   if (r < -1)
     return r;
   if (sr.full)
@@ -7637,7 +7633,8 @@ struct getdents_result {
   bool fullent;
 };
 
-static int _readdir_getdent_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+static int _readdir_getdent_cb(void *p, struct dirent *de,
+			       struct ceph_statx *stx, off_t off)
 {
   struct getdents_result *c = static_cast<getdents_result *>(p);
 
@@ -7689,7 +7686,7 @@ struct getdir_result {
   int num;
 };
 
-static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+static int _getdir_cb(void *p, struct dirent *de, struct ceph_statx *stx, off_t off)
 {
   getdir_result *r = static_cast<getdir_result *>(p);
 

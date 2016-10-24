@@ -32,6 +32,7 @@
 #include "ioctl.h"
 #include "common/config.h"
 #include "include/assert.h"
+#include "include/cephfs/ceph_statx.h"
 
 #include "fuse_ll.h"
 #include <fuse.h>
@@ -678,19 +679,20 @@ struct readdir_context {
 /*
  * return 0 on success, -1 if out of space
  */
-static int fuse_ll_add_dirent(void *p, struct dirent *de, struct stat *st,
-			      int stmask, off_t next_off)
+static int fuse_ll_add_dirent(void *p, struct dirent *de,
+			      struct ceph_statx *stx, off_t next_off)
 {
   struct readdir_context *c = (struct readdir_context *)p;
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(c->req);
 
-  st->st_ino = cfuse->make_fake_ino(de->d_ino, c->snap);
-  st->st_mode = DTTOIF(de->d_type);
-  st->st_rdev = new_encode_dev(st->st_rdev);
+  struct stat st;
+  st.st_ino = cfuse->make_fake_ino(stx->stx_ino, c->snap);
+  st.st_mode = stx->stx_mode;
+  st.st_rdev = new_encode_dev(stx->stx_rdev);
 
   size_t room = c->size - c->pos;
   size_t entrysize = fuse_add_direntry(c->req, c->buf + c->pos, room,
-				       de->d_name, st, next_off);
+				       de->d_name, &st, next_off);
   if (entrysize > room)
     return -ENOSPC;
 
