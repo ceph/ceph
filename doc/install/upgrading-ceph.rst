@@ -115,7 +115,7 @@ follows::
 .. important:: If your cluster already has an ``auth supported`` option defined in
    the configuration file, no changes are necessary.
 
-See `Ceph Authentication - Backward Compatibility`_ for details.
+See `User Management - Backward Compatibility`_ for details.
 
 
 Monitor On-wire Protocol
@@ -175,7 +175,7 @@ extended period of time between ``ceph-mon`` upgrades. See `Upgrading
 Monitors`_ for details.
 
 .. note:: See the `Authentication`_ section and the 
-   `Ceph Authentication - Backward Compatibility`_ for additional information
+   `User Management - Backward Compatibility`_ for additional information
    on authentication backward compatibility settings for Bobtail.
 
 Once you complete the upgrade of your monitors from Argonaut to
@@ -738,8 +738,7 @@ Under those directories, the keyring should be in a file named ``keyring``.
 
 .. _Monitor Config Reference: ../../rados/configuration/mon-config-ref
 .. _Joao's blog post: http://ceph.com/dev-notes/cephs-new-monitor-changes 
-.. _Ceph Authentication: ../../rados/operations/authentication/
-.. _Ceph Authentication - Backward Compatibility: ../../rados/operations/authentication/#backward-compatibility
+.. _User Management - Backward Compatibility: ../../rados/configuration/auth-config-ref/#backward-compatibility
 .. _manually: ../install-storage-cluster/
 .. _Operating a Cluster: ../../rados/operations/operating
 .. _Monitoring a Cluster: ../../rados/operations/monitoring
