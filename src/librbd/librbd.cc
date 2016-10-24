@@ -483,7 +483,7 @@ namespace librbd {
     return r;
   }
 
-  int RBD::group_list(IoCtx& io_ctx, vector<string>& names)
+  int RBD::group_list(IoCtx& io_ctx, vector<string> *names)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, group_list_enter, io_ctx.get_pool_name().c_str(),
@@ -491,7 +491,7 @@ namespace librbd {
 
     int r = librbd::group_list(io_ctx, names);
     if (r >= 0) {
-      for (auto itr : names) {
+      for (auto itr : *names) {
 	tracepoint(librbd, group_list_entry, itr.c_str());
       }
     }
@@ -524,7 +524,7 @@ namespace librbd {
   }
 
   int RBD::group_image_list(IoCtx& group_ioctx, const char *group_name,
-                            std::vector<group_image_status_t>& images)
+                            std::vector<group_image_status_t> *images)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
     tracepoint(librbd, group_image_list_enter, group_ioctx.get_pool_name().c_str(),
@@ -3237,7 +3237,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
 	     group_ioctx.get_id(), group_name);
 
   std::vector<librbd::group_image_status_t> cpp_images;
-  int r = librbd::group_image_list(group_ioctx, group_name, cpp_images);
+  int r = librbd::group_image_list(group_ioctx, group_name, &cpp_images);
 
   if (r == -ENOENT) {
     tracepoint(librbd, group_image_list_exit, 0);

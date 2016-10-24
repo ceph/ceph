@@ -52,6 +52,9 @@ private:
    *            V2_GET_FLAGS                                  |
    *                |                                         |
    *                v                                         |
+   *            V2_GET_GROUP                                  |
+   *                |                                         |
+   *                v                                         |
    *            V2_GET_SNAPSHOTS (skip if no snaps)           |
    *                |                                         |
    *                v                                         |
@@ -154,6 +157,9 @@ private:
 
   void send_v2_get_flags();
   Context *handle_v2_get_flags(int *result);
+
+  void send_v2_get_group();
+  Context *handle_v2_get_group(int *result);
 
   void send_v2_get_snapshots();
   Context *handle_v2_get_snapshots(int *result);

@@ -1057,19 +1057,18 @@ TEST_F(TestClsRbd, get_mutable_metadata_features)
   std::string lock_tag;
   ::SnapContext snapc;
   parent_info parent;
-  cls::rbd::GroupSpec group_spec;
 
   ASSERT_EQ(0, get_mutable_metadata(&ioctx, oid, true, &size, &features,
 				    &incompatible_features, &lockers,
 				    &exclusive_lock, &lock_tag, &snapc,
-                                    &parent, &group_spec));
+                                    &parent));
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK), features);
   ASSERT_EQ(0U, incompatible_features);
 
   ASSERT_EQ(0, get_mutable_metadata(&ioctx, oid, false, &size, &features,
                                     &incompatible_features, &lockers,
                                     &exclusive_lock, &lock_tag, &snapc,
-				    &parent, &group_spec));
+				    &parent));
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK), features);
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK),
 	    incompatible_features);
@@ -2004,14 +2003,16 @@ TEST_F(TestClsRbd, group_image_list) {
 
   vector<cls::rbd::GroupImageStatus> images;
   cls::rbd::GroupImageSpec empty_image_spec = cls::rbd::GroupImageSpec();
-  ASSERT_EQ(0, group_image_list(&ioctx, group_id, empty_image_spec, 1024, images));
+  ASSERT_EQ(0, group_image_list(&ioctx, group_id, empty_image_spec, 1024,
+                                &images));
   ASSERT_EQ(1U, images.size());
   ASSERT_EQ(image_id, images[0].spec.image_id);
   ASSERT_EQ(pool_id, images[0].spec.pool_id);
   ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE, images[0].state);
 
   cls::rbd::GroupImageStatus last_image = *images.rbegin();
-  ASSERT_EQ(0, group_image_list(&ioctx, group_id, last_image.spec, 1024, images));
+  ASSERT_EQ(0, group_image_list(&ioctx, group_id, last_image.spec, 1024,
+                                &images));
   ASSERT_EQ(0U, images.size());
 }
 
@@ -2113,7 +2114,7 @@ TEST_F(TestClsRbd, image_get_group) {
   ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec_add));
 
   cls::rbd::GroupSpec spec;
-  ASSERT_EQ(0, image_get_group(&ioctx, image_id, spec));
+  ASSERT_EQ(0, image_get_group(&ioctx, image_id, &spec));
 
   ASSERT_EQ(group_id, spec.group_id);
   ASSERT_EQ(pool_id, spec.pool_id);
