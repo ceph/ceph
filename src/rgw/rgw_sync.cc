@@ -814,6 +814,7 @@ public:
       }
       if (get_ret_status() < 0) {
         ldout(cct, 0) << "ERROR: failed to fetch metadata sections" << dendl;
+        yield entries_index->finish();
         yield lease_cr->go_down();
         drain_all();
 	return set_cr_error(get_ret_status());
@@ -829,6 +830,7 @@ public:
 	}
         if (get_ret_status() < 0) {
           ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
+          yield entries_index->finish();
           yield lease_cr->go_down();
           drain_all();
           return set_cr_error(get_ret_status());
