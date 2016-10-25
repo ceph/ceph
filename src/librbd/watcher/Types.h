@@ -79,6 +79,10 @@ private:
   bufferlist::iterator &m_iter;
 };
 
+template <typename ImageCtxT>
+struct Traits {
+  typedef librbd::Watcher Watcher;
+};
 
 } // namespace watcher
 } // namespace librbd
