@@ -55,6 +55,9 @@ def task(ctx, config):
               rollback: 2
               snap_remove: 0
             ec_pool: create an ec pool, defaults to False
+            erasure_code_use_hacky_overwrites: use the whitebox
+                                               testing experimental
+                                               overwrites mode
             erasure_code_profile:
               name: teuthologyprofile
               k: 2
@@ -135,7 +138,11 @@ def task(ctx, config):
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'ceph_test_rados']
     if config.get('ec_pool', False):
-        args.extend(['--ec-pool'])
+        args.extend(['--no-omap'])
+        if config.get('erasure_code_use_hacky_overwrites', False):
+            args.extend(['--no-sparse'])
+        else:
+            args.extend(['--ec-pool'])
     if config.get('write_fadvise_dontneed', False):
         args.extend(['--write-fadvise-dontneed'])
     if config.get('pool_snaps', False):
@@ -221,7 +228,11 @@ def task(ctx, config):
                 if not pool and existing_pools:
                     pool = existing_pools.pop()
                 else:
-                    pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
+                    pool = manager.create_pool_with_unique_name(
+                        erasure_code_profile_name=profile_name,
+                        erasure_code_use_hacky_overwrites=
+                          config.get('erasure_code_use_hacky_overwrites', False)
+                    )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
                         manager.raw_cluster_cmd(

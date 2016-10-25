@@ -1307,7 +1307,8 @@ class CephManager:
 
     def create_pool_with_unique_name(self, pg_num=16,
                                      erasure_code_profile_name=None,
-                                     min_size=None):
+                                     min_size=None,
+                                     erasure_code_use_hacky_overwrites=False):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -1319,7 +1320,8 @@ class CephManager:
                 name,
                 pg_num,
                 erasure_code_profile_name=erasure_code_profile_name,
-                min_size=min_size)
+                min_size=min_size,
+                erasure_code_use_hacky_overwrites=erasure_code_use_hacky_overwrites)
         return name
 
     @contextlib.contextmanager
@@ -1330,13 +1332,16 @@ class CephManager:
 
     def create_pool(self, pool_name, pg_num=16,
                     erasure_code_profile_name=None,
-                    min_size=None):
+                    min_size=None,
+                    erasure_code_use_hacky_overwrites=False):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
         :param pg_num: initial number of pgs.
         :param erasure_code_profile_name: if set and !None create an
                                           erasure coded pool using the profile
+        :param erasure_code_use_hacky_overwrites: if true, use the hacky
+                                                  overwrites mode
         """
         with self.lock:
             assert isinstance(pool_name, basestring)
@@ -1355,6 +1360,11 @@ class CephManager:
                     'osd', 'pool', 'set', pool_name,
                     'min_size',
                     str(min_size))
+            if erasure_code_use_hacky_overwrites:
+                self.raw_cluster_cmd(
+                    'osd', 'pool', 'set', pool_name,
+                    'debug_white_box_testing_ec_overwrites',
+                    'true')
             self.pools[pool_name] = pg_num
         time.sleep(1)
 
