@@ -69,9 +69,10 @@ void PgFiles::hit_dir(std::string const &path)
       continue;
     }
 
-    struct stat st;
+    struct ceph_statx stx;
     std::string de_path = (path + std::string("/") + de.d_name);
-    r = ceph_stat(cmount, de_path.c_str(), &st);
+    r = ceph_statx(cmount, de_path.c_str(), &stx,
+		    CEPH_STATX_INO|CEPH_STATX_SIZE, 0);
     if (r != 0) {
       derr << "Failed to stat path " << de_path << ": "
             << cpp_strerror(r) << dendl;
@@ -79,9 +80,9 @@ void PgFiles::hit_dir(std::string const &path)
       continue;
     }
 
-    if (S_ISREG(st.st_mode)) {
-      hit_file(de_path, st);
-    } else if (S_ISDIR(st.st_mode)) {
+    if (S_ISREG(stx.stx_mode)) {
+      hit_file(de_path, stx);
+    } else if (S_ISDIR(stx.stx_mode)) {
       hit_dir(de_path);
     } else {
       dout(20) << "Skipping non reg/dir file: " << de_path << dendl;
@@ -95,9 +96,9 @@ void PgFiles::hit_dir(std::string const &path)
   }
 }
 
-void PgFiles::hit_file(std::string const &path, struct stat const &st)
+void PgFiles::hit_file(std::string const &path, const struct ceph_statx &stx)
 {
-  assert(S_ISREG(st.st_mode));
+  assert(S_ISREG(stx.stx_mode));
 
   dout(20) << "Hitting file '" << path << "'" << dendl;
 
@@ -127,11 +128,11 @@ void PgFiles::hit_file(std::string const &path, struct stat const &st)
     return;
   }
 
-  auto num_objects = Striper::get_num_objects(layout, st.st_size);
+  auto num_objects = Striper::get_num_objects(layout, stx.stx_size);
 
   for (uint64_t i = 0; i < num_objects; ++i) {
     char buf[32];
-    snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)st.st_ino,
+    snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)stx.stx_ino,
                                               (long long unsigned int)i);
     dout(20) << "  object " << std::string(buf) << dendl;
 
