@@ -44,12 +44,9 @@ void *Finisher::finisher_thread_entry()
   finisher_lock.Lock();
   ldout(cct, 10) << "finisher_thread start" << dendl;
 
-  utime_t start;
   while (!finisher_stop) {
     /// Every time we are woken up, we process the queue until it is empty.
     while (!finisher_queue.empty()) {
-      if (logger)
-        start = ceph_clock_now(cct);
       // To reduce lock contention, we swap out the queue to process.
       // This way other threads can submit new contexts to complete while we are working.
       vector<Context*> ls;
@@ -61,23 +58,25 @@ void *Finisher::finisher_thread_entry()
       ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
 
       // Now actually process the contexts.
+      utime_t start;
       for (vector<Context*>::iterator p = ls.begin();
-	   p != ls.end();
-	   ++p) {
-	if (*p) {
-	  (*p)->complete(0);
-	} else {
-	  // When an item is NULL in the finisher_queue, it means
-	  // we should instead process an item from finisher_queue_rval,
-	  // which has a parameter for complete() other than zero.
-	  // This preserves the order while saving some storage.
-	  assert(!ls_rval.empty());
-	  Context *c = ls_rval.front().first;
-	  c->complete(ls_rval.front().second);
-	  ls_rval.pop_front();
-	}
-	if (logger) {
-	  logger->dec(l_finisher_queue_len);
+           p != ls.end();
+           ++p) {
+        start = ceph_clock_now(cct);
+        if (*p) {
+          (*p)->complete(0);
+        } else {
+          // When an item is NULL in the finisher_queue, it means
+          // we should instead process an item from finisher_queue_rval,
+          // which has a parameter for complete() other than zero.
+          // This preserves the order while saving some storage.
+          assert(!ls_rval.empty());
+          Context *c = ls_rval.front().first;
+          c->complete(ls_rval.front().second);
+          ls_rval.pop_front();
+        }
+        if (logger) {
+          logger->dec(l_finisher_queue_len);
           logger->tinc(l_finisher_complete_lat, ceph_clock_now(cct) - start);
         }
       }
