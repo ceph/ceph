@@ -1007,6 +1007,7 @@ public:
   int setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 	       const UserPerm& perms, int flags=0);
   int fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms);
+  int fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms);
   int chmod(const char *path, mode_t mode, const UserPerm& perms);
   int fchmod(int fd, mode_t mode, const UserPerm& perms);
   int lchmod(const char *path, mode_t mode, const UserPerm& perms);

@@ -6682,6 +6682,23 @@ int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
   return _setattr(f->inode, attr, mask, perms);
 }
 
+int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fsetattr" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << mask  << std::endl;
+
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+#if defined(__linux__) && defined(O_PATH)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
+  return _setattrx(f->inode, stx, mask, perms);
+}
+
 int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
 		 frag_info_t *dirstat, int mask)
 {
