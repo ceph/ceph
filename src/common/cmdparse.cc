@@ -250,7 +250,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	    // if an empty array is acceptable, the caller should always check for
 	    // vector<string> if the expected value of "vector<int64_t>" in the
 	    // cmdmap is missing.
-	    (*mapp)[it->first] = std::move(vector<string>());
+	    (*mapp)[it->first] = vector<string>();
 	  } else if (spvals.front().type() == json_spirit::str_type) {
 	    vector<string> outv;
 	    for (const auto& sv : spvals) {
