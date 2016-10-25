@@ -3072,8 +3072,7 @@ void CDir::scrub_dentry_finished(CDentry *dn)
   dout(20) << __func__ << " on dn " << *dn << dendl;
   assert(scrub_infop && scrub_infop->directory_scrubbing);
   dentry_key_t dn_key = dn->key();
-  if (scrub_infop->directories_scrubbing.count(dn_key)) {
-    scrub_infop->directories_scrubbing.erase(dn_key);
+  if (scrub_infop->directories_scrubbing.erase(dn_key)) {
     scrub_infop->directories_scrubbed.insert(dn_key);
   } else {
     assert(scrub_infop->others_scrubbing.count(dn_key));
