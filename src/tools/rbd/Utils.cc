@@ -210,7 +210,7 @@ int get_special_pool_group_names(const po::variables_map &vm,
     }
   }
 
-  if (group_pool_name->empty()) {
+  if (group_pool_name->empty() && vm.count(pool_key)) {
     *group_pool_name = vm[pool_key].as<std::string>();
   }
 
@@ -259,7 +259,7 @@ int get_special_pool_image_names(const po::variables_map &vm,
     }
   }
 
-  if (image_pool_name->empty()) {
+  if (image_pool_name->empty() && vm.count(pool_key)) {
     *image_pool_name = vm[pool_key].as<std::string>();
   }
 
