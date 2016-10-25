@@ -60,7 +60,8 @@ public:
     ::encode(fsid, payload);
     ::encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	(features & CEPH_FEATURE_MDSENC) == 0) {
+	(features & CEPH_FEATURE_MDSENC) == 0 ||
+	(features & CEPH_FEATURE_MSG_ADDR2) == 0) {
       // reencode for old clients.
       MDSMap m;
       m.decode(encoded);
