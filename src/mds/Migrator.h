@@ -291,6 +291,7 @@ public:
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
   friend class MigratorContext;
+  friend class MigratorLogContext;
 
   // importer
   void handle_export_discover(MExportDirDiscover *m);
