@@ -4441,6 +4441,7 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.back()->cookie = 123;
   o.back()->timeout_seconds = 99;
   entity_addr_t ea;
+  ea.set_type(entity_addr_t::TYPE_LEGACY);
   ea.set_nonce(1);
   ea.set_family(AF_INET);
   ea.set_in4_quad(0, 127);

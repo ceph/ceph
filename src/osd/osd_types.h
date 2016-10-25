@@ -4762,6 +4762,7 @@ struct obj_list_watch_response_t {
     entity_addr_t ea;
     o.push_back(new obj_list_watch_response_t);
     o.push_back(new obj_list_watch_response_t);
+    ea.set_type(entity_addr_t::TYPE_LEGACY);
     ea.set_nonce(1000);
     ea.set_family(AF_INET);
     ea.set_in4_quad(0, 127);
