@@ -210,7 +210,7 @@ private:
   changed_set_t changed;
 
 public:
-  ceph::log::SubsystemMap subsys;
+  ceph::logging::SubsystemMap subsys;
 
   EntityName name;
   string data_dir_option;  ///< data_dir config option, if any

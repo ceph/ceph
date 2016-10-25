@@ -131,7 +131,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       }
 
       if (channels.do_log_to_graylog(channel)) {
-	ceph::log::Graylog::Ref graylog = channels.get_graylog(channel);
+	ceph::logging::Graylog::Ref graylog = channels.get_graylog(channel);
 	if (graylog) {
 	  graylog->log_log_entry(&le);
 	}
@@ -725,14 +725,14 @@ bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
   return ret;
 }
 
-ceph::log::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
+ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
     const string &channel)
 {
   generic_dout(25) << __func__ << " for channel '"
 		   << channel << "'" << dendl;
 
   if (graylogs.count(channel) == 0) {
-    ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
+    ceph::logging::Graylog::Ref graylog = ceph::logging::Graylog::Ref(new ceph::logging::Graylog("mon"));
 
     graylog->set_fsid(g_conf->fsid);
     graylog->set_hostname(g_conf->host);
