@@ -48,6 +48,7 @@ struct C_DiscardJournalCommit : public Context {
     ldout(cct, 20) << this << " C_DiscardJournalCommit: "
                    << "journal committed: discarding from cache" << dendl;
 
+    RWLock::RLocker owner_locker(image_ctx.owner_lock);
     Mutex::Locker cache_locker(image_ctx.cache_lock);
     image_ctx.object_cacher->discard_set(image_ctx.object_set, object_extents);
     aio_comp->complete_request(r);
