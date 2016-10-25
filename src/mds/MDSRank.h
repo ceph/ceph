@@ -280,7 +280,11 @@ class MDSRank {
         MonClient *monc_,
         Context *respawn_hook_,
         Context *suicide_hook_);
+
+  protected:
     ~MDSRank();
+
+  public:
 
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
