@@ -2273,8 +2273,9 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    if (!etag.empty()) {
-      s->formatter->dump_string("ETag", etag);
+    std::string etag_str = etag.to_str();
+    if (! etag_str.empty()) {
+      s->formatter->dump_string("ETag", std::move(etag_str));
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);

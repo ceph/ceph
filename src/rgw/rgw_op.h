@@ -930,7 +930,7 @@ protected:
   string source_zone;
   string client_id;
   string op_id;
-  string etag;
+  ceph::buffer::list etag;
 
   off_t last_ofs;
 

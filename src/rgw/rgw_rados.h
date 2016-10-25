@@ -2627,7 +2627,7 @@ public:
 		       ceph::real_time delete_at,
                        string *version_id,
                        string *ptag,
-                       string *petag,
+                       ceph::buffer::list *petag,
                        struct rgw_err *err,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data);
@@ -2671,7 +2671,7 @@ public:
 	       ceph::real_time delete_at,
                string *version_id,
                string *ptag,
-               string *petag,
+               ceph::buffer::list *petag,
                struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data);
@@ -2690,7 +2690,7 @@ public:
 	       ceph::real_time delete_at,
                string *version_id,
                string *ptag,
-               string *petag,
+               ceph::buffer::list *petag,
                struct rgw_err *err);
 
   /**
