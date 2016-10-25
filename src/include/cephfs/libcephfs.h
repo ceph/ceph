@@ -656,6 +656,18 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
 int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
 
 /**
+ * Set a file's attributes (extended version).
+ *
+ * @param cmount the ceph mount handle to use for performing the setattr.
+ * @param relpath the path to the file/directory to set the attributes of.
+ * @param stx the statx struct that must include attribute values to set on the file.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+ * @param flags mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath, struct ceph_statx *stx, int mask, int flags);
+
+/**
  * Set a file's attributes.
  * 
  * @param cmount the ceph mount handle to use for performing the setattr.
@@ -668,15 +680,14 @@ int ceph_fsetattr(struct ceph_mount_info *cmount, int fd, struct stat *attr, int
 
 /**
  * Set a file's attributes (extended version).
- *
+ * 
  * @param cmount the ceph mount handle to use for performing the setattr.
- * @param relpath the path to the file/directory to set the attributes of.
+ * @param fd the fd of the open file/directory to set the attributes of.
  * @param stx the statx struct that must include attribute values to set on the file.
- * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
- * @param flags mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+ * @param mask a mask of all the stat values that have been set on the stat struct.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath, struct ceph_statx *stx, int mask, int flags);
+int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx, int mask);
 
 /**
  * Change the mode bits (permissions) of a file/directory.
