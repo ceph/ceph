@@ -2203,6 +2203,14 @@ void RGWDeleteBucket::execute()
   }
 
   op_ret = store->delete_bucket(s->bucket, ot);
+
+  if (op_ret == -ECANCELED) {
+    // lost a race, either with mdlog sync or another delete bucket operation.
+    // in either case, we've already called rgw_unlink_bucket()
+    op_ret = 0;
+    return;
+  }
+
   if (op_ret == 0) {
     op_ret = rgw_unlink_bucket(store, s->user->user_id, s->bucket.tenant,
 			       s->bucket.name, false);
