@@ -62,7 +62,9 @@ void *Finisher::finisher_thread_entry()
       for (vector<Context*>::iterator p = ls.begin();
            p != ls.end();
            ++p) {
-        start = ceph_clock_now(cct);
+        if(logger)
+          start = ceph_clock_now(cct);
+        
         if (*p) {
           (*p)->complete(0);
         } else {
