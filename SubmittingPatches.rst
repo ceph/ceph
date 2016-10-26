@@ -378,8 +378,8 @@ for a single patch, or
 to send a whole patch series (prepared with, say, git format-patch).
 
 
-3. Describe your changes.
--------------------------
+3. Describe your changes
+------------------------
 
 Describe the technical detail of the change(s) your patch includes.
 
@@ -446,8 +446,8 @@ So a typical commit message for revising the document could look like::
 
 .. _split_changes:
 
-4. Separate your changes.
--------------------------
+4. Separate your changes
+------------------------
 
 Separate *logical changes* into a single patch file.
 
@@ -468,15 +468,15 @@ If you cannot condense your patch set into a smaller set of patches,
 then only post say 15 or so at a time and wait for review and integration.
 
 
-5. Style check your changes.
-----------------------------
+5. Style check your changes
+---------------------------
 
 Check your patch for basic style violations, details of which can be
 found in CodingStyle.
 
 
-6. No MIME, no links, no compression, no attachments.  Just plain text.
------------------------------------------------------------------------
+6. No MIME, no links, no compression, no attachments.  Just plain text
+----------------------------------------------------------------------
 
 Developers need to be able to read and comment on the changes you are
 submitting.  It is important for a kernel developer to be able to
