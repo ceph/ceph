@@ -551,6 +551,92 @@ protected:
   void add_engine(Control ctrl_flag, const Engine& engine) noexcept;
 };
 
+
+/* rgw::auth::RemoteApplier targets those authentication engines which don't
+ * need to ask the RADOS store while performing the auth process. Instead,
+ * they obtain credentials from an external source like Keystone or LDAP.
+ *
+ * As the authenticated user may not have an account yet, RGWRemoteAuthApplier
+ * must be able to create it basing on data passed by an auth engine. Those
+ * data will be used to fill RGWUserInfo structure. */
+class RemoteApplier : public IdentityApplier {
+public:
+  class AuthInfo {
+    friend class RemoteApplier;
+  protected:
+    const rgw_user acct_user;
+    const std::string acct_name;
+    const uint32_t perm_mask;
+    const bool is_admin;
+    const uint32_t acct_type;
+
+  public:
+    enum class acct_privilege_t {
+      IS_ADMIN_ACCT,
+      IS_PLAIN_ACCT
+    };
+
+    AuthInfo(const rgw_user& acct_user,
+             const std::string& acct_name,
+             const uint32_t perm_mask,
+             const acct_privilege_t level,
+             const uint32_t acct_type=TYPE_NONE)
+    : acct_user(acct_user),
+      acct_name(acct_name),
+      perm_mask(perm_mask),
+      is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
+      acct_type(acct_type) {
+    }
+  };
+
+  using aclspec_t = RGWIdentityApplier::aclspec_t;
+  typedef std::function<uint32_t(const aclspec_t&)> acl_strategy_t;
+
+protected:
+  CephContext* const cct;
+
+  /* Read-write is intensional here due to RGWUserInfo creation process. */
+  RGWRados* const store;
+
+  /* Supplemental strategy for extracting permissions from ACLs. Its results
+   * will be combined (ORed) with a default strategy that is responsible for
+   * handling backward compatibility. */
+  const acl_strategy_t extra_acl_strategy;
+
+  const AuthInfo info;
+
+  virtual void create_account(const rgw_user& acct_user,
+                              RGWUserInfo& user_info) const;          /* out */
+
+public:
+  RemoteApplier(CephContext* const cct,
+                RGWRados* const store,
+                acl_strategy_t&& extra_acl_strategy,
+                const AuthInfo& info)
+    : cct(cct),
+      store(store),
+      extra_acl_strategy(std::move(extra_acl_strategy)),
+      info(info) {
+  }
+
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  bool is_admin_of(const rgw_user& uid) const override;
+  bool is_owner_of(const rgw_user& uid) const override;
+  uint32_t get_perm_mask() const override { return info.perm_mask; }
+  void to_str(std::ostream& out) const override;
+  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+
+  struct Factory {
+    virtual ~Factory() {}
+    /* Providing r-value reference here is required intensionally. Callee is
+     * thus disallowed to handle std::function in a way that could inhibit
+     * the move behaviour (like forgetting about std::moving a l-value). */
+    virtual aplptr_t create_apl_remote(CephContext * const cct,
+                                       acl_strategy_t&& extra_acl_strategy,
+                                       const AuthInfo info) const = 0;
+  };
+};
+
 } /* namespace auth */
 } /* namespace rgw */
 
