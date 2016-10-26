@@ -4357,3 +4357,45 @@ TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
   ASSERT_EQ(0, read_comp->wait_for_complete());
   read_comp->release();
 }
+
+TEST_F(TestLibRBD, DiscardAfterWrite)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 18;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  // enable writeback cache
+  ASSERT_EQ(0, image.flush());
+
+  bufferlist bl;
+  bl.append(std::string(256, '1'));
+
+  librbd::RBD::AioCompletion *write_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, image.aio_write(0, bl.length(), bl, write_comp));
+  ASSERT_EQ(0, write_comp->wait_for_complete());
+  write_comp->release();
+
+  librbd::RBD::AioCompletion *discard_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, image.aio_discard(0, 256, discard_comp));
+  ASSERT_EQ(0, discard_comp->wait_for_complete());
+  discard_comp->release();
+
+  librbd::RBD::AioCompletion *read_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  bufferlist read_bl;
+  image.aio_read(0, bl.length(), read_bl, read_comp);
+  ASSERT_EQ(0, read_comp->wait_for_complete());
+  ASSERT_EQ(bl.length(), read_comp->get_return_value());
+  ASSERT_TRUE(read_bl.is_zero());
+  read_comp->release();
+}
