@@ -338,7 +338,7 @@ option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
     set(Python_ADDITIONAL_VERSIONS 2.7)
     find_package(PythonLibs 2.7 REQUIRED)
-    find_package(Boost COMPONENTS python REQUIRED)
+    # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
 option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
@@ -420,7 +420,7 @@ else()
   set(Boost_USE_STATIC_LIBS ON)
   execute_process(COMMAND "./bootstrap.sh"
     "--prefix=${BOOST_PREFIX}"
-    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,random,regex,system,thread"
+    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,python,random,regex,system,thread"
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
   # 2. install headers
   set(BOOST_ROOT "${BOOST_PREFIX}")
@@ -448,9 +448,17 @@ else()
   # 4. set hints for FindBoost.cmake
   set(Boost_NO_SYSTEM_PATHS ON)
   include_directories(BEFORE ${BOOST_PREFIX}/include)
+  # fixup for CheckIncludeFileCXX
+  set(HAVE_BOOST_ASIO_COROUTINE ON)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
+
+set(BOOST_COMPONENTS
+	thread system regex random program_options date_time iostreams)
+if(WITH_MGR)
+	list(APPEND BOOST_COMPONENTS python)
+endif()
 
 # require minimally the bundled version
 find_package(Boost 1.61 COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
