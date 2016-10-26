@@ -7626,10 +7626,20 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
   }
 
-  // XXX: need to copy over compression attr and its orig_size here?
-  ret = processor.complete(ofs, etag, mtime, set_mtime, attrs, delete_at);
+  // pass original size if compressed
+  uint64_t accounted_size = ofs;
+  {
+    bool compressed{false};
+    RGWCompressionInfo cs_info;
+    ret = rgw_compression_info_from_attrset(attrs, compressed, cs_info);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to read compression info" << dendl;
+      return ret;
+    }
+    accounted_size = cs_info.orig_size;
+  }
 
-  return ret;
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at);
 }
 
 bool RGWRados::is_meta_master()
