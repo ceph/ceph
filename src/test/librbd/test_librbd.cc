@@ -254,6 +254,43 @@ TEST_F(TestLibRBD, CreateAndStat)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, CreateWithSameDataPool)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
+  rbd_image_options_t image_options;
+  rbd_image_options_create(&image_options);
+  BOOST_SCOPE_EXIT( (&image_options) ) {
+    rbd_image_options_destroy(image_options);
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, rbd_image_options_set_uint64(image_options,
+                                            RBD_IMAGE_OPTION_FEATURES,
+                                            features));
+  ASSERT_EQ(0, rbd_image_options_set_string(image_options,
+                                            RBD_IMAGE_OPTION_DATA_POOL,
+                                            m_pool_name.c_str()));
+
+  ASSERT_EQ(0, rbd_create4(ioctx, name.c_str(), size, image_options));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, CreateAndStatPP)
 {
   librados::IoCtx ioctx;
