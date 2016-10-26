@@ -97,8 +97,9 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   const char* env = getenv("CEPH_LIB");
-  std::string libs_dir(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", libs_dir, false, false);
+  std::string libs_dir(env ? env : "lib");
+
+  g_conf->set_val("plugin_dir", libs_dir, false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -153,12 +154,11 @@ int ErasureCodeNonRegression::run()
 
 int ErasureCodeNonRegression::run_create()
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
-			      profile, &erasure_code, &messages);
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", plugin));
+  int code = ecp->factory(profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -225,12 +225,11 @@ int ErasureCodeNonRegression::decode_erasures(ErasureCodeInterfaceRef erasure_co
 
 int ErasureCodeNonRegression::run_check()
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
-			      profile, &erasure_code, &messages);
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", plugin));
+  int code = ecp->factory(profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;

@@ -11,7 +11,6 @@ cmake "$@" ..
 # minimal config to find plugins
 cat <<EOF > ceph.conf
 plugin dir = lib
-erasure code dir = lib
 EOF
 
 # give vstart a (hopefully) unique mon port to start with

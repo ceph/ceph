@@ -456,7 +456,7 @@ int global_init_shutdown_stderr(CephContext *cct)
   return 0;
 }
 
-int global_init_preload_erasure_code(const CephContext *cct)
+int global_init_preload_erasure_code(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;
   string plugins = conf->osd_erasure_code_plugins;
@@ -490,14 +490,10 @@ int global_init_preload_erasure_code(const CephContext *cct)
 	}
   }
 
-  stringstream ss;
-  int r = ErasureCodePluginRegistry::instance().preload(
-    plugins,
-    conf->erasure_code_dir,
-    &ss);
+  int r = cct->get_plugin_registry()->preload(plugins);
   if (r)
-    derr << ss.str() << dendl;
+    derr << "Failed to preload " << plugins << dendl;
   else
-    dout(10) << ss.str() << dendl;
+    dout(10) << "Preloaded: " << plugins << dendl;
   return r;
 }

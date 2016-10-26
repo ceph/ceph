@@ -452,8 +452,7 @@ endif(LINUX)
 
 set(mon_common_files
   auth/AuthSessionHandler.cc
-  auth/cephx/CephxSessionHandler.cc
-  erasure-code/ErasureCodePlugin.cc)
+  auth/cephx/CephxSessionHandler.cc)
 add_library(mon_common_objs OBJECT ${mon_common_files})
 set(common_mountcephfs_files
   common/armor.c
@@ -479,7 +478,7 @@ endif(ENABLE_SHARED)
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common json_spirit erasure_code rt ${LIB_RESOLV}
+target_link_libraries(common json_spirit rt ${LIB_RESOLV}
   ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 

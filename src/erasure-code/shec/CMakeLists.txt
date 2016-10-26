@@ -15,15 +15,15 @@ set(ec_shec_objs
   $<TARGET_OBJECTS:jerasure_objs>
   $<TARGET_OBJECTS:shec_utils>)
 
-add_library(ec_shec SHARED ${ec_shec_objs})
-add_dependencies(ec_shec ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_shec ${EXTRALIBS})
-install(TARGETS ec_shec DESTINATION ${erasure_plugin_dir})
+add_library(ceph_shec SHARED ${ec_shec_objs})
+add_dependencies(ceph_shec ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+target_link_libraries(ceph_shec ${EXTRALIBS})
+install(TARGETS ceph_shec DESTINATION ${erasure_plugin_dir})
 
 # legacy libraries
 foreach(flavor ${jerasure_legacy_flavors})
-  set(plugin_name "ec_shec_${flavor}")
+  set(plugin_name "ceph_shec_${flavor}")
   add_library(${plugin_name} SHARED ${ec_shec_objs})
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
-  add_dependencies(ec_shec ${plugin_name})
+  add_dependencies(ceph_shec ${plugin_name})
 endforeach()

@@ -103,7 +103,9 @@ Plugin *PluginRegistry::get_with_load(const std::string& type,
   Mutex::Locker l(lock);
   Plugin* ret = get(type, name);
   if (!ret) {
+    loading = true;
     int err = load(type, name);
+    loading = false;
     if (err == 0)
       ret = get(type, name);
   } 
@@ -210,10 +212,7 @@ int PluginRegistry::load(const std::string &type,
   return 0;
 }
 
-/*
-int ErasureCodePluginRegistry::preload(const std::string &plugins,
-				       const std::string &directory,
-				       ostream &ss)
+int PluginRegistry::preload(const std::string &plugins)
 {
   Mutex::Locker l(lock);
   list<string> plugins_list;
@@ -221,11 +220,11 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
   for (list<string>::iterator i = plugins_list.begin();
        i != plugins_list.end();
        ++i) {
-    ErasureCodePlugin *plugin;
-    int r = load(*i, directory, &plugin, ss);
+    loading = true;
+    int r = load("", *i);
+    loading = false;
     if (r)
       return r;
   }
   return 0;
 }
-*/

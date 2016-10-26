@@ -23,8 +23,11 @@
 
 class ErasureCodePluginExample : public ErasureCodePlugin {
 public:
-  virtual int factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
+
+  ErasureCodePluginExample(CephContext* cct) : ErasureCodePlugin(cct)
+  {}
+  
+  virtual int factory(ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss)
   {
@@ -34,10 +37,12 @@ public:
   }
 };
 
-const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory)
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  return instance.add(plugin_name, new ErasureCodePluginExample());
+  PluginRegistry *instance = cct->get_plugin_registry();
+  return instance->add(type, name, new ErasureCodePluginExample(cct));
 }

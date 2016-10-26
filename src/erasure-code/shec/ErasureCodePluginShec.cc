@@ -20,8 +20,8 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "ErasureCodePluginShec.h"
 #include "ErasureCodeShecTableCache.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeShec.h"
 #include "jerasure_init.h"
 
@@ -34,8 +34,14 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodePluginShec: ";
 }
 
-int ErasureCodePluginShec::factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
+class ErasureCodePluginShec : public ErasureCodePlugin {
+public:
+  ErasureCodeShecTableCache tcache;
+
+  ErasureCodePluginShec(CephContext* cct) : ErasureCodePlugin(cct)
+  {}
+
+  virtual int factory(ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
     ErasureCodeShec *interface;
@@ -64,17 +70,20 @@ int ErasureCodePluginShec::factory(const std::string &directory,
     dout(10) << "ErasureCodePluginShec: factory() completed" << dendl;
 
     return 0;
-}
+  }
+};
 
-const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory = (char *)"")
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = cct->get_plugin_registry();
   int w[] = { 8, 16, 32 };
   int r = jerasure_init(3, w);
   if (r) {
     return -r;
   }
-  return instance.add(plugin_name, new ErasureCodePluginShec());
+  return instance->add(type, name, new ErasureCodePluginShec(cct));
 }

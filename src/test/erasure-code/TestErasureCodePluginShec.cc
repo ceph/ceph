@@ -27,15 +27,14 @@
 
 TEST(ErasureCodePlugin, factory)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", "shec"));
+  EXPECT_TRUE(ecp);
   map<std::string,std::string> profile;
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("shec",
-				  g_conf->erasure_code_dir,
-				  profile,
-				  &erasure_code, &cerr));
+    EXPECT_EQ(0, ecp->factory(profile, &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());
   }
   const char *techniques[] = {
@@ -47,10 +46,7 @@ TEST(ErasureCodePlugin, factory)
     ErasureCodeInterfaceRef erasure_code;
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("shec",
-				  g_conf->erasure_code_dir,
-				  profile,
-                                  &erasure_code, &cerr));
+    EXPECT_EQ(0, ecp->factory(profile, &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());
   }
 }
@@ -64,8 +60,9 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
 
   const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
+  string directory(env ? env : "lib");
+
+  g_conf->set_val("plugin_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

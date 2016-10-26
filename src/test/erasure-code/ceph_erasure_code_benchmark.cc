@@ -138,8 +138,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
 }
 
 int ErasureCodeBench::run() {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  instance.disable_dlclose = true;
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
+  instance->disable_dlclose = true;
 
   if (workload == "encode")
     return encode();
@@ -149,12 +149,11 @@ int ErasureCodeBench::run() {
 
 int ErasureCodeBench::encode()
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
-			      profile, &erasure_code, &messages);
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", plugin));
+  int code = ecp->factory(profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -253,12 +252,11 @@ int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
 
 int ErasureCodeBench::decode()
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  PluginRegistry *instance = g_ceph_context->get_plugin_registry();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
-			      profile, &erasure_code, &messages);
+  ErasureCodePlugin* ecp = dynamic_cast<ErasureCodePlugin*>(instance->get_with_load("erasure-code", plugin));
+  int code = ecp->factory(profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
