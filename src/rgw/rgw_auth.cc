@@ -556,3 +556,122 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
 {
   auth_stack.push_back(std::make_pair(std::cref(engine), ctrl_flag));
 }
+
+
+/* rgw::auth::RemoteAuthApplier */
+uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+{
+  uint32_t perm = 0;
+
+  /* For backward compatibility with ACLOwner. */
+  perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user,
+                                                  aclspec);
+
+  /* We also need to cover cases where rgw_keystone_implicit_tenants
+   * was enabled. */
+  if (info.acct_user.tenant.empty()) {
+    const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
+
+    perm |= rgw_perms_from_aclspec_default_strategy(tenanted_acct_user,
+                                                    aclspec);
+  }
+
+  /* Now it's a time for invoking additional strategy that was supplied by
+   * a specific auth engine. */
+  if (extra_acl_strategy) {
+    perm |= extra_acl_strategy(aclspec);
+  }
+
+  ldout(cct, 20) << "from ACL got perm=" << perm << dendl;
+  return perm;
+}
+
+bool rgw::auth::RemoteApplier::is_admin_of(const rgw_user& uid) const
+{
+  return info.is_admin;
+}
+
+bool rgw::auth::RemoteApplier::is_owner_of(const rgw_user& uid) const
+{
+  if (info.acct_user.tenant.empty()) {
+    const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
+
+    if (tenanted_acct_user == uid) {
+      return true;
+    }
+  }
+
+  return info.acct_user == uid;
+}
+
+void rgw::auth::RemoteApplier::to_str(std::ostream& out) const
+{
+  out << "RGWRemoteAuthApplier(acct_user=" << info.acct_user
+      << ", acct_name=" << info.acct_name
+      << ", perm_mask=" << info.perm_mask
+      << ", is_admin=" << info.is_admin << ")";
+}
+
+void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
+                                              RGWUserInfo& user_info) const      /* out */
+{
+  rgw_user new_acct_user = acct_user;
+
+  if (info.acct_type) {
+    //ldap/keystone for s3 users
+    user_info.type = info.acct_type;
+  }
+
+  /* Administrator may enforce creating new accounts within their own tenants.
+   * The config parameter name is kept due to legacy. */
+  if (new_acct_user.tenant.empty() && g_conf->rgw_keystone_implicit_tenants) {
+    new_acct_user.tenant = new_acct_user.id;
+  }
+
+  user_info.user_id = new_acct_user;
+  user_info.display_name = info.acct_name;
+
+  int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
+                                real_time(), true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to store new user info: user="
+                  << user_info.user_id << " ret=" << ret << dendl;
+    throw ret;
+  }
+}
+
+/* TODO(rzarzynski): we need to handle display_name changes. */
+void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const      /* out */
+{
+  /* It's supposed that RGWRemoteAuthApplier tries to load account info
+   * that belongs to the authenticated identity. Another policy may be
+   * applied by using a RGWThirdPartyAccountAuthApplier decorator. */
+  const rgw_user& acct_user = info.acct_user;
+
+  /* Normally, empty "tenant" field of acct_user means the authenticated
+   * identity has the legacy, global tenant. However, due to inclusion
+   * of multi-tenancy, we got some special compatibility kludge for remote
+   * backends like Keystone.
+   * If the global tenant is the requested one, we try the same tenant as
+   * the user name first. If that RGWUserInfo exists, we use it. This way,
+   * migrated OpenStack users can get their namespaced containers and nobody's
+   * the wiser.
+   * If that fails, we look up in the requested (possibly empty) tenant.
+   * If that fails too, we create the account within the global or separated
+   * namespace depending on rgw_keystone_implicit_tenants. */
+  if (acct_user.tenant.empty()) {
+    const rgw_user tenanted_uid(acct_user.id, acct_user.id);
+
+    if (rgw_get_user_info_by_uid(store, tenanted_uid, user_info) >= 0) {
+      /* Succeeded. */
+      return;
+    }
+  }
+
+  if (rgw_get_user_info_by_uid(store, acct_user, user_info) < 0) {
+    ldout(cct, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
+    create_account(acct_user, user_info);
+  }
+
+  /* Succeeded if we are here (create_account() hasn't throwed). */
+}
