@@ -471,8 +471,7 @@ static int detect_curl_multi_wait_bug(CephContext *cct, CURLM *handle,
     curl_multi_wait_bug_present = true;
     ldout(cct, 0) << "WARNING: detected a version of libcurl which contains a "
         "bug in curl_multi_wait(). enabling a workaround that may degrade "
-        "performance slightly. please upgrade to a more recent version of "
-        "libcurl." << dendl;
+        "performance slightly." << dendl;
   }
 
   return clear_signal(read_fd);
