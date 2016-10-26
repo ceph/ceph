@@ -409,7 +409,7 @@ RPM Packages
 Ceph requires additional additional third party libraries.
 To add the EPEL repository, execute the following::
 
-   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
 Ceph requires the following packages:
 

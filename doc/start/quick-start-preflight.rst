@@ -57,11 +57,12 @@ For CentOS 7, perform the following steps:
         sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
 
 #. Install and enable the Extra Packages for Enterprise Linux (EPEL)
-   repository. Please see the `EPEL wiki`_ page for more information.
+   repository::
 
-#. On CentOS, you can execute the following command chain::
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
-        sudo yum install -y yum-utils && sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/7/x86_64/ && sudo yum install --nogpgcheck -y epel-release && sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7 && sudo rm /etc/yum.repos.d/dl.fedoraproject.org*
+   Please see the `EPEL wiki`_ page for more information.
+
 
 #. Add the package to your repository. Open a text editor and create a
    Yellowdog Updater, Modified (YUM) entry. Use the file path
