@@ -161,7 +161,7 @@ protected:
   friend class ESubtreeMap;
   friend class MDCache;
 
-  uint64_t get_last_segment_seq() {
+  uint64_t get_last_segment_seq() const {
     assert(!segments.empty());
     return segments.rbegin()->first;
   }
@@ -237,7 +237,7 @@ public:
     return NULL;
   }
 
-  bool have_any_segments() {
+  bool have_any_segments() const {
     return !segments.empty();
   }
 
@@ -246,13 +246,13 @@ public:
   size_t get_num_events() const { return num_events; }
   size_t get_num_segments() const { return segments.size(); }
 
-  uint64_t get_read_pos();
-  uint64_t get_write_pos();
-  uint64_t get_safe_pos();
+  uint64_t get_read_pos() const;
+  uint64_t get_write_pos() const;
+  uint64_t get_safe_pos() const;
   Journaler *get_journaler() { return journaler; }
-  bool empty() { return segments.empty(); }
+  bool empty() const { return segments.empty(); }
 
-  bool is_capped() { return capped; }
+  bool is_capped() const { return capped; }
   void cap();
 
   void kick_submitter();
@@ -280,11 +280,11 @@ public:
     _submit_entry(e, c);
     submit_cond.Signal();
   }
-  bool entry_is_open() { return cur_event != NULL; }
+  bool entry_is_open() const { return cur_event != NULL; }
 
   void wait_for_safe( MDSInternalContextBase *c );
   void flush();
-  bool is_flushed() {
+  bool is_flushed() const {
     return unflushed == 0;
   }
 
