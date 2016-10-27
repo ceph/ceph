@@ -1873,6 +1873,8 @@ public:
     return 0;
   }
 
+  virtual void get_db_statistics(Formatter *f) { }
+
   virtual string get_type() = 0;
 
   // mgmt
