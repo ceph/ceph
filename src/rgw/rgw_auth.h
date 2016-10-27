@@ -516,6 +516,14 @@ public:
 };
 
 
+/* Interface for extracting a token basing from data carried by req_state. */
+class TokenExtractor {
+public:
+  virtual ~TokenExtractor() = default;
+  virtual std::string get_token(const req_state* s) const = 0;
+};
+
+
 /* Abstract class for stacking sub-engines to expose them as a single
  * Engine. It is responsible for ordering its sub-engines and managing
  * fall-backs between them. Derivatee is supposed to encapsulate engine
