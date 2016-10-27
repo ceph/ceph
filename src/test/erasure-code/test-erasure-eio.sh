@@ -34,7 +34,6 @@ function run() {
         run_mon $dir a || return 1
         # check that erasure code plugins are preloaded
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-        grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
         $func $dir || return 1
         teardown $dir || return 1
     done
@@ -55,7 +54,6 @@ function setup_osds() {
 
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/osd.0.log || return 1
 }
 
 function create_erasure_coded_pool() {
