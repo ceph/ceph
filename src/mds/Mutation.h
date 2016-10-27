@@ -113,7 +113,7 @@ public:
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
   bool is_slave() const { return slave_to_mds != MDS_RANK_NONE; }
 
-  client_t get_client() {
+  client_t get_client() const {
     if (reqid.name.is_client())
       return client_t(reqid.name.num());
     return -1;
@@ -144,7 +144,7 @@ public:
   void finish_locking(SimpleLock *lock);
 
   // auth pins
-  bool is_auth_pinned(MDSCacheObject *object);
+  bool is_auth_pinned(MDSCacheObject *object) const;
   void auth_pin(MDSCacheObject *object);
   void auth_unpin(MDSCacheObject *object);
   void drop_local_auth_pins();
@@ -321,10 +321,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   ~MDRequestImpl();
   
   More* more();
-  bool has_more();
+  bool has_more() const;
   bool has_witnesses();
   bool slave_did_prepare();
-  bool did_ino_allocation();
+  bool did_ino_allocation() const;
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
