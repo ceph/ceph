@@ -498,6 +498,6 @@ int global_init_preload_erasure_code(const CephContext *cct)
   if (r)
     derr << ss.str() << dendl;
   else
-    dout(10) << ss.str() << dendl;
+    dout(0) << ss.str() << dendl;
   return r;
 }
