@@ -68,6 +68,7 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::DB *db;
   rocksdb::Env *env;
   string options_str;
+
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -142,6 +143,13 @@ public:
   int create_and_open(ostream &out);
 
   void close();
+
+  bool support_statistics() {
+    return true;
+  }
+
+  void get_statistics(Formatter *f);
+
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
     int num_seen = 0;
