@@ -3,6 +3,8 @@ overrides:
     conf:
       global:
         enable experimental unrecoverable data corrupting features: '*'
+  thrashosds:
+    disable_objectstore_tool_tests: true
 tasks:
 - rados:
     clients: [client.0]
