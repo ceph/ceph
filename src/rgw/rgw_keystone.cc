@@ -138,22 +138,25 @@ bool rgw_decode_pki_token(CephContext * const cct,
 }
 
 
-KeystoneApiVersion KeystoneService::get_api_version()
+namespace rgw {
+namespace keystone {
+
+ApiVersion Service::get_api_version()
 {
   const int keystone_version = g_ceph_context->_conf->rgw_keystone_api_version;
 
   if (keystone_version == 3) {
-    return KeystoneApiVersion::VER_3;
+    return ApiVersion::VER_3;
   } else if (keystone_version == 2) {
-    return KeystoneApiVersion::VER_2;
+    return ApiVersion::VER_2;
   } else {
     dout(0) << "ERROR: wrong Keystone API version: " << keystone_version
             << "; falling back to v2" <<  dendl;
-    return KeystoneApiVersion::VER_2;
+    return ApiVersion::VER_2;
   }
 }
 
-int KeystoneService::get_keystone_url(CephContext * const cct,
+int Service::get_keystone_url(CephContext* const cct,
                                       std::string& url)
 {
   url = cct->_conf->rgw_keystone_url;
@@ -169,8 +172,8 @@ int KeystoneService::get_keystone_url(CephContext * const cct,
   return 0;
 }
 
-int KeystoneService::get_keystone_admin_token(CephContext * const cct,
-                                              std::string& token)
+int Service::get_keystone_admin_token(CephContext* const cct,
+                                      std::string& token)
 {
   std::string token_url;
 
@@ -183,10 +186,10 @@ int KeystoneService::get_keystone_admin_token(CephContext * const cct,
     return 0;
   }
 
-  KeystoneToken t;
+  TokenEnvelope t;
 
   /* Try cache first. */
-  if (RGWKeystoneTokenCache::get_instance().find_admin(t)) {
+  if (TokenCache::get_instance<rgw::keystone::LegacyConfig>().find_admin(t)) {
     ldout(cct, 20) << "found cached admin token" << dendl;
     token = t.token.id;
     return 0;
@@ -197,9 +200,9 @@ int KeystoneService::get_keystone_admin_token(CephContext * const cct,
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
-  const auto keystone_version = KeystoneService::get_api_version();
-  if (keystone_version == KeystoneApiVersion::VER_2) {
-    KeystoneAdminTokenRequestVer2 req_serializer(cct);
+  const auto keystone_version = Service::get_api_version();
+  if (keystone_version == ApiVersion::VER_2) {
+    AdminTokenRequestVer2 req_serializer(cct);
     req_serializer.dump(&jf);
 
     std::stringstream ss;
@@ -208,8 +211,8 @@ int KeystoneService::get_keystone_admin_token(CephContext * const cct,
     token_req.set_send_length(ss.str().length());
     token_url.append("v2.0/tokens");
 
-  } else if (keystone_version == KeystoneApiVersion::VER_3) {
-    KeystoneAdminTokenRequestVer3 req_serializer(cct);
+  } else if (keystone_version == ApiVersion::VER_3) {
+    AdminTokenRequestVer3 req_serializer(cct);
     req_serializer.dump(&jf);
 
     std::stringstream ss;
@@ -236,12 +239,13 @@ int KeystoneService::get_keystone_admin_token(CephContext * const cct,
     return -EINVAL;
   }
 
-  RGWKeystoneTokenCache::get_instance().add_admin(t);
+  TokenCache::get_instance().add_admin(t);
   token = t.token.id;
   return 0;
 }
 
-bool KeystoneToken::has_role(const string& r) const
+
+bool TokenEnvelope::has_role(const std::string& r) const
 {
   list<Role>::const_iterator iter;
   for (iter = roles.cbegin(); iter != roles.cend(); ++iter) {
@@ -252,9 +256,9 @@ bool KeystoneToken::has_role(const string& r) const
   return false;
 }
 
-int KeystoneToken::parse(CephContext * const cct,
-                         const string& token_str,
-                         bufferlist& bl)
+int TokenEnvelope::parse(CephContext* const cct,
+                         const std::string& token_str,
+                         ceph::bufferlist& bl)
 {
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
@@ -263,16 +267,16 @@ int KeystoneToken::parse(CephContext * const cct,
   }
 
   try {
-    const auto version = KeystoneService::get_api_version();
+    const auto version = rgw::keystone::Service::get_api_version();
 
-    if (version == KeystoneApiVersion::VER_2) {
+    if (version == rgw::keystone::ApiVersion::VER_2) {
       if (!JSONDecoder::decode_json("access", *this, &parser)) {
-        /* Token structure doesn't follow Identity API v2, so the token
+        /* TokenEnvelope structure doesn't follow Identity API v2, so the token
          * must be in v3. Otherwise we can assume it's wrongly formatted. */
         JSONDecoder::decode_json("token", *this, &parser, true);
         token.id = token_str;
       }
-    } else if (version == KeystoneApiVersion::VER_3) {
+    } else if (version == rgw::keystone::ApiVersion::VER_3) {
       if (!JSONDecoder::decode_json("token", *this, &parser)) {
         /* If the token cannot be parsed according to V3, try V2. */
         JSONDecoder::decode_json("access", *this, &parser, true);
@@ -293,19 +297,22 @@ int KeystoneToken::parse(CephContext * const cct,
   return 0;
 }
 
-RGWKeystoneTokenCache& RGWKeystoneTokenCache::get_instance()
+TokenCache& TokenCache::get_instance()
 {
   /* In C++11 this is thread safe. */
-  static RGWKeystoneTokenCache instance;
+  static TokenCache instance;
   return instance;
 }
-bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
+
+bool TokenCache::find(const std::string& token_id,
+                      rgw::keystone::TokenEnvelope& token)
 {
   Mutex::Locker l(lock);
   return find_locked(token_id, token);
 }
 
-bool RGWKeystoneTokenCache::find_locked(const string& token_id, KeystoneToken& token)
+bool TokenCache::find_locked(const std::string& token_id,
+                             rgw::keystone::TokenEnvelope& token)
 {
   assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
@@ -332,22 +339,22 @@ bool RGWKeystoneTokenCache::find_locked(const string& token_id, KeystoneToken& t
   return true;
 }
 
-bool RGWKeystoneTokenCache::find_admin(KeystoneToken& token)
+bool TokenCache::find_admin(rgw::keystone::TokenEnvelope& token)
 {
   Mutex::Locker l(lock);
 
   return find_locked(admin_token_id, token);
 }
 
-void RGWKeystoneTokenCache::add(const string& token_id,
-                                const KeystoneToken& token)
+void TokenCache::add(const std::string& token_id,
+                     const rgw::keystone::TokenEnvelope& token)
 {
   Mutex::Locker l(lock);
   add_locked(token_id, token);
 }
 
-void RGWKeystoneTokenCache::add_locked(const string& token_id,
-                                const KeystoneToken& token)
+void TokenCache::add_locked(const std::string& token_id,
+                            const rgw::keystone::TokenEnvelope& token)
 {
   assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
@@ -370,7 +377,7 @@ void RGWKeystoneTokenCache::add_locked(const string& token_id,
   }
 }
 
-void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
+void TokenCache::add_admin(const rgw::keystone::TokenEnvelope& token)
 {
   Mutex::Locker l(lock);
 
@@ -378,7 +385,7 @@ void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
   add_locked(admin_token_id, token);
 }
 
-void RGWKeystoneTokenCache::invalidate(const string& token_id)
+void TokenCache::invalidate(const std::string& token_id)
 {
   Mutex::Locker l(lock);
   map<string, token_entry>::iterator iter = tokens.find(token_id);
@@ -391,7 +398,7 @@ void RGWKeystoneTokenCache::invalidate(const string& token_id)
   tokens.erase(iter);
 }
 
-int RGWKeystoneTokenCache::RevokeThread::check_revoked()
+int TokenCache::RevokeThread::check_revoked()
 {
   std::string url;
   std::string token;
@@ -399,18 +406,18 @@ int RGWKeystoneTokenCache::RevokeThread::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (KeystoneService::get_keystone_admin_token(cct, token) < 0) {
+  if (rgw::keystone::Service::get_keystone_admin_token(cct, token) < 0) {
     return -EINVAL;
   }
-  if (KeystoneService::get_keystone_url(cct, url) < 0) {
+  if (rgw::keystone::Service::get_keystone_url(cct, url) < 0) {
     return -EINVAL;
   }
   req.append_header("X-Auth-Token", token);
 
-  const auto keystone_version = KeystoneService::get_api_version();
-  if (keystone_version == KeystoneApiVersion::VER_2) {
+  const auto keystone_version = rgw::keystone::Service::get_api_version();
+  if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
     url.append("v2.0/tokens/revoked");
-  } else if (keystone_version == KeystoneApiVersion::VER_3) {
+  } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
     url.append("v3/auth/tokens/OS-PKI/revoked");
   }
 
@@ -489,12 +496,12 @@ int RGWKeystoneTokenCache::RevokeThread::check_revoked()
   return 0;
 }
 
-bool RGWKeystoneTokenCache::going_down() const
+bool TokenCache::going_down() const
 {
   return (down_flag.read() != 0);
 }
 
-void * RGWKeystoneTokenCache::RevokeThread::entry()
+void* TokenCache::RevokeThread::entry()
 {
   do {
     ldout(cct, 2) << "keystone revoke thread: start" << dendl;
@@ -517,8 +524,11 @@ void * RGWKeystoneTokenCache::RevokeThread::entry()
   return nullptr;
 }
 
-void RGWKeystoneTokenCache::RevokeThread::stop()
+void TokenCache::RevokeThread::stop()
 {
   Mutex::Locker l(lock);
   cond.Signal();
 }
+
+}; /* namespace keystone */
+}; /* namespace rgw */
