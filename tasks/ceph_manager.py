@@ -151,7 +151,9 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
-        if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
+        if (self.config.get('powercycle') or
+            not self.cmd_exists_on_osds("ceph-objectstore-tool") or
+            self.config.get('disable_objectstore_tool_tests', False)):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
             if self.config.get('powercycle'):

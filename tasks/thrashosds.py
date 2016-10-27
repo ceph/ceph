@@ -117,6 +117,9 @@ def task(ctx, config):
 
     noscrub_toggle_delay: (2.0) duration to delay between toggling noscrub
 
+    disable_objectstore_tool_tests: (false) disable ceph_objectstore_tool based
+                                    tests
+
     example:
 
     tasks:
@@ -141,9 +144,15 @@ def task(ctx, config):
     config['dump_ops_enable'] = config.get('dump_ops_enable', "true")
     # add default value for noscrub_toggle_delay
     config['noscrub_toggle_delay'] = config.get('noscrub_toggle_delay', 2.0)
+
+    log.info("config is {config}".format(config=str(config)))
+
     overrides = ctx.config.get('overrides', {})
+    log.info("overrides is {overrides}".format(overrides=str(overrides)))
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
     cluster = config.get('cluster', 'ceph')
+
+    log.info("config is {config}".format(config=str(config)))
 
     if 'powercycle' in config:
 
