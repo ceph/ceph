@@ -274,12 +274,19 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
+    if (osdmap.is_out(o))
+      continue;
+    map<int,utime_t>::iterator found = down_pending_out.find(o);
     if (osdmap.is_down(o)) {
       // populate down -> out map
-      if (osdmap.is_in(o) &&
-	  down_pending_out.count(o) == 0) {
-	dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
-	down_pending_out[o] = ceph_clock_now(g_ceph_context);
+      if (found == down_pending_out.end()) {
+        dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
+        down_pending_out[o] = ceph_clock_now(g_ceph_context);
+      }
+    } else {
+      if (found != down_pending_out.end()) {
+        dout(10) << " removing osd." << o << " from down_pending_out map" << dendl;
+        down_pending_out.erase(found);
       }
     }
   }
