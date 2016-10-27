@@ -27,12 +27,15 @@ bool rgw_decode_pki_token(CephContext *cct,
                           const string& token,
                           bufferlist& bl);
 
-enum class KeystoneApiVersion {
+namespace rgw {
+namespace keystone {
+
+enum class ApiVersion {
   VER_2,
   VER_3
 };
 
-class KeystoneService {
+class Service {
 public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
   public:
@@ -57,7 +60,7 @@ public:
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
   typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
-  static KeystoneApiVersion get_api_version();
+  static ApiVersion get_api_version();
 
   static int get_keystone_url(CephContext * const cct,
                               std::string& url);
@@ -65,7 +68,8 @@ public:
                                       std::string& token);
 };
 
-class KeystoneToken {
+
+class TokenEnvelope {
 public:
   class Domain {
   public:
@@ -113,7 +117,7 @@ public:
 
 public:
   // FIXME: default ctor needs to be eradicated here
-  KeystoneToken() = default;
+  TokenEnvelope() = default;
   time_t get_expires() const { return token.expires; }
   const std::string& get_domain_id() const {return project.domain.id;};
   const std::string& get_domain_name() const {return project.domain.name;};
@@ -133,27 +137,29 @@ public:
 };
 
 
-class RGWKeystoneTokenCache {
+class TokenCache {
   struct token_entry {
-    KeystoneToken token;
+    TokenEnvelope token;
     list<string>::iterator lru_iter;
   };
 
+  const rgw::keystone::Config& config;
   atomic_t down_flag;
 
   class RevokeThread : public Thread {
-    friend class RGWKeystoneTokenCache;
+    friend class TokenCache;
     typedef RGWPostHTTPData RGWGetRevokedTokens;
 
     CephContext * const cct;
-    RGWKeystoneTokenCache * const cache;
+    TokenCache* const cache;
     Mutex lock;
     Cond cond;
 
-    RevokeThread(CephContext * const cct, RGWKeystoneTokenCache * cache)
+    RevokeThread(CephContext* const cct,
+                 TokenCache* const cache)
       : cct(cct),
         cache(cache),
-        lock("RGWKeystoneTokenCache::RevokeThread") {
+        lock("rgw::keystone::TokenCache::RevokeThread") {
     }
     void *entry();
     void stop();
@@ -170,15 +176,16 @@ class RGWKeystoneTokenCache {
 
   const size_t max;
 
-  RGWKeystoneTokenCache()
+  TokenCache()
     : revocator(g_ceph_context, this),
       cct(g_ceph_context),
-      lock("RGWKeystoneTokenCache"),
+      lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
     /* The thread name has been kept for backward compliance. */
     revocator.create("rgw_swift_k_rev");
   }
-  ~RGWKeystoneTokenCache() {
+
+  ~TokenCache() {
     down_flag.set(1);
 
     revocator.stop();
@@ -186,48 +193,56 @@ class RGWKeystoneTokenCache {
   }
 
 public:
-  RGWKeystoneTokenCache(const RGWKeystoneTokenCache&) = delete;
-  void operator=(const RGWKeystoneTokenCache&) = delete;
+  TokenCache(const TokenCache&) = delete;
+  void operator=(const TokenCache&) = delete;
 
-  static RGWKeystoneTokenCache& get_instance();
+  static TokenCache& get_instance();
 
-  bool find(const string& token_id, KeystoneToken& token);
-  bool find_admin(KeystoneToken& token);
-  void add(const string& token_id, const KeystoneToken& token);
-  void add_admin(const KeystoneToken& token);
-  void invalidate(const string& token_id);
+    /* In C++11 this is thread safe. */
+    static TokenCache instance(ConfigT::get_instance());
+    return instance;
+  }
+
+  bool find(const std::string& token_id, TokenEnvelope& token);
+  bool find_admin(TokenEnvelope& token);
+  void add(const std::string& token_id, const TokenEnvelope& token);
+  void add_admin(const TokenEnvelope& token);
+  void invalidate(const std::string& token_id);
   bool going_down() const;
 private:
-  void add_locked(const string& token_id, const KeystoneToken& token);
-  bool find_locked(const string& token_id, KeystoneToken& token);
+  void add_locked(const std::string& token_id, const TokenEnvelope& token);
+  bool find_locked(const std::string& token_id, TokenEnvelope& token);
 
 };
 
 
-class KeystoneAdminTokenRequest {
+class AdminTokenRequest {
 public:
-  virtual ~KeystoneAdminTokenRequest() = default;
-  virtual void dump(Formatter *f) const = 0;
+  virtual ~AdminTokenRequest() = default;
+  virtual void dump(Formatter* f) const = 0;
 };
 
-class KeystoneAdminTokenRequestVer2 : public KeystoneAdminTokenRequest {
-  CephContext *cct;
+class AdminTokenRequestVer2 : public AdminTokenRequest {
+  CephContext* cct;
 
 public:
-  KeystoneAdminTokenRequestVer2(CephContext * const _cct)
-    : cct(_cct) {
+  AdminTokenRequestVer2(CephContext* const cct)
+    : cct(cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter* f) const;
 };
 
-class KeystoneAdminTokenRequestVer3 : public KeystoneAdminTokenRequest {
-  CephContext *cct;
+class AdminTokenRequestVer3 : public AdminTokenRequest {
+  CephContext* cct;
 
 public:
-  KeystoneAdminTokenRequestVer3(CephContext * const _cct)
-    : cct(_cct) {
+  AdminTokenRequestVer3(CephContext* const cct)
+    : cct(cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter* f) const;
 };
+
+}; /* namespace keystone */
+}; /* namespace rgw */
 
 #endif
