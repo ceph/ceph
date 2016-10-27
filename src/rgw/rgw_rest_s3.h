@@ -414,7 +414,7 @@ private:
   vector<string> accepted_roles;
 
 public:
-  KeystoneToken response;
+  rgw::keystone::TokenEnvelope response;
 
 private:
   void set_tx_buffer(const string& d) {

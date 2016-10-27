@@ -3302,7 +3302,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
     keystone_url.append("/");
   }
 
-  if (KeystoneService::get_api_version() == KeystoneApiVersion::VER_3) {
+  if (rgw::keystone::Service::get_api_version() == rgw::keystone::ApiVersion::VER_3) {
     keystone_url.append("v3/s3tokens");
   } else {
     keystone_url.append("v2.0/s3tokens");
@@ -3310,7 +3310,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* get authentication token for Keystone. */
   string admin_token_id;
-  int r = KeystoneService::get_keystone_admin_token(cct, admin_token_id);
+  int r = rgw::keystone::Service::get_keystone_admin_token(cct, admin_token_id);
   if (r < 0) {
     ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
     return r;
