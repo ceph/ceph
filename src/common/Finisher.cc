@@ -63,25 +63,25 @@ void *Finisher::finisher_thread_entry()
 
       // Now actually process the contexts.
       for (vector<Context*>::iterator p = ls.begin();
-           p != ls.end();
-           ++p) {
-        if (*p) {
-          (*p)->complete(0);
-        } else {
-          // When an item is NULL in the finisher_queue, it means
-          // we should instead process an item from finisher_queue_rval,
-          // which has a parameter for complete() other than zero.
-          // This preserves the order while saving some storage.
-          assert(!ls_rval.empty());
-          Context *c = ls_rval.front().first;
-          c->complete(ls_rval.front().second);
-          ls_rval.pop_front();
-        }
-        if (logger) {
-          logger->dec(l_finisher_queue_len);
+	   p != ls.end();
+	   ++p) {
+	if (*p) {
+	  (*p)->complete(0);
+	} else {
+	  // When an item is NULL in the finisher_queue, it means
+	  // we should instead process an item from finisher_queue_rval,
+	  // which has a parameter for complete() other than zero.
+	  // This preserves the order while saving some storage.
+	  assert(!ls_rval.empty());
+	  Context *c = ls_rval.front().first;
+	  c->complete(ls_rval.front().second);
+	  ls_rval.pop_front();
+	}
+	if (logger) {
+	  logger->dec(l_finisher_queue_len);
           end = ceph_clock_now(cct);
-          logger->tinc(l_finisher_complete_lat, end - start);
-          start = end;
+	  logger->tinc(l_finisher_complete_lat, end - start);
+	  start = end;
         }
       }
       ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
