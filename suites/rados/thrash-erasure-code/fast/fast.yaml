@@ -1,4 +1,4 @@
-override:
+overrides:
   ceph:
     conf:
       global:
