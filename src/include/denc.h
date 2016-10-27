@@ -449,7 +449,7 @@ inline void denc_lba(uint64_t& v, bufferptr::iterator& p) {
 // denc top-level methods that call into denc_traits<T> methods
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
+inline typename std::enable_if<traits::supported != 0 &&
 			       !traits::featured>::type denc(
   const T& o,
   size_t& p,
@@ -458,7 +458,7 @@ inline typename std::enable_if<traits::supported &&
   traits::bound_encode(o, p);
 }
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
+inline typename std::enable_if<traits::supported != 0 &&
 			       traits::featured>::type denc(
   const T& o,
   size_t& p,
@@ -468,7 +468,7 @@ inline typename std::enable_if<traits::supported &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
+inline typename std::enable_if<traits::supported != 0 &&
 			       !traits::featured>::type denc(
   const T& o,
   buffer::list::contiguous_appender& p,
@@ -477,7 +477,7 @@ inline typename std::enable_if<traits::supported &&
   traits::encode(o, p);
 }
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
+inline typename std::enable_if<traits::supported != 0 &&
 			       traits::featured>::type denc(
   const T& o,
   buffer::list::contiguous_appender& p,
@@ -487,7 +487,7 @@ inline typename std::enable_if<traits::supported &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
+inline typename std::enable_if<traits::supported != 0 &&
 			       !traits::featured>::type denc(
   T& o,
   buffer::ptr::iterator& p,
@@ -496,7 +496,7 @@ inline typename std::enable_if<traits::supported &&
   traits::decode(o, p);
 }
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
+inline typename std::enable_if<traits::supported != 0 &&
 			       traits::featured>::type denc(
   T& o,
   buffer::ptr::iterator& p,
@@ -588,8 +588,8 @@ struct denc_traits<bufferlist> {
 template<typename A, typename B>
 struct denc_traits<
   std::pair<A, B>,
-  typename std::enable_if<denc_traits<A>::supported &&
-			  denc_traits<B>::supported>::type> {
+  typename std::enable_if<denc_traits<A>::supported != 0 &&
+			  denc_traits<B>::supported != 0>::type> {
   typedef denc_traits<A> a_traits;
   typedef denc_traits<B> b_traits;
 
@@ -640,7 +640,7 @@ struct denc_traits<
 template<typename T>
 struct denc_traits<
   std::list<T>,
-  typename std::enable_if<denc_traits<T>::supported>::type> {
+  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
   typedef denc_traits<T> traits;
 
   enum { supported = true };
@@ -722,7 +722,7 @@ struct denc_traits<
 template<typename T>
 struct denc_traits<
   std::vector<T>,
-  typename std::enable_if<denc_traits<T>::supported>::type> {
+  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
   typedef denc_traits<T> traits;
 
   enum { supported = true };
@@ -831,7 +831,7 @@ struct denc_traits<
 template<typename T>
 struct denc_traits<
   std::set<T>,
-  typename std::enable_if<denc_traits<T>::supported>::type> {
+  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
   typedef denc_traits<T> traits;
 
   enum { supported = true };
@@ -943,8 +943,8 @@ struct denc_traits<
 template<typename A, typename B>
 struct denc_traits<
   std::map<A, B>,
-  typename std::enable_if<denc_traits<A>::supported &&
-			  denc_traits<B>::supported>::type> {
+  typename std::enable_if<denc_traits<A>::supported != 0 &&
+			  denc_traits<B>::supported != 0>::type> {
   typedef denc_traits<A> a_traits;
   typedef denc_traits<B> b_traits;
 
