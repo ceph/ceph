@@ -1141,7 +1141,7 @@ void RGWRealm::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("epoch", epoch, obj);
 }
 
-void KeystoneToken::Token::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Token::decode_json(JSONObj *obj)
 {
   string expires_iso8601;
   struct tm t;
@@ -1158,26 +1158,26 @@ void KeystoneToken::Token::decode_json(JSONObj *obj)
   }
 }
 
-void KeystoneToken::Role::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Role::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
-void KeystoneToken::Domain::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Domain::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
-void KeystoneToken::Project::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Project::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("domain", domain, obj);
 }
 
-void KeystoneToken::User::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
@@ -1185,13 +1185,13 @@ void KeystoneToken::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("roles", roles_v2, obj);
 }
 
-void KeystoneToken::decode_json(JSONObj *root_obj)
+void rgw::keystone::TokenEnvelope::decode_json(JSONObj *root_obj)
 {
   JSONDecoder::decode_json("user", user, root_obj, true);
 
-  const auto version = KeystoneService::get_api_version();
+  const auto version = rgw::keystone::Service::get_api_version();
 
-  if (version == KeystoneApiVersion::VER_3) {
+  if (version == rgw::keystone::ApiVersion::VER_3) {
     string expires_iso8601;
     if (JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj)) {
       /* VER_3 */
@@ -1214,7 +1214,7 @@ void KeystoneToken::decode_json(JSONObj *root_obj)
       roles = user.roles_v2;
       project = token.tenant_v2;
     }
-  } else if (version == KeystoneApiVersion::VER_2) {
+  } else if (version == rgw::keystone::ApiVersion::VER_2) {
     if (JSONDecoder::decode_json("token", token, root_obj)) {
       /* VER_2 */
       roles = user.roles_v2;
@@ -1325,7 +1325,7 @@ void rgw_sync_error_info::dump(Formatter *f) const {
   encode_json("message", message, f);
 }
 
-void KeystoneAdminTokenRequestVer2::dump(Formatter * const f) const
+void rgw::keystone::AdminTokenRequestVer2::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
@@ -1338,7 +1338,7 @@ void KeystoneAdminTokenRequestVer2::dump(Formatter * const f) const
   f->close_section();
 }
 
-void KeystoneAdminTokenRequestVer3::dump(Formatter * const f) const
+void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
