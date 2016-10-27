@@ -242,6 +242,9 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
       return -EINVAL;
     }
   }
+
+  opt.statistics = rocksdb::CreateDBStatistics();
+
   opt.create_if_missing = create_if_missing;
   if (g_conf->rocksdb_separate_wal_dir) {
     opt.wal_dir = path + ".wal";
@@ -361,6 +364,26 @@ void RocksDBStore::close()
 
   if (logger)
     cct->get_perfcounters_collection()->remove(logger);
+}
+
+void RocksDBStore::get_statistics(Formatter *f) {
+  std::string stats;
+  bool status = db->GetProperty("rocksdb.stats", &stats);
+  if (status) {
+    f->open_object_section("bluestore rocksdb statistics");
+    std::size_t p1 = 0, p2 = 0;
+    while ((p1 = stats.find("\n", p2)) != std::string::npos) {
+      if (p1 != p2) {
+	std::string substr = stats.substr(p2, p1 - p2 + 1);
+	substr = "  " + substr;
+	f->write_raw_data(substr.data());
+      } else
+	f->write_raw_data("\n");
+      p2 = ++p1;
+    }
+    f->write_raw_data("\n");
+    f->close_section();
+  }
 }
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
