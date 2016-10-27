@@ -33,7 +33,8 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 
 # populate files with version strings
 echo "including src/.git_version, ceph.spec"
-src/make_version -g src/.git_version
+
+(git rev-parse HEAD ; git describe) 2> /dev/null > src/.git_version
 
 # if the version has '-' in it, it has a 'release' part,
 # like vX.Y.Z-N-g<shortsha1>.  If it doesn't, it's just
