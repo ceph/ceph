@@ -225,7 +225,7 @@ TokenEngine::authenticate(const std::string& token) const
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
   /* Check cache first. */
-  if (RGWKeystoneTokenCache::get_instance().find(token_id, t)) {
+  if (token_cache.find(token_id, t)) {
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
                    << dendl;
     auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
@@ -260,7 +260,7 @@ TokenEngine::authenticate(const std::string& token) const
       ldout(cct, 0) << "validated token: " << t.get_project_name()
                     << ":" << t.get_user_name()
                     << " expires: " << t.get_expires() << dendl;
-      RGWKeystoneTokenCache::get_instance().add(token_id, t);
+      token_cache.add(token_id, t);
       auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));
       return std::make_pair(std::move(apl), nullptr);
