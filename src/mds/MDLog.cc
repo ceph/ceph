@@ -125,17 +125,17 @@ void MDLog::write_head(MDSInternalContextBase *c)
   journaler->write_head(fin);
 }
 
-uint64_t MDLog::get_read_pos()
+uint64_t MDLog::get_read_pos() const
 {
   return journaler->get_read_pos(); 
 }
 
-uint64_t MDLog::get_write_pos()
+uint64_t MDLog::get_write_pos() const
 {
   return journaler->get_write_pos(); 
 }
 
-uint64_t MDLog::get_safe_pos()
+uint64_t MDLog::get_safe_pos() const
 {
   return journaler->get_write_safe_pos(); 
 }
