@@ -1008,6 +1008,7 @@ OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456")
+OPTION(bluestore_rocksdb_perf, OPT_BOOL, false) // rocksdb breakdown
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
