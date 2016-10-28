@@ -789,7 +789,8 @@ void ReplicatedBackend::be_deep_scrub(
   ScrubMap::object &o,
   ThreadPool::TPHandle &handle)
 {
-  dout(10) << __func__ << " " << poid << " seed " << seed << dendl;
+  dout(10) << __func__ << " " << poid << " seed " 
+	   << std::hex << seed << std::dec << dendl;
   bufferhash h(seed), oh(seed);
   bufferlist bl, hdrbl;
   int r;
