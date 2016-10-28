@@ -477,7 +477,7 @@ public:
     char buf[COOKIE_LEN + 1];
 
     gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-    string cookie = buf;
+    cookie = buf;
 
     sync_status_oid = RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone);
   }
