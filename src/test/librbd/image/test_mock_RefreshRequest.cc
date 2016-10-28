@@ -190,8 +190,8 @@ public:
   }
 
   void expect_snap_namespace_list(MockRefreshImageCtx &mock_image_ctx, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_namespace"), _, _, _));
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_namespace"), _, _, _));
   }
 
   void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
