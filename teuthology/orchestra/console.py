@@ -1,6 +1,7 @@
 import logging
 import os
 import pexpect
+import psutil
 import subprocess
 import time
 
@@ -37,7 +38,7 @@ class PhysicalConsole():
         )
         self.conserver_master = config.conserver_master
         self.conserver_port = config.conserver_port
-        conserver_client_found = subprocess.Popen(
+        conserver_client_found = psutil.Popen(
             'which console',
             shell=True,
             stdout=subprocess.PIPE,
@@ -273,7 +274,7 @@ class PhysicalConsole():
         Using the subprocess module, spawn an ipmitool process using 'sol
         activate' and redirect its output to a file.
 
-        :returns: a subprocess.Popen object
+        :returns: a psutil.Popen object
         """
         pexpect_templ = \
             "import pexpect; " \
@@ -288,7 +289,7 @@ class PhysicalConsole():
                     log=dest_path,
                 ),
             ]
-            return subprocess.Popen(
+            return psutil.Popen(
                 python_cmd,
                 env=os.environ,
             )

@@ -88,15 +88,16 @@ class TestPhysicalConsole(TestConsole):
 
     def test_spawn_log_conserver(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 0
             m_popen.return_value.wait.return_value = 0
             cons = self.klass(self.hostname)
             assert cons.has_conserver is True
             m_popen.reset_mock()
             m_popen.return_value.poll.return_value = None
-            m_popen.poll.return_value = None
             cons.spawn_sol_log('/fake/path')
             assert m_popen.call_count == 1
             call_args = m_popen.call_args_list[0][0][0]
@@ -106,9 +107,11 @@ class TestPhysicalConsole(TestConsole):
 
     def test_spawn_log_ipmi(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 1
             m_popen.return_value.wait.return_value = 1
             cons = self.klass(self.hostname)
             assert cons.has_conserver is False
@@ -123,9 +126,11 @@ class TestPhysicalConsole(TestConsole):
 
     def test_spawn_log_fallback(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 0
             m_popen.return_value.wait.return_value = 0
             cons = self.klass(self.hostname)
             assert cons.has_conserver is True
@@ -141,9 +146,11 @@ class TestPhysicalConsole(TestConsole):
 
     def test_get_console_conserver(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 0
             m_popen.return_value.wait.return_value = 0
             cons = self.klass(self.hostname)
         assert cons.has_conserver is True
@@ -158,9 +165,11 @@ class TestPhysicalConsole(TestConsole):
 
     def test_get_console_ipmitool(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 0
             m_popen.return_value.wait.return_value = 0
             cons = self.klass(self.hostname)
         assert cons.has_conserver is True
@@ -175,9 +184,11 @@ class TestPhysicalConsole(TestConsole):
 
     def test_get_console_fallback(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 0
             m_popen.return_value.wait.return_value = 0
             cons = self.klass(self.hostname)
         assert cons.has_conserver is True
@@ -195,9 +206,11 @@ class TestPhysicalConsole(TestConsole):
 
     def test_disable_conserver(self):
         with patch(
-            'teuthology.orchestra.console.subprocess.Popen',
+            'teuthology.orchestra.console.psutil.subprocess.Popen',
             autospec=True,
         ) as m_popen:
+            m_popen.return_value.pid = 42
+            m_popen.return_value.returncode = 0
             m_popen.return_value.wait.return_value = 0
             teuth_config.use_conserver = False
             cons = self.klass(self.hostname)
