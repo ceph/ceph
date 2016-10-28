@@ -279,11 +279,8 @@ class TestForwardScrub(CephFSTestCase):
         self.assertEqual(['alpha', 'parent_a'],
                          [a['dname'] for a in backtrace['ancestors']])
 
-        with self.assert_cluster_log("bad backtrace on inode", invert_match=True):
-            self.fs.mds_asok(["scrub_path", "/", "repair", "recursive"])
-
         # Go corrupt the backtrace
-        self.fs._write_data_xattr(file_ino, "inode_backtrace_t",
+        self.fs._write_data_xattr(file_ino, "parent",
                                   "oh i'm sorry did i overwrite your xattr?")
 
         with self.assert_cluster_log("bad backtrace on inode"):
