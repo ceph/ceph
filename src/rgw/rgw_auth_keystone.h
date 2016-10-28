@@ -28,6 +28,7 @@ class TokenEngine : public rgw::auth::Engine {
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
   rgw::keystone::Config& config;
+  rgw::keystone::TokenCache& token_cache;
 
   /* Helper methods. */
   bool is_applicable() const noexcept;
@@ -43,11 +44,13 @@ public:
   TokenEngine(CephContext* const cct,
               const rgw::auth::TokenExtractor* const extractor,
               const rgw::auth::RemoteApplier::Factory* const apl_factory,
-              rgw::keystone::Config& config)
+              rgw::keystone::Config& config,
+              rgw::keystone::TokenCache& token_cache)
     : cct(cct),
       extractor(extractor),
       apl_factory(apl_factory),
-      config(config) {
+      config(config),
+      token_cache(token_cache) {
   }
 
   const char* get_name() const noexcept override {
