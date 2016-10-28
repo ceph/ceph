@@ -23,18 +23,16 @@
 #include "mdstypes.h"
 
 class Mantle {
+  public:
+    Mantle();
+    ~Mantle() { if (L) lua_close(L); }
+    int balance(const std::string &script,
+                mds_rank_t whoami,
+                const std::vector <std::map<std::string, double>> &metrics,
+                std::map<mds_rank_t,double> &my_targets);
+
   protected:
     lua_State *L;
-    map<mds_rank_t, mds_load_t>  mds_load;
-
-  public:
-    Mantle() : L(NULL) {};
-    int start();
-    int execute(const string &script);
-    int balance(const string &script,
-                mds_rank_t whoami,
-                const vector < map<string, double> > &metrics,
-                map<mds_rank_t,double> &my_targets);
 };
 
 #endif
