@@ -4066,13 +4066,13 @@ public:
     return status;
   }
 
-  void fsck() {
+  void fsck(bool deep) {
     Mutex::Locker locker(lock);
     EnterExit ee("fsck");
     while (in_flight)
       cond.Wait(lock);
     store->umount();
-    store->fsck();
+    store->fsck(deep);
     store->mount();
   }
 
@@ -4250,7 +4250,9 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
     boost::uniform_int<> true_false(0, 999);
     int val = true_false(rng);
     if (val > 998) {
-      test_obj.fsck();
+      test_obj.fsck(true);
+    } else if (val > 997) {
+      test_obj.fsck(false);
     } else if (val > 970) {
       test_obj.scan();
     } else if (val > 950) {
