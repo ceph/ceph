@@ -1,5 +1,7 @@
 #include <errno.h>
 #include <ctime>
+#include <iomanip>
+#include <sstream>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -82,10 +84,10 @@ int RGWRole::create(bool exclusive)
   struct timeval tv;
   real_clock::to_timeval(t, tv);
 
-  char buf[30];
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", std::gmtime(&tv.tv_sec));
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec);
-  creation_date.assign(buf, strlen(buf));
+  std::ostringstream oss;
+  oss << std::put_time(std::gmtime(&tv.tv_sec), "%Y-%m-%dT%H:%M:%S");
+  oss << "." << (tv.tv_usec/1000) << "Z";
+  creation_date = oss.str();
 
   auto& pool = store->get_zone_params().roles_pool;
   ret = store_info(exclusive);
