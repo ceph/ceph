@@ -550,6 +550,20 @@ class CephFSMount(object):
         proc.wait()
         return int(proc.stdout.getvalue().strip())
 
+    def path_to_nlink(self, fs_path):
+        abs_path = os.path.join(self.mountpoint, fs_path)
+
+        pyscript = dedent("""
+            import os
+            import stat
+
+            print os.stat("{path}").st_nlink
+            """).format(path=abs_path)
+
+        proc = self._run_python(pyscript)
+        proc.wait()
+        return int(proc.stdout.getvalue().strip())
+
     def ls(self, path=None):
         """
         Wrap ls: return a list of strings
