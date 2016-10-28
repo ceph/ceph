@@ -4438,7 +4438,7 @@ void PG::scrub_compare_maps()
   }
 
   // ok, do the pg-type specific scrubbing
-  _scrub(for_meta_scrub, missing_digest);
+  scrub_snapshot_metadata(for_meta_scrub, missing_digest);
   if (!scrubber.store->empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;

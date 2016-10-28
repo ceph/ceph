@@ -49,7 +49,7 @@ function TEST_scrub_snaps() {
     poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
 
     dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
-    for i in `seq 1 14`
+    for i in `seq 1 15`
     do
         rados -p $poolname put obj${i} $TESTDATA
     done
@@ -147,6 +147,11 @@ function TEST_scrub_snaps() {
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj14)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset size
 
+    echo "garbage" > $dir/bad
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj15)"
+    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-attr snapset $dir/bad
+    rm -f $dir/bad
+
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
 
@@ -164,7 +169,7 @@ function TEST_scrub_snaps() {
     test $(jq -r '.[0]' $dir/json) = $pgid || return 1
 
     rados list-inconsistent-snapset $pgid > $dir/json || return 1
-    test $(jq '.inconsistents | length' $dir/json) = "20" || return 1
+    test $(jq '.inconsistents | length' $dir/json) = "21" || return 1
 
     local jqfilter='.inconsistents'
     local sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
@@ -292,6 +297,15 @@ function TEST_scrub_snaps() {
       "locator": "",
       "nspace": "",
       "name": "obj12"
+    },
+    {
+      "errors": [
+        "ss_attr_corrupted"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj15"
     },
     {
       "errors": [
@@ -428,7 +442,8 @@ EOF
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj9:1 is missing in clone_size"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 is an unexpected clone"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 size 1032 != clone_size 1033"
-    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 21 errors"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 22 errors"
+    err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head can't decode 'snapset' attr buffer"
 
     for i in `seq 0 ${#err_strings[@]}`
     do
