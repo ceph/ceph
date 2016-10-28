@@ -1944,7 +1944,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     eversion_t replay_version;
     version_t user_version;
     int return_code = 0;
-    bool got = pg_log.get_log().get_request(
+    bool got = check_in_progress_op(
       m->get_reqid(), &replay_version, &user_version, &return_code);
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
@@ -8558,6 +8558,9 @@ void ReplicatedPG::issue_repop(RepGather *repop, OpContext *ctx)
     assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;
   }
+  for (auto &&entry: ctx->log) {
+    projected_log.add(entry);
+  }
   pgbackend->submit_transaction(
     soid,
     ctx->delta_stats,
@@ -11335,11 +11338,11 @@ void ReplicatedPG::update_range(
     scan_range(local_min, local_max, bi, handle);
   }
 
-  if (bi->version >= info.last_update) {
+  if (bi->version >= projected_last_update) {
     dout(10) << __func__<< ": bi is current " << dendl;
-    assert(bi->version == info.last_update);
+    assert(bi->version == projected_last_update);
   } else if (bi->version >= info.log_tail) {
-    if (pg_log.get_log().empty()) {
+    if (pg_log.get_log().empty() && projected_log.empty()) {
       /* Because we don't move log_tail on split, the log might be
        * empty even if log_tail != last_update.  However, the only
        * way to get here with an empty log is if log_tail is actually
@@ -11349,41 +11352,36 @@ void ReplicatedPG::update_range(
       assert(bi->version == eversion_t());
       return;
     }
-    assert(!pg_log.get_log().empty());
-    dout(10) << __func__<< ": bi is old, (" << bi->version
-	     << ") can be updated with log" << dendl;
-    list<pg_log_entry_t>::const_iterator i =
-      pg_log.get_log().log.end();
-    --i;
-    while (i != pg_log.get_log().log.begin() &&
-           i->version > bi->version) {
-      --i;
-    }
-    if (i->version == bi->version)
-      ++i;
 
-    assert(i != pg_log.get_log().log.end());
-    dout(10) << __func__ << ": updating from version " << i->version
-	     << dendl;
-    for (; i != pg_log.get_log().log.end(); ++i) {
-      const hobject_t &soid = i->soid;
+    dout(10) << __func__<< ": bi is old, (" << bi->version
+	     << ") can be updated with log to projected_last_update "
+	     << projected_last_update << dendl;
+
+    auto func = [&](const pg_log_entry_t &e) {
+      dout(10) << __func__ << ": updating from version " << e.version
+               << dendl;
+      const hobject_t &soid = e.soid;
       if (cmp(soid, bi->begin, get_sort_bitwise()) >= 0 &&
 	  cmp(soid, bi->end, get_sort_bitwise()) < 0) {
-	if (i->is_update()) {
-	  dout(10) << __func__ << ": " << i->soid << " updated to version "
-		   << i->version << dendl;
-	  bi->objects.erase(i->soid);
+	if (e.is_update()) {
+	  dout(10) << __func__ << ": " << e.soid << " updated to version "
+		   << e.version << dendl;
+	  bi->objects.erase(e.soid);
 	  bi->objects.insert(
 	    make_pair(
-	      i->soid,
-	      i->version));
-	} else if (i->is_delete()) {
-	  dout(10) << __func__ << ": " << i->soid << " removed" << dendl;
-	  bi->objects.erase(i->soid);
+	      e.soid,
+	      e.version));
+	} else if (e.is_delete()) {
+	  dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
+	  bi->objects.erase(e.soid);
 	}
       }
-    }
-    bi->version = info.last_update;
+    };
+    dout(10) << "scanning pg log first" << dendl;
+    pg_log.get_log().scan_log_after(bi->version, func);
+    dout(10) << "scanning projected log" << dendl;
+    projected_log.scan_log_after(bi->version, func);
+    bi->version = projected_last_update;
   } else {
     assert(0 == "scan_range should have raised bi->version past log_tail");
   }

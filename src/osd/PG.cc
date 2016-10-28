@@ -942,6 +942,7 @@ void PG::clear_primary_state()
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
+  projected_log = PGLog::IndexedLog();
 
   last_update_ondisk = eversion_t();
 
@@ -2481,6 +2482,18 @@ void PG::update_heartbeat_peers()
     osd->need_heartbeat_peer_update();
 }
 
+
+bool PG::check_in_progress_op(
+  const osd_reqid_t &r,
+  eversion_t *replay_version,
+  version_t *user_version,
+  int *return_code) const
+{
+  return (
+    projected_log.get_request(r, replay_version, user_version, return_code) ||
+    pg_log.get_log().get_request(r, replay_version, user_version, return_code));
+}
+
 void PG::_update_calc_stats()
 {
   info.stats.version = info.last_update;
@@ -3073,6 +3086,12 @@ void PG::append_log(
       pg_log.roll_forward(&handler);
     }
   }
+  auto last = logv.rbegin();
+  if (is_primary() && last != logv.rend()) {
+    projected_log.skip_can_rollback_to_to_head();
+    projected_log.trim(last->version, nullptr);
+  }
+
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
     pg_log.roll_forward_to(
       roll_forward_to,
