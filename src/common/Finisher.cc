@@ -58,7 +58,7 @@ void *Finisher::finisher_thread_entry()
       finisher_lock.Unlock();
       ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
 
-      if(logger)
+      if (logger)
         start = ceph_clock_now(cct);
 
       // Now actually process the contexts.
