@@ -195,6 +195,15 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        bool transaction_applied,
        ObjectStore::Transaction &t) = 0;
 
+     virtual void pgb_set_object_snap_mapping(
+       const hobject_t &soid,
+       const set<snapid_t> &snaps,
+       ObjectStore::Transaction *t) = 0;
+
+     virtual void pgb_clear_object_snap_mapping(
+       const hobject_t &soid,
+       ObjectStore::Transaction *t) = 0;
+
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
        eversion_t lcod) = 0;
@@ -392,10 +401,23 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::Transaction *t);
 
    void rollback(
-     const hobject_t &hoid,
-     const ObjectModDesc &desc,
+     const pg_log_entry_t &entry,
      ObjectStore::Transaction *t);
 
+   friend class LRBTrimmer;
+   void rollforward(
+     const pg_log_entry_t &entry,
+     ObjectStore::Transaction *t);
+
+   void trim(
+     const pg_log_entry_t &entry,
+     ObjectStore::Transaction *t);
+
+   void remove(
+     const hobject_t &hoid,
+     ObjectStore::Transaction *t);
+
+ protected:
    /// Reapply old attributes
    void rollback_setattrs(
      const hobject_t &hoid,
@@ -423,7 +445,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    /// Delete object to rollback create
    void rollback_create(
      const hobject_t &hoid,
-     ObjectStore::Transaction *t);
+     ObjectStore::Transaction *t) {
+     remove(hoid, t);
+   }
+ public:
 
    /// Trim object stashed at stashed_version
    void trim_stashed_object(

@@ -376,6 +376,7 @@ public:
 void generate_transaction(
   PGTransactionUPtr &pgt,
   const coll_t &coll,
+  bool legacy_log_entries,
   vector<pg_log_entry_t> &log_entries,
   ObjectStore::Transaction *t,
   set<hobject_t, hobject_t::BitwiseComparator> *added,
@@ -386,7 +387,7 @@ void generate_transaction(
   assert(removed);
 
   for (auto &&le: log_entries) {
-    le.mod_desc.mark_unrollbackable();
+    le.mark_unrollbackable(legacy_log_entries);
     auto oiter = pgt->op_map.find(le.soid);
     if (oiter != pgt->op_map.end() && oiter->second.updated_snaps) {
       vector<snapid_t> snaps(
@@ -540,6 +541,7 @@ void ReplicatedBackend::submit_transaction(
   generate_transaction(
     t,
     coll,
+    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN),
     log_entries,
     &op_t,
     &added,

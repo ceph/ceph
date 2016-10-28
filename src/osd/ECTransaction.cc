@@ -100,6 +100,7 @@ void ECTransaction::generate_transactions(
     > &hash_infos,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
+  bool legacy_log_entries,
   const ECUtil::stripe_info_t &sinfo,
   vector<pg_log_entry_t> &entries,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
@@ -116,6 +117,7 @@ void ECTransaction::generate_transactions(
     obj_to_log.insert(make_pair(i.soid, &i));
   }
 
+  TransactionInfo::LocalRollBack lrb;
   t.safe_create_traverse(
     [&](pair<const hobject_t, PGTransaction::ObjectOperation> &opair) {
     const hobject_t &oid = opair.first;
@@ -124,7 +126,7 @@ void ECTransaction::generate_transactions(
     pg_log_entry_t *entry = iter != obj_to_log.end() ? iter->second : nullptr;
 
     if (entry && opair.second.updated_snaps) {
-      entry->mod_desc.update_snaps(opair.second.updated_snaps->first);
+      lrb.update_snaps(opair.second.updated_snaps->first);
       vector<snapid_t> snaps(
 	opair.second.updated_snaps->second.begin(),
 	opair.second.updated_snaps->second.end());
@@ -203,7 +205,7 @@ void ECTransaction::generate_transactions(
 	obc->attr_cache.clear();
       }
       if (entry) {
-	entry->mod_desc.rmobject(entry->version.version);
+	lrb.rmobject(entry->version.version);
 	for (auto &&st: *transactions) {
 	  st.second.collection_move_rename(
 	    coll_t(spg_t(pgid, st.first)),
@@ -222,7 +224,7 @@ void ECTransaction::generate_transactions(
     }
 
     if (opair.second.is_fresh_object() && entry) {
-      entry->mod_desc.create();
+      lrb.create();
     }
 
     match(
@@ -322,7 +324,7 @@ void ECTransaction::generate_transactions(
       assert(!xattr_rollback.empty());
     }
     if (entry && !xattr_rollback.empty()) {
-      entry->mod_desc.setattrs(xattr_rollback);
+      lrb.setattrs(xattr_rollback);
     }
 
     if (opair.second.alloc_hint) {
@@ -354,7 +356,7 @@ void ECTransaction::generate_transactions(
 	want.insert(i);
       }
       if (entry) {
-	entry->mod_desc.append(
+	lrb.append(
 	  sinfo.aligned_chunk_offset_to_logical_offset(
 	    hinfo->get_total_chunk_size()
 	    ));
@@ -392,5 +394,8 @@ void ECTransaction::generate_transactions(
 	  });
       }
     }
+    entry->mark_local_rollback(
+      lrb,
+      legacy_log_entries);
   });
 }

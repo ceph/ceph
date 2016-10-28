@@ -336,6 +336,18 @@ public:
     map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
+  void pgb_set_object_snap_mapping(
+    const hobject_t &soid,
+    const set<snapid_t> &snaps,
+    ObjectStore::Transaction *t) override {
+    return update_object_snap_mapping(t, soid, snaps);
+  }
+  void pgb_clear_object_snap_mapping(
+    const hobject_t &soid,
+    ObjectStore::Transaction *t) override {
+    return clear_object_snap_mapping(t, soid);
+  }
+
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,

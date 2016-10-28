@@ -9811,7 +9811,8 @@ void ReplicatedPG::mark_all_unfound_lost(
 	  pg_log_entry_t::LOST_REVERT, oid, v,
 	  m->second.need, 0, osd_reqid_t(), mtime, 0);
 	e.reverting_to = prev;
-	e.mod_desc.mark_unrollbackable();
+	e.mark_unrollbackable(
+	  !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN));
 	log_entries.push_back(e);
 	dout(10) << e << dendl;
 
@@ -9827,9 +9828,14 @@ void ReplicatedPG::mark_all_unfound_lost(
 			 0, osd_reqid_t(), mtime, 0);
 	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
 	  if (pool.info.require_rollback()) {
-	    e.mod_desc.try_rmobject(v.version);
+	    TransactionInfo::LocalRollBack lrb;
+	    lrb.try_rmobject(v.version);
+	    e.mark_local_rollback(
+	      lrb,
+	      !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN));
 	  } else {
-	    e.mod_desc.mark_unrollbackable();
+	    e.mark_unrollbackable(
+	      !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN));
 	  }
 	} // otherwise, just do what we used to do
 	dout(10) << e << dendl;
@@ -9972,9 +9978,8 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
 
 
   // clear log
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, t};
   pg_log.roll_forward(&rollbacker);
-  rollbacker.apply(this, t);
 
   write_if_dirty(*t);
 

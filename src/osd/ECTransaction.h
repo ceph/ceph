@@ -32,6 +32,7 @@ namespace ECTransaction {
       > &hash_infos,
     ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
+    bool legacy_log_entries,
     const ECUtil::stripe_info_t &sinfo,
     vector<pg_log_entry_t> &entries,
     map<shard_id_t, ObjectStore::Transaction> *transactions,

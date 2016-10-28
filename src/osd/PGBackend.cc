@@ -36,60 +36,158 @@ static ostream& _prefix(std::ostream *_dout, PGBackend *pgb) {
   return *_dout << pgb->get_parent()->gen_dbg_prefix();
 }
 
-// -- ObjectModDesc --
-struct RollbackVisitor : public ObjectModDesc::Visitor {
-  const hobject_t &hoid;
+void PGBackend::rollback(
+  const pg_log_entry_t &entry,
+  ObjectStore::Transaction *t)
+{
+
+  struct RollbackVisitor : public TransactionInfo::LocalRollBack::Visitor {
+    const hobject_t &hoid;
+    PGBackend *pg;
+    ObjectStore::Transaction t;
+    RollbackVisitor(
+      const hobject_t &hoid,
+      PGBackend *pg) : hoid(hoid), pg(pg) {}
+    void append(uint64_t old_size) {
+      ObjectStore::Transaction temp;
+      pg->rollback_append(hoid, old_size, &temp);
+      temp.append(t);
+      temp.swap(t);
+    }
+    void setattrs(map<string, boost::optional<bufferlist> > &attrs) {
+      ObjectStore::Transaction temp;
+      pg->rollback_setattrs(hoid, attrs, &temp);
+      temp.append(t);
+      temp.swap(t);
+    }
+    void rmobject(version_t old_version) {
+      ObjectStore::Transaction temp;
+      pg->rollback_stash(hoid, old_version, &temp);
+      temp.append(t);
+      temp.swap(t);
+    }
+    void try_rmobject(version_t old_version) {
+      ObjectStore::Transaction temp;
+      pg->rollback_try_stash(hoid, old_version, &temp);
+      temp.append(t);
+      temp.swap(t);
+    }
+    void create() {
+      ObjectStore::Transaction temp;
+      pg->rollback_create(hoid, &temp);
+      temp.append(t);
+      temp.swap(t);
+    }
+    void update_snaps(set<snapid_t> &snaps) {
+      ObjectStore::Transaction temp;
+      pg->get_parent()->pgb_set_object_snap_mapping(hoid, snaps, &temp);
+      temp.append(t);
+      temp.swap(t);
+    }
+  };
+
+  assert(entry.can_rollback());
+  entry.match_transaction_info(
+    [&](const TransactionInfo::LocalRollBack &lrb) {
+      assert(lrb.can_rollback());
+      RollbackVisitor vis(entry.soid, this);
+      lrb.visit(&vis);
+      t->append(vis.t);
+    },
+    [&](const TransactionInfo::LocalRollForward &lrf) {
+      if (!lrf.extents.empty())
+	trim_stashed_object(entry.soid, lrf.version, t);
+    });
+}
+
+struct LRBTrimmer : public TransactionInfo::LocalRollBack::Visitor {
+  const hobject_t &soid;
   PGBackend *pg;
-  ObjectStore::Transaction t;
-  RollbackVisitor(
-    const hobject_t &hoid,
-    PGBackend *pg) : hoid(hoid), pg(pg) {}
-  void append(uint64_t old_size) {
-    ObjectStore::Transaction temp;
-    pg->rollback_append(hoid, old_size, &temp);
-    temp.append(t);
-    temp.swap(t);
-  }
-  void setattrs(map<string, boost::optional<bufferlist> > &attrs) {
-    ObjectStore::Transaction temp;
-    pg->rollback_setattrs(hoid, attrs, &temp);
-    temp.append(t);
-    temp.swap(t);
-  }
+  ObjectStore::Transaction *t;
+  LRBTrimmer(
+    const hobject_t &soid,
+    PGBackend *pg,
+    ObjectStore::Transaction *t)
+    : soid(soid), pg(pg), t(t) {}
   void rmobject(version_t old_version) {
-    ObjectStore::Transaction temp;
-    pg->rollback_stash(hoid, old_version, &temp);
-    temp.append(t);
-    temp.swap(t);
-  }
-  void try_rmobject(version_t old_version) {
-    ObjectStore::Transaction temp;
-    pg->rollback_try_stash(hoid, old_version, &temp);
-    temp.append(t);
-    temp.swap(t);
-  }
-  void create() {
-    ObjectStore::Transaction temp;
-    pg->rollback_create(hoid, &temp);
-    temp.append(t);
-    temp.swap(t);
-  }
-  void update_snaps(set<snapid_t> &snaps) {
-    // pass
+    pg->trim_stashed_object(
+      soid,
+      old_version,
+      t);
   }
 };
 
-void PGBackend::rollback(
-  const hobject_t &hoid,
-  const ObjectModDesc &desc,
+void PGBackend::rollforward(
+  const pg_log_entry_t &entry,
   ObjectStore::Transaction *t)
 {
-  assert(desc.can_rollback());
-  RollbackVisitor vis(hoid, this);
-  desc.visit(&vis);
-  t->append(vis.t);
+  auto dpp = get_parent()->get_dpp();
+  ldpp_dout(dpp, 20) << __func__ << ": entry=" << entry << dendl;
+  ldpp_dout(dpp, 20) << __func__ << ": ti=" << entry.transaction_info << dendl;
+  if (!entry.can_rollback())
+    return;
+  entry.match_transaction_info(
+    [&](const TransactionInfo::LocalRollBack &lrb) {
+      LRBTrimmer trimmer(entry.soid, this, t);
+      lrb.visit(&trimmer);
+    },
+    [&](const TransactionInfo::LocalRollForward &lrf) {
+      if (lrf.truncate) {
+	ldpp_dout(dpp, 20) << "  truncate: truncate=" << *(lrf.truncate) << dendl;
+	t->truncate(
+	  coll,
+	  ghobject_t(
+	    entry.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  *(lrf.truncate));
+      }
+      if (!lrf.extents.empty()) {
+	ldpp_dout(dpp, 20) << "  rollforward: extents=" << lrf.extents << dendl;
+	t->move_ranges_destroy_src(
+	  coll,
+	  ghobject_t(
+	    entry.soid, lrf.version, get_parent()->whoami_shard().shard),
+	  ghobject_t(
+	    entry.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  lrf.extents);
+      }
+      map<string, bufferlist> attrs;
+      for (auto &&attr: lrf.new_attrs) {
+	if (attr.second) {
+	  attrs.insert(make_pair(attr.first, *(attr.second)));
+	} else {
+	  t->rmattr(
+	    coll,
+	    ghobject_t(
+	      entry.soid, ghobject_t::NO_GEN,
+	      get_parent()->whoami_shard().shard),
+	    attr.first);
+	}
+      }
+      t->setattrs(
+	coll,
+	ghobject_t(
+	  entry.soid, ghobject_t::NO_GEN,
+	  get_parent()->whoami_shard().shard),
+	attrs);
+    });
 }
 
+void PGBackend::trim(
+  const pg_log_entry_t &entry,
+  ObjectStore::Transaction *t)
+{
+  if (!entry.can_rollback())
+    return;
+  entry.match_transaction_info(
+    [&](const TransactionInfo::LocalRollBack &lrb) {
+      LRBTrimmer trimmer(entry.soid, this, t);
+      lrb.visit(&trimmer);
+    },
+    [&](const TransactionInfo::LocalRollForward &lrf) {
+      if (!lrf.extents.empty())
+	trim_stashed_object(entry.soid, lrf.version, t);
+    });
+}
 
 void PGBackend::try_stash(
   const hobject_t &hoid,
@@ -100,6 +198,16 @@ void PGBackend::try_stash(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(hoid, v, get_parent()->whoami_shard().shard));
+}
+
+void PGBackend::remove(
+  const hobject_t &hoid,
+  ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
+  t->remove(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+  get_parent()->pgb_clear_object_snap_mapping(hoid, t);
 }
 
 void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
@@ -288,15 +396,6 @@ void PGBackend::rollback_try_stash(
   t->try_rename(
     coll,
     ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard),
-    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-}
-
-void PGBackend::rollback_create(
-  const hobject_t &hoid,
-  ObjectStore::Transaction *t) {
-  assert(!hoid.is_temp());
-  t->remove(
-    coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
 }
 
