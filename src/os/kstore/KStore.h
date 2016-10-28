@@ -416,7 +416,7 @@ public:
   int umount();
   void _sync();
 
-  int fsck();
+  int fsck(bool deep) override;
 
 
   int validate_hobject_key(const hobject_t &obj) const override {

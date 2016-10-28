@@ -3748,7 +3748,7 @@ int BlueStore::mkfs()
     if (r == 0) {
       dout(1) << __func__ << " already created" << dendl;
       if (g_conf->bluestore_fsck_on_mkfs) {
-        r = fsck();
+        r = fsck(g_conf->bluestore_fsck_on_mkfs_deep);
         if (r < 0) {
           derr << __func__ << " fsck found fatal error: " << cpp_strerror(r)
                << dendl;
@@ -3912,7 +3912,7 @@ int BlueStore::mkfs()
 
   if (r == 0 &&
       g_conf->bluestore_fsck_on_mkfs) {
-    int rc = fsck();
+    int rc = fsck(g_conf->bluestore_fsck_on_mkfs_deep);
     if (rc < 0)
       return rc;
     if (rc > 0) {
@@ -3954,7 +3954,7 @@ int BlueStore::mount()
   }
 
   if (g_conf->bluestore_fsck_on_mount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->bluestore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
     if (rc > 0) {
@@ -4085,7 +4085,7 @@ int BlueStore::umount()
   _close_path();
 
   if (g_conf->bluestore_fsck_on_umount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->bluestore_fsck_on_umount_deep);
     if (rc < 0)
       return rc;
     if (rc > 0) {
@@ -4115,7 +4115,8 @@ int BlueStore::_fsck_check_extents(
   const vector<bluestore_pextent_t>& extents,
   bool compressed,
   boost::dynamic_bitset<> &used_blocks,
-  store_statfs_t& expected_statfs)
+  store_statfs_t& expected_statfs,
+  bool deep)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
   int errors = 0;
@@ -4149,9 +4150,9 @@ int BlueStore::_fsck_check_extents(
   return errors;
 }
 
-int BlueStore::fsck()
+int BlueStore::fsck(bool deep)
 {
-  dout(1) << __func__ << " start" << dendl;
+  dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
   set<uint64_t> used_nids;
   set<uint64_t> used_omap_head;
@@ -4421,7 +4422,8 @@ int BlueStore::fsck()
 	  errors += _fsck_check_extents(oid, blob.extents,
 					blob.is_compressed(),
 					used_blocks,
-					expected_statfs);
+					expected_statfs,
+					deep);
         }
       }
       // omap
@@ -4472,9 +4474,9 @@ int BlueStore::fsck()
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
 	errors += _fsck_check_extents(p->second.oids.front(),
-			    extents,
-			    p->second.compressed,
-			    used_blocks, expected_statfs);
+				      extents,
+				      p->second.compressed,
+				      used_blocks, expected_statfs, deep);
 	sb_info.erase(p);
       }
     }

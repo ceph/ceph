@@ -973,7 +973,7 @@ int KStore::mount()
   dout(1) << __func__ << " path " << path << dendl;
 
   if (g_conf->kstore_fsck_on_mount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->kstore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
   }
@@ -1044,7 +1044,7 @@ int KStore::umount()
   return 0;
 }
 
-int KStore::fsck()
+int KStore::fsck(bool deep)
 {
   dout(1) << __func__ << dendl;
   int errors = 0;

@@ -1581,7 +1581,8 @@ private:
     const vector<bluestore_pextent_t>& extents,
     bool compressed,
     boost::dynamic_bitset<> &used_blocks,
-    store_statfs_t& expected_statfs);
+    store_statfs_t& expected_statfs,
+    bool deep);
 
   void _buffer_cache_write(
     TransContext *txc,
@@ -1625,7 +1626,7 @@ public:
   int umount() override;
   void _sync();
 
-  int fsck() override;
+  int fsck(bool deep) override;
 
   void set_cache_shards(unsigned num) override;
 
