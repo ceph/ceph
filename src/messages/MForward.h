@@ -22,6 +22,7 @@
 #include "msg/Message.h"
 #include "mon/MonCap.h"
 #include "include/encoding.h"
+#include "include/stringify.h"
 
 struct MForward : public Message {
   uint64_t tid;
@@ -29,9 +30,10 @@ struct MForward : public Message {
   MonCap client_caps;
   uint64_t con_features;
   EntityName entity_name;
-  PaxosServiceMessage *msg;   // incoming message
-  bufferlist msg_bl;          // outgoing message
+  PaxosServiceMessage *msg;   // incoming or outgoing message
 
+  string msg_desc;  // for operator<< only
+  
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
@@ -44,7 +46,9 @@ struct MForward : public Message {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
     con_features = feat;
-    set_message(m, feat);
+    // we may need to reencode for the target mon
+    msg->clear_payload();
+    msg = (PaxosServiceMessage*)m->get();
   }
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
            const MonCap& caps) :
@@ -52,7 +56,7 @@ struct MForward : public Message {
     tid(t), client_caps(caps), msg(NULL) {
     client = m->get_source_inst();
     con_features = feat;
-    set_message(m, feat);
+    msg = (PaxosServiceMessage*)m->get();
   }
 private:
   ~MForward() {
@@ -63,18 +67,20 @@ private:
     }
   }
 
-  PaxosServiceMessage *get_msg_from_bl() {
-    bufferlist::iterator p = msg_bl.begin();
-    return (msg_bl.length() ?
-        (PaxosServiceMessage*)decode_message(NULL, 0, p) : NULL);
-  }
-
 public:
   void encode_payload(uint64_t features) {
     ::encode(tid, payload);
     ::encode(client, payload);
     ::encode(client_caps, payload, features);
-    payload.append(msg_bl);
+    // Encode client message with intersection of target and source
+    // features.  This could matter if the semantics of the encoded
+    // message are changed when reencoding with more features than the
+    // client had originally.  That should never happen, but we may as
+    // well be defensive here.
+    if (con_features != features) {
+      msg->clear_payload();
+    }
+    encode_message(msg, features & con_features, payload);
     ::encode(con_features, payload);
     ::encode(entity_name, payload);
   }
@@ -101,21 +107,10 @@ public:
 
   }
 
-  void set_message(PaxosServiceMessage *m, uint64_t features) {
-    // get a reference to the message.  We will not use it except for print(),
-    // and we will put it in the dtor if it is not claimed.
-    // we could avoid doing this if only we had a const bufferlist iterator :)
-    msg = (PaxosServiceMessage*)m->get();
-
-    encode_message(m, features, msg_bl);
-  }
-
   PaxosServiceMessage *claim_message() {
-    if (!msg) {
-      return get_msg_from_bl();
-    }
-
     // let whoever is claiming the message deal with putting it.
+    assert(msg);
+    msg_desc = stringify(*msg);
     PaxosServiceMessage *m = msg;
     msg = NULL;
     return m;
@@ -123,13 +118,15 @@ public:
 
   const char *get_type_name() const { return "forward"; }
   void print(ostream& o) const {
+    o << "forward(";
     if (msg) {
-      o << "forward(" << *msg << " caps " << client_caps
-	<< " tid " << tid
-        << " con_features " << con_features << ") to leader";
+      o << *msg;
     } else {
-      o << "forward(??? ) to leader";
+      o << msg_desc;
     }
+    o << " caps " << client_caps
+      << " tid " << tid
+      << " con_features " << con_features << ")";
   }
 };
   
