@@ -570,7 +570,7 @@ void ReplicatedBackend::submit_transaction(
     tid,
     reqid,
     trim_to,
-    roll_forward_to,
+    at_version,
     added.size() ? *(added.begin()) : hobject_t(),
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
@@ -585,7 +585,7 @@ void ReplicatedBackend::submit_transaction(
     log_entries,
     hset_history,
     trim_to,
-    roll_forward_to,
+    at_version,
     true,
     op_t);
   
