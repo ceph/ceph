@@ -144,7 +144,7 @@ class Module(MgrModule):
                         obj = obj[part]
                     else:
                         obj = getattr(obj, part)
-            except (AttributeError, KeyError) as e:
+            except (AttributeError, KeyError):
                 raise NotFound(object_type, path)
 
         return obj

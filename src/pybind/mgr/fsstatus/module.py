@@ -1,12 +1,9 @@
 
 """
-High level status display for CephFS
+High level status display commands
 """
-from collections import defaultdict
 
-import logging
-import logging.config
-import json
+from collections import defaultdict
 from prettytable import PrettyTable
 import prettytable
 
@@ -242,7 +239,6 @@ class Module(MgrModule):
         osdmap = self.get("osd_map")
 
         # Build dict of OSD ID to stats
-        #return 0, "", json.dumps(self.get("osd_stats"))
         osd_stats = dict([(o['osd'], o) for o in self.get("osd_stats")['osd_stats']])
 
         for osd in osdmap['osds']:
