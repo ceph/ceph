@@ -11,7 +11,7 @@
 #include "EntryQueue.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 class Graylog;
 class SubsystemMap;

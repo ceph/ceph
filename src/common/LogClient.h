@@ -33,7 +33,7 @@ struct Connection;
 class LogChannel;
 
 namespace ceph {
-namespace log {
+namespace logging {
   class Graylog;
 }
 }
@@ -182,7 +182,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
-  shared_ptr<ceph::log::Graylog> graylog;
+  shared_ptr<ceph::logging::Graylog> graylog;
 
 
   friend class LogClientTemp;
