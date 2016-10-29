@@ -360,6 +360,15 @@ void ReplicatedPG::on_local_recover(
   // keep track of active pushes for scrub
   ++active_pushes;
 
+  if (recovery_info.version > pg_log.get_can_rollback_to()) {
+    /* This can only happen during a repair, and even then, it would
+     * be one heck of a race.  If we are repairing the object, the
+     * write in question must be fully committed, so it's not valid
+     * to roll it back anyway (and we'll be rolled forward shortly
+     * anyway) */
+    PGLogEntryHandler h{this, t};
+    pg_log.roll_forward_to(recovery_info.version, &h);
+  }
   recover_got(recovery_info.soid, recovery_info.version);
 
   if (is_primary()) {
