@@ -33,7 +33,7 @@ class ceph_state:
 sys.modules["ceph_state"] = ceph_state
 
 # Needed to avoid weird import loops
-from rest.module import global_instance
+from rest.module import global_instance  # NOQA
 
 from rest.app.serializers.v2 import ValidatingSerializer
 
