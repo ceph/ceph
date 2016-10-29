@@ -438,8 +438,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (r < 0 && ret == 0) {
       ret = r;
     }
-
-    if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)) {
+    if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)&&(!s->no_redirect)) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different zonegroup (" << s->bucket_info.zonegroup << " != " << store->get_zonegroup().get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation

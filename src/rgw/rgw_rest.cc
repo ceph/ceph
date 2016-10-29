@@ -1599,7 +1599,8 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET)
     return 0;
-
+  if (op->get_type() == RGW_OP_GET_BUCKET_LOCATION)
+    s->no_redirect = true;
   return do_init_permissions();
 }
 

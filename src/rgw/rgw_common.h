@@ -401,6 +401,7 @@ enum RGWOpType {
   RGW_OP_STAT_ACCOUNT,
   RGW_OP_LIST_BUCKET,
   RGW_OP_GET_BUCKET_LOGGING,
+  RGW_OP_GET_BUCKET_LOCATION,
   RGW_OP_GET_BUCKET_VERSIONING,
   RGW_OP_SET_BUCKET_VERSIONING,
   RGW_OP_GET_BUCKET_WEBSITE,
@@ -1305,6 +1306,7 @@ struct req_state {
   int bucket_instance_shard_id;
 
   string redirect;
+  bool no_redirect;
 
   RGWBucketInfo bucket_info;
   map<string, bufferlist> bucket_attrs;
