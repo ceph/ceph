@@ -136,7 +136,7 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
   //dump();
 }
 
-bool SnapServer::_is_prepared(version_t tid)
+bool SnapServer::_is_prepared(version_t tid) const
 {
   return 
     pending_update.count(tid) ||
