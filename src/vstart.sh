@@ -582,6 +582,7 @@ $DAEMONOPTS
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
+        osd copyfrom max chunk = 524288
 	bluestore fsck on mount = true
 	bluestore block create = true
 	bluestore block db size = 67108864
