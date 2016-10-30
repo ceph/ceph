@@ -269,8 +269,10 @@ public:
       param(NULL) {}
   ~CryptoAESKeyHandler() {
     SECITEM_FreeItem(param, PR_TRUE);
-    PK11_FreeSymKey(key);
-    PK11_FreeSlot(slot);
+    if (key)
+      PK11_FreeSymKey(key);
+    if (slot)
+      PK11_FreeSlot(slot);
   }
 
   int init(const bufferptr& s, ostringstream& err) {
