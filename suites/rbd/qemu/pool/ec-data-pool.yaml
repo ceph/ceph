@@ -1,0 +1,11 @@
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd m=1 k=2
+      - sudo ceph osd pool create datapool 4 4 erasure teuthologyprofile
+
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default data pool: datapool
