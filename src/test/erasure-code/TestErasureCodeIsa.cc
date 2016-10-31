@@ -967,6 +967,8 @@ int main(int argc, char **argv)
   string directory(env ? env : ".libs");
   g_conf->set_val("erasure_code_dir", directory, false, false);
 
+  kill(getpid(), SIGSEGV);
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
