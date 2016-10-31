@@ -16,6 +16,8 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
+#include "rgw/rgw_rados.h"
+#include "test_rgw_common.h"
 #define GTEST
 #ifdef GTEST
 #include <gtest/gtest.h>
@@ -29,21 +31,6 @@
 #define EXPECT_TRUE(c) ASSERT_TRUE(c) 
 #endif
 using namespace std;
-
-static void populate_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id)
-{
-  b->tenant = t;
-  b->name = n;
-  b->marker = m;
-  b->bucket_id = id;
-  b->placement.data_pool = rgw_pool(dp);
-  b->placement.index_pool = rgw_pool(ip);
-}
-
-static void init_bucket(rgw_bucket *bucket, const char *name)
-{
-  populate_bucket(bucket, "", name, ".data-pool", ".index-pool", "marker", "bucket-id");
-}
 
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)
 {
@@ -91,7 +78,7 @@ void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, 
 void test_obj(const string& name, const string& ns, const string& instance)
 {
   rgw_bucket b;
-  init_bucket(&b, "test");
+  test_rgw_init_bucket(&b, "test");
 
   JSONFormatter *formatter = new JSONFormatter(true);
 
@@ -167,3 +154,123 @@ TEST(TestRGWObj, no_underscore) {
   test_obj("obj", "ns", "v1");
 }
 
+template <class T>
+void dump(JSONFormatter& f, const string& name, const T& entity)
+{
+  f.open_object_section(name.c_str());
+  ::encode_json(name.c_str(), entity, &f);
+  f.close_section();
+  f.flush(cout);
+}
+
+static void test_obj_to_raw(test_rgw_env& env, const rgw_bucket& b,
+                            const string& name, const string& instance, const string& ns,
+                            const string& placement_id)
+{
+  JSONFormatter f(true);
+  dump(f, "bucket", b);
+  rgw_obj obj = test_rgw_create_obj(b, name, instance, ns, placement_id);
+  dump(f, "obj", obj);
+
+  rgw_raw_obj raw_obj;
+
+  rgw_obj_to_raw(env.zonegroup, env.zone_params, obj, &raw_obj);
+  dump(f, "raw_obj", raw_obj);
+
+  if (!placement_id.empty()) {
+    ASSERT_EQ(raw_obj.pool, env.get_placement(placement_id).data_pool);
+  } else {
+    ASSERT_EQ(raw_obj.pool, b.explicit_placement.data_pool);
+  }
+  ASSERT_EQ(raw_obj.oid, test_rgw_get_obj_oid(obj));
+
+  rgw_obj new_obj;
+  rgw_raw_obj_to_obj(b, raw_obj, &new_obj);
+
+  dump(f, "new_obj", new_obj);
+
+  ASSERT_EQ(obj, new_obj);
+
+}
+
+TEST(TestRGWObj, obj_to_raw) {
+  test_rgw_env env;
+
+  rgw_bucket b;
+  test_rgw_init_bucket(&b, "test");
+
+  rgw_bucket eb;
+  test_rgw_init_explicit_placement_bucket(&eb, "ebtest");
+
+  for (auto name : { "myobj", "_myobj", "_myobj_"}) {
+    for (auto inst : { "", "inst"}) {
+      for (auto ns : { "", "ns"}) {
+        test_obj_to_raw(env, b, name, inst, ns, env.zonegroup.default_placement);
+        test_obj_to_raw(env, eb, name, inst, ns, string());
+      }
+    }
+  }
+}
+
+TEST(TestRGWObj, old_to_raw) {
+  JSONFormatter f(true);
+  test_rgw_env env;
+
+  old_rgw_bucket eb;
+  test_rgw_init_old_bucket(&eb, "ebtest");
+
+  for (auto name : { "myobj", "_myobj", "_myobj_"}) {
+    for (string inst : { "", "inst"}) {
+      for (string ns : { "", "ns"}) {
+        old_rgw_obj old(eb, name);
+        if (!inst.empty()) {
+          old.set_instance(inst);
+        }
+        if (!ns.empty()) {
+          old.set_ns(ns);
+        }
+
+        bufferlist bl;
+
+        ::encode(old, bl);
+
+        rgw_obj new_obj;
+        rgw_raw_obj raw_obj;
+
+        try {
+          bufferlist::iterator iter = bl.begin();
+          ::decode(new_obj, iter);
+
+          iter = bl.begin();
+          ::decode(raw_obj, iter);
+        } catch (buffer::error& err) {
+          ASSERT_TRUE(false);
+        }
+
+        bl.clear();
+
+        rgw_obj new_obj2;
+        rgw_raw_obj raw_obj2;
+
+        ::encode(new_obj, bl);
+
+        dump(f, "raw_obj", raw_obj);
+        dump(f, "new_obj", new_obj);
+        cout << "raw=" << raw_obj << std::endl;
+
+        try {
+          bufferlist::iterator iter = bl.begin();
+          ::decode(new_obj2, iter);
+
+          iter = bl.begin();
+          ::decode(raw_obj2, iter);
+        } catch (buffer::error& err) {
+          ASSERT_TRUE(false);
+        }
+
+        ASSERT_EQ(new_obj, new_obj2);
+        ASSERT_EQ(raw_obj, raw_obj2);
+      }
+    }
+  }
+}
