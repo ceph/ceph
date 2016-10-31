@@ -912,7 +912,7 @@ struct rgw_bucket {
   std::string name;
   std::string marker;
   std::string bucket_id;
-  rgw_data_placement_target placement;
+  rgw_data_placement_target explicit_placement;
 
   std::string oid; /*
                     * runtime in-memory only info. If not empty, points to the bucket instance object
@@ -925,32 +925,40 @@ struct rgw_bucket {
     name(b.name),
     marker(b.marker),
     bucket_id(b.bucket_id),
-    placement(b.data_pool, b.data_extra_pool, b.index_pool) {}
+    explicit_placement(b.explicit_placement.data_pool,
+                       b.explicit_placement.data_extra_pool,
+                       b.explicit_placement.index_pool) {}
 
-  void convert(cls_user_bucket *b) {
+  void convert(cls_user_bucket *b) const {
     b->name = name;
-    b->data_pool = placement.data_pool.to_str();
-    b->data_extra_pool = placement.data_extra_pool.to_str();
-    b->index_pool = placement.index_pool.to_str();
     b->marker = marker;
     b->bucket_id = bucket_id;
+    b->explicit_placement.data_pool = explicit_placement.data_pool.to_str();
+    b->explicit_placement.data_extra_pool = explicit_placement.data_extra_pool.to_str();
+    b->explicit_placement.index_pool = explicit_placement.index_pool.to_str();
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(9, 3, bl);
+     ENCODE_START(10, 10, bl);
     ::encode(name, bl);
-    ::encode(placement.data_pool.name, bl);
     ::encode(marker, bl);
     ::encode(bucket_id, bl);
-    ::encode(placement.index_pool.name, bl);
-    ::encode(placement.data_extra_pool.name, bl);
     ::encode(tenant, bl);
+    bool encode_explicit = !explicit_placement.data_pool.empty();
+    ::encode(encode_explicit, bl);
+    if (encode_explicit) {
+      ::encode(explicit_placement.data_pool, bl);
+      ::encode(explicit_placement.data_extra_pool, bl);
+      ::encode(explicit_placement.index_pool, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
     ::decode(name, bl);
-    ::decode(placement.data_pool.name, bl);
+    if (struct_v < 10) {
+      ::decode(explicit_placement.data_pool.name, bl);
+    }
     if (struct_v >= 2) {
       ::decode(marker, bl);
       if (struct_v <= 3) {
@@ -963,16 +971,27 @@ struct rgw_bucket {
         ::decode(bucket_id, bl);
       }
     }
-    if (struct_v >= 5) {
-      ::decode(placement.index_pool.name, bl);
-    } else {
-      placement.index_pool = placement.data_pool;
-    }
-    if (struct_v >= 7) {
-      ::decode(placement.data_extra_pool.name, bl);
+    if (struct_v < 10) {
+      if (struct_v >= 5) {
+        ::decode(explicit_placement.index_pool.name, bl);
+      } else {
+        explicit_placement.index_pool = explicit_placement.data_pool;
+      }
+      if (struct_v >= 7) {
+        ::decode(explicit_placement.data_extra_pool.name, bl);
+      }
     }
     if (struct_v >= 8) {
       ::decode(tenant, bl);
+    }
+    if (struct_v >= 10) {
+      bool decode_explicit = !explicit_placement.data_pool.empty();
+      ::decode(decode_explicit, bl);
+      if (decode_explicit) {
+        ::decode(explicit_placement.data_pool, bl);
+        ::decode(explicit_placement.data_extra_pool, bl);
+        ::decode(explicit_placement.index_pool, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
@@ -982,7 +1001,7 @@ struct rgw_bucket {
                       char id_delim = ':') const;
 
   const rgw_pool& get_data_extra_pool() const {
-    return placement.get_data_extra_pool();
+    return explicit_placement.get_data_extra_pool();
   }
 
   void dump(Formatter *f) const;
@@ -1580,7 +1599,7 @@ struct RGWBucketEnt {
       count(e.count) {
   }
 
-  void convert(cls_user_bucket_entry *b) {
+  void convert(cls_user_bucket_entry *b) const {
     bucket.convert(&b->bucket);
     b->size = size;
     b->size_rounded = size_rounded;
@@ -1642,6 +1661,7 @@ public:
   const std::string& get_loc() const { return loc; }
   const std::string& get_instance() const { return instance; }
   rgw_bucket bucket;
+  std::string placement_id;
   std::string ns;
 
   bool in_extra_data; /* in-memory only member, does not serialize */
@@ -1905,14 +1925,6 @@ public:
     return in_extra_data;
   }
 
-  const rgw_pool& get_data_pool() const {
-    if (!in_extra_data) {
-      return bucket.placement.data_pool;
-    } else {
-      return bucket.placement.data_extra_pool;
-    }
-  }
-
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
     ::encode(bucket.name, bl);
@@ -1980,6 +1992,13 @@ public:
     }
 
     return (r < 0);
+  }
+
+  const rgw_pool& get_explicit_data_pool() {
+    if (!in_extra_data || bucket.explicit_placement.data_extra_pool.empty()) {
+      return bucket.explicit_placement.data_pool;
+    }
+    return bucket.explicit_placement.data_extra_pool;
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)

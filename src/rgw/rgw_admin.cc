@@ -1016,14 +1016,14 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
   map<RGWObjCategory, RGWStorageStats> stats;
   string bucket_ver, master_ver;
   string max_marker;
-  int ret = store->get_bucket_stats(bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret = store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
   }
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  ::encode_json("placement", bucket.placement, formatter);
+  ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
 
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
@@ -5436,7 +5436,7 @@ next:
     formatter->open_array_section("objects");
     while (is_truncated) {
       map<string, RGWObjEnt> result;
-      int r = store->cls_bucket_list(bucket, RGW_NO_SHARD, marker, prefix, 1000, true,
+      int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
                                      result, &is_truncated, &marker,
                                      bucket_object_check_filter);
 
@@ -5659,7 +5659,7 @@ next:
     list<rgw_obj_key> oid_list;
     rgw_obj_key key(object, object_version);
     oid_list.push_back(key);
-    ret = store->remove_objs_from_index(bucket, oid_list);
+    ret = store->remove_objs_from_index(bucket_info, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -6395,7 +6395,7 @@ next:
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->list_bi_log_entries(bucket, shard_id, marker, max_entries - count, entries, &truncated);
+      ret = store->list_bi_log_entries(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6504,7 +6504,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->trim_bi_log_entries(bucket, shard_id, start_marker, end_marker);
+    ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6523,7 +6523,7 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = store->get_bi_log_status(bucket, shard_id, markers);
+    ret = store->get_bi_log_status(bucket_info, shard_id, markers);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

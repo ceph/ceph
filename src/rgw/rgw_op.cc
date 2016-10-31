@@ -2322,9 +2322,10 @@ void RGWCreateBucket::execute()
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
+    bucket.tenant = s->bucket_tenant;
+    bucket.name = s->bucket_name;
     op_ret = store->select_bucket_placement(*(s->user), zonegroup_id,
 					    placement_rule,
-					    s->bucket_tenant, s->bucket_name,
 					    bucket, &selected_placement_rule, nullptr);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       op_ret = -EEXIST;
@@ -2517,7 +2518,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = rgw_bucket_sync_user_stats(store, s->user->user_id, s->bucket);
+  op_ret = rgw_bucket_sync_user_stats(store, s->user->user_id, s->bucket_info);
   if ( op_ret < 0) {
      ldout(s->cct, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -2536,7 +2537,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = store->delete_bucket(s->bucket, ot);
+  op_ret = store->delete_bucket(s->bucket_info, ot);
 
   if (op_ret == -ECANCELED) {
     // lost a race, either with mdlog sync or another delete bucket operation.
@@ -2617,11 +2618,6 @@ public:
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 {
-  int r = prepare_init(store, NULL);
-  if (r < 0) {
-    return r;
-  }
-
   string oid = obj_str;
   upload_id = s->info.args.get("uploadId");
   if (!oid_rand) {
@@ -2659,14 +2655,19 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
+  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
   if (r < 0) {
     return r;
   }
 
-  cur_obj = manifest_gen.get_cur_obj();
+  cur_obj = manifest_gen.get_cur_obj(store);
   rgw_raw_obj_to_obj(bucket, cur_obj, &head_obj);
   head_obj.index_hash_source = obj_str;
+
+  r = prepare_init(store, NULL);
+  if (r < 0) {
+    return r;
+  }
 
   return 0;
 }
@@ -4920,7 +4921,7 @@ void RGWCompleteMultipart::execute()
         op_ret = -ERR_INVALID_PART;
         return;
       } else {
-        manifest.append(obj_part.manifest);
+        manifest.append(obj_part.manifest, store);
       }
 
       if (obj_part.cs_info.compression_type != "none") {
@@ -5079,7 +5080,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
           rgw_obj head;
-          rgw_raw_obj raw_head = oiter.get_location();
+          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store);
           rgw_raw_obj_to_obj(s->bucket, raw_head, &head);
 
           rgw_obj_key key;
@@ -5371,7 +5372,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     RGWObjVersionTracker ot;
     ot.read_version = binfo.ep_objv;
 
-    ret = store->delete_bucket(binfo.bucket, ot);
+    ret = store->delete_bucket(binfo, ot);
     if (0 == ret) {
       ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.tenant,
                               binfo.bucket.name, false);

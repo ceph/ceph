@@ -49,6 +49,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
   bool is_truncated;
   string marker;
   int ret;
+  RGWObjectCtx obj_ctx(store);
 
   do {
     RGWUserBuckets user_buckets;
@@ -65,7 +66,14 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       marker = i->first;
 
       RGWBucketEnt& bucket_ent = i->second;
-      ret = rgw_bucket_sync_user_stats(store, user_id, bucket_ent.bucket);
+      RGWBucketInfo bucket_info;
+
+      ret = store->get_bucket_instance_info(obj_ctx, bucket_ent.bucket, bucket_info, NULL, NULL);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
+        continue;
+      }
+      ret = rgw_bucket_sync_user_stats(store, user_id, bucket_info);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
