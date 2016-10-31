@@ -186,6 +186,7 @@ public:
   const uint64_t max_stride_size;
   AttrGenerator attr_gen;
   const bool no_omap;
+  const bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
   int snapname_num;
@@ -196,6 +197,7 @@ public:
 		   uint64_t min_stride_size,
 		   uint64_t max_stride_size,
 		   bool no_omap,
+		   bool no_sparse,
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
 		   const char *id = 0) :
@@ -212,6 +214,7 @@ public:
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
     attr_gen(2000, 20000),
     no_omap(no_omap),
+    no_sparse(no_sparse),
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
     snapname_num(0)
@@ -1209,7 +1212,7 @@ public:
     uint64_t len = 0;
     if (old_value.has_contents())
       len = old_value.most_recent_gen()->get_length(old_value.most_recent());
-    if (rand() % 2) {
+    if (context->no_sparse || rand() % 2) {
       is_sparse_read[index] = false;
       read_op.read(0,
 		   len,
