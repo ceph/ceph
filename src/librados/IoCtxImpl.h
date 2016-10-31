@@ -205,6 +205,8 @@ struct librados::IoCtxImpl {
   int aio_remove(const object_t &oid, AioCompletionImpl *c, int flags=0);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
+  int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
+	       const char *method, bufferlist& inbl, char *buf, size_t out_len);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
   int aio_stat2(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, struct timespec *pts);
   int aio_getxattr(const object_t& oid, AioCompletionImpl *c,

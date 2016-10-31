@@ -1258,6 +1258,28 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   return 0;
 }
 
+int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
+				  const char *cls, const char *method,
+				  bufferlist& inbl, char *buf, size_t out_len)
+{
+  Context *onack = new C_aio_Ack(c);
+
+  c->is_read = true;
+  c->io = this;
+  c->bl.clear();
+  c->bl.push_back(buffer::create_static(out_len, buf));
+  c->blp = &c->bl;
+  c->out_buf = buf;
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.call(cls, method, inbl);
+  Objecter::Op *o = objecter->prepare_read_op(
+    oid, oloc, rd, snap_seq, &c->bl, 0, onack, &c->objver);
+  objecter->op_submit(o, &c->tid);
+  return 0;
+}
+
 int librados::IoCtxImpl::read(const object_t& oid,
 			      bufferlist& bl, size_t len, uint64_t off)
 {
