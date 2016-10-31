@@ -56,6 +56,8 @@ namespace ECTransaction {
 	}
 
 	if (i.second.is_delete()) {
+	  ldpp_dout(dpp, 20) << __func__ << ": delete, setting projected size"
+			     << " to 0" << dendl;
 	  projected_size = 0;
 	}
 

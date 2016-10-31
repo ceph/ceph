@@ -7478,11 +7478,14 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     [this, &cop /* avoid ref cycle */](PGTransaction *t) {
       ObjectState& obs = cop->obc->obs;
       if (cop->temp_cursor.is_initial()) {
+	dout(20) << "fill_in_final_tx: writing "
+		 << "directly to final object" << dendl;
 	// write directly to final object
 	cop->results.temp_oid = obs.oi.soid;
 	_write_copy_chunk(cop, t);
       } else {
 	// finish writing to temp object, then move into place
+	dout(20) << "fill_in_final_tx: writing to temp object" << dendl;
 	_write_copy_chunk(cop, t);
 	t->rename(obs.oi.soid, cop->results.temp_oid);
       }
@@ -7606,6 +7609,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   CopyFromCallback *cb = static_cast<CopyFromCallback*>(ctx->copy_cb);
 
   if (obs.exists) {
+    dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);
   } else {
     ctx->delta_stats.num_objects++;
