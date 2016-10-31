@@ -39,9 +39,9 @@ TEST(ErasureCodePlugin, factory)
   }
   const char *techniques[] = {
     // "reed_sol_van",
-    "reed_sol_r6_op",
-    "cauchy_orig",
-    "cauchy_good",
+    // "reed_sol_r6_op",
+    // "cauchy_orig",
+    // "cauchy_good",
     // "liberation",
     // "blaum_roth",
     // "liber8tion",
