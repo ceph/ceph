@@ -379,11 +379,13 @@ void ReplicatedPG::on_local_recover(
     publish_stats_to_osd();
     assert(missing_loc.needs_recovery(hoid));
     missing_loc.add_location(hoid, pg_whoami);
-    if (!is_unreadable_object(hoid) &&
-        waiting_for_unreadable_object.count(hoid)) {
-      dout(20) << " kicking unreadable waiters on " << hoid << dendl;
-      requeue_ops(waiting_for_unreadable_object[hoid]);
-      waiting_for_unreadable_object.erase(hoid);
+    if (!is_unreadable_object(hoid)) {
+      auto unreadable_object_entry = waiting_for_unreadable_object.find(hoid);
+      if (unreadable_object_entry != waiting_for_unreadable_object.end()) {
+	dout(20) << " kicking unreadable waiters on " << hoid << dendl;
+	requeue_ops(unreadable_object_entry->second);
+	waiting_for_unreadable_object.erase(unreadable_object_entry);
+      }
     }
     if (pg_log.get_missing().get_items().size() == 0) {
       requeue_ops(waiting_for_all_missing);
@@ -425,20 +427,21 @@ void ReplicatedPG::on_global_recover(
   i->second->drop_recovery_read(&requeue_list);
   requeue_ops(requeue_list);
 
-  if (backfills_in_flight.count(soid))
-    backfills_in_flight.erase(soid);
+  backfills_in_flight.erase(soid);
 
   recovering.erase(i);
   finish_recovery_op(soid);
-  if (waiting_for_degraded_object.count(soid)) {
+  auto degraded_object_entry = waiting_for_degraded_object.find(soid);
+  if (degraded_object_entry != waiting_for_degraded_object.end()) {
     dout(20) << " kicking degraded waiters on " << soid << dendl;
-    requeue_ops(waiting_for_degraded_object[soid]);
-    waiting_for_degraded_object.erase(soid);
+    requeue_ops(degraded_object_entry->second);
+    waiting_for_degraded_object.erase(degraded_object_entry);
   }
-  if (waiting_for_unreadable_object.count(soid)) {
+  auto unreadable_object_entry = waiting_for_unreadable_object.find(soid);
+  if (unreadable_object_entry != waiting_for_unreadable_object.end()) {
     dout(20) << " kicking unreadable waiters on " << soid << dendl;
-    requeue_ops(waiting_for_unreadable_object[soid]);
-    waiting_for_unreadable_object.erase(soid);
+    requeue_ops(unreadable_object_entry->second);
+    waiting_for_unreadable_object.erase(unreadable_object_entry);
   }
   finish_degraded_object(soid);
 }
