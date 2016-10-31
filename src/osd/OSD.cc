@@ -2803,6 +2803,12 @@ int OSD::shutdown()
 
   dout(10) << "syncing store" << dendl;
   enable_disable_fuse(true);
+
+  if (g_conf->osd_journal_flush_on_shutdown) {
+    dout(10) << "flushing journal" << dendl;
+    store->flush_journal();
+  }
+
   store->umount();
   delete store;
   store = 0;
