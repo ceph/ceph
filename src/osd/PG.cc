@@ -486,8 +486,9 @@ bool PG::MissingLoc::readable_with_acting(
   const hobject_t &hoid,
   const set<pg_shard_t> &acting) const {
   if (!needs_recovery(hoid)) return true;
-  if (!missing_loc.count(hoid)) return false;
-  const set<pg_shard_t> &locs = missing_loc.find(hoid)->second;
+  auto missing_loc_entry = missing_loc.find(hoid);
+  if (missing_loc_entry == missing_loc.end()) return false;
+  const set<pg_shard_t> &locs = missing_loc_entry->second;
   dout(10) << __func__ << ": locs:" << locs << dendl;
   set<pg_shard_t> have_acting;
   for (set<pg_shard_t>::const_iterator i = locs.begin();
@@ -1781,10 +1782,12 @@ void PG::activate(ObjectStore::Transaction& t,
         if (!missing.have_missing())
           complete_shards.insert(*i);
       } else {
-	assert(peer_missing.count(*i));
-	missing_loc.add_active_missing(peer_missing[*i]);
-        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill.is_max())
-          complete_shards.insert(*i);
+	auto peer_missing_entry = peer_missing.find(*i);
+	assert(peer_missing_entry != peer_missing.end());
+	missing_loc.add_active_missing(peer_missing_entry->second);
+        if (!peer_missing_entry->second.have_missing() &&
+	    peer_info[*i].last_backfill.is_max())
+	  complete_shards.insert(*i);
       }
     }
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -4474,10 +4477,11 @@ bool PG::scrub_process_inconsistent()
 	   i != scrubber.authoritative.end();
 	   ++i) {
 	set<pg_shard_t>::iterator j;
-	
-	if (scrubber.missing.count(i->first)) {
-	  for (j = scrubber.missing[i->first].begin();
-	       j != scrubber.missing[i->first].end(); 
+
+	auto missing_entry = scrubber.missing.find(i->first);
+	if (missing_entry != scrubber.missing.end()) {
+	  for (j = missing_entry->second.begin();
+	       j != missing_entry->second.end();
 	       ++j) {
 	    repair_object(
 	      i->first,
