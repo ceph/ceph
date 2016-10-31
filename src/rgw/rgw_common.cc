@@ -1440,7 +1440,8 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
   rgw_obj old_obj;
   ::decode(old_obj, bl);
 
-  RGWRados::obj_to_raw(old_obj, this);
+  get_obj_bucket_and_oid_loc(old_obj, oid, loc);
+  pool = old_obj.get_explicit_data_pool();
 }
 
 std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const

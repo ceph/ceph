@@ -437,7 +437,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location();
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
       string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }

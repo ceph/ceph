@@ -94,7 +94,6 @@ void RGWObjManifest::dump(Formatter *f) const
   f->close_section();
   f->dump_unsigned("obj_size", obj_size);
   ::encode_json("explicit_objs", explicit_objs, f);
-  ::encode_json("head_obj", head_obj, f);
   ::encode_json("head_size", head_size, f);
   ::encode_json("max_head_size", max_head_size, f);
   ::encode_json("prefix", prefix, f);
@@ -576,7 +575,7 @@ void rgw_bucket::dump(Formatter *f) const
   encode_json("marker", marker, f);
   encode_json("bucket_id", bucket_id, f);
   encode_json("tenant", tenant, f);
-  encode_json("placement", placement, f);
+  encode_json("explicit_placement", explicit_placement, f);
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
@@ -584,12 +583,12 @@ void rgw_bucket::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
   JSONDecoder::decode_json("tenant", tenant, obj);
-  JSONDecoder::decode_json("placement", placement, obj);
-  if (placement.data_pool.empty()) {
+  JSONDecoder::decode_json("explicit_placement", explicit_placement, obj);
+  if (explicit_placement.data_pool.empty()) {
     /* decoding old format */
-    JSONDecoder::decode_json("pool", placement.data_pool, obj);
-    JSONDecoder::decode_json("data_extra_pool", placement.data_extra_pool, obj);
-    JSONDecoder::decode_json("index_pool", placement.index_pool, obj);
+    JSONDecoder::decode_json("pool", explicit_placement.data_pool, obj);
+    JSONDecoder::decode_json("data_extra_pool", explicit_placement.data_extra_pool, obj);
+    JSONDecoder::decode_json("index_pool", explicit_placement.index_pool, obj);
   }
 }
 

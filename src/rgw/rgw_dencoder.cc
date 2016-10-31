@@ -18,8 +18,8 @@ static void init_bucket(rgw_bucket *b, const char *t, const char *n, const char 
   b->name = n;
   b->marker = m;
   b->bucket_id = id;
-  b->placement.data_pool = rgw_pool(dp);
-  b->placement.index_pool = rgw_pool(ip);
+  b->explicit_placement.data_pool = rgw_pool(dp);
+  b->explicit_placement.index_pool = rgw_pool(ip);
 }
 
 void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
@@ -112,14 +112,12 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 void RGWObjManifest::obj_iterator::update_location()
 {
   if (manifest->explicit_objs) {
-    RGWRados::obj_to_raw(explicit_iter->second.loc, &location);
+    location = explicit_iter->second.loc;
     return;
   }
 
-  const rgw_raw_obj& head = manifest->get_head();
-
   if (ofs < manifest->get_head_size()) {
-    location = head;
+    location = manifest->get_obj();
     return;
   }
 
@@ -159,7 +157,7 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   o.push_back(new RGWObjManifest);
 }
 
-void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_raw_obj *location)
+void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location)
 {
   string oid;
   if (!override_prefix || override_prefix->empty()) {
@@ -171,7 +169,7 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
 
   if (!cur_part_id) {
     if (ofs < max_head_size) {
-      *location = head_obj;
+      *location = obj;
       return;
     } else {
       char buf[16];
@@ -208,7 +206,7 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
   // to get the right shadow object location
   loc.set_instance(tail_instance);
 
-  RGWRados::obj_to_raw(loc, location);
+  *location = loc;
 }
 
 

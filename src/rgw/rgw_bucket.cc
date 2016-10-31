@@ -151,13 +151,13 @@ int rgw_read_user_buckets(RGWRados * store,
   return 0;
 }
 
-int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket)
+int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info)
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
   rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
 
-  return store->cls_user_sync_bucket_stats(obj, bucket);
+  return store->cls_user_sync_bucket_stats(obj, bucket_info);
 }
 
 int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name)
@@ -170,7 +170,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const
     return ret;
   }
 
-  ret = rgw_bucket_sync_user_stats(store, bucket_info.owner, bucket_info.bucket);
+  ret = rgw_bucket_sync_user_stats(store, bucket_info.owner, bucket_info);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: could not sync user stats for bucket " << bucket_name << ": ret=" << ret << dendl;
     return ret;
@@ -480,7 +480,6 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 
       if (actual_bucket.name.compare(bucket.name) != 0 ||
           actual_bucket.tenant.compare(bucket.tenant) != 0 ||
-          actual_bucket.placement.compare(bucket.placement) != 0 ||
           actual_bucket.marker.compare(bucket.marker) != 0 ||
           actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
@@ -529,11 +528,11 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 
   string bucket_ver, master_ver;
 
-  ret = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
   if (ret < 0)
     return ret;
 
-  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
+  ret = store->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -564,14 +563,14 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 
   }
 
-  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, bucket.name);
+  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, info);
   if ( ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
 
   RGWObjVersionTracker objv_tracker;
 
-  ret = store->delete_bucket(bucket, objv_tracker);
+  ret = store->delete_bucket(info, objv_tracker);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << dendl;
     return ret;
@@ -620,11 +619,11 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
 
   string bucket_ver, master_ver;
 
-  ret = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
   if (ret < 0)
     return ret;
 
-  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
+  ret = store->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -664,7 +663,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
         RGWObjManifest::obj_iterator miter = manifest.obj_begin();
         rgw_obj head_obj = manifest.get_obj();
         rgw_raw_obj raw_head_obj;
-        RGWRados::obj_to_raw(head_obj, &raw_head_obj);
+        store->obj_to_raw(head_obj, &raw_head_obj);
 
 
         for (; miter != manifest.obj_end() && max_aio--; ++miter) {
@@ -677,7 +676,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
             max_aio = concurrent_max;
           }
 
-          rgw_raw_obj last_obj = miter.get_location();
+          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store);
           if (last_obj == raw_head_obj) {
             // have the head obj deleted at the end
             continue;
@@ -690,7 +689,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
           }
         } // for all shadow objs
 
-        ret = store->delete_obj_aio(head_obj, bucket, info, astate, handles, keep_index_consistent);
+        ret = store->delete_obj_aio(head_obj, info, astate, handles, keep_index_consistent);
         if (ret < 0) {
           lderr(store->ctx()) << "ERROR: delete obj aio failed with " << ret << dendl;
           return ret;
@@ -719,7 +718,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
     return ret;
   }
 
-  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, bucket.name);
+  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, info);
   if (ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -1073,7 +1072,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
     return 0;
 
   if (fix_index) {
-    int r = store->remove_objs_from_index(bucket, objs_to_unlink);
+    int r = store->remove_objs_from_index(bucket_info, objs_to_unlink);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +
               cpp_strerror(-r));
@@ -1091,6 +1090,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 {
 
   bool fix_index = op_state.will_fix_index();
+
   rgw_bucket bucket = op_state.get_bucket();
 
   if (!fix_index) {
@@ -1098,11 +1098,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
     return -EINVAL;
   }
 
-/*
-  dout(0) << "Checking objects, decreasing bucket 2-phase commit timeout.\n"\
-	  << "** Note that timeout will reset only when operation completes successfully **" << dendl;
-*/
-  store->cls_obj_set_bucket_tag_timeout(bucket, BUCKET_TAG_TIMEOUT);
+  store->cls_obj_set_bucket_tag_timeout(bucket_info, BUCKET_TAG_TIMEOUT);
 
   string prefix;
   rgw_obj_key marker;
@@ -1113,7 +1109,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   while (is_truncated) {
     map<string, RGWObjEnt> result;
 
-    int r = store->cls_bucket_list(bucket, RGW_NO_SHARD, marker, prefix, 1000, true,
+    int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
                                    result, &is_truncated, &marker,
                                    bucket_object_check_filter);
     if (r == -ENOENT) {
@@ -1130,7 +1126,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
   formatter->close_section();
 
-  store->cls_obj_set_bucket_tag_timeout(bucket, 0);
+  store->cls_obj_set_bucket_tag_timeout(bucket_info, 0);
 
   return 0;
 }
@@ -1144,14 +1140,14 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
   rgw_bucket bucket = op_state.get_bucket();
   bool fix_index = op_state.will_fix_index();
 
-  int r = store->bucket_check_index(bucket, &existing_stats, &calculated_stats);
+  int r = store->bucket_check_index(bucket_info, &existing_stats, &calculated_stats);
   if (r < 0) {
     set_err_msg(err_msg, "failed to check index error=" + cpp_strerror(-r));
     return r;
   }
 
   if (fix_index) {
-    r = store->bucket_rebuild_index(bucket);
+    r = store->bucket_rebuild_index(bucket_info);
     if (r < 0) {
       set_err_msg(err_msg, "failed to rebuild index err=" + cpp_strerror(-r));
       return r;
@@ -1367,7 +1363,6 @@ int RGWBucketAdminOp::remove_object(RGWRados *store, RGWBucketAdminOpState& op_s
 static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  rgw_bucket bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
   real_time mtime;
@@ -1376,11 +1371,11 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   if (r < 0)
     return r;
 
-  bucket = bucket_info.bucket;
+  rgw_bucket& bucket = bucket_info.bucket;
 
   string bucket_ver, master_ver;
   string max_marker;
-  int ret = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret = store->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
@@ -1390,7 +1385,6 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  encode_json("placement", bucket.placement, formatter);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   ::encode_json("owner", bucket_info.owner, formatter);
@@ -2122,21 +2116,19 @@ public:
       string bucket_name;
       parse_bucket(key, tenant_name, bucket_name);
 
-      rgw_bucket bucket;
       RGWZonePlacementInfo rule_info;
-      ret = store->set_bucket_location_by_rule(bci.info.placement_rule,
-                                           tenant_name, bucket_name, bucket, &rule_info);
+      bci.info.bucket.name = bucket_name;
+      bci.info.bucket.tenant = tenant_name;
+      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, bci.info.bucket, &rule_info);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
       }
-      bci.info.bucket.tenant = bucket.tenant;
-      bci.info.bucket.placement = bucket.placement;
       bci.info.index_type = rule_info.index_type;
     } else {
-      /* existing bucket, keep its placement pools */
-      bci.info.bucket.placement = old_bci.info.bucket.placement;
-      bci.info.index_type = old_bci.info.index_type;
+      /* existing bucket, keep its placement */
+      bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;
+      bci.info.placement_rule = old_bci.info.placement_rule;
     }
 
     // are we actually going to perform this put, or is it too old?
@@ -2157,7 +2149,7 @@ public:
 
     objv_tracker = bci.info.objv_tracker;
 
-    ret = store->init_bucket_index(bci.info.bucket, bci.info.num_shards);
+    ret = store->init_bucket_index(bci.info, bci.info.num_shards);
     if (ret < 0)
       return ret;
 
