@@ -2150,7 +2150,6 @@ public:
       bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
       bci.info.bucket.data_extra_pool = old_bci.info.bucket.data_extra_pool;
-      bci.info.index_type = old_bci.info.index_type;
     }
 
     // are we actually going to perform this put, or is it too old?
