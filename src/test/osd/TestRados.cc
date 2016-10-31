@@ -297,6 +297,7 @@ int main(int argc, char **argv)
   string pool_name = "rbd";
   bool ec_pool = false;
   bool no_omap = false;
+  bool no_sparse = false;
   bool balance_reads = false;
 
   for (int i = 1; i < argc; ++i) {
@@ -318,6 +319,8 @@ int main(int argc, char **argv)
       max_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--no-omap") == 0)
       no_omap = true;
+    else if (strcmp(argv[i], "--no-sparse") == 0)
+      no_sparse = true;
     else if (strcmp(argv[i], "--balance_reads") == 0)
       balance_reads = true;
     else if (strcmp(argv[i], "--pool-snaps") == 0)
@@ -331,6 +334,7 @@ int main(int argc, char **argv)
       }
       ec_pool = true;
       no_omap = true;
+      no_sparse = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       if (i == argc) {
@@ -418,6 +422,7 @@ int main(int argc, char **argv)
     min_stride_size,
     max_stride_size,
     no_omap,
+    no_sparse,
     pool_snaps,
     write_fadvise_dontneed,
     id);

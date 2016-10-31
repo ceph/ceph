@@ -218,7 +218,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
   stat_queue_item(this),
-  snap_trim_queued(false),
   scrub_queued(false),
   recovery_queued(false),
   recovery_ops_active(0),
@@ -434,18 +433,16 @@ void PG::update_object_snap_mapping(
 void PG::merge_log(
   ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, pg_shard_t from)
 {
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, &t};
   pg_log.merge_log(
     t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
-  rollbacker.apply(this, &t);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, &t};
   pg_log.rewind_divergent_log(
     t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
-  rollbacker.apply(this, &t);
 }
 
 /*
@@ -945,6 +942,7 @@ void PG::clear_primary_state()
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
+  projected_log = PGLog::IndexedLog();
 
   last_update_ondisk = eversion_t();
 
@@ -1588,7 +1586,7 @@ void PG::activate(ObjectStore::Transaction& t,
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
   last_update_applied = info.last_update;
-  last_rollback_info_trimmed_to_applied = pg_log.get_rollback_trimmed_to();
+  last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
 
   need_up_thru = false;
 
@@ -1620,7 +1618,7 @@ void PG::activate(ObjectStore::Transaction& t,
     }
     dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
     if (!snap_trimq.empty() && is_clean())
-      queue_snap_trim();
+      kick_snap_trim();
   }
 
   // init complete pointer
@@ -1844,6 +1842,28 @@ void PG::activate(ObjectStore::Transaction& t,
 
     state_set(PG_STATE_ACTIVATING);
   }
+  if (is_primary()) {
+    projected_last_update = info.last_update;
+  }
+  if (acting.size() >= pool.info.min_size ||
+      pool.info.is_hacky_ecoverwrites()) {
+    /* The reason this is guarded with the above check is that it's not strictly
+     * safe if acting.size < min_size since we aren't actually activating.  In
+     * that case, we might still need to rollback the entries at the head of the
+     * log if an osd comes up with an older log.  If the pool only allows inplace
+     * updates, this is no problem (i.e., no hacky ecoverwrites are enabled).
+     * However, with the rollforward entries implied by ecoverwrites
+     * implementation, not doing the rollforward would leave the on-disk state
+     * out of sync with the log in case of recovery.  For now, we'll just
+     * do the rollforward on an overwrites pool, but before this is used in real
+     * life, recovery reads need to be able to overlay unapplied rollforward
+     * updates.
+     *
+     * See http://tracker.ceph.com/issues/17158 for the considerations here
+     */
+    PGLogEntryHandler handler{this, &t};
+    pg_log.roll_forward(&handler);
+  }
 }
 
 bool PG::op_has_sufficient_caps(OpRequestRef& op)
@@ -2025,17 +2045,6 @@ void PG::all_activated_and_committed()
         AllReplicasActivated())));
 }
 
-void PG::queue_snap_trim()
-{
-  if (snap_trim_queued) {
-    dout(10) << "queue_snap_trim -- already queued" << dendl;
-  } else {
-    dout(10) << "queue_snap_trim -- queuing" << dendl;
-    snap_trim_queued = true;
-    osd->queue_for_snap_trim(this);
-  }
-}
-
 bool PG::requeue_scrub()
 {
   assert(is_locked());
@@ -2115,7 +2124,7 @@ void PG::mark_clean()
   trim_past_intervals();
 
   if (is_clean() && !snap_trimq.empty())
-    queue_snap_trim();
+    kick_snap_trim();
 
   dirty_info = true;
 }
@@ -2257,7 +2266,6 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_active.empty());
   split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
 
-  snap_trim_queued = false;
   osd->dequeue_pg(this, &waiting_for_peered);
 
   OSD::split_list(
@@ -2472,6 +2480,18 @@ void PG::update_heartbeat_peers()
 
   if (need_update)
     osd->need_heartbeat_peer_update();
+}
+
+
+bool PG::check_in_progress_op(
+  const osd_reqid_t &r,
+  eversion_t *replay_version,
+  version_t *user_version,
+  int *return_code) const
+{
+  return (
+    projected_log.get_request(r, replay_version, user_version, return_code) ||
+    pg_log.get_log().get_request(r, replay_version, user_version, return_code));
 }
 
 void PG::_update_calc_stats()
@@ -3003,7 +3023,7 @@ void PG::trim_peers()
   }
 }
 
-void PG::add_log_entry(const pg_log_entry_t& e)
+void PG::add_log_entry(const pg_log_entry_t& e, bool applied)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -3019,7 +3039,7 @@ void PG::add_log_entry(const pg_log_entry_t& e)
     info.last_user_version = e.user_version;
 
   // log mutation
-  pg_log.add(e);
+  pg_log.add(e, applied);
   dout(10) << "add_log_entry " << e << dendl;
 }
 
@@ -3027,7 +3047,7 @@ void PG::add_log_entry(const pg_log_entry_t& e)
 void PG::append_log(
   const vector<pg_log_entry_t>& logv,
   eversion_t trim_to,
-  eversion_t trim_rollback_to,
+  eversion_t roll_forward_to,
   ObjectStore::Transaction &t,
   bool transaction_applied)
 {
@@ -3044,36 +3064,46 @@ void PG::append_log(
   }
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
+  PGLogEntryHandler handler{this, &t};
+  if (!transaction_applied) {
+     /* We must be a backfill peer, so it's ok if we apply
+      * out-of-turn since we won't be considered when
+      * determining a min possible last_update.
+      */
+    pg_log.roll_forward(&handler);
+  }
+
   for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
        p != logv.end();
        ++p) {
-    add_log_entry(*p);
+    add_log_entry(*p, transaction_applied);
+
+    /* We don't want to leave the rollforward artifacts around
+     * here past last_backfill.  It's ok for the same reason as
+     * above */
+    if (transaction_applied &&
+	(cmp(p->soid, info.last_backfill, get_sort_bitwise()) > 0)) {
+      pg_log.roll_forward(&handler);
+    }
+  }
+  auto last = logv.rbegin();
+  if (is_primary() && last != logv.rend()) {
+    projected_log.skip_can_rollback_to_to_head();
+    projected_log.trim(last->version, nullptr);
   }
 
-  PGLogEntryHandler handler;
-  if (!transaction_applied) {
-    pg_log.clear_can_rollback_to(&handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	info.last_update));
-  } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
-    pg_log.trim_rollback_info(
-      trim_rollback_to,
+  if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
+    pg_log.roll_forward_to(
+      roll_forward_to,
       &handler);
     t.register_on_applied(
       new C_UpdateLastRollbackInfoTrimmedToApplied(
 	this,
 	get_osdmap()->get_epoch(),
-	trim_rollback_to));
+	roll_forward_to));
   }
 
-  pg_log.trim(&handler, trim_to, info);
-
-  dout(10) << __func__ << ": trimming to " << trim_rollback_to
-	   << " entries " << handler.to_trim << dendl;
-  handler.apply(this, &t);
+  pg_log.trim(trim_to, info);
 
   // update the local pg, pg log
   dirty_info = true;
@@ -4109,6 +4139,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
         // Don't include temporary objects when scrubbing
         scrubber.start = info.pgid.pgid.get_hobj_start();
+	if (pool.info.is_hacky_ecoverwrites()) {
+	  osd->clog->info() << info.pgid << ": skipping scrub since it's"
+			    << " not supported with overwrites yet.";
+	  scrubber.start = hobject_t::get_max();
+	  scrubber.end = hobject_t::get_max();
+	}
+
+
         scrubber.state = PG::Scrubber::NEW_CHUNK;
 
 	{
@@ -4335,7 +4373,7 @@ void PG::scrub_clear_state()
 
   if (scrubber.queue_snap_trim) {
     dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
-    queue_snap_trim();
+    snap_trimmer_scrub_complete();
   }
 
   scrubber.reset();
@@ -4639,13 +4677,12 @@ bool PG::append_log_entries_update_missing(
   assert(!entries.empty());
   assert(entries.begin()->version > info.last_update);
 
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, &t};
   bool invalidate_stats =
     pg_log.append_new_log_entries(info.last_backfill,
 				  info.last_backfill_bitwise,
 				  entries,
 				  &rollbacker);
-  rollbacker.apply(this, &t);
   info.last_update = pg_log.get_head();
 
   if (pg_log.get_missing().num_missing() == 0) {
@@ -4681,6 +4718,7 @@ void PG::merge_new_log_entries(
       pinfo.last_backfill,
       info.last_backfill_bitwise,
       entries,
+      true,
       NULL,
       pmissing,
       NULL,
@@ -5084,7 +5122,6 @@ void PG::start_peering_interval(
 
   peer_purged.clear();
   actingbackfill.clear();
-  snap_trim_queued = false;
   scrub_queued = false;
 
   // reset primary state?
@@ -5096,6 +5133,8 @@ void PG::start_peering_interval(
     
   // pg->on_*
   on_change(t);
+
+  projected_last_update = eversion_t();
 
   assert(!deleting);
 
@@ -5210,16 +5249,17 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 	  for (snapid_t snap = i.get_start();
 	       snap != i.get_len() + i.get_start();
 	       ++snap) {
-	    hobject_t hoid;
-	    int r = snap_mapper.get_next_object_to_trim(snap, &hoid);
+	    vector<hobject_t> hoids;
+	    int r = snap_mapper.get_next_objects_to_trim(snap, 1, &hoids);
 	    if (r != 0 && r != -ENOENT) {
 	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
 		   << cpp_strerror(r) << dendl;
 	      assert(0);
 	    } else if (r != -ENOENT) {
+	      assert(!hoids.empty());
 	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
 		   << cpp_strerror(r) << " for object "
-		   << hoid << " on snap " << snap
+		   << hoids[0] << " on snap " << snap
 		   << " which should have been fully trimmed " << dendl;
 	      assert(0);
 	    }
@@ -5272,7 +5312,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
   if (!pg.backfill_targets.empty())
     out << " bft=" << pg.backfill_targets;
-  out << " crt=" << pg.pg_log.get_log().can_rollback_to;
+  out << " crt=" << pg.pg_log.get_can_rollback_to();
 
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
@@ -6796,7 +6836,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   if (!pg->snap_trimq.empty() &&
       pg->is_clean()) {
     dout(10) << "Active: queuing snap trim" << dendl;
-    pg->queue_snap_trim();
+    pg->kick_snap_trim();
   }
 
   if (pg->is_peered() &&
@@ -7112,9 +7152,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
 
-    PGLogEntryHandler rollbacker;
+    PGLogEntryHandler rollbacker{pg, t};
     pg->pg_log.reset_backfill_claim_log(msg->log, &rollbacker);
-    rollbacker.apply(pg, t);
 
     pg->pg_log.reset_backfill();
   } else {

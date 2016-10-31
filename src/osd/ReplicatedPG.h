@@ -25,6 +25,7 @@
 #include "messages/MOSDOpReply.h"
 #include "common/sharedptr_registry.hpp"
 #include "ReplicatedBackend.h"
+#include "PGTransaction.h"
 
 class MOSDSubOpReply;
 
@@ -73,23 +74,26 @@ public:
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
     hobject_t temp_oid;    ///< temp object (if any)
+
     /**
-     * Final transaction; if non-empty the callback must execute it before any
-     * other accesses to the object (in order to complete the copy).
+     * Function to fill in transaction; if non-empty the callback
+     * must execute it before any other accesses to the object
+     * (in order to complete the copy).
      */
-    PGBackend::PGTransaction *final_tx;
+    std::function<void(PGTransaction *)> fill_in_final_tx;
+
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
-    map<string, bufferlist> attrs; ///< src user attrs
     bool has_omap;
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
     vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    map<string, bufferlist> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool is_data_digest() {
@@ -100,7 +104,7 @@ public:
     }
     CopyResults()
       : object_size(0), started_temp_obj(false),
-	final_tx(NULL), user_version(0),
+	user_version(0),
 	should_requeue(false), mirror_snapset(false),
 	has_omap(false),
 	flags(0),
@@ -239,6 +243,10 @@ public:
   }
 
   /// Listener methods
+  DoutPrefixProvider *get_dpp() override {
+    return this;
+  }
+
   void on_local_recover(
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
@@ -259,6 +267,9 @@ public:
     const object_stat_sum_t &stat_diff) override;
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
   void cancel_pull(const hobject_t &soid) override;
+  void apply_stats(
+    const hobject_t &soid,
+    const object_stat_sum_t &delta_stats) override;
 
   template<class T> class BlessedGenContext;
   class BlessedContext;
@@ -328,19 +339,31 @@ public:
     map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
+  void pgb_set_object_snap_mapping(
+    const hobject_t &soid,
+    const set<snapid_t> &snaps,
+    ObjectStore::Transaction *t) override {
+    return update_object_snap_mapping(t, soid, snaps);
+  }
+  void pgb_clear_object_snap_mapping(
+    const hobject_t &soid,
+    ObjectStore::Transaction *t) override {
+    return clear_object_snap_mapping(t, soid);
+  }
+
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
-    const eversion_t &trim_rollback_to,
+    const eversion_t &roll_forward_to,
     bool transaction_applied,
     ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
       dirty_info = true;
     }
-    append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
+    append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
 
   struct C_OSD_OnApplied;
@@ -474,7 +497,7 @@ public:
 
     int current_osd_subop_num;
 
-    PGBackend::PGTransactionUPtr op_t;
+    PGTransactionUPtr op_t;
     vector<pg_log_entry_t> log;
     boost::optional<pg_hit_set_history_t> updated_hset_history;
 
@@ -500,10 +523,6 @@ public:
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
-    // pending xattr updates
-    map<ObjectContextRef,
-	map<string, boost::optional<bufferlist> > > pending_attrs;
-
     list<std::function<void()>> on_applied;
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_finish;
@@ -528,29 +547,6 @@ public:
     bool sent_ack;
     bool sent_disk;
 
-    void apply_pending_attrs() {
-      for (map<ObjectContextRef,
-	     map<string, boost::optional<bufferlist> > >::iterator i =
-	     pending_attrs.begin();
-	   i != pending_attrs.end();
-	   ++i) {
-	if (i->first->obs.exists) {
-	  for (map<string, boost::optional<bufferlist> >::iterator j =
-		 i->second.begin();
-	       j != i->second.end();
-	       ++j) {
-	    if (j->second)
-	      i->first->attr_cache[j->first] = j->second.get();
-	    else
-	      i->first->attr_cache.erase(j->first);
-	  }
-	} else {
-	  i->first->attr_cache.clear();
-	}
-      }
-      pending_attrs.clear();
-    }
-
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
@@ -562,8 +558,6 @@ public:
     bool async_reads_complete() {
       return inflightreads == 0;
     }
-
-    ObjectModDesc mod_desc;
 
     ObjectContext::RWState::State lock_type;
     ObcLockManager lock_manager;
@@ -799,7 +793,7 @@ protected:
     if (requeue_recovery)
       queue_recovery();
     if (requeue_snaptrim)
-      queue_snap_trim();
+      snap_trimmer_machine.process_event(TrimWriteUnblocked());
 
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
@@ -1097,7 +1091,7 @@ protected:
 
   void _make_clone(
     OpContext *ctx,
-    PGBackend::PGTransaction* t,
+    PGTransaction* t,
     ObjectContextRef obc,
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
@@ -1108,8 +1102,9 @@ protected:
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
-  void apply_ctx_stats(OpContext *ctx,
-		       bool scrub_ok=false); ///< true if we should skip scrub stat update
+  void apply_ctx_scrub_stats(
+    OpContext *ctx,
+    bool scrub_ok=false); ///< true if we should skip scrub stat update
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
@@ -1268,7 +1263,7 @@ protected:
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
 		  unsigned dest_obj_fadvise_flags);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
-  void _write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t);
+  void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
     uint64_t size = cct->_conf->osd_copyfrom_max_chunk;
     if (pool.info.requires_aligned_append()) {
@@ -1280,8 +1275,6 @@ protected:
     return size;
   }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
-  void _build_finish_copy_transaction(CopyOpRef cop,
-                                      PGBackend::PGTransaction *t);
   void finish_copyfrom(OpContext *ctx);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
@@ -1381,8 +1374,10 @@ public:
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
 
-  OpContextUPtr trim_object(const hobject_t &coid);
+  OpContextUPtr trim_object(bool first, const hobject_t &coid);
   void snap_trimmer(epoch_t e) override;
+  void kick_snap_trim() override;
+  void snap_trimmer_scrub_complete() override;
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
@@ -1444,8 +1439,20 @@ public:
   }
 private:
   struct NotTrimming;
-  struct SnapTrim : boost::statechart::event< SnapTrim > {
-    SnapTrim() : boost::statechart::event < SnapTrim >() {}
+  struct DoSnapWork : boost::statechart::event< DoSnapWork > {
+    DoSnapWork() : boost::statechart::event < DoSnapWork >() {}
+  };
+  struct KickTrim : boost::statechart::event< KickTrim > {
+    KickTrim() : boost::statechart::event < KickTrim >() {}
+  };
+  struct RepopsComplete : boost::statechart::event< RepopsComplete > {
+    RepopsComplete() : boost::statechart::event < RepopsComplete >() {}
+  };
+  struct ScrubComplete : boost::statechart::event< ScrubComplete > {
+    ScrubComplete() : boost::statechart::event < ScrubComplete >() {}
+  };
+  struct TrimWriteUnblocked : boost::statechart::event< TrimWriteUnblocked > {
+    TrimWriteUnblocked() : boost::statechart::event < TrimWriteUnblocked >() {}
   };
   struct Reset : boost::statechart::event< Reset > {
     Reset() : boost::statechart::event< Reset >() {}
@@ -1454,50 +1461,119 @@ private:
     ReplicatedPG *pg;
     set<hobject_t, hobject_t::BitwiseComparator> in_flight;
     snapid_t snap_to_trim;
-    bool need_share_pg_info;
-    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
+    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg) {}
     ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
   } snap_trimmer_machine;
 
   /* SnapTrimmerStates */
-  struct TrimmingObjects : boost::statechart::state< TrimmingObjects, SnapTrimmer >, NamedState {
+  struct AwaitAsyncWork : boost::statechart::state< AwaitAsyncWork, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::custom_reaction< DoSnapWork >,
+      boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    hobject_t pos;
-    explicit TrimmingObjects(my_context ctx);
+    explicit AwaitAsyncWork(my_context ctx);
     void exit();
-    boost::statechart::result react(const SnapTrim&);
+    boost::statechart::result react(const DoSnapWork&);
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
   };
 
-  struct WaitingOnReplicas : boost::statechart::state< WaitingOnReplicas, SnapTrimmer >, NamedState {
+  struct WaitRWLock : boost::statechart::state< WaitRWLock, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::custom_reaction< TrimWriteUnblocked >,
+      boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    explicit WaitingOnReplicas(my_context ctx);
-    void exit();
-    boost::statechart::result react(const SnapTrim&);
+    explicit WaitRWLock(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRWLock") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<SnapTrimmer>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const TrimWriteUnblocked&) {
+      post_event(KickTrim());
+      return discard_event();
+    }
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
   };
-  
+
+  struct WaitScrub : boost::statechart::state< WaitScrub, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< ScrubComplete >,
+      boost::statechart::custom_reaction< KickTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    explicit WaitScrub(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitScrub") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<SnapTrimmer>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const ScrubComplete&) {
+      post_event(KickTrim());
+      return transit< NotTrimming >();
+    }
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
+  };
+
+  struct WaitRepops : boost::statechart::state< WaitRepops, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< RepopsComplete >,
+      boost::statechart::custom_reaction< KickTrim >,
+      boost::statechart::custom_reaction< Reset >
+      > reactions;
+    explicit WaitRepops(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(!context<SnapTrimmer>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      assert(context<SnapTrimmer>().in_flight.empty());
+    }
+    boost::statechart::result react(const RepopsComplete&) {
+      post_event(KickTrim());
+      return transit< NotTrimming >();
+    }
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
+    boost::statechart::result react(const Reset&) {
+      context<SnapTrimmer>().in_flight.clear();
+      return transit< NotTrimming>();
+    }
+  };
+
   struct NotTrimming : boost::statechart::state< NotTrimming, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
     explicit NotTrimming(my_context ctx);
     void exit();
-    boost::statechart::result react(const SnapTrim&);
+    boost::statechart::result react(const KickTrim&);
   };
 
   int _verify_no_head_clones(const hobject_t& soid,
 			     const SnapSet& ss);
   // return true if we're creating a local object, false for a
   // whiteout or no change.
-  bool maybe_create_new_object(OpContext *ctx);
+  void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
   int _delete_oid(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
@@ -1545,25 +1621,21 @@ public:
   void on_shutdown() override;
 
   // attr cache handling
-  void replace_cached_attrs(
-    OpContext *ctx,
-    ObjectContextRef obc,
-    const map<string, bufferlist> &new_attrs);
   void setattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
-    PGBackend::PGTransaction *t,
+    PGTransaction *t,
     const string &key,
     bufferlist &val);
   void setattrs_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
-    PGBackend::PGTransaction *t,
+    PGTransaction *t,
     map<string, bufferlist> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
-    PGBackend::PGTransaction *t,
+    PGTransaction *t,
     const string &key);
   int getattr_maybe_cache(
     ObjectContextRef obc,

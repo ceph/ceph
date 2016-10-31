@@ -3256,8 +3256,8 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 			     *h.back(), 5));
 }
 
-// -- ObjectModDesc --
-void ObjectModDesc::visit(Visitor *visitor) const
+// -- LocalRollBack --
+void TransactionInfo::LocalRollBack::visit(Visitor *visitor) const
 {
   bufferlist::iterator bp = bl.begin();
   try {
@@ -3310,7 +3310,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
   }
 }
 
-struct DumpVisitor : public ObjectModDesc::Visitor {
+struct DumpVisitor : public TransactionInfo::LocalRollBack::Visitor {
   Formatter *f;
   explicit DumpVisitor(Formatter *f) : f(f) {}
   void append(uint64_t old_size) {
@@ -3350,55 +3350,210 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
   }
 };
 
-void ObjectModDesc::dump(Formatter *f) const
+void TransactionInfo::dump(Formatter *f, bool dump_attr_values) const
 {
-  f->open_object_section("object_mod_desc");
-  f->dump_bool("can_local_rollback", can_local_rollback);
-  f->dump_bool("rollback_info_completed", rollback_info_completed);
-  {
-    f->open_array_section("ops");
-    DumpVisitor vis(f);
-    visit(&vis);
-    f->close_section();
-  }
+  f->open_object_section("TransactionInfo");
+  match(
+    ti_type,
+    [&](const LocalRollBack &lrb) {
+      f->open_object_section("LocalRollBack");
+      f->dump_bool("can_local_rollback", lrb.can_local_rollback);
+      f->dump_bool("rollback_info_completed", lrb.rollback_info_completed);
+      {
+	f->open_array_section("ops");
+	DumpVisitor vis(f);
+	lrb.visit(&vis);
+	f->close_section();
+      }
+      f->close_section();
+    },
+    [&](const LocalRollForward &lrf) {
+      f->open_object_section("LocalRollForward");
+      {
+	f->open_array_section("xattr_deltas");
+	for (auto &&attr: lrf.new_attrs) {
+	  f->open_object_section("delta");
+	  f->dump_string("key", attr.first);
+	  if (attr.second) {
+	    if (dump_attr_values) {
+	      attr.second->hexdump(f->dump_stream("value"));
+	    } else {
+	      f->dump_string("update", "");
+	    }
+	  } else {
+	    f->dump_string("delete", "");
+	  }
+	  f->close_section();
+	}
+	f->close_section();
+      }
+      if (lrf.truncate) {
+	f->dump_stream("truncate") << *(lrf.truncate);
+      }
+      f->open_object_section("extents");
+      for (auto &&extent: lrf.extents) {
+	f->open_object_section("extent");
+	f->dump_stream("offset") << extent.first;
+	f->dump_stream("length") << extent.second;
+	f->close_section();
+      }
+      f->close_section();
+      f->dump_stream("source_generation") << lrf.version;
+    });
   f->close_section();
 }
 
-void ObjectModDesc::generate_test_instances(list<ObjectModDesc*>& o)
+ostream &operator<<(ostream &lhs, const TransactionInfo &rhs)
+{
+  JSONFormatter f(false);
+  rhs.dump(&f, false);
+  f.flush(lhs);
+  return lhs;
+}
+
+void TransactionInfo::generate_test_instances(
+  list<TransactionInfo*>& o)
 {
   map<string, boost::optional<bufferlist> > attrs;
   attrs[OI_ATTR];
   attrs[SS_ATTR];
   attrs["asdf"];
-  o.push_back(new ObjectModDesc());
-  o.back()->append(100);
-  o.back()->setattrs(attrs);
-  o.push_back(new ObjectModDesc());
-  o.back()->rmobject(1001);
-  o.push_back(new ObjectModDesc());
-  o.back()->create();
-  o.back()->setattrs(attrs);
-  o.push_back(new ObjectModDesc());
-  o.back()->create();
-  o.back()->setattrs(attrs);
-  o.back()->mark_unrollbackable();
-  o.back()->append(1000);
+  {
+    LocalRollBack lrb;
+    lrb.append(100);
+    lrb.setattrs(attrs);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.back()->set_legacy(true);
+  }
+  {
+    LocalRollBack lrb;
+    lrb.rmobject(1001);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.back()->set_legacy(true);
+  }
+  {
+    LocalRollBack lrb;
+    lrb.create();
+    lrb.setattrs(attrs);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.back()->set_legacy(true);
+  }
+  {
+    LocalRollBack lrb;
+    lrb.create();
+    lrb.setattrs(attrs);
+    lrb.mark_unrollbackable();
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollback(lrb);
+    o.back()->set_legacy(true);
+  }
+  {
+    LocalRollForward lrf;
+    lrf.new_attrs = attrs;
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollforward(lrf);
+    o.back()->set_legacy(true);
+  }
+  {
+    LocalRollForward lrf;
+    lrf.new_attrs = attrs;
+    lrf.truncate = 10;
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollforward(lrf);
+  }
+  {
+    LocalRollForward lrf;
+    lrf.new_attrs = attrs;
+    lrf.truncate = 10;
+    lrf.extents.push_back(make_pair(10, 10));
+    lrf.extents.push_back(make_pair(40, 10));
+    lrf.version = 1001;
+    o.push_back(new TransactionInfo());
+    o.back()->mark_local_rollforward(lrf);
+  }
 }
 
-void ObjectModDesc::encode(bufferlist &_bl) const
+void TransactionInfo::encode(bufferlist &_bl) const
 {
-  ENCODE_START(1, 1, _bl);
-  ::encode(can_local_rollback, _bl);
-  ::encode(rollback_info_completed, _bl);
-  ::encode(bl, _bl);
-  ENCODE_FINISH(_bl);
+  if (legacy) {
+    match(
+      ti_type,
+      [&](const LocalRollBack &lrb) {
+	ENCODE_START(1, 1, _bl);
+	::encode(lrb.can_local_rollback, _bl);
+	::encode(lrb.rollback_info_completed, _bl);
+	::encode(lrb.bl, _bl);
+	ENCODE_FINISH(_bl);
+      },
+      [&](const LocalRollForward &lrf) {
+	assert(0 == "Cannot use legacy encoding on LocalRollForward");
+      });
+  } else {
+    ENCODE_START(2, 2, _bl);
+    match(
+      ti_type,
+      [&](const LocalRollBack &lrb) {
+	__u8 t = 0;
+	::encode(t, _bl);
+	::encode(lrb.can_local_rollback, _bl);
+	::encode(lrb.rollback_info_completed, _bl);
+	::encode(lrb.bl, _bl);
+      },
+      [&](const LocalRollForward &lrf) {
+	__u8 t = 1;
+	::encode(t, _bl);
+	::encode(lrf.new_attrs, _bl);
+	::encode(lrf.truncate, _bl);
+	::encode(lrf.extents, _bl);
+	::encode(lrf.version, _bl);
+      });
+    ENCODE_FINISH(_bl);
+  }
 }
-void ObjectModDesc::decode(bufferlist::iterator &_bl)
+void TransactionInfo::decode(bufferlist::iterator &_bl)
 {
-  DECODE_START(1, _bl);
-  ::decode(can_local_rollback, _bl);
-  ::decode(rollback_info_completed, _bl);
-  ::decode(bl, _bl);
+  DECODE_START(2, _bl);
+  if (struct_v < 2) {
+    legacy = true;
+    LocalRollBack lrb;
+    ::decode(lrb.can_local_rollback, _bl);
+    ::decode(lrb.rollback_info_completed, _bl);
+    ::decode(lrb.bl, _bl);
+    lrb.trim_bl();
+    mark_local_rollback(lrb);
+  } else {
+    legacy = false;
+    __u8 t = 2; // must be 0 or 1
+    ::decode(t, _bl);
+    if (t == 0) {
+      LocalRollBack lrb;
+      ::decode(lrb.can_local_rollback, _bl);
+      ::decode(lrb.rollback_info_completed, _bl);
+      ::decode(lrb.bl, _bl);
+      lrb.trim_bl();
+      mark_local_rollback(lrb);
+    } else if (t == 1) {
+      LocalRollForward lrf;
+      ::decode(lrf.new_attrs, _bl);
+      ::decode(lrf.truncate, _bl);
+      ::decode(lrf.extents, _bl);
+      ::decode(lrf.version, _bl);
+      mark_local_rollforward(lrf);
+    } else {
+      assert(0 == "invalid TransactionInfo encoding");
+    }
+  }
   DECODE_FINISH(_bl);
 }
 
@@ -3455,7 +3610,7 @@ void pg_log_entry_t::encode(bufferlist &bl) const
     ::encode(prior_version, bl);
   ::encode(snaps, bl);
   ::encode(user_version, bl);
-  ::encode(mod_desc, bl);
+  ::encode(transaction_info, bl);
   ::encode(extra_reqids, bl);
   if (op == ERROR)
     ::encode(return_code, bl);
@@ -3508,9 +3663,9 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     user_version = version.version;
 
   if (struct_v >= 9)
-    ::decode(mod_desc, bl);
+    ::decode(transaction_info, bl);
   else
-    mod_desc.mark_unrollbackable();
+    transaction_info.mark_unrollbackable();
   if (struct_v >= 10)
     ::decode(extra_reqids, bl);
   if (struct_v >= 11 && op == ERROR)
@@ -3553,9 +3708,7 @@ void pg_log_entry_t::dump(Formatter *f) const
     f->close_section();
   }
   {
-    f->open_object_section("mod_desc");
-    mod_desc.dump(f);
-    f->close_section();
+    transaction_info.dump(f);
   }
 }
 

@@ -576,6 +576,7 @@ $DAEMONOPTS
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
+        osd copyfrom max chunk = 524288
 	bluestore fsck on mount = true
 	bluestore block create = true
 	bluestore block db size = 67108864
@@ -779,6 +780,12 @@ if [ "$ec" -eq 1 ]; then
     ceph_adm <<EOF
 osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec 8 8 erasure ec-profile
+EOF
+fi
+
+if [ "$EC_OVERWRITES" -eq 1 ]; then
+    ceph_adm <<EOF
+osd pool set ec debug_white_box_testing_ec_overwrites true
 EOF
 fi
 

@@ -27,6 +27,7 @@
 
 #include "include/rados/rados_types.hpp"
 
+#include "common/inline_variant.h"
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/utime.h"
@@ -1075,7 +1076,7 @@ struct pg_pool_t {
   enum {
     FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
     FLAG_FULL       = 1<<1, // pool is full
-    FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    FLAG_EC_OVERWRITES = 1<<2, // enables overwrites, once enabled, cannot be disabled
     FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
     FLAG_NODELETE = 1<<4, // pool can't be deleted
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
@@ -1089,7 +1090,7 @@ struct pg_pool_t {
     switch (f) {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
-    case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
+    case FLAG_EC_OVERWRITES: return "ec_overwrites";
     case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
     case FLAG_NODELETE: return "nodelete";
     case FLAG_NOPGCHANGE: return "nopgchange";
@@ -1119,8 +1120,8 @@ struct pg_pool_t {
       return FLAG_HASHPSPOOL;
     if (name == "full")
       return FLAG_FULL;
-    if (name == "require_local_rollback")
-      return FLAG_DEBUG_FAKE_EC_POOL;
+    if (name == "ec_overwrites")
+      return FLAG_EC_OVERWRITES;
     if (name == "incomplete_clones")
       return FLAG_INCOMPLETE_CLONES;
     if (name == "nodelete")
@@ -1364,7 +1365,7 @@ public:
     return type == TYPE_ERASURE;
   }
   bool require_rollback() const {
-    return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
+    return ec_pool();
   }
 
   /// true if incomplete clones may be present
@@ -1397,11 +1398,17 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return !(get_type() == TYPE_ERASURE || has_flag(FLAG_DEBUG_FAKE_EC_POOL));
+    return !(get_type() == TYPE_ERASURE);
   }
 
-  bool requires_aligned_append() const { return is_erasure(); }
+  bool requires_aligned_append() const {
+    return is_erasure() && !has_flag(FLAG_EC_OVERWRITES);
+  }
   uint64_t required_alignment() const { return stripe_width; }
+
+  bool is_hacky_ecoverwrites() const {
+    return has_flag(FLAG_EC_OVERWRITES);
+  }
 
   bool can_shift_osds() const {
     switch (get_type()) {
@@ -2582,151 +2589,206 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
 }
 
 class PGBackend;
-class ObjectModDesc {
-  bool can_local_rollback;
-  bool rollback_info_completed;
+
+class TransactionInfo {
+  bool legacy = false;
 public:
-  class Visitor {
-  public:
-    virtual void append(uint64_t old_offset) {}
-    virtual void setattrs(map<string, boost::optional<bufferlist> > &attrs) {}
-    virtual void rmobject(version_t old_version) {}
-    /**
-     * Used to support the unfound_lost_delete log event: if the stashed
-     * version exists, we unstash it, otherwise, we do nothing.  This way
-     * each replica rolls back to whatever state it had prior to the attempt
-     * at mark unfound lost delete
-     */
-    virtual void try_rmobject(version_t old_version) {
-      rmobject(old_version);
-    }
-    virtual void create() {}
-    virtual void update_snaps(set<snapid_t> &old_snaps) {}
-    virtual ~Visitor() {}
-  };
-  void visit(Visitor *visitor) const;
-  mutable bufferlist bl;
-  enum ModID {
-    APPEND = 1,
-    SETATTRS = 2,
-    DELETE = 3,
-    CREATE = 4,
-    UPDATE_SNAPS = 5,
-    TRY_DELETE = 6
-  };
-  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
-  void claim(ObjectModDesc &other) {
-    bl.clear();
-    bl.claim(other.bl);
-    can_local_rollback = other.can_local_rollback;
-    rollback_info_completed = other.rollback_info_completed;
-  }
-  void claim_append(ObjectModDesc &other) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    if (!other.can_local_rollback) {
-      mark_unrollbackable();
-      return;
-    }
-    bl.claim_append(other.bl);
-    rollback_info_completed = other.rollback_info_completed;
-  }
-  void swap(ObjectModDesc &other) {
-    bl.swap(other.bl);
-
-    bool temp = other.can_local_rollback;
-    other.can_local_rollback = can_local_rollback;
-    can_local_rollback = temp;
-
-    temp = other.rollback_info_completed;
-    other.rollback_info_completed = rollback_info_completed;
-    rollback_info_completed = temp;
-  }
-  void append_id(ModID id) {
-    uint8_t _id(id);
-    ::encode(_id, bl);
-  }
-  void append(uint64_t old_size) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    ENCODE_START(1, 1, bl);
-    append_id(APPEND);
-    ::encode(old_size, bl);
-    ENCODE_FINISH(bl);
-  }
-  void setattrs(map<string, boost::optional<bufferlist> > &old_attrs) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    ENCODE_START(1, 1, bl);
-    append_id(SETATTRS);
-    ::encode(old_attrs, bl);
-    ENCODE_FINISH(bl);
-  }
-  bool rmobject(version_t deletion_version) {
-    if (!can_local_rollback || rollback_info_completed)
-      return false;
-    ENCODE_START(1, 1, bl);
-    append_id(DELETE);
-    ::encode(deletion_version, bl);
-    ENCODE_FINISH(bl);
-    rollback_info_completed = true;
-    return true;
-  }
-  bool try_rmobject(version_t deletion_version) {
-    if (!can_local_rollback || rollback_info_completed)
-      return false;
-    ENCODE_START(1, 1, bl);
-    append_id(TRY_DELETE);
-    ::encode(deletion_version, bl);
-    ENCODE_FINISH(bl);
-    rollback_info_completed = true;
-    return true;
-  }
-  void create() {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    rollback_info_completed = true;
-    ENCODE_START(1, 1, bl);
-    append_id(CREATE);
-    ENCODE_FINISH(bl);
-  }
-  void update_snaps(set<snapid_t> &old_snaps) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    ENCODE_START(1, 1, bl);
-    append_id(UPDATE_SNAPS);
-    ::encode(old_snaps, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  // cannot be rolled back
-  void mark_unrollbackable() {
-    can_local_rollback = false;
-    bl.clear();
-  }
-  bool can_rollback() const {
-    return can_local_rollback;
-  }
-  bool empty() const {
-    return can_local_rollback && (bl.length() == 0);
-  }
-
   /**
-   * Create fresh copy of bl bytes to avoid keeping large buffers around
-   * in the case that bl contains ptrs which point into a much larger
-   * message buffer
+   * Formerly known as ObjectModDesc, encoding is identical
    */
-  void trim_bl() {
-    if (bl.length() > 0)
-      bl.rebuild();
+  class LocalRollBack {
+    bool can_local_rollback;
+    bool rollback_info_completed;
+  public:
+    class Visitor {
+    public:
+      virtual void append(uint64_t old_offset) {}
+      virtual void setattrs(map<string, boost::optional<bufferlist> > &attrs) {}
+      virtual void rmobject(version_t old_version) {}
+      /**
+	 * Used to support the unfound_lost_delete log event: if the stashed
+	 * version exists, we unstash it, otherwise, we do nothing.  This way
+	 * each replica rolls back to whatever state it had prior to the attempt
+	 * at mark unfound lost delete
+	 */
+      virtual void try_rmobject(version_t old_version) {
+	rmobject(old_version);
+      }
+      virtual void create() {}
+      virtual void update_snaps(set<snapid_t> &old_snaps) {}
+      virtual ~Visitor() {}
+    };
+    void visit(Visitor *visitor) const;
+    mutable bufferlist bl;
+    enum ModID {
+      APPEND = 1,
+      SETATTRS = 2,
+      DELETE = 3,
+      CREATE = 4,
+      UPDATE_SNAPS = 5,
+      TRY_DELETE = 6
+    };
+    LocalRollBack() : can_local_rollback(true), rollback_info_completed(false) {}
+    void claim(LocalRollBack &other) {
+      bl.clear();
+      bl.claim(other.bl);
+      can_local_rollback = other.can_local_rollback;
+      rollback_info_completed = other.rollback_info_completed;
+    }
+    void swap(LocalRollBack &other) {
+      bl.swap(other.bl);
+
+      bool temp = other.can_local_rollback;
+      other.can_local_rollback = can_local_rollback;
+      can_local_rollback = temp;
+
+      temp = other.rollback_info_completed;
+      other.rollback_info_completed = rollback_info_completed;
+      rollback_info_completed = temp;
+    }
+    void append_id(ModID id) {
+      uint8_t _id(id);
+      ::encode(_id, bl);
+    }
+    void append(uint64_t old_size) {
+      if (!can_local_rollback || rollback_info_completed)
+	return;
+      ENCODE_START(1, 1, bl);
+      append_id(APPEND);
+      ::encode(old_size, bl);
+      ENCODE_FINISH(bl);
+    }
+    void setattrs(const map<string, boost::optional<bufferlist> > &old_attrs) {
+      if (!can_local_rollback || rollback_info_completed)
+	return;
+      ENCODE_START(1, 1, bl);
+      append_id(SETATTRS);
+      ::encode(old_attrs, bl);
+      ENCODE_FINISH(bl);
+    }
+    bool rmobject(version_t deletion_version) {
+      if (!can_local_rollback || rollback_info_completed)
+	return false;
+      ENCODE_START(1, 1, bl);
+      append_id(DELETE);
+      ::encode(deletion_version, bl);
+      ENCODE_FINISH(bl);
+      rollback_info_completed = true;
+      return true;
+    }
+    bool try_rmobject(version_t deletion_version) {
+      if (!can_local_rollback || rollback_info_completed)
+	return false;
+      ENCODE_START(1, 1, bl);
+      append_id(TRY_DELETE);
+      ::encode(deletion_version, bl);
+      ENCODE_FINISH(bl);
+      rollback_info_completed = true;
+      return true;
+    }
+    void create() {
+      if (!can_local_rollback || rollback_info_completed)
+	return;
+      rollback_info_completed = true;
+      ENCODE_START(1, 1, bl);
+      append_id(CREATE);
+      ENCODE_FINISH(bl);
+    }
+    void update_snaps(const set<snapid_t> &old_snaps) {
+      if (!can_local_rollback || rollback_info_completed)
+	return;
+      ENCODE_START(1, 1, bl);
+      append_id(UPDATE_SNAPS);
+      ::encode(old_snaps, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    // cannot be rolled back
+    void mark_unrollbackable() {
+      can_local_rollback = false;
+      bl.clear();
+    }
+    bool can_rollback() const {
+      return can_local_rollback;
+    }
+    bool empty() const {
+      return can_local_rollback && (bl.length() == 0);
+    }
+
+    /**
+     * Create fresh copy of bl bytes to avoid keeping large buffers around
+     * in the case that bl contains ptrs which point into a much larger
+     * message buffer
+     */
+    void trim_bl() {
+      if (bl.length() > 0)
+	bl.rebuild();
+    }
+
+    friend class TransactionInfo;
+  };
+
+  struct LocalRollForward {
+    map<string, boost::optional<bufferlist> > new_attrs;
+    boost::optional<uint64_t> truncate;
+
+    vector<std::pair<uint64_t, uint64_t> > extents;
+    version_t version; // generation of source object
+    LocalRollForward() : version(0) {}
+  };
+
+private:
+  using TIType = boost::variant<
+    LocalRollBack,
+    LocalRollForward>;
+  TIType ti_type = LocalRollBack();
+public:
+
+  bool can_rollback() const {
+    auto legacy = boost::get<LocalRollBack>(&ti_type);
+    if (legacy)
+      return legacy->can_rollback();
+    return true;
   }
+
+  bool is_rollforward()  const {
+    return boost::get<LocalRollForward>(&ti_type) != nullptr;
+  }
+
+  void mark_unrollbackable() {
+    LocalRollBack md;
+    md.mark_unrollbackable();
+    ti_type = md;
+  }
+
+  void mark_local_rollback(LocalRollBack desc) {
+    desc.trim_bl();
+    ti_type = desc;
+  }
+
+  void mark_local_rollforward(LocalRollForward rf) {
+    ti_type = rf;
+  }
+
+  void set_legacy(bool _legacy) {
+    legacy = _legacy;
+  }
+
+  template <typename... F>
+  void ti_type_match(F&&... f) const {
+    match(
+      ti_type,
+      std::forward<F>(f)...);
+  }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ObjectModDesc*>& o);
+  void dump(Formatter *f, bool dump_attr_values=true) const;
+  static void generate_test_instances(list<TransactionInfo*>& o);
+  friend std::ostream &operator<<(std::ostream &lhs, const TransactionInfo &rhs);
 };
-WRITE_CLASS_ENCODER(ObjectModDesc)
-
+std::ostream &operator<<(std::ostream &lhs, const TransactionInfo &rhs);
+WRITE_CLASS_ENCODER(TransactionInfo)
 
 /**
  * pg_log_entry_t - single entry/event in pg log
@@ -2775,8 +2837,9 @@ struct pg_log_entry_t {
     return get_op_name(op);
   }
 
-  // describes state for a locally-rollbackable entry
-  ObjectModDesc mod_desc;
+  // describes transaction for rollback/rollforward
+  TransactionInfo transaction_info;
+
   bufferlist snaps;   // only for clone entries
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
@@ -2835,6 +2898,31 @@ struct pg_log_entry_t {
       (op == MODIFY || op == DELETE || op == ERROR);
   }
 
+  bool is_rollforward() const { return transaction_info.is_rollforward(); }
+  bool can_rollback() const { return transaction_info.can_rollback(); }
+
+  void mark_unrollbackable(bool legacy) {
+    transaction_info.mark_unrollbackable();
+    transaction_info.set_legacy(legacy);
+  }
+  void mark_local_rollback(
+    const TransactionInfo::LocalRollBack &lrb,
+    bool legacy) {
+    transaction_info.mark_local_rollback(lrb);
+    transaction_info.set_legacy(legacy);
+  }
+  void mark_local_rollforward(
+    const TransactionInfo::LocalRollForward &lrf) {
+    transaction_info.mark_local_rollforward(lrf);
+    transaction_info.set_legacy(false);
+  }
+
+  template <typename... F>
+  void match_transaction_info(F&&... f) const {
+    transaction_info.ti_type_match(
+      std::forward<F>(f)...);
+  }
+
   string get_key_name() const;
   void encode_with_checksum(bufferlist& bl) const;
   void decode_with_checksum(bufferlist::iterator& p);
@@ -2866,6 +2954,7 @@ struct pg_log_t {
   eversion_t head;    // newest entry
   eversion_t tail;    // version prior to oldest
 
+protected:
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
 
@@ -2873,14 +2962,94 @@ struct pg_log_t {
   // data can be found
   eversion_t rollback_info_trimmed_to;
 
+public:
   list<pg_log_entry_t> log;  // the actual log.
   
-  pg_log_t() {}
+  pg_log_t() = default;
+  pg_log_t(const eversion_t &last_update,
+	   const eversion_t &log_tail,
+	   const eversion_t &can_rollback_to,
+	   const eversion_t &rollback_info_trimmed_to,
+	   list<pg_log_entry_t> &&entries)
+    : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_info_trimmed_to(rollback_info_trimmed_to),
+      log(std::move(entries)) {}
 
   void clear() {
     eversion_t z;
-    can_rollback_to = head = tail = z;
+    rollback_info_trimmed_to = can_rollback_to = head = tail = z;
     log.clear();
+  }
+
+  eversion_t get_rollback_info_trimmed_to() const {
+    return rollback_info_trimmed_to;
+  }
+  eversion_t get_can_rollback_to() const {
+    return can_rollback_to;
+  }
+
+
+  pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
+    list<pg_log_entry_t> oldlog, childlog;
+    oldlog.swap(log);
+
+    eversion_t old_tail;
+    unsigned mask = ~((~0)<<split_bits);
+    for (list<pg_log_entry_t>::iterator i = oldlog.begin();
+	 i != oldlog.end();
+      ) {
+      if ((i->soid.get_hash() & mask) == child_pgid.m_seed) {
+	childlog.push_back(*i);
+      } else {
+	log.push_back(*i);
+      }
+      oldlog.erase(i++);
+    }
+
+    return pg_log_t(
+      head,
+      tail,
+      can_rollback_to,
+      rollback_info_trimmed_to,
+      std::move(childlog));
+  }
+
+  list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+    assert(newhead >= tail);
+
+    list<pg_log_entry_t>::iterator p = log.end();
+    list<pg_log_entry_t> divergent;
+    while (true) {
+      if (p == log.begin()) {
+	// yikes, the whole thing is divergent!
+	divergent.swap(log);
+	break;
+      }
+      --p;
+      if (p->version.version <= newhead.version) {
+	/*
+	 * look at eversion.version here.  we want to avoid a situation like:
+	 *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  lower_bound = 100'9
+	 * i.e, same request, different version.  If the eversion.version is > the
+	 * lower_bound, we it is divergent.
+	 */
+	++p;
+	divergent.splice(divergent.begin(), log, p, log.end());
+	break;
+      }
+      assert(p->version > newhead);
+    }
+    head = newhead;
+
+    if (can_rollback_to > newhead)
+      can_rollback_to = newhead;
+
+    if (rollback_info_trimmed_to > newhead)
+      rollback_info_trimmed_to = newhead;
+
+    return divergent;
   }
 
   bool empty() const {
@@ -2936,7 +3105,7 @@ WRITE_CLASS_ENCODER(pg_log_t)
 inline ostream& operator<<(ostream& out, const pg_log_t& log) 
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
-      << log.can_rollback_to << ")";
+      << log.get_can_rollback_to() << ")";
   return out;
 }
 
@@ -4010,21 +4179,6 @@ public:
   // attr cache
   map<string, bufferlist> attr_cache;
 
-  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
-    map<string, boost::optional<bufferlist> > to_set;
-    for (set<string>::const_iterator i = changing.begin();
-	 i != changing.end();
-	 ++i) {
-      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
-      if (iter != attr_cache.end()) {
-	to_set[*i] = iter->second;
-      } else {
-	to_set[*i];
-      }
-    }
-    mod->setattrs(to_set);
-  }
-  
   struct RWState {
     enum State {
       RWNONE,
@@ -4207,11 +4361,12 @@ public:
   bool get_write_greedy(OpRequestRef op) {
     return rwstate.get_write(op, true);
   }
-  bool get_snaptrimmer_write() {
+  bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
     if (rwstate.get_write_lock()) {
       return true;
     } else {
-      rwstate.snaptrimmer_write_marker = true;
+      if (mark_if_unsuccessful)
+	rwstate.snaptrimmer_write_marker = true;
       return false;
     }
   }
@@ -4414,9 +4569,10 @@ public:
   /// Get write lock for snap trim
   bool get_snaptrimmer_write(
     const hobject_t &hoid,
-    ObjectContextRef obc) {
+    ObjectContextRef obc,
+    bool mark_if_unsuccessful) {
     assert(locks.find(hoid) == locks.end());
-    if (obc->get_snaptrimmer_write()) {
+    if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
       locks.insert(
 	make_pair(
 	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
