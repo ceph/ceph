@@ -2072,6 +2072,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       break;
     }
     if (n->logical_offset >= shard_end) {
+      assert(pshard != shards.end());
       ++pshard;
       if (pshard != shards.end()) {
 	shard_end = pshard->offset;
