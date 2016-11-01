@@ -241,7 +241,7 @@ private:
 
 /* Class for constructing a PerfCounters object.
  *
- * This class peforms some validation that the parameters we have supplied are
+ * This class performs some validation that the parameters we have supplied are
  * correct in create_perf_counters().
  *
  * In the future, we will probably get rid of the first/last arguments, since
