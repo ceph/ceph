@@ -188,6 +188,8 @@ if(${ENABLE_GIT_VERSION})
     list(GET CEPH_GIT_SHA_AND_TAG 0 CEPH_GIT_VER)
     list(GET CEPH_GIT_SHA_AND_TAG 1 CEPH_GIT_NICE_VER)
   endif(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
+  # remove 'v' prefix from raw git version
+  string(SUBSTRING ${CEPH_GIT_NICE_VER} 1 -1 CEPH_GIT_NICE_VER)
 else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
