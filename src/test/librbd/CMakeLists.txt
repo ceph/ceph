@@ -5,8 +5,9 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
-  test_MirroringWatcher.cc 
+  test_MirroringWatcher.cc
   test_ObjectMap.cc
+  test_Operations.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})
@@ -34,7 +35,10 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
   image_watcher/test_mock_RewatchRequest.cc
+  journal/test_mock_OpenRequest.cc
+  journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
+  mirror/test_mock_DisableRequest.cc
   object_map/test_mock_InvalidateRequest.cc
   object_map/test_mock_LockRequest.cc
   object_map/test_mock_RefreshRequest.cc
