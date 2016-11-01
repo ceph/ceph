@@ -32,7 +32,7 @@ class CephContext;
 class PerfCountersBuilder;
 class PerfCountersCollectionTest;
 
-enum perfcounter_type_d
+enum perfcounter_type_d : uint8_t
 {
   PERFCOUNTER_NONE = 0,
   PERFCOUNTER_TIME = 0x1,

@@ -1157,6 +1157,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_lremovexattr(cmount, "/path", "name"));
   EXPECT_EQ(-ENOTCONN, ceph_setxattr(cmount, "/path", "name", NULL, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_lsetxattr(cmount, "/path", "name", NULL, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_fsetattr(cmount, 0, &st, 0));
   EXPECT_EQ(-ENOTCONN, ceph_chmod(cmount, "/path", 0));
   EXPECT_EQ(-ENOTCONN, ceph_fchmod(cmount, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_chown(cmount, "/path", 0, 0));
@@ -1667,5 +1668,32 @@ TEST(LibCephFS, DirChangeAttr) {
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
   ASSERT_NE(stx.stx_version, old_change_attr);
 
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SetSize) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/setsize%x", getpid());
+
+  ceph_unlink(cmount, filename);
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+
+  struct stat st;
+  uint64_t size = 8388608;
+  st.st_size = (off_t)size;
+  ASSERT_EQ(ceph_fsetattr(cmount, fd, &st, CEPH_SETATTR_SIZE), 0);
+
+  struct stat stbuf;
+  ASSERT_EQ(ceph_fstat(cmount, fd, &stbuf), 0);
+  ASSERT_EQ(stbuf.st_size, (off_t)size);
+
+  ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }

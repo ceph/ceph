@@ -306,8 +306,7 @@ Packages for Enterprise Linux) repository as it provides some extra packages
 which are not available in the default repository. To install ``epel``, execute
 the following::
 
-	wget http://ftp.riken.jp/Linux/fedora/epel/7/x86_64/e/epel-release-7-2.noarch.rpm
-	sudo yum install epel-release-7-2.noarch.rpm
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
 For CentOS/RHEL distributions, execute the following::
 

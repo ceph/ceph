@@ -284,6 +284,7 @@ private:
   uint64_t m_max_append_size = 0;
   uint64_t m_tag_class = 0;
   uint64_t m_tag_tid = 0;
+  journal::ImageClientMeta m_client_meta;
   journal::TagData m_tag_data;
 
   int m_error_result;
@@ -343,8 +344,7 @@ private:
 
   void start_append();
 
-  void handle_initialized(int r);
-  void handle_get_tags(int r);
+  void handle_open(int r);
 
   void handle_replay_ready();
   void handle_replay_complete(int r);

@@ -2592,5 +2592,7 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
     dirty_or_tx_bh.erase(bh);
   }
   bh_stat_sub(bh);
+  if (get_stat_dirty_waiting() > 0)
+    stat_cond.Signal();
 }
 
