@@ -4066,17 +4066,13 @@ public:
     return status;
   }
 
-  void fsck() {
+  void fsck(bool deep) {
     Mutex::Locker locker(lock);
     EnterExit ee("fsck");
     while (in_flight)
       cond.Wait(lock);
     store->umount();
-    // fixme: this is bluestore specific, but...
-    if (!g_conf->bluestore_fsck_on_mount &&
-	!g_conf->bluestore_fsck_on_umount) {
-      store->fsck();
-    }
+    store->fsck(deep);
     store->mount();
   }
 
@@ -4235,6 +4231,10 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "false");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "false");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid,
 				  max_obj, max_wr, align);
   test_obj.init();
@@ -4250,7 +4250,9 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
     boost::uniform_int<> true_false(0, 999);
     int val = true_false(rng);
     if (val > 998) {
-      test_obj.fsck();
+      test_obj.fsck(true);
+    } else if (val > 997) {
+      test_obj.fsck(false);
     } else if (val > 970) {
       test_obj.scan();
     } else if (val > 950) {
@@ -4277,6 +4279,10 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
   }
   test_obj.wait_for_done();
   test_obj.shutdown();
+
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
 }
 
 TEST_P(StoreTest, Synthetic) {
