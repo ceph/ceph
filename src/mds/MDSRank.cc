@@ -710,7 +710,7 @@ void MDSRank::heartbeat_reset()
   g_ceph_context->get_heartbeat_map()->reset_timeout(hb, g_conf->mds_beacon_grace, 0);
 }
 
-bool MDSRank::is_stale_message(Message *m)
+bool MDSRank::is_stale_message(Message *m) const
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
