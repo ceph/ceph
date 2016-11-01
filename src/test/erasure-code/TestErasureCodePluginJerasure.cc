@@ -25,6 +25,8 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+#include "global/signal_handler.h"
+
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -63,6 +65,9 @@ TEST(ErasureCodePlugin, factory)
 
 int main(int argc, char **argv)
 {
+
+  install_standard_sighandlers();
+
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
