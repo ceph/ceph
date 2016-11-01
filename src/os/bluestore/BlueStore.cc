@@ -1504,7 +1504,8 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
   if (o->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
-      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n); //we need to encode inline_bl to measure encoded length
+      // we need to encode inline_bl to measure encoded length
+      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
       assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << " inline shard "
@@ -1630,8 +1631,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
     auto sp = o->onode.extent_map_shards.begin();
     auto esp = o->onode.extent_map_shards.end();
     unsigned shard_start = 0;
-    ++sp;
     unsigned shard_end;
+    ++sp;
     if (sp == esp) {
       shard_end = OBJECT_MAX_SIZE;
     } else {
