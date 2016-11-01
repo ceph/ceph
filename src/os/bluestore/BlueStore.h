@@ -1142,7 +1142,7 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
-    uint64_t ops, bytes;
+    uint64_t ops, bytes, wal_bytes;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
     set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
@@ -1227,6 +1227,7 @@ public:
 	osr(o),
 	ops(0),
 	bytes(0),
+	wal_bytes(0),
 	oncommit(NULL),
 	onreadable(NULL),
 	onreadable_sync(NULL),
