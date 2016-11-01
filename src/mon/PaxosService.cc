@@ -321,11 +321,22 @@ void PaxosService::_active()
       have_pending = true;
     }
 
-    if (get_last_committed() == 0) {
-      // create initial state
-      create_initial();
-      propose_pending();
-      return;
+    // Entry create_initial() when get_last_committed equal load_map_version
+    if (get_service_name() == "osdmap") {
+      dout(0) << "get_load_map_version()" << get_load_map_version() <<dendl;
+      if (get_last_committed() == get_load_map_version()) {
+        create_initial();
+        propose_pending();
+        return;
+      }
+    }
+    else {
+      if (get_last_committed() == 0) {
+        // create initial state
+        create_initial();
+        propose_pending();
+        return;
+      }
     }
   } else {
     if (!mon->is_leader()) {

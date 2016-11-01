@@ -81,7 +81,9 @@ OSDMonitor::OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& se
    full_osd_cache(g_conf->mon_osd_cache_size),
    thrash_map(0), thrash_last_up_osd(-1),
    op_tracker(cct, true, 1)
-{}
+{
+  create_initial_version = 0;
+}
 
 bool OSDMonitor::_have_pending_crush()
 {
@@ -117,11 +119,37 @@ void OSDMonitor::create_initial()
   if (bl.length()) {
     newmap.decode(bl);
     newmap.set_fsid(mon->monmap->fsid);
+    dout(0) <<"create_initial mkfs osdmap" << dendl;
   } else {
     newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0,
 			g_conf->osd_pg_bits, g_conf->osd_pgp_bits);
+    dout(0) <<"create_initial build_simple" << dendl;
   }
-  newmap.set_epoch(1);
+  dout(0) << "get_first_committed " << get_first_committed() << "get_last_committed " << get_last_committed() << dendl;
+  dout(0) << "newmap.epoch " << newmap.epoch << dendl;
+  if (newmap.epoch == 0)
+    newmap.set_epoch(1);
+  else {
+    // set load osdmap ver
+    newmap.set_epoch(newmap.epoch);
+    create_initial_version = newmap.epoch;
+
+    // init first_committed/last_committed/osdmap.epoch to newmap.epoch
+    set_first_committed(newmap.epoch);
+    set_last_committed(newmap.epoch);
+    osdmap.epoch = newmap.epoch;
+    set_load_map_version(newmap.epoch);
+
+    // first_committed/last_committed/pgmap_meta(last_osdmap_epoch) commit mon_db
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    put_first_committed(t, newmap.epoch);
+    put_last_committed(t, newmap.epoch);
+    put_version_full(t, newmap.epoch, bl);
+    t->put("pgmap_meta", "last_osdmap_epoch", newmap.epoch);
+    mon->store->apply_transaction(t);
+  }
+  dout(10) << "osdmap.epoch " << osdmap.epoch << "pending_inc.epoch " << pending_inc.epoch << dendl;
+
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // new clusters should sort bitwise by default.
@@ -132,8 +160,20 @@ void OSDMonitor::create_initial()
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
 
   // encode into pending incremental
+  if (create_initial_version != 0)
+    newmap.epoch = newmap.epoch + 1;
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
+  
+  if (create_initial_version != 0) {
+    // reset pending_inc status
+    pending_inc.epoch = osdmap.epoch + 1;
+    pending_inc.fsid = mon->monmap->fsid;
+    osdmap.fsid = pending_inc.fsid;
+  }
   pending_inc.full_crc = newmap.get_crc();
+
+  dout(20) << " pending_inc.fsid " << pending_inc.fsid << " pending_inc.epoch " << pending_inc.epoch << dendl;
+  dout(20) << " fsid " << osdmap.fsid << dendl;
   dout(20) << " full crc " << pending_inc.full_crc << dendl;
 }
 
@@ -160,7 +200,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
    * that the following conditions find whichever full map version is newer.
    */
   version_t latest_full = get_version_latest_full();
-  if (latest_full == 0 && get_first_committed() > 1)
+  
+  dout(0) << "get_first_committed() - create_initial_version " << get_first_committed() - create_initial_version << dendl;
+  if (latest_full == 0 && (get_first_committed() - create_initial_version) > 1)
     latest_full = get_first_committed();
 
   if (latest_full > 0) {
@@ -173,7 +215,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       latest_full = 0;
     }
   }
-  if (get_first_committed() > 1 &&
+  if ((get_first_committed() - create_initial_version) > 1 &&
       latest_full < get_first_committed()) {
     /* a bug introduced in 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 would lead
      * us to not update the on-disk latest_full key.  Upon trim, the actual
@@ -1264,6 +1306,10 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
   put_last_committed(t, pending_inc.epoch);
+
+  if ((create_initial_version == get_first_committed()) && (0 != get_first_committed())) {
+    put_first_committed(t, pending_inc.epoch);
+  }
 
   // metadata, too!
   for (map<int,bufferlist>::iterator p = pending_metadata.begin();

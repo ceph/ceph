@@ -134,7 +134,7 @@ public:
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
       full_prefix_name("full"), full_latest_name("latest"),
-      cached_first_committed(0), cached_last_committed(0)
+      cached_first_committed(0), cached_last_committed(0), cached_load_map_version(0)
   {
   }
 
@@ -448,6 +448,7 @@ public:
    */
   version_t cached_first_committed;
   version_t cached_last_committed;
+  version_t cached_load_map_version;
   /**
    * @}
    */
@@ -802,6 +803,16 @@ public:
   version_t get_first_committed() const{
     return cached_first_committed;
   }
+
+  /**
+   * Set the first committed version
+   *
+   * @Param first committed version
+   */
+  void set_first_committed(version_t version) {
+    cached_first_committed = version;
+  }
+  
   /**
    * Get the last committed version
    *
@@ -809,6 +820,33 @@ public:
    */
   version_t get_last_committed() const{
     return cached_last_committed;
+  }
+
+  /**
+   * Set the last committed version
+   *
+   * @Param last committed version
+   */
+  void set_last_committed(version_t version) {
+    cached_last_committed = version;
+  }
+
+  /**
+   * Get the load map version
+   *
+   * @returns Our load map version
+   */
+  version_t get_load_map_version() const{
+    return cached_load_map_version;
+  }
+
+  /**
+   * Set the load map version
+   *
+   * @Param load map version
+   */
+  void set_load_map_version(version_t version) {
+    cached_load_map_version = version;
   }
 
   /**
