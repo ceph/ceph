@@ -2428,6 +2428,8 @@ void BlueStore::Collection::trim_cache()
   cache->trim(
     g_conf->bluestore_onode_cache_size / store->cache_shards.size(),
     g_conf->bluestore_buffer_cache_size / store->cache_shards.size());
+
+  store->_update_cache_logger();
 }
 
 // =======================================================
@@ -6665,8 +6667,6 @@ void BlueStore::_kv_sync_thread()
 
       // this is as good a place as any ...
       _reap_collections();
-
-      _update_cache_logger();
 
       if (bluefs) {
 	if (!bluefs_gift_extents.empty()) {
