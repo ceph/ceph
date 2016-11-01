@@ -2258,7 +2258,8 @@ bool BlueStore::ExtentMap::do_write_check_depth(
 
   bool do_collect = true;
   if (depth < g_conf->bluestore_gc_max_blob_depth) {
-    *blob_depth = 1 + depth;
+    if (head_overlap || tail_overlap)
+      *blob_depth = 1 + depth;
     do_collect = false;
   }
   dout(20) << __func__ << " GC depth " << (int)*blob_depth
