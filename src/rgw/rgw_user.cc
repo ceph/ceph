@@ -1389,11 +1389,16 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
 {
   std::string subprocess_msg;
   int ret;
+  int32_t key_type = op_state.get_key_type();
 
   ret = check_op(op_state, &subprocess_msg);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to parse request, " + subprocess_msg);
     return ret;
+  }
+
+  if (key_type == KEY_TYPE_S3 && op_state.get_access_key().empty()) {
+    op_state.set_gen_access();
   }
 
   if (op_state.get_secret_key().empty()) {
