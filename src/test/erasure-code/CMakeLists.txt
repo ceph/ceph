@@ -78,17 +78,17 @@ target_link_libraries(unittest_erasure_code
   )
 
 # unittest_erasure_code_plugin_jerasure
-add_executable(unittest_erasure_code_plugin_jerasure
-  TestErasureCodePluginJerasure.cc
-  )
+#add_executable(unittest_erasure_code_plugin_jerasure
+#  TestErasureCodePluginJerasure.cc
+#  )
 #add_ceph_unittest(unittest_erasure_code_plugin_jerasure ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_erasure_code_plugin_jerasure)
-target_link_libraries(unittest_erasure_code_plugin_jerasure
-  global
-  osd
-  ec_jerasure
-  common)
-add_dependencies(unittest_erasure_code_plugin_jerasure
-  ec_jerasure)
+#target_link_libraries(unittest_erasure_code_plugin_jerasure
+#  global
+#  osd
+#  ec_jerasure
+#  common)
+#add_dependencies(unittest_erasure_code_plugin_jerasure
+#  ec_jerasure)
 
 if(HAVE_BETTER_YASM_ELF64)
 
