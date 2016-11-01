@@ -20,6 +20,7 @@
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
+#include "log/Log.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
@@ -73,7 +74,9 @@ int main(int argc, char **argv)
   g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  int status = RUN_ALL_TESTS();
+  g_ceph_context->_log->stop();
+  return status;
 }
 
 /*
