@@ -75,10 +75,12 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
 
 void RDMAWorker::initialize()
 {
-  dispatcher = stack->get_dispatcher();
-  notify_fd = dispatcher->register_worker(this);
-  center.create_file_event(notify_fd, EVENT_READABLE, tx_handler);
-  memory_manager = infiniband->get_memory_manager();
+  if (!dispatcher) {
+    dispatcher = stack->get_dispatcher();
+    notify_fd = dispatcher->register_worker(this);
+    center.create_file_event(notify_fd, EVENT_READABLE, tx_handler);
+    memory_manager = infiniband->get_memory_manager();
+  }
 }
 
 int RDMAWorker::reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes)

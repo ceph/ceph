@@ -34,7 +34,7 @@ class RDMAServerSocketImpl;
 class RDMAStack;
 class RDMAWorker;
 
-class RDMADispatcher {
+class RDMADispatcher : public CephContext::ForkWatcher {
   typedef Infiniband::MemoryManager::Chunk Chunk;
   typedef Infiniband::QueuePair QueuePair;
 
@@ -92,6 +92,7 @@ class RDMADispatcher {
     rx_cq = ib->create_comp_queue(rx_cc);
     assert(rx_cq);
     t = std::thread(&RDMADispatcher::polling, this);
+    cct->register_fork_watcher(this);
   }
   virtual ~RDMADispatcher();
   void handle_async_event();
@@ -155,6 +156,14 @@ class RDMADispatcher {
   }
   Infiniband::CompletionQueue* get_rx_cq() const { return rx_cq; }
   void notify_pending_workers();
+  virtual void handle_pre_fork() override {
+    done = true;
+    t.join();
+    done = false;
+  }
+  virtual void handle_post_fork() override {
+    t = std::thread(&RDMADispatcher::polling, this);
+  }
 };
 
 
@@ -169,7 +178,7 @@ class RDMAWorker : public Worker {
   EventCallbackRef tx_handler;
   MemoryManager *memory_manager;
   std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
-  RDMADispatcher* dispatcher;
+  RDMADispatcher* dispatcher = nullptr;
   int notify_fd = -1;
   Mutex lock;
   std::vector<ibv_wc> wc;
