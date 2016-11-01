@@ -4426,6 +4426,15 @@ int BlueStore::fsck(bool deep)
 					deep);
         }
       }
+      if (deep) {
+	bufferlist bl;
+	int r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
+	if (r < 0) {
+	  ++errors;
+	  derr << __func__ << " " << oid << " error during read: "
+	       << cpp_strerror(r) << dendl;
+	}
+      }
       // omap
       while (o->onode.omap_head) {
 	if (used_omap_head.count(o->onode.omap_head)) {
