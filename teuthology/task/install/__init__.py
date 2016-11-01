@@ -15,33 +15,13 @@ from teuthology.parallel import parallel
 from teuthology.orchestra import run
 from teuthology.task import ansible
 
-log = logging.getLogger(__name__)
+from .util import (
+    _get_builder_project, get_flavor, ship_utilities, _get_local_dir
+)
 
 # Should the RELEASE value get extracted from somewhere?
 RELEASE = "1-0"
-
-
-def _get_builder_project(ctx, remote, config):
-    return packaging.get_builder_project()(
-        config.get('project', 'ceph'),
-        config,
-        remote=remote,
-        ctx=ctx
-    )
-
-
-def _get_local_dir(config, remote):
-    """
-    Extract local directory name from the task lists.
-    Copy files over to the remote site.
-    """
-    ldir = config.get('local', None)
-    if ldir:
-        remote.run(args=['sudo', 'mkdir', '-p', ldir,])
-        for fyle in os.listdir(ldir):
-            fname = "%s/%s" % (ldir, fyle)
-            teuthology.sudo_write_file(remote, fname, open(fname).read(), '644')
-    return ldir
+log = logging.getLogger(__name__)
 
 
 def _update_deb_package_list_and_install(ctx, remote, debs, config):
@@ -77,7 +57,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
             stdout=StringIO(),
         )
 
-    builder = _get_builder_project(ctx, remote, config)
+    builder = util._get_builder_project(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote deb {arch}".format(
         pkglist=", ".join(debs), arch=builder.arch)
     )
@@ -106,7 +86,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
     )
-    ldir = _get_local_dir(config, remote)
+    ldir = util._get_local_dir(config, remote)
     if ldir:
         for fyle in os.listdir(ldir):
             fname = "%s/%s" % (ldir, fyle)
@@ -221,7 +201,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     :param config: the config dict
     """
     rpm = _rpm_package_overrides(rpm, remote.os)
-    builder = _get_builder_project(ctx, remote, config)
+    builder = util._get_builder_project(ctx, remote, config)
     log.info('Pulling from %s', builder.base_url)
     log.info('Package version is %s', builder.version)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
@@ -262,7 +242,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                 'sudo', 'yum', 'clean', 'all',
             ])
 
-    ldir = _get_local_dir(config, remote)
+    ldir = util._get_local_dir(config, remote)
 
     if dist_release == 'opensuse':
         pkg_mng_cmd = 'zypper'
@@ -468,7 +448,7 @@ def _remove_rpm(ctx, config, remote, rpm):
     rpm = _rpm_package_overrides(rpm, remote.os)
     log.info("Removing packages: {pkglist} on rpm system.".format(
         pkglist=", ".join(rpm)))
-    builder = _get_builder_project(ctx, remote, config)
+    builder = util._get_builder_project(ctx, remote, config)
     dist_release = builder.dist_release
 
     if dist_release == 'opensuse':
@@ -735,7 +715,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
             stdout=StringIO(),
         )
 
-    builder = _get_builder_project(ctx, remote, config)
+    builder = util._get_builder_project(ctx, remote, config)
     base_url = builder.base_url
     log.info('Pulling from %s', base_url)
 
@@ -920,7 +900,7 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     :param pkgs: the RPM packages to be installed
     :param branch: the branch of the project to be used
     """
-    builder = _get_builder_project(ctx, remote, config)
+    builder = util._get_builder_project(ctx, remote, config)
     log.info(
         "Host {host} is: {distro} {ver} {arch}".format(
             host=remote.shortname,
@@ -1157,96 +1137,6 @@ def ceph_deploy_upgrade(ctx, config):
 
 ceph_deploy_upgrade.__doc__ = docstring_for_upgrade.format(
     cmd_parameter='ceph_deploy_upgrade')
-
-
-@contextlib.contextmanager
-def ship_utilities(ctx, config):
-    """
-    Write a copy of valgrind.supp to each of the remote sites.  Set executables
-    used by Ceph in /usr/local/bin.  When finished (upon exit of the teuthology
-    run), remove these files.
-
-    :param ctx: Context
-    :param config: Configuration
-    """
-    assert config is None
-    testdir = teuthology.get_testdir(ctx)
-    filenames = []
-
-    log.info('Shipping valgrind.supp...')
-    with file(
-        os.path.join(os.path.dirname(__file__), 'valgrind.supp'),
-        'rb'
-            ) as f:
-        fn = os.path.join(testdir, 'valgrind.supp')
-        filenames.append(fn)
-        for rem in ctx.cluster.remotes.iterkeys():
-            teuthology.sudo_write_file(
-                remote=rem,
-                path=fn,
-                data=f,
-                )
-            f.seek(0)
-
-    FILES = ['daemon-helper', 'adjust-ulimits']
-    destdir = '/usr/bin'
-    for filename in FILES:
-        log.info('Shipping %r...', filename)
-        src = os.path.join(os.path.dirname(__file__), filename)
-        dst = os.path.join(destdir, filename)
-        filenames.append(dst)
-        with file(src, 'rb') as f:
-            for rem in ctx.cluster.remotes.iterkeys():
-                teuthology.sudo_write_file(
-                    remote=rem,
-                    path=dst,
-                    data=f,
-                )
-                f.seek(0)
-                rem.run(
-                    args=[
-                        'sudo',
-                        'chmod',
-                        'a=rx',
-                        '--',
-                        dst,
-                    ],
-                )
-
-    try:
-        yield
-    finally:
-        log.info('Removing shipped files: %s...', ' '.join(filenames))
-        run.wait(
-            ctx.cluster.run(
-                args=[
-                    'sudo',
-                    'rm',
-                    '-f',
-                    '--',
-                ] + list(filenames),
-                wait=False,
-            ),
-        )
-
-
-def get_flavor(config):
-    """
-    Determine the flavor to use.
-    """
-    config = config or dict()
-    flavor = config.get('flavor', 'basic')
-
-    if config.get('path'):
-        # local dir precludes any other flavors
-        flavor = 'local'
-    else:
-        if config.get('valgrind'):
-            flavor = 'notcmalloc'
-        else:
-            if config.get('coverage'):
-                flavor = 'gcov'
-    return flavor
 
 
 @contextlib.contextmanager
