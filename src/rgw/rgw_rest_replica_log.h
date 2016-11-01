@@ -144,10 +144,11 @@ public:
 
 class RGWRESTMgr_ReplicaLog : public RGWRESTMgr {
 public:
-  RGWRESTMgr_ReplicaLog() {}
-  virtual ~RGWRESTMgr_ReplicaLog() {}
+  RGWRESTMgr_ReplicaLog() = default;
+  virtual ~RGWRESTMgr_ReplicaLog() = default;
 
-  virtual RGWHandler_REST* get_handler(struct req_state *s){
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_ReplicaLog;
   }
 };

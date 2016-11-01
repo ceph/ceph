@@ -38,3 +38,6 @@
 	url = https://github.com/ceph/lua.git
 	branch = lua-5.3-ceph
 	ignore = dirty
+[submodule "src/Beast"]
+	path = src/Beast
+	url = https://github.com/ceph/Beast.git

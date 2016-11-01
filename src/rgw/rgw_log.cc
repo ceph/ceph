@@ -211,8 +211,8 @@ static void log_usage(struct req_state *s, const string& op_name)
   string p = payer.to_str();
   rgw_usage_log_entry entry(u, p, bucket_name);
 
-  uint64_t bytes_sent = s->cio->get_bytes_sent();
-  uint64_t bytes_received = s->cio->get_bytes_received();
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   rgw_usage_data data(bytes_sent, bytes_received);
 
@@ -344,8 +344,8 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
 
-  uint64_t bytes_sent = s->cio->get_bytes_sent();
-  uint64_t bytes_received = s->cio->get_bytes_received();
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
   entry.total_time = ceph_clock_now(s->cct) - s->time;
