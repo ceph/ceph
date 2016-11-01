@@ -1504,7 +1504,8 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
   if (o->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
-      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n); //we need to encode inline_bl to measure encoded length
+      // we need to encode inline_bl to measure encoded length
+      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
       assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << " inline shard "
@@ -1630,8 +1631,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
     auto sp = o->onode.extent_map_shards.begin();
     auto esp = o->onode.extent_map_shards.end();
     unsigned shard_start = 0;
-    ++sp;
     unsigned shard_end;
+    ++sp;
     if (sp == esp) {
       shard_end = OBJECT_MAX_SIZE;
     } else {
@@ -1676,6 +1677,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 		// switch b to the new right-hand side, in case it
 		// *also* has to get split.
 		bstart += blob_offset;
+		onode->c->store->logger->inc(l_bluestore_blob_split);
 	      } else {
 		must_span = true;
 		break;
@@ -2070,6 +2072,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       break;
     }
     if (n->logical_offset >= shard_end) {
+      assert(pshard != shards.end());
       ++pshard;
       if (pshard != shards.end()) {
 	shard_end = pshard->offset;
@@ -2683,8 +2686,12 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_gc, "bluestore_gc", "Sum for garbage collection reads");
-  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes", "garbage collected bytes");
+  b.add_u64(l_bluestore_gc, "bluestore_gc",
+            "Sum for garbage collection reads");
+  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes",
+            "garbage collected bytes");
+  b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
+            "Sum for blob splitting due to resharding");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
