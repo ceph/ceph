@@ -67,6 +67,10 @@ public:
   void release(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn) override;
+
+  bool supports_parallel_transactions() override {
+    return true;
+  }
 };
 
 #endif

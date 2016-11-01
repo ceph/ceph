@@ -1160,6 +1160,8 @@ public:
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
     vector<OnodeRef> wal_op_onodes;
 
+    bool kv_submitted = false; ///< true when we've been submitted to kv db
+
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
       enum {
@@ -1274,6 +1276,8 @@ public:
     std::mutex wal_apply_mutex;
 
     uint64_t last_seq = 0;
+
+    std::atomic_int kv_committing_serially = {0};
 
     OpSequencer()
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
@@ -1429,11 +1433,10 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex id_lock;
   std::atomic<uint64_t> nid_last = {0};
-  uint64_t nid_max = 0;
+  std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
-  uint64_t blobid_max = 0;
+  std::atomic<uint64_t> blobid_max = {0};
 
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
@@ -1452,8 +1455,10 @@ private:
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
   bool kv_stop;
-  deque<TransContext*> kv_queue, kv_committing;
-  deque<TransContext*> wal_cleanup_queue, wal_cleaning;
+  deque<TransContext*> kv_queue;             ///< ready, already submitted
+  deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
+  deque<TransContext*> kv_committing;        ///< currently syncing
+  deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
 
   PerfCounters *logger;
 
