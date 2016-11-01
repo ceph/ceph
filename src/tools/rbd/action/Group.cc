@@ -68,7 +68,7 @@ int execute_list(const po::variables_map &vm) {
 
   librbd::RBD rbd;
   std::vector<std::string> names;
-  r = rbd.group_list(io_ctx, names);
+  r = rbd.group_list(io_ctx, &names);
 
   if (r == -ENOENT)
     r = 0;
@@ -257,7 +257,7 @@ int execute_list_images(const po::variables_map &vm) {
   librbd::RBD rbd;
   std::vector<librbd::group_image_status_t> images;
 
-  r = rbd.group_image_list(io_ctx, group_name.c_str(), images);
+  r = rbd.group_image_list(io_ctx, group_name.c_str(), &images);
 
   if (r == -ENOENT)
     r = 0;

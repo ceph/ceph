@@ -1054,7 +1054,7 @@ bool OSDService::can_inc_scrubs_pending()
   Mutex::Locker l(sched_scrub_lock);
 
   if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
-    dout(20) << __func__ << scrubs_pending << " -> " << (scrubs_pending+1)
+    dout(20) << __func__ << " " << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     can_inc = true;
   } else {
@@ -2803,6 +2803,12 @@ int OSD::shutdown()
 
   dout(10) << "syncing store" << dendl;
   enable_disable_fuse(true);
+
+  if (g_conf->osd_journal_flush_on_shutdown) {
+    dout(10) << "flushing journal" << dendl;
+    store->flush_journal();
+  }
+
   store->umount();
   delete store;
   store = 0;
@@ -5540,11 +5546,10 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   // 'tell <pgid>' (which comes in without any of that prefix)?
 
   else if (prefix == "pg" ||
-	   (cmd_getval(cct, cmdmap, "pgid", pgidstr) &&
-	     (prefix == "query" ||
-	      prefix == "mark_unfound_lost" ||
-	      prefix == "list_missing")
-	   )) {
+	    prefix == "query" ||
+	    prefix == "mark_unfound_lost" ||
+	    prefix == "list_missing"
+	   ) {
     pg_t pgid;
 
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {

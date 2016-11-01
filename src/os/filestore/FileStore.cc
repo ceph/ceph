@@ -5644,8 +5644,10 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_max_xattr_value_size_xfs") ||
       changed.count("filestore_max_xattr_value_size_btrfs") ||
       changed.count("filestore_max_xattr_value_size_other")) {
-    Mutex::Locker l(lock);
-    set_xattr_limits_via_conf();
+    if (backend) {
+      Mutex::Locker l(lock);
+      set_xattr_limits_via_conf();
+    }
   }
 
   if (changed.count("filestore_queue_max_bytes") ||

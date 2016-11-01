@@ -371,7 +371,7 @@ int main(int argc, const char **argv)
 	cerr << "expecting features" << std::endl;
 	exit(1);
       }
-      features = atoi(*i);
+      features = atoll(*i);
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;

@@ -37,6 +37,9 @@ class AioCompletionImpl;
 
 class librados::RadosClient : public Dispatcher
 {
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)> > cct_deleter;
+
 public:
   using Dispatcher::cct;
   md_config_t *conf;

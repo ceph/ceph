@@ -147,10 +147,10 @@ private:
  * logging-related config changes to the log.
  */
 class LogObs : public md_config_obs_t {
-  ceph::log::Log *log;
+  ceph::logging::Log *log;
 
 public:
-  explicit LogObs(ceph::log::Log *l) : log(l) {}
+  explicit LogObs(ceph::logging::Log *l) : log(l) {}
 
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
@@ -476,7 +476,7 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   ceph_spin_init(&_feature_lock);
   ceph_spin_init(&_cct_perf_lock);
 
-  _log = new ceph::log::Log(&_conf->subsys);
+  _log = new ceph::logging::Log(&_conf->subsys);
   _log->start();
 
   _log_obs = new LogObs(_log);

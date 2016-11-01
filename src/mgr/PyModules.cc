@@ -153,14 +153,6 @@ PyObject *PyModules::get_python(const std::string &what)
       }
     );
     return f.get();
-  } else if (what == "fs_map") {
-    PyFormatter f;
-    cluster_state.with_fsmap(
-      [&f](const FSMap &fsmap) {
-        fsmap.dump(&f);
-      }
-    );
-    return f.get();
   } else if (what == "osd_metadata") {
     PyFormatter f;
     auto dmc = daemon_state.get_by_type(CEPH_ENTITY_TYPE_OSD);
