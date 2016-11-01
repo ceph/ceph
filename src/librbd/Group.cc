@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #include "common/errno.h"
 
 #include "librbd/AioCompletion.h"
@@ -76,7 +77,7 @@ int group_remove(librados::IoCtx& io_ctx, const char *group_name)
   ldout(cct, 20) << "group_remove " << &io_ctx << " " << group_name << dendl;
 
   std::vector<group_image_status_t> images;
-  int r = group_image_list(io_ctx, group_name, images);
+  int r = group_image_list(io_ctx, group_name, &images);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error listing group images" << dendl;
     return r;
@@ -119,7 +120,7 @@ int group_remove(librados::IoCtx& io_ctx, const char *group_name)
   return 0;
 }
 
-int group_list(IoCtx& io_ctx, vector<string>& names)
+int group_list(IoCtx& io_ctx, vector<string> *names)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "group_list " << &io_ctx << dendl;
@@ -129,14 +130,15 @@ int group_list(IoCtx& io_ctx, vector<string>& names)
   int r;
   do {
     map<string, string> groups;
-    r = cls_client::group_dir_list(&io_ctx, RBD_GROUP_DIRECTORY, last_read, max_read, &groups);
+    r = cls_client::group_dir_list(&io_ctx, RBD_GROUP_DIRECTORY, last_read,
+                                   max_read, &groups);
     if (r < 0) {
       lderr(cct) << "error listing group in directory: "
 		 << cpp_strerror(r) << dendl;
       return r;
     }
     for (pair<string, string> group : groups) {
-      names.push_back(group.first);
+      names->push_back(group.first);
     }
     if (!groups.empty()) {
       last_read = groups.rbegin()->first;
@@ -288,7 +290,7 @@ int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 
 int group_image_list(librados::IoCtx& group_ioctx,
 		     const char *group_name,
-		     std::vector<group_image_status_t>& images)
+		     std::vector<group_image_status_t> *images)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "group_image_list " << &group_ioctx
@@ -317,7 +319,7 @@ int group_image_list(librados::IoCtx& group_ioctx,
     cls::rbd::GroupImageSpec start_last;
 
     r = cls_client::group_image_list(&group_ioctx, group_header_oid,
-	start_last, max_read, image_ids_page);
+	start_last, max_read, &image_ids_page);
 
     if (r < 0) {
       lderr(cct) << "error reading image list from consistency group: "
@@ -344,7 +346,7 @@ int group_image_list(librados::IoCtx& group_ioctx,
       return r;
     }
 
-    images.push_back(
+    images->push_back(
 	group_image_status_t {
 	   image_name,
 	   i.spec.pool_id,
@@ -379,4 +381,5 @@ int image_get_group(ImageCtx *ictx, group_spec_t *group_spec)
 
   return 0;
 }
+
 } // namespace librbd
