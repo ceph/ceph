@@ -32,7 +32,49 @@ class ObjectNotFound(Exception):
         return "Object not found: '{0}'".format(self._object_name)
 
 
-class MDSCluster(object):
+class CephCluster(object):
+    @property
+    def admin_remote(self):
+        first_mon = misc.get_first_mon(self._ctx, None)
+        (result,) = self._ctx.cluster.only(first_mon).remotes.iterkeys()
+        return result
+
+    def __init__(self, ctx):
+        self._ctx = ctx
+        self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
+
+    def get_config(self, key, service_type=None):
+        """
+        Get config from mon by default, or a specific service if caller asks for it
+        """
+        if service_type is None:
+            service_type = 'mon'
+
+        service_id = sorted(misc.all_roles_of_type(self._ctx.cluster, service_type))[0]
+        return self.json_asok(['config', 'get', key], service_type, service_id)[key]
+
+    def set_ceph_conf(self, subsys, key, value):
+        if subsys not in self._ctx.ceph['ceph'].conf:
+            self._ctx.ceph['ceph'].conf[subsys] = {}
+        self._ctx.ceph['ceph'].conf[subsys][key] = value
+        write_conf(self._ctx)  # XXX because we don't have the ceph task's config object, if they
+                               # used a different config path this won't work.
+
+    def clear_ceph_conf(self, subsys, key):
+        del self._ctx.ceph['ceph'].conf[subsys][key]
+        write_conf(self._ctx)
+
+    def json_asok(self, command, service_type, service_id):
+        proc = self.mon_manager.admin_socket(service_type, service_id, command)
+        response_data = proc.stdout.getvalue()
+        log.info("_json_asok output: {0}".format(response_data))
+        if response_data.strip():
+            return json.loads(response_data)
+        else:
+            return None
+
+
+class MDSCluster(CephCluster):
     """
     Collective operations on all the MDS daemons in the Ceph cluster.  These
     daemons may be in use by various Filesystems.
@@ -41,21 +83,14 @@ class MDSCluster(object):
     a parent of Filesystem.  The correct way to use MDSCluster going forward is
     as a separate instance outside of your (multiple) Filesystem instances.
     """
-
-    @property
-    def admin_remote(self):
-        first_mon = misc.get_first_mon(self._ctx, None)
-        (result,) = self._ctx.cluster.only(first_mon).remotes.iterkeys()
-        return result
-
     def __init__(self, ctx):
+        super(MDSCluster, self).__init__(ctx)
+
         self.mds_ids = list(misc.all_roles_of_type(ctx.cluster, 'mds'))
-        self._ctx = ctx
 
         if len(self.mds_ids) == 0:
             raise RuntimeError("This task requires at least one MDS")
 
-        self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
         if hasattr(self._ctx, "daemons"):
             # Presence of 'daemons' attribute implies ceph task rather than ceph_deploy task
             self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
@@ -156,36 +191,6 @@ class MDSCluster(object):
             result.add(mds_remote.hostname)
 
         return list(result)
-
-    def get_config(self, key, service_type=None):
-        """
-        Get config from mon by default, or a specific service if caller asks for it
-        """
-        if service_type is None:
-            service_type = 'mon'
-
-        service_id = sorted(misc.all_roles_of_type(self._ctx.cluster, service_type))[0]
-        return self.json_asok(['config', 'get', key], service_type, service_id)[key]
-
-    def set_ceph_conf(self, subsys, key, value):
-        if subsys not in self._ctx.ceph['ceph'].conf:
-            self._ctx.ceph['ceph'].conf[subsys] = {}
-        self._ctx.ceph['ceph'].conf[subsys][key] = value
-        write_conf(self._ctx)  # XXX because we don't have the ceph task's config object, if they
-                               # used a different config path this won't work.
-
-    def clear_ceph_conf(self, subsys, key):
-        del self._ctx.ceph['ceph'].conf[subsys][key]
-        write_conf(self._ctx)
-
-    def json_asok(self, command, service_type, service_id):
-        proc = self.mon_manager.admin_socket(service_type, service_id, command)
-        response_data = proc.stdout.getvalue()
-        log.info("_json_asok output: {0}".format(response_data))
-        if response_data.strip():
-            return json.loads(response_data)
-        else:
-            return None
 
     def set_clients_block(self, blocked, mds_id=None):
         """

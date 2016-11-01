@@ -3,6 +3,7 @@ ceph:
   deb:
   - ceph
   - ceph-mds
+  - ceph-mgr
   - ceph-common
   - ceph-fuse
   - ceph-test
@@ -18,6 +19,7 @@ ceph:
   - ceph-common-dbg
   - ceph-fuse-dbg
   - ceph-mds-dbg
+  - ceph-mgr-dbg
   - ceph-mon-dbg
   - ceph-osd-dbg
   - ceph-test-dbg
@@ -34,6 +36,7 @@ ceph:
   - ceph-radosgw
   - ceph-test
   - ceph
+  - ceph-mgr
   - ceph-fuse
   - cephfs-java
   - libcephfs_jni1
