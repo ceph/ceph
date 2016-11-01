@@ -12,8 +12,6 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/image/SetFlagsRequest.h"
-#include "librbd/journal/DisabledPolicy.h"
-#include "librbd/journal/StandardPolicy.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/object_map/RemoveRequest.h"
@@ -121,14 +119,6 @@ Context *DisableFeaturesRequest<I>::handle_block_writes(int *result) {
 	 !image_ctx.journal->is_journal_replaying())) {
       image_ctx.exclusive_lock->block_requests(0);
       m_requests_blocked = true;
-    }
-
-    // if disabling journaling, avoid attempting to open the journal
-    // when acquiring the exclusive lock in case the journal is corrupt
-    if ((m_features & RBD_FEATURE_JOURNALING) != 0) {
-      RWLock::WLocker snap_locker(image_ctx.snap_lock);
-      image_ctx.set_journal_policy(new journal::DisabledPolicy());
-      m_disabling_journal = true;
     }
   }
 
@@ -627,12 +617,6 @@ Context *DisableFeaturesRequest<I>::handle_finish(int r) {
 
   {
     RWLock::WLocker locker(image_ctx.owner_lock);
-
-    if (m_disabling_journal) {
-      RWLock::WLocker snap_locker(image_ctx.snap_lock);
-      image_ctx.set_journal_policy(new journal::StandardPolicy<I>(&image_ctx));
-    }
-
     if (image_ctx.exclusive_lock != nullptr && m_requests_blocked) {
       image_ctx.exclusive_lock->unblock_requests();
     }

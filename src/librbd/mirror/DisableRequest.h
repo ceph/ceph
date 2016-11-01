@@ -27,6 +27,9 @@ public:
     return new DisableRequest(image_ctx, force, remove, on_finish);
   }
 
+  DisableRequest(ImageCtxT *image_ctx, bool force, bool remove,
+                 Context *on_finish);
+
   void send();
 
 private:
@@ -46,6 +49,9 @@ private:
    *    |                                                         *
    *    v                                                         *
    * NOTIFY_MIRRORING_WATCHER                                     *
+   *    |                                                         *
+   *    v                                                         *
+   * PROMOTE_IMAGE (skip if primary)                              *
    *    |                                                         *
    *    v                                                         *
    * GET_CLIENTS <----------------------------------------\ * * * *
@@ -74,9 +80,6 @@ private:
    * @endverbatim
    */
 
-  DisableRequest(ImageCtxT *image_ctx, bool force, bool remove,
-                 Context *on_finish);
-
   ImageCtxT *m_image_ctx;
   bool m_force;
   bool m_remove;
@@ -103,6 +106,9 @@ private:
   void send_notify_mirroring_watcher();
   Context *handle_notify_mirroring_watcher(int *result);
 
+  void send_promote_image();
+  Context *handle_promote_image(int *result);
+
   void send_get_clients();
   Context *handle_get_clients(int *result);
 
@@ -123,6 +129,7 @@ private:
     Context*(DisableRequest<ImageCtxT>::*handle)(
       int*, const std::string &client_id),
     const std::string &client_id);
+
 };
 
 } // namespace mirror

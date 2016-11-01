@@ -211,10 +211,6 @@ public:
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes()).Times(1);
   }
 
-  void expect_set_journal_policy(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, set_journal_policy(_)).Times(1);
-  }
-
   void expect_verify_lock_ownership(MockOperationImageCtx &mock_image_ctx) {
     if (mock_image_ctx.exclusive_lock != nullptr) {
       EXPECT_CALL(*mock_image_ctx.exclusive_lock, is_lock_owner())
@@ -316,7 +312,6 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
   }
   expect_block_requests(mock_image_ctx);
   if (features_to_disable & RBD_FEATURE_JOURNALING) {
-    expect_set_journal_policy(mock_image_ctx);
     expect_disable_mirror_request_send(mock_image_ctx,
                                        mock_disable_mirror_request, 0);
     expect_close_journal(mock_image_ctx, 0);
@@ -332,9 +327,6 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
 				  mock_set_flags_request, 0);
   }
   expect_notify_update(mock_image_ctx);
-  if (features_to_disable & RBD_FEATURE_JOURNALING) {
-    expect_set_journal_policy(mock_image_ctx);
-  }
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
   expect_handle_prepare_lock_complete(mock_image_ctx);
@@ -463,14 +455,12 @@ TEST_F(TestMockOperationDisableFeaturesRequest, Mirroring) {
   expect_block_writes(mock_image_ctx);
   expect_is_journal_replaying(*mock_image_ctx.journal);
   expect_block_requests(mock_image_ctx);
-  expect_set_journal_policy(mock_image_ctx);
   expect_disable_mirror_request_send(mock_image_ctx,
                                      mock_disable_mirror_request, 0);
   expect_close_journal(mock_image_ctx, 0);
   expect_remove_journal_request_send(mock_image_ctx,
                                      mock_remove_journal_request, 0);
   expect_notify_update(mock_image_ctx);
-  expect_set_journal_policy(mock_image_ctx);
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
   expect_handle_prepare_lock_complete(mock_image_ctx);
@@ -508,14 +498,12 @@ TEST_F(TestMockOperationDisableFeaturesRequest, MirroringError) {
   expect_block_writes(mock_image_ctx);
   expect_is_journal_replaying(*mock_image_ctx.journal);
   expect_block_requests(mock_image_ctx);
-  expect_set_journal_policy(mock_image_ctx);
   expect_disable_mirror_request_send(mock_image_ctx,
                                      mock_disable_mirror_request, -EINVAL);
   expect_close_journal(mock_image_ctx, 0);
   expect_remove_journal_request_send(mock_image_ctx,
                                      mock_remove_journal_request, 0);
   expect_notify_update(mock_image_ctx);
-  expect_set_journal_policy(mock_image_ctx);
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
   expect_handle_prepare_lock_complete(mock_image_ctx);

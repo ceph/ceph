@@ -13,6 +13,8 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/journal/DisabledPolicy.h"
+#include "librbd/journal/StandardPolicy.h"
 #include "librbd/operation/DisableFeaturesRequest.h"
 #include "librbd/operation/EnableFeaturesRequest.h"
 #include "librbd/operation/FlattenRequest.h"
@@ -31,6 +33,7 @@
 #include "librbd/operation/SnapshotLimitRequest.h"
 #include <set>
 #include <boost/bind.hpp>
+#include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -1271,6 +1274,22 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
       return -EINVAL;
     }
   }
+
+  // if disabling journaling, avoid attempting to open the journal
+  // when acquiring the exclusive lock in case the journal is corrupt
+  bool disabling_journal = false;
+  if (!enabled && ((features & RBD_FEATURE_JOURNALING) != 0)) {
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    m_image_ctx.set_journal_policy(new journal::DisabledPolicy());
+    disabling_journal = true;
+  }
+  BOOST_SCOPE_EXIT_ALL( (this)(disabling_journal) ) {
+    if (disabling_journal) {
+      RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+      m_image_ctx.set_journal_policy(
+        new journal::StandardPolicy<I>(&m_image_ctx));
+    }
+  };
 
   r = invoke_async_request("update_features", false,
                            boost::bind(&Operations<I>::execute_update_features,
