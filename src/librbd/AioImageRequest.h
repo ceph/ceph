@@ -36,7 +36,7 @@ public:
   static void aio_write(ImageCtxT *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                          uint64_t len);
+                          uint64_t len, const blkin_trace_info *trace_info = nullptr);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
 
   virtual bool is_write_op() const {
@@ -214,8 +214,8 @@ template <typename ImageCtxT = ImageCtx>
 class AioImageDiscard : public AbstractAioImageWrite<ImageCtxT> {
 public:
   AioImageDiscard(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                  uint64_t len)
-    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, {{off, len}}) {
+                  uint64_t len, const blkin_trace_info *trace_info = nullptr)
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, {{off, len}}, trace_info) {
   }
 
 protected:

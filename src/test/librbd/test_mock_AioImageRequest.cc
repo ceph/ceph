@@ -36,7 +36,8 @@ struct AioObjectRequest<librbd::MockTestImageCtx> : public AioObjectRequestHandl
                                          const std::string &oid,
                                          uint64_t object_no,
                                          const ::SnapContext &snapc,
-                                         Context *completion) {
+                                         Context *completion,
+                                         ZTracer::Trace *trace) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -47,7 +48,8 @@ struct AioObjectRequest<librbd::MockTestImageCtx> : public AioObjectRequestHandl
                                            uint64_t object_no,
                                            uint64_t object_off,
                                            const ::SnapContext &snapc,
-                                           Context *completion) {
+                                           Context *completion,
+                                           ZTracer::Trace *trace) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -71,7 +73,8 @@ struct AioObjectRequest<librbd::MockTestImageCtx> : public AioObjectRequestHandl
                                        uint64_t object_no, uint64_t object_off,
                                        uint64_t object_len,
                                        const ::SnapContext &snapc,
-                                       Context *completion) {
+                                       Context *completion,
+                                       ZTracer::Trace *trace) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;

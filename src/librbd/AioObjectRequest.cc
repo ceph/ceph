@@ -32,9 +32,10 @@ AioObjectRequest<I>*
 AioObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
                                    uint64_t object_no,
                                    const ::SnapContext &snapc,
-                                   Context *completion) {
+                                   Context *completion,
+                                   ZTracer::Trace *trace) {
   return new AioObjectRemove(util::get_image_ctx(ictx), oid, object_no, snapc,
-                             completion);
+                             completion, trace);
 }
 
 template <typename I>
@@ -42,9 +43,10 @@ AioObjectRequest<I>*
 AioObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
                                      uint64_t object_no, uint64_t object_off,
                                      const ::SnapContext &snapc,
-                                     Context *completion) {
+                                     Context *completion,
+                                     ZTracer::Trace *trace) {
   return new AioObjectTruncate(util::get_image_ctx(ictx), oid, object_no,
-                               object_off, snapc, completion);
+                               object_off, snapc, completion, trace);
 }
 
 template <typename I>
@@ -65,9 +67,10 @@ AioObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
                                  uint64_t object_no, uint64_t object_off,
                                  uint64_t object_len,
                                  const ::SnapContext &snapc,
-                                 Context *completion) {
+                                 Context *completion,
+                                 ZTracer::Trace *trace) {
   return new AioObjectZero(util::get_image_ctx(ictx), oid, object_no,
-                           object_off, object_len, snapc, completion);
+                           object_off, object_len, snapc, completion, trace);
 }
 
 template <typename I>

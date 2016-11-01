@@ -363,6 +363,8 @@ public:
   int aio_read_traced(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c,
 		  const struct blkin_trace_info *trace_info);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
+  int aio_discard_traced(uint64_t off, uint64_t len, RBD::AioCompletion *c,
+		  const struct blkin_trace_info *trace_info);
 
   int flush();
   /**

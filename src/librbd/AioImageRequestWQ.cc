@@ -157,7 +157,8 @@ void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 }
 
 void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
-                                    uint64_t len, bool native_async) {
+                                    uint64_t len, bool native_async,
+                                    const blkin_trace_info *trace_info) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_DISCARD);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_discard: ictx=" << &m_image_ctx << ", "
@@ -174,10 +175,10 @@ void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(new AioImageDiscard<>(m_image_ctx, c, off, len));
+    queue(new AioImageDiscard<>(m_image_ctx, c, off, len, trace_info));
   } else {
     c->start_op();
-    AioImageRequest<>::aio_discard(&m_image_ctx, c, off, len);
+    AioImageRequest<>::aio_discard(&m_image_ctx, c, off, len, trace_info);
     finish_in_flight_op();
   }
 }

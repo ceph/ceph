@@ -218,8 +218,9 @@ void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
 
 template <typename I>
 void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
-                                     uint64_t off, uint64_t len) {
-  AioImageDiscard<I> req(*ictx, c, off, len);
+                                     uint64_t off, uint64_t len,
+                                     const blkin_trace_info *trace_info) {
+  AioImageDiscard<I> req(*ictx, c, off, len, trace_info);
   req.send();
 }
 
@@ -649,16 +650,17 @@ AioObjectRequestHandle *AioImageDiscard<I>::create_object_request(
   if (object_extent.length == image_ctx.layout.object_size) {
     req = AioObjectRequest<I>::create_remove(
       &image_ctx, object_extent.oid.name, object_extent.objectno, snapc,
-      on_finish);
+      on_finish, trace);
   } else if (object_extent.offset + object_extent.length ==
                image_ctx.layout.object_size) {
     req = AioObjectRequest<I>::create_truncate(
       &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, snapc, on_finish);
+      object_extent.offset, snapc, on_finish, trace);
   } else {
     req = AioObjectRequest<I>::create_zero(
       &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, object_extent.length, snapc, on_finish);
+      object_extent.offset, object_extent.length, snapc, on_finish,
+      trace);
   }
   return req;
 }

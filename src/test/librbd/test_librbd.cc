@@ -1094,6 +1094,20 @@ void aio_discard_test_data(rbd_image_t image, uint64_t off, uint64_t len, bool *
   *passed = true;
 }
 
+void aio_discard_test_data_traced(rbd_image_t image, uint64_t off, uint64_t len, bool *passed)
+{
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);
+  struct blkin_trace_info trace_info;
+  rbd_aio_discard_traced(image, off, len, comp, &trace_info);
+  rbd_aio_wait_for_complete(comp);
+  int r = rbd_aio_get_return_value(comp);
+  ASSERT_EQ(0, r);
+  printf("aio discard traced: %d~%d = %d\n", (int)off, (int)len, (int)r);
+  rbd_aio_release(comp);
+  *passed = true;
+}
+
 void discard_test_data(rbd_image_t image, uint64_t off, size_t len, bool *passed)
 {
   ssize_t written;
@@ -1262,6 +1276,7 @@ TEST_F(TestLibRBD, TestIO)
   // discard 2nd, 4th sections.
   ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
   ASSERT_PASSED(aio_discard_test_data, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
+  ASSERT_PASSED(aio_discard_test_data_traced, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
 
   ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE, 0);
   ASSERT_PASSED(read_test_data, image, skip_discard ? test_data : zero_data,
@@ -1358,6 +1373,7 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   // discard 2nd, 4th sections.
   ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
   ASSERT_PASSED(aio_discard_test_data, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
+  ASSERT_PASSED(aio_discard_test_data_traced, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
 
   ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE,
 		LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
@@ -1455,6 +1471,18 @@ void aio_discard_test_data(librbd::Image& image, off_t off, size_t len, bool *pa
 {
   librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL, (librbd::callback_t) simple_write_cb_pp);
   image.aio_discard(off, len, comp);
+  comp->wait_for_complete();
+  int r = comp->get_return_value();
+  ASSERT_EQ(0, r);
+  comp->release();
+  *passed = true;
+}
+
+void aio_discard_test_data_traced(librbd::Image& image, off_t off, size_t len, bool *passed)
+{
+  librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL, (librbd::callback_t) simple_write_cb_pp);
+  struct blkin_trace_info trace_info;
+  image.aio_discard_traced(off, len, comp, &trace_info);
   comp->wait_for_complete();
   int r = comp->get_return_value();
   ASSERT_EQ(0, r);
