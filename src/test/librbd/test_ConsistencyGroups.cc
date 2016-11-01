@@ -51,14 +51,14 @@ TEST_F(TestLibCG, group_create)
   ASSERT_EQ(0, rbd.group_create(ioctx, "mygroup"));
 
   vector<string> groups;
-  ASSERT_EQ(0, rbd.group_list(ioctx, groups));
+  ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
   ASSERT_EQ(1U, groups.size());
   ASSERT_EQ("mygroup", groups[0]);
 
   ASSERT_EQ(0, rbd.group_remove(ioctx, "mygroup"));
 
   groups.clear();
-  ASSERT_EQ(0, rbd.group_list(ioctx, groups));
+  ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
   ASSERT_EQ(0U, groups.size());
 }
 
@@ -78,7 +78,7 @@ TEST_F(TestLibCG, add_image)
   ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx, image_name));
 
   vector<librbd::group_image_status_t> images;
-  ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, images));
+  ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, &images));
   ASSERT_EQ(1U, images.size());
   ASSERT_EQ("myimage", images[0].name);
   ASSERT_EQ(ioctx.get_id(), images[0].pool);
@@ -86,6 +86,6 @@ TEST_F(TestLibCG, add_image)
   ASSERT_EQ(0, rbd.group_image_remove(ioctx, group_name, ioctx, image_name));
 
   images.clear();
-  ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, images));
+  ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, &images));
   ASSERT_EQ(0U, images.size());
 }
