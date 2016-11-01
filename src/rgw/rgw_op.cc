@@ -84,6 +84,8 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
   string s(range);
   string ofs_str;
   string end_str;
+  char *eop;
+  int il;
 
   *partial_content = false;
 
@@ -110,23 +112,47 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
     goto done;
 
   *partial_content = true;
+  end = -2;
 
+  if (pos == 0 && s.length() == 1)
+    goto done;
   ofs_str = s.substr(0, pos);
   end_str = s.substr(pos + 1);
+  for (il = ofs_str.length(); il > 0; --il)
+    if (!isspace(ofs_str[il-1])) break;
+  if (il < ofs_str.length())
+    ofs_str.erase(il);
+  for (il = end_str.length(); il > 0; --il)
+    if (!isspace(end_str[il-1])) break;
+  if (il < end_str.length())
+    end_str.erase(il);
+
   if (end_str.length()) {
-    end = atoll(end_str.c_str());
-    if (end < 0)
+    end = strtoll(end_str.c_str(), &eop, 10);
+    if (end < 0 || eop - end_str.c_str() != end_str.length())
       goto done;
   }
 
   if (ofs_str.length()) {
-    ofs = atoll(ofs_str.c_str());
+    ofs = strtoll(ofs_str.c_str(), &eop, 10);
+    if (eop - ofs_str.c_str() != ofs_str.length())
+	goto done;
+    ++end;
   } else { // RFC2616 suffix-byte-range-spec
     ofs = -end;
     end = -1;
+    if (!ofs) {
+/* this is case "-0".  We *should* probably return 416
+ * but that will fail teuthology.  See
+ *  https://bugs.launchpad.net/swift/+bug/1047658
+ * so for now, do "nothing" = pretend no range was specified.
+ * That's also allowable by the RFC...
+ */
+       *partial_content = false;
+    }
   }
 
-  if (end >= 0 && end < ofs)
+  if (end > 0 && end <= ofs)
     goto done;
 
   r = 0;
@@ -830,7 +856,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   }
 
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
-  while (cur_ofs <= cur_end) {
+  while (cur_ofs < cur_end) {
     bufferlist bl;
     op_ret = read_op.read(cur_ofs, cur_end, bl);
     if (op_ret < 0)
@@ -911,8 +937,8 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                         ent.etag.length());
       }
 
-      if (!found_end && obj_ofs > (uint64_t)end) {
-	end_ofs = end - cur_total_len + 1;
+      if (!found_end && obj_ofs >= (uint64_t)end) {
+	end_ofs = end - cur_total_len;
 	found_end = true;
       }
 
@@ -1004,8 +1030,8 @@ static int iterate_slo_parts(CephContext *cct,
 
     obj_ofs += ent.size;
 
-    if (!found_end && obj_ofs > (uint64_t)end) {
-      end_ofs = end - cur_total_len + 1;
+    if (!found_end && obj_ofs >= (uint64_t)end) {
+      end_ofs = end - cur_total_len;
       found_end = true;
     }
 
@@ -1236,10 +1262,10 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   }
 
   if (end < 0 || end >= static_cast<off_t>(total_len)) {
-    end = total_len - 1;
+    end = total_len;
   }
 
-  total_len = end - ofs + 1;
+  total_len = end - ofs;
 
   int r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
         get_obj_user_manifest_iterate_cb, (void *)this);
@@ -1361,13 +1387,6 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare(&new_ofs, &new_end);
   if (op_ret < 0)
     goto done_err;
-
-  // for range requests with obj size 0
-  if (range_str && !(s->obj_size)) {
-    total_len = 0;
-    op_ret = -ERANGE;
-    goto done_err;
-  }
 
   /* start gettorrent */
   if (torrent.get_flag())

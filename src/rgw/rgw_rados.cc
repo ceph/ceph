@@ -7235,7 +7235,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
     return ret;
   }
 
-  ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb());
+  ret = read_op.iterate(0, astate->size, out_stream_req->get_out_cb());
   if (ret < 0)
     return ret;
 
@@ -7495,7 +7495,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.olh_epoch = olh_epoch;
   write_op.meta.delete_at = delete_at;
 
-  ret = write_op.write_meta(end + 1, attrs);
+  ret = write_op.write_meta(end, attrs);
   if (ret < 0) {
     goto done_ret;
   }
@@ -7583,7 +7583,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     } while (again);
 
     ofs += read_len;
-  } while (ofs <= end);
+  } while (ofs < end);
 
   string etag;
   map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
@@ -9092,9 +9092,9 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     ofs += astate->size;
     if (ofs < 0)
       ofs = 0;
-    end = astate->size - 1;
+    end = astate->size;
   } else if (end < 0) {
-    end = astate->size - 1;
+    end = astate->size;
   }
 
   if (astate->size > 0) {
@@ -9102,7 +9102,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
       return -ERANGE;
     }
     if (end >= (off_t)astate->size) {
-      end = astate->size - 1;
+      end = astate->size;
     }
   }
 
@@ -9111,7 +9111,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   if (pend)
     *pend = end;
   if (params.read_size)
-    *params.read_size = (ofs <= end ? end + 1 - ofs : 0);
+    *params.read_size = (ofs < end ? end - ofs : 0);
   if (params.obj_size)
     *params.obj_size = astate->size;
   if (params.lastmod)
@@ -9318,7 +9318,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   if (end < 0)
     len = 0;
   else
-    len = end - ofs + 1;
+    len = end - ofs;
 
   if (astate->has_manifest && astate->manifest.has_tail()) {
     /* now get the relevant object part */
@@ -9887,7 +9887,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx, rgw_obj& obj,
   if (end < 0)
     len = 0;
   else
-    len = end - ofs + 1;
+    len = end - ofs;
 
   if (astate->has_manifest) {
     /* now get the relevant object stripe */
@@ -9895,11 +9895,11 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx, rgw_obj& obj,
 
     RGWObjManifest::obj_iterator obj_end = astate->manifest.obj_end();
 
-    for (; iter != obj_end && ofs <= end; ++iter) {
+    for (; iter != obj_end && ofs < end; ++iter) {
       off_t stripe_ofs = iter.get_stripe_ofs();
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
-      while (ofs < next_stripe_ofs && ofs <= end) {
+      while (ofs < next_stripe_ofs && ofs < end) {
         read_obj = iter.get_location();
         uint64_t read_len = min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
@@ -9919,7 +9919,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx, rgw_obj& obj,
       }
     }
   } else {
-    while (ofs <= end) {
+    while (ofs < end) {
       uint64_t read_len = min(len, max_chunk_size);
 
       r = iterate_obj_cb(obj, ofs, ofs, read_len, reading_from_head, astate, arg);
