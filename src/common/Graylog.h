@@ -21,7 +21,7 @@ namespace ceph {
 
 class Formatter;
 
-namespace log {
+namespace logging {
 
 struct Entry;
 class SubsystemMap;

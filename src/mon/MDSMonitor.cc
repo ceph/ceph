@@ -1911,6 +1911,15 @@ public:
           fs->mds_map.set_inline_data_enabled(false);
         });
       }
+    } else if (var == "balancer") {
+      ss << "setting the metadata load balancer to " << val;
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [val](std::shared_ptr<Filesystem> fs)
+        {
+          fs->mds_map.set_balancer(val);
+        });
+      return true;
     } else if (var == "max_file_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";

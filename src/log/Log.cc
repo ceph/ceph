@@ -34,7 +34,7 @@
 
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 static OnExitManager exit_callbacks;
 
@@ -476,5 +476,5 @@ void Log::inject_segv()
   m_inject_segv = true;
 }
 
-} // ceph::log::
+} // ceph::logging::
 } // ceph::

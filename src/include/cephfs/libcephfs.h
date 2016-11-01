@@ -656,6 +656,17 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
 int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
 
 /**
+ * Set a file's attributes.
+ * 
+ * @param cmount the ceph mount handle to use for performing the setattr.
+ * @param fd the fd of the open file/directory to set the attributes of.
+ * @param attr the stat struct that must include attribute values to set on the file.
+ * @param mask a mask of all the stat values that have been set on the stat struct.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_fsetattr(struct ceph_mount_info *cmount, int fd, struct stat *attr, int mask);
+
+/**
  * Set a file's attributes (extended version).
  *
  * @param cmount the ceph mount handle to use for performing the setattr.

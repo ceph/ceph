@@ -1874,7 +1874,7 @@ void CInode::start_scatter(ScatterLock *lock)
 }
 
 
-class C_Inode_FragUpdate : public MDSInternalContextBase {
+class C_Inode_FragUpdate : public MDSLogContextBase {
 protected:
   CInode *in;
   CDir *dir;
@@ -3845,15 +3845,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
 					      &equivalent, &divergent);
 
-      if (equivalent) {
-        results->backtrace.passed = true;
+      if (divergent || memory_newer < 0) {
+	// we're divergent, or on-disk version is newer
+	results->backtrace.error_str << "On-disk backtrace is divergent or newer";
       } else {
-        if (divergent || memory_newer <= 0) {
-          // we're divergent, or don't have a newer version to write
-          results->backtrace.error_str <<
-              "On-disk backtrace is divergent or newer";
-	  goto next;
-        }
+        results->backtrace.passed = true;
       }
 next:
 

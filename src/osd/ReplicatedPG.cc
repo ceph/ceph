@@ -379,11 +379,13 @@ void ReplicatedPG::on_local_recover(
     publish_stats_to_osd();
     assert(missing_loc.needs_recovery(hoid));
     missing_loc.add_location(hoid, pg_whoami);
-    if (!is_unreadable_object(hoid) &&
-        waiting_for_unreadable_object.count(hoid)) {
-      dout(20) << " kicking unreadable waiters on " << hoid << dendl;
-      requeue_ops(waiting_for_unreadable_object[hoid]);
-      waiting_for_unreadable_object.erase(hoid);
+    if (!is_unreadable_object(hoid)) {
+      auto unreadable_object_entry = waiting_for_unreadable_object.find(hoid);
+      if (unreadable_object_entry != waiting_for_unreadable_object.end()) {
+	dout(20) << " kicking unreadable waiters on " << hoid << dendl;
+	requeue_ops(unreadable_object_entry->second);
+	waiting_for_unreadable_object.erase(unreadable_object_entry);
+      }
     }
     if (pg_log.get_missing().get_items().size() == 0) {
       requeue_ops(waiting_for_all_missing);
@@ -425,20 +427,21 @@ void ReplicatedPG::on_global_recover(
   i->second->drop_recovery_read(&requeue_list);
   requeue_ops(requeue_list);
 
-  if (backfills_in_flight.count(soid))
-    backfills_in_flight.erase(soid);
+  backfills_in_flight.erase(soid);
 
   recovering.erase(i);
   finish_recovery_op(soid);
-  if (waiting_for_degraded_object.count(soid)) {
+  auto degraded_object_entry = waiting_for_degraded_object.find(soid);
+  if (degraded_object_entry != waiting_for_degraded_object.end()) {
     dout(20) << " kicking degraded waiters on " << soid << dendl;
-    requeue_ops(waiting_for_degraded_object[soid]);
-    waiting_for_degraded_object.erase(soid);
+    requeue_ops(degraded_object_entry->second);
+    waiting_for_degraded_object.erase(degraded_object_entry);
   }
-  if (waiting_for_unreadable_object.count(soid)) {
+  auto unreadable_object_entry = waiting_for_unreadable_object.find(soid);
+  if (unreadable_object_entry != waiting_for_unreadable_object.end()) {
     dout(20) << " kicking unreadable waiters on " << soid << dendl;
-    requeue_ops(waiting_for_unreadable_object[soid]);
-    waiting_for_unreadable_object.erase(soid);
+    requeue_ops(unreadable_object_entry->second);
+    waiting_for_unreadable_object.erase(unreadable_object_entry);
   }
   finish_degraded_object(soid);
 }
@@ -8836,7 +8839,7 @@ void ReplicatedPG::submit_log_entries(
   boost::optional<std::function<void(void)> > &&on_complete,
   OpRequestRef op)
 {
-  dout(10) << __func__ << entries << dendl;
+  dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
   ObjectStore::Transaction t;
@@ -9830,13 +9833,13 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
   }
 }
 
-
-void ReplicatedPG::failed_push(pg_shard_t from, const hobject_t &soid)
+void ReplicatedPG::failed_push(const list<pg_shard_t> &from, const hobject_t &soid)
 {
   assert(recovering.count(soid));
   recovering.erase(soid);
-  missing_loc.remove_location(soid, from);
-  dout(0) << "_failed_push " << soid << " from shard " << from
+  for (auto&& i : from)
+    missing_loc.remove_location(soid, i);
+  dout(0) << __func__ << " " << soid << " from shard " << from
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
   finish_recovery_op(soid);  // close out this attempt,
@@ -10047,6 +10050,7 @@ void ReplicatedPG::mark_all_unfound_lost(
       [=]() {
 	requeue_ops(waiting_for_all_missing);
 	waiting_for_all_missing.clear();
+	requeue_object_waiters(waiting_for_unreadable_object);
 	queue_recovery();
 
 	stringstream ss;
@@ -10432,7 +10436,7 @@ void ReplicatedPG::_clear_recovery_state()
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
 {
-  dout(20) << __func__ << ": soid" << dendl;
+  dout(20) << __func__ << ": " << soid << dendl;
   assert(recovering.count(soid));
   ObjectContextRef obc = recovering[soid];
   if (obc) {
@@ -12780,11 +12784,11 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
  *              [Snapset clones 4]
  * EOL                  obj4 snap 4, (expected)
  */
-void ReplicatedPG::_scrub(
+void ReplicatedPG::scrub_snapshot_metadata(
   ScrubMap &scrubmap,
   const map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest)
 {
-  dout(10) << "_scrub" << dendl;
+  dout(10) << __func__ << dendl;
 
   coll_t c(info.pgid);
   bool repair = state_test(PG_STATE_REPAIR);
@@ -12921,7 +12925,8 @@ void ReplicatedPG::_scrub(
       ++scrubber.shallow_errors;
       soid_error.set_headless();
       scrubber.store->add_snap_error(pool.id, soid_error);
-      head_error.set_clone(soid.snap);
+      if (head && soid.get_head() == head->get_head())
+	head_error.set_clone(soid.snap);
       continue;
     }
 
@@ -12962,7 +12967,6 @@ void ReplicatedPG::_scrub(
 		<< " can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
 	  head_error.set_ss_attr_corrupted();
-	  head_error.set_ss_attr_missing(); // Not available too
         }
       }
 
@@ -13103,7 +13107,7 @@ void ReplicatedPG::_scrub(
     ++scrubber.num_digest_updates_pending;
   }
 
-  dout(10) << "_scrub (" << mode << ") finish" << dendl;
+  dout(10) << __func__ << " (" << mode << ") finish" << dendl;
 }
 
 void ReplicatedPG::_scrub_clear_state()

@@ -15,7 +15,7 @@
 #include "include/uuid.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 Graylog::Graylog(const SubsystemMap * const s, std::string logger)
     : m_subs(s),
@@ -167,5 +167,5 @@ void Graylog::log_log_entry(LogEntry const * const e)
   }
 }
 
-} // ceph::log::
+} // ceph::logging::
 } // ceph::

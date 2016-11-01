@@ -35,6 +35,7 @@ TYPE(SloppyCRCMap)
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE_FEATUREFUL(entity_addr_t)
+TYPE_FEATUREFUL(entity_addrvec_t)
 TYPE_FEATUREFUL(entity_inst_t)
 
 #include "osd/OSDMap.h"

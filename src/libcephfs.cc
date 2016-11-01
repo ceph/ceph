@@ -641,6 +641,14 @@ extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
   return cmount->get_client()->setattr(relpath, attr, mask, cmount->default_perms);
 }
 
+extern "C" int ceph_fsetattr(struct ceph_mount_info *cmount, int fd,
+	            struct stat *attr, int mask)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fsetattr(fd, attr, mask, cmount->default_perms);
+}
+
 extern "C" int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath,
 			    struct ceph_statx *stx, int mask, int flags)
 {
