@@ -2304,6 +2304,7 @@ TEST(LibRadosAio, AioUnlock) {
 
 TEST(LibRadosAio, AioUnlockPP) {
   AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
   ASSERT_EQ(0, test_data.m_ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
   boost::scoped_ptr<AioCompletion> my_completion
     (test_data.m_cluster.aio_create_completion
