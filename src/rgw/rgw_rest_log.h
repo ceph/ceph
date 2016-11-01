@@ -321,10 +321,11 @@ public:
 
 class RGWRESTMgr_Log : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Log() {}
-  virtual ~RGWRESTMgr_Log() {}
+  RGWRESTMgr_Log() = default;
+  virtual ~RGWRESTMgr_Log() = default;
 
-  virtual RGWHandler_REST* get_handler(struct req_state *s){
+  RGWHandler_REST* get_handler(struct req_state* const,
+                               const std::string& frontend_prefixs) override {
     return new RGWHandler_Log;
   }
 };

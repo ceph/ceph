@@ -275,7 +275,7 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
     request_payload_hash = "UNSIGNED-PAYLOAD";
   } else {
     if (s->aws4_auth_needs_complete) {
-      request_payload_hash = STREAM_IO(s)->grab_aws4_sha256_hash();
+      request_payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
     } else {
       if (s->aws4_auth_streaming_mode) {
         request_payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";

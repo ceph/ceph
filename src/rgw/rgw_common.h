@@ -27,6 +27,7 @@
 #include <string.h>
 #include <string>
 #include <map>
+#include <boost/utility/string_ref.hpp>
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
@@ -346,18 +347,32 @@ class RGWHTTPArgs
   }
 };
 
-class RGWConf;
+class RGWEnv;
+
+class RGWConf {
+  friend class RGWEnv;
+protected:
+  void init(CephContext *cct, RGWEnv* env);
+public:
+  RGWConf()
+    : enable_ops_log(1),
+      enable_usage_log(1),
+      defer_to_bucket_acls(0) {
+  }
+
+  int enable_ops_log;
+  int enable_usage_log;
+  uint8_t defer_to_bucket_acls;
+};
 
 class RGWEnv {
   std::map<string, string, ltstr_nocase> env_map;
 public:
-  RGWConf *conf; 
+  RGWConf conf;
 
-  RGWEnv();
-  ~RGWEnv();
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
-  void set(const char *name, const char *val);
+  void set(const boost::string_ref& name, const boost::string_ref& val);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
@@ -368,19 +383,6 @@ public:
   void remove(const char *name);
 
   std::map<string, string, ltstr_nocase>& get_map() { return env_map; }
-};
-
-class RGWConf {
-  friend class RGWEnv;
-protected:
-  void init(CephContext *cct, RGWEnv * env);
-public:
-  RGWConf() :
-    enable_ops_log(1), enable_usage_log(1), defer_to_bucket_acls(0) {}
-
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
 };
 
 enum http_op {
@@ -1129,7 +1131,11 @@ struct req_state;
 
 class RGWEnv;
 
-class RGWClientIO;
+namespace rgw {
+namespace io {
+class BasicClient;
+}
+}
 
 struct req_info {
   RGWEnv *env;
@@ -1263,7 +1269,7 @@ class RGWRequest;
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
-  RGWClientIO *cio;
+  rgw::io::BasicClient *cio;
   RGWRequest *req; /// XXX: re-remove??
   http_op op;
   RGWOpType op_type;

@@ -3,143 +3,112 @@
 
 #include <string.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/utility/string_ref.hpp>
+
 #include "civetweb/civetweb.h"
 #include "rgw_civetweb.h"
 
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWMongoose::write_data(const char *buf, int len)
+size_t RGWCivetWeb::write_data(const char *buf, const size_t len)
 {
-  if (!header_done) {
-    header_data.append(buf, len);
-    return len;
-  }
-  if (!sent_header) {
-    data.append(buf, len);
-    return len;
-  }
-  int r = mg_write(conn, buf, len);
-  if (r == 0) {
-    /* didn't send anything, error out */
-    return -EIO;
-  }
-  return r;
-}
-
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
-  : conn(_conn), port(_port), status_num(0), header_done(false),
-    sent_header(false), has_content_length(false),
-    explicit_keepalive(false), explicit_conn_close(false)
-{
-}
-
-int RGWMongoose::read_data(char *buf, int len)
-{
-  return mg_read(conn, buf, len);
-}
-
-void RGWMongoose::flush()
-{
-}
-
-int RGWMongoose::complete_request()
-{
-  if (!sent_header) {
-    if (!has_content_length) {
-
-      header_done = false; /* let's go back to writing the header */
-
-      /*
-       * Status 204 should not include a content-length header
-       * RFC7230 says so
-       *
-       * Same goes for status 304: Not Modified
-       *
-       * 'If a cache uses a received 304 response to update a cache entry,'
-       * 'the cache MUST update the entry to reflect any new field values'
-       * 'given in the response.'
-       *
-       */
-      if (status_num == 204 || status_num == 304) {
-        has_content_length = true;
-      } else if (0 && data.length() == 0) {
-        has_content_length = true;
-        print("Transfer-Enconding: %s\r\n", "chunked");
-        data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
-      } else {
-	int r = send_content_length(data.length());
-	if (r < 0)
-	  return r;
-      }
+  auto to_sent = len;
+  while (to_sent) {
+    const int ret = mg_write(conn, buf, len);
+    if (ret < 0 || ! ret) {
+      /* According to the documentation of mg_write() it always returns -1 on
+       * error. The details aren't available, so we will just throw EIO. Same
+       * goes to 0 that is associated with writing to a closed connection. */
+      throw rgw::io::Exception(EIO, std::system_category());
+    } else {
+      to_sent -= static_cast<size_t>(ret);
     }
-
-    complete_header();
   }
+  return len;
+}
 
-  if (data.length()) {
-    int r = write_data(data.c_str(), data.length());
-    if (r < 0)
-      return r;
-    data.clear();
+RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
+  : conn(conn),
+    port(port),
+    explicit_keepalive(false),
+    explicit_conn_close(false),
+    txbuf(*this)
+{
+}
+
+size_t RGWCivetWeb::read_data(char *buf, size_t len)
+{
+  const int ret = mg_read(conn, buf, len);
+  if (ret < 0) {
+    throw rgw::io::Exception(EIO, std::system_category());
   }
+  return ret;
+}
 
+void RGWCivetWeb::flush()
+{
+  txbuf.pubsync();
+}
+
+size_t RGWCivetWeb::complete_request()
+{
   return 0;
 }
 
-void RGWMongoose::init_env(CephContext *cct)
+void RGWCivetWeb::init_env(CephContext *cct)
 {
   env.init(cct);
-  struct mg_request_info *info = mg_get_request_info(conn);
+  struct mg_request_info* const info = mg_get_request_info(conn);
 
-  if (!info)
+  if (! info) {
     return;
+  }
 
   for (int i = 0; i < info->num_headers; i++) {
-    struct mg_request_info::mg_header *header = &info->http_headers[i];
+    struct mg_request_info::mg_header* const header = &info->http_headers[i];
+    const boost::string_ref name(header->name);
+    const auto& value = header->value;
 
-    if (strcasecmp(header->name, "content-length") == 0) {
-      env.set("CONTENT_LENGTH", header->value);
+    if (boost::algorithm::iequals(name, "content-length")) {
+      env.set("CONTENT_LENGTH", value);
       continue;
     }
-
-    if (strcasecmp(header->name, "content-type") == 0) {
-      env.set("CONTENT_TYPE", header->value);
+    if (boost::algorithm::iequals(name, "content-type")) {
+      env.set("CONTENT_TYPE", value);
       continue;
     }
-
-    if (strcasecmp(header->name, "connection") == 0) {
-      explicit_keepalive = (strcasecmp(header->value, "keep-alive") == 0);
-      explicit_conn_close = (strcasecmp(header->value, "close") == 0);
+    if (boost::algorithm::iequals(name, "connection")) {
+      explicit_keepalive = boost::algorithm::iequals(value, "keep-alive");
+      explicit_conn_close = boost::algorithm::iequals(value, "close");
     }
 
-    int len = strlen(header->name) + 5; /* HTTP_ prepended */
-    char buf[len + 1];
-    memcpy(buf, "HTTP_", 5);
-    const char *src = header->name;
-    char *dest = &buf[5];
-    for (; *src; src++, dest++) {
-      char c = *src;
-      switch (c) {
-       case '-':
-	 c = '_';
-	 break;
-      default:
-	c = toupper(c);
-	break;
+    static const boost::string_ref HTTP_{"HTTP_"};
+
+    char buf[name.size() + HTTP_.size() + 1];
+    auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
+    for (auto src = name.begin(); src != name.end(); ++src, ++dest) {
+      if (*src == '-') {
+        *dest = '_';
+      } else {
+        *dest = std::toupper(*src);
       }
-      *dest = c;
     }
     *dest = '\0';
 
-    env.set(buf, header->value);
+    env.set(buf, value);
   }
 
   env.set("REQUEST_METHOD", info->request_method);
   env.set("REQUEST_URI", info->uri);
-  env.set("QUERY_STRING", info->query_string);
-  env.set("REMOTE_USER", info->remote_user);
   env.set("SCRIPT_URI", info->uri); /* FIXME */
+  if (info->query_string) {
+    env.set("QUERY_STRING", info->query_string);
+  }
+  if (info->remote_user) {
+    env.set("REMOTE_USER", info->remote_user);
+  }
 
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", port);
@@ -153,74 +122,89 @@ void RGWMongoose::init_env(CephContext *cct)
   }
 }
 
-int RGWMongoose::send_status(int status, const char *status_name)
+size_t RGWCivetWeb::send_status(int status, const char *status_name)
 {
-  char buf[128];
+  mg_set_http_status(conn, status);
 
-  if (!status_name)
-    status_name = "";
+  static constexpr size_t STATUS_BUF_SIZE = 128;
 
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %d %s\r\n", status, status_name);
+  char statusbuf[STATUS_BUF_SIZE];
+  const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
+                                  "HTTP/1.1 %d %s\r\n", status, status_name);
 
-  bufferlist bl;
-  bl.append(buf);
-  bl.append(header_data);
-  header_data = bl;
-
-  status_num = status;
-  mg_set_http_status(conn, status_num);
-
-  return 0;
+  return txbuf.sputn(statusbuf, statuslen);
 }
 
-int RGWMongoose::send_100_continue()
+size_t RGWCivetWeb::send_100_continue()
 {
-  char buf[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
-
-  return mg_write(conn, buf, sizeof(buf) - 1);
+  const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
+  const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
+                                  sizeof(HTTTP_100_CONTINUE) - 1);
+  flush();
+  return sent;
 }
 
-static void dump_date_header(bufferlist &out)
+size_t RGWCivetWeb::send_header(const boost::string_ref& name,
+                                const boost::string_ref& value)
+{
+  static constexpr char HEADER_SEP[] = ": ";
+  static constexpr char HEADER_END[] = "\r\n";
+
+  size_t sent = 0;
+
+  sent += txbuf.sputn(name.data(), name.length());
+  sent += txbuf.sputn(HEADER_SEP, sizeof(HEADER_SEP) - 1);
+  sent += txbuf.sputn(value.data(), value.length());
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  return sent;
+}
+
+size_t RGWCivetWeb::dump_date_header()
 {
   char timestr[TIME_BUF_SIZE];
-  const time_t gtime = time(NULL);
+
+  const time_t gtime = time(nullptr);
   struct tm result;
-  struct tm const * const tmp = gmtime_r(&gtime, &result);
+  struct tm const* const tmp = gmtime_r(&gtime, &result);
 
-  if (tmp == NULL)
-    return;
-
-  if (strftime(timestr, sizeof(timestr),
-	       "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
-    out.append(timestr);
-}
-
-int RGWMongoose::complete_header()
-{
-  header_done = true;
-
-  if (!has_content_length) {
+  if (nullptr == tmp) {
     return 0;
   }
 
-  dump_date_header(header_data);
+  if (! strftime(timestr, sizeof(timestr),
+                 "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp)) {
+    return 0;
+  }
 
-  if (explicit_keepalive)
-    header_data.append("Connection: Keep-Alive\r\n");
-  else if (explicit_conn_close)
-    header_data.append("Connection: close\r\n");
-
-  header_data.append("\r\n");
-
-  sent_header = true;
-
-  return write_data(header_data.c_str(), header_data.length());
+  return txbuf.sputn(timestr, strlen(timestr));
 }
 
-int RGWMongoose::send_content_length(uint64_t len)
+size_t RGWCivetWeb::complete_header()
 {
-  has_content_length = true;
-  char buf[21];
-  snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\r\n", buf);
+  size_t sent = dump_date_header();
+
+  if (explicit_keepalive) {
+    constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
+    sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+  } else if (explicit_conn_close) {
+    constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
+    sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
+  }
+
+  static constexpr char HEADER_END[] = "\r\n";
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  flush();
+  return sent;
+}
+
+size_t RGWCivetWeb::send_content_length(uint64_t len)
+{
+  static constexpr size_t CONLEN_BUF_SIZE = 128;
+
+  char sizebuf[CONLEN_BUF_SIZE];
+  const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
+                                "Content-Length: %" PRIu64 "\r\n", len);
+  return txbuf.sputn(sizebuf, sizelen);
 }

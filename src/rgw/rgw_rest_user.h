@@ -25,10 +25,11 @@ public:
 
 class RGWRESTMgr_User : public RGWRESTMgr {
 public:
-  RGWRESTMgr_User() {}
-  virtual ~RGWRESTMgr_User() {}
+  RGWRESTMgr_User() = default;
+  virtual ~RGWRESTMgr_User() = default;
 
-  RGWHandler_REST *get_handler(struct req_state *s) {
+  RGWHandler_REST *get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_User;
   }
 };

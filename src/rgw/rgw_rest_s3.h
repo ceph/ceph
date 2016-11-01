@@ -470,7 +470,9 @@ public:
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& bucket);
 
-  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
+  virtual int init(RGWRados *store,
+                   struct req_state *s,
+                   rgw::io::BasicClient *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
@@ -485,7 +487,9 @@ public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
 
-  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
+  virtual int init(RGWRados *store,
+                   struct req_state *s,
+                   rgw::io::BasicClient *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
@@ -562,13 +566,14 @@ class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
 public:
-  explicit RGWRESTMgr_S3(bool _enable_s3website = false)
-    : enable_s3website(_enable_s3website)
-    {}
+  explicit RGWRESTMgr_S3(bool enable_s3website = false)
+    : enable_s3website(enable_s3website) {
+  }
 
-  virtual ~RGWRESTMgr_S3() {}
+  virtual ~RGWRESTMgr_S3() = default;
 
-  virtual RGWHandler_REST *get_handler(struct req_state *s);
+  RGWHandler_REST *get_handler(struct req_state* s,
+                               const std::string& frontend_prefix) override;
 };
 
 class RGWHandler_REST_Obj_S3Website;

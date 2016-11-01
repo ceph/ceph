@@ -126,6 +126,9 @@
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 
+/* define if radosgw's asio frontend enabled */
+#cmakedefine WITH_RADOSGW_ASIO_FRONTEND
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

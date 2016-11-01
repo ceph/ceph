@@ -5300,7 +5300,9 @@ RGWHandler::~RGWHandler()
 {
 }
 
-int RGWHandler::init(RGWRados *_store, struct req_state *_s, RGWClientIO *cio)
+int RGWHandler::init(RGWRados *_store,
+                     struct req_state *_s,
+                     rgw::io::BasicClient *cio)
 {
   store = _store;
   s = _s;

@@ -6993,7 +6993,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               string *petag,
+               ceph::buffer::list *petag,
                struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
@@ -7127,10 +7127,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (petag) {
-    map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
+    const auto iter = src_attrs.find(RGW_ATTR_ETAG);
     if (iter != src_attrs.end()) {
-      bufferlist& etagbl = iter->second;
-      *petag = string(etagbl.c_str(), etagbl.length());
+      *petag = iter->second;
     }
   }
 
@@ -7286,7 +7285,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               string *petag,
+               ceph::buffer::list *petag,
                struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
@@ -7391,10 +7390,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (petag) {
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+    const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
-      bufferlist& etagbl = iter->second;
-      *petag = string(etagbl.c_str(), etagbl.length());
+      *petag = iter->second;
     }
   }
 
@@ -7540,7 +7538,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               string *petag,
+               ceph::buffer::list *petag,
                struct rgw_err *err)
 {
   bufferlist first_chunk;
@@ -7586,12 +7584,12 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   } while (ofs <= end);
 
   string etag;
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+  auto iter = attrs.find(RGW_ATTR_ETAG);
   if (iter != attrs.end()) {
     bufferlist& bl = iter->second;
     etag = string(bl.c_str(), bl.length());
     if (petag) {
-      *petag = etag;
+      *petag = bl;
     }
   }
 

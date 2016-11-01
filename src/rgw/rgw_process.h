@@ -29,6 +29,7 @@ struct RGWProcessEnv {
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
+  std::string uri_prefix;
 };
 
 class RGWFrontendConfig;
@@ -44,6 +45,7 @@ protected:
   RGWREST* rest;
   RGWFrontendConfig* conf;
   int sock_fd;
+  std::string uri_prefix;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
@@ -95,16 +97,24 @@ protected:
   } req_wq;
 
 public:
-  RGWProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-	    RGWFrontendConfig* _conf)
-    : cct(cct), store(pe->store), olog(pe->olog),
+  RGWProcess(CephContext* const cct,
+             RGWProcessEnv* const pe,
+             const int num_threads,
+             RGWFrontendConfig* const conf)
+    : cct(cct),
+      store(pe->store),
+      olog(pe->olog),
       m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
-      rest(pe->rest), conf(_conf), sock_fd(-1),
+      rest(pe->rest),
+      conf(conf),
+      sock_fd(-1),
+      uri_prefix(pe->uri_prefix),
       req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {}
+	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
+  }
   
-  virtual ~RGWProcess() {}
+  virtual ~RGWProcess() = default;
 
   virtual void run() = 0;
   virtual void handle_request(RGWRequest *req) = 0;
@@ -127,16 +137,18 @@ public:
 }; /* RGWProcess */
 
 class RGWFCGXProcess : public RGWProcess {
-	int max_connections;
+  int max_connections;
 public:
 
   /* have a bit more connections than threads so that requests are
    * still accepted even if we're still processing older requests */
-  RGWFCGXProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-		 RGWFrontendConfig* _conf)
-    : RGWProcess(cct, pe, num_threads, _conf),
-      max_connections(num_threads + (num_threads >> 3))
-    {}
+  RGWFCGXProcess(CephContext* const cct,
+                 RGWProcessEnv* const pe,
+                 const int num_threads,
+                 RGWFrontendConfig* const conf)
+    : RGWProcess(cct, pe, num_threads, conf),
+      max_connections(num_threads + (num_threads >> 3)) {
+  }
 
   void run();
   void handle_request(RGWRequest* req);
@@ -172,7 +184,8 @@ public:
 extern int process_request(RGWRados* store,
                            RGWREST* rest,
                            RGWRequest* req,
-		           RGWStreamIO* client_io,
+                           const std::string& frontend_prefix,
+                           RGWRestfulIO* client_io,
                            OpsLogSocket* olog);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
