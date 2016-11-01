@@ -6020,11 +6020,13 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "nid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, p);
+      uint64_t v;
+      ::decode(v, p);
+      nid_max = v;
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
-    nid_last = nid_max;
+    nid_last = nid_max.load();
   }
 
   // blobid
@@ -6034,11 +6036,13 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "blobid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(blobid_max, p);
+      uint64_t v;
+      ::decode(v, p);
+      blobid_max = v;
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old blobid_max " << blobid_max << dendl;
-    blobid_last = blobid_max;
+    blobid_last = blobid_max.load();
   }
 
   // freelist
@@ -6162,21 +6166,40 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
-      if (!g_conf->bluestore_sync_transaction) {
-	if (g_conf->bluestore_sync_submit_transaction) {
+      if (g_conf->bluestore_sync_submit_transaction &&
+	  fm->supports_parallel_transactions()) {
+	if (txc->last_nid >= nid_max ||
+	    txc->last_blobid >= blobid_max) {
+	  dout(20) << __func__
+		   << " last_{nid,blobid} exceeds max, submit via kv thread"
+		   << dendl;
+	} else if (txc->osr->kv_committing_serially) {
+	  dout(20) << __func__ << " prior txc submitted via kv thread, us too"
+		   << dendl;
+	  // note: this is starvation-prone.  once we have a txc in a busy
+	  // sequencer that is committing serially it is possible to keep
+	  // submitting new transactions fast enough that we get stuck doing
+	  // so.  the alternative is to block here... fixme?
+	} else if (g_conf->bluestore_debug_randomize_serial_transaction &&
+		   rand() % g_conf->bluestore_debug_randomize_serial_transaction
+		   == 0) {
+	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
+		   << dendl;
+	} else {
 	  _txc_finalize_kv(txc, txc->t);
+	  txc->kv_submitted = true;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
-      } else {
-	_txc_finalize_kv(txc, txc->t);
-	int r = db->submit_transaction_sync(txc->t);
-	assert(r == 0);
       }
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
+	if (!txc->kv_submitted) {
+	  kv_queue_unsubmitted.push_back(txc);
+	  ++txc->osr->kv_committing_serially;
+	}
       }
       return;
     case TransContext::STATE_KV_QUEUED:
@@ -6504,7 +6527,6 @@ void BlueStore::_kv_sync_thread()
   std::unique_lock<std::mutex> l(kv_lock);
   while (true) {
     assert(kv_committing.empty());
-    assert(wal_cleaning.empty());
     if (kv_queue.empty() && wal_cleanup_queue.empty()) {
       if (kv_stop)
 	break;
@@ -6513,14 +6535,19 @@ void BlueStore::_kv_sync_thread()
       kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
+      deque<TransContext*> kv_submitting;
+      deque<TransContext*> wal_cleaning;
       dout(20) << __func__ << " committing " << kv_queue.size()
+	       << " submitting " << kv_queue_unsubmitted.size()
 	       << " cleaning " << wal_cleanup_queue.size() << dendl;
       kv_committing.swap(kv_queue);
+      kv_submitting.swap(kv_queue_unsubmitted);
       wal_cleaning.swap(wal_cleanup_queue);
       utime_t start = ceph_clock_now(NULL);
       l.unlock();
 
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
+      dout(30) << __func__ << " submitting txc " << kv_submitting << dendl;
       dout(30) << __func__ << " wal_cleaning txc " << wal_cleaning << dendl;
 
       alloc->commit_start();
@@ -6528,45 +6555,41 @@ void BlueStore::_kv_sync_thread()
       // flush/barrier on block device
       bdev->flush();
 
-      uint64_t high_nid = 0, high_blobid = 0;
-      if (!g_conf->bluestore_sync_transaction &&
-	  !g_conf->bluestore_sync_submit_transaction) {
-	for (auto txc : kv_committing) {
-	  _txc_finalize_kv(txc, txc->t);
-	  if (txc->last_nid > high_nid) {
-	    high_nid = txc->last_nid;
-	  }
-	  if (txc->last_blobid > high_blobid) {
-	    high_blobid = txc->last_blobid;
-	  }
-          txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	}
-	if (!kv_committing.empty()) {
-	  TransContext *first_txc = kv_committing.front();
-	  std::lock_guard<std::mutex> l(id_lock);
-	  if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
-	    nid_max = high_nid + g_conf->bluestore_nid_prealloc;
-	    bufferlist bl;
-	    ::encode(nid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "nid_max", bl);
-	    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
-	  }
-	  if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
-	    blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
-	    bufferlist bl;
-	    ::encode(blobid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "blobid_max", bl);
-	    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
-	  }
-	}
-	for (auto txc : kv_committing) {
-	  int r = db->submit_transaction(txc->t);
-	  assert(r == 0);
-	}
-      }
+      // we will use one final transaction to force a sync
+      KeyValueDB::Transaction synct = db->get_transaction();
 
-      // one final transaction to force a sync
-      KeyValueDB::Transaction t = db->get_transaction();
+      // increase {nid,blobid}_max?  note that this covers both the
+      // case wehre we are approaching the max and the case we passed
+      // it.  in either case, we increase the max in the earlier txn
+      // we submit.
+      uint64_t new_nid_max = 0, new_blobid_max = 0;
+      if (nid_last + g_conf->bluestore_nid_prealloc/2 > nid_max) {
+	KeyValueDB::Transaction t =
+	  kv_submitting.empty() ? synct : kv_submitting.front()->t;
+	new_nid_max = nid_last + g_conf->bluestore_nid_prealloc;
+	bufferlist bl;
+	::encode(new_nid_max, bl);
+	t->set(PREFIX_SUPER, "nid_max", bl);
+	dout(10) << __func__ << " new_nid_max " << new_nid_max << dendl;
+      }
+      if (blobid_last + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
+	KeyValueDB::Transaction t =
+	  kv_submitting.empty() ? synct : kv_submitting.front()->t;
+	new_blobid_max = blobid_last + g_conf->bluestore_blobid_prealloc;
+	bufferlist bl;
+	::encode(new_blobid_max, bl);
+	t->set(PREFIX_SUPER, "blobid_max", bl);
+	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
+      }
+      for (auto txc : kv_submitting) {
+	assert(!txc->kv_submitted);
+	_txc_finalize_kv(txc, txc->t);
+	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	int r = db->submit_transaction(txc->t);
+	assert(r == 0);
+	--txc->osr->kv_committing_serially;
+	txc->kv_submitted = true;
+      }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
@@ -6580,7 +6603,7 @@ void BlueStore::_kv_sync_thread()
 	  ::encode(bluefs_extents, bl);
 	  dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
 		   << bluefs_extents << std::dec << dendl;
-	  t->set(PREFIX_SUPER, "bluefs_extents", bl);
+	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
 	}
       }
 
@@ -6590,14 +6613,25 @@ void BlueStore::_kv_sync_thread()
 	    ++it) {
 	bluestore_wal_transaction_t& wt =*(*it)->wal_txn;
 	// kv metadata updates
-	_txc_finalize_kv(*it, t);
+	_txc_finalize_kv(*it, synct);
 	// cleanup the wal
 	string key;
 	get_wal_key(wt.seq, &key);
-	t->rm_single_key(PREFIX_WAL, key);
+	synct->rm_single_key(PREFIX_WAL, key);
       }
-      int r = db->submit_transaction_sync(t);
+
+      // submit synct synchronously (block and wait for it to commit)
+      int r = db->submit_transaction_sync(synct);
       assert(r == 0);
+
+      if (new_nid_max) {
+	nid_max = new_nid_max;
+	dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+      }
+      if (new_blobid_max) {
+	blobid_max = new_blobid_max;
+	dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+      }
 
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
@@ -6606,6 +6640,7 @@ void BlueStore::_kv_sync_thread()
 	       << " in " << dur << dendl;
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
+	assert(txc->kv_submitted);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
