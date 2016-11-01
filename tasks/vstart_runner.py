@@ -107,7 +107,8 @@ try:
     from teuthology.exceptions import CommandFailedError
     from tasks.ceph_manager import CephManager
     from tasks.cephfs.fuse_mount import FuseMount
-    from tasks.cephfs.filesystem import Filesystem, MDSCluster
+    from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
+    from mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
 except ImportError:
@@ -289,8 +290,6 @@ class LocalRemote(object):
         return proc
 
 
-# FIXME: twiddling vstart daemons is likely to be unreliable, we should probably just let vstart
-# run RADOS and run the MDS daemons directly from the test runner
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
         self.daemon_type = daemon_type
@@ -565,18 +564,11 @@ class LocalCephManager(CephManager):
         return j
 
 
-class LocalMDSCluster(MDSCluster):
+class LocalCephCluster(CephCluster):
     def __init__(self, ctx):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
-
-        self.mds_ids = ctx.daemons.daemons['mds'].keys()
-        if not self.mds_ids:
-            raise RuntimeError("No MDSs found in ceph.conf!")
-
         self.mon_manager = LocalCephManager()
-        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
-
         self._conf = defaultdict(dict)
 
     def get_config(self, key, service_type=None):
@@ -638,12 +630,34 @@ class LocalMDSCluster(MDSCluster):
         del self._conf[subsys][key]
         self._write_conf()
 
+
+class LocalMDSCluster(LocalCephCluster, MDSCluster):
+    def __init__(self, ctx):
+        super(LocalMDSCluster, self).__init__(ctx)
+
+        self.mds_ids = ctx.daemons.daemons['mds'].keys()
+        if not self.mds_ids:
+            raise RuntimeError("No MDSs found in ceph.conf!")
+
+        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
+
     def clear_firewall(self):
         # FIXME: unimplemented
         pass
 
     def get_filesystem(self, name):
         return LocalFilesystem(self._ctx, name)
+
+
+class LocalMgrCluster(LocalCephCluster, MgrCluster):
+    def __init__(self, ctx):
+        super(LocalMgrCluster, self).__init__(ctx)
+
+        self.mgr_ids = ctx.daemons.daemons['mgr'].keys()
+        if not self.mgr_ids:
+            raise RuntimeError("No manager daemonss found in ceph.conf!")
+
+        self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
@@ -769,7 +783,7 @@ def exec_test():
             # tests that want to look these up via ctx can do so.
             # Inspect ceph.conf to see what roles exist
             for conf_line in open("ceph.conf").readlines():
-                for svc_type in ["mon", "osd", "mds"]:
+                for svc_type in ["mon", "osd", "mds", "mgr"]:
                     if svc_type not in self.daemons.daemons:
                         self.daemons.daemons[svc_type] = {}
                     match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
@@ -806,6 +820,7 @@ def exec_test():
                 os.rmdir(mount.mountpoint)
     filesystem = LocalFilesystem(ctx)
     mds_cluster = LocalMDSCluster(ctx)
+    mgr_cluster = LocalMgrCluster(ctx)
 
     from tasks.cephfs_test_runner import DecoratingLoader
 
@@ -830,7 +845,8 @@ def exec_test():
         "ctx": ctx,
         "mounts": mounts,
         "fs": filesystem,
-        "mds_cluster": mds_cluster
+        "mds_cluster": mds_cluster,
+        "mgr_cluster": mgr_cluster,
     })
 
     # For the benefit of polling tests like test_full -- in teuthology land we set this
