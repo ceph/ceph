@@ -4377,7 +4377,14 @@ int BlueStore::fsck(bool deep)
 	if (l.logical_offset < pos) {
 	  derr << __func__ << " " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset
-	       << "overlaps with the previous, which ends at 0x" << pos
+	       << " overlaps with the previous, which ends at 0x" << pos
+	       << std::dec << dendl;
+	  ++errors;
+	}
+	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
+	  derr << __func__ << " " << oid << " lextent at 0x"
+	       << std::hex << l.logical_offset << "~" << l.length
+	       << " spans a shard boundary"
 	       << std::dec << dendl;
 	  ++errors;
 	}
