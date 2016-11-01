@@ -1676,6 +1676,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 		// switch b to the new right-hand side, in case it
 		// *also* has to get split.
 		bstart += blob_offset;
+		onode->c->store->logger->inc(l_bluestore_blob_split);
 	      } else {
 		must_span = true;
 		break;
@@ -2683,8 +2684,12 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_gc, "bluestore_gc", "Sum for garbage collection reads");
-  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes", "garbage collected bytes");
+  b.add_u64(l_bluestore_gc, "bluestore_gc",
+            "Sum for garbage collection reads");
+  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes",
+            "garbage collected bytes");
+  b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
+            "Sum for blob splitting due to resharding");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
