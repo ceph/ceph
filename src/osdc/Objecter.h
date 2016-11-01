@@ -1779,7 +1779,7 @@ public:
     using lock_guard = std::lock_guard<decltype(lock)>;
     using unique_lock = std::unique_lock<decltype(lock)>;
     using shared_lock = boost::shared_lock<decltype(lock)>;
-    using shunique_lcok = ceph::shunique_lock<decltype(lock)>;
+    using shunique_lock = ceph::shunique_lock<decltype(lock)>;
 
     // pending ops
     map<ceph_tid_t,Op*> ops;
