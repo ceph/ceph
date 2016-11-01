@@ -3044,8 +3044,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     // Not using 'sortbitwise' and should be?
-    if (g_conf->mon_warn_on_no_sortbitwise &&
-	!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
+    if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
 	(osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
 	 CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
       ostringstream ss;
