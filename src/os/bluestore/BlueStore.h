@@ -94,6 +94,7 @@ enum {
   l_bluestore_onode_reshard,
   l_bluestore_gc,
   l_bluestore_gc_bytes,
+  l_bluestore_blob_split,
   l_bluestore_last
 };
 
