@@ -2061,6 +2061,15 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     }
   }
 
+  // make sure upgrades stop at jewel
+  if ((m->osd_features & CEPH_FEATURE_SERVER_KRAKEN) &&
+      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+    mon->clog->info() << "disallowing boot of post-jewel OSD "
+		      << m->get_orig_source_inst()
+		      << " because require_jewel_osds is not set\n";
+    goto ignore;
+  }
+
   // make sure upgrades stop at hammer
   //  * HAMMER_0_94_4 is the required hammer feature
   //  * MON_METADATA is the first post-hammer feature
