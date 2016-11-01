@@ -12,8 +12,8 @@ from teuthology.config import config as teuth_config
 from teuthology import misc as teuthology
 from teuthology import contextutil, packaging
 from teuthology.parallel import parallel
-from ..orchestra import run
-from . import ansible
+from teuthology.orchestra import run
+from teuthology.task import ansible
 
 log = logging.getLogger(__name__)
 
