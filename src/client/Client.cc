@@ -247,7 +247,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(mc->get_global_id()),
-    cap_epoch_barrier(0), fsmap_user(nullptr),
+    cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
@@ -2521,8 +2521,7 @@ void Client::handle_fs_map(MFSMap *m)
 
 void Client::handle_fs_map_user(MFSMapUser *m)
 {
-  delete fsmap_user;
-  fsmap_user = new FSMapUser;
+  fsmap_user.reset(new FSMapUser);
   *fsmap_user = m->get_fsmap();
   m->put();
 
@@ -5442,12 +5441,12 @@ int Client::fetch_fsmap(bool user)
   ldout(cct, 10) << __func__ << " learned FSMap version " << fsmap_latest << dendl;
 
   if (user) {
-    if (fsmap_user == nullptr || fsmap_user->get_epoch() < fsmap_latest) {
+    if (!fsmap_user || fsmap_user->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap.user", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
       wait_on_list(waiting_for_fsmap);
     }
-    assert(fsmap_user != nullptr);
+    assert(fsmap_user);
     assert(fsmap_user->get_epoch() >= fsmap_latest);
   } else {
     if (!fsmap || fsmap->get_epoch() < fsmap_latest) {

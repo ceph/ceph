@@ -321,7 +321,7 @@ protected:
   // FSMap, for when using mds_command
   list<Cond*> waiting_for_fsmap;
   std::unique_ptr<FSMap> fsmap;
-  FSMapUser *fsmap_user;
+  std::unique_ptr<FSMapUser> fsmap_user;
 
   // MDS command state
   CommandTable<MDSCommandOp> command_table;
