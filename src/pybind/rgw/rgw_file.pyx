@@ -343,7 +343,6 @@ cdef class LibRGWFS(object):
 
     def __exit__(self, type_, value, traceback):
         self.shutdown()
-        return False
 
     def __dealloc__(self):
         self.shutdown()
