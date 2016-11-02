@@ -8784,6 +8784,7 @@ int BlueStore::_move_ranges_destroy_src(
       } else {
 	skip_back = 0;
       }
+#warning blob depth here is wrong
       Extent *ne = new Extent(
 	e.logical_offset + skip_front,
 	e.blob_offset + skip_front,
