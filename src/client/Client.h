@@ -264,7 +264,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   CommandHook m_command_hook;
 
   // cluster descriptors
-  MDSMap *mdsmap;
+  std::unique_ptr<MDSMap> mdsmap;
 
   SafeTimer timer;
 
