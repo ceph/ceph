@@ -320,7 +320,7 @@ protected:
 
   // FSMap, for when using mds_command
   list<Cond*> waiting_for_fsmap;
-  FSMap *fsmap;
+  std::unique_ptr<FSMap> fsmap;
   FSMapUser *fsmap_user;
 
   // MDS command state

@@ -247,7 +247,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(mc->get_global_id()),
-    cap_epoch_barrier(0), fsmap(nullptr), fsmap_user(nullptr),
+    cap_epoch_barrier(0), fsmap_user(nullptr),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
@@ -314,7 +314,6 @@ Client::~Client()
 
   delete filer;
   delete objecter;
-  delete fsmap;
 
   delete logger;
 }
@@ -2512,9 +2511,7 @@ bool Client::ms_dispatch(Message *m)
 
 void Client::handle_fs_map(MFSMap *m)
 {
-  delete fsmap;
-  fsmap = new FSMap;
-  *fsmap = m->get_fsmap();
+  fsmap.reset(new FSMap(m->get_fsmap()));
   m->put();
 
   signal_cond_list(waiting_for_fsmap);
@@ -5337,7 +5334,7 @@ int Client::resolve_mds(
     const std::string &mds_spec,
     std::vector<mds_gid_t> *targets)
 {
-  assert(fsmap != nullptr);
+  assert(fsmap);
   assert(targets != nullptr);
 
   mds_role_t role;
@@ -5453,12 +5450,12 @@ int Client::fetch_fsmap(bool user)
     assert(fsmap_user != nullptr);
     assert(fsmap_user->get_epoch() >= fsmap_latest);
   } else {
-    if (fsmap == nullptr || fsmap->get_epoch() < fsmap_latest) {
+    if (!fsmap || fsmap->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
       wait_on_list(waiting_for_fsmap);
     }
-    assert(fsmap != nullptr);
+    assert(fsmap);
     assert(fsmap->get_epoch() >= fsmap_latest);
   }
   ldout(cct, 10) << __func__ << " finished waiting for FSMap version "
