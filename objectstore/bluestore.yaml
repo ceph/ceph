@@ -13,4 +13,5 @@ overrides:
         debug rocksdb: 10
         enable experimental unrecoverable data corrupting features: "*"
         osd debug randomize hobject sort order: false
-        bluestore bluefs env mirror: true
+# this doesn't work with failures bc the log writes are not atomic across the two backends
+#        bluestore bluefs env mirror: true
