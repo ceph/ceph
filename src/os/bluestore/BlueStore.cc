@@ -3155,8 +3155,7 @@ int BlueStore::_open_db(bool create)
 {
   int r;
   assert(!db);
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/db", path.c_str());
+  string fn = path + "/db";
   string options;
   stringstream err;
   ceph::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
@@ -3204,11 +3203,11 @@ int BlueStore::_open_db(bool create)
     }
     bluefs = new BlueFS;
 
-    char bfn[PATH_MAX];
+    string bfn;
     struct stat st;
 
-    snprintf(bfn, sizeof(bfn), "%s/block.db", path.c_str());
-    if (::stat(bfn, &st) == 0) {
+    bfn = path + "/block.db";
+    if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -3240,7 +3239,7 @@ int BlueStore::_open_db(bool create)
     }
 
     // shared device
-    snprintf(bfn, sizeof(bfn), "%s/block", path.c_str());
+    bfn = path + "/block";
     r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -3261,8 +3260,8 @@ int BlueStore::_open_db(bool create)
       bluefs_extents.insert(BLUEFS_START, initial);
     }
 
-    snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
-    if (::stat(bfn, &st) == 0) {
+    bfn = path + "/block.wal";
+    if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -3317,22 +3316,20 @@ int BlueStore::_open_db(bool create)
       env = new BlueRocksEnv(bluefs);
 
       // simplify the dir names, too, as "seen" by rocksdb
-      strcpy(fn, "db");
+      fn = "db";
     }
 
     if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
-      char db_paths[PATH_MAX*3];
-      snprintf(
-	db_paths, sizeof(db_paths), "%s,%lld %s.slow,%lld",
-	fn,
-	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_DB) *
-	 95 / 100,
-	fn,
-	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_SLOW) *
-	 95 / 100);
-      g_conf->set_val("rocksdb_db_paths", db_paths, false, false);
+      ostringstream db_paths;
+      uint64_t db_size = bluefs->get_block_device_size(BlueFS::BDEV_DB);
+      uint64_t slow_size = bluefs->get_block_device_size(BlueFS::BDEV_SLOW);
+      db_paths << fn << ","
+               << (uint64_t)(db_size * 95 / 100) << " "
+               << fn + ".slow" << ","
+               << (uint64_t)(slow_size * 95 / 100);
+      g_conf->set_val("rocksdb_db_paths", db_paths.str(), false, false);
       dout(10) << __func__ << " set rocksdb_db_paths to "
 	       << g_conf->rocksdb_db_paths << dendl;
     }
@@ -3340,12 +3337,12 @@ int BlueStore::_open_db(bool create)
     if (create) {
       env->CreateDir(fn);
       if (g_conf->rocksdb_separate_wal_dir)
-	env->CreateDir(string(fn) + ".wal");
+	env->CreateDir(fn + ".wal");
       if (g_conf->rocksdb_db_paths.length())
-	env->CreateDir(string(fn) + ".slow");
+	env->CreateDir(fn + ".slow");
     }
   } else if (create) {
-    int r = ::mkdir(fn, 0755);
+    int r = ::mkdir(fn.c_str(), 0755);
     if (r < 0)
       r = -errno;
     if (r < 0 && r != -EEXIST) {
@@ -3356,9 +3353,8 @@ int BlueStore::_open_db(bool create)
 
     // wal_dir, too!
     if (g_conf->rocksdb_separate_wal_dir) {
-      char walfn[PATH_MAX];
-      snprintf(walfn, sizeof(walfn), "%s/db.wal", path.c_str());
-      r = ::mkdir(walfn, 0755);
+      string walfn = path + "/db.wal";
+      r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
 	r = -errno;
       if (r < 0 && r != -EEXIST) {
@@ -4117,8 +4113,7 @@ int BlueStore::_fsck_check_extents(
   const vector<bluestore_pextent_t>& extents,
   bool compressed,
   boost::dynamic_bitset<> &used_blocks,
-  store_statfs_t& expected_statfs,
-  bool deep)
+  store_statfs_t& expected_statfs)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
   int errors = 0;
@@ -4431,8 +4426,7 @@ int BlueStore::fsck(bool deep)
 	  errors += _fsck_check_extents(oid, blob.extents,
 					blob.is_compressed(),
 					used_blocks,
-					expected_statfs,
-					deep);
+					expected_statfs);
         }
       }
       if (deep) {
@@ -4494,7 +4488,7 @@ int BlueStore::fsck(bool deep)
 	errors += _fsck_check_extents(p->second.oids.front(),
 				      extents,
 				      p->second.compressed,
-				      used_blocks, expected_statfs, deep);
+				      used_blocks, expected_statfs);
 	sb_info.erase(p);
       }
     }
