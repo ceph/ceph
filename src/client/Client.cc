@@ -283,7 +283,7 @@ Client::Client(Messenger *m, MonClient *mc)
   messenger = m;
 
   // osd interfaces
-  mdsmap = new MDSMap;
+  mdsmap.reset(new MDSMap);
   objecter = new Objecter(cct, messenger, monclient, NULL,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
@@ -314,7 +314,6 @@ Client::~Client()
 
   delete filer;
   delete objecter;
-  delete mdsmap;
   delete fsmap;
 
   delete logger;
@@ -2546,8 +2545,9 @@ void Client::handle_mds_map(MMDSMap* m)
 
   ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
 
-  MDSMap *oldmap = mdsmap;
-  mdsmap = new MDSMap;
+  std::unique_ptr<MDSMap> oldmap(new MDSMap);
+  oldmap.swap(mdsmap);
+
   mdsmap->decode(m->get_encoded());
 
   // Cancel any commands for missing or laggy GIDs
@@ -2619,7 +2619,6 @@ void Client::handle_mds_map(MMDSMap* m)
   // kick any waiting threads
   signal_cond_list(waiting_for_mdsmap);
 
-  delete oldmap;
   m->put();
 
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
