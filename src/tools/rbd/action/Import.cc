@@ -19,6 +19,7 @@
 
 namespace rbd {
 namespace action {
+namespace import {
 
 int do_import_diff_fd(librbd::Image &image, int fd,
 		   bool no_progress, int format)
@@ -205,12 +206,10 @@ int do_import_diff(librbd::Image &image, const char *path,
   return r;
 }
 
-namespace import_diff {
-
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-void get_arguments(po::options_description *positional,
+void get_arguments_diff(po::options_description *positional,
                    po::options_description *options) {
   at::add_path_options(positional, options,
                        "import file (or '-' for stdin)");
@@ -218,7 +217,7 @@ void get_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute(const po::variables_map &vm) {
+int execute_diff(const po::variables_map &vm) {
   std::string path;
   int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
   if (r < 0) {
@@ -253,16 +252,9 @@ int execute(const po::variables_map &vm) {
   return 0;
 }
 
-Shell::Action action(
-  {"import-diff"}, {}, "Import an incremental diff.", "", &get_arguments,
-  &execute);
-
-} // namespace import_diff
-
-namespace import {
-
-namespace at = argument_types;
-namespace po = boost::program_options;
+Shell::Action action_diff(
+  {"import-diff"}, {}, "Import an incremental diff.", "", &get_arguments_diff,
+  &execute_diff);
 
 class C_Import : public Context {
 public:

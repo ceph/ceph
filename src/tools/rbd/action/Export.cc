@@ -17,6 +17,7 @@
 
 namespace rbd {
 namespace action {
+namespace export_full {
 
 struct ExportDiffContext {
   librbd::Image *image;
@@ -231,12 +232,10 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
 }
 
 
-namespace export_diff {
-
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-void get_arguments(po::options_description *positional,
+void get_arguments_diff(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_SOURCE);
@@ -249,7 +248,7 @@ void get_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute(const po::variables_map &vm) {
+int execute_diff(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -295,17 +294,9 @@ int execute(const po::variables_map &vm) {
 }
 
 Shell::SwitchArguments switched_arguments({at::WHOLE_OBJECT});
-Shell::Action action(
+Shell::Action action_diff(
   {"export-diff"}, {}, "Export incremental diff to file.", "",
-  &get_arguments, &execute);
-
-} // namespace export_diff
-
-
-namespace export_full {
-
-namespace at = argument_types;
-namespace po = boost::program_options;
+  &get_arguments_diff, &execute_diff);
 
 class C_Export : public Context
 {
