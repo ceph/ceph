@@ -1581,8 +1581,7 @@ private:
     const vector<bluestore_pextent_t>& extents,
     bool compressed,
     boost::dynamic_bitset<> &used_blocks,
-    store_statfs_t& expected_statfs,
-    bool deep);
+    store_statfs_t& expected_statfs);
 
   void _buffer_cache_write(
     TransContext *txc,
