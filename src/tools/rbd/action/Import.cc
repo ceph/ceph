@@ -53,6 +53,7 @@ int do_import_diff_fd(librbd::Image &image, int fd,
 
   while (true) {
     __u8 tag;
+    uint64_t length = 0;
     r = safe_read_exact(fd, &tag, 1);
     if (r < 0) {
       goto done;
@@ -60,85 +61,98 @@ int do_import_diff_fd(librbd::Image &image, int fd,
 
     if (tag == RBD_DIFF_END) {
       break;
-    } else if (tag == RBD_DIFF_FROM_SNAP) {
-      r = utils::read_string(fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
-      if (r < 0)
-	goto done;
-
-      bool exists; 
-      r = image.snap_exists2(from.c_str(), &exists);
-      if (r < 0)
-	goto done;
-
-      if (!exists) {
-	std::cerr << "start snapshot '" << from
-		  << "' does not exist in the image, aborting" << std::endl;
-	r = -EINVAL;
-	goto done;
+    } else {
+      if (format == 2) {
+	r = safe_read_exact(fd, &length, 8);
+	if (r < 0) {
+	  return r;
+	}
       }
-    }
-    else if (tag == RBD_DIFF_TO_SNAP) {
-      r = utils::read_string(fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
-      if (r < 0)
-	goto done;
 
-      // verify this snap isn't already present
-      bool exists;
-      r = image.snap_exists2(to.c_str(), &exists);
-      if (r < 0)
-	goto done;
-      
-      if (exists) {
-	std::cerr << "end snapshot '" << to
-		  << "' already exists, aborting" << std::endl;
-	r = -EEXIST;
-	goto done;
-      }
-    } else if (tag == RBD_DIFF_IMAGE_SIZE) {
-      uint64_t end_size;
-      char buf[8];
-      r = safe_read_exact(fd, buf, 8);
-      if (r < 0)
-	goto done;
-      bufferlist bl;
-      bl.append(buf, 8);
-      bufferlist::iterator p = bl.begin();
-      ::decode(end_size, p);
-      uint64_t cur_size;
-      image.size(&cur_size);
-      if (cur_size != end_size) {
-	image.resize(end_size);
-      }
-      if (from_stdin)
-	size = end_size;
-    } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
-      uint64_t len;
-      char buf[16];
-      r = safe_read_exact(fd, buf, 16);
-      if (r < 0)
-	goto done;
-      bufferlist bl;
-      bl.append(buf, 16);
-      bufferlist::iterator p = bl.begin();
-      ::decode(off, p);
-      ::decode(len, p);
-
-      if (tag == RBD_DIFF_WRITE) {
-	bufferptr bp = buffer::create(len);
-	r = safe_read_exact(fd, bp.c_str(), len);
+      if (tag == RBD_DIFF_FROM_SNAP) {
+	r = utils::read_string(fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
 	if (r < 0)
 	  goto done;
-	bufferlist data;
-	data.append(bp);
-	image.write2(off, len, data, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
-      } else {
-	image.discard(off, len);
+
+	bool exists; 
+	r = image.snap_exists2(from.c_str(), &exists);
+	if (r < 0)
+	  goto done;
+
+	if (!exists) {
+	  std::cerr << "start snapshot '" << from
+		    << "' does not exist in the image, aborting" << std::endl;
+	  r = -EINVAL;
+	  goto done;
+	}
       }
-    } else {
-      std::cerr << "unrecognized tag byte " << (int)tag
-		<< " in stream; aborting" << std::endl;
-      r = -EINVAL;
-      goto done;
+      else if (tag == RBD_DIFF_TO_SNAP) {
+	r = utils::read_string(fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
+	if (r < 0)
+	  goto done;
+
+	// verify this snap isn't already present
+	bool exists;
+	r = image.snap_exists2(to.c_str(), &exists);
+	if (r < 0)
+	  goto done;
+	
+	if (exists) {
+	  std::cerr << "end snapshot '" << to
+		    << "' already exists, aborting" << std::endl;
+	  r = -EEXIST;
+	  goto done;
+	}
+      } else if (tag == RBD_DIFF_IMAGE_SIZE) {
+	uint64_t end_size;
+	char buf[8];
+	r = safe_read_exact(fd, buf, 8);
+	if (r < 0)
+	  goto done;
+	bufferlist bl;
+	bl.append(buf, 8);
+	bufferlist::iterator p = bl.begin();
+	::decode(end_size, p);
+	uint64_t cur_size;
+	image.size(&cur_size);
+	if (cur_size != end_size) {
+	  image.resize(end_size);
+	}
+	if (from_stdin)
+	  size = end_size;
+      } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
+	uint64_t len;
+	char buf[16];
+	r = safe_read_exact(fd, buf, 16);
+	if (r < 0)
+	  goto done;
+	bufferlist bl;
+	bl.append(buf, 16);
+	bufferlist::iterator p = bl.begin();
+	::decode(off, p);
+	::decode(len, p);
+
+	if (tag == RBD_DIFF_WRITE) {
+	  bufferptr bp = buffer::create(len);
+	  r = safe_read_exact(fd, bp.c_str(), len);
+	  if (r < 0)
+	    goto done;
+	  bufferlist data;
+	  data.append(bp);
+	  image.write2(off, len, data, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+	} else {
+	  image.discard(off, len);
+	}
+      } else {
+	std::cerr << "unrecognized tag byte " << (int)tag
+		  << " in stream; aborting" << std::endl;
+	if (format == 2) {
+	  ::lseek(fd, length, SEEK_CUR);
+	} else {
+	  r = -EINVAL;
+	  goto done;
+	}
+      }
     }
     if (!from_stdin) {
       // progress through input

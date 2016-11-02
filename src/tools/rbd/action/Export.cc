@@ -21,13 +21,14 @@ namespace action {
 struct ExportDiffContext {
   librbd::Image *image;
   int fd;
+  int export_format;
   uint64_t totalsize;
   utils::ProgressContext pc;
   OrderedThrottle throttle;
 
   ExportDiffContext(librbd::Image *i, int f, uint64_t t, int max_ops,
-                    bool no_progress) :
-    image(i), fd(f), totalsize(t), pc("Exporting image", no_progress),
+                    bool no_progress, int eformat) :
+    image(i), fd(f), export_format(eformat), totalsize(t), pc("Exporting image", no_progress),
     throttle(max_ops, true) {
   }
 };
@@ -35,9 +36,9 @@ struct ExportDiffContext {
 class C_ExportDiff : public Context {
 public:
   C_ExportDiff(ExportDiffContext *edc, uint64_t offset, uint64_t length,
-               bool exists)
+               bool exists, int export_format)
     : m_export_diff_context(edc), m_offset(offset), m_length(length),
-      m_exists(exists) {
+      m_exists(exists), m_export_format(export_format) {
   }
 
   int send() {
@@ -64,10 +65,10 @@ public:
   }
 
   static int export_diff_cb(uint64_t offset, size_t length, int exists,
-                            void *arg) {
+			    void *arg) {
     ExportDiffContext *edc = reinterpret_cast<ExportDiffContext *>(arg);
 
-    C_ExportDiff *context = new C_ExportDiff(edc, offset, length, exists);
+    C_ExportDiff *context = new C_ExportDiff(edc, offset, length, exists, edc->export_format);
     return context->send();
   }
 
@@ -77,7 +78,7 @@ protected:
       if (m_exists) {
         m_exists = !m_read_data.is_zero();
       }
-      r = write_extent(m_export_diff_context, m_offset, m_length, m_exists);
+      r = write_extent(m_export_diff_context, m_offset, m_length, m_exists, m_export_format);
       if (r == 0 && m_exists) {
         r = m_read_data.write_fd(m_export_diff_context->fd);
       }
@@ -90,14 +91,23 @@ private:
   uint64_t m_offset;
   uint64_t m_length;
   bool m_exists;
+  int m_export_format;
   bufferlist m_read_data;
 
   static int write_extent(ExportDiffContext *edc, uint64_t offset,
-                          uint64_t length, bool exists) {
+                          uint64_t length, bool exists, int export_format) {
     // extent
     bufferlist bl;
     __u8 tag = exists ? RBD_DIFF_WRITE : RBD_DIFF_ZERO;
+    uint64_t len = 0;
     ::encode(tag, bl);
+    if (export_format == 2) {
+      if (tag == RBD_DIFF_WRITE)
+	len = 8 + 8 + length;
+      else
+	len = 8 + 8;
+      ::encode(len, bl);
+    }
     ::encode(offset, bl);
     ::encode(length, bl);
     int r = bl.write_fd(edc->fd);
@@ -128,10 +138,15 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       bl.append(utils::RBD_DIFF_BANNER_V2);
 
     __u8 tag;
+    uint64_t len = 0;
     if (fromsnapname) {
       tag = RBD_DIFF_FROM_SNAP;
       ::encode(tag, bl);
       std::string from(fromsnapname);
+      if (export_format == 2) {
+	len = from.length() + 4;
+	::encode(len, bl);
+      }
       ::encode(from, bl);
     }
 
@@ -139,12 +154,20 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       tag = RBD_DIFF_TO_SNAP;
       ::encode(tag, bl);
       std::string to(endsnapname);
+      if (export_format == 2) {
+	len = to.length() + 4;
+	::encode(len, bl);
+      }
       ::encode(to, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
     ::encode(tag, bl);
     uint64_t endsize = info.size;
+    if (export_format == 2) {
+      len = 8;
+      ::encode(len, bl);
+    }
     ::encode(endsize, bl);
 
     r = bl.write_fd(fd);
@@ -153,7 +176,8 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     }
   }
   ExportDiffContext edc(&image, fd, info.size,
-                        g_conf->rbd_concurrent_management_ops, no_progress);
+                        g_conf->rbd_concurrent_management_ops, no_progress,
+			export_format);
   r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
