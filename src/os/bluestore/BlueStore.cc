@@ -2137,14 +2137,14 @@ void BlueStore::ExtentMap::punch_hole(
 
 BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   uint64_t logical_offset,
-  uint64_t offset, uint64_t length, uint8_t blob_depth, BlobRef b,
+  uint64_t blob_offset, uint64_t length, uint8_t blob_depth, BlobRef b,
   extent_map_t *old_extents)
 {
   punch_hole(logical_offset, length, old_extents);
-  b->ref_map.get(offset, length);
-  Extent *le = new Extent(logical_offset, offset, length, blob_depth, b);
+  b->ref_map.get(blob_offset, length);
+  Extent *le = new Extent(logical_offset, blob_offset, length, blob_depth, b);
   extent_map.insert(*le);
-  if (!needs_reshard && spans_shard(offset, length)) {
+  if (!needs_reshard && spans_shard(logical_offset, length)) {
     needs_reshard = true;
   }
   return le;
@@ -4379,7 +4379,14 @@ int BlueStore::fsck(bool deep)
 	if (l.logical_offset < pos) {
 	  derr << __func__ << " " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset
-	       << "overlaps with the previous, which ends at 0x" << pos
+	       << " overlaps with the previous, which ends at 0x" << pos
+	       << std::dec << dendl;
+	  ++errors;
+	}
+	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
+	  derr << __func__ << " " << oid << " lextent at 0x"
+	       << std::hex << l.logical_offset << "~" << l.length
+	       << " spans a shard boundary"
 	       << std::dec << dendl;
 	  ++errors;
 	}
