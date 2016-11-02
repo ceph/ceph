@@ -19,7 +19,6 @@ import urlparse
 import yaml
 import json
 import re
-import tempfile
 import pprint
 
 from teuthology import safepath
@@ -778,33 +777,31 @@ def pull_directory(remote, remotedir, localdir):
               remote.shortname, remotedir, localdir)
     if not os.path.exists(localdir):
         os.mkdir(localdir)
-    _, local_tarfile = tempfile.mkstemp(dir=localdir)
-    remote.get_tar(remotedir, local_tarfile, sudo=True)
-    with open(local_tarfile, 'r+') as fb1:
-        tar = tarfile.open(mode='r|gz', fileobj=fb1)
-        while True:
-            ti = tar.next()
-            if ti is None:
-                break
+    r = remote.get_tar_stream(remotedir, sudo=True)
+    tar = tarfile.open(mode='r|gz', fileobj=r.stdout)
+    while True:
+        ti = tar.next()
+        if ti is None:
+            break
 
-            if ti.isdir():
-                # ignore silently; easier to just create leading dirs below
-                pass
-            elif ti.isfile():
-                sub = safepath.munge(ti.name)
-                safepath.makedirs(root=localdir, path=os.path.dirname(sub))
-                tar.makefile(ti, targetpath=os.path.join(localdir, sub))
+        if ti.isdir():
+            # ignore silently; easier to just create leading dirs below
+            # XXX this mean empty dirs are not transferred
+            pass
+        elif ti.isfile():
+            sub = safepath.munge(ti.name)
+            safepath.makedirs(root=localdir, path=os.path.dirname(sub))
+            tar.makefile(ti, targetpath=os.path.join(localdir, sub))
+        else:
+            if ti.isdev():
+                type_ = 'device'
+            elif ti.issym():
+                type_ = 'symlink'
+            elif ti.islnk():
+                type_ = 'hard link'
             else:
-                if ti.isdev():
-                    type_ = 'device'
-                elif ti.issym():
-                    type_ = 'symlink'
-                elif ti.islnk():
-                    type_ = 'hard link'
-                else:
-                    type_ = 'unknown'
-                log.info('Ignoring tar entry: %r type %r', ti.name, type_)
-    os.remove(local_tarfile)
+                type_ = 'unknown'
+            log.info('Ignoring tar entry: %r type %r', ti.name, type_)
 
 
 def pull_directory_tarball(remote, remotedir, localfile):
