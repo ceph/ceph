@@ -685,10 +685,14 @@ class TestShamanProject(TestBuilderProject):
             )
 
     def test_init_from_config_tag_overrides_branch_ref(self, caplog):
-        obj = super(TestShamanProject, self)\
-            .test_init_from_config_tag_overrides_branch_ref(caplog)
-        search_uri = obj._search_uri
-        assert 'v10.0.1' in search_uri
+        with patch(
+            'teuthology.packaging.repo_utils.ls_remote',
+        ) as m_ls_remote:
+            m_ls_remote.return_value = 'sha1_from_my_tag'
+            obj = super(TestShamanProject, self)\
+                .test_init_from_config_tag_overrides_branch_ref(caplog)
+            search_uri = obj._search_uri
+        assert 'sha1=sha1_from_my_tag' in search_uri
         assert 'jewel' not in search_uri
 
     def test_init_from_config_branch_overrides_sha1(self, caplog):
