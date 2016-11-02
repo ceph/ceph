@@ -34,6 +34,21 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
+// bluestore_meta_onode
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
+			      bluestore_meta_onode);
+
+// bluestore_meta_other
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
+			      bluestore_meta_other);
+
+// kv store prefixes
 const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_STAT = "T";    // field -> value(int64 array)
 const string PREFIX_COLL = "C";    // collection name -> cnode_t
@@ -508,6 +523,69 @@ BlueStore::Cache *BlueStore::Cache::create(string type, PerfCounters *logger)
   return c;
 }
 
+void BlueStore::Cache::trim(
+  uint64_t target_bytes,
+  float target_meta_ratio,
+  float bytes_per_onode)
+{
+  std::lock_guard<std::recursive_mutex> l(lock);
+  uint64_t current_meta = _get_num_onodes() * bytes_per_onode;
+  uint64_t current_buffer = _get_buffer_bytes();
+  uint64_t current = current_meta + current_buffer;
+
+  uint64_t target_meta = target_bytes * target_meta_ratio;
+  uint64_t target_buffer = target_bytes - target_meta;
+
+  if (current <= target_bytes) {
+    dout(10) << __func__
+	     << " shard target " << pretty_si_t(target_bytes)
+	     << " ratio " << target_meta_ratio << " ("
+	     << pretty_si_t(target_meta) << " + "
+	     << pretty_si_t(target_buffer) << "), "
+	     << " current " << pretty_si_t(current) << " ("
+	     << pretty_si_t(current_meta) << " + "
+	     << pretty_si_t(current_buffer) << ")"
+	     << dendl;
+    return;
+  }
+
+  uint64_t need_to_free = 0;
+  if (current > target_bytes) {
+    need_to_free = current - target_bytes;
+  }
+  uint64_t free_buffer = 0;
+  uint64_t free_meta = 0;
+  if (current_buffer > target_buffer) {
+    free_buffer = current_buffer - target_buffer;
+    if (free_buffer > need_to_free) {
+      free_buffer = need_to_free;
+    }
+  }
+  free_meta = need_to_free - free_buffer;
+
+  // start bounds at what we have now
+  uint64_t max_buffer = current_buffer - free_buffer;
+  uint64_t max_meta = current_meta - free_meta;
+  uint64_t max_onodes = max_meta / bytes_per_onode;
+
+  dout(10) << __func__
+	   << " shard target " << pretty_si_t(target_bytes)
+	   << " ratio " << target_meta_ratio << " ("
+	   << pretty_si_t(target_meta) << " + "
+	   << pretty_si_t(target_buffer) << "), "
+	   << " current " << pretty_si_t(current) << " ("
+	   << pretty_si_t(current_meta) << " + "
+	   << pretty_si_t(current_buffer) << "),"
+	   << " need_to_free " << pretty_si_t(need_to_free) << " ("
+	   << pretty_si_t(free_meta) << " + "
+	   << pretty_si_t(free_buffer) << ")"
+	   << " -> max " << max_onodes << " onodes + "
+	   << max_buffer << " buffer"
+	   << dendl;
+  _trim(max_onodes, max_buffer);
+}
+
+
 // LRUCache
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.LRUCache(" << this << ") "
@@ -519,10 +597,8 @@ void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
   onode_lru.push_front(*o);
 }
 
-void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
+void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
-
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_size << " / " << buffer_max
 	   << dendl;
@@ -698,10 +774,8 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
   }
 }
 
-void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
+void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
-
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_bytes << " / " << buffer_max
 	   << dendl;
@@ -2425,11 +2499,50 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 
 void BlueStore::Collection::trim_cache()
 {
-  cache->trim(
-    g_conf->bluestore_onode_cache_size / store->cache_shards.size(),
-    g_conf->bluestore_buffer_cache_size / store->cache_shards.size());
+  // see if mempool stats have updated
+  uint64_t total_bytes;
+  uint64_t total_onodes;
+  size_t seq;
+  store->get_mempool_stats(&seq, &total_bytes, &total_onodes);
+  if (seq == cache->last_trim_seq) {
+    dout(30) << __func__ << " no new mempool stats; nothing to do" << dendl;
+    return;
+  }
+  cache->last_trim_seq = seq;
+
+  // trim
+  if (total_onodes < 2) {
+    total_onodes = 2;
+  }
+  float bytes_per_onode = (float)total_bytes / (float)total_onodes;
+  size_t num_shards = store->cache_shards.size();
+  uint64_t shard_target = g_conf->bluestore_cache_size / num_shards;
+  dout(30) << __func__
+	   << " total meta bytes " << total_bytes
+	   << ", total onodes " << total_onodes
+	   << ", bytes_per_onode " << bytes_per_onode
+	   << dendl;
+  cache->trim(shard_target, g_conf->bluestore_cache_meta_ratio, bytes_per_onode);
 
   store->_update_cache_logger();
+}
+
+// =======================================================
+
+void *BlueStore::MempoolThread::entry()
+{
+  Mutex::Locker l(lock);
+  while (!stop) {
+    store->mempool_bytes = mempool::bluestore_meta_other::allocated_bytes() +
+      mempool::bluestore_meta_onode::allocated_bytes();
+    store->mempool_onodes = mempool::bluestore_meta_onode::allocated_items();
+    ++store->mempool_seq;
+    utime_t wait;
+    wait += g_conf->bluestore_cache_trim_interval;
+    cond.WaitInterval(g_ceph_context, lock, wait);
+  }
+  stop = false;
+  return NULL;
 }
 
 // =======================================================
@@ -2480,7 +2593,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
     csum_type(Checksummer::CSUM_CRC32C),
-    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
+    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply),
+    mempool_thread(this)
 {
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
@@ -4020,6 +4134,8 @@ int BlueStore::mount()
   if (r < 0)
     goto out_stop;
 
+  mempool_thread.init();
+
   _set_csum();
   _set_compression();
 
@@ -4027,6 +4143,7 @@ int BlueStore::mount()
   return 0;
 
  out_stop:
+  mempool_thread.shutdown();
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
@@ -4059,6 +4176,8 @@ int BlueStore::umount()
   _sync();
   _reap_collections();
   coll_map.clear();
+
+  mempool_thread.shutdown();
 
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();

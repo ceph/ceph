@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/mempool.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
 #include "common/config.h"
@@ -26,6 +27,7 @@
 #include "global/signal_handler.h"
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "common/admin_socket.h"
 
 #include <pwd.h>
 #include <grp.h>
@@ -36,6 +38,56 @@
 #endif
 
 #define dout_subsys ceph_subsys_
+
+class GlobalObs : public md_config_obs_t,
+		  public AdminSocketHook {
+  CephContext *cct;
+
+public:
+  explicit GlobalObs(CephContext *cct) : cct(cct) {
+    cct->_conf->add_observer(this);
+    int r = cct->get_admin_socket()->register_command(
+      "dump_mempools",
+      "dump_mempools",
+      this,
+      "get mempool stats");
+    assert(r == 0);
+  }
+  ~GlobalObs() {
+    cct->_conf->remove_observer(this);
+    cct->get_admin_socket()->unregister_command("dump_mempools");
+  }
+
+  // md_config_obs_t
+  const char** get_tracked_conf_keys() const {
+    static const char *KEYS[] = {
+      "mempool_debug",
+      NULL
+    };
+    return KEYS;
+  }
+
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set <std::string> &changed) {
+    if (changed.count("mempool_debug")) {
+      mempool::set_debug_mode(cct->_conf->mempool_debug);
+    }
+  }
+
+  // AdminSocketHook
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    if (command == "dump_mempools") {
+      std::unique_ptr<Formatter> f(Formatter::create(format));
+      f->open_object_section("mempools");
+      mempool::dump(f.get());
+      f->close_section();
+      f->flush(out);
+      return true;
+    }
+    return false;
+  }
+};
 
 static void global_init_set_globals(CephContext *cct)
 {
@@ -96,6 +148,10 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
   if (alt_def_args)
     conf->parse_argv(*alt_def_args);  // alternative default args
+
+  // set up global config observer
+  GlobalObs *obs = 0;
+  g_ceph_context->lookup_or_create_singleton_object(obs, "global_obs");
 
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
 				     &cerr, flags);
