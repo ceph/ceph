@@ -467,6 +467,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     ss << "removing mon." << name << " at " << addr
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
+    err = 0;
     goto reply;
 
   } else {
