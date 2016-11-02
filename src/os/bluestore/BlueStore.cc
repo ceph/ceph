@@ -4436,14 +4436,14 @@ int BlueStore::fsck(bool deep)
 	}
       }
       // omap
-      while (o->onode.omap_head) {
+      if (o->onode.omap_head) {
 	if (used_omap_head.count(o->onode.omap_head)) {
 	  derr << __func__ << " " << oid << " omap_head " << o->onode.omap_head
 	       << " already in use" << dendl;
 	  ++errors;
-	  break;
+	} else {
+	  used_omap_head.insert(o->onode.omap_head);
 	}
-	used_omap_head.insert(o->onode.omap_head);
       }
     }
   }
