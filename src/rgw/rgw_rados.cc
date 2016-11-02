@@ -6759,8 +6759,6 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
 int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
 {
   map<string, bufferlist> attrset;
-  int64_t ofs = 0;
-  int64_t end = -1;
 
   real_time mtime;
   uint64_t obj_size;

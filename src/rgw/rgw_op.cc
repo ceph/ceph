@@ -788,7 +788,6 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
   int64_t cur_ofs = start_ofs;
   int64_t cur_end = end_ofs;
-  utime_t start_time = s->time;
 
   rgw_obj part(bucket, ent.key);
 
@@ -2817,7 +2816,6 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
-  int res;
   bool compression_enabled;
   boost::optional<RGWPutObj_Compress> compressor;
 
