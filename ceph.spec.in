@@ -1341,6 +1341,7 @@ fi
 %{_includedir}/rados/librados.hpp
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/buffer_fwd.h
+%{_includedir}/rados/inline_memory.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rados/rados_types.h
