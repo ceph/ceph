@@ -2594,21 +2594,8 @@ int main(int argc, char **argv)
     myexit(1);
   }
 
-  if (op == "fsck") {
-    int r = fs->fsck(false);
-    if (r < 0) {
-      cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
-      myexit(1);
-    }
-    if (r > 0) {
-      cerr << "fsck found " << r << " errors" << std::endl;
-      myexit(1);
-    }
-    cout << "fsck found no errors" << std::endl;
-    exit(0);
-  }
-  if (op == "fsck-deep") {
-    int r = fs->fsck(true);
+  if (op == "fsck" || op == "fsck-deep") {
+    int r = fs->fsck(op == "fsck-deep");
     if (r < 0) {
       cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
       myexit(1);
