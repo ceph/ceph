@@ -30,7 +30,8 @@ def get_ceph_gid():
     return gid
 
 def wait_for_quorum(cluster, mon_id):
-    while True:
+    wait_count = 600  # 10 minutes
+    while wait_count > 0:
         p = subprocess.Popen(
             args=[
                 'ceph',
@@ -48,11 +49,13 @@ def wait_for_quorum(cluster, mon_id):
         if returncode != 0:
             LOG.info('ceph-mon admin socket not ready yet.')
             time.sleep(1)
+            wait_count -= 1
             continue
 
         if out == '':
             LOG.info('ceph-mon admin socket returned no data')
             time.sleep(1)
+            wait_count -= 1
             continue
 
         try:
@@ -65,9 +68,13 @@ def wait_for_quorum(cluster, mon_id):
         if state not in QUORUM_STATES:
             LOG.info('ceph-mon is not in quorum: %r', state)
             time.sleep(1)
+            wait_count -= 1
             continue
 
         break
+
+    if wait_count == 0:
+        LOG.error("ceph-mon was not able to join quorum within ten minutes")
 
 
 def get_key(cluster, mon_id):
