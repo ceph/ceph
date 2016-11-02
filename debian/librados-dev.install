@@ -4,6 +4,7 @@ usr/include/rados/buffer_fwd.h
 usr/include/rados/crc32c.h
 usr/include/rados/librados.h
 usr/include/rados/librados.hpp
+usr/include/rados/inline_memory.h
 usr/include/rados/page.h
 usr/include/rados/rados_types.h
 usr/include/rados/rados_types.hpp

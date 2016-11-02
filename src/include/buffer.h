@@ -55,7 +55,7 @@
 # include <assert.h>
 #endif
 
-#include "include/inline_memory.h"
+#include "inline_memory.h"
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
