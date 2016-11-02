@@ -369,6 +369,24 @@ class Remote(object):
         self._sftp_get_file(remote_temp_path, to_path)
         self.remove(remote_temp_path)
 
+    def get_tar_stream(self, path, sudo=False):
+        """
+        Tar-compress a remote directory and return the RemoteProcess
+        for streaming
+        """
+        args = []
+        if sudo:
+            args.append('sudo')
+        args.extend([
+            'tar',
+            'cz',
+            '-f', '-',
+            '-C', path,
+            '--',
+            '.',
+            ])
+        return self.run(args=args, wait=False, stdout=run.PIPE)
+
     @property
     def os(self):
         if not hasattr(self, '_os'):
