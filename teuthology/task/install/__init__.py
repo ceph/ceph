@@ -154,15 +154,7 @@ def remove_sources(ctx, config):
             proj=project))
         for remote in ctx.cluster.remotes.iterkeys():
             remove_fn = remove_sources_pkgs[remote.os.package_type]
-            p.spawn(remove_fn, remote, project)
-
-    with parallel() as p:
-        project = 'calamari'
-        log.info("Removing {proj} sources lists".format(
-            proj=project))
-        for remote in ctx.cluster.remotes.iterkeys():
-            remove_fn = remove_sources_pkgs[remote.os.package_type]
-            p.spawn(remove_fn, remote, project)
+            p.spawn(remove_fn, ctx, config, remote)
 
 
 def get_package_list(ctx, config):

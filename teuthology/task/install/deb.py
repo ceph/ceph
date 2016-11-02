@@ -54,15 +54,8 @@ def _update_package_list_and_install(ctx, remote, debs, config):
     version = builder.version
     log.info('Package version is %s', version)
 
-    remote.run(
-        args=[
-            'echo', 'deb', builder.base_url, builder.codename, 'main',
-            run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
-                proj=config.get('project', 'ceph')),
-        ],
-        stdout=StringIO(),
-    )
+    builder.install_repo()
+
     remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
     remote.run(
         args=[
@@ -137,19 +130,11 @@ def _remove(ctx, config, remote, debs):
     )
 
 
-def _remove_sources_list(remote, proj):
-    """
-    Removes /etc/apt/sources.list.d/{proj}.list and then runs ``apt-get
-    update``.
-
-    :param remote: the teuthology.orchestra.remote.Remote object
-    :param proj: the project whose sources.list needs removing
-    """
+def _remove_sources_list(ctx, config, remote):
+    builder = _get_builder_project(ctx, remote, config)
+    builder.remove_repo()
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(
-                proj=proj),
-            run.Raw('&&'),
             'sudo', 'apt-get', 'update',
         ],
         check_status=False,
@@ -195,15 +180,8 @@ def _upgrade_packages(ctx, config, remote, debs):
     version = builder.version
     log.info('Package version is %s', version)
 
-    remote.run(
-        args=[
-            'echo', 'deb', base_url, builder.codename, 'main',
-            run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
-                proj=config.get('project', 'ceph')),
-        ],
-        stdout=StringIO(),
-    )
+    builder.install_repo()
+
     remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
     remote.run(
         args=[

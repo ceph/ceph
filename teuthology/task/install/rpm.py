@@ -8,9 +8,6 @@ from .util import _get_builder_project, _get_local_dir
 
 log = logging.getLogger(__name__)
 
-# Should the RELEASE value get extracted from somewhere?
-RELEASE = "1-0"
-
 
 def _remove(ctx, config, remote, rpm):
     """
@@ -55,16 +52,8 @@ def _remove(ctx, config, remote, rpm):
         args=[
             'sudo', pkg_mng_cmd, 'clean', pkg_mng_opts,
         ])
-    if dist_release == 'opensuse':
-        projRelease = '%s-release-%s.noarch' % (
-            config.get('project', 'ceph'), RELEASE)
-    else:
-        projRelease = '%s-release-%s.%s.noarch' % (
-            config.get('project', 'ceph'), RELEASE, dist_release)
-    if dist_release == 'opensuse':
-        remote.run(args=['sudo', 'zypper', '-n', 'remove', projRelease])
-    else:
-        remote.run(args=['sudo', 'yum', 'erase', projRelease, '-y'])
+
+    builder.remove_repo()
 
     if dist_release != 'opensuse':
         pkg_mng_opts = 'expire-cache'
@@ -94,7 +83,7 @@ def _package_overrides(pkgs, os):
 
 def _update_package_list_and_install(ctx, remote, rpm, config):
     """
-    Installs the ceph-release package for the relevant branch, then installs
+    Installs the repository for the relevant branch, then installs
     the requested packages on the remote system.
 
     TODO: split this into at least two functions.
@@ -110,25 +99,10 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
     log.info('Package version is %s', builder.version)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
         pkglist=", ".join(rpm), arch=builder.arch))
+    builder.install_repo()
+
     dist_release = builder.dist_release
     project = builder.project
-    start_of_url = builder.base_url
-    if dist_release == 'opensuse':
-        proj_release = '{proj}-release-{release}.noarch'.format(
-            proj=project, release=RELEASE)
-    else:
-        proj_release = '{proj}-release-{release}.{dist_release}.noarch'.format(
-            proj=project, release=RELEASE, dist_release=dist_release)
-    rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
-    base_url = "{start_of_url}/noarch/{rpm_name}".format(
-        start_of_url=start_of_url, rpm_name=rpm_name)
-    if dist_release == 'opensuse':
-        remote.run(args=[
-            'sudo', 'zypper', '-n', 'install', '--capability', rpm_name
-        ])
-    else:
-        remote.run(args=['sudo', 'yum', '-y', 'install', base_url])
-
     if dist_release != 'opensuse':
         uri = builder.uri_reference
         _yum_fix_repo_priority(remote, project, uri)
@@ -264,19 +238,16 @@ def _yum_unset_check_obsoletes(remote):
                check_status=False)
 
 
-def _remove_sources_list(remote, proj):
+def _remove_sources_list(ctx, config, remote):
     """
     Removes /etc/yum.repos.d/{proj}.repo, /var/lib/{proj}, and /var/log/{proj}
 
     :param remote: the teuthology.orchestra.remote.Remote object
     :param proj: the project whose .repo needs removing
     """
-    if remote.os.name != 'opensuse':
-        remote.run(
-            args=['sudo', 'rm',
-                  '/etc/yum.repos.d/{proj}.repo'.format(proj=proj)],
-            check_status=False,
-        )
+    builder = _get_builder_project(ctx, remote, config)
+    builder.remove_repo()
+    proj = builder.project
     # FIXME
     # There probably should be a way of removing these files that is
     # implemented in the yum/rpm remove procedures for the ceph package.
@@ -296,7 +267,7 @@ def _remove_sources_list(remote, proj):
 def _upgrade_packages(ctx, config, remote, pkgs):
     """
     Upgrade project's packages on remote RPM-based host
-    Before doing so, it makes sure the project's -release RPM is installed -
+    Before doing so, it makes sure the project's repository is installed -
     removing any previous version first.
 
     :param ctx: the argparse.Namespace object
@@ -318,30 +289,9 @@ def _upgrade_packages(ctx, config, remote, pkgs):
     log.info('Repo base URL: %s', base_url)
     project = builder.project
 
-    # Remove the -release package before upgrading it
-    args = ['sudo', 'rpm', '-ev', '%s-release' % project]
-    remote.run(args=args)
-
-    # Build the new -release package path
-    if (builder.dist_release == 'opensuse'):
-        release_rpm = \
-            "{base}/noarch/{proj}-release-{release}.noarch.rpm".format(
-                base=base_url,
-                proj=project,
-                release=RELEASE
-            )
-    else:
-        release_rpm = \
-            "{base}/noarch/{proj}-release-{release}.{dist_release}.noarch.rpm".format(
-                base=base_url,
-                proj=project,
-                release=RELEASE,
-                dist_release=builder.dist_release,
-            )
-
-    # Upgrade the -release package
-    args = ['sudo', 'rpm', '-Uv', release_rpm]
-    remote.run(args=args)
+    # Remove the repository before re-adding it
+    builder.remove_repo()
+    builder.install_repo()
 
     if builder.dist_release != 'opensuse':
         uri = builder.uri_reference
