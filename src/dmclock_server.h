@@ -710,13 +710,17 @@ namespace crimson {
 	    // don't use ourselves (or anything else that might be
 	    // listed as idle) since we're now in the map
 	    if (!c.second->idle) {
+	      double p;
 	      // use either lowest proportion tag or previous proportion tag
 	      if (c.second->has_request()) {
-		double p = c.second->next_request().tag.proportion +
+		p = c.second->next_request().tag.proportion +
 		  c.second->prop_delta;
-		if (p < lowest_prop_tag) {
-		  lowest_prop_tag = p;
-		}
+	      } else {
+	        p = c.second->get_req_tag().proportion + c.second->prop_delta;
+	      }
+
+	      if (p < lowest_prop_tag) {
+		lowest_prop_tag = p;
 	      }
 	    }
 	  }
