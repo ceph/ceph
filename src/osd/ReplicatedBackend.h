@@ -28,6 +28,7 @@ class ReplicatedBackend : public PGBackend {
   friend struct C_ReplicatedBackend_OnPullComplete;
 public:
   CephContext *cct;
+  bool isBlueStore;
 
   ReplicatedBackend(
     PGBackend::Listener *pg,
