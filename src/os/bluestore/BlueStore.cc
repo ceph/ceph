@@ -4117,8 +4117,7 @@ int BlueStore::_fsck_check_extents(
   const vector<bluestore_pextent_t>& extents,
   bool compressed,
   boost::dynamic_bitset<> &used_blocks,
-  store_statfs_t& expected_statfs,
-  bool deep)
+  store_statfs_t& expected_statfs)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
   int errors = 0;
@@ -4424,8 +4423,7 @@ int BlueStore::fsck(bool deep)
 	  errors += _fsck_check_extents(oid, blob.extents,
 					blob.is_compressed(),
 					used_blocks,
-					expected_statfs,
-					deep);
+					expected_statfs);
         }
       }
       if (deep) {
@@ -4487,7 +4485,7 @@ int BlueStore::fsck(bool deep)
 	errors += _fsck_check_extents(p->second.oids.front(),
 				      extents,
 				      p->second.compressed,
-				      used_blocks, expected_statfs, deep);
+				      used_blocks, expected_statfs);
 	sb_info.erase(p);
       }
     }
