@@ -138,12 +138,12 @@ void OSDMonitor::create_initial()
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
-  if (version == osdmap.epoch)
+  if (version == osdmap.get_epoch())
     return;
-  assert(version > osdmap.epoch);
+  assert(version > osdmap.get_epoch());
 
   dout(15) << "update_from_paxos paxos e " << version
-	   << ", my e " << osdmap.epoch << dendl;
+	   << ", my e " << osdmap.get_epoch() << dendl;
 
 
   /*
@@ -205,7 +205,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
              << latest_full << dendl;
   }
 
-  if ((latest_full > 0) && (latest_full > osdmap.epoch)) {
+  if ((latest_full > 0) && (latest_full > osdmap.get_epoch())) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
     assert(latest_bl.length() != 0);
@@ -216,13 +216,13 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   // walk through incrementals
   MonitorDBStore::TransactionRef t;
   size_t tx_size = 0;
-  while (version > osdmap.epoch) {
+  while (version > osdmap.get_epoch()) {
     bufferlist inc_bl;
-    int err = get_version(osdmap.epoch+1, inc_bl);
+    int err = get_version(osdmap.get_epoch()+1, inc_bl);
     assert(err == 0);
     assert(inc_bl.length());
 
-    dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
+    dout(7) << "update_from_paxos  applying incremental " << osdmap.get_epoch()+1 << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
@@ -244,7 +244,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     tx_size += full_bl.length();
 
     bufferlist orig_full_bl;
-    get_version_full(osdmap.epoch, orig_full_bl);
+    get_version_full(osdmap.get_epoch(), orig_full_bl);
     if (orig_full_bl.length()) {
       // the primary provided the full map
       assert(inc.have_crc);
@@ -262,14 +262,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       }
     } else {
       assert(!inc.have_crc);
-      put_version_full(t, osdmap.epoch, full_bl);
+      put_version_full(t, osdmap.get_epoch(), full_bl);
     }
-    put_version_latest_full(t, osdmap.epoch);
+    put_version_latest_full(t, osdmap.get_epoch());
 
     // share
     dout(1) << osdmap << dendl;
 
-    if (osdmap.epoch == 1) {
+    if (osdmap.get_epoch() == 1) {
       t->erase("mkfs", "osdmap");
     }
 
@@ -302,7 +302,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
-    mon->pgmon()->check_osd_map(osdmap.epoch);
+    mon->pgmon()->check_osd_map(osdmap.get_epoch());
   }
 
   check_subs();
@@ -1026,7 +1026,7 @@ void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
 
 void OSDMonitor::create_pending()
 {
-  pending_inc = OSDMap::Incremental(osdmap.epoch+1);
+  pending_inc = OSDMap::Incremental(osdmap.get_epoch()+1);
   pending_inc.fsid = mon->monmap->fsid;
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;

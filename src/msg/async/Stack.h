@@ -202,7 +202,6 @@ class Worker {
 
  public:
   bool done = false;
-
   CephContext *cct;
   PerfCounters *perf_logger;
   unsigned id;

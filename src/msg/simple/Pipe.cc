@@ -12,6 +12,7 @@
  * 
  */
 
+#include <urcu.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -88,6 +89,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
   ANNOTATE_BENIGN_RACE_SIZED(&state, sizeof(state), "Pipe state");
   ANNOTATE_BENIGN_RACE_SIZED(&recv_len, sizeof(recv_len), "Pipe recv_len");
   ANNOTATE_BENIGN_RACE_SIZED(&recv_ofs, sizeof(recv_ofs), "Pipe recv_ofs");
+
   if (con) {
     connection_state = con;
     connection_state->reset_pipe(this);
@@ -99,7 +101,6 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
   if (randomize_out_seq()) {
     lsubdout(msgr->cct,ms,15) << "Pipe(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
   }
-    
 
   msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
@@ -1518,16 +1519,21 @@ void Pipe::stop_and_wait()
 void Pipe::reader()
 {
   pipe_lock.Lock();
-
+  
   if (state == STATE_ACCEPTING) {
     accept();
     assert(pipe_lock.is_locked());
   }
 
+  rcu_register_thread();
+  pthread_setspecific(msgr->cct->registered, this);
+
   // loop.
   while (state != STATE_CLOSED &&
 	 state != STATE_CONNECTING) {
     assert(pipe_lock.is_locked());
+
+    rcu_quiescent_state();
 
     // sleep if (re)connecting
     if (state == STATE_STANDBY) {
@@ -1542,6 +1548,9 @@ void Pipe::reader()
     pipe_lock.Unlock();
 
     char tag = -1;
+
+    rcu_thread_offline();
+
     ldout(msgr->cct,20) << "reader reading tag..." << dendl;
     if (tcp_read((char*)&tag, 1) < 0) {
       pipe_lock.Lock();
@@ -1549,6 +1558,8 @@ void Pipe::reader()
       fault(true);
       continue;
     }
+
+    rcu_thread_online();
 
     if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
       ldout(msgr->cct,2) << "reader got KEEPALIVE" << dendl;
@@ -1704,7 +1715,8 @@ void Pipe::reader()
     }
   }
 
- 
+  rcu_unregister_thread();
+
   // reap?
   reader_running = false;
   reader_needs_join = true;

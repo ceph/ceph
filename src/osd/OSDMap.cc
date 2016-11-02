@@ -874,7 +874,7 @@ void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
 
 void OSDMap::set_epoch(epoch_t e)
 {
-  epoch = e;
+  epoch.set(e);
   for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
        p != pools.end();
        ++p)
@@ -1123,7 +1123,7 @@ uint64_t OSDMap::get_up_osd_features() const
 
 void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 {
-  if (o->epoch == n->epoch)
+  if (o->get_epoch() == n->get_epoch())
     return;
 
   int diff = 0;
@@ -1267,9 +1267,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
   else if (inc.fsid != fsid)
     return -EINVAL;
   
-  assert(inc.epoch == epoch+1);
+  assert(inc.epoch == epoch.get()+1);
 
-  epoch++;
+  epoch.inc();
   modified = inc.modified;
 
   // full map?
@@ -1293,7 +1293,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
        p != inc.new_pools.end();
        ++p) {
     pools[p->first] = p->second;
-    pools[p->first].last_change = epoch;
+    pools[p->first].last_change = epoch.get();
   }
   for (map<int64_t,string>::const_iterator p = inc.new_pool_names.begin();
        p != inc.new_pool_names.end();
@@ -1350,7 +1350,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     int s = i->second ? i->second : CEPH_OSD_UP;
     if ((osd_state[i->first] & CEPH_OSD_UP) &&
 	(s & CEPH_OSD_UP)) {
-      osd_info[i->first].down_at = epoch;
+      osd_info[i->first].down_at = epoch.get();
       osd_xinfo[i->first].down_stamp = modified;
     }
     if ((osd_state[i->first] & CEPH_OSD_EXISTS) &&
@@ -1386,7 +1386,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     else
       osd_addrs->hb_front_addr[i->first].reset();
 
-    osd_info[i->first].up_from = epoch;
+    osd_info[i->first].up_from = epoch.get();
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_cluster.begin();
        i != inc.new_up_cluster.end();
@@ -1782,7 +1782,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
 
   // base
   ::encode(fsid, bl);
-  ::encode(epoch, bl);
+  ::encode(epoch.get(), bl);
   ::encode(created, bl);
   ::encode(modified, bl);
 
@@ -1846,7 +1846,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
 
   // base
   ::encode(fsid, bl);
-  ::encode(epoch, bl);
+  ::encode(epoch.get(), bl);
   ::encode(created, bl);
   ::encode(modified, bl);
 
@@ -1907,7 +1907,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ENCODE_START(3, 1, bl); // client-usable data
     // base
     ::encode(fsid, bl);
-    ::encode(epoch, bl);
+    ::encode(epoch.get(), bl);
     ::encode(created, bl);
     ::encode(modified, bl);
 
@@ -1997,7 +1997,11 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
 
   // base
   ::decode(fsid, p);
-  ::decode(epoch, p);
+
+  epoch_t decoded_epoch;
+  ::decode(decoded_epoch, p);
+  epoch.set(decoded_epoch);
+
   ::decode(created, p);
   ::decode(modified, p);
 
@@ -2127,7 +2131,11 @@ void OSDMap::decode(bufferlist::iterator& bl)
     DECODE_START(3, bl); // client-usable data
     // base
     ::decode(fsid, bl);
-    ::decode(epoch, bl);
+
+    epoch_t decoded_epoch;
+    ::decode(decoded_epoch, bl);
+    epoch.set(decoded_epoch);
+
     ::decode(created, bl);
     ::decode(modified, bl);
 
@@ -2245,6 +2253,7 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
 void OSDMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", get_epoch());
+  f->dump_int("epoch", epoch.get());
   f->dump_stream("fsid") << get_fsid();
   f->dump_stream("created") << get_created();
   f->dump_stream("modified") << get_modified();
@@ -2641,7 +2650,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   ldout(cct, 10) << "build_simple on " << num_osd
 		 << " osds with " << pg_bits << " pg bits per osd, "
 		 << dendl;
-  epoch = e;
+  set_epoch(e);
   set_fsid(fsid);
   created = modified = ceph_clock_now(cct);
 
@@ -2714,7 +2723,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].set_pg_num(poolbase << pg_bits);
     pools[pool].set_pgp_num(poolbase << pgp_bits);
-    pools[pool].last_change = epoch;
+    pools[pool].last_change = get_epoch();
     pool_name[pool] = *p;
     name_pool[*p] = pool;
   }

@@ -15,6 +15,7 @@
 #ifndef CEPH_PG_H
 #define CEPH_PG_H
 
+#include <atomic>
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
 #include <boost/statechart/simple_state.hpp>
@@ -215,7 +216,10 @@ public:
 protected:
   // Ops waiting for map, should be queued at back
   Mutex map_lock;
+  atomic<bool> waiting_for_map_empty;
   list<OpRequestRef> waiting_for_map;
+  OSDMapRef *osdmap_ptr_rcu;
+  OSDMapRef old_osdmap_ref;
   OSDMapRef osdmap_ref;
   OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
@@ -223,18 +227,14 @@ protected:
   void queue_op(OpRequestRef& op);
   void take_op_map_waiters();
 
-  void update_osdmap_ref(OSDMapRef newmap) {
-    assert(_lock.is_locked_by_me());
-    Mutex::Locker l(map_lock);
-    osdmap_ref = newmap;
-  }
+  void update_osdmap_ref(OSDMapRef newmap);
 
   OSDMapRef get_osdmap_with_maplock() const {
     assert(map_lock.is_locked());
     assert(osdmap_ref);
     return osdmap_ref;
   }
-
+  epoch_t get_osdmap_epoch_rcu();
 public:
   OSDMapRef get_osdmap() const {
     assert(is_locked());

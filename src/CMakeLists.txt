@@ -220,6 +220,8 @@ if(HAVE_XIO)
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
 endif(HAVE_XIO)
 
+set(RCU_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
+
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
@@ -476,7 +478,7 @@ add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
 target_link_libraries(common json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
-  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${URCU_LIBRARIES})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -643,7 +645,7 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
+target_link_libraries(ceph-osd osd os global ${URCU_LIBRARIES} ${BLKID_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()

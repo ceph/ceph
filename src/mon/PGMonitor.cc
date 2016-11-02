@@ -68,7 +68,7 @@ void PGMonitor::on_restart()
 void PGMonitor::on_active()
 {
   if (mon->is_leader()) {
-    check_osd_map(mon->osdmon()->osdmap.epoch);
+    check_osd_map(mon->osdmon()->osdmap.get_epoch());
     need_check_down_pgs = true;
   }
 

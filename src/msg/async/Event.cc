@@ -14,6 +14,7 @@
  *
  */
 
+#include <urcu.h>
 #include "common/errno.h"
 #include "Event.h"
 
@@ -331,11 +332,18 @@ int EventCenter::process_events(int timeout_microseconds)
 
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
+
+  rcu_thread_offline();
   numevents = driver->event_wait(fired_events, &tv);
+  rcu_thread_online();
+
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
     EventCallbackRef cb;
+
+    rcu_quiescent_state();
+
     event = _get_file_event(fired_events[j].fd);
 
     /* note the event->mask & mask & ... code: maybe an already processed
