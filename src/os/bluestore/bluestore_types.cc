@@ -195,7 +195,7 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
   }
   if (p != ref_map.end())
     _maybe_merge_left(p);
-  _check();
+  //_check();
 }
 
 void bluestore_extent_ref_map_t::put(
@@ -249,7 +249,7 @@ void bluestore_extent_ref_map_t::put(
   }
   if (p != ref_map.end())
     _maybe_merge_left(p);
-  _check();
+  //_check();
 }
 
 bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const

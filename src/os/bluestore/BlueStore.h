@@ -32,6 +32,7 @@
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
+#include "include/mempool.h"
 #include "common/Finisher.h"
 #include "compressor/Compressor.h"
 #include "os/ObjectStore.h"
@@ -120,6 +121,8 @@ public:
 
   /// cached buffer
   struct Buffer {
+    MEMPOOL_CLASS_HELPERS();
+
     enum {
       STATE_EMPTY,     ///< empty buffer -- used for cache history
       STATE_CLEAN,     ///< clean data that is up to date
@@ -207,7 +210,8 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
+    mempool::bluestore_meta_other::map<uint64_t, std::unique_ptr<Buffer>>
+      buffer_map;
     Cache *cache;
 
     // we use a bare intrusive list here instead of std::map because
@@ -320,6 +324,8 @@ public:
 
   /// in-memory shared blob state (incl cached buffers)
   struct SharedBlob {
+    MEMPOOL_CLASS_HELPERS();
+
     std::atomic_int nref = {0}; ///< reference count
 
     // these are defined/set if the shared_blob is 'loaded'
@@ -362,7 +368,7 @@ public:
 
     // we use a bare pointer because we don't want to affect the ref
     // count
-    std::unordered_map<uint64_t,SharedBlob*> sb_map;
+    mempool::bluestore_meta_other::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard<std::mutex> l(lock);
@@ -397,6 +403,8 @@ public:
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
+    MEMPOOL_CLASS_HELPERS();
+
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
@@ -516,10 +524,12 @@ public:
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef std::map<int,BlobRef> blob_map_t;
+  typedef mempool::bluestore_meta_other::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   struct Extent : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>> {
+    MEMPOOL_CLASS_HELPERS();
+
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
@@ -594,7 +604,7 @@ public:
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
-    vector<Shard> shards;    ///< shards
+    mempool::bluestore_meta_other::vector<Shard> shards;    ///< shards
 
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
@@ -732,6 +742,8 @@ public:
 
   /// an in-memory object
   struct Onode {
+    MEMPOOL_CLASS_HELPERS();
+
     std::atomic_int nref;  ///< reference count
     Collection *c;
 
@@ -780,6 +792,8 @@ public:
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
 
+    size_t last_trim_seq = 0;
+
     static Cache *create(string type, PerfCounters *logger);
 
     virtual ~Cache() {}
@@ -792,6 +806,9 @@ public:
     virtual void _rm_buffer(Buffer *b) = 0;
     virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
     virtual void _touch_buffer(Buffer *b) = 0;
+
+    virtual uint64_t _get_num_onodes() = 0;
+    virtual uint64_t _get_buffer_bytes() = 0;
 
     void add_extent() {
       ++num_extents;
@@ -807,7 +824,10 @@ public:
       --num_blobs;
     }
 
-    virtual void trim(uint64_t onode_max, uint64_t buffer_max) = 0;
+    void trim(uint64_t target_bytes, float target_meta_ratio,
+	      float bytes_per_onode);
+
+    virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
 
     virtual void add_stats(uint64_t *onodes, uint64_t *extents,
 			   uint64_t *blobs,
@@ -843,6 +863,9 @@ public:
     uint64_t buffer_size = 0;
 
   public:
+    uint64_t _get_num_onodes() override {
+      return onode_lru.size();
+    }
     void _add_onode(OnodeRef& o, int level) override {
       if (level > 0)
 	onode_lru.push_front(*o);
@@ -855,6 +878,9 @@ public:
     }
     void _touch_onode(OnodeRef& o) override;
 
+    uint64_t _get_buffer_bytes() override {
+      return buffer_size;
+    }
     void _add_buffer(Buffer *b, int level, Buffer *near) override {
       if (near) {
 	auto q = buffer_lru.iterator_to(*near);
@@ -883,7 +909,7 @@ public:
       _audit("_touch_buffer end");
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max) override;
+    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
 
     void add_stats(uint64_t *onodes, uint64_t *extents,
 		   uint64_t *blobs,
@@ -937,6 +963,9 @@ public:
     uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
 
   public:
+    uint64_t _get_num_onodes() override {
+      return onode_lru.size();
+    }
     void _add_onode(OnodeRef& o, int level) override {
       if (level > 0)
 	onode_lru.push_front(*o);
@@ -949,6 +978,9 @@ public:
     }
     void _touch_onode(OnodeRef& o) override;
 
+    uint64_t _get_buffer_bytes() override {
+      return buffer_bytes;
+    }
     void _add_buffer(Buffer *b, int level, Buffer *near) override;
     void _rm_buffer(Buffer *b) override;
     void _adjust_buffer_size(Buffer *b, int64_t delta) override;
@@ -970,7 +1002,7 @@ public:
       _audit("_touch_buffer end");
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max) override;
+    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
 
     void add_stats(uint64_t *onodes, uint64_t *extents,
 		   uint64_t *blobs,
@@ -991,7 +1023,9 @@ public:
 
   struct OnodeSpace {
     Cache *cache;
-    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
+
+    /// forward lookups
+    mempool::bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     OnodeSpace(Cache *c) : cache(c) {}
     ~OnodeSpace() {
@@ -1429,7 +1463,7 @@ private:
   bool mounted;
 
   RWLock coll_lock;    ///< rwlock to protect coll_map
-  ceph::unordered_map<coll_t, CollectionRef> coll_map;
+  mempool::bluestore_meta_other::unordered_map<coll_t, CollectionRef> coll_map;
 
   vector<Cache*> cache_shards;
 
@@ -1487,6 +1521,44 @@ private:
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
+
+  // cache trim control
+
+  // note that these update in a racy way, but we don't *really* care if
+  // they're perfectly accurate.  they are all word sized so they will
+  // individually update atomically, but may not be coherent with each other.
+  size_t mempool_seq = 0;
+  size_t mempool_bytes = 0;
+  size_t mempool_onodes = 0;
+
+  void get_mempool_stats(size_t *seq, uint64_t *bytes, uint64_t *onodes) {
+    *seq = mempool_seq;
+    *bytes = mempool_bytes;
+    *onodes = mempool_onodes;
+  }
+
+  struct MempoolThread : public Thread {
+    BlueStore *store;
+    Cond cond;
+    Mutex lock;
+    bool stop = false;
+  public:
+    explicit MempoolThread(BlueStore *s)
+      : store(s),
+	lock("BlueStore::MempoolThread::lock") {}
+    void *entry();
+    void init() {
+      assert(stop == false);
+      create("bstore_mempool");
+    }
+    void shutdown() {
+      lock.Lock();
+      stop = true;
+      cond.Signal();
+      lock.Unlock();
+      join();
+    }
+  } mempool_thread;
 
   // --------------------------------------------------------
   // private methods

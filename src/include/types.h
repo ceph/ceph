@@ -95,8 +95,8 @@ inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
   return out << v.first << "," << v.second;
 }
 
-template<class A>
-inline ostream& operator<<(ostream& out, const vector<A>& v) {
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
   out << "[";
   for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
@@ -105,8 +105,8 @@ inline ostream& operator<<(ostream& out, const vector<A>& v) {
   out << "]";
   return out;
 }
-template<class A>
-inline ostream& operator<<(ostream& out, const deque<A>& v) {
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   out << "<";
   for (typename deque<A>::const_iterator p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
@@ -122,8 +122,8 @@ inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
   return out;
 }
 
-template<class A>
-inline ostream& operator<<(ostream& out, const list<A>& ilist) {
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist) {
   for (typename list<A>::const_iterator it = ilist.begin();
        it != ilist.end();
        ++it) {
@@ -133,9 +133,9 @@ inline ostream& operator<<(ostream& out, const list<A>& ilist) {
   return out;
 }
 
-template<class A>
-inline ostream& operator<<(ostream& out, const set<A>& iset) {
-  for (typename set<A>::const_iterator it = iset.begin();
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
+  for (typename set<A, Comp>::const_iterator it = iset.begin();
        it != iset.end();
        ++it) {
     if (it != iset.begin()) out << ",";
@@ -144,9 +144,9 @@ inline ostream& operator<<(ostream& out, const set<A>& iset) {
   return out;
 }
 
-template<class A, class C>
-inline ostream& operator<<(ostream& out, const set<A, C>& iset) {
-  for (typename set<A, C>::const_iterator it = iset.begin();
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset) {
+  for (typename multiset<A,Comp>::const_iterator it = iset.begin();
        it != iset.end();
        ++it) {
     if (it != iset.begin()) out << ",";
@@ -155,22 +155,11 @@ inline ostream& operator<<(ostream& out, const set<A, C>& iset) {
   return out;
 }
 
-template<class A>
-inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
-  for (typename multiset<A>::const_iterator it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A,class B>
-inline ostream& operator<<(ostream& out, const map<A,B>& m) 
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m)
 {
   out << "{";
-  for (typename map<A,B>::const_iterator it = m.begin();
+  for (typename map<A,B,Comp>::const_iterator it = m.begin();
        it != m.end();
        ++it) {
     if (it != m.begin()) out << ",";
@@ -180,25 +169,11 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
   return out;
 }
 
-template<class A,class B, class C>
-inline ostream& operator<<(ostream& out, const map<A,B,C>& m)
-{
-  out << "{";
-  for (typename map<A,B,C>::const_iterator it = m.begin();
-       it != m.end();
-       ++it) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  out << "}";
-  return out;
-}
-
-template<class A,class B>
-inline ostream& operator<<(ostream& out, const multimap<A,B>& m) 
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m)
 {
   out << "{{";
-  for (typename multimap<A,B>::const_iterator it = m.begin();
+  for (typename multimap<A,B,Comp>::const_iterator it = m.begin();
        it != m.end();
        ++it) {
     if (it != m.begin()) out << ",";
