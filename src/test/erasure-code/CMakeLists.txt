@@ -86,9 +86,12 @@ target_link_libraries(unittest_erasure_code_plugin_jerasure
   global
   osd
   ec_jerasure
-  common)
+  common
+  ${UNITTEST_LIBS}
+  )
 add_dependencies(unittest_erasure_code_plugin_jerasure
   ec_jerasure)
+set_target_properties(unittest_erasure_code_plugin_jerasure PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 if(HAVE_BETTER_YASM_ELF64)
 
