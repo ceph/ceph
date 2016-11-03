@@ -1143,6 +1143,12 @@ void BlueStore::OnodeSpace::clear()
   onode_map.clear();
 }
 
+bool BlueStore::OnodeSpace::empty()
+{
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  return onode_map.empty();
+}
+
 void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 				     const ghobject_t& old_oid,
 				     const ghobject_t& new_oid,
@@ -8922,17 +8928,24 @@ int BlueStore::_split_collection(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << dendl;
-  int r;
   RWLock::WLocker l(c->lock);
   RWLock::WLocker l2(d->lock);
 
-  // blow away the caches.  FIXME.
+  // blow away src cache
   c->onode_map.clear();
-  d->onode_map.clear();
 
-  assert(c->shared_blob_set.empty());
+  // We have an awkward race here: previous pipelinex transactions may
+  // still reference blobs and their shared_blobs.  They will be flushed
+  // shortly by _osr_reap_done, but it's awkward to block for that (and
+  // a waste of time).  Instead, explicitly remove them from the shared blob
+  // map.
+  c->shared_blob_set.violently_clear();
+
+  // the destination should be empty.
+  assert(d->onode_map.empty());
   assert(d->shared_blob_set.empty());
 
+  // adjust bits
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
   r = 0;
@@ -8943,7 +8956,7 @@ int BlueStore::_split_collection(TransContext *txc,
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
-  return r;
+  return 0;
 }
 
 

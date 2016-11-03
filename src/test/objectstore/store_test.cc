@@ -5107,7 +5107,8 @@ TEST_P(StoreTest, XattrTest) {
 void colsplittest(
   ObjectStore *store,
   unsigned num_objects,
-  unsigned common_suffix_size
+  unsigned common_suffix_size,
+  bool clones
   ) {
   ObjectStore::Sequencer osr("test");
   coll_t cid(spg_t(pg_t(0,52),shard_id_t::NO_SHARD));
@@ -5119,17 +5120,30 @@ void colsplittest(
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  bufferlist small;
+  small.append("small");
   {
     ObjectStore::Transaction t;
-    for (uint32_t i = 0; i < 2*num_objects; ++i) {
+    for (uint32_t i = 0; i < (2 - (int)clones)*num_objects; ++i) {
       stringstream objname;
       objname << "obj" << i;
-      t.touch(cid, ghobject_t(hobject_t(
-	  objname.str(),
-	  "",
-	  CEPH_NOSNAP,
-	  i<<common_suffix_size,
-	  52, "")));
+      ghobject_t a(hobject_t(
+		     objname.str(),
+		     "",
+		     CEPH_NOSNAP,
+		     i<<common_suffix_size,
+		     52, ""));
+      t.write(cid, a, 0, small.length(), small);
+      if (clones) {
+	objname << "-clone";
+	ghobject_t b(hobject_t(
+		       objname.str(),
+		       "",
+		       CEPH_NOSNAP,
+		       i<<common_suffix_size,
+		       52, ""));
+	t.clone(cid, a, b);
+      }
     }
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -5174,10 +5188,16 @@ void colsplittest(
 }
 
 TEST_P(StoreTest, ColSplitTest1) {
-  colsplittest(store.get(), 10000, 11);
+  colsplittest(store.get(), 10000, 11, false);
+}
+TEST_P(StoreTest, ColSplitTest1Clones) {
+  colsplittest(store.get(), 10000, 11, true);
 }
 TEST_P(StoreTest, ColSplitTest2) {
-  colsplittest(store.get(), 100, 7);
+  colsplittest(store.get(), 100, 7, false);
+}
+TEST_P(StoreTest, ColSplitTest2Clones) {
+  colsplittest(store.get(), 100, 7, true);
 }
 
 #if 0
