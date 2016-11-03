@@ -12,6 +12,7 @@
 #include <memory>
 #include <boost/scoped_ptr.hpp>
 #include "rocksdb/write_batch.h"
+#include "rocksdb/perf_context.h"
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
@@ -34,6 +35,10 @@ enum {
   l_rocksdb_compact_range,
   l_rocksdb_compact_queue_merge,
   l_rocksdb_compact_queue_len,
+  l_rocksdb_write_wal_time,
+  l_rocksdb_write_memtable_time,
+  l_rocksdb_write_delay_time,
+  l_rocksdb_write_pre_and_post_process_time,
   l_rocksdb_last,
 };
 
