@@ -4139,7 +4139,6 @@ int BlueStore::mount()
   return 0;
 
  out_stop:
-  mempool_thread.shutdown();
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
