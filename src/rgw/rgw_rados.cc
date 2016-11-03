@@ -1461,6 +1461,7 @@ int get_zones_pool_names_set(CephContext* cct,
       pool_names.insert(zone.user_email_pool.name);
       pool_names.insert(zone.user_swift_pool.name);
       pool_names.insert(zone.user_uid_pool.name);
+      pool_names.insert(zone.roles_pool.name);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
@@ -1528,6 +1529,7 @@ int RGWZoneParams::fix_pool_names()
   user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
   user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
   user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
+  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.roles", roles_pool.name);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
@@ -12856,4 +12858,3 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
   }
   return ret;
 }
-

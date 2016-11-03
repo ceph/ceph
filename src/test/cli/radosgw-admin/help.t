@@ -112,6 +112,15 @@
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
+    role create                create a AWS role for use with STS
+    role delete                delete a role
+    role get                   get a role
+    role list                  list roles with specified path prefix
+    role modify                modify the assume role policy of an existing role
+    role-policy put            add/update permission policy to role
+    role-policy list           list policies attached to a role
+    role-policy get            get the specified inline policy document embedded with the given role
+    role-policy delete         delete policy attached to a role
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -204,6 +213,12 @@
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
                                ignores bucket index consistency
+     --role-name               name of the role to create
+     --path                    path to the role
+     --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role
+     --policy-name             name of the policy document
+     --policy-doc              permission policy document
+     --path-prefix             path prefix for filtering roles
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
