@@ -109,6 +109,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
+#define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
+
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
@@ -1117,6 +1119,7 @@ struct RGWStorageStats
   RGWObjCategory category;
   uint64_t size;
   uint64_t size_rounded;
+  uint64_t size_utilized{0}; //< size after compression, encryption
   uint64_t num_objects;
 
   RGWStorageStats()
@@ -1374,7 +1377,8 @@ struct RGWObjEnt {
   std::string ns;
   rgw_user owner;
   std::string owner_display_name;
-  uint64_t size;
+  uint64_t size{0};
+  uint64_t accounted_size{0};
   ceph::real_time mtime;
   string etag;
   string content_type;
@@ -1382,7 +1386,7 @@ struct RGWObjEnt {
   uint32_t flags;
   uint64_t versioned_epoch;
 
-  RGWObjEnt() : size(0), flags(0), versioned_epoch(0) {}
+  RGWObjEnt() : flags(0), versioned_epoch(0) {}
 
   void dump(Formatter *f) const;
 

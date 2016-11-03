@@ -554,21 +554,28 @@ struct rgw_bucket_category_stats {
   uint64_t total_size;
   uint64_t total_size_rounded;
   uint64_t num_entries;
+  uint64_t actual_size{0}; //< account for compression, encryption
 
   rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     ::encode(total_size, bl);
     ::encode(total_size_rounded, bl);
     ::encode(num_entries, bl);
+    ::encode(actual_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     ::decode(total_size, bl);
     ::decode(total_size_rounded, bl);
     ::decode(num_entries, bl);
+    if (struct_v >= 3) {
+      ::decode(actual_size, bl);
+    } else {
+      actual_size = total_size;
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

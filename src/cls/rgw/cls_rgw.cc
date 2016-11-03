@@ -536,6 +536,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
       stats.num_entries++;
       stats.total_size += entry.meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+      stats.actual_size += entry.meta.size;
 
       start_obj = kiter->first;
     }
@@ -652,7 +653,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_set_tag_timeout(): failed to read header\n");
     return rc;
   }
 
@@ -713,7 +714,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   struct rgw_bucket_dir_header header;
   rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to read header\n");
     return rc;
   }
 
@@ -740,6 +741,7 @@ static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_buc
   stats.num_entries--;
   stats.total_size -= entry.meta.accounted_size;
   stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
+  stats.actual_size -= entry.meta.size;
 }
 
 static void log_entry(const char *func, const char *str, struct rgw_bucket_dir_entry *entry)
@@ -925,6 +927,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       stats.num_entries++;
       stats.total_size += meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+      stats.actual_size += meta.size;
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
       int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1955,6 +1958,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
         old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
+        old_stats.actual_size -= cur_disk.meta.size;
         header_changed = true;
       }
       struct rgw_bucket_category_stats& stats =
@@ -1982,6 +1986,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
+        stats.actual_size += cur_change.meta.size;
         header_changed = true;
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;

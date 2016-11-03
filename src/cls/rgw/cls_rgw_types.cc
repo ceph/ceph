@@ -468,6 +468,7 @@ void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category
   s->total_size = 1024;
   s->total_size_rounded = 4096;
   s->num_entries = 2;
+  s->actual_size = 1024;
   o.push_back(s);
   o.push_back(new rgw_bucket_category_stats);
 }
@@ -477,6 +478,7 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
   f->dump_unsigned("total_size", total_size);
   f->dump_unsigned("total_size_rounded", total_size_rounded);
   f->dump_unsigned("num_entries", num_entries);
+  f->dump_unsigned("actual_size", actual_size);
 }
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)

@@ -76,6 +76,59 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bu
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
+struct compression_block {
+  uint64_t old_ofs;
+  uint64_t new_ofs;
+  uint64_t len;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(old_ofs, bl);
+    ::encode(new_ofs, bl);
+    ::encode(len, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(old_ofs, bl);
+     ::decode(new_ofs, bl);
+     ::decode(len, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(compression_block)
+
+struct RGWCompressionInfo {
+  string compression_type;
+  uint64_t orig_size;
+  vector<compression_block> blocks;
+
+  RGWCompressionInfo() : compression_type("none"), orig_size(0) {}
+  RGWCompressionInfo(const RGWCompressionInfo& cs_info) : compression_type(cs_info.compression_type),
+                                                          orig_size(cs_info.orig_size),
+                                                          blocks(cs_info.blocks) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(compression_type, bl);
+    ::encode(orig_size, bl);
+    ::encode(blocks, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(compression_type, bl);
+     ::decode(orig_size, bl);
+     ::decode(blocks, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWCompressionInfo)
+
+int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
+
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
@@ -148,6 +201,17 @@ public:
   virtual void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    return 0;
+  }
+  /**
+   * Allows to extend fetch range of RGW object. Used by RGWGetObjFilter.
+   */
+  virtual void fixup_range(off_t& bl_ofs, off_t& bl_end) {}
 };
 
 class RGWAccessListFilter {
@@ -625,29 +689,39 @@ WRITE_CLASS_ENCODER(RGWObjManifest)
 struct RGWUploadPartInfo {
   uint32_t num;
   uint64_t size;
+  uint64_t accounted_size{0};
   string etag;
   ceph::real_time modified;
   RGWObjManifest manifest;
+  RGWCompressionInfo cs_info;
 
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     ::encode(num, bl);
     ::encode(size, bl);
     ::encode(etag, bl);
     ::encode(modified, bl);
     ::encode(manifest, bl);
+    ::encode(cs_info, bl);
+    ::encode(accounted_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     ::decode(num, bl);
     ::decode(size, bl);
     ::decode(etag, bl);
     ::decode(modified, bl);
     if (struct_v >= 3)
       ::decode(manifest, bl);
+    if (struct_v >= 4) {
+      ::decode(cs_info, bl);
+      ::decode(accounted_size, bl);
+    } else {
+      accounted_size = size;
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -660,7 +734,8 @@ struct RGWObjState {
   bool is_atomic;
   bool has_attrs;
   bool exists;
-  uint64_t size;
+  uint64_t size; //< size of raw object
+  uint64_t accounted_size{0}; //< size before compression, encryption
   ceph::real_time mtime;
   uint64_t epoch;
   bufferlist obj_tag;
@@ -692,6 +767,7 @@ struct RGWObjState {
     has_attrs = rhs.has_attrs;
     exists = rhs.exists;
     size = rhs.size;
+    accounted_size = rhs.accounted_size;
     mtime = rhs.mtime;
     epoch = rhs.epoch;
     if (rhs.obj_tag.length()) {
@@ -2331,17 +2407,17 @@ public:
 
       struct Params {
         ceph::real_time *lastmod;
-        uint64_t *read_size;
         uint64_t *obj_size;
         map<string, bufferlist> *attrs;
         struct rgw_err *perr;
 
-        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL), perr(NULL) {}
+        Params() : lastmod(NULL), obj_size(NULL), attrs(NULL), perr(NULL) {}
       } params;
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
 
-      int prepare(int64_t *pofs, int64_t *pend);
+      int prepare();
+      static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
       int read(int64_t ofs, int64_t end, bufferlist& bl);
       int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb);
       int get_attr(const char *name, bufferlist& dest);
@@ -2374,7 +2450,8 @@ public:
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
-      int write_meta(uint64_t size,  map<std::string, bufferlist>& attrs);
+      int write_meta(uint64_t size, uint64_t accounted_size,
+                     map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
     };
 
@@ -2494,7 +2571,8 @@ public:
 
       int prepare(RGWModifyOp);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
-                   ceph::real_time& ut, string& etag, string& content_type,
+                   uint64_t accounted_size, ceph::real_time& ut,
+                   const string& etag, const string& content_type,
                    bufferlist *acl_bl, RGWObjCategory category,
 		   list<rgw_obj_key> *remove_objs);
       int complete_del(int64_t poolid, uint64_t epoch,
@@ -3234,7 +3312,21 @@ public:
   }
 }; /* RGWChainedCacheImpl */
 
-class RGWPutObjProcessor
+/**
+ * Base of PUT operation.
+ * Allow to create chained data transformers like compresors and encryptors.
+ */
+class RGWPutObjDataProcessor
+{
+public:
+  RGWPutObjDataProcessor(){}
+  virtual ~RGWPutObjDataProcessor(){}
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) = 0;
+  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
+}; /* RGWPutObjDataProcessor */
+
+
+class RGWPutObjProcessor : public RGWPutObjDataProcessor
 {
 protected:
   RGWRados *store;
@@ -3243,25 +3335,27 @@ protected:
   RGWBucketInfo bucket_info;
   bool canceled;
 
-  virtual int do_complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
+  virtual int do_complete(size_t accounted_size, const string& etag,
+                          ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
+                          const char *if_match, const char *if_nomatch) = 0;
 
 public:
-  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi), canceled(false) {}
+  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
+                                                                   obj_ctx(_obj_ctx), 
+                                                                   is_complete(false), 
+                                                                   bucket_info(_bi), 
+                                                                   canceled(false) {}
   virtual ~RGWPutObjProcessor() {}
   virtual int prepare(RGWRados *_store, string *oid_rand) {
     store = _store;
     return 0;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again) = 0;
-  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
-  virtual void complete_hash(MD5 *hash) {
-    assert(0);
-  }
-  virtual int complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
-                       map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                       const char *if_match = NULL, const char *if_nomatch = NULL);
+
+  int complete(size_t accounted_size, const string& etag,
+               ceph::real_time *mtime, ceph::real_time set_mtime,
+               map<string, bufferlist>& attrs, ceph::real_time delete_at,
+               const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
 
@@ -3312,8 +3406,6 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   int cur_part_id;
   off_t data_ofs;
 
-  uint64_t extra_data_len;
-  bufferlist extra_data_bl;
   bufferlist pending_data_bl;
   uint64_t max_chunk_size;
 
@@ -3333,9 +3425,10 @@ protected:
   RGWObjManifest::generator manifest_gen;
 
   int write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool exclusive);
-  virtual int do_complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
-                          map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match = NULL, const char *if_nomatch = NULL);
+  int do_complete(size_t accounted_size, const string& etag,
+                  ceph::real_time *mtime, ceph::real_time set_mtime,
+                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
+                  const char *if_match, const char *if_nomatch) override;
 
   int prepare_next_part(off_t ofs);
   int complete_parts();
@@ -3353,7 +3446,6 @@ public:
                                 next_part_ofs(_p),
                                 cur_part_id(0),
                                 data_ofs(0),
-                                extra_data_len(0),
                                 max_chunk_size(0),
                                 versioned_object(versioned),
                                 olh_epoch(0),
@@ -3362,12 +3454,7 @@ public:
                                 unique_tag(_t) {}
   int prepare(RGWRados *store, string *oid_rand);
   virtual bool immutable_head() { return false; }
-  void set_extra_data_len(uint64_t len) {
-    extra_data_len = len;
-  }
-  virtual int handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again);
-  virtual void complete_hash(MD5 *hash);
-  bufferlist& get_extra_data() { return extra_data_bl; }
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again);
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;
