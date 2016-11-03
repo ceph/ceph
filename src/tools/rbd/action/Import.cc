@@ -33,7 +33,7 @@ int do_import_diff_fd(librbd::Image &image, int fd,
   string banner = (format == 1 ? utils::RBD_DIFF_BANNER : utils::RBD_DIFF_BANNER_V2);
   char buf[banner.size() + 1];
 
-  bool from_stdin = (fd == 0);
+  bool from_stdin = (fd == STDIN_FILENO);
   if (!from_stdin) {
     r = ::fstat(fd, &stat_buf);
     if (r < 0)
@@ -201,7 +201,7 @@ int do_import_diff(librbd::Image &image, const char *path,
   int fd;
 
   if (strcmp(path, "-") == 0) {
-    fd = 0;
+    fd = STDIN_FILENO;
   } else {
     fd = open(path, O_RDONLY);
     if (fd < 0) {
@@ -320,7 +320,7 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
   if (import_format == 1)
     return r;
 
-  if (fd == 0 || size < utils::RBD_IMAGE_BANNER_V2.size()) {
+  if (fd == STDIN_FILENO || size < utils::RBD_IMAGE_BANNER_V2.size()) {
     r = -EINVAL;
     return r;
   }
@@ -494,7 +494,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
   size_t blklen = 0;            // amount accumulated from reads to fill blk
   char *p = new char[imgblklen];
   uint64_t image_pos = 0;
-  bool from_stdin = (fd == 0);
+  bool from_stdin = (fd == STDIN_FILENO);
 
   reqlen = min(reqlen, size);
   // loop body handles 0 return, as we may have a block to flush
@@ -546,7 +546,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     goto out;
   }
 
-  if (fd == 0) {
+  if (fd == STDIN_FILENO) {
     r = image.resize(image_pos);
     if (r < 0) {
       std::cerr << "rbd: final image resize failed" << std::endl;
@@ -583,7 +583,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   bool from_stdin = !strcmp(path, "-");
   if (from_stdin) {
     throttle.reset(new SimpleThrottle(1, false));
-    fd = 0;
+    fd = STDIN_FILENO;
     size = 1ULL << order;
   } else {
     throttle.reset(new SimpleThrottle(

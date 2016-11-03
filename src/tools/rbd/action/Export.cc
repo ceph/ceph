@@ -214,7 +214,7 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   int fd;
 
   if (strcmp(path, "-") == 0)
-    fd = 1;
+    fd = STDOUT_FILENO;
   else
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (fd < 0)
