@@ -27,6 +27,8 @@
 
 	osd default data pool replay window = 5
 
+	mon allow pool delete = true
+
 [osd]
         osd journal size = 100
 
