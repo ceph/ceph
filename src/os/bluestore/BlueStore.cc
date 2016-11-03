@@ -3420,7 +3420,7 @@ int BlueStore::_open_db(bool create)
       rocksdb::Env *b = rocksdb::Env::Default();
       if (create) {
 	string cmd = "rm -rf " + path + "/db " +
-	  path + "/db.slow" +
+	  path + "/db.slow " +
 	  path + "/db.wal";
 	int r = system(cmd.c_str());
 	(void)r;
