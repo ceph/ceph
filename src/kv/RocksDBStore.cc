@@ -371,6 +371,7 @@ void RocksDBStore::get_statistics(Formatter *f) {
   bool status = db->GetProperty("rocksdb.stats", &stats);
   if (status) {
     f->open_object_section("bluestore rocksdb statistics");
+    f->write_raw_data("\n We usually observe an overhead of 5%-10% for this command. Be carefully before using\n\n");
     std::size_t p1 = 0, p2 = 0;
     while ((p1 = stats.find("\n", p2)) != std::string::npos) {
       if (p1 != p2) {
