@@ -961,7 +961,7 @@ if ! getent passwd ceph >/dev/null ; then
     useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin 2>/dev/null || :
 fi
 usermod -c "Ceph storage service" \
-        -d %{_localstatedir}/lib/ceph \   
+        -d %{_localstatedir}/lib/ceph \
         -g ceph \
         -s /sbin/nologin \
         ceph
