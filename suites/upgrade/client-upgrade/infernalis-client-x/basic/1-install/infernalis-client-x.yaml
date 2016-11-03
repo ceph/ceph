@@ -1,6 +1,7 @@
 tasks:
 - install:
     branch: infernalis 
+    exclude_packages: ['ceph-mgr']
 - print: "**** done install infernalis"
 upgrade_workload:
   sequential:

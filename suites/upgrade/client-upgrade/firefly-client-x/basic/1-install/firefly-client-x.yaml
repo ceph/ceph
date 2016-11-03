@@ -1,6 +1,7 @@
 tasks:
 - install:
-   branch: firefly 
+    branch: firefly
+    exclude_packages: ['ceph-mgr']
 - print: "**** done install firefly"
 - install.upgrade:
    exclude_packages: ['ceph-test', 'ceph-test-dbg']
