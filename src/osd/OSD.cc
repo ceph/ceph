@@ -4913,9 +4913,12 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
-  } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE) &&
-	     !store->can_sort_nibblewise()) {
-    dout(1) << "osdmap SORTBITWISE flag is NOT set but our backend does not support nibblewise sort" << dendl;
+  } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+    dout(1) << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
+	    << dendl;
+  } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+    dout(1) << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
+	    << dendl;
   } else if (osdmap->get_num_up_osds() &&
 	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
     dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
