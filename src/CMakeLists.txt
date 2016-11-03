@@ -18,12 +18,15 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
+if(LINUX)
+  add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
+endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
 
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
@@ -185,6 +188,8 @@ if(${ENABLE_GIT_VERSION})
     list(GET CEPH_GIT_SHA_AND_TAG 0 CEPH_GIT_VER)
     list(GET CEPH_GIT_SHA_AND_TAG 1 CEPH_GIT_NICE_VER)
   endif(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
+  # remove 'v' prefix from raw git version
+  string(SUBSTRING ${CEPH_GIT_NICE_VER} 1 -1 CEPH_GIT_NICE_VER)
 else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
@@ -630,31 +635,44 @@ install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
 # make rocksdb statically
-if(NOT ALLOCATOR STREQUAL "jemalloc")
-  set(disable_jemalloc "DISABLE_JEMALLOC=1")
+
+set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+
+if(ALLOCATOR STREQUAL "jemalloc")
+  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_JEMALLOC=ON)
 endif()
 
-set(ROCKSDB_EXTRA_CXXFLAG -fPIC -Wno-unused-variable)
-if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(ROCKSDB_EXTRA_CXXFLAG ${ROCKSDB_EXTRA_CXXFLAG} -DNDEBUG)
-endif(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-
-set(ROCKSDB_CXX "${CMAKE_CXX_COMPILER}")
 if (WITH_CCACHE AND CCACHE_FOUND)
-  set(ROCKSDB_CXX "ccache" "${CMAKE_CXX_COMPILER}")
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=ccache)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER})
+else(WITH_CCACHE AND CCACHE_FOUND)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
 endif(WITH_CCACHE AND CCACHE_FOUND)
 
-add_custom_target(build_rocksdb
-    COMMAND
-    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib CXX="${ROCKSDB_CXX}" EXTRA_CXXFLAGS="${ROCKSDB_EXTRA_CXXFLAG}"
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
-    COMMENT "rocksdb building")
+list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
 
-# add a imported library for librocksdb.a
+# we use an external project and copy the sources to bin directory to ensure
+# that object files are built outside of the source tree.
+include(ExternalProject)
+ExternalProject_Add(rocksdb_ext
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb
+  CMAKE_ARGS ${ROCKSDB_CMAKE_ARGS}
+  BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/rocksdb
+  BUILD_COMMAND $(MAKE) rocksdblib
+  INSTALL_COMMAND "true")
+
+# force rocksdb make to be called on each time
+ExternalProject_Add_Step(rocksdb_ext forcebuild
+  DEPENDEES configure
+  DEPENDERS build
+  COMMAND "true"
+  ALWAYS 1)
+
+set(ROCKSDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/include)
+
 add_library(rocksdb STATIC IMPORTED)
-set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
-add_dependencies(rocksdb build_rocksdb)
-set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
+add_dependencies(rocksdb rocksdb_ext)
+set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdblib.a")
 
 add_subdirectory(kv)
 add_subdirectory(os)

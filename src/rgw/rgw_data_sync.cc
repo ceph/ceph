@@ -1581,17 +1581,20 @@ int RGWRemoteDataLog::run_sync(int num_shards)
 {
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
+  data_sync_cr->get(); // run() will drop a ref, so take another
   lock.unlock();
+
   int r = run(data_sync_cr);
+
+  lock.get_write();
+  data_sync_cr->put();
+  data_sync_cr = NULL;
+  lock.unlock();
+
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
     return r;
   }
-
-  lock.get_write();
-  data_sync_cr = NULL;
-  lock.unlock();
-
   return 0;
 }
 
@@ -1815,8 +1818,7 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-  rgw_bucket_shard_sync_info sync_status;
-  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, sync_status);
+  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, init_status);
 }
 
 template <class T>

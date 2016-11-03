@@ -32,7 +32,7 @@ class CephContext;
 class PerfCountersBuilder;
 class PerfCountersCollectionTest;
 
-enum perfcounter_type_d
+enum perfcounter_type_d : uint8_t
 {
   PERFCOUNTER_NONE = 0,
   PERFCOUNTER_TIME = 0x1,
@@ -241,7 +241,7 @@ private:
 
 /* Class for constructing a PerfCounters object.
  *
- * This class peforms some validation that the parameters we have supplied are
+ * This class performs some validation that the parameters we have supplied are
  * correct in create_perf_counters().
  *
  * In the future, we will probably get rid of the first/last arguments, since

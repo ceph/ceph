@@ -930,7 +930,7 @@ protected:
   string source_zone;
   string client_id;
   string op_id;
-  string etag;
+  ceph::buffer::list etag;
 
   off_t last_ofs;
 
@@ -1515,7 +1515,7 @@ public:
   RGWHandler() : store(NULL), s(NULL) {}
   virtual ~RGWHandler();
 
-  virtual int init(RGWRados* store, struct req_state* _s, RGWClientIO* cio);
+  virtual int init(RGWRados* store, struct req_state* _s, rgw::io::BasicClient* cio);
 
   virtual int init_permissions(RGWOp *op) {
     return 0;

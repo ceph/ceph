@@ -234,11 +234,7 @@ Requires:      cryptsetup
 Requires:      findutils
 Requires:      which
 %if 0%{?suse_version}
-Requires:      lsb-release
 Recommends:    ntp-daemon
-%endif
-%if 0%{?fedora} || 0%{?rhel}
-Requires:      redhat-lsb-core
 %endif
 %if 0%{with xio}
 Requires:      libxio
@@ -1345,6 +1341,7 @@ fi
 %{_includedir}/rados/librados.hpp
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/buffer_fwd.h
+%{_includedir}/rados/inline_memory.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rados/rados_types.h

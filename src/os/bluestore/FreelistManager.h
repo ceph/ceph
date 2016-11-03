@@ -38,6 +38,10 @@ public:
   virtual void release(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn) = 0;
+
+  virtual bool supports_parallel_transactions() {
+    return false;
+  }
 };
 
 

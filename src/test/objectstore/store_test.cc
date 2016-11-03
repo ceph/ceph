@@ -4066,17 +4066,13 @@ public:
     return status;
   }
 
-  void fsck() {
+  void fsck(bool deep) {
     Mutex::Locker locker(lock);
     EnterExit ee("fsck");
     while (in_flight)
       cond.Wait(lock);
     store->umount();
-    // fixme: this is bluestore specific, but...
-    if (!g_conf->bluestore_fsck_on_mount &&
-	!g_conf->bluestore_fsck_on_umount) {
-      store->fsck();
-    }
+    store->fsck(deep);
     store->mount();
   }
 
@@ -4235,6 +4231,10 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "false");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "false");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid,
 				  max_obj, max_wr, align);
   test_obj.init();
@@ -4250,7 +4250,9 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
     boost::uniform_int<> true_false(0, 999);
     int val = true_false(rng);
     if (val > 998) {
-      test_obj.fsck();
+      test_obj.fsck(true);
+    } else if (val > 997) {
+      test_obj.fsck(false);
     } else if (val > 970) {
       test_obj.scan();
     } else if (val > 950) {
@@ -4277,6 +4279,10 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
   }
   test_obj.wait_for_done();
   test_obj.shutdown();
+
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
 }
 
 TEST_P(StoreTest, Synthetic) {
@@ -5711,45 +5717,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  g_ceph_context->_conf->set_val("osd_journal_size", "400");
-  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
-  g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
-  g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
-  g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
-  //g_ceph_context->_conf->set_val("filestore_fiemap", "true");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
-  g_ceph_context->_conf->set_val("bluestore_debug_misc", "true");
-  g_ceph_context->_conf->set_val("bluestore_debug_small_allocations", "4");
-  g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
-  g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
-  g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
-
-  // set small cache sizes so we see trimming during Synthetic tests
-  g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
-  g_ceph_context->_conf->set_val("bluestore_onode_cache_size", "500");
-
-  // specify device size
-  g_ceph_context->_conf->set_val("bluestore_block_size", "10240000000");
-
-  g_ceph_context->_conf->set_val(
-    "enable_experimental_unrecoverable_data_corrupting_features", "*");
-  g_ceph_context->_conf->apply_changes(NULL);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
-  return r;
-}
-
 void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
                         unsigned max_objects,
                         unsigned max_ops,
@@ -5825,6 +5792,51 @@ TEST_P(StoreTest, TooManyBlobsTest) {
   doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0, &res_stat);
   ASSERT_LE(res_stat.stored, max_object);
   ASSERT_EQ(res_stat.allocated, max_object);
+}
+
+int main(int argc, char **argv) {
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  g_ceph_context->_conf->set_val("osd_journal_size", "400");
+  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
+  g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
+  g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
+  g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
+  //g_ceph_context->_conf->set_val("filestore_fiemap", "true");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf->set_val("bluestore_debug_misc", "true");
+  g_ceph_context->_conf->set_val("bluestore_debug_small_allocations", "4");
+  g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
+  g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
+  g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
+
+  // set small cache sizes so we see trimming during Synthetic tests
+  g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
+  g_ceph_context->_conf->set_val("bluestore_onode_cache_size", "500");
+
+  // very short *_max prealloc so that we fall back to async submits
+  g_ceph_context->_conf->set_val("bluestore_blobid_prealloc", "10");
+  g_ceph_context->_conf->set_val("bluestore_nid_prealloc", "10");
+  g_ceph_context->_conf->set_val("bluestore_debug_randomize_serial_transaction",
+				 "10");
+
+  // specify device size
+  g_ceph_context->_conf->set_val("bluestore_block_size", "10240000000");
+
+  g_ceph_context->_conf->set_val(
+    "enable_experimental_unrecoverable_data_corrupting_features", "*");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  int r = RUN_ALL_TESTS();
+  g_ceph_context->put();
+  return r;
 }
 
 /*

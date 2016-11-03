@@ -106,6 +106,8 @@ OPTION(async_compressor_threads, OPT_INT, 2)
 OPTION(async_compressor_thread_timeout, OPT_INT, 5)
 OPTION(async_compressor_thread_suicide_timeout, OPT_INT, 30)
 
+OPTION(mempool_debug, OPT_BOOL, false)
+
 DEFAULT_SUBSYS(0, 5)
 SUBSYS(lockdep, 0, 1)
 SUBSYS(context, 0, 1)
@@ -610,6 +612,7 @@ OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
 OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
+OPTION(osd_journal_flush_on_shutdown, OPT_BOOL, true) // Flush journal to data store on shutdown
 // flags for specific control purpose during osd mount() process. 
 // e.g., can be 1 to skip over replaying journal
 // or 2 to skip over mounting omap or 3 to skip over both.
@@ -995,23 +998,26 @@ OPTION(bluestore_extent_map_shard_target_size, OPT_U32, 500)
 OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
 OPTION(bluestore_extent_map_shard_target_size_slop, OPT_DOUBLE, .2)
 OPTION(bluestore_extent_map_inline_shard_prealloc_size, OPT_U32, 256)
+OPTION(bluestore_cache_trim_interval, OPT_DOUBLE, .1)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
-OPTION(bluestore_onode_cache_size, OPT_U32, 4*1024)
-OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
+OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
+OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .1)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
-OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
+OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_umount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
-OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
-OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
+OPTION(bluestore_sync_submit_transaction, OPT_BOOL, true) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
 OPTION(bluestore_wal_threads, OPT_INT, 4)
 OPTION(bluestore_wal_thread_timeout, OPT_INT, 30)
@@ -1032,6 +1038,7 @@ OPTION(bluestore_debug_freelist, OPT_BOOL, false)
 OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
 OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 OPTION(bluestore_debug_inject_read_err, OPT_BOOL, false)
+OPTION(bluestore_debug_randomize_serial_transaction, OPT_INT, 0)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 
@@ -1040,6 +1047,7 @@ OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(kstore_backend, OPT_STR, "rocksdb")
 OPTION(kstore_rocksdb_options, OPT_STR, "compression=kNoCompression")
 OPTION(kstore_fsck_on_mount, OPT_BOOL, false)
+OPTION(kstore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(kstore_nid_prealloc, OPT_U64, 1024)
 OPTION(kstore_sync_transaction, OPT_BOOL, false)
 OPTION(kstore_sync_submit_transaction, OPT_BOOL, false)

@@ -95,6 +95,17 @@ public:
   }
 };
 
+class MigratorLogContext : public MDSLogContextBase {
+protected:
+  Migrator *mig;
+  MDSRank *get_mds() {
+    return mig->mds;
+  }
+public:
+  explicit MigratorLogContext(Migrator *mig_) : mig(mig_) {
+    assert(mig != NULL);
+  }
+};
 
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
@@ -1534,10 +1545,10 @@ void Migrator::finish_export_dir(CDir *dir, utime_t now, mds_rank_t peer,
     finish_export_dir(*it, now, peer, peer_imported, finished, num_dentries);
 }
 
-class C_MDS_ExportFinishLogged : public MigratorContext {
+class C_MDS_ExportFinishLogged : public MigratorLogContext {
   CDir *dir;
 public:
-  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorContext(m), dir(d) {}
+  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorLogContext(m), dir(d) {}
   void finish(int r) {
     mig->export_logged_finish(dir);
   }
@@ -2182,7 +2193,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
 
 
-class C_MDS_ImportDirLoggedStart : public MigratorContext {
+class C_MDS_ImportDirLoggedStart : public MigratorLogContext {
   dirfrag_t df;
   CDir *dir;
   mds_rank_t from;
@@ -2191,7 +2202,7 @@ public:
   map<client_t,uint64_t> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
-    MigratorContext(m), df(d->dirfrag()), dir(d), from(f) {
+    MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
   }
   void finish(int r) {
     mig->import_logged_start(df, dir, from, imported_client_map, sseqmap);
@@ -3036,7 +3047,7 @@ out:
   m->put();
 }
 
-class C_M_LoggedImportCaps : public MigratorContext {
+class C_M_LoggedImportCaps : public MigratorLogContext {
   CInode *in;
   mds_rank_t from;
 public:
@@ -3044,7 +3055,7 @@ public:
   map<client_t,entity_inst_t> client_map;
   map<client_t,uint64_t> sseqmap;
 
-  C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorContext(m), in(i), from(f) {}
+  C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorLogContext(m), in(i), from(f) {}
   void finish(int r) {
     mig->logged_import_caps(in, from, peer_exports, client_map, sseqmap);
   }  

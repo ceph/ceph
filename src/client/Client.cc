@@ -1303,7 +1303,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       unsigned wanted = 0;
       if (op == CEPH_MDS_OP_GETATTR || op == CEPH_MDS_OP_LOOKUP)
 	wanted = request->head.args.getattr.mask;
-      else if (op == CEPH_MDS_OP_OPEN || op == CEPH_MDS_OP_OPEN)
+      else if (op == CEPH_MDS_OP_OPEN || op == CEPH_MDS_OP_CREATE)
 	wanted = request->head.args.open.mask;
 
       if ((wanted & CEPH_CAP_XATTR_SHARED) &&

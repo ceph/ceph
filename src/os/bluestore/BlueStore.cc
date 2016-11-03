@@ -34,6 +34,21 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
+// bluestore_meta_onode
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
+			      bluestore_meta_onode);
+
+// bluestore_meta_other
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
+			      bluestore_meta_other);
+
+// kv store prefixes
 const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_STAT = "T";    // field -> value(int64 array)
 const string PREFIX_COLL = "C";    // collection name -> cnode_t
@@ -508,6 +523,69 @@ BlueStore::Cache *BlueStore::Cache::create(string type, PerfCounters *logger)
   return c;
 }
 
+void BlueStore::Cache::trim(
+  uint64_t target_bytes,
+  float target_meta_ratio,
+  float bytes_per_onode)
+{
+  std::lock_guard<std::recursive_mutex> l(lock);
+  uint64_t current_meta = _get_num_onodes() * bytes_per_onode;
+  uint64_t current_buffer = _get_buffer_bytes();
+  uint64_t current = current_meta + current_buffer;
+
+  uint64_t target_meta = target_bytes * target_meta_ratio;
+  uint64_t target_buffer = target_bytes - target_meta;
+
+  if (current <= target_bytes) {
+    dout(10) << __func__
+	     << " shard target " << pretty_si_t(target_bytes)
+	     << " ratio " << target_meta_ratio << " ("
+	     << pretty_si_t(target_meta) << " + "
+	     << pretty_si_t(target_buffer) << "), "
+	     << " current " << pretty_si_t(current) << " ("
+	     << pretty_si_t(current_meta) << " + "
+	     << pretty_si_t(current_buffer) << ")"
+	     << dendl;
+    return;
+  }
+
+  uint64_t need_to_free = 0;
+  if (current > target_bytes) {
+    need_to_free = current - target_bytes;
+  }
+  uint64_t free_buffer = 0;
+  uint64_t free_meta = 0;
+  if (current_buffer > target_buffer) {
+    free_buffer = current_buffer - target_buffer;
+    if (free_buffer > need_to_free) {
+      free_buffer = need_to_free;
+    }
+  }
+  free_meta = need_to_free - free_buffer;
+
+  // start bounds at what we have now
+  uint64_t max_buffer = current_buffer - free_buffer;
+  uint64_t max_meta = current_meta - free_meta;
+  uint64_t max_onodes = max_meta / bytes_per_onode;
+
+  dout(10) << __func__
+	   << " shard target " << pretty_si_t(target_bytes)
+	   << " ratio " << target_meta_ratio << " ("
+	   << pretty_si_t(target_meta) << " + "
+	   << pretty_si_t(target_buffer) << "), "
+	   << " current " << pretty_si_t(current) << " ("
+	   << pretty_si_t(current_meta) << " + "
+	   << pretty_si_t(current_buffer) << "),"
+	   << " need_to_free " << pretty_si_t(need_to_free) << " ("
+	   << pretty_si_t(free_meta) << " + "
+	   << pretty_si_t(free_buffer) << ")"
+	   << " -> max " << max_onodes << " onodes + "
+	   << max_buffer << " buffer"
+	   << dendl;
+  _trim(max_onodes, max_buffer);
+}
+
+
 // LRUCache
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.LRUCache(" << this << ") "
@@ -519,10 +597,8 @@ void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
   onode_lru.push_front(*o);
 }
 
-void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
+void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
-
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_size << " / " << buffer_max
 	   << dendl;
@@ -698,10 +774,8 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
   }
 }
 
-void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
+void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
-
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_bytes << " / " << buffer_max
 	   << dendl;
@@ -1504,7 +1578,8 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
   if (o->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
-      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n); //we need to encode inline_bl to measure encoded length
+      // we need to encode inline_bl to measure encoded length
+      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
       assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << " inline shard "
@@ -1630,8 +1705,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
     auto sp = o->onode.extent_map_shards.begin();
     auto esp = o->onode.extent_map_shards.end();
     unsigned shard_start = 0;
-    ++sp;
     unsigned shard_end;
+    ++sp;
     if (sp == esp) {
       shard_end = OBJECT_MAX_SIZE;
     } else {
@@ -1676,6 +1751,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 		// switch b to the new right-hand side, in case it
 		// *also* has to get split.
 		bstart += blob_offset;
+		onode->c->store->logger->inc(l_bluestore_blob_split);
 	      } else {
 		must_span = true;
 		break;
@@ -2070,6 +2146,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       break;
     }
     if (n->logical_offset >= shard_end) {
+      assert(pshard != shards.end());
       ++pshard;
       if (pshard != shards.end()) {
 	shard_end = pshard->offset;
@@ -2134,14 +2211,14 @@ void BlueStore::ExtentMap::punch_hole(
 
 BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   uint64_t logical_offset,
-  uint64_t offset, uint64_t length, uint8_t blob_depth, BlobRef b,
+  uint64_t blob_offset, uint64_t length, uint8_t blob_depth, BlobRef b,
   extent_map_t *old_extents)
 {
   punch_hole(logical_offset, length, old_extents);
-  b->ref_map.get(offset, length);
-  Extent *le = new Extent(logical_offset, offset, length, blob_depth, b);
+  b->ref_map.get(blob_offset, length);
+  Extent *le = new Extent(logical_offset, blob_offset, length, blob_depth, b);
   extent_map.insert(*le);
-  if (!needs_reshard && spans_shard(offset, length)) {
+  if (!needs_reshard && spans_shard(logical_offset, length)) {
     needs_reshard = true;
   }
   return le;
@@ -2422,9 +2499,50 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 
 void BlueStore::Collection::trim_cache()
 {
-  cache->trim(
-    g_conf->bluestore_onode_cache_size / store->cache_shards.size(),
-    g_conf->bluestore_buffer_cache_size / store->cache_shards.size());
+  // see if mempool stats have updated
+  uint64_t total_bytes;
+  uint64_t total_onodes;
+  size_t seq;
+  store->get_mempool_stats(&seq, &total_bytes, &total_onodes);
+  if (seq == cache->last_trim_seq) {
+    dout(30) << __func__ << " no new mempool stats; nothing to do" << dendl;
+    return;
+  }
+  cache->last_trim_seq = seq;
+
+  // trim
+  if (total_onodes < 2) {
+    total_onodes = 2;
+  }
+  float bytes_per_onode = (float)total_bytes / (float)total_onodes;
+  size_t num_shards = store->cache_shards.size();
+  uint64_t shard_target = g_conf->bluestore_cache_size / num_shards;
+  dout(30) << __func__
+	   << " total meta bytes " << total_bytes
+	   << ", total onodes " << total_onodes
+	   << ", bytes_per_onode " << bytes_per_onode
+	   << dendl;
+  cache->trim(shard_target, g_conf->bluestore_cache_meta_ratio, bytes_per_onode);
+
+  store->_update_cache_logger();
+}
+
+// =======================================================
+
+void *BlueStore::MempoolThread::entry()
+{
+  Mutex::Locker l(lock);
+  while (!stop) {
+    store->mempool_bytes = mempool::bluestore_meta_other::allocated_bytes() +
+      mempool::bluestore_meta_onode::allocated_bytes();
+    store->mempool_onodes = mempool::bluestore_meta_onode::allocated_items();
+    ++store->mempool_seq;
+    utime_t wait;
+    wait += g_conf->bluestore_cache_trim_interval;
+    cond.WaitInterval(g_ceph_context, lock, wait);
+  }
+  stop = false;
+  return NULL;
 }
 
 // =======================================================
@@ -2475,7 +2593,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
     csum_type(Checksummer::CSUM_CRC32C),
-    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
+    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply),
+    mempool_thread(this)
 {
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
@@ -2683,8 +2802,12 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_gc, "bluestore_gc", "Sum for garbage collection reads");
-  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes", "garbage collected bytes");
+  b.add_u64(l_bluestore_gc, "bluestore_gc",
+            "Sum for garbage collection reads");
+  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes",
+            "garbage collected bytes");
+  b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
+            "Sum for blob splitting due to resharding");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -3146,8 +3269,7 @@ int BlueStore::_open_db(bool create)
 {
   int r;
   assert(!db);
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/db", path.c_str());
+  string fn = path + "/db";
   string options;
   stringstream err;
   ceph::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
@@ -3195,11 +3317,11 @@ int BlueStore::_open_db(bool create)
     }
     bluefs = new BlueFS;
 
-    char bfn[PATH_MAX];
+    string bfn;
     struct stat st;
 
-    snprintf(bfn, sizeof(bfn), "%s/block.db", path.c_str());
-    if (::stat(bfn, &st) == 0) {
+    bfn = path + "/block.db";
+    if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -3231,7 +3353,7 @@ int BlueStore::_open_db(bool create)
     }
 
     // shared device
-    snprintf(bfn, sizeof(bfn), "%s/block", path.c_str());
+    bfn = path + "/block";
     r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -3252,8 +3374,8 @@ int BlueStore::_open_db(bool create)
       bluefs_extents.insert(BLUEFS_START, initial);
     }
 
-    snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
-    if (::stat(bfn, &st) == 0) {
+    bfn = path + "/block.wal";
+    if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -3308,22 +3430,20 @@ int BlueStore::_open_db(bool create)
       env = new BlueRocksEnv(bluefs);
 
       // simplify the dir names, too, as "seen" by rocksdb
-      strcpy(fn, "db");
+      fn = "db";
     }
 
     if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
-      char db_paths[PATH_MAX*3];
-      snprintf(
-	db_paths, sizeof(db_paths), "%s,%lld %s.slow,%lld",
-	fn,
-	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_DB) *
-	 95 / 100,
-	fn,
-	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_SLOW) *
-	 95 / 100);
-      g_conf->set_val("rocksdb_db_paths", db_paths, false, false);
+      ostringstream db_paths;
+      uint64_t db_size = bluefs->get_block_device_size(BlueFS::BDEV_DB);
+      uint64_t slow_size = bluefs->get_block_device_size(BlueFS::BDEV_SLOW);
+      db_paths << fn << ","
+               << (uint64_t)(db_size * 95 / 100) << " "
+               << fn + ".slow" << ","
+               << (uint64_t)(slow_size * 95 / 100);
+      g_conf->set_val("rocksdb_db_paths", db_paths.str(), false, false);
       dout(10) << __func__ << " set rocksdb_db_paths to "
 	       << g_conf->rocksdb_db_paths << dendl;
     }
@@ -3331,12 +3451,12 @@ int BlueStore::_open_db(bool create)
     if (create) {
       env->CreateDir(fn);
       if (g_conf->rocksdb_separate_wal_dir)
-	env->CreateDir(string(fn) + ".wal");
+	env->CreateDir(fn + ".wal");
       if (g_conf->rocksdb_db_paths.length())
-	env->CreateDir(string(fn) + ".slow");
+	env->CreateDir(fn + ".slow");
     }
   } else if (create) {
-    int r = ::mkdir(fn, 0755);
+    int r = ::mkdir(fn.c_str(), 0755);
     if (r < 0)
       r = -errno;
     if (r < 0 && r != -EEXIST) {
@@ -3347,9 +3467,8 @@ int BlueStore::_open_db(bool create)
 
     // wal_dir, too!
     if (g_conf->rocksdb_separate_wal_dir) {
-      char walfn[PATH_MAX];
-      snprintf(walfn, sizeof(walfn), "%s/db.wal", path.c_str());
-      r = ::mkdir(walfn, 0755);
+      string walfn = path + "/db.wal";
+      r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
 	r = -errno;
       if (r < 0 && r != -EEXIST) {
@@ -3741,7 +3860,7 @@ int BlueStore::mkfs()
     if (r == 0) {
       dout(1) << __func__ << " already created" << dendl;
       if (g_conf->bluestore_fsck_on_mkfs) {
-        r = fsck();
+        r = fsck(g_conf->bluestore_fsck_on_mkfs_deep);
         if (r < 0) {
           derr << __func__ << " fsck found fatal error: " << cpp_strerror(r)
                << dendl;
@@ -3905,7 +4024,7 @@ int BlueStore::mkfs()
 
   if (r == 0 &&
       g_conf->bluestore_fsck_on_mkfs) {
-    int rc = fsck();
+    int rc = fsck(g_conf->bluestore_fsck_on_mkfs_deep);
     if (rc < 0)
       return rc;
     if (rc > 0) {
@@ -3947,7 +4066,7 @@ int BlueStore::mount()
   }
 
   if (g_conf->bluestore_fsck_on_mount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->bluestore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
     if (rc > 0) {
@@ -4015,6 +4134,8 @@ int BlueStore::mount()
   if (r < 0)
     goto out_stop;
 
+  mempool_thread.init();
+
   _set_csum();
   _set_compression();
 
@@ -4022,6 +4143,7 @@ int BlueStore::mount()
   return 0;
 
  out_stop:
+  mempool_thread.shutdown();
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
@@ -4055,6 +4177,8 @@ int BlueStore::umount()
   _reap_collections();
   coll_map.clear();
 
+  mempool_thread.shutdown();
+
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   dout(20) << __func__ << " draining wal_wq" << dendl;
@@ -4078,7 +4202,7 @@ int BlueStore::umount()
   _close_path();
 
   if (g_conf->bluestore_fsck_on_umount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->bluestore_fsck_on_umount_deep);
     if (rc < 0)
       return rc;
     if (rc > 0) {
@@ -4142,9 +4266,9 @@ int BlueStore::_fsck_check_extents(
   return errors;
 }
 
-int BlueStore::fsck()
+int BlueStore::fsck(bool deep)
 {
-  dout(1) << __func__ << " start" << dendl;
+  dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
   set<uint64_t> used_nids;
   set<uint64_t> used_omap_head;
@@ -4369,7 +4493,14 @@ int BlueStore::fsck()
 	if (l.logical_offset < pos) {
 	  derr << __func__ << " " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset
-	       << "overlaps with the previous, which ends at 0x" << pos
+	       << " overlaps with the previous, which ends at 0x" << pos
+	       << std::dec << dendl;
+	  ++errors;
+	}
+	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
+	  derr << __func__ << " " << oid << " lextent at 0x"
+	       << std::hex << l.logical_offset << "~" << l.length
+	       << " spans a shard boundary"
 	       << std::dec << dendl;
 	  ++errors;
 	}
@@ -4417,15 +4548,24 @@ int BlueStore::fsck()
 					expected_statfs);
         }
       }
+      if (deep) {
+	bufferlist bl;
+	int r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
+	if (r < 0) {
+	  ++errors;
+	  derr << __func__ << " " << oid << " error during read: "
+	       << cpp_strerror(r) << dendl;
+	}
+      }
       // omap
-      while (o->onode.omap_head) {
+      if (o->onode.omap_head) {
 	if (used_omap_head.count(o->onode.omap_head)) {
 	  derr << __func__ << " " << oid << " omap_head " << o->onode.omap_head
 	       << " already in use" << dendl;
 	  ++errors;
-	  break;
+	} else {
+	  used_omap_head.insert(o->onode.omap_head);
 	}
-	used_omap_head.insert(o->onode.omap_head);
       }
     }
   }
@@ -4465,9 +4605,9 @@ int BlueStore::fsck()
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
 	errors += _fsck_check_extents(p->second.oids.front(),
-			    extents,
-			    p->second.compressed,
-			    used_blocks, expected_statfs);
+				      extents,
+				      p->second.compressed,
+				      used_blocks, expected_statfs);
 	sb_info.erase(p);
       }
     }
@@ -6013,11 +6153,13 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "nid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, p);
+      uint64_t v;
+      ::decode(v, p);
+      nid_max = v;
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
-    nid_last = nid_max;
+    nid_last = nid_max.load();
   }
 
   // blobid
@@ -6027,11 +6169,13 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "blobid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(blobid_max, p);
+      uint64_t v;
+      ::decode(v, p);
+      blobid_max = v;
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old blobid_max " << blobid_max << dendl;
-    blobid_last = blobid_max;
+    blobid_last = blobid_max.load();
   }
 
   // freelist
@@ -6155,21 +6299,40 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
-      if (!g_conf->bluestore_sync_transaction) {
-	if (g_conf->bluestore_sync_submit_transaction) {
+      if (g_conf->bluestore_sync_submit_transaction &&
+	  fm->supports_parallel_transactions()) {
+	if (txc->last_nid >= nid_max ||
+	    txc->last_blobid >= blobid_max) {
+	  dout(20) << __func__
+		   << " last_{nid,blobid} exceeds max, submit via kv thread"
+		   << dendl;
+	} else if (txc->osr->kv_committing_serially) {
+	  dout(20) << __func__ << " prior txc submitted via kv thread, us too"
+		   << dendl;
+	  // note: this is starvation-prone.  once we have a txc in a busy
+	  // sequencer that is committing serially it is possible to keep
+	  // submitting new transactions fast enough that we get stuck doing
+	  // so.  the alternative is to block here... fixme?
+	} else if (g_conf->bluestore_debug_randomize_serial_transaction &&
+		   rand() % g_conf->bluestore_debug_randomize_serial_transaction
+		   == 0) {
+	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
+		   << dendl;
+	} else {
 	  _txc_finalize_kv(txc, txc->t);
+	  txc->kv_submitted = true;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
-      } else {
-	_txc_finalize_kv(txc, txc->t);
-	int r = db->submit_transaction_sync(txc->t);
-	assert(r == 0);
       }
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
+	if (!txc->kv_submitted) {
+	  kv_queue_unsubmitted.push_back(txc);
+	  ++txc->osr->kv_committing_serially;
+	}
       }
       return;
     case TransContext::STATE_KV_QUEUED:
@@ -6497,7 +6660,6 @@ void BlueStore::_kv_sync_thread()
   std::unique_lock<std::mutex> l(kv_lock);
   while (true) {
     assert(kv_committing.empty());
-    assert(wal_cleaning.empty());
     if (kv_queue.empty() && wal_cleanup_queue.empty()) {
       if (kv_stop)
 	break;
@@ -6506,14 +6668,19 @@ void BlueStore::_kv_sync_thread()
       kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
+      deque<TransContext*> kv_submitting;
+      deque<TransContext*> wal_cleaning;
       dout(20) << __func__ << " committing " << kv_queue.size()
+	       << " submitting " << kv_queue_unsubmitted.size()
 	       << " cleaning " << wal_cleanup_queue.size() << dendl;
       kv_committing.swap(kv_queue);
+      kv_submitting.swap(kv_queue_unsubmitted);
       wal_cleaning.swap(wal_cleanup_queue);
       utime_t start = ceph_clock_now(NULL);
       l.unlock();
 
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
+      dout(30) << __func__ << " submitting txc " << kv_submitting << dendl;
       dout(30) << __func__ << " wal_cleaning txc " << wal_cleaning << dendl;
 
       alloc->commit_start();
@@ -6521,45 +6688,41 @@ void BlueStore::_kv_sync_thread()
       // flush/barrier on block device
       bdev->flush();
 
-      uint64_t high_nid = 0, high_blobid = 0;
-      if (!g_conf->bluestore_sync_transaction &&
-	  !g_conf->bluestore_sync_submit_transaction) {
-	for (auto txc : kv_committing) {
-	  _txc_finalize_kv(txc, txc->t);
-	  if (txc->last_nid > high_nid) {
-	    high_nid = txc->last_nid;
-	  }
-	  if (txc->last_blobid > high_blobid) {
-	    high_blobid = txc->last_blobid;
-	  }
-          txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	}
-	if (!kv_committing.empty()) {
-	  TransContext *first_txc = kv_committing.front();
-	  std::lock_guard<std::mutex> l(id_lock);
-	  if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
-	    nid_max = high_nid + g_conf->bluestore_nid_prealloc;
-	    bufferlist bl;
-	    ::encode(nid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "nid_max", bl);
-	    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
-	  }
-	  if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
-	    blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
-	    bufferlist bl;
-	    ::encode(blobid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "blobid_max", bl);
-	    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
-	  }
-	}
-	for (auto txc : kv_committing) {
-	  int r = db->submit_transaction(txc->t);
-	  assert(r == 0);
-	}
-      }
+      // we will use one final transaction to force a sync
+      KeyValueDB::Transaction synct = db->get_transaction();
 
-      // one final transaction to force a sync
-      KeyValueDB::Transaction t = db->get_transaction();
+      // increase {nid,blobid}_max?  note that this covers both the
+      // case wehre we are approaching the max and the case we passed
+      // it.  in either case, we increase the max in the earlier txn
+      // we submit.
+      uint64_t new_nid_max = 0, new_blobid_max = 0;
+      if (nid_last + g_conf->bluestore_nid_prealloc/2 > nid_max) {
+	KeyValueDB::Transaction t =
+	  kv_submitting.empty() ? synct : kv_submitting.front()->t;
+	new_nid_max = nid_last + g_conf->bluestore_nid_prealloc;
+	bufferlist bl;
+	::encode(new_nid_max, bl);
+	t->set(PREFIX_SUPER, "nid_max", bl);
+	dout(10) << __func__ << " new_nid_max " << new_nid_max << dendl;
+      }
+      if (blobid_last + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
+	KeyValueDB::Transaction t =
+	  kv_submitting.empty() ? synct : kv_submitting.front()->t;
+	new_blobid_max = blobid_last + g_conf->bluestore_blobid_prealloc;
+	bufferlist bl;
+	::encode(new_blobid_max, bl);
+	t->set(PREFIX_SUPER, "blobid_max", bl);
+	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
+      }
+      for (auto txc : kv_submitting) {
+	assert(!txc->kv_submitted);
+	_txc_finalize_kv(txc, txc->t);
+	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	int r = db->submit_transaction(txc->t);
+	assert(r == 0);
+	--txc->osr->kv_committing_serially;
+	txc->kv_submitted = true;
+      }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
@@ -6573,7 +6736,7 @@ void BlueStore::_kv_sync_thread()
 	  ::encode(bluefs_extents, bl);
 	  dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
 		   << bluefs_extents << std::dec << dendl;
-	  t->set(PREFIX_SUPER, "bluefs_extents", bl);
+	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
 	}
       }
 
@@ -6583,14 +6746,25 @@ void BlueStore::_kv_sync_thread()
 	    ++it) {
 	bluestore_wal_transaction_t& wt =*(*it)->wal_txn;
 	// kv metadata updates
-	_txc_finalize_kv(*it, t);
+	_txc_finalize_kv(*it, synct);
 	// cleanup the wal
 	string key;
 	get_wal_key(wt.seq, &key);
-	t->rm_single_key(PREFIX_WAL, key);
+	synct->rm_single_key(PREFIX_WAL, key);
       }
-      int r = db->submit_transaction_sync(t);
+
+      // submit synct synchronously (block and wait for it to commit)
+      int r = db->submit_transaction_sync(synct);
       assert(r == 0);
+
+      if (new_nid_max) {
+	nid_max = new_nid_max;
+	dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+      }
+      if (new_blobid_max) {
+	blobid_max = new_blobid_max;
+	dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+      }
 
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
@@ -6599,6 +6773,7 @@ void BlueStore::_kv_sync_thread()
 	       << " in " << dur << dendl;
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
+	assert(txc->kv_submitted);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
@@ -6612,8 +6787,6 @@ void BlueStore::_kv_sync_thread()
 
       // this is as good a place as any ...
       _reap_collections();
-
-      _update_cache_logger();
 
       if (bluefs) {
 	if (!bluefs_gift_extents.empty()) {

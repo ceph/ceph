@@ -584,18 +584,22 @@ void RGW_SWIFT_Auth_Get::execute()
     tenant_path.append(info.user_id.to_str());
   }
 
-  STREAM_IO(s)->print("X-Storage-Url: %s%s/v1%s\r\n", swift_url.c_str(),
-	        swift_prefix.c_str(), tenant_path.c_str());
+  dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
+              tenant_path);
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
 
   {
-    char buf[bl.length() * 2 + 1];
-    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
+    static constexpr size_t PREFIX_LEN = strlen("AUTH_rgwtk");
+    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
 
-    STREAM_IO(s)->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
-    STREAM_IO(s)->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
+    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
+    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
+               token_val + PREFIX_LEN);
+
+    dump_header(s, "X-Storage-Token", token_val);
+    dump_header(s, "X-Auth-Token", token_val);
   }
 
   ret = STATUS_NO_CONTENT;
@@ -607,7 +611,7 @@ done:
 }
 
 int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
-				RGWClientIO *cio)
+				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;

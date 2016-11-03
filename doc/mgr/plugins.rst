@@ -48,9 +48,8 @@ Exposing commands
 -----------------
 
 Set the ``COMMANDS`` class attribute of your plugin to a list of dicts
-like this:
+like this::
 
-::
     COMMANDS = [
         {
             "cmd": "foobar name=myarg,type=CephString",

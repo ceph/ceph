@@ -178,7 +178,6 @@ over standard packages, so you must ensure that you set
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
@@ -187,7 +186,6 @@ over standard packages, so you must ensure that you set
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
@@ -196,7 +194,6 @@ over standard packages, so you must ensure that you set
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -209,7 +206,6 @@ for development releases instead. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
@@ -218,7 +214,6 @@ for development releases instead. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
@@ -227,7 +222,6 @@ for development releases instead. ::
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -287,7 +281,6 @@ below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
 	baseurl=http://gitbuilder.ceph.com/ceph-rpm-{distro}-x86_64-basic/ref/{branch}/SRPMS
 	enabled=0
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -329,7 +322,6 @@ directory to see which distributions Ceph supports.
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[apache2-ceph-source]
@@ -338,7 +330,6 @@ directory to see which distributions Ceph supports.
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -350,7 +341,6 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-noarch]
@@ -359,7 +349,6 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-source]
@@ -368,7 +357,6 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -409,7 +397,7 @@ RPM Packages
 Ceph requires additional additional third party libraries.
 To add the EPEL repository, execute the following::
 
-   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
 Ceph requires the following packages:
 

@@ -36,7 +36,7 @@ public:
     ::encode(path, bl);
     ::encode(description, bl);
     ::encode(nick, bl);
-    assert(type < 256);
+    static_assert(sizeof(type) == 1, "perfcounter_type_d must be one byte");
     ::encode((uint8_t)type, bl);
     ENCODE_FINISH(bl);
   }

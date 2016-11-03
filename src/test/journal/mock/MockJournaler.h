@@ -108,6 +108,8 @@ struct MockJournaler {
   MOCK_METHOD2(get_cached_client, int(const std::string&, cls::journal::Client*));
   MOCK_METHOD2(update_client, void(const bufferlist &, Context *));
 
+  MOCK_METHOD4(allocate_tag, void(uint64_t, const bufferlist &,
+                                  cls::journal::Tag*, Context *));
   MOCK_METHOD3(get_tag, void(uint64_t, cls::journal::Tag *, Context *));
   MOCK_METHOD3(get_tags, void(uint64_t, journal::Journaler::Tags*, Context*));
   MOCK_METHOD4(get_tags, void(uint64_t, uint64_t, journal::Journaler::Tags*,
@@ -163,9 +165,10 @@ struct MockJournalerProxy {
     return -EINVAL;
   }
 
-  void allocate_tag(uint64_t, const bufferlist &,
-                    cls::journal::Tag*, Context *on_finish) {
-    on_finish->complete(-EINVAL);
+  void allocate_tag(uint64_t tag_class, const bufferlist &tag_data,
+                    cls::journal::Tag* tag, Context *on_finish) {
+    MockJournaler::get_instance().allocate_tag(tag_class, tag_data, tag,
+                                               on_finish);
   }
 
   void init(Context *on_finish) {

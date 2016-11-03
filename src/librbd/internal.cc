@@ -1554,8 +1554,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
 
       cls::rbd::GroupSpec s;
-      r = cls_client::image_get_group(&io_ctx, header_oid, s);
-      if (s.is_valid()) {
+      r = cls_client::image_get_group(&io_ctx, header_oid, &s);
+      if (r < 0 && r != -EOPNOTSUPP) {
+        lderr(cct) << "error querying consistency group" << dendl;
+        ictx->owner_lock.put_read();
+        ictx->state->close();
+        return r;
+      } else if (s.is_valid()) {
 	lderr(cct) << "image is in a consistency group - not removing" << dendl;
 	ictx->owner_lock.put_read();
 	ictx->state->close();

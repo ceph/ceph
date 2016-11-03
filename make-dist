@@ -32,8 +32,9 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 		       $outfile.tar
 
 # populate files with version strings
-echo "including src/.git_version, src/ceph_ver.h, ceph.spec"
-src/make_version -g src/.git_version -c src/ceph_ver.h
+echo "including src/.git_version, ceph.spec"
+
+(git rev-parse HEAD ; git describe) 2> /dev/null > src/.git_version
 
 # if the version has '-' in it, it has a 'release' part,
 # like vX.Y.Z-N-g<shortsha1>.  If it doesn't, it's just
@@ -53,7 +54,7 @@ cat ceph.spec.in | \
     sed "s/@RPM_RELEASE@/$rpm_release/g" |
     sed "s/@TARBALL_BASENAME@/ceph-$version/g" > ceph.spec
 ln -s . $outfile
-tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/src/ceph_ver.h $outfile/ceph.spec
+tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec
 tar --concatenate -f $outfile.both.tar $outfile.version.tar
 tar --concatenate -f $outfile.both.tar $outfile.tar
 mv $outfile.both.tar $outfile.tar
