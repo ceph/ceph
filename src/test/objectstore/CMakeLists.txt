@@ -139,7 +139,7 @@ endif(HAVE_LIBAIO)
 add_executable(unittest_transaction
   test_transaction.cc)
 add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_transaction)
-target_link_libraries(unittest_transaction os common)
+target_link_libraries(unittest_transaction os common ${XIO_LIBRARY})
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone
