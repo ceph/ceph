@@ -471,7 +471,6 @@ void CreateRequest<I>::object_map_resize() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
-  op.create(true);
   cls_client::object_map_resize(&op, Striper::get_num_objects(m_layout, m_size),
                                 OBJECT_NONEXISTENT);
 
