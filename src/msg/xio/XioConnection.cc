@@ -77,6 +77,14 @@ void print_ceph_msg(CephContext *cct, const char *tag, Message *m)
   }
 }
 
+#undef dout_prefix
+#define dout_prefix conn_prefix(_dout)
+ostream& XioConnection::conn_prefix(std::ostream *_dout) {
+  return *_dout << "-- " << get_messenger()->get_myinst().addr << " >> " << peer_addr
+                << " peer=" << peer.name.type_str()
+                << " conn=" << conn << " sess=" << session << " ";
+}
+
 XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
 			     const entity_inst_t& _peer) :
   Connection(m->cct, m),
@@ -136,8 +144,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES,
              &bytes_opt, sizeof(bytes_opt));
 
-  ldout(m->cct,4) << "Peer type: " << peer.name.type_str() <<
-        " throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
+  ldout(m->cct,4) << "throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
 
   /* XXXX fake features, aieee! */
   set_features(XIO_ALL_FEATURES);
@@ -281,7 +288,6 @@ int XioConnection::handle_data_msg(struct xio_session *session,
       << " iov_base " << tmsg->in.header.iov_base
       << " iov_len " << (int) tmsg->in.header.iov_len
       << " nents " << tmsg->in.pdata_iov.nents
-      << " conn " << conn << " sess " << session
       << " sn " << tmsg->sn << dendl;
     assert(session == this->session);
     in_seq.set_count(msg_cnt.msg_cnt);
@@ -561,7 +567,7 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
   } /* trace ctr */
 
   ldout(msgr->cct,11) << "on_msg_delivered xcon: " << xsend->xcon <<
-    " session: " << session << " msg: " << req << " sn: " << req->sn << dendl;
+    " msg: " << req << " sn: " << req->sn << dendl;
 
   XioMsg *xmsg = dynamic_cast<XioMsg*>(xsend);
   if (xmsg) {
@@ -578,8 +584,8 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
     if ((send_ctr <= uint32_t(xio_qdepth_low_mark())) &&
 	(1 /* XXX memory <= memory low-water mark */))  {
       cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
-      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xsend->xcon <<
-        " session: " << session << " up_ready from flow_controlled" << dendl;
+      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xsend->xcon
+        << " up_ready from flow_controlled" << dendl;
     }
   }
 
