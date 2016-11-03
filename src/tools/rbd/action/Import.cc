@@ -152,11 +152,22 @@ int do_import_diff_fd(librbd::Image &image, int fd,
       } else {
 	std::cerr << "unrecognized tag byte " << (int)tag
 		  << " in stream; aborting" << std::endl;
-	if (format == 2) {
-	  ::lseek(fd, length, SEEK_CUR);
+	if (from_stdin) {
+	  char buf[4096];
+	  uint64_t len = min(length, uint64_t(4096));
+	  while (len > 0) {
+	    r = safe_read_exact(fd, buf, len);
+	    if (r < 0)
+	      return r;
+	    length -= len;
+	    len = min(length, uint64_t(4096));
+	  }
 	} else {
-	  r = -EINVAL;
-	  goto done;
+	  off64_t offs = lseek64(fd, length, SEEK_CUR);
+	  if (offs < 0) {
+	    r = -errno;
+	    goto done;
+	  }
 	}
       }
     }
@@ -409,7 +420,23 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
 	}
       } else {
 	std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it." << std::endl;
-	::lseek(fd, length, SEEK_CUR);
+	if (fd == STDIN_FILENO) {
+	  // read the appending data out to skip this tag.
+	  char buf[4096];
+	  uint64_t len = min(length, uint64_t(4096));
+	  while (len > 0) {
+	    r = safe_read_exact(fd, buf, len);
+	    if (r < 0)
+	      return r;
+	    length -= len;
+	    len = min(length, uint64_t(4096));
+	  }
+	} else {
+	  // lseek to skip this tag
+	  off64_t offs = lseek64(fd, length, SEEK_CUR);
+	  if (offs < 0)
+	    return -errno;
+	}
       }
     }
   }

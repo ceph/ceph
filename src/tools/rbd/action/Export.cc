@@ -375,7 +375,6 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
 		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
 {
   int r = 0;
-  size_t offset = 0;
   // header
   bufferlist bl;
   bl.append(utils::RBD_IMAGE_BANNER_V2);
@@ -424,9 +423,6 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   if (r < 0) {
     return r;
   }
-  offset += bl.length();
-
-  lseek(fd, offset, SEEK_SET);
 
   // header for snapshots
   bl.clear();
@@ -446,26 +442,22 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
     return r;
   }
 
-  if (0 == diff_num) {
-    return r;
-  } else {
-    const char *last_snap = NULL;
-    for (size_t i = 0; i < snaps.size(); ++i) {
-      utils::snap_set(image, snaps[i].name.c_str());
-      r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
-      if (r < 0) {
-	return r;
-      }
-      pc.update_progress(i, snaps.size() + 1);
-      last_snap = snaps[i].name.c_str();
-    }
-    utils::snap_set(image, std::string(""));
-    r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+  const char *last_snap = NULL;
+  for (size_t i = 0; i < snaps.size(); ++i) {
+    utils::snap_set(image, snaps[i].name.c_str());
+    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
     if (r < 0) {
       return r;
     }
-    pc.update_progress(snaps.size() + 1, snaps.size() + 1);
+    pc.update_progress(i, snaps.size() + 1);
+    last_snap = snaps[i].name.c_str();
   }
+  utils::snap_set(image, std::string(""));
+  r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+  if (r < 0) {
+    return r;
+  }
+  pc.update_progress(snaps.size() + 1, snaps.size() + 1);
   return r;
 }
 
@@ -492,7 +484,12 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info, int fd
   if (fd != 1) {
     if (r >= 0) {
       r = ftruncate(fd, file_size);
-      r = lseek(fd, file_size, SEEK_SET);
+      if (r < 0)
+	return r;
+
+      uint64_t chkret = lseek64(fd, file_size, SEEK_SET);
+      if (chkret != file_size)
+	r = errno;
     }
   }
   return r;
