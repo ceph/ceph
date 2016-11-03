@@ -43,6 +43,7 @@ tasks:
 - print: "****  v10.2.0 about to install"
 - install:
     tag: v10.2.0
+    exclude_packages: ['ceph-mgr']
 - print: "**** done v10.2.0 install"
 - ceph:
    fs: xfs
