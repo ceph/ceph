@@ -368,7 +368,7 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
   utime_t start = ceph_clock_now(g_ceph_context);
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
-  if (g_conf->bluestore_rocksdb_perf) {
+  if (g_conf->rocksdb_perf) {
     rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
     rocksdb::perf_context.Reset();
   }
@@ -418,7 +418,7 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   utime_t start = ceph_clock_now(g_ceph_context);
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
-  if (g_conf->bluestore_rocksdb_perf) {
+  if (g_conf->rocksdb_perf) {
     rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
     rocksdb::perf_context.Reset();
   }
