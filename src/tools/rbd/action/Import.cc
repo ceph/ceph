@@ -63,10 +63,15 @@ int do_import_diff_fd(librbd::Image &image, int fd,
       break;
     } else {
       if (format == 2) {
-	r = safe_read_exact(fd, &length, 8);
+	char buf[8];
+	r = safe_read_exact(fd, buf, 8);
 	if (r < 0) {
 	  return r;
 	}
+	bufferlist bl;
+	bl.append(buf, 8);
+	bufferlist::iterator p = bl.begin();
+	::decode(length, p);
       }
 
       if (tag == RBD_DIFF_FROM_SNAP) {
@@ -348,44 +353,65 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
     if (tag == RBD_EXPORT_IMAGE_END) {
       break;
     } else {
-      r = safe_read_exact(fd, &length, 8);
+      r = safe_read_exact(fd, buf, 8);
       if (r < 0) {
 	return r;
       }
+      bl.clear();
+      bl.append(buf, 8);
+      p = bl.begin();
+      ::decode(length, p);
 
       if (tag == RBD_EXPORT_IMAGE_ORDER) {
 	uint64_t order = 0;
-	r = safe_read_exact(fd, &order, 8);
+	r = safe_read_exact(fd, buf, 8);
 	if (r < 0) {
 	  return r;
 	}
+	bl.clear();
+	bl.append(buf, 8);
+	p = bl.begin();
+	::decode(order, p);
+
 	if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
 	  opts.set(RBD_IMAGE_OPTION_ORDER, order);
 	}
       } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
 	uint64_t features = 0;
-	r = safe_read_exact(fd, &features, 8);
+	r = safe_read_exact(fd, buf, 8);
 	if (r < 0) {
 	  return r;
 	}
+	bl.clear();
+	bl.append(buf, 8);
+	p = bl.begin();
+	::decode(features, p);
 	if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
 	  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 	}
       } else if (tag == RBD_EXPORT_IMAGE_STRIPE_UNIT) {
 	uint64_t stripe_unit = 0;
-	r = safe_read_exact(fd, &stripe_unit, 8);
+	r = safe_read_exact(fd, buf, 8);
 	if (r < 0) {
 	  return r;
 	}
+	bl.clear();
+	bl.append(buf, 8);
+	p = bl.begin();
+	::decode(stripe_unit, p);
 	if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
 	  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
 	}
       } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
 	uint64_t stripe_count = 0;
-	r = safe_read_exact(fd, &stripe_count, 8);
+	r = safe_read_exact(fd, buf, 8);
 	if (r < 0) {
 	  return r;
 	}
+	bl.clear();
+	bl.append(buf, 8);
+	p = bl.begin();
+	::decode(stripe_count, p);
 	if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
 	  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
 	}
@@ -415,10 +441,15 @@ static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
     cerr << "Incorrect RBD_IMAGE_DIFFS_BANNER." << snap_buf <<std::endl;
     return -EINVAL;
   } else {
-    r = safe_read_exact(fd, &diff_num, 8);
+    char buf[8];
+    r = safe_read_exact(fd, buf, 8);
     if (r < 0) {
       return r;
     }
+    bufferlist bl;
+    bl.append(buf, 8);
+    bufferlist::iterator p = bl.begin();
+    ::decode(diff_num, p);
   }
 
   for (size_t i = 0; i < diff_num; i++) {
