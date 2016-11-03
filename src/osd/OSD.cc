@@ -1935,9 +1935,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
-  } else if (command == "bluestore_db_statistics") {
-    if (store->get_type() == "bluestore")
-      store->get_db_statistics(f);
+  } else if (command == "dump_objectstore_kv_stats") {
+    store->get_db_statistics(f);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2397,7 +2396,7 @@ void OSD::final_init()
 				     "get malloc extension heap property");
   assert(r == 0);
 
-  r = admin_socket->register_command("bluestore_db_statistics", "bluestore_db_statistics", asok_hook,
+  r = admin_socket->register_command("dump_objectstore_kv_stats", "dump_objectstore_kv_stats", asok_hook,
 					 "print statistics of kvdb which used by bluestore");
   assert(r == 0);
 
@@ -2721,7 +2720,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("get_latest_osdmap");
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
-  cct->get_admin_socket()->unregister_command("bluestore_db_statistics");
+  cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   delete asok_hook;
   asok_hook = NULL;
 

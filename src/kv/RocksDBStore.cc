@@ -22,6 +22,7 @@ using std::string;
 #include "common/perf_counters.h"
 #include "common/debug.h"
 #include "include/str_list.h"
+#include "include/stringify.h"
 #include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
@@ -243,7 +244,10 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     }
   }
 
-  opt.statistics = rocksdb::CreateDBStatistics();
+  if (g_conf->rocksdb_perf)  {
+    dbstats = rocksdb::CreateDBStatistics();
+    opt.statistics = dbstats;
+  }
 
   opt.create_if_missing = create_if_missing;
   if (g_conf->rocksdb_separate_wal_dir) {
@@ -280,9 +284,8 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     dout(10) << __func__ << " using custom Env " << priv << dendl;
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
-  
+
   auto cache = rocksdb::NewLRUCache(g_conf->rocksdb_cache_size, g_conf->rocksdb_cache_shard_bits);
-  rocksdb::BlockBasedTableOptions bbt_opts;
   bbt_opts.block_size = g_conf->rocksdb_block_size;
   bbt_opts.block_cache = cache;
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
@@ -367,21 +370,40 @@ void RocksDBStore::close()
 }
 
 void RocksDBStore::get_statistics(Formatter *f) {
-  std::string stats;
-  bool status = db->GetProperty("rocksdb.stats", &stats);
-  if (status) {
-    f->open_object_section("bluestore rocksdb statistics");
-    std::size_t p1 = 0, p2 = 0;
-    while ((p1 = stats.find("\n", p2)) != std::string::npos) {
-      if (p1 != p2) {
-	std::string substr = stats.substr(p2, p1 - p2 + 1);
-	substr = "  " + substr;
-	f->write_raw_data(substr.data());
-      } else
-	f->write_raw_data("\n");
-      p2 = ++p1;
+  if (!g_conf->rocksdb_perf)  {
+    dout(20) << __func__ << "RocksDB perf is disabled, can't probe for stats" << dendl;
+    return;
+  }
+
+  if (g_conf->rocksdb_collect_compaction_stats) {
+    std::string stats;
+    bool status = db->GetProperty("rocksdb.stats", &stats);
+    if (status) {
+      f->open_object_section("rocksdb_statistics");
+      f->dump_string("rocksdb_compaction_statistics", stats);
+      f->close_section();
     }
-    f->write_raw_data("\n");
+  }
+  if (g_conf->rocksdb_collect_extended_stats) {
+    if (dbstats) {
+      f->open_object_section("rocksdb_extended_statistics");
+      f->dump_string("rocksdb_extended_statistics", dbstats->ToString().c_str());
+      f->close_section();
+    }
+    f->open_object_section("rocksdbstore_perf_counters");
+    logger->dump_formatted(f,0);
+    f->close_section();
+  }
+  if (g_conf->rocksdb_collect_memory_stats) {
+    f->open_object_section("rocksdb_memtable_statistics");
+    std::string str(stringify(bbt_opts.block_cache->GetUsage()));
+    f->dump_string("block_cache_usage", str.data());
+    str.clear();
+    str.append(stringify(bbt_opts.block_cache->GetPinnedUsage()));
+    f->dump_string("block_cache_pinned_blocks_usage", str);
+    str.clear();
+    db->GetProperty("rocksdb.cur-size-all-mem-tables", &str);
+    f->dump_string("rocksdb_memtable_usage", str);
     f->close_section();
   }
 }

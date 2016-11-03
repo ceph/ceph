@@ -313,11 +313,11 @@ public:
     return -EOPNOTSUPP;
   }
 
-  virtual bool support_statistics() {
+  virtual bool can_dump_stats() {
     return false;
   }
   virtual void get_statistics(Formatter *f) {
-    return ;
+    return;
   }
 protected:
   /// List of matching prefixes and merge operators
