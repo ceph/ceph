@@ -549,10 +549,7 @@ void BlueStore::Cache::trim(
     return;
   }
 
-  uint64_t need_to_free = 0;
-  if (current > target_bytes) {
-    need_to_free = current - target_bytes;
-  }
+  uint64_t need_to_free = current - target_bytes;
   uint64_t free_buffer = 0;
   uint64_t free_meta = 0;
   if (current_buffer > target_buffer) {
@@ -1566,8 +1563,7 @@ ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 
 BlueStore::ExtentMap::ExtentMap(Onode *o)
   : onode(o),
-    inline_bl(
-      g_conf ? g_conf->bluestore_extent_map_inline_shard_prealloc_size : 4096) {
+    inline_bl(g_conf->bluestore_extent_map_inline_shard_prealloc_size) {
 }
 
 
@@ -3420,7 +3416,7 @@ int BlueStore::_open_db(bool create)
       rocksdb::Env *b = rocksdb::Env::Default();
       if (create) {
 	string cmd = "rm -rf " + path + "/db " +
-	  path + "/db.slow" +
+	  path + "/db.slow " +
 	  path + "/db.wal";
 	int r = system(cmd.c_str());
 	(void)r;
@@ -4143,7 +4139,6 @@ int BlueStore::mount()
   return 0;
 
  out_stop:
-  mempool_thread.shutdown();
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
