@@ -399,6 +399,14 @@ public:
       std::lock_guard<std::mutex> l(lock);
       return sb_map.empty();
     }
+
+    void violently_clear() {
+      std::lock_guard<std::mutex> l(lock);
+      for (auto& p : sb_map) {
+	p.second->parent_set = nullptr;
+      }
+      sb_map.clear();
+    }
   };
 
   /// in-memory blob metadata and associated cached buffers (if any)
@@ -1038,6 +1046,7 @@ public:
 		const ghobject_t& new_oid,
 		const string& new_okey);
     void clear();
+    bool empty();
 
     /// return true if f true for any item
     bool map_any(std::function<bool(OnodeRef)> f);
