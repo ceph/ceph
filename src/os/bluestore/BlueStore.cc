@@ -5672,7 +5672,7 @@ int BlueStore::_collection_list(
   }
   dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
   while (true) {
-    if (!it->valid() || it->key() > pend) {
+    if (!it->valid() || it->key() >= pend) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
@@ -5691,7 +5691,7 @@ int BlueStore::_collection_list(
       }
       break;
     }
-    dout(20) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
+    dout(30) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
     if (is_extent_shard_key(it->key())) {
       it->next();
       continue;
@@ -5699,6 +5699,7 @@ int BlueStore::_collection_list(
     ghobject_t oid;
     int r = get_key_object(it->key(), &oid);
     assert(r == 0);
+    dout(20) << __func__ << " oid " << oid << " end " << end << dendl;
     if (ls->size() >= (unsigned)max) {
       dout(20) << __func__ << " reached max " << max << dendl;
       *pnext = oid;
