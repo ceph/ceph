@@ -342,6 +342,13 @@ private:
 public:
   friend class C_OSD_OnOpCommit;
   friend class C_OSD_OnOpApplied;
+
+  void call_write_ordered(std::function<void(void)> &&cb) override {
+    // ReplicatedBackend submits writes inline in submit_transaction, so
+    // we can just call the callback.
+    cb();
+  }
+
   void submit_transaction(
     const hobject_t &hoid,
     const object_stat_sum_t &delta_stats,
