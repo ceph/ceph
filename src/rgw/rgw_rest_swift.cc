@@ -295,7 +295,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       s->formatter->open_object_section("object");
       s->formatter->dump_string("name", key.name);
       s->formatter->dump_string("hash", iter->etag);
-      s->formatter->dump_int("bytes", iter->size);
+      s->formatter->dump_int("bytes", iter->accounted_size);
       string single_content_type = iter->content_type;
       if (iter->content_type.size()) {
         // content type might hold multiple values, just dump the last one
@@ -1272,7 +1272,6 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
   dump_header(s, "X-Timestamp", utime_t(lastmod));
-
   if (is_slo) {
     dump_header(s, "X-Static-Large-Object", "True");
   }
