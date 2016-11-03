@@ -114,7 +114,13 @@ ReplicatedBackend::ReplicatedBackend(
   ObjectStore *store,
   CephContext *cct) :
   PGBackend(pg, store, coll, c),
-  cct(cct) {}
+  cct(cct) {
+    if ("bluestore" == store->get_type()) {
+      isBlueStore = true;
+    } else {
+      isBlueStore = false;
+    }
+}
 
 void ReplicatedBackend::run_recovery_op(
   PGBackend::RecoveryHandle *_h,
@@ -1259,8 +1265,13 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   // send ack to acker only if we haven't sent a commit already
   if (ack) {
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
-    get_parent()->send_message_osd_cluster(
-      rm->ackerosd, ack, get_osdmap()->get_epoch());
+    if (!isBlueStore) {
+      get_parent()->send_message_osd_cluster(
+        rm->ackerosd, ack, get_osdmap()->get_epoch());
+    }
+    else {
+      ack->put();
+    }
   }
 
   parent->op_applied(version);
