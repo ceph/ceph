@@ -12,6 +12,7 @@
  * 
  */
 
+#include <urcu.h>
 #include "PG.h"
 // #include "msg/Messenger.h"
 #include "messages/MOSDRepScrub.h"
@@ -206,6 +207,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     _pool.id,
     p.shard),
   map_lock("PG::map_lock"),
+  waiting_for_map_empty(true),
+  osdmap_ptr_rcu(&osdmap_ref),
   osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
   #ifdef PG_DEBUG_REFS
@@ -1899,18 +1902,43 @@ void PG::take_op_map_waiters()
       waiting_for_map.erase(i++);
     }
   }
+  if (waiting_for_map.empty())
+    waiting_for_map_empty.store(true);
+}
+
+void PG::update_osdmap_ref(OSDMapRef newmap) {
+  assert(_lock.is_locked_by_me());
+  Mutex::Locker l(map_lock);
+
+  // Take extra reference of old osdmap so it is not deleted
+  // until function exits after synchronize_rcu().
+  OSDMapRef extra_ref = osdmap_ref;
+
+  osdmap_ref = newmap;
+  rcu_xchg_pointer(&osdmap_ptr_rcu, &osdmap_ref);
+  synchronize_rcu();
+}
+
+epoch_t PG::get_osdmap_epoch_rcu() {
+  rcu_read_lock();
+  OSDMapRef *osdmap_ptr = rcu_dereference(osdmap_ptr_rcu);
+  epoch_t ret_epoch = (*osdmap_ptr)->get_epoch();
+  rcu_read_unlock();
+  return ret_epoch;
 }
 
 void PG::queue_op(OpRequestRef& op)
 {
-  Mutex::Locker l(map_lock);
-  if (!waiting_for_map.empty()) {
+  if (waiting_for_map_empty.load() == false) {
+    Mutex::Locker l(map_lock);
     // preserve ordering
     waiting_for_map.push_back(op);
     op->mark_delayed("waiting_for_map not empty");
     return;
   }
-  if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), op)) {
+  if (op_must_wait_for_map(get_osdmap_epoch_rcu(), op)) {
+    Mutex::Locker l(map_lock);
+    waiting_for_map_empty.store(false);
     waiting_for_map.push_back(op);
     op->mark_delayed("op must wait for map");
     return;
@@ -2269,6 +2297,10 @@ void PG::split_ops(PG *child, unsigned split_bits) {
     Mutex::Locker l(map_lock); // to avoid a race with the osd dispatch
     OSD::split_list(
       &waiting_for_map, &(child->waiting_for_map), match, split_bits);
+    if (waiting_for_map.empty())
+      waiting_for_map_empty.store(true);
+    if (child->waiting_for_map.empty())
+      child->waiting_for_map_empty.store(true);
   }
 }
 

@@ -134,6 +134,7 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
+BuildRequires:	userspace-rcu
 
 #################################################################################
 # distro-conditional dependencies

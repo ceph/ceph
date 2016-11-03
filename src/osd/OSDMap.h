@@ -28,6 +28,7 @@
 #include "osd_types.h"
 
 //#include "include/ceph_features.h"
+#include <atomic>
 #include "crush/CrushWrapper.h"
 #include <vector>
 #include <list>
@@ -199,7 +200,34 @@ public:
   
 private:
   uuid_d fsid;
-  epoch_t epoch;        // what epoch of the osd cluster descriptor is this
+
+  class atomic_epoch {
+    std::atomic<epoch_t> value;
+  public:
+    atomic_epoch() {
+      value.store(0);
+    }
+    atomic_epoch(epoch_t init_epoch) {
+      value.store(init_epoch);
+    }
+    atomic_epoch(const atomic_epoch& other) {
+      value=other.value.load();
+    }
+    atomic_epoch& operator=(const atomic_epoch& other) {
+      value=other.value.load();
+      return *this;
+    }
+    epoch_t get() const {
+      return value.load();
+    }
+    void set(epoch_t new_epoch) {
+      value.store(new_epoch);
+    }
+    void inc() {
+      value++;
+    }
+  } epoch;
+
   utime_t created, modified; // epoch start time
   int32_t pool_max;     // the largest pool num, ever
 
@@ -257,7 +285,7 @@ private:
   friend class OSDMonitor;
 
  public:
-  OSDMap() : epoch(0), 
+  OSDMap() : epoch(0),
 	     pool_max(-1),
 	     flags(0),
 	     num_osd(0), num_up_osd(0), num_in_osd(0),
@@ -302,9 +330,8 @@ public:
   const uuid_d& get_fsid() const { return fsid; }
   void set_fsid(uuid_d& f) { fsid = f; }
 
-  epoch_t get_epoch() const { return epoch; }
-  void inc_epoch() { epoch++; }
-
+  epoch_t get_epoch() const { return epoch.get(); }
+  void inc_epoch() { epoch.inc(); }
   void set_epoch(epoch_t e);
 
   /* stamps etc */
@@ -315,7 +342,7 @@ public:
   void get_blacklist(list<pair<entity_addr_t,utime_t > > *bl) const;
 
   string get_cluster_snapshot() const {
-    if (cluster_snapshot_epoch == epoch)
+    if (cluster_snapshot_epoch == epoch.get())
       return cluster_snapshot;
     return string();
   }
