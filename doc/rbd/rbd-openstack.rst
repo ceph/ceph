@@ -176,7 +176,7 @@ Save the uuid of the secret for configuring ``nova-compute`` later.
    However from a platform consistency perspective, it's better to keep the
    same UUID.
 
-.. _cephx authentication: ../../rados/operations/authentication
+.. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
 
 
 Configure OpenStack to use Ceph
