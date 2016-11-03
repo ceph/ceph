@@ -650,6 +650,7 @@ else(WITH_CCACHE AND CCACHE_FOUND)
 endif(WITH_CCACHE AND CCACHE_FOUND)
 
 list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
+list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 
 # we use an external project and copy the sources to bin directory to ensure
 # that object files are built outside of the source tree.
