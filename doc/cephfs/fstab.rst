@@ -20,7 +20,7 @@ For example::
 .. important:: The ``name`` and ``secret`` or ``secretfile`` options are 
    mandatory when you have Ceph authentication running. 
  
-See `Authentication`_ for details. 
+See `User Management`_ for details.
    
    
 FUSE
@@ -41,7 +41,7 @@ The ``DEVICE`` field is a comma-delimited list of options to pass to the command
 Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass any valid 
 ``ceph-fuse`` option to the command line this way.
 
-See `Authentication`_ for details. 
+See `User Management`_ for details.
 
 
-.. _Authentication: ../../rados/operations/authentication/
+.. _User Management: ../../rados/operations/user-management/
