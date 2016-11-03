@@ -9685,13 +9685,13 @@ void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
   assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
   append_log_entries_update_missing(m->entries, t);
-  // TODO FIX
 
   Context *complete = new FunctionContext(
-      [=](int) {
-	MOSDPGUpdateLogMissing *msg =
-	  static_cast<MOSDPGUpdateLogMissing*>(
-	    op->get_req());
+    [=](int) {
+      MOSDPGUpdateLogMissing *msg = static_cast<MOSDPGUpdateLogMissing*>(
+	op->get_req());
+      lock();
+      if (!pg_has_reset_since(msg->get_epoch())) {
 	MOSDPGUpdateLogMissingReply *reply =
 	  new MOSDPGUpdateLogMissingReply(
 	    spg_t(info.pgid.pgid, primary_shard().shard),
@@ -9700,7 +9700,9 @@ void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
 	    msg->get_tid());
 	reply->set_priority(CEPH_MSG_PRIO_HIGH);
 	msg->get_connection()->send_message(reply);
-      });
+      }
+      unlock();
+    });
 
   /* Hack to work around the fact that ReplicatedBackend sends
    * ack+commit if commit happens first */
