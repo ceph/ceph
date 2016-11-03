@@ -378,13 +378,13 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
   /* update class instance count */
   nInstances.inc();
 
-  loop_con->set_features(features);
+  loop_con->set_features(CEPH_FEATURES_ALL);
 
   ldout(cct,2) << "Create msgr: " << this << " instance: "
     << nInstances.read() << " type: " << name.type_str()
     << " subtype: " << mname << " nportals: " << get_nportals(cflags)
-    << " nconns_per_portal: " << get_nconns_per_portal(cflags) << " features: "
-    << features << dendl;
+    << " nconns_per_portal: " << get_nconns_per_portal(cflags)
+    << dendl;
 
 } /* ctor */
 
