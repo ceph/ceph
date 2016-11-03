@@ -206,6 +206,8 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 # Python stuff
+option(WITH_PYTHON "build python bindings" ON)
+if(WITH_PYTHON)
 find_package(PythonInterp 2 REQUIRED)
 find_package(PythonLibs 2 REQUIRED)
 
@@ -221,7 +223,8 @@ if(WITH_PYTHON3 MATCHES "check|CHECK")
 elseif(WITH_PYTHON3)
   find_package(Python3Interp 3 REQUIRED)
   find_package(Python3Libs 3 REQUIRED)
-endif()
+endif(WITH_PYTHON3)
+endif(WITH_PYTHON)
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
@@ -521,7 +524,16 @@ add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(libradosstriper)
 
-if (WITH_MGR)
+set(librados_config_srcs
+  librados-config.cc)
+add_executable(librados-config ${librados_config_srcs})
+target_link_libraries(librados-config librados global ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS})
+
+install(TARGETS librados-config DESTINATION bin)
+
+if(WITH_PYTHON)
+if(WITH_MGR)
   set(mgr_srcs
       ceph_mgr.cc
       mon/PGMap.cc
@@ -542,14 +554,6 @@ if (WITH_MGR)
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
-set(librados_config_srcs
-  librados-config.cc)
-add_executable(librados-config ${librados_config_srcs})
-target_link_libraries(librados-config librados global ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS})
-
-install(TARGETS librados-config DESTINATION bin)
-
 # virtualenv base directory for ceph-disk and ceph-detect-init
 set(CEPH_BUILD_VIRTUALENV $ENV{TMPDIR})
 if(NOT CEPH_BUILD_VIRTUALENV)
@@ -559,6 +563,7 @@ endif()
 add_subdirectory(pybind)
 add_subdirectory(ceph-disk)
 add_subdirectory(ceph-detect-init)
+endif()
 
 ## dencoder
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
