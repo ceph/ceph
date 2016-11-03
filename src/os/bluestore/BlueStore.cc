@@ -549,10 +549,7 @@ void BlueStore::Cache::trim(
     return;
   }
 
-  uint64_t need_to_free = 0;
-  if (current > target_bytes) {
-    need_to_free = current - target_bytes;
-  }
+  uint64_t need_to_free = current - target_bytes;
   uint64_t free_buffer = 0;
   uint64_t free_meta = 0;
   if (current_buffer > target_buffer) {
