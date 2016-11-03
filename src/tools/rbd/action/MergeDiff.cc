@@ -171,7 +171,7 @@ static int do_merge_diff(const char *first, const char *second,
 
   bool first_stdin = !strcmp(first, "-");
   if (first_stdin) {
-    fd = 0;
+    fd = STDIN_FILENO;
   } else {
     fd = open(first, O_RDONLY);
     if (fd < 0) {
