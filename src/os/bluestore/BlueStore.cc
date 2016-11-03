@@ -9044,6 +9044,7 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << dendl;
   RWLock::WLocker l(c->lock);
   RWLock::WLocker l2(d->lock);
+  int r;
 
   // blow away src cache
   c->onode_map.clear();
@@ -9070,7 +9071,7 @@ int BlueStore::_split_collection(TransContext *txc,
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
-  return 0;
+  return r;
 }
 
 
