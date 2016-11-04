@@ -1,6 +1,11 @@
 Mantle
 ======
 
+.. warning::
+
+    Mantle is for research and development of metadata balancer algorithms,
+    not for use on production CephFS clusters.
+
 Multiple, active MDSs can migrate directories to balance metadata load. The
 policies for when, where, and how much to migrate are hard-coded into the
 metadata balancing module. Mantle is a programmable metadata balancer built

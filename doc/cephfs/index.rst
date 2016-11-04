@@ -96,6 +96,7 @@ authentication keyring.
 	Disaster recovery <disaster-recovery>
 	Client authentication <client-auth>
 	Upgrading old filesystems <upgrading>
+	Mantle <mantle>
 
 .. raw:: html
 
