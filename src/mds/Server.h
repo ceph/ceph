@@ -187,6 +187,7 @@ public:
 			 set<SimpleLock*> wrlocks,
 			 set<SimpleLock*> xlocks);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
+			    file_layout_t *dir_layout,
 			    set<SimpleLock*> rdlocks,
 			    set<SimpleLock*> wrlocks,
 			    set<SimpleLock*> xlocks);
