@@ -249,7 +249,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 
  public:
   explicit PosixServerSocketImpl(NetHandler &h, const entity_addr_t &sa, int f): handler(h), sa(sa), _fd(f) {}
-  virtual int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out) override;
+  virtual int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
   virtual void abort_accept() override {
     ::close(_fd);
   }
@@ -258,7 +258,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
   }
 };
 
-int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) {
+int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
   assert(sock);
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);

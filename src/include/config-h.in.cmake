@@ -123,6 +123,9 @@
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
 
+/* AsyncMessenger RDMA conditional compilation */
+#cmakedefine HAVE_RDMA
+
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 

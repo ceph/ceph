@@ -23,6 +23,7 @@
 #include "msg/msg_types.h"
 #include "msg/async/Event.h"
 
+class Worker;
 class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}
@@ -47,7 +48,7 @@ struct SocketOptions {
 class ServerSocketImpl {
  public:
   virtual ~ServerSocketImpl() {}
-  virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) = 0;
+  virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
   virtual void abort_accept() = 0;
   /// Get file descriptor
   virtual int fd() const = 0;
@@ -157,8 +158,8 @@ class ServerSocket {
   ///
   /// \Accepts a \ref ConnectedSocket representing the connection, and
   ///          a \ref entity_addr_t describing the remote endpoint.
-  int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) {
-    return _ssi->accept(sock, opt, out);
+  int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
+    return _ssi->accept(sock, opt, out, w);
   }
 
   /// Stops any \ref accept() in progress.
@@ -309,6 +310,7 @@ class NetworkStack : public CephContext::ForkWatcher {
   // But for dpdk backend, we maintain listen table in each thread. So we
   // need to let each thread do binding port.
   virtual bool support_local_listen_table() const { return false; }
+  virtual bool nonblock_connect_need_writable_event() const { return true; }
 
   void start();
   void stop();
