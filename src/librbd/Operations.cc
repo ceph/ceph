@@ -212,9 +212,9 @@ struct C_InvokeAsyncRequest : public Context {
       // current lock owner doesn't support op -- try to perform
       // the action locally
       request_lock = false;
-      image_ctx.exclusive_lock->request_lock(ctx);
+      image_ctx.exclusive_lock->acquire_lock(ctx);
     } else {
-      image_ctx.exclusive_lock->try_lock(ctx);
+      image_ctx.exclusive_lock->try_acquire_lock(ctx);
     }
     owner_lock.put_read();
   }
@@ -1212,7 +1212,7 @@ int Operations<I>::snap_set_limit(uint64_t limit) {
 	!m_image_ctx.exclusive_lock->is_lock_owner()) {
       C_SaferCond lock_ctx;
 
-      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      m_image_ctx.exclusive_lock->acquire_lock(&lock_ctx);
       r = lock_ctx.wait();
       if (r < 0) {
 	return r;
@@ -1369,7 +1369,7 @@ int Operations<I>::metadata_set(const std::string &key,
 	!m_image_ctx.exclusive_lock->is_lock_owner()) {
       C_SaferCond lock_ctx;
 
-      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      m_image_ctx.exclusive_lock->acquire_lock(&lock_ctx);
       r = lock_ctx.wait();
       if (r < 0) {
 	return r;
@@ -1424,7 +1424,7 @@ int Operations<I>::metadata_remove(const std::string &key) {
         !m_image_ctx.exclusive_lock->is_lock_owner()) {
       C_SaferCond lock_ctx;
 
-      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      m_image_ctx.exclusive_lock->acquire_lock(&lock_ctx);
       r = lock_ctx.wait();
       if (r < 0) {
         return r;
@@ -1469,7 +1469,7 @@ int Operations<I>::prepare_image_update() {
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
          !m_image_ctx.exclusive_lock->accept_requests(&r))) {
-      m_image_ctx.exclusive_lock->try_lock(&ctx);
+      m_image_ctx.exclusive_lock->try_acquire_lock(&ctx);
       trying_lock = true;
     }
   }

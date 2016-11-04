@@ -144,7 +144,7 @@ void DisableFeaturesRequest<I>::send_acquire_exclusive_lock() {
 	!image_ctx.exclusive_lock->is_lock_owner()) {
       m_acquired_lock = true;
 
-      image_ctx.exclusive_lock->request_lock(ctx);
+      image_ctx.exclusive_lock->acquire_lock(ctx);
       return;
     }
   }

@@ -100,7 +100,7 @@ TEST_F(TestInternal, IsExclusiveLockOwner) {
   C_SaferCond ctx;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&ctx);
+    ictx->exclusive_lock->try_acquire_lock(&ctx);
   }
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -317,7 +317,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
   C_SaferCond ctx;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&ctx);
+    ictx->exclusive_lock->try_acquire_lock(&ctx);
   }
 
   ASSERT_EQ(0, ctx.wait());
@@ -360,7 +360,7 @@ TEST_F(TestInternal, MultipleResize) {
     C_SaferCond ctx;
     {
       RWLock::WLocker l(ictx->owner_lock);
-      ictx->exclusive_lock->try_lock(&ctx);
+      ictx->exclusive_lock->try_acquire_lock(&ctx);
     }
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
