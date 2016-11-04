@@ -5379,7 +5379,7 @@ int BlueStore::fiemap(
 	     << " size 0x" << o->onode.size << std::dec << dendl;
 
     boost::intrusive::set<Extent>::iterator ep, eend;
-    if (offset > o->onode.size)
+    if (offset >= o->onode.size)
       goto out;
 
     if (offset + length > o->onode.size) {
