@@ -733,7 +733,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
   list<string> result;
   list<string>::iterator iter;
 
-  RGWShardedOmapCRManager *entries_index;
+  std::unique_ptr<RGWShardedOmapCRManager> entries_index;
 
   RGWContinuousLeaseCR *lease_cr;
   RGWCoroutinesStack *lease_stack;
@@ -746,7 +746,7 @@ public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
                     map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
-						      ret_status(0), entries_index(NULL), lease_cr(nullptr), lease_stack(nullptr),
+						      ret_status(0), lease_cr(nullptr), lease_stack(nullptr),
                                                       lost_lock(false), failed(false), markers(_markers) {
   }
 
@@ -803,9 +803,9 @@ public:
         set_sleeping(true);
         yield;
       }
-      entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
-						  sync_env->store->get_zone_params().log_pool,
-                                                  mdlog_sync_full_sync_index_prefix);
+      entries_index.reset(new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
+                                                      sync_env->store->get_zone_params().log_pool,
+                                                      mdlog_sync_full_sync_index_prefix));
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
 				       "/admin/metadata", NULL, &sections));
