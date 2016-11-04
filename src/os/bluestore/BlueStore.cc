@@ -2029,7 +2029,6 @@ void BlueStore::ExtentMap::fault_range(
 }
 
 void BlueStore::ExtentMap::dirty_range(
-  KeyValueDB::Transaction t,
   uint32_t offset,
   uint32_t length)
 {
@@ -4705,9 +4704,9 @@ int BlueStore::fsck(bool deep)
     size_t count = used_blocks.count();
     if (used_blocks.size() != count) {
       assert(used_blocks.size() > count);
-      derr << __func__ << " leaked some space;"
+      derr << __func__ << " leaked 0x" << std::hex
 	   << (used_blocks.size() - count) * min_alloc_size
-	   << " bytes leaked" << dendl;
+	   << std::dec << " bytes" << dendl;
       ++errors;
     }
   }
@@ -4784,24 +4783,22 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
   if (r >= 0) {
-       TransContext::volatile_statfs vstatfs;
-     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
-       auto it = bl.begin();
-       vstatfs.decode(it);
+    TransContext::volatile_statfs vstatfs;
+    if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
+      auto it = bl.begin();
+      vstatfs.decode(it);
 
-       buf->allocated = vstatfs.allocated();
-       buf->stored = vstatfs.stored();
-       buf->compressed = vstatfs.compressed();
-       buf->compressed_original = vstatfs.compressed_original();
-       buf->compressed_allocated = vstatfs.compressed_allocated();
-     } else {
-       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
-     }
+      buf->allocated = vstatfs.allocated();
+      buf->stored = vstatfs.stored();
+      buf->compressed = vstatfs.compressed();
+      buf->compressed_original = vstatfs.compressed_original();
+      buf->compressed_allocated = vstatfs.compressed_allocated();
+    } else {
+      dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
+    }
   } else {
     dout(10) << __func__ << " store_statfs missed, using empty" << dendl;
   }
-
-
   dout(20) << __func__ << *buf << dendl;
   return 0;
 }
@@ -8211,7 +8208,7 @@ int BlueStore::_do_write(
 
   o->extent_map.compress_extent_map(offset, length);
 
-  o->extent_map.dirty_range(txc->t, offset, length);
+  o->extent_map.dirty_range(offset, length);
 
   if (end > o->onode.size) {
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
@@ -8281,7 +8278,7 @@ int BlueStore::_do_zero(TransContext *txc,
   WriteContext wctx;
   o->extent_map.fault_range(db, offset, length);
   o->extent_map.punch_hole(offset, length, &wctx.old_extents);
-  o->extent_map.dirty_range(txc->t, offset, length);
+  o->extent_map.dirty_range(offset, length);
   _wctx_finish(txc, c, o, &wctx);
 
   if (offset + length > o->onode.size) {
@@ -8316,7 +8313,7 @@ int BlueStore::_do_truncate(
     uint64_t length = o->onode.size - offset;
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(offset, length, &wctx.old_extents);
-    o->extent_map.dirty_range(txc->t, offset, length);
+    o->extent_map.dirty_range(offset, length);
     _wctx_finish(txc, c, o, &wctx);
   }
 
@@ -8787,7 +8784,7 @@ int BlueStore::_do_clone_range(
     txc->statfs_delta.stored() += ne->length;
     if (e.blob->get_blob().is_compressed()) {
       txc->statfs_delta.compressed_original() += ne->length;
-      if (blob_duped){
+      if (blob_duped) {
         txc->statfs_delta.compressed() +=
           cb->get_blob().get_compressed_payload_length();
       }
@@ -8796,7 +8793,7 @@ int BlueStore::_do_clone_range(
     ++n;
   }
   if (dirtied_oldo) {
-    oldo->extent_map.dirty_range(txc->t, srcoff, length); // overkill
+    oldo->extent_map.dirty_range(srcoff, length); // overkill
     txc->write_onode(oldo);
   }
   txc->write_onode(newo);
@@ -8804,7 +8801,7 @@ int BlueStore::_do_clone_range(
   if (dstoff + length > newo->onode.size) {
     newo->onode.size = dstoff + length;
   }
-  newo->extent_map.dirty_range(txc->t, dstoff, length);
+  newo->extent_map.dirty_range(dstoff, length);
   _dump_onode(oldo);
   _dump_onode(newo);
   return 0;
@@ -8866,28 +8863,80 @@ int BlueStore::_move_ranges_destroy_src(
   dout(15) << __func__ << " " << c->cid << " "
            << srco->oid << " -> " << baseo->oid
            << dendl;
+  _dump_onode(srco, 30);
+  _dump_onode(baseo, 30);
+
+  baseo->exists = true;
+  _assign_nid(txc, baseo);
 
   int r = 0;
 
-  // Traverse move_info completely, move contents from src object
-  // to base object.
-  for (unsigned i = 0; i < move_info.size(); ++i) {
-    uint64_t off = move_info[i].first;
-    uint64_t len = move_info[i].second;
+  // fault in entire src; we'll need it for the delete anyway
+  srco->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 
-    dout(15) << __func__ << " " << c->cid << " " << srco->oid << " -> "
-	     << baseo->oid << " 0x" << std::hex << off << "~" << len
+  // move all extents.  implicitly transfer all (referenced) blobs to
+  // the new object.
+  WriteContext wctx;
+  for (unsigned i = 0; i < move_info.size(); ++i) {
+    uint64_t offset = move_info[i].first;
+    uint64_t length = move_info[i].second;
+    dout(15) << __func__ << "   0x" << std::hex << offset << "~" << length
 	     << dendl;
 
-    r = _clone_range(txc, c, srco, baseo, off, len, off);
-    if (r < 0)
-      goto out;
+    baseo->extent_map.fault_range(db, offset, length);
+    baseo->extent_map.punch_hole(offset, length, &wctx.old_extents);
+
+    for (auto ep = srco->extent_map.seek_lextent(offset);
+	 ep != srco->extent_map.extent_map.end();
+	 ++ep) {
+      auto& e = *ep;
+      if (e.logical_offset >= offset + length) {
+	break;
+      }
+      dout(20) << __func__ << "  src " << e << dendl;
+      int skip_front, skip_back;
+      if (e.logical_offset < offset) {
+	skip_front = offset - e.logical_offset;
+      } else {
+	skip_front = 0;
+      }
+      if (e.logical_offset + e.length > offset + length) {
+	skip_back = e.logical_offset + e.length - (offset + length);
+      } else {
+	skip_back = 0;
+      }
+#warning blob depth here is wrong
+      Extent *ne = new Extent(
+	e.logical_offset + skip_front,
+	e.blob_offset + skip_front,
+	e.length - skip_front - skip_back, e.blob_depth, ep->blob);
+      baseo->extent_map.extent_map.insert(*ne);
+      ne->blob->ref_map.get(ne->blob_offset, ne->length);
+      txc->statfs_delta.stored() += ne->length;
+      if (e.blob->get_blob().is_compressed()) {
+	txc->statfs_delta.compressed_original() += ne->length;
+      }
+      ne->blob->id = -1; // assume it's not spanning for now
+      dout(20) << __func__ << "  dst " << *ne << dendl;
+    }
+
+    if (!baseo->extent_map.needs_reshard &&
+	baseo->extent_map.spans_shard(offset, length)) {
+      baseo->extent_map.needs_reshard = true;
+    }
+    if (offset + length > baseo->onode.size) {
+      dout(20) << __func__ << " extending size to 0x" << std::hex
+	       << offset + length << std::dec << dendl;
+      baseo->onode.size = offset + length;
+    }
+    baseo->extent_map.dirty_range(offset, length);
   }
+  _wctx_finish(txc, c, baseo, &wctx);
+  txc->write_onode(baseo);
 
   // delete the src object
   r = _do_remove(txc, c, srco);
 
- out:
   return r;
 }
 

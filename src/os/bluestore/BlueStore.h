@@ -696,8 +696,7 @@ public:
 		     uint32_t offset, uint32_t length);
 
     /// ensure a range of the map is marked dirty
-    void dirty_range(KeyValueDB::Transaction t,
-		     uint32_t offset, uint32_t length);
+    void dirty_range(uint32_t offset, uint32_t length);
 
     extent_map_t::iterator find(uint64_t offset);
 
@@ -1206,7 +1205,7 @@ public:
     bool kv_submitted = false; ///< true when we've been submitted to kv db
 
     interval_set<uint64_t> allocated, released;
-    struct volatile_statfs{
+    struct volatile_statfs {
       enum {
         STATFS_ALLOCATED = 0,
         STATFS_STORED,

@@ -2878,7 +2878,16 @@ TEST_P(StoreTest, SimpleMoveRangeDelSrcTest) {
     cerr << "move temp object" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
-
+  }
+  if (true) {
+    r = store->umount();
+    ASSERT_EQ(0, r);
+    r = store->fsck();
+    ASSERT_EQ(0, r);
+    r = store->mount();
+    ASSERT_EQ(0, r);
+  }
+  {
     r = store->read(cid, hoid, 0, 5, newdata);
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(newdata.contents_equal(small));
@@ -2887,6 +2896,57 @@ TEST_P(StoreTest, SimpleMoveRangeDelSrcTest) {
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(newdata.contents_equal(small));
 
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist big;
+    big.append_zero(1048576);
+    memset(big.c_str(), 1, big.length());
+    t.write(cid, hoid2, 0, 1048576, big);
+    cerr << "Writing object2 again " << hoid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<std::pair<uint64_t, uint64_t>> move_info = {
+      std::make_pair(1024, 4096),
+      std::make_pair(256000, 4096),
+      std::make_pair(16384, 65536)
+    };
+    ObjectStore::Transaction t;
+    t.move_ranges_destroy_src(cid, hoid2, hoid, move_info);
+    cerr << "move temp object" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  if (true) {
+    r = store->umount();
+    ASSERT_EQ(0, r);
+    r = store->fsck();
+    ASSERT_EQ(0, r);
+    r = store->mount();
+    ASSERT_EQ(0, r);
+  }
+  {
+    bufferlist newdata;
+    r = store->read(cid, hoid, 0, 1048576, newdata);
+    ASSERT_EQ(r, 260096);
+    const char *p = newdata.c_str();
+    ASSERT_EQ(p[0], 's');
+    ASSERT_EQ(p[10], 's');
+    ASSERT_EQ(p[1023], '\0');
+    ASSERT_EQ(p[1024], '\1');
+    ASSERT_EQ(p[5119], '\1');
+    ASSERT_EQ(p[5120], '\0');
+
+    ASSERT_EQ(p[255999], '\0');
+    ASSERT_EQ(p[256000], '\1');
+    ASSERT_EQ(p[260095], '\1');
+
+    ASSERT_EQ(p[16383], '\0');
+    ASSERT_EQ(p[16384], '\1');
+    ASSERT_EQ(p[81919], '\1');
+    ASSERT_EQ(p[81920], '\0');
   }
   {
     ObjectStore::Transaction t;
