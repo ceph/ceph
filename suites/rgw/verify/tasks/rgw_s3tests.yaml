@@ -13,5 +13,8 @@ tasks:
 overrides:
   ceph:
     conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
       client:
         rgw lc debug interval: 10
