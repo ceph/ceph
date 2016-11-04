@@ -17,6 +17,9 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "PosixStack.h"
+#ifdef HAVE_RDMA
+#include "rdma/RDMAStack.h"
+#endif
 
 #include "common/dout.h"
 #include "include/assert.h"
@@ -54,6 +57,10 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
 {
   if (t == "posix")
     return std::make_shared<PosixNetworkStack>(c, t);
+#ifdef HAVE_RDMA
+  else if (t == "rdma")
+    return std::make_shared<RDMAStack>(c, t);
+#endif
 
   return nullptr;
 }
@@ -62,6 +69,10 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
 {
   if (type == "posix")
     return new PosixWorker(c, i);
+#ifdef HAVE_RDMA
+  else if (type == "rdma")
+    return new RDMAWorker(c, i);
+#endif
   return nullptr;
 }
 

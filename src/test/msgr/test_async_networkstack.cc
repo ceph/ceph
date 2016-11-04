@@ -163,7 +163,7 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
     }
 
     if (is_my_accept) {
-      r = bind_socket.accept(&srv_socket, options, &cli_addr);
+      r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
       ASSERT_EQ(0, r);
       ASSERT_TRUE(srv_socket.fd() > 0);
     }
@@ -268,7 +268,7 @@ TEST_P(NetworkWorkerTest, ConnectFailedTest) {
       center->create_file_event(cli_socket2.fd(), EVENT_READABLE, &cb);
       r = cli_socket2.is_connected();
       if (r == 0) {
-        ASSERT_FALSE(cb.poll(500));
+        cb.poll(500);
         r = cli_socket2.is_connected();
       }
       ASSERT_TRUE(r != 1);
@@ -310,7 +310,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
 
       ConnectedSocket srv_socket, cli_socket;
       if (bind_socket) {
-        r = bind_socket.accept(&srv_socket, options, &cli_addr);
+        r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
         ASSERT_EQ(-EAGAIN, r);
       }
 
@@ -327,7 +327,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
         cb.poll(500);
         ConnectedSocket srv_socket2;
         do {
-          r = bind_socket.accept(&srv_socket2, options, &cli_addr);
+          r = bind_socket.accept(&srv_socket2, options, &cli_addr, worker);
           usleep(100);
         } while (r == -EAGAIN && !*accepted_p);
         if (r == 0)
@@ -365,7 +365,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
 
       if (bind_socket) {
         do {
-          r = bind_socket.accept(&srv_socket, options, &cli_addr);
+          r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
           usleep(100);
         } while (r == -EAGAIN && !*accepted_p);
         if (r == 0)
@@ -398,12 +398,14 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
 
 TEST_P(NetworkWorkerTest, ComplexTest) {
   entity_addr_t bind_addr;
+  std::atomic_bool listen_done(false);
+  std::atomic_bool *listen_p = &listen_done;
   std::atomic_bool accepted(false);
   std::atomic_bool *accepted_p = &accepted;
   std::atomic_bool done(false);
   std::atomic_bool *done_p = &done;
   ASSERT_TRUE(bind_addr.parse(get_addr().c_str()));
-  exec_events([this, bind_addr, accepted_p, done_p](Worker *worker) mutable {
+  exec_events([this, bind_addr, listen_p, accepted_p, done_p](Worker *worker) mutable {
     entity_addr_t cli_addr;
     EventCenter *center = &worker->center;
     SocketOptions options;
@@ -412,20 +414,28 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
     if (stack->support_local_listen_table() || worker->id == 0) {
       r = worker->listen(bind_addr, options, &bind_socket);
       ASSERT_EQ(0, r);
+      *listen_p = true;
     }
     ConnectedSocket cli_socket, srv_socket;
     if (worker->id == 1) {
-      r = worker->connect(bind_addr, options, &cli_socket);
-      ASSERT_EQ(0, r);
+      while (!*listen_p) {
+        usleep(50);
+        r = worker->connect(bind_addr, options, &cli_socket);
+        ASSERT_EQ(0, r);
+      }
     }
 
     if (bind_socket) {
       C_poll cb(center);
       center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-      if (cb.poll(500)) {
-        r = bind_socket.accept(&srv_socket, options, &cli_addr);
-        ASSERT_EQ(0, r);
-        *accepted_p = true;
+      int count = 3;
+      while (count--) {
+        if (cb.poll(500)) {
+          r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
+          ASSERT_EQ(0, r);
+          *accepted_p = true;
+          break;
+        }
       }
       ASSERT_TRUE(*accepted_p);
       center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
@@ -875,16 +885,17 @@ class StressFactory {
     StressFactory *factory;
     ServerSocket bind_socket;
     ThreadData *t_data;
+    Worker *worker;
 
    public:
-    C_accept(StressFactory *f, ServerSocket s, ThreadData *data)
-        : factory(f), bind_socket(std::move(s)), t_data(data) {}
+    C_accept(StressFactory *f, ServerSocket s, ThreadData *data, Worker *w)
+        : factory(f), bind_socket(std::move(s)), t_data(data), worker(w) {}
     void do_request(int id) {
       while (true) {
         entity_addr_t cli_addr;
         ConnectedSocket srv_socket;
         SocketOptions options;
-        int r = bind_socket.accept(&srv_socket, options, &cli_addr);
+        int r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
         if (r == -EAGAIN) {
           break;
         }
@@ -906,6 +917,7 @@ class StressFactory {
   const size_t client_num, queue_depth, max_message_length;
   atomic_int message_count, message_left;
   entity_addr_t bind_addr;
+  std::atomic_bool already_bind = {false};
   bool zero_copy_read;
   SocketOptions options;
 
@@ -955,12 +967,15 @@ class StressFactory {
     if (stack->support_local_listen_table() || worker->id == 0) {
       r = worker->listen(bind_addr, options, &bind_socket);
       ASSERT_EQ(0, r);
+      already_bind = true;
     }
+    while (!already_bind)
+      usleep(50);
     C_accept *accept_handler = nullptr;
     int bind_fd = 0;
     if (bind_socket) {
       bind_fd = bind_socket.fd();
-      accept_handler = new C_accept(this, std::move(bind_socket), &t_data);
+      accept_handler = new C_accept(this, std::move(bind_socket), &t_data, worker);
       ASSERT_EQ(0, worker->center.create_file_event(
                   bind_fd, EVENT_READABLE, accept_handler));
     }

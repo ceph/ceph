@@ -215,6 +215,12 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
 OPTION(ms_async_send_inline, OPT_BOOL, false)
+OPTION(ms_async_rdma_device_name, OPT_STR, "")
+OPTION(ms_async_rdma_enable_hugepage, OPT_BOOL, false)
+OPTION(ms_async_rdma_buffer_size, OPT_INT, 8192)
+OPTION(ms_async_rdma_send_buffers, OPT_U32, 10240)
+OPTION(ms_async_rdma_receive_buffers, OPT_U32, 10240)
+OPTION(ms_async_rdma_port_num, OPT_U32, 1)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 

@@ -228,6 +228,11 @@ if(HAVE_XIO)
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
 endif(HAVE_XIO)
 
+if(HAVE_RDMA)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${RDMA_INCLUDE_DIR}")
+  list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread rt)
+endif(HAVE_RDMA)
+
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
@@ -310,6 +315,15 @@ if(HAVE_XIO)
     msg/xio/XioPortal.cc
     msg/xio/QueueStrategy.cc)
 endif(HAVE_XIO)
+
+set(async_rdma_common_srcs)
+if(HAVE_RDMA)
+  list(APPEND async_rdma_common_srcs
+    msg/async/rdma/Infiniband.cc
+    msg/async/rdma/RDMAConnectedSocketImpl.cc
+    msg/async/rdma/RDMAServerSocketImpl.cc
+    msg/async/rdma/RDMAStack.cc)
+endif(HAVE_RDMA)
 
 if(HAVE_GOOD_YASM_ELF64)
   set(yasm_srcs
@@ -396,6 +410,7 @@ set(libcommon_files
   msg/async/PosixStack.cc
   msg/async/net_handler.cc
   ${xio_common_srcs}
+  ${async_rdma_common_srcs}
   msg/msg_types.cc
   common/hobject.cc
   osd/OSDMap.cc
@@ -545,7 +560,7 @@ endif (WITH_MGR)
 set(librados_config_srcs
   librados-config.cc)
 add_executable(librados-config ${librados_config_srcs})
-target_link_libraries(librados-config librados global ${BLKID_LIBRARIES}
+target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
 install(TARGETS librados-config DESTINATION bin)
@@ -687,7 +702,7 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
+target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
