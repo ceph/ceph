@@ -2367,6 +2367,58 @@ TEST_P(StoreTest, SimpleListTest) {
   }
 }
 
+TEST_P(StoreTest, ListEndTest) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid(spg_t(pg_t(0, 1), shard_id_t(1)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  set<ghobject_t, ghobject_t::BitwiseComparator> all;
+  {
+    ObjectStore::Transaction t;
+    for (int i=0; i<200; ++i) {
+      string name("object_");
+      name += stringify(i);
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
+		      ghobject_t::NO_GEN, shard_id_t(1));
+      hoid.hobj.pool = 1;
+      all.insert(hoid);
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+    }
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ghobject_t end(hobject_t(sobject_t("object_100", CEPH_NOSNAP)),
+		   ghobject_t::NO_GEN, shard_id_t(1));
+    end.hobj.pool = 1;
+    vector<ghobject_t> objects;
+    ghobject_t next;
+    int r = store->collection_list(cid, ghobject_t(), end,
+				   true, 500,
+				   &objects, &next);
+    ASSERT_EQ(r, 0);
+    for (auto &p : objects) {
+      ASSERT_NE(p, end);
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+      t.remove(cid, *p);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, Sort) {
   {
     hobject_t a(sobject_t("a", CEPH_NOSNAP));
