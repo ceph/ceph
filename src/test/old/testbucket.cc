@@ -8,7 +8,7 @@ using namespace crush;
 using namespace std;
 
 
-ostream& operator<<(ostream& out, vector<int>& v)
+ostream& operator<<(ostream &out, const vector<int> &v)
 {
   out << "[";
   for (int i=0; i<v.size(); i++) {

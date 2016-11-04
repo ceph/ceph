@@ -62,7 +62,7 @@ void IO::write_debug_base(ostream& out, string type) const {
 }
 
 
-ostream& operator<<(ostream& out, IO::ptr io) {
+ostream& operator<<(ostream &out, const IO::ptr &io) {
   io->write_debug(out);
   return out;
 }
