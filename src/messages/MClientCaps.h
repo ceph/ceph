@@ -29,7 +29,6 @@ class MClientCaps : public Message {
   uint64_t size, max_size, truncate_size, change_attr;
   uint32_t truncate_seq;
   utime_t mtime, atime, ctime, btime;
-  file_layout_t layout;
   uint32_t time_warp_seq;
 
   struct ceph_mds_cap_peer peer;
@@ -70,6 +69,10 @@ class MClientCaps : public Message {
 
   const file_layout_t& get_layout() {
     return layout;
+  }
+
+  void set_layout(const file_layout_t &l) {
+    layout = l;
   }
 
   int       get_migrate_seq() { return head.migrate_seq; }
@@ -176,6 +179,8 @@ class MClientCaps : public Message {
     inline_version = 0;
   }
 private:
+  file_layout_t layout;
+
   ~MClientCaps() {}
 
 public:
