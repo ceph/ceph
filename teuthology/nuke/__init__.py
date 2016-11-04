@@ -305,7 +305,7 @@ def nuke_helper(ctx, should_unlock):
     if ctx.check_locks:
         # does not check to ensure if the node is 'up'
         # we want to be able to nuke a downed node
-        check_lock(ctx, None, check_up=False)
+        check_lock.check_lock(ctx, None, check_up=False)
     if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
         try:
