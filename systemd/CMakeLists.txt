@@ -9,7 +9,6 @@ install(FILES
   ceph-mds@.service
   ceph-mgr@.service
   ceph-mon@.service
-  ceph-create-keys@.service
   ceph-osd@.service
   ceph-radosgw@.service
   ceph-rbd-mirror@.service
