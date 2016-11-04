@@ -1,6 +1,7 @@
 tasks:
 - install:
-   branch: hammer
+    branch: hammer
+    exclude_packages: ['ceph-mgr']
 - print: "**** done install hammer"
 - install.upgrade:
    exclude_packages: ['ceph-test', 'ceph-test-dbg']
