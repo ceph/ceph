@@ -3100,26 +3100,6 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
-    // warn about upgrade flags that can be set but are not.
-    if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-      string msg = "all OSDs are running jewel or later but the"
-	" 'require_jewel_osds' osdmap flag is not set";
-      summary.push_back(make_pair(HEALTH_WARN, msg));
-      if (detail) {
-	detail->push_back(make_pair(HEALTH_WARN, msg));
-      }
-    }
-    if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-      string msg = "all OSDs are running kraken or later but the"
-	" 'require_kraken_osds' osdmap flag is not set";
-      summary.push_back(make_pair(HEALTH_WARN, msg));
-      if (detail) {
-	detail->push_back(make_pair(HEALTH_WARN, msg));
-      }
-    }
-
     get_pools_health(summary, detail);
   }
 }
