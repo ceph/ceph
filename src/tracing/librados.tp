@@ -2407,6 +2407,26 @@ TRACEPOINT_EVENT(librados, rados_aio_stat_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_aio_exec_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_exec_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_watch_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
