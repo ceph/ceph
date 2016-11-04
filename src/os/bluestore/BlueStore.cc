@@ -6931,6 +6931,15 @@ int BlueStore::queue_transactions(
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
 
+  if (g_conf->objectstore_blackhole) {
+    dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
+	    << dendl;
+    delete ondisk;
+    delete onreadable;
+    delete onreadable_sync;
+    return 0;
+  }
+
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
