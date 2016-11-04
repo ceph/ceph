@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_OBJECT_WATCHER_NOTIFIER_H
-#define CEPH_LIBRBD_OBJECT_WATCHER_NOTIFIER_H
+#ifndef CEPH_LIBRBD_WATCHER_NOTIFIER_H
+#define CEPH_LIBRBD_WATCHER_NOTIFIER_H
 
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
@@ -14,7 +14,7 @@
 
 namespace librbd {
 
-namespace object_watcher {
+namespace watcher {
 
 class Notifier {
 public:
@@ -55,7 +55,7 @@ private:
 
 };
 
-} // namespace object_watcher
+} // namespace watcher
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_OBJECT_WATCHER_NOTIFIER_H
+#endif // CEPH_LIBRBD_WATCHER_NOTIFIER_H
