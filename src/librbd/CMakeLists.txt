@@ -29,6 +29,9 @@ set(librbd_internal_srcs
   Utils.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
+  Watcher.cc
+  watcher/Types.cc
+  watcher/RewatchRequest.cc
   exclusive_lock/AcquireRequest.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/ReacquireRequest.cc
@@ -64,7 +67,7 @@ set(librbd_internal_srcs
   object_map/SnapshotRollbackRequest.cc
   object_map/UnlockRequest.cc
   object_map/UpdateRequest.cc
-  object_watcher/Notifier.cc
+  watcher/Notifier.cc
   operation/DisableFeaturesRequest.cc
   operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
