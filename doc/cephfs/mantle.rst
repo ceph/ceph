@@ -1,6 +1,11 @@
 Mantle
 ======
 
+.. warning::
+
+    Mantle is for research and development of metadata balancer algorithms,
+    not for use on production CephFS clusters.
+
 Multiple, active MDSs can migrate directories to balance metadata load. The
 policies for when, where, and how much to migrate are hard-coded into the
 metadata balancing module. Mantle is a programmable metadata balancer built
@@ -45,7 +50,7 @@ metadata load:
 
 
 Mantle with `vstart.sh`
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 1. Start Ceph and tune the logging so we can see migrations happen:
 
@@ -110,7 +115,7 @@ Mantle with `vstart.sh`
 
 
 Output
-~~~~~
+~~~~~~
 
 Looking at the log for the first MDS (could be a, b, or c), we see that
 everyone has no load:
@@ -162,7 +167,7 @@ balancer. The balancer is stored in the RADOS metadata pool and a string in the
 MDSMap tells the MDSs which balancer to use.
 
 Exposing Metrics to Lua
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Metrics are exposed directly to the Lua code as global variables instead of
 using a well-defined function signature. There is a global "mds" table, where
@@ -187,7 +192,7 @@ in mds_load_t: auth.meta_load(), all.meta_load(), req_rate, queue_length,
 cpu_load_avg.
 
 Compile/Execute the Balancer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here we use `lua_pcall` instead of `lua_call` because we want to handle errors
 in the MDBalancer. We do not want the error propagating up the call chain. The
@@ -199,7 +204,7 @@ The performance improvement of using `lua_call` over `lua_pcall` would not be
 leveraged here because the balancer is invoked every 10 seconds by default. 
 
 Returning Policy Decision to C++
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We force the Lua policy engine to return a table of values, corresponding to
 the amount of load to send to each MDS. These loads are inserted directly into
@@ -234,7 +239,7 @@ does not support daemon-local fallbacks and the balancer assumes that all MDSs
 come to the same decision at the same time (e.g., importers, exporters, etc.).
 
 Debugging
-~~~~~~~~
+~~~~~~~~~
 
 Logging in a Lua policy will appear in the MDS log. The syntax is the same as
 the cls logging interface:
@@ -253,7 +258,7 @@ messages are only sent on version changes by the first MDS to avoid spamming
 the `ceph -w` utility. These messages are used for the integration tests.
 
 Testing
-~~~~~~
+~~~~~~~
 
 Testing is done with the ceph-qa-suite (tasks.cephfs.test_mantle). We do not
 test invalid balancer logging and loading the actual Lua VM.
