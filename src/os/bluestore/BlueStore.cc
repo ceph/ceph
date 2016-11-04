@@ -4965,10 +4965,10 @@ int BlueStore::set_collection_opts(
   if (!ch)
     return -ENOENT;
   Collection *c = static_cast<Collection*>(ch.get());
-  dout(15) << __func__ << " " << cid << " "
-    << " options " << opts << dendl;
+  dout(15) << __func__ << " " << cid << " options " << opts << dendl;
+  if (!c->exists)
+    return -ENOENT;
   RWLock::WLocker l(c->lock);
-
   c->pool_opts = opts;
   return 0;
 }
