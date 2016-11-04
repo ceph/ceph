@@ -7225,19 +7225,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
-    case Transaction::OP_MERGE_DELETE:
-      {
-	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	OnodeRef& no = ovec[op->dest_oid];
-	if (!no) {
-	  no = c->get_onode(noid, true);
-	}
-	vector<std::pair<uint64_t, uint64_t>> move_info;
-	i.decode_move_info(move_info);
-	r = _move_ranges_destroy_src(txc, c, o, no, move_info);
-      }
-      break;
-
     case Transaction::OP_COLL_ADD:
       assert(0 == "not implemented");
       break;
@@ -8850,44 +8837,6 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec
 	   << " = " << r << dendl;
-  return r;
-}
-
-/* Move contents of src object according to move_info to base object.
- * Once the move_info is traversed completely, delete the src object.
- */
-int BlueStore::_move_ranges_destroy_src(
-  TransContext *txc,
-  CollectionRef& c,
-  OnodeRef& srco,
-  OnodeRef& baseo,
-  const vector<std::pair<uint64_t, uint64_t>> move_info)
-{
-  dout(15) << __func__ << " " << c->cid << " "
-           << srco->oid << " -> " << baseo->oid
-           << dendl;
-
-  int r = 0;
-
-  // Traverse move_info completely, move contents from src object
-  // to base object.
-  for (unsigned i = 0; i < move_info.size(); ++i) {
-    uint64_t off = move_info[i].first;
-    uint64_t len = move_info[i].second;
-
-    dout(15) << __func__ << " " << c->cid << " " << srco->oid << " -> "
-	     << baseo->oid << " 0x" << std::hex << off << "~" << len
-	     << dendl;
-
-    r = _clone_range(txc, c, srco, baseo, off, len, off);
-    if (r < 0)
-      goto out;
-  }
-
-  // delete the src object
-  r = _do_remove(txc, c, srco);
-
- out:
   return r;
 }
 

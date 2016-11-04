@@ -135,8 +135,6 @@ TEST(Transaction, MoveRangesDelSrcObj)
   t.clone(c, o1, o2);
   bl.append("some other data");
   t.write(c, o2, 1, bl.length(), bl);
-
-  t.move_ranges_destroy_src(c, o1, o2, move_info);
 }
 
 TEST(Transaction, GetNumBytes)
