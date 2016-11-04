@@ -303,7 +303,7 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
     *result = cls_client::get_data_pool_finish(&it, &data_pool_id);
-  } else if (*result == -ENOEXEC) {
+  } else if (*result == -EOPNOTSUPP) {
     *result = 0;
   }
 
