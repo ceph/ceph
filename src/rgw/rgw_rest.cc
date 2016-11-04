@@ -530,7 +530,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   /* do not send content type if content length is zero
      and the content type was not set by the user */
-  if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
+  if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err() || !content_type){
     switch (s->format) {
     case RGW_FORMAT_XML:
       ctype = "application/xml";
