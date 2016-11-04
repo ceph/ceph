@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/object_watcher/Notifier.h"
+#include "librbd/watcher/Notifier.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
@@ -11,7 +11,7 @@
 #define dout_prefix *_dout << "librbd::object_watcher::Notifier: "
 
 namespace librbd {
-namespace object_watcher {
+namespace watcher {
 
 const uint64_t Notifier::NOTIFY_TIMEOUT = 5000;
 
@@ -73,5 +73,5 @@ void Notifier::handle_notify(int r, Context *on_finish) {
   }
 }
 
-} // namespace object_watcher
+} // namespace watcher
 } // namespace librbd
