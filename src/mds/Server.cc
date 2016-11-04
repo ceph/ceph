@@ -3180,9 +3180,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     // file would have inherited anyway from its parent.
     CDir *parent = dn->get_dir();
     CInode *parent_in = parent->get_inode();
-    int64_t parent_pool = parent_in->inode.layout.pool_id;
-
-    if (layout.pool_id != parent_pool) {
+    if (layout.pool_id != parent_in->inode.layout.pool_id
+        || layout.pool_ns != parent_in->inode.layout.pool_ns) {
       access |= MAY_SET_POOL;
     }
 
@@ -4239,7 +4238,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    if (cur->inode.layout.pool_id != layout.pool_id) {
+    if (cur->inode.layout.pool_id != layout.pool_id
+        || cur->inode.layout.pool_ns != layout.pool_ns) {
       if (!check_access(mdr, cur, MAY_SET_POOL)) {
         return;
       }
@@ -4290,7 +4290,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    if (cur->inode.layout.pool_id != layout.pool_id) {
+    if (cur->inode.layout.pool_id != layout.pool_id
+        || cur->inode.layout.pool_ns != layout.pool_ns) {
       if (!check_access(mdr, cur, MAY_SET_POOL)) {
         return;
       }
