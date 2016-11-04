@@ -594,6 +594,14 @@ static int do_map()
   }
 
   size = info.size;
+
+  if (size > (1UL << 32) * 512) {
+    r = -EFBIG;
+    cerr << "rbd-nbd: image is too large (" << prettybyte_t(size) << ", max is "
+         << prettybyte_t((1UL << 32) * 512) << ")" << std::endl;
+    goto close_nbd;
+  }
+
   r = ioctl(nbd, NBD_SET_SIZE, size);
   if (r < 0) {
     r = -errno;
