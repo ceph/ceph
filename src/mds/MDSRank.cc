@@ -753,10 +753,13 @@ void MDSRank::send_message_mds(Message *m, mds_rank_t mds)
   }
 
   // send mdsmap first?
-  if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
+  auto peer_mdsmap_epoch_entry =
+    peer_mdsmap_epoch.emplace(mds, version_t()).first;
+
+  if (mds != whoami && peer_mdsmap_epoch_entry->second < mdsmap->get_epoch()) {
     messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap),
 			    mdsmap->get_inst(mds));
-    peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
+    peer_mdsmap_epoch_entry->second = mdsmap->get_epoch();
   }
 
   // send message
