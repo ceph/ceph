@@ -578,6 +578,9 @@ void Operations<I>::execute_rename(const std::string &dest_name,
     // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
     on_finish = new FunctionContext([this, on_finish](int r) {
+        if (m_image_ctx.old_format) {
+          m_image_ctx.image_watcher->set_oid(m_image_ctx.header_oid);
+        }
 	m_image_ctx.image_watcher->register_watch(on_finish);
       });
     on_finish = new FunctionContext([this, dest_name, on_finish](int r) {
