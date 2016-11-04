@@ -7,16 +7,19 @@
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
-#include "librbd/exclusive_lock/ReleaseRequest.h"
+#include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <list>
 
 // template definitions
-#include "librbd/exclusive_lock/ReleaseRequest.cc"
-template class librbd::exclusive_lock::ReleaseRequest<librbd::MockImageCtx>;
+#include "librbd/exclusive_lock/PreReleaseRequest.cc"
+template class librbd::exclusive_lock::PreReleaseRequest<librbd::MockImageCtx>;
 
 namespace librbd {
+
+using librbd::ManagedLock;
+
 namespace exclusive_lock {
 
 namespace {
@@ -36,9 +39,9 @@ using ::testing::StrEq;
 
 static const std::string TEST_COOKIE("auto 123");
 
-class TestMockExclusiveLockReleaseRequest : public TestMockFixture {
+class TestMockExclusiveLockPreReleaseRequest : public TestMockFixture {
 public:
-  typedef ReleaseRequest<MockImageCtx> MockReleaseRequest;
+  typedef PreReleaseRequest<MockImageCtx> MockPreReleaseRequest;
 
   void expect_complete_context(MockContext &mock_context, int r) {
     EXPECT_CALL(mock_context, complete(r));
@@ -73,12 +76,6 @@ public:
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
-                  .WillOnce(Return(r));
-  }
-
   void expect_close_journal(MockImageCtx &mock_image_ctx,
                            MockJournal &mock_journal, int r) {
     EXPECT_CALL(mock_journal, close(_))
@@ -109,7 +106,7 @@ public:
 
 };
 
-TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
+TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -119,6 +116,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+
   expect_prepare_lock(mock_image_ctx);
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_block_writes(mock_image_ctx, 0);
@@ -134,25 +132,24 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
 
   MockContext mock_releasing_ctx;
   expect_complete_context(mock_releasing_ctx, 0);
-  expect_unlock(mock_image_ctx, 0);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
-                                                       TEST_COOKIE,
+  MockPreReleaseRequest *req = MockPreReleaseRequest::create(mock_image_ctx,
                                                        &mock_releasing_ctx,
                                                        &ctx, false);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
+TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessJournalDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
+
   expect_block_writes(mock_image_ctx, 0);
   expect_op_work_queue(mock_image_ctx);
 
@@ -165,13 +162,11 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
   mock_image_ctx.object_map = mock_object_map;
   expect_close_object_map(mock_image_ctx, *mock_object_map);
 
-  expect_unlock(mock_image_ctx, 0);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond release_ctx;
   C_SaferCond ctx;
-  MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
-                                                       TEST_COOKIE,
+  MockPreReleaseRequest *req = MockPreReleaseRequest::create(mock_image_ctx,
                                                        &release_ctx, &ctx,
                                                        false);
   req->send();
@@ -179,13 +174,14 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
+TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessObjectMapDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
+
   expect_block_writes(mock_image_ctx, 0);
   expect_op_work_queue(mock_image_ctx);
 
@@ -193,12 +189,9 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_flush_notifies(mock_image_ctx);
 
-  expect_unlock(mock_image_ctx, 0);
-
   C_SaferCond release_ctx;
   C_SaferCond ctx;
-  MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
-                                                       TEST_COOKIE,
+  MockPreReleaseRequest *req = MockPreReleaseRequest::create(mock_image_ctx,
                                                        &release_ctx, &ctx,
                                                        true);
   req->send();
@@ -206,13 +199,14 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockExclusiveLockReleaseRequest, BlockWritesError) {
+TEST_F(TestMockExclusiveLockPreReleaseRequest, BlockWritesError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
+
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -221,21 +215,21 @@ TEST_F(TestMockExclusiveLockReleaseRequest, BlockWritesError) {
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
-  MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
-                                                       TEST_COOKIE,
+  MockPreReleaseRequest *req = MockPreReleaseRequest::create(mock_image_ctx,
                                                        nullptr, &ctx,
                                                        true);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
+TEST_F(TestMockExclusiveLockPreReleaseRequest, UnlockError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
+
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -243,11 +237,8 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   expect_block_writes(mock_image_ctx, 0);
   expect_flush_notifies(mock_image_ctx);
 
-  expect_unlock(mock_image_ctx, -EINVAL);
-
   C_SaferCond ctx;
-  MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
-                                                       TEST_COOKIE,
+  MockPreReleaseRequest *req = MockPreReleaseRequest::create(mock_image_ctx,
                                                        nullptr, &ctx,
                                                        true);
   req->send();

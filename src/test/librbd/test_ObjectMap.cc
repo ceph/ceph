@@ -34,7 +34,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenCorrupt) {
   C_SaferCond lock_ctx;
   {
     RWLock::WLocker owner_locker(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&lock_ctx);
+    ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
 
@@ -57,7 +57,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenTooSmall) {
   C_SaferCond lock_ctx;
   {
     RWLock::WLocker owner_locker(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&lock_ctx);
+    ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
 
@@ -81,7 +81,7 @@ TEST_F(TestObjectMap, InvalidateFlagOnDisk) {
   C_SaferCond lock_ctx;
   {
     RWLock::WLocker owner_locker(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&lock_ctx);
+    ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
 

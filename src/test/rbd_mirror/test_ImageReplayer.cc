@@ -753,7 +753,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
   for (uint64_t i = 0; i < 10; ++i) {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     C_SaferCond request_lock;
-    ictx->exclusive_lock->request_lock(&request_lock);
+    ictx->exclusive_lock->acquire_lock(&request_lock);
     ASSERT_EQ(0, request_lock.wait());
 
     C_SaferCond append_ctx;
@@ -801,7 +801,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     C_SaferCond request_lock;
-    ictx->exclusive_lock->request_lock(&request_lock);
+    ictx->exclusive_lock->acquire_lock(&request_lock);
     ASSERT_EQ(0, request_lock.wait());
 
     C_SaferCond append_ctx;
