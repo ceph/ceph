@@ -3389,7 +3389,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 	   << " ctime " << i->ctime << dendl;
 
   i = pfile ? pi:oi;
-  m->layout = i->layout;
+  m->set_layout(i->layout);
   m->size = i->size;
   m->truncate_seq = i->truncate_seq;
   m->truncate_size = i->truncate_size;
