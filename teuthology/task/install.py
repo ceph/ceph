@@ -643,6 +643,17 @@ def get_package_list(ctx, config):
     if not debug:
         debs = filter(lambda p: not p.endswith('-dbg'), debs)
         rpms = filter(lambda p: not p.endswith('-debuginfo'), rpms)
+
+    excluded_packages = config.get('exclude_packages', list())
+    if excluded_packages:
+        log.debug("Excluding packages: {}".format(excluded_packages))
+
+        def exclude(pkgs):
+            return list(set(pkgs).difference(set(excluded_packages)))
+
+        debs = exclude(debs)
+        rpms = exclude(rpms)
+
     package_list = dict(deb=debs, rpm=rpms)
     log.debug("Package list is: {}".format(package_list))
     return package_list
@@ -1050,8 +1061,6 @@ def upgrade_common(ctx, config, deploy_style):
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')
         pkgs = get_package_list(ctx, config)[system_type]
-        excluded_packages = config.get('exclude_packages', list())
-        pkgs = list(set(pkgs).difference(set(excluded_packages)))
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
             proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
             # FIXME: again, make extra_pkgs distro-agnostic
@@ -1354,6 +1363,7 @@ def task(ctx, config):
                 debuginfo=config.get('debuginfo'),
                 flavor=flavor,
                 extra_packages=config.get('extra_packages', []),
+                exclude_packages=config.get('exclude_packages', []),
                 extras=config.get('extras', None),
                 wait_for_package=config.get('wait_for_package', False),
                 project=project,
