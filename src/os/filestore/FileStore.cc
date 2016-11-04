@@ -2054,8 +2054,10 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  if (g_conf->filestore_blackhole) {
-    dout(0) << "queue_transactions filestore_blackhole = TRUE, dropping transaction" << dendl;
+
+  if (g_conf->objectstore_blackhole) {
+    dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
+	    << dendl;
     delete ondisk;
     delete onreadable;
     delete onreadable_sync;
