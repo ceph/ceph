@@ -19,3 +19,5 @@ libceph_zlib_la_LDFLAGS += -export-symbols-regex '.*__compressor_.*'
 endif
 
 compressorlib_LTLIBRARIES += libceph_zlib.la
+
+EXTRA_DIST += compressor/zlib/CMakeLists.txt

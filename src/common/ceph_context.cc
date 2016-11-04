@@ -583,8 +583,10 @@ void CephContext::put() {
 
 void CephContext::init_crypto()
 {
-  ceph::crypto::init(this);
-  _crypto_inited = true;
+  if (!_crypto_inited) {
+    ceph::crypto::init(this);
+    _crypto_inited = true;
+  }
 }
 
 void CephContext::start_service_thread()

@@ -207,7 +207,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 }
 
 TEST(LibRGW, OPEN1) {
-  int ret = rgw_open(fs, object_fh, RGW_OPEN_FLAG_NONE);
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -234,7 +234,7 @@ TEST(LibRGW, CLOSE1) {
 }
 
 TEST(LibRGW, OPEN2) {
-  int ret = rgw_open(fs, object_fh, RGW_OPEN_FLAG_NONE);
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 

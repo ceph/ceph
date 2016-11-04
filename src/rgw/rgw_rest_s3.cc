@@ -746,6 +746,11 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     goto done;
   }
 
+  if (!store->is_meta_master()) {
+    /* only need to keep this data around if we're not meta master */
+    in_data.append(data, len);
+  }
+
   r = parser.get_versioning_status(&enable_versioning);
 
 done:
@@ -1754,7 +1759,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  << store->ctx()->_conf->rgw_ldap_uri
 	  << dendl;
 
-	RGWToken token{from_base64(s3_access_key)};
+	RGWToken token;
+	/* boost filters and/or string_ref may throw on invalid input */
+	try {
+	  token = rgw::from_base64(s3_access_key);
+	} catch(...) {
+	  token = std::string("");
+	}
 	if (! token.valid())
 	  return -EACCES;
 
@@ -2308,7 +2319,8 @@ int RGWPutCORS_ObjStore_S3::get_params()
   if (s->aws4_auth_needs_complete) {
     int ret_auth = do_aws4_auth_completion();
     if (ret_auth < 0) {
-      return ret_auth;
+      r = ret_auth;
+      goto done_err;
     }
   }
 
@@ -3089,12 +3101,13 @@ void RGW_Auth_S3::init_impl(RGWRados* store)
   const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
   const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
   const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
+  const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
   const string& ldap_dnattr =
     store->ctx()->_conf->rgw_ldap_dnattr;
   std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
   ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
-			    ldap_searchdn, ldap_dnattr);
+			    ldap_searchdn, ldap_searchfilter, ldap_dnattr);
 
   ldh->init();
   ldh->bind();

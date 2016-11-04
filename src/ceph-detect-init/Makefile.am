@@ -22,6 +22,7 @@ check_SCRIPTS += ceph-detect-init/run-tox.sh
 
 EXTRA_DIST += \
 	ceph-detect-init/AUTHORS.rst \
+	ceph-detect-init/CMakeLists.txt \
 	ceph-detect-init/ceph_detect_init/centos/__init__.py \
 	ceph-detect-init/ceph_detect_init/exc.py \
 	ceph-detect-init/ceph_detect_init/main.py \

@@ -92,7 +92,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
 {
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
-  fs->mds_map.max_mds = g_conf->max_mds;
+  fs->mds_map.max_mds = 1;
   fs->mds_map.data_pools.insert(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
@@ -1682,7 +1682,7 @@ int MDSMonitor::management_command(
     // Carry forward what makes sense
     new_fs->fscid = fs->fscid;
     new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
-    new_fs->mds_map.max_mds = g_conf->max_mds;
+    new_fs->mds_map.max_mds = 1;
     new_fs->mds_map.data_pools = fs->mds_map.data_pools;
     new_fs->mds_map.metadata_pool = fs->mds_map.metadata_pool;
     new_fs->mds_map.cas_pool = fs->mds_map.cas_pool;
@@ -2814,6 +2814,17 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
           info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
             pending_fsmap.legacy_client_fscid : info.standby_for_fscid,
           info.standby_for_rank};
+
+        // It is possible that the map contains a standby_for_fscid
+        // that doesn't correspond to an existing filesystem, especially
+        // if we loaded from a version with a bug (#17466)
+        if (info.standby_for_fscid != FS_CLUSTER_ID_NONE
+            && pending_fsmap.get_filesystems().count(
+              info.standby_for_fscid) == 0) {
+          derr << "gid " << gid << " has invalid standby_for_fscid "
+               << info.standby_for_fscid << dendl;
+          continue;
+        }
 
         // If we managed to resolve a full target role
         if (target_role.fscid != FS_CLUSTER_ID_NONE) {

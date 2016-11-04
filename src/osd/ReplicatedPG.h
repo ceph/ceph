@@ -398,6 +398,22 @@ public:
     append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
   }
 
+  struct C_OSD_OnApplied : Context {
+    ReplicatedPGRef pg;
+    epoch_t epoch;
+    eversion_t v;
+    C_OSD_OnApplied(
+      ReplicatedPGRef pg,
+      epoch_t epoch,
+      eversion_t v)
+      : pg(pg), epoch(epoch), v(v) {}
+    void finish(int) override {
+      pg->lock();
+      if (!pg->pg_has_reset_since(epoch))
+	pg->op_applied(v);
+      pg->unlock();
+    }
+  };
   void op_applied(
     const eversion_t &applied_version);
 

@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 
-EXTRA_DIST = conf.py ceph_selinux.8
+EXTRA_DIST = conf.py ceph_selinux.8 CMakeLists.txt
 
 dist_man_MANS = 
 

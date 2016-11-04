@@ -289,13 +289,18 @@ void client_update_data(librados::ObjectWriteOperation *op,
 
 int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
                         const std::string &id, cls::journal::ClientState state) {
+  librados::ObjectWriteOperation op;
+  client_update_state(&op, id, state);
+  return ioctx.operate(oid, &op);
+}
+
+void client_update_state(librados::ObjectWriteOperation *op,
+                         const std::string &id,
+                         cls::journal::ClientState state) {
   bufferlist bl;
   ::encode(id, bl);
   ::encode(static_cast<uint8_t>(state), bl);
-
-  librados::ObjectWriteOperation op;
-  op.exec("journal", "client_update_state", bl);
-  return ioctx.operate(oid, &op);
+  op->exec("journal", "client_update_state", bl);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,

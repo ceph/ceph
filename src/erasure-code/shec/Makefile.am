@@ -160,3 +160,5 @@ endif
 erasure-code/shec/ErasureCodePluginSelectShec.cc: ./ceph_ver.h
 
 erasure_codelib_LTLIBRARIES += libec_shec.la
+
+EXTRA_DIST += erasure-code/shec/CMakeLists.txt

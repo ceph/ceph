@@ -253,6 +253,8 @@ protected:
                              as object might have been copied across buckets */
   map<uint64_t, RGWObjManifestRule> rules;
 
+  string tail_instance; /* tail object's instance */
+
   void convert_to_explicit();
   int append_explicit(RGWObjManifest& m);
   void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter, string *override_prefix);
@@ -278,6 +280,7 @@ public:
     prefix = rhs.prefix;
     tail_bucket = rhs.tail_bucket;
     rules = rhs.rules;
+    tail_instance = rhs.tail_instance;
 
     begin_iter.set_manifest(this);
     end_iter.set_manifest(this);
@@ -315,7 +318,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(5, 3, bl);
     ::encode(obj_size, bl);
     ::encode(objs, bl);
     ::encode(explicit_objs, bl);
@@ -325,11 +328,12 @@ public:
     ::encode(prefix, bl);
     ::encode(rules, bl);
     ::encode(tail_bucket, bl);
+    ::encode(tail_instance, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(4, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(5, 2, 2, bl);
     ::decode(obj_size, bl);
     ::decode(objs, bl);
     if (struct_v >= 3) {
@@ -365,6 +369,12 @@ public:
 
     if (struct_v >= 4) {
       ::decode(tail_bucket, bl);
+    }
+
+    if (struct_v >= 5) {
+      ::decode(tail_instance, bl);
+    } else { // old object created before 'tail_instance' field added to manifest
+      tail_instance = head_obj.get_instance();
     }
 
     update_iterators();
@@ -428,6 +438,14 @@ public:
 
   const string& get_prefix() {
     return prefix;
+  }
+
+  void set_tail_instance(const string& _ti) {
+    tail_instance = _ti;
+  }
+
+  const string& get_tail_instance() {
+    return tail_instance;
   }
 
   void set_head_size(uint64_t _s) {

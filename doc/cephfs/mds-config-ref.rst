@@ -11,15 +11,6 @@
 :Default: ``true`` 
 
 
-``max mds``
-
-:Description: The number of active MDS daemons during cluster creation. Set
-              under ``[mon]`` or ``[global]``.
-              
-:Type:  32-bit Integer
-:Default: ``1``
-
-
 ``mds max file size``
 
 :Description: The maximum allowed file size to set when creating a 

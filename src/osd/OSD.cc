@@ -4057,14 +4057,14 @@ void OSD::heartbeat_check()
     if (p->second.is_unhealthy(cutoff)) {
       if (p->second.last_rx_back == utime_t() ||
 	  p->second.last_rx_front == utime_t()) {
-	derr << "heartbeat_check: no reply from osd." << p->first
-	     << " ever on either front or back, first ping sent " << p->second.first_tx
-	     << " (cutoff " << cutoff << ")" << dendl;
+	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+	     << " osd." << p->first << " ever on either front or back, first ping sent "
+	     << p->second.first_tx << " (cutoff " << cutoff << ")" << dendl;
 	// fail
 	failure_queue[p->first] = p->second.last_tx;
       } else {
-	derr << "heartbeat_check: no reply from osd." << p->first
-	     << " since back " << p->second.last_rx_back
+	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+	     << " osd." << p->first << " since back " << p->second.last_rx_back
 	     << " front " << p->second.last_rx_front
 	     << " (cutoff " << cutoff << ")" << dendl;
 	// fail

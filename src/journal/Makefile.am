@@ -2,7 +2,6 @@ if ENABLE_CLIENT
 if WITH_RADOS
 
 libjournal_la_SOURCES = \
-	journal/AsyncOpTracker.cc \
 	journal/Entry.cc \
 	journal/Future.cc \
 	journal/FutureImpl.cc \
@@ -17,7 +16,6 @@ libjournal_la_SOURCES = \
 
 noinst_LTLIBRARIES += libjournal.la
 noinst_HEADERS += \
-	journal/AsyncOpTracker.h \
 	journal/Entry.h \
 	journal/Future.h \
 	journal/FutureImpl.h \

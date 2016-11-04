@@ -49,7 +49,9 @@ void JournalTrimmer::shut_down(Context *on_finish) {
 
 int JournalTrimmer::remove_objects(bool force) {
   ldout(m_cct, 20) << __func__ << dendl;
-  m_async_op_tracker.wait_for_ops();
+  C_SaferCond ops_ctx;
+  m_async_op_tracker.wait_for_ops(&ops_ctx);
+  ops_ctx.wait();
 
   C_SaferCond ctx;
   {
@@ -142,8 +144,11 @@ void JournalTrimmer::handle_metadata_updated() {
   uint64_t minimum_commit_set = active_set;
   std::string minimum_client_id;
 
-  // TODO: add support for trimming past "laggy" clients
   for (auto &client : registered_clients) {
+    if (client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+      continue;
+    }
+
     if (client.commit_position.object_positions.empty()) {
       // client hasn't recorded any commits
       minimum_commit_set = minimum_set;

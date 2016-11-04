@@ -26,7 +26,8 @@ public:
   journal::JournalMetadataPtr create_metadata(const std::string &oid,
                                               const std::string &client_id = "client",
                                               double commit_internal = 0.1,
-                                              uint64_t max_fetch_bytes = 0);
+                                              uint64_t max_fetch_bytes = 0,
+                                              int max_concurrent_object_sets = 0);
   int append(const std::string &oid, const bufferlist &bl);
 
   int client_register(const std::string &oid, const std::string &id = "client",

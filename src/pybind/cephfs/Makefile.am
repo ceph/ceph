@@ -1,4 +1,7 @@
-EXTRA_DIST += $(srcdir)/pybind/cephfs/setup.py $(srcdir)/pybind/cephfs/cephfs.pyx
+EXTRA_DIST += \
+	$(srcdir)/pybind/cephfs/CMakeLists.txt \
+	$(srcdir)/pybind/cephfs/setup.py \
+	$(srcdir)/pybind/cephfs/cephfs.pyx
 
 cephfs-pybind-all: libcephfs.la ${srcdir}/ceph_ver.h
 	cd $(srcdir)/pybind/cephfs; $(PY_DISTUTILS) build \

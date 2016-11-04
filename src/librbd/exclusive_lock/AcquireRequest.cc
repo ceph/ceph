@@ -171,7 +171,14 @@ Context *AcquireRequest<I>::send_open_journal() {
   m_on_acquire->complete(0);
   m_on_acquire = nullptr;
 
-  if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+  bool journal_enabled;
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    journal_enabled = (m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
+                                                 m_image_ctx.snap_lock) &&
+                       !m_image_ctx.get_journal_policy()->journal_disabled());
+  }
+  if (!journal_enabled) {
     apply();
     return m_on_finish;
   }

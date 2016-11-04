@@ -1328,26 +1328,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     return false;
   }
 
-  if ((up.size() &&
-      !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
-       auth_log_shard->second.log_tail) &&
-      auth_log_shard->second.is_incomplete()) {
-    map<pg_shard_t, pg_info_t> complete_infos;
-    for (map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
-	 i != all_info.end();
-	 ++i) {
-      if (!i->second.is_incomplete())
-	complete_infos.insert(*i);
-    }
-    map<pg_shard_t, pg_info_t>::const_iterator i = find_best_info(
-      complete_infos,
-      history_les_bound);
-    if (i != complete_infos.end()) {
-      auth_log_shard = all_info.find(i->first);
-    }
-  }
-
+  assert(!auth_log_shard->second.is_incomplete());
   auth_log_shard_id = auth_log_shard->first;
 
   // Determine if compatibility needed
@@ -2553,11 +2534,11 @@ void PG::_update_calc_stats()
 
     // a misplaced object is not stored on the correct OSD
     uint64_t misplaced = 0;
-    unsigned i = 0;
     unsigned in_place = 0;
-    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p, ++i) {
-      pg_shard_t s(*p,
-		   pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
+    for (set<pg_shard_t>::const_iterator p = upset.begin();
+	 p != upset.end();
+	 ++p) {
+      const pg_shard_t &s = *p;
       if (actingset.count(s)) {
 	++in_place;
       } else {
@@ -3482,10 +3463,16 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   dout(10) << " got " << m->from << " scrub map" << dendl;
   bufferlist::iterator p = m->get_data().begin();
 
-  scrubber.received_maps[m->from].decode(p, info.pgid.pool());
+  ScrubMap &map = scrubber.received_maps[m->from];
+  map.reset_bitwise(get_sort_bitwise());
+  map.decode(p, info.pgid.pool());
   dout(10) << "map version is "
-	     << scrubber.received_maps[m->from].valid_through
-	     << dendl;
+	   << map.valid_through
+	   << dendl;
+
+  // Account for http://tracker.ceph.com/issues/17491
+  if (!map.objects.empty() && map.objects.rbegin()->first == scrubber.end)
+    map.objects.erase(scrubber.end);
 
   --scrubber.waiting_on;
   scrubber.waiting_on_whom.erase(m->from);
@@ -4078,6 +4065,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
       case PG::Scrubber::INACTIVE:
         dout(10) << "scrub start" << dendl;
 
+	scrubber.cleaned_meta_map.reset_bitwise(get_sort_bitwise());
+
         publish_stats_to_osd();
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
@@ -4118,59 +4107,59 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.received_maps.clear();
 
         {
-	  hobject_t candidate_end;
-
-          // get the start and end of our scrub chunk
-          //
-          // start and end need to lie on a hash boundary. We test for this by
-          // requesting a list and searching backward from the end looking for a
-          // boundary. If there's no boundary, we request a list after the first
-          // list, and so forth.
-
-          bool boundary_found = false;
+          /* get the start and end of our scrub chunk
+	   *
+	   * Our scrub chunk has an important restriction we're going to need to
+	   * respect. We can't let head or snapdir be start or end.
+	   * Using a half-open interval means that if end == head|snapdir,
+	   * we'd scrub/lock head and the clone right next to head in different
+	   * chunks which would allow us to miss clones created between
+	   * scrubbing that chunk and scrubbing the chunk including head.
+	   * This isn't true for any of the other clones since clones can
+	   * only be created "just to the left of" head.  There is one exception
+	   * to this: promotion of clones which always happens to the left of the
+	   * left-most clone, but promote_object checks the scrubber in that
+	   * case, so it should be ok.  Also, it's ok to "miss" clones at the
+	   * left end of the range if we are a tier because they may legitimately
+	   * not exist (see _scrub).
+	   */
+	  unsigned min = MAX(3, cct->_conf->osd_scrub_chunk_min);
           hobject_t start = scrubber.start;
-          unsigned loop = 0;
-          while (!boundary_found) {
-            vector<hobject_t> objects;
-            ret = get_pgbackend()->objects_list_partial(
-	      start,
-	      cct->_conf->osd_scrub_chunk_min,
-	      cct->_conf->osd_scrub_chunk_max,
-	      &objects,
-	      &candidate_end);
-            assert(ret >= 0);
+	  hobject_t candidate_end;
+	  vector<hobject_t> objects;
+	  ret = get_pgbackend()->objects_list_partial(
+	    start,
+	    min,
+	    MAX(min, cct->_conf->osd_scrub_chunk_max),
+	    &objects,
+	    &candidate_end);
+	  assert(ret >= 0);
 
-            // in case we don't find a boundary: start again at the end
-            start = candidate_end;
-
-            // special case: reached end of file store, implicitly a boundary
-            if (objects.empty()) {
-              break;
-            }
-
-            // search backward from the end looking for a boundary
-            objects.push_back(candidate_end);
-            while (!boundary_found && objects.size() > 1) {
-              hobject_t end = objects.back().get_boundary();
-              objects.pop_back();
-
-              if (objects.back().get_hash() != end.get_hash()) {
-                candidate_end = end;
-                boundary_found = true;
-              }
-            }
-
-            // reset handle once in a while, the search maybe takes long.
-            if (++loop >= g_conf->osd_loop_before_reset_tphandle) {
-              handle.reset_tp_timeout();
-              loop = 0;
-            }
-          }
+	  if (!objects.empty()) {
+	    hobject_t back = objects.back();
+	    while (candidate_end.has_snapset() &&
+		      candidate_end.get_head() == back.get_head()) {
+	      candidate_end = back;
+	      objects.pop_back();
+	      if (objects.empty()) {
+		assert(0 ==
+		       "Somehow we got more than 2 objects which"
+		       "have the same head but are not clones");
+	      }
+	      back = objects.back();
+	    }
+	    if (candidate_end.has_snapset()) {
+	      assert(candidate_end.get_head() != back.get_head());
+	      candidate_end = candidate_end.get_object_boundary();
+	    }
+	  } else {
+	    assert(candidate_end.is_max());
+	  }
 
 	  if (!_range_available_for_scrub(scrubber.start, candidate_end)) {
 	    // we'll be requeued by whatever made us unavailable for scrub
 	    dout(10) << __func__ << ": scrub blocked somewhere in range "
-		     << "[" << scrubber.start << ", " << candidate_end << ")"
+		     << "[" << scrubber.start << ", " << candidate_end << "]"
 		     << dendl;
 	    done = true;
 	    break;
@@ -4184,13 +4173,15 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
              p != pg_log.get_log().log.rend();
              ++p) {
           if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
+	      cmp(p->soid, scrubber.end, get_sort_bitwise()) <= 0) {
+	    // inclusive upper bound, @see write_blocked_by_scrub
             scrubber.subset_last_update = p->version;
             break;
           }
         }
 
-        // ask replicas to wait until last_update_applied >= scrubber.subset_last_update and then scan
+        // ask replicas to wait until
+        // last_update_applied >= scrubber.subset_last_update and then scan
         scrubber.waiting_on_whom.insert(pg_whoami);
         ++scrubber.waiting_on;
 
@@ -4337,7 +4328,7 @@ void PG::scrub_compare_maps()
   dout(10) << __func__ << " has maps, analyzing" << dendl;
 
   // construct authoritative scrub map for type specific scrubbing
-  ScrubMap authmap(scrubber.primary_scrubmap);
+  scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
   map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> missing_digest;
 
   if (acting.size() > 1) {
@@ -4399,13 +4390,34 @@ void PG::scrub_compare_maps()
     for (map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator>::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
-      authmap.objects.erase(i->first);
-      authmap.objects.insert(*(maps[i->second.back()]->objects.find(i->first)));
+      scrubber.cleaned_meta_map.objects.erase(i->first);
+      scrubber.cleaned_meta_map.objects.insert(
+	*(maps[i->second.back()]->objects.find(i->first))
+	);
     }
   }
 
+  ScrubMap for_meta_scrub(get_sort_bitwise());
+  if (scrubber.end.is_max() ||
+      scrubber.cleaned_meta_map.objects.empty()) {
+    scrubber.cleaned_meta_map.swap(for_meta_scrub);
+  } else {
+    auto iter = scrubber.cleaned_meta_map.objects.end();
+    --iter; // not empty, see if clause
+    auto begin = scrubber.cleaned_meta_map.objects.begin();
+    while (iter != begin) {
+      auto next = iter--;
+      if (next->first.get_head() != iter->first.get_head()) {
+	++iter;
+	break;
+      }
+    }
+    for_meta_scrub.objects.insert(begin, iter);
+    scrubber.cleaned_meta_map.objects.erase(begin, iter);
+  }
+
   // ok, do the pg-type specific scrubbing
-  _scrub(authmap, missing_digest);
+  _scrub(for_meta_scrub, missing_digest);
   if (!scrubber.store->empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;

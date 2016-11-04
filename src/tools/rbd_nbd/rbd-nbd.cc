@@ -184,13 +184,21 @@ private:
 
     dout(20) << __func__ << ": " << *ctx << dendl;
 
+    if (ret == -EINVAL) {
+      // if shrinking an image, a pagecache writeback might reference
+      // extents outside of the range of the new image extents
+      dout(5) << __func__ << ": masking IO out-of-bounds error" << dendl;
+      ctx->data.clear();
+      ret = 0;
+    }
+
     if (ret < 0) {
       ctx->reply.error = htonl(-ret);
     } else if ((ctx->command == NBD_CMD_READ) &&
                 ret < static_cast<int>(ctx->request.len)) {
       int pad_byte_count = static_cast<int> (ctx->request.len) - ret;
       ctx->data.append_zero(pad_byte_count);
-      dout(20) << __func__ << ": " << *ctx << ": Pad byte count: " 
+      dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
       ctx->reply.error = 0;
     } else {
@@ -235,6 +243,7 @@ private:
       switch (ctx->command)
       {
         case NBD_CMD_DISC:
+          // RBD_DO_IT will return when pipe is closed
 	  dout(0) << "disconnect request received" << dendl;
           return;
         case NBD_CMD_WRITE:
@@ -649,9 +658,10 @@ static int do_unmap()
     return nbd;
   }
 
-  if (ioctl(nbd, NBD_DISCONNECT) < 0)
+  // alert the reader thread to shut down
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
-  ioctl(nbd, NBD_CLEAR_SOCK);
+  }
   close(nbd);
 
   return 0;
@@ -726,6 +736,7 @@ static int rbd_nbd(int argc, const char *argv[])
   env_to_vec(args);
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
               CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  g_ceph_context->_conf->set_val_or_die("pid_file", "");
 
   std::vector<const char*>::iterator i;
   std::ostringstream err;

@@ -103,6 +103,11 @@ void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
 Journaler::~Journaler() {
   if (m_metadata != nullptr) {
     assert(!m_metadata->is_initialized());
+    if (!m_initialized) {
+      // never initialized -- ensure any in-flight ops are complete
+      // since we wouldn't expect shut_down to be invoked
+      m_metadata->wait_for_ops();
+    }
     m_metadata->put();
     m_metadata = nullptr;
   }
@@ -124,6 +129,7 @@ int Journaler::exists(bool *header_exists) const {
 }
 
 void Journaler::init(Context *on_init) {
+  m_initialized = true;
   m_metadata->init(new C_InitJournaler(this, on_init));
 }
 
@@ -313,7 +319,12 @@ void Journaler::get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish) {
 }
 
 void Journaler::get_tags(uint64_t tag_class, Tags *tags, Context *on_finish) {
-  m_metadata->get_tags(tag_class, tags, on_finish);
+  m_metadata->get_tags(0, tag_class, tags, on_finish);
+}
+
+void Journaler::get_tags(uint64_t start_after_tag_tid, uint64_t tag_class,
+                         Tags *tags, Context *on_finish) {
+  m_metadata->get_tags(start_after_tag_tid, tag_class, tags, on_finish);
 }
 
 void Journaler::start_replay(ReplayHandler *replay_handler) {

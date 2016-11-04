@@ -192,6 +192,7 @@
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   

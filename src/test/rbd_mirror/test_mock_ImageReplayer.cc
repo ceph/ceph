@@ -168,7 +168,6 @@ ReplayStatusFormatter<librbd::MockTestImageCtx>* ReplayStatusFormatter<librbd::M
 
 // template definitions
 #include "tools/rbd_mirror/ImageReplayer.cc"
-template class rbd::mirror::ImageReplayer<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {

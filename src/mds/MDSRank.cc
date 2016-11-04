@@ -1240,9 +1240,7 @@ void MDSRank::clientreplay_start()
 bool MDSRank::queue_one_replay()
 {
   if (replay_queue.empty()) {
-    if (mdcache->get_num_client_requests() == 0) {
-      clientreplay_done();
-    }
+    clientreplay_done();
     return false;
   }
   queue_waiter(replay_queue.front());

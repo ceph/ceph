@@ -227,7 +227,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 
 TEST(LibRGW, OBJ_OPEN) {
   if (do_get || do_put || do_readv || do_writev) {
-    int ret = rgw_open(fs, object_fh, 0 /* flags */);
+    int ret = rgw_open(fs, object_fh, 0 /* posix flags */, 0 /* flags */);
     ASSERT_EQ(ret, 0);
     object_open = true;
   }

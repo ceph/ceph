@@ -367,3 +367,5 @@ check_TESTPROGRAMS += unittest_erasure_code_example
 
 endif # WITH_OSD
 endif # ENABLE_SERVER
+
+EXTRA_DIST += test/erasure-code/CMakeLists.txt

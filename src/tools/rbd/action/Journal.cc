@@ -168,6 +168,66 @@ static int do_reset_journal(librados::IoCtx& io_ctx,
   return 0;
 }
 
+static int do_disconnect_journal_client(librados::IoCtx& io_ctx,
+					const std::string& journal_id,
+					const std::string& client_id)
+{
+  int r;
+
+  C_SaferCond cond;
+  uint64_t minimum_set;
+  uint64_t active_set;
+  std::set<cls::journal::Client> registered_clients;
+  std::string oid = ::journal::Journaler::header_oid(journal_id);
+
+  cls::journal::client::get_mutable_metadata(io_ctx, oid, &minimum_set,
+                                            &active_set, &registered_clients,
+                                            &cond);
+  r = cond.wait();
+  if (r < 0) {
+    std::cerr << "warning: failed to get journal metadata" << std::endl;
+    return r;
+  }
+
+  static const std::string IMAGE_CLIENT_ID("");
+
+  bool found = false;
+  for (auto &c : registered_clients) {
+    if (c.id == IMAGE_CLIENT_ID || (!client_id.empty() && client_id != c.id)) {
+      continue;
+    }
+    r = cls::journal::client::client_update_state(io_ctx, oid, c.id,
+				  cls::journal::CLIENT_STATE_DISCONNECTED);
+    if (r < 0) {
+      std::cerr << "warning: failed to disconnect client " << c.id << ": "
+		<< cpp_strerror(r) << std::endl;
+      return r;
+    }
+    std::cout << "client " << c.id << " disconnected" << std::endl;
+    found = true;
+  }
+
+  if (!found) {
+    if (!client_id.empty()) {
+      std::cerr << "warning: client " << client_id << " is not registered"
+		<< std::endl;
+    } else {
+      std::cerr << "no registered clients to disconnect" << std::endl;
+    }
+    return -ENOENT;
+  }
+
+  bufferlist bl;
+  r = io_ctx.notify2(oid, bl, 5000, NULL);
+  if (r < 0) {
+    std::cerr << "warning: failed to notify state change:" << ": "
+	      << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
 class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
@@ -843,6 +903,45 @@ int execute_reset(const po::variables_map &vm) {
   return 0;
 }
 
+void get_client_disconnect_arguments(po::options_description *positional,
+				     po::options_description *options) {
+  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  options->add_options()
+    ("client-id", po::value<std::string>(),
+     "client ID (or leave unspecified to disconnect all)");
+}
+
+int execute_client_disconnect(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string journal_name;
+  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
+					&arg_index, &pool_name, &journal_name);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string client_id;
+  if (vm.count("client-id")) {
+    client_id = vm["client-id"].as<std::string>();
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  r = do_disconnect_journal_client(io_ctx, journal_name, client_id);
+  if (r < 0) {
+    std::cerr << "rbd: journal client disconnect: " << cpp_strerror(r)
+	      << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 void get_inspect_arguments(po::options_description *positional,
 			   po::options_description *options) {
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -980,6 +1079,11 @@ Shell::Action action_export(
 Shell::Action action_import(
   {"journal", "import"}, {}, "Import image journal.", "",
   &get_import_arguments, &execute_import);
+
+Shell::Action action_disconnect(
+  {"journal", "client", "disconnect"}, {},
+  "Flag image journal client as disconnected.", "",
+  &get_client_disconnect_arguments, &execute_client_disconnect);
 
 } // namespace journal
 } // namespace action

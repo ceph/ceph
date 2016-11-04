@@ -524,7 +524,6 @@ OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 OPTION(mds_wipe_sessions, OPT_BOOL, 0)
 OPTION(mds_wipe_ino_prealloc, OPT_BOOL, 0)
 OPTION(mds_skip_ino, OPT_INT, 0)
-OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_for_fscid, OPT_INT, -1)
@@ -1173,6 +1172,7 @@ OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will 
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
+OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1211,6 +1211,7 @@ OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending 
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 OPTION(rbd_journal_max_payload_bytes, OPT_U32, 16384) // maximum journal payload size before splitting
+OPTION(rbd_journal_max_concurrent_object_sets, OPT_INT, 0) // maximum number of object sets a journal client can be behind before it is automatically unregistered
 
 /**
  * RBD Mirror options
@@ -1297,6 +1298,8 @@ OPTION(rgw_ldap_dnattr, OPT_STR, "uid")
 OPTION(rgw_ldap_secret, OPT_STR, "/etc/openldap/secret")
 /* rgw_s3_auth_use_ldap  use LDAP for RGW auth? */
 OPTION(rgw_s3_auth_use_ldap, OPT_BOOL, false)
+/* rgw_ldap_searchfilter  LDAP search filter */
+OPTION(rgw_ldap_searchfilter, OPT_STR, "")
 
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
@@ -1322,6 +1325,9 @@ OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
 OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
 OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
 OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+OPTION(rgw_nfs_write_completion_interval_s, OPT_INT, 10) /* stateless (V3)
+							  * commit
+							  * delay */
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored

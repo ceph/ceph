@@ -145,6 +145,8 @@ void RGW_SWIFT_Auth_Get::execute()
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
 
+  s->prot_flags |= RGW_REST_SWIFT;
+
   string user_str;
   RGWUserInfo info;
   bufferlist bl;

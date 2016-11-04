@@ -8,11 +8,14 @@
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
+#include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/Cond.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <algorithm>
@@ -119,14 +122,14 @@ public:
   void close(Context *on_finish);
 
   bool is_tag_owner() const;
+  uint64_t get_tag_tid() const;
   journal::TagData get_tag_data() const;
   int demote();
 
   void allocate_local_tag(Context *on_finish);
   void allocate_tag(const std::string &mirror_uuid,
-                    const std::string &predecessor_mirror_uuid,
-                    bool predecessor_commit_valid, uint64_t predecessor_tag_tid,
-                    uint64_t predecessor_entry_tid, Context *on_finish);
+                    const journal::TagPredecessor &predecessor,
+                    Context *on_finish);
 
   void flush_commit_position(Context *on_finish);
 
@@ -157,15 +160,17 @@ public:
   }
 
   void start_external_replay(journal::Replay<ImageCtxT> **journal_replay,
-                             Context *on_start, Context *on_close_request);
+                             Context *on_start);
   void stop_external_replay();
 
-  void add_listener(journal::ListenerType type,
-                    journal::JournalListenerPtr listener);
-  void remove_listener(journal::ListenerType type,
-                       journal::JournalListenerPtr listener);
+  void add_listener(journal::Listener *listener);
+  void remove_listener(journal::Listener *listener);
 
-  int check_resync_requested(bool *do_resync);
+  int is_resync_requested(bool *do_resync);
+
+  inline ContextWQ *get_work_queue() {
+    return m_work_queue;
+  }
 
 private:
   ImageCtxT &m_image_ctx;
@@ -297,7 +302,8 @@ private:
   bool m_blocking_writes;
 
   journal::Replay<ImageCtxT> *m_journal_replay;
-  Context *m_on_replay_close_request = nullptr;
+
+  util::AsyncOpTracker m_async_journal_op_tracker;
 
   struct MetadataListener : public ::journal::JournalMetadataListener {
     Journal<ImageCtxT> *journal;
@@ -312,9 +318,15 @@ private:
     }
   } m_metadata_listener;
 
-  typedef std::map<journal::ListenerType,
-                   std::list<journal::JournalListenerPtr> > ListenerMap;
-  ListenerMap m_listener_map;
+  typedef std::set<journal::Listener *> Listeners;
+  Listeners m_listeners;
+  Cond m_listener_cond;
+  bool m_listener_notify = false;
+
+  uint64_t m_refresh_sequence = 0;
+
+  bool is_journal_replaying(const Mutex &) const;
+  bool is_tag_owner(const Mutex &) const;
 
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
@@ -360,9 +372,12 @@ private:
   bool is_steady_state() const;
   void wait_for_steady_state(Context *on_state);
 
-  int check_resync_requested_internal(bool *do_resync);
+  int check_resync_requested(bool *do_resync);
 
   void handle_metadata_updated();
+  void handle_refresh_metadata(uint64_t refresh_sequence, uint64_t tag_tid,
+                               journal::TagData tag_data, int r);
+
 };
 
 } // namespace librbd

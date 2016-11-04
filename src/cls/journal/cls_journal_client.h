@@ -51,6 +51,9 @@ void client_update_data(librados::ObjectWriteOperation *op,
                         const std::string &id, const bufferlist &data);
 int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
                         const std::string &id, cls::journal::ClientState state);
+void client_update_state(librados::ObjectWriteOperation *op,
+                         const std::string &id,
+                         cls::journal::ClientState state);
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                       const std::string &id);

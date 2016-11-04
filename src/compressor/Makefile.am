@@ -19,3 +19,5 @@ noinst_HEADERS += \
 	compressor/AsyncCompressor.h \
     compressor/CompressionPlugin.h
 
+
+EXTRA_DIST += compressor/CMakeLists.txt

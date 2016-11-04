@@ -795,12 +795,18 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
   // shut down request might have occurred while lock was
   // dropped -- handle if pending
-  Mutex::Locker locker(m_lock);
-  assert(m_in_flight_op_events > 0);
-  --m_in_flight_op_events;
-  if (m_flush_ctx != nullptr && m_in_flight_op_events == 0 &&
-      (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
-    m_image_ctx.op_work_queue->queue(m_flush_ctx, 0);
+  Context *on_flush = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_in_flight_op_events > 0);
+    --m_in_flight_op_events;
+    if (m_in_flight_op_events == 0 &&
+        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
+      on_flush = m_flush_ctx;
+    }
+  }
+  if (on_flush != nullptr) {
+    m_image_ctx.op_work_queue->queue(on_flush, 0);
   }
 }
 

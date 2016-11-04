@@ -446,15 +446,38 @@ struct ClientData {
 
 // Journal Tag data structures
 
+struct TagPredecessor {
+  std::string mirror_uuid; // empty if local
+  bool commit_valid = false;
+  uint64_t tag_tid = 0;
+  uint64_t entry_tid = 0;
+
+  TagPredecessor() {
+  }
+  TagPredecessor(const std::string &mirror_uuid, bool commit_valid,
+                 uint64_t tag_tid, uint64_t entry_tid)
+    : mirror_uuid(mirror_uuid), commit_valid(commit_valid), tag_tid(tag_tid),
+      entry_tid(entry_tid) {
+  }
+
+  inline bool operator==(const TagPredecessor &rhs) const {
+    return (mirror_uuid == rhs.mirror_uuid &&
+            commit_valid == rhs.commit_valid &&
+            tag_tid == rhs.tag_tid &&
+            entry_tid == rhs.entry_tid);
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct TagData {
   // owner of the tag (exclusive lock epoch)
   std::string mirror_uuid; // empty if local
 
   // mapping to last committed record of previous tag
-  std::string predecessor_mirror_uuid; // empty if local
-  bool predecessor_commit_valid = false;
-  uint64_t predecessor_tag_tid = 0;
-  uint64_t predecessor_entry_tid = 0;
+  TagPredecessor predecessor;
 
   TagData() {
   }
@@ -465,10 +488,8 @@ struct TagData {
           bool predecessor_commit_valid,
           uint64_t predecessor_tag_tid, uint64_t predecessor_entry_tid)
     : mirror_uuid(mirror_uuid),
-      predecessor_mirror_uuid(predecessor_mirror_uuid),
-      predecessor_commit_valid(predecessor_commit_valid),
-      predecessor_tag_tid(predecessor_tag_tid),
-      predecessor_entry_tid(predecessor_entry_tid) {
+      predecessor(predecessor_mirror_uuid, predecessor_commit_valid,
+                  predecessor_tag_tid, predecessor_entry_tid) {
   }
 
   void encode(bufferlist& bl) const;
@@ -484,19 +505,22 @@ std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerState &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta);
+std::ostream &operator<<(std::ostream &out, const TagPredecessor &predecessor);
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
 
-enum class ListenerType : int8_t {
-  RESYNC
-};
+struct Listener {
+  virtual ~Listener() {
+  }
 
-struct ResyncListener {
-  virtual ~ResyncListener() {}
+  /// invoked when journal close is requested
+  virtual void handle_close() = 0;
+
+  /// invoked when journal is promoted to primary
+  virtual void handle_promoted() = 0;
+
+  /// invoked when journal resync is requested
   virtual void handle_resync() = 0;
 };
-
-typedef boost::variant<ResyncListener *> JournalListenerPtr;
-
 
 } // namespace journal
 } // namespace librbd

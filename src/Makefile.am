@@ -142,6 +142,7 @@ EXTRA_DIST += $(srcdir)/tools/ceph-monstore-update-crush.sh
 endif
 
 EXTRA_DIST += \
+	CMakeLists.txt \
 	unittest_bufferlist.sh
 
 

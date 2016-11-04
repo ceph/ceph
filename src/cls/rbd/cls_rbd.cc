@@ -409,6 +409,9 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  // newer clients might attempt to mask off features we don't support
+  mask &= RBD_FEATURES_ALL;
+
   uint64_t enabled_features = features & mask;
   if ((enabled_features & RBD_FEATURES_MUTABLE) != enabled_features) {
     CLS_ERR("Attempting to enable immutable feature: %" PRIu64,

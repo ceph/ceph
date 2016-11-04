@@ -1186,6 +1186,11 @@ int RGWPeriod::update()
       ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << " zone realm id " << zg.realm_id << ", not on our realm " << realm_id << dendl;
       continue;
     }
+
+    if (zg.master_zone.empty()) {
+      ldout(cct, 0) << "ERROR: zonegroup " << zg.get_name() << " should have a master zone " << dendl;
+      return -EINVAL;
+    }  
     
     if (zg.is_master_zonegroup()) {
       master_zonegroup = zg.get_id();
@@ -1466,7 +1471,9 @@ int RGWZoneParams::fix_pool_names()
   }
 
   domain_root = fix_zone_pool_name(pool_names, name, ".rgw.data.root", domain_root.name);
-  metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+  if (!metadata_heap.name.empty()) {
+    metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+  }
   control_pool = fix_zone_pool_name(pool_names, name, ".rgw.control", control_pool.name);
   gc_pool = fix_zone_pool_name(pool_names, name ,".rgw.gc", gc_pool.name);
   log_pool = fix_zone_pool_name(pool_names, name, ".rgw.log", log_pool.name);
@@ -1912,6 +1919,9 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   cur_part_id = rule.start_part_num;
 
   manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
+
+  // Normal object which not generated through copy operation 
+  manifest->set_tail_instance(_h.get_instance());
 
   manifest->update_iterators();
 
@@ -3133,7 +3143,6 @@ void RGWRados::finalize()
     data_notifier->stop();
     delete data_notifier;
   }
-  delete meta_mgr;
   delete data_log;
   if (async_rados) {
     delete async_rados;
@@ -3164,6 +3173,7 @@ void RGWRados::finalize()
   if (cr_registry) {
     cr_registry->put();
   }
+  delete meta_mgr;
   delete binfo_cache;
   delete obj_tombstone_cache;
 }
@@ -3307,9 +3317,26 @@ int RGWRados::replace_region_with_zonegroup()
     default_oid = default_region_info_oid;
   }
 
-  string default_region;
+
   RGWZoneGroup default_zonegroup;
-  int ret = default_zonegroup.init(cct, this, false, true);
+  string pool_name = default_zonegroup.get_pool_name(cct);
+  rgw_bucket pool(pool_name.c_str());
+  string oid  = "converted";
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(this);
+
+  int ret = rgw_get_system_obj(this, obj_ctx, pool ,oid, bl, NULL,  NULL);
+  if (ret < 0 && ret !=  -ENOENT) {
+    ldout(cct, 0) << "failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
+  } else if (ret != -ENOENT) {
+    ldout(cct, 0) << "System already converted " << dendl;
+    return 0;
+  }
+
+  string default_region;
+  ret = default_zonegroup.init(cct, this, false, true);
   if (ret < 0) {
     ldout(cct, 0) << "failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -3332,11 +3359,6 @@ int RGWRados::replace_region_with_zonegroup()
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << __func__ << ": error initializing default zone params: " << cpp_strerror(-ret) << dendl;
       return ret;
-    }
-    /* default zone is missing meta_heap */
-    if (ret != -ENOENT && zoneparams.metadata_heap.name.empty()) {
-      zoneparams.metadata_heap = ".rgw.meta";
-      return zoneparams.update();
     }
     /* update master zone */
     RGWZoneGroup default_zg(default_zonegroup_name);
@@ -3412,6 +3434,15 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
+    ldout(cct, 0) << "Converting  " << *iter << dendl;
+    /* check to see if we don't have already a zonegroup with this name */
+    RGWZoneGroup new_zonegroup(*iter);
+    ret = new_zonegroup.init(cct , this);
+    if (ret == 0 && new_zonegroup.get_id() != *iter) {
+      ldout(cct, 0) << "zonegroup  "<< *iter << " already exists id " << new_zonegroup.get_id () <<
+	" skipping conversion " << dendl;
+      continue;
+    }
     RGWZoneGroup zonegroup(*iter);
     zonegroup.set_id(*iter);
     int ret = zonegroup.init(cct, this, true, true);
@@ -3420,6 +3451,11 @@ int RGWRados::replace_region_with_zonegroup()
       return ret;
     }
     zonegroup.realm_id = realm.get_id();
+    /* fix default region master zone */
+    if (*iter == default_zonegroup_name && zonegroup.master_zone.empty()) {
+      ldout(cct, 0) << "Setting default zone as master for default region" << dendl;
+      zonegroup.master_zone = default_zone_name;
+    }
     ret = zonegroup.update();
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
@@ -3442,15 +3478,14 @@ int RGWRados::replace_region_with_zonegroup()
     }
     for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
          iter ++) {
+      ldout(cct, 0) << "Converting zone" << iter->first << dendl;
       RGWZoneParams zoneparams(iter->first, iter->first);
       zoneparams.set_id(iter->first);
+      zoneparams.realm_id = realm.get_id();
       ret = zoneparams.init(cct, this);
       if (ret < 0) {
         ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
-      }
-      if (zoneparams.metadata_heap.name.empty()) {
-	zoneparams.metadata_heap = ".rgw.meta";
       }
       zonegroup.realm_id = realm.get_id();
       ret = zoneparams.update();
@@ -3471,19 +3506,49 @@ int RGWRados::replace_region_with_zonegroup()
         ldout(cct, 0) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
         return ret;
       }
-      ret = current_period.update();
-      if (ret < 0) {
-        ldout(cct, 0) << "failed to update current_period: " << cpp_strerror(-ret) << dendl;
-        return ret;
-      }
     }
+  }
 
+  if (!current_period.get_id().empty()) {
+    ret = current_period.update();
+    if (ret < 0) {
+      ldout(cct, 0) << "failed to update new period: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    ret = current_period.store_info(false);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed to store new period: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    ret = current_period.reflect();
+    if (ret < 0) {
+      ldout(cct, 0) << "failed to update local objects: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+
+  for (auto const& iter : regions) {
+    RGWZoneGroup zonegroup(iter);
+    int ret = zonegroup.init(cct, this, true, true);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed init zonegroup" << iter << ": ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
     ret = zonegroup.delete_obj(true);
     if (ret < 0 && ret != -ENOENT) {
-      ldout(cct, 0) << "failed to delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+      ldout(cct, 0) << "failed to delete region " << iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
+  }
+
+  /* mark as converted */
+  ret = rgw_put_system_obj(this, pool, oid, bl.c_str(), bl.length(),
+			   true, NULL, real_time(), NULL);
+  if (ret < 0 ) {
+    ldout(cct, 0) << "failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
   }
 
   return 0;
@@ -6948,7 +7013,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
-  ret = get_obj_state(&obj_ctx, src_obj, &astate, NULL);
+
+  ret = get_obj_state(&obj_ctx, src_obj, &astate);
   if (ret < 0) {
     return ret;
   }

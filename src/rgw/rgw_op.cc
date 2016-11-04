@@ -263,7 +263,8 @@ static int read_policy(RGWRados *store, struct req_state *s,
     obj.init_ns(bucket, oid, mp_ns);
     obj.set_in_extra_data(true);
   } else {
-    obj = rgw_obj(bucket, object);
+    obj = rgw_obj(bucket, object.name);
+    obj.set_instance(object.instance);
   }
   int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj);
   if (ret == -ENOENT && !object.empty()) {
@@ -410,6 +411,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     s->object_acl = new RGWAccessControlPolicy(s->cct);
 
     rgw_obj obj(s->bucket, s->object);
+      
     store->set_atomic(s->obj_ctx, obj);
     if (prefetch_data) {
       store->set_prefetch_data(s->obj_ctx, obj);
@@ -430,7 +432,8 @@ static void rgw_bucket_object_pre_exec(struct req_state *s)
 
 int RGWGetObj::verify_permission()
 {
-  obj = rgw_obj(s->bucket, s->object);
+  obj = rgw_obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
   store->set_atomic(s->obj_ctx, obj);
   if (get_data)
     store->set_prefetch_data(s->obj_ctx, obj);
@@ -723,6 +726,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
     return -EPERM;
   }
 
+  if (ent.size == 0) {
+    return 0;
+  }
+
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
@@ -732,6 +739,12 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
     off_t len = bl.length();
     cur_ofs += len;
+    if (!len) {
+        ldout(s->cct, 0) << "ERROR: read 0 bytes; ofs=" << cur_ofs
+	    << " end=" << cur_end << " from obj=" << ent.key.name
+	    << "[" << ent.key.instance << "]" << dendl;
+        return -EIO;
+    }
     op_ret = 0; /* XXX redundant? */
     perfcounter->tinc(l_rgw_get_lat,
                       (ceph_clock_now(s->cct) - start_time));
@@ -999,6 +1012,11 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
+  }
+
+  if (!total_len) {
+    bufferlist bl;
+    send_response_data(bl, 0, 0);
   }
 
   return 0;
@@ -1552,20 +1570,17 @@ void RGWSetBucketVersioning::pre_exec()
 
 void RGWSetBucketVersioning::execute()
 {
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
   if (!store->is_meta_master()) {
-    bufferlist in_data;
-    JSONParser jp;
-    op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     }
     return;
   }
-  
-  op_ret = get_params();
-
-  if (op_ret < 0)
-    return;
 
   if (enable_versioning) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
@@ -3450,8 +3465,6 @@ void RGWGetACLs::execute()
   acls = ss.str();
 }
 
-
-
 int RGWPutACLs::verify_permission()
 {
   bool perm;
@@ -3543,7 +3556,8 @@ void RGWPutACLs::execute()
   }
 
   new_policy.encode(bl);
-  obj = rgw_obj(s->bucket, s->object);
+  obj = rgw_obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
   map<string, bufferlist> attrs;
 
   store->set_atomic(s->obj_ctx, obj);
@@ -3559,6 +3573,9 @@ void RGWPutACLs::execute()
     attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  }
+  if (op_ret == -ECANCELED) {
+    op_ret = 0; /* lost a race, but it's ok because acls are immutable */
   }
 }
 
@@ -4658,6 +4675,46 @@ void RGWBulkDelete::execute()
   } while (!op_ret && is_truncated);
 
   return;
+}
+
+int RGWSetAttrs::verify_permission()
+{
+  bool perm;
+  if (!s->object.empty()) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE);
+  }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetAttrs::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  rgw_obj obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  if (!s->object.empty()) {
+    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, nullptr);
+  } else {
+    for (auto& iter : attrs) {
+      s->bucket_attrs[iter.first] = std::move(iter.second);
+    }
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
+				  &s->bucket_info.objv_tracker);
+  }
 }
 
 RGWHandler::~RGWHandler()

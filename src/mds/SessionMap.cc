@@ -52,7 +52,7 @@ void SessionMap::dump()
 	     << " state " << p->second->get_state_name()
 	     << " completed " << p->second->info.completed_requests
 	     << " prealloc_inos " << p->second->info.prealloc_inos
-	     << " used_ions " << p->second->info.used_inos
+	     << " used_inos " << p->second->info.used_inos
 	     << dendl;
 }
 

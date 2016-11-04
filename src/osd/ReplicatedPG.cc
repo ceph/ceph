@@ -8789,6 +8789,8 @@ void ReplicatedPG::submit_log_entries(
 	  });
     }
   }
+  t.register_on_applied(
+    new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
   int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
   assert(r == 0);
 }
@@ -9774,7 +9776,7 @@ void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
   append_log_entries_update_missing(m->entries, t);
   // TODO FIX
 
-  Context *c = new FunctionContext(
+  Context *complete = new FunctionContext(
       [=](int) {
 	MOSDPGUpdateLogMissing *msg =
 	  static_cast<MOSDPGUpdateLogMissing*>(
@@ -9792,10 +9794,12 @@ void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
   /* Hack to work around the fact that ReplicatedBackend sends
    * ack+commit if commit happens first */
   if (pool.info.ec_pool()) {
-    t.register_on_complete(c);
+    t.register_on_complete(complete);
   } else {
-    t.register_on_commit(c);
+    t.register_on_commit(complete);
   }
+  t.register_on_applied(
+    new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
   int tr = osd->store->queue_transaction(
     osr.get(),
     std::move(t),
@@ -12576,7 +12580,8 @@ bool ReplicatedPG::_range_available_for_scrub(
   next.second = object_contexts.lookup(begin);
   next.first = begin;
   bool more = true;
-  while (more && cmp(next.first, end, get_sort_bitwise()) < 0) {
+  // inclusive upper bound, @see write_blocked_by_scrub
+  while (more && cmp(next.first, end, get_sort_bitwise()) <= 0) {
     if (next.second && next.second->is_blocked()) {
       next.second->requeue_scrub_on_unblock = true;
       dout(10) << __func__ << ": scrub delayed, "

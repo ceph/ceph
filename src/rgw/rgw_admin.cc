@@ -238,6 +238,7 @@ void _usage()
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\n";
@@ -2076,6 +2077,7 @@ int main(int argc, char **argv)
       secret_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
+      user_op.user_email_specified=true;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
       display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {

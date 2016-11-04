@@ -17,6 +17,7 @@ check_SCRIPTS += ceph-disk/run-tox.sh
 
 EXTRA_DIST += \
 	ceph-disk/AUTHORS.rst \
+	ceph-disk/CMakeLists.txt \
 	ceph-disk/ceph_disk/__init__.py \
 	ceph-disk/ceph_disk/main.py \
 	ceph-disk/Makefile.am \

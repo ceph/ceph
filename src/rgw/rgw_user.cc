@@ -1932,8 +1932,18 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
 
-  if (op_state.has_bucket_quota())
+  if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
+  } else {
+    if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
+      user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
+      user_info.bucket_quota.enabled = true;
+    }
+    if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
+      user_info.bucket_quota.max_size_kb = cct->_conf->rgw_bucket_default_quota_max_size;
+      user_info.bucket_quota.enabled = true;
+    }
+  }
 
   if (op_state.temp_url_key_specified) {
     map<int, string>::iterator iter;
@@ -1943,8 +1953,18 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     }
   }
 
-  if (op_state.has_user_quota())
+  if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
+  } else {
+    if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
+      user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
+      user_info.user_quota.enabled = true;
+    }
+    if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
+      user_info.user_quota.max_size_kb = cct->_conf->rgw_user_default_quota_max_size;
+      user_info.user_quota.enabled = true;
+    }
+  }
 
   // update the request
   op_state.set_user_info(user_info);
@@ -2126,8 +2146,16 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       }
     }
     user_info.user_email = op_email;
-  }
+  } else if (op_email.empty() && op_state.user_email_specified) {
 
+    ldout(store->ctx(), 10) << "removing email index: " << user_info.user_email << dendl;
+    ret = rgw_remove_email_index(store, user_info.user_email);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(store->ctx(), 0) << "ERROR: could not remove " << user_info.user_id << " index (err=" << ret << ")" << dendl;
+      return ret;
+    }
+    user_info.user_email = "";
+  }
 
   // update the remaining user info
   if (!display_name.empty())

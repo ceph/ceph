@@ -68,10 +68,12 @@ int RadosTestFixture::create(const std::string &oid, uint8_t order,
 
 journal::JournalMetadataPtr RadosTestFixture::create_metadata(
     const std::string &oid, const std::string &client_id,
-    double commit_interval, uint64_t max_fetch_bytes) {
+    double commit_interval, uint64_t max_fetch_bytes,
+    int max_concurrent_object_sets) {
   journal::Settings settings;
   settings.commit_interval = commit_interval;
   settings.max_fetch_bytes = max_fetch_bytes;
+  settings.max_concurrent_object_sets = max_concurrent_object_sets;
 
   journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
     m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings));

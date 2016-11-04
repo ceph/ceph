@@ -16,3 +16,5 @@ noinst_HEADERS += \
 	json_spirit/json_spirit_writer_options.h \
 	json_spirit/json_spirit_writer_template.h
 
+
+EXTRA_DIST += json_spirit/CMakeLists.txt

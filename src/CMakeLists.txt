@@ -212,6 +212,7 @@ endif(HAVE_GOOD_YASM_ELF64)
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
+  common/AsyncOpTracker.cc
   common/DecayCounter.cc
   common/LogClient.cc
   common/LogEntry.cc
@@ -463,6 +464,7 @@ install(TARGETS ceph-monstore-tool DESTINATION bin)
 
 add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
+  tools/rebuild_mondb.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
@@ -1101,10 +1103,6 @@ endif(${WITH_KVS})
 
 if(${WITH_RADOSGW})
 
-  if(${HAVE_OPENLDAP})
-    set(rgw_ldap_srcs rgw/rgw_ldap.cc)
-  endif(${HAVE_OPENLDAP})
-
   set(rgw_a_srcs
     rgw/rgw_acl.cc
     rgw/rgw_acl_s3.cc
@@ -1126,7 +1124,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_http_client.cc
     rgw/rgw_json_enc.cc
     rgw/rgw_keystone.cc
-    ${rgw_ldap_srcs}
+    rgw/rgw_ldap.cc
     rgw/rgw_loadgen.cc
     rgw/rgw_log.cc
     rgw/rgw_metadata.cc

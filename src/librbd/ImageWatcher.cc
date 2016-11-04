@@ -54,13 +54,20 @@ struct C_UnwatchAndFlush : public Context {
       r = rados.aio_watch_flush(aio_comp);
       assert(r == 0);
       aio_comp->release();
-    } else {
-      Context::complete(ret_val);
+      return;
     }
+
+    // ensure our reference to the RadosClient is released prior
+    // to completing the callback to avoid racing an explicit
+    // librados shutdown
+    Context *ctx = on_finish;
+    r = ret_val;
+    delete this;
+
+    ctx->complete(r);
   }
 
   virtual void finish(int r) override {
-    on_finish->complete(r);
   }
 };
 
@@ -443,11 +450,12 @@ void ImageWatcher<I>::notify_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
 
-  // ExclusiveLock state machine can be dynamically disabled
-  if (m_image_ctx.exclusive_lock == nullptr) {
+  // ExclusiveLock state machine can be dynamically disabled or
+  // race with task cancel
+  if (m_image_ctx.exclusive_lock == nullptr ||
+      m_image_ctx.exclusive_lock->is_lock_owner()) {
     return;
   }
-  assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
 

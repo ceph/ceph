@@ -95,6 +95,8 @@ namespace librbd {
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
+  int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
+             std::map<std::pair<int64_t, std::string >, std::set<std::string> >& image_info);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -134,8 +136,9 @@ namespace librbd {
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
 
-  int remove(librados::IoCtx& io_ctx, const char *imgname,
-	     ProgressContext& prog_ctx, bool force=false);
+  int remove(librados::IoCtx& io_ctx, const std::string &image_name,
+             const std::string &image_id, ProgressContext& prog_ctx,
+             bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,

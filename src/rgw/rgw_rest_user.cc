@@ -143,6 +143,37 @@ void RGWOp_User_Create::execute()
   if (gen_key)
     op_state.set_generate_key();
 
+  RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
+
+  if (s->cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
+    bucket_quota.max_objects = s->cct->_conf->rgw_bucket_default_quota_max_objects;
+    bucket_quota.enabled = true;
+  }
+
+  if (s->cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
+    bucket_quota.max_size_kb = s->cct->_conf->rgw_bucket_default_quota_max_size;
+    bucket_quota.enabled = true;
+  }
+
+  if (s->cct->_conf->rgw_user_default_quota_max_objects >= 0) {
+    user_quota.max_objects = s->cct->_conf->rgw_user_default_quota_max_objects;
+    user_quota.enabled = true;
+  }
+
+  if (s->cct->_conf->rgw_user_default_quota_max_size >= 0) {
+    user_quota.max_size_kb = s->cct->_conf->rgw_user_default_quota_max_size;
+    user_quota.enabled = true;
+  }
+
+  if (bucket_quota.enabled) {
+    op_state.set_bucket_quota(bucket_quota);
+  }
+
+  if (user_quota.enabled) {
+    op_state.set_user_quota(user_quota);
+  }
+
   http_ret = RGWUserAdminOp_User::create(store, op_state, flusher);
 }
 

@@ -371,6 +371,7 @@ void Client::tear_down_cache()
 
 inodeno_t Client::get_root_ino()
 {
+  Mutex::Locker l(client_lock);
   if (use_faked_inos())
     return root->faked_ino;
   else
@@ -379,6 +380,7 @@ inodeno_t Client::get_root_ino()
 
 Inode *Client::get_root()
 {
+  Mutex::Locker l(client_lock);
   root->ll_get();
   return root;
 }
@@ -898,17 +900,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
     in->dirstat = st->dirstat;
     in->rstat = st->rstat;
+    in->quota = st->quota;
+    in->layout = st->layout;
 
     if (in->is_dir()) {
       in->dir_layout = st->dir_layout;
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
     }
-
-    if (st->quota.is_enable() ^ in->quota.is_enable())
-      invalidate_quota_tree(in);
-    in->quota = st->quota;
-
-    in->layout = st->layout;
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
@@ -1147,7 +1145,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 		   << ", readdir_start " << readdir_start << dendl;
 
     if (diri->snapid != CEPH_SNAPDIR &&
-	fg.is_leftmost() && readdir_offset == 2) {
+	fg.is_leftmost() && readdir_offset == 2 && readdir_start.empty()) {
       dirp->release_count = diri->dir_release_count;
       dirp->ordered_count = diri->dir_ordered_count;
       dirp->start_shared_gen = diri->shared_gen;
@@ -1241,6 +1239,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 {
   MClientReply *reply = request->reply;
+  int op = request->get_op();
 
   ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds." << session->mds_num
 	   << " is_target=" << (int)reply->head.is_target
@@ -1265,14 +1264,14 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
 
     if (d && reply->get_result() == 0) {
-      if (request->head.op == CEPH_MDS_OP_RENAME) {
+      if (op == CEPH_MDS_OP_RENAME) {
 	// rename
 	Dentry *od = request->old_dentry();
 	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
 	assert(od);
 	unlink(od, true, true);  // keep dir, dentry
-      } else if (request->head.op == CEPH_MDS_OP_RMDIR ||
-		 request->head.op == CEPH_MDS_OP_UNLINK) {
+      } else if (op == CEPH_MDS_OP_RMDIR ||
+		 op == CEPH_MDS_OP_UNLINK) {
 	// unlink, rmdir
 	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
 	unlink(d, true, true);  // keep dir, dentry
@@ -1311,7 +1310,6 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   if (reply->head.is_target) {
     ist.decode(p, features);
     if (cct->_conf->client_debug_getattr_caps) {
-      int op = request->get_op();
       unsigned wanted = 0;
       if (op == CEPH_MDS_OP_GETATTR || op == CEPH_MDS_OP_LOOKUP)
 	wanted = request->head.args.getattr.mask;
@@ -1326,15 +1324,15 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     in = add_update_inode(&ist, request->sent_stamp, session);
   }
 
+  Inode *diri = NULL;
   if (reply->head.is_dentry) {
-    Inode *diri = add_update_inode(&dirst, request->sent_stamp, session);
+    diri = add_update_inode(&dirst, request->sent_stamp, session);
     update_dir_dist(diri, &dst);  // dir stat info is attached to ..
 
     if (in) {
       Dir *dir = diri->open_dir();
       insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session,
-                          ((request->head.op == CEPH_MDS_OP_RENAME) ?
-                                        request->old_dentry() : NULL));
+                          (op == CEPH_MDS_OP_RENAME) ? request->old_dentry() : NULL);
     } else {
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
@@ -1345,14 +1343,14 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	}
       }
     }
-  } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
-	     reply->head.op == CEPH_MDS_OP_MKSNAP) {
+  } else if (op == CEPH_MDS_OP_LOOKUPSNAP ||
+	     op == CEPH_MDS_OP_MKSNAP) {
     ldout(cct, 10) << " faking snap lookup weirdness" << dendl;
     // fake it for snap lookup
     vinodeno_t vino = ist.vino;
     vino.snapid = CEPH_SNAPDIR;
     assert(inode_map.count(vino));
-    Inode *diri = inode_map[vino];
+    diri = inode_map[vino];
     
     string dname = request->path.last_dentry();
     
@@ -1372,9 +1370,13 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   }
 
   if (in) {
-    if (reply->head.op == CEPH_MDS_OP_READDIR ||
-	reply->head.op == CEPH_MDS_OP_LSSNAP)
+    if (op == CEPH_MDS_OP_READDIR ||
+	op == CEPH_MDS_OP_LSSNAP) {
       insert_readdir_results(request, session, in);
+    } else if (op == CEPH_MDS_OP_LOOKUPNAME) {
+      // hack: return parent inode instead
+      in = diri;
+    }
 
     if (request->dentry() == NULL && in != request->inode()) {
       // pin the target inode if its parent dentry is not pinned
@@ -1552,7 +1554,7 @@ int Client::verify_reply_trace(int r,
     *pcreated = got_created_ino;
 
   if (request->target) {
-    ptarget->swap(request->target);
+    *ptarget = request->target;
     ldout(cct, 20) << "make_request target is " << *ptarget->get() << dendl;
   } else {
     if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
@@ -1571,7 +1573,7 @@ int Client::verify_reply_trace(int r,
 			 << " got_ino " << got_created_ino
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _do_lookup(d->dir->parent_inode, d->name, &target, uid, gid);
+	  r = _do_lookup(d->dir->parent_inode, d->name, request->regetattr_mask, &target, uid, gid);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
 	  assert(0 == "how did this happen?  i want logs!");
@@ -2126,6 +2128,8 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   }
   if (request->got_unsafe) {
     r->set_replayed_op();
+    if (request->target)
+      r->head.ino = request->target->ino;
   } else {
     encode_cap_releases(request, mds);
     if (drop_cap_releases) // we haven't send cap reconnect yet, drop cap releases
@@ -2840,7 +2844,6 @@ void Client::put_inode(Inode *in, int n)
     ldout(cct, 10) << "put_inode deleting " << *in << dendl;
     bool unclean = objectcacher->release_set(&in->oset);
     assert(!unclean);
-    put_qtree(in);
     inode_map.erase(in->vino());
     if (use_faked_inos())
       _release_faked_ino(in);
@@ -2947,7 +2950,6 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   // unlink from inode
   if (in) {
-    invalidate_quota_tree(in.get());
     if (in->is_dir()) {
       if (in->dir)
 	dn->put(); // dir -> dn pin
@@ -3923,6 +3925,8 @@ public:
 
 void Client::_invalidate_kernel_dcache()
 {
+  if (unmounting)
+    return;
   if (can_invalidate_dentries && dentry_invalidate_cb && root->dir) {
     for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
 	 p != root->dir->dentries.end();
@@ -4487,8 +4491,6 @@ void Client::handle_quota(MClientQuota *m)
     in = inode_map[vino];
 
     if (in) {
-      if (in->quota.is_enable() ^ m->quota.is_enable())
-	invalidate_quota_tree(in);
       in->quota = m->quota;
       in->rstat = m->rstat;
     }
@@ -5208,7 +5210,7 @@ int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
   /* 'name == NULL' means rmsnap */
   if (uid != 0 && name && (dir->mode & S_ISVTX)) {
     InodeRef otherin;
-    r = _lookup(dir, name, &otherin, uid, gid);
+    r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, uid, gid);
     if (r < 0)
       goto out;
     if (dir->uid != (uid_t)uid && otherin->uid != (uid_t)uid)
@@ -5651,9 +5653,10 @@ void Client::unmount()
   
   while (!ll_unclosed_fh_set.empty()) {
     set<Fh*>::iterator it = ll_unclosed_fh_set.begin();
-    ll_unclosed_fh_set.erase(*it);
-    ldout(cct, 0) << " destroyed lost open file " << *it << " on " << *((*it)->inode) << dendl;
-    _release_fh(*it);
+    Fh *fh = *it;
+    ll_unclosed_fh_set.erase(fh);
+    ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *(fh->inode) << dendl;
+    _release_fh(fh);
   }
 
   while (!opened_dirs.empty()) {
@@ -5837,7 +5840,7 @@ void Client::renew_caps(MetaSession *session)
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
+int Client::_do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
 		       int uid, int gid)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
@@ -5848,9 +5851,8 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
   req->set_filepath(path);
   req->set_inode(dir);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
-      req->head.args.getattr.mask = DEBUG_GETATTR_CAPS;
-  else
-      req->head.args.getattr.mask = 0;
+      mask |= DEBUG_GETATTR_CAPS;
+  req->head.args.getattr.mask = mask;
 
   ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
@@ -5859,8 +5861,8 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
   return r;
 }
 
-int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
-		    int uid, int gid)
+int Client::_lookup(Inode *dir, const string& dname, int mask,
+		    InodeRef *target, int uid, int gid)
 {
   int r = 0;
   Dentry *dn = NULL;
@@ -5902,7 +5904,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
-    if (!dn->inode || dn->inode->is_any_caps()) {
+    if (!dn->inode || dn->inode->caps_issued_mask(mask)) {
       // is dn lease valid?
       utime_t now = ceph_clock_now(cct);
       if (dn->lease_mds >= 0 &&
@@ -5921,8 +5923,9 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
       }
       // dir lease?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
-	if (dn->cap_shared_gen == dir->shared_gen)
-	  goto hit_dn;
+	if (dn->cap_shared_gen == dir->shared_gen &&
+	    (!dn->inode || dn->inode->caps_issued_mask(mask)))
+	      goto hit_dn;
 	if (!dn->inode && (dir->flags & I_COMPLETE)) {
 	  ldout(cct, 10) << "_lookup concluded ENOENT locally for "
 			 << *dir << " dn '" << dname << "'" << dendl;
@@ -5941,7 +5944,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
     }
   }
 
-  r = _do_lookup(dir, dname, target, uid, gid);
+  r = _do_lookup(dir, dname, mask, target, uid, gid);
   goto done;
 
  hit_dn:
@@ -6011,6 +6014,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
   ldout(cct, 10) << "path_walk " << path << dendl;
 
   int symlinks = 0;
+  int caps = 0;
 
   unsigned i=0;
   while (i < path.depth() && cur) {
@@ -6022,8 +6026,9 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
       int r = may_lookup(cur.get(), uid, gid);
       if (r < 0)
 	return r;
+      caps = CEPH_CAP_AUTH_SHARED;
     }
-    int r = _lookup(cur.get(), dname, &next, uid, gid);
+    int r = _lookup(cur.get(), dname, caps, &next, uid, gid);
     if (r < 0)
       return r;
     // only follow trailing symlink if followsym.  always follow
@@ -6207,7 +6212,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   //get through existing parts of path
   filepath path(relpath);
   unsigned int i;
-  int r=0;
+  int r = 0, caps = 0;
   InodeRef cur, next;
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
@@ -6215,8 +6220,9 @@ int Client::mkdirs(const char *relpath, mode_t mode)
       r = may_lookup(cur.get(), uid, gid);
       if (r < 0)
 	break;
+      caps = CEPH_CAP_AUTH_SHARED;
     }
-    r = _lookup(cur.get(), path[i].c_str(), &next, uid, gid);
+    r = _lookup(cur.get(), path[i].c_str(), caps, &next, uid, gid);
     if (r < 0)
       break;
     cur.swap(next);
@@ -6639,7 +6645,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_nlink = in->nlink;
   st->st_uid = in->uid;
   st->st_gid = in->gid;
-  if (in->ctime.sec() > in->mtime.sec()) {
+  if (in->ctime > in->mtime) {
     stat_set_ctime_sec(st, in->ctime.sec());
     stat_set_ctime_nsec(st, in->ctime.nsec());
   } else {
@@ -8856,7 +8862,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   assert(root != nullptr);
-  Inode *quota_root = get_quota_root(root);
+  Inode *quota_root = root->quota.is_enable() ? root : get_quota_root(root);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -9437,7 +9443,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   string dname(name);
   InodeRef in;
 
-  r = _lookup(parent, dname, &in, uid, gid);
+  r = _lookup(parent, dname, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
@@ -10760,7 +10766,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  res = _lookup(dir, name, &otherin, uid, gid);
+  res = _lookup(dir, name, 0, &otherin, uid, gid);
   if (res < 0)
     goto fail;
   req->set_other_inode(otherin.get());
@@ -10823,7 +10829,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  res = _lookup(dir, name, &in, uid, gid);
+  res = _lookup(dir, name, 0, &in, uid, gid);
   if (res < 0)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
@@ -10920,13 +10926,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, &oldin, uid, gid);
+    res = _lookup(fromdir, fromname, 0, &oldin, uid, gid);
     if (res < 0)
       goto fail;
     req->set_old_inode(oldin.get());
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
-    res = _lookup(todir, toname, &otherin, uid, gid);
+    res = _lookup(todir, toname, 0, &otherin, uid, gid);
     if (res != 0 && res != -ENOENT) {
       goto fail;
     } else if (res == 0) {
@@ -11262,7 +11268,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   InodeRef in;
-  int r = _lookup(parent, name, &in, uid, gid);
+  int r = _lookup(parent, name, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -12035,88 +12041,73 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
   return true;
 }
 
-void Client::put_qtree(Inode *in)
-{
-  QuotaTree *qtree = in->qtree;
-  if (qtree) {
-    qtree->invalidate();
-    in->qtree = NULL;
-  }
-}
-
-void Client::invalidate_quota_tree(Inode *in)
-{
-  QuotaTree *qtree = in->qtree;
-  if (qtree) {
-    ldout(cct, 10) << "invalidate quota tree node " << *in << dendl;
-    if (qtree->parent_ref()) {
-      assert(in->is_dir());
-      ldout(cct, 15) << "invalidate quota tree ancestor " << *in << dendl;
-      Inode *ancestor = qtree->ancestor()->in();
-      if (ancestor)
-        put_qtree(ancestor);
-    }
-    put_qtree(in);
-  }
-}
-
 Inode *Client::get_quota_root(Inode *in)
 {
   if (!cct->_conf->client_quota)
     return NULL;
 
-  QuotaTree *ancestor = NULL;
-  QuotaTree *parent = NULL;
+  Inode *cur = in;
+  utime_t now = ceph_clock_now(cct);
 
-  vector<Inode*> inode_list;
-  while (in) {
-    if (in->qtree && in->qtree->ancestor()->in()) {
-      ancestor = in->qtree->ancestor();
-      parent = in->qtree;
+  while (cur) {
+    if (cur != in && cur->quota.is_enable())
+      break;
+
+    Inode *parent_in = NULL;
+    if (!cur->dn_set.empty()) {
+      for (auto p = cur->dn_set.begin(); p != cur->dn_set.end(); ++p) {
+	Dentry *dn = *p;
+	if (dn->lease_mds >= 0 &&
+	    dn->lease_ttl > now &&
+	    mds_sessions.count(dn->lease_mds)) {
+	  parent_in = dn->dir->parent_inode;
+	} else {
+	  Inode *diri = dn->dir->parent_inode;
+	  if (diri->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
+	      diri->shared_gen == dn->cap_shared_gen) {
+	    parent_in = dn->dir->parent_inode;
+	  }
+	}
+	if (parent_in)
+	  break;
+      }
+    } else if (root_parents.count(cur)) {
+      parent_in = root_parents[cur].get();
+    }
+
+    if (parent_in) {
+      cur = parent_in;
+      continue;
+    }
+
+    if (cur == root_ancestor)
+      break;
+
+    MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
+    filepath path(cur->ino);
+    req->set_filepath(path);
+    req->set_inode(cur);
+
+    InodeRef parent_ref;
+    int ret = make_request(req, -1, -1, &parent_ref);
+    if (ret < 0) {
+      ldout(cct, 1) << __func__ << " " << in->vino()
+		    << " failed to find parent of " << cur->vino()
+		    << " err " << ret <<  dendl;
+      // FIXME: what to do?
+      cur = root_ancestor;
       break;
     }
 
-    inode_list.push_back(in);
-
-    if (!in->dn_set.empty())
-      in = in->get_first_parent()->dir->parent_inode;
-    else if (root_parents.count(in))
-      in = root_parents[in].get();
+    now = ceph_clock_now(cct);
+    if (cur == in)
+      cur = parent_ref.get();
     else
-      in = NULL;
+      cur = in; // start over
   }
 
-  if (!in) {
-    assert(!parent && !ancestor);
-    assert(root_ancestor->qtree == NULL);
-    root_ancestor->qtree = ancestor = new QuotaTree(root_ancestor);
-    ancestor->set_ancestor(ancestor);
-    parent = ancestor;
-  }
-  assert(parent && ancestor);
-
-  for (vector<Inode*>::reverse_iterator iter = inode_list.rbegin();
-       iter != inode_list.rend(); ++iter) {
-    Inode *cur = *iter;
-
-    if (!cur->qtree)
-      cur->qtree = new QuotaTree(cur);
-
-    cur->qtree->set_parent(parent);
-    if (parent->in()->quota.is_enable())
-      ancestor = parent;
-    cur->qtree->set_ancestor(ancestor);
-
-    ldout(cct, 20) << "link quota tree " << cur->ino
-                   << " to parent (" << parent->in()->ino << ")"
-                   << " ancestor (" << ancestor->in()->ino << ")" << dendl;
-
-    parent = cur->qtree;
-    if (cur->quota.is_enable())
-      ancestor = cur->qtree;
-  }
-
-  return ancestor->in();
+  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << cur->vino() << dendl;
+  return cur;
 }
 
 /**

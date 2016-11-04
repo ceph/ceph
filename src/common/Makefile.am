@@ -1,5 +1,6 @@
 libcommon_internal_la_SOURCES = \
 	ceph_ver.c \
+	common/AsyncOpTracker.cc \
 	common/DecayCounter.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
@@ -178,6 +179,7 @@ libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
 noinst_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
+	common/AsyncOpTracker.h \
 	common/BackTrace.h \
 	common/RefCountedObj.h \
 	common/HeartbeatMap.h \

@@ -42,6 +42,8 @@ struct ObjectOperation;
 
 ostream& operator<<(ostream& out, const class CDir& dir);
 class CDir : public MDSCacheObject {
+  friend ostream& operator<<(ostream& out, const class CDir& dir);
+
   /*
    * This class uses a boost::pool to handle allocation. This is *not*
    * thread-safe, so don't do allocations from multiple threads!
@@ -509,6 +511,8 @@ private:
    *             <parent,mds2>       subtree_root     
    */
   mds_authority_t dir_auth;
+
+  std::string get_path() const;
 
  public:
   mds_authority_t authority() const;
