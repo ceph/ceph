@@ -29,9 +29,9 @@ set(unittest_librbd_srcs
   test_mock_AioImageRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
-  exclusive_lock/test_mock_AcquireRequest.cc
-  exclusive_lock/test_mock_ReacquireRequest.cc
-  exclusive_lock/test_mock_ReleaseRequest.cc
+  exclusive_lock/test_mock_PreAcquireRequest.cc
+  exclusive_lock/test_mock_PostAcquireRequest.cc
+  exclusive_lock/test_mock_PreReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
