@@ -633,7 +633,7 @@ Placing Different Pools on Different OSDS:
 
 Suppose you want to have most pools default to OSDs backed by large hard drives,
 but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
-It's possible to have multiple independent CRUSH heirarchies within the same
+It's possible to have multiple independent CRUSH hierarchies within the same
 CRUSH map. Define two hierarchies with two different root nodes--one for hard
 disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
 below::
