@@ -1438,7 +1438,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	return 0;
       }
 
-      ictx->exclusive_lock->request_lock(&lock_ctx);
+      ictx->exclusive_lock->acquire_lock(&lock_ctx);
     }
 
     int r = lock_ctx.wait();
@@ -2580,7 +2580,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     };
 
     C_SaferCond lock_ctx;
-    ictx->exclusive_lock->request_lock(&lock_ctx);
+    ictx->exclusive_lock->acquire_lock(&lock_ctx);
 
     // don't block holding lock since refresh might be required
     ictx->owner_lock.put_read();

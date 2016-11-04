@@ -460,7 +460,7 @@ void AioImageRequestWQ::queue(AioImageRequest<> *req) {
   ThreadPool::PointerWQ<AioImageRequest<> >::queue(req);
 
   if (lock_required) {
-    m_image_ctx.exclusive_lock->request_lock(nullptr);
+    m_image_ctx.exclusive_lock->acquire_lock(nullptr);
   }
 }
 
@@ -487,7 +487,7 @@ void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest<> *req) {
   // we acquire the lock
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (is_lock_required() && is_lock_request_needed()) {
-    m_image_ctx.exclusive_lock->request_lock(nullptr);
+    m_image_ctx.exclusive_lock->acquire_lock(nullptr);
   }
 }
 
