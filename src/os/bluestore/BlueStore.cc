@@ -6243,6 +6243,14 @@ uint64_t BlueStore::_assign_blobid(TransContext *txc)
   return bid;
 }
 
+void BlueStore::get_db_statistics(Formatter *f) {
+  if (!g_conf->bluestore_enable_db_collect_statistics)
+    f->write_raw_data("first enable option: bluestore_enable_db_collect_statistic");
+  else if (db->support_statistics())
+    db->get_statistics(f);
+  else
+    f->write_raw_data("bluestore db  don't supprot collect statistics");
+}
 
 BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 {
