@@ -1966,7 +1966,8 @@ class CephManager:
         Stop osd if nothing else works.
         """
         self.raw_cluster_cmd('--', 'tell', 'osd.%d' % osd,
-                             'injectargs', '--filestore-blackhole')
+                             'injectargs',
+                             '--objectstore-blackhole')
         time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).stop()
 

@@ -81,7 +81,7 @@ def task(ctx, config):
     # blackhole non_divergent
     log.info("blackholing osds %s", str(non_divergent))
     for i in non_divergent:
-        manager.set_config(i, filestore_blackhole=1)
+        manager.set_config(i, objectstore_blackhole=1)
 
     DIVERGENT_WRITE = 5
     DIVERGENT_REMOVE = 5
