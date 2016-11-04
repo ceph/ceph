@@ -146,7 +146,7 @@ static int do_reset_journal(librados::IoCtx& io_ctx,
   }
 
   librbd::Image image;
-  r = utils::open_image(io_ctx, image_name, false, &image);
+  r = utils::open_image(io_ctx, image_name, "", false, &image);
   if (r < 0) {
     std::cerr << "failed to open image: " << cpp_strerror(r) << std::endl;
     return r;
