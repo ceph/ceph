@@ -1175,7 +1175,7 @@ if(${WITH_RADOSGW})
 
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs PUBLIC
+  target_include_directories(civetweb_common_objs PRIVATE
 	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
   if(HAVE_OPENSSL)
   set_property(TARGET civetweb_common_objs
