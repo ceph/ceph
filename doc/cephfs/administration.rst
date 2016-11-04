@@ -120,7 +120,7 @@ filesystem.
     mds rmfailed
 
 Legacy
-======
+------
 
 ::
 
