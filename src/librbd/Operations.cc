@@ -1020,6 +1020,11 @@ int Operations<I>::snap_protect(const char *snap_name) {
     return -EROFS;
   }
 
+  if (!m_image_ctx.test_features(RBD_FEATURE_LAYERING)) {
+    lderr(cct) << "image must support layering" << dendl;
+    return -ENOSYS;
+  }
+
   int r = m_image_ctx.state->refresh_if_required();
   if (r < 0) {
     return r;
