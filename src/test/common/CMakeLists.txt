@@ -6,7 +6,7 @@ add_executable(get_command_descriptions
 target_link_libraries(get_command_descriptions
   mon
   global
-  leveldb
+  ${LEVELDB_LIBRARIES}
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
