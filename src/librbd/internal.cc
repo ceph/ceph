@@ -1774,8 +1774,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
   {
-    return cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
-					  limit);
+    int r = cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
+                                           limit);
+    if (r == -EOPNOTSUPP) {
+      *limit = UINT64_MAX;
+      r = 0;
+    }
+    return r;
   }
 
   int snap_set_limit(ImageCtx *ictx, uint64_t limit)
