@@ -6531,14 +6531,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
       }
     } else if (key == "require_jewel_osds") {
-      if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) {
+      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+	ss << "the sortbitwise flag must be set before require_jewel_osds";
+	err = -EPERM;
+      } else if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) {
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
 	err = -EPERM;
       }
     } else if (key == "require_kraken_osds") {
-      if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
+      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+	ss << "the sortbitwise flag must be set before require_kraken_osds";
+	err = -EPERM;
+      } else if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
 	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
 	// ensure JEWEL is also set
 	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
