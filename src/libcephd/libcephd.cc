@@ -1,4 +1,8 @@
 #include "acconfig.h"
+#include "auth/Auth.h"
+#include "auth/Crypto.h"
+#include "auth/KeyRing.h"
+#include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/PluginRegistry.h"
 #include "compressor/snappy/CompressionPluginSnappy.h"
@@ -12,6 +16,8 @@
 #include "erasure-code/lrc/ErasureCodePluginLrc.h"
 #include "erasure-code/shec/ErasureCodePluginShec.h"
 #include "include/cephd/libcephd.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 extern "C" void cephd_version(int *pmajor, int *pminor, int *ppatch)
 {
@@ -36,6 +42,40 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
   if (ppatch)
     *ppatch = (n >= 3) ? patch : 0;
   return v;
+}
+
+extern "C" int cephd_generate_fsid(char *buf, size_t len)
+{
+    if (len < sizeof("b06ad912-70d7-4263-a5ff-011462a5929a")) {
+        return -ERANGE;
+    }
+
+    uuid_d fsid;
+    fsid.generate_random();
+    fsid.print(buf);
+
+    return 0;
+}
+
+extern "C" int cephd_generate_secret_key(char *buf, size_t len)
+{
+    CephInitParameters iparams(CEPH_ENTITY_TYPE_MON);
+    CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    cct->_conf->apply_changes(NULL);
+    cct->init_crypto();
+
+    CryptoKey key;
+    key.create(cct, CEPH_CRYPTO_AES);
+
+    cct->put();
+
+    string keystr;
+    key.encode_base64(keystr);
+    if (keystr.length() >= len) {
+        return -ERANGE;
+    }
+    strcpy(buf, keystr.c_str());
+    return keystr.length();
 }
 
 // load the embedded plugins. This is safe to call multiple
@@ -108,4 +148,17 @@ void cephd_preload_embedded_plugins()
     }
     assert(r == 0);
   }
+}
+
+extern "C" int cephd_mon(int argc, const char **argv);
+extern "C" int cephd_osd(int argc, const char **argv);
+
+int cephd_run_mon(int argc, const char **argv)
+{
+    return cephd_mon(argc, argv);
+}
+
+int cephd_run_osd(int argc, const char **argv)
+{
+    return cephd_osd(argc, argv);
 }
