@@ -24,8 +24,144 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--print] [--create [--clobber][--fsid uuid]] [--generate] [--set-initial-members] [--add name 1.2.3.4:567] [--rm name] <mapfilename>" << std::endl;
+  cout << " usage: [--print] [--create [--clobber][--fsid uuid]]\n"
+       << "        [--generate] [--set-initial-members]\n"
+       << "        [--add name 1.2.3.4:567] [--rm name]\n"
+       << "        [--feature-list [plain|parseable]]\n"
+       << "        [--feature-set <value> [--optional|--persistent]]\n"
+       << "        [--feature-unset <value> [--optional|--persistent]] "
+       << "<mapfilename>"
+       << std::endl;
   exit(1);
+}
+
+struct feature_op_t {
+  enum type_t {
+    PERSISTENT,
+    OPTIONAL,
+    PLAIN,
+    PARSEABLE,
+    NONE
+  };
+
+  enum op_t {
+    OP_SET,
+    OP_UNSET,
+    OP_LIST
+  };
+
+  op_t op;
+  type_t type;
+  mon_feature_t feature;
+
+  feature_op_t() : op(OP_LIST), type(NONE) { }
+  // default to 'persistent' feature if not specified
+  feature_op_t(op_t o) : op(o), type(PERSISTENT) { }
+  feature_op_t(op_t o, type_t t) : op(o), type(t) { }
+  feature_op_t(op_t o, type_t t, mon_feature_t &f) :
+    op(o), type(t), feature(t) { }
+
+  void set_optional() {
+    type = OPTIONAL;
+  }
+  void set_persistent() {
+    type = PERSISTENT;
+  }
+  bool parse_value(string &s, ostream *errout = NULL) {
+
+    feature = ceph::features::mon::get_feature_by_name(s);
+    if (feature != ceph::features::mon::FEATURE_NONE) {
+      return true;
+    }
+
+    // try parsing as numerical value
+    uint64_t feature_val;
+    string interr;
+    feature_val = strict_strtoll(s.c_str(), 10, &interr);
+    if (!interr.empty()) {
+      if (errout) {
+        *errout << "unknown features name '" << s
+                << "' or unable to parse value: " << interr << std::endl;
+      }
+      return false;
+    }
+    feature = mon_feature_t(feature_val);
+    return true;
+  }
+};
+
+void features_list(feature_op_t &f, MonMap &m)
+{
+  if (f.type == feature_op_t::type_t::PLAIN) {
+
+    cout << "MONMAP FEATURES:" << std::endl;
+    cout << "    persistent: ";
+    m.persistent_features.print_with_value(cout);
+    cout << std::endl;
+    cout << "    optional:   ";
+    m.optional_features.print_with_value(cout);
+    cout << std::endl;
+    cout << "    required:   ";
+    m.get_required_features().print_with_value(cout);
+    cout << std::endl;
+
+    cout << std::endl;
+    cout << "AVAILABLE FEATURES:" << std::endl;
+    cout << "    supported:  ";
+    ceph::features::mon::get_supported().print_with_value(cout);
+    cout << std::endl;
+    cout << "    persistent: ";
+    ceph::features::mon::get_persistent().print_with_value(cout);
+    cout << std::endl;
+  } else if (f.type == feature_op_t::type_t::PARSEABLE) {
+
+    cout << "monmap:persistent:";
+    m.persistent_features.print_with_value(cout);
+    cout << std::endl;
+    cout << "monmap:optional:";
+    m.optional_features.print_with_value(cout);
+    cout << std::endl;
+    cout << "monmap:required:";
+    m.get_required_features().print_with_value(cout);
+    cout << std::endl;
+    cout << "available:supported:";
+    ceph::features::mon::get_supported().print_with_value(cout);
+    cout << std::endl;
+    cout << "available:persistent:";
+    ceph::features::mon::get_persistent().print_with_value(cout);
+    cout << std::endl;
+  }
+}
+
+bool handle_features(list<feature_op_t>& lst, MonMap &m)
+{
+  if (lst.empty())
+    return false;
+
+  bool modified = false;
+
+  for (auto &f : lst) {
+    if (f.op == feature_op_t::op_t::OP_LIST) {
+      features_list(f, m);
+    } else if (f.op == feature_op_t::op_t::OP_SET ||
+               f.op == feature_op_t::op_t::OP_UNSET) {
+
+      modified = true;
+
+      mon_feature_t &target =
+        ( f.type == feature_op_t::type_t::OPTIONAL ?
+            m.optional_features : m.persistent_features );
+
+      if (f.op == feature_op_t::op_t::OP_SET) {
+        target.set_feature(f.feature);
+      } else {
+        target.unset_feature(f.feature);
+      }
+    } else {
+      cerr << "unknow feature operation type '" << f.op << "'" << std::endl; 
+    }
+  }
+  return modified;
 }
 
 int main(int argc, const char **argv)
@@ -40,10 +176,12 @@ int main(int argc, const char **argv)
   bool create = false;
   bool clobber = false;
   bool modified = false;
+  bool show_features = false;
   bool generate = false;
   bool filter = false;
   map<string,entity_addr_t> add;
   list<string> rm;
+  list<feature_op_t> features;
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -82,6 +220,53 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--rm", (char*)NULL)) {
       rm.push_back(val);
       modified = true;
+    } else if (ceph_argparse_flag(args, i, "--feature-list", (char*)NULL)) {
+      string format = *i;
+      if (format == "plain" || format == "parseable") {
+        i = args.erase(i);
+      } else {
+        format = "plain";
+      }
+
+      feature_op_t f(feature_op_t::op_t::OP_LIST,
+                   feature_op_t::type_t::PLAIN);
+
+      if (format == "parseable") {
+        f.type = feature_op_t::type_t::PARSEABLE;
+      } else if (format != "plain") {
+        cerr << "invalid format type for list: '" << val << "'" << std::endl;
+        usage();
+      }
+
+      features.push_back(f);
+      show_features = true;
+    } else if (ceph_argparse_witharg(args, i, &val,
+                                     "--feature-set", (char*)NULL)) {
+      // parse value
+      feature_op_t f(feature_op_t::op_t::OP_SET);
+      if (!f.parse_value(val, &cerr)) {
+        usage();
+      }
+      features.push_back(f);
+
+    } else if (ceph_argparse_witharg(args, i, &val,
+                                     "--feature-unset", (char*)NULL)) {
+      // parse value
+      feature_op_t f(feature_op_t::op_t::OP_UNSET);
+      if (!f.parse_value(val, &cerr)) {
+        usage();
+      }
+      features.push_back(f);
+    } else if (ceph_argparse_flag(args, i, "--optional", (char*)NULL)) {
+      if (features.empty()) {
+        usage();
+      }
+      features.back().set_optional();
+    } else if (ceph_argparse_flag(args, i, "--persistent", (char*)NULL)) {
+      if (features.empty()) {
+        usage();
+      }
+      features.back().set_persistent();
     } else {
       ++i;
     }
@@ -178,7 +363,11 @@ int main(int argc, const char **argv)
     monmap.remove(*p);
   }
 
-  if (!print && !modified)
+  if (handle_features(features, monmap)) {
+    modified = true;
+  }
+
+  if (!print && !modified && !show_features)
     usage();
 
   if (print) 

@@ -132,7 +132,8 @@ void OSDMonitor::create_initial()
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
 
   // encode into pending incremental
-  newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
+  newmap.encode(pending_inc.fullmap,
+                mon->get_quorum_con_features() | CEPH_FEATURE_RESERVED);
   pending_inc.full_crc = newmap.get_crc();
   dout(20) << " full crc " << pending_inc.full_crc << dendl;
 }
@@ -238,7 +239,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     // encode with all features.
     uint64_t f = inc.encode_features;
     if (!f)
-      f = mon->quorum_features;
+      f = mon->get_quorum_con_features();
     if (!f)
       f = -1;
     bufferlist full_bl;
@@ -1223,7 +1224,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   // features for osdmap and its incremental
-  uint64_t features = mon->quorum_features;
+  uint64_t features = mon->get_quorum_con_features();
 
   // encode full map and determine its crc
   OSDMap tmp;
@@ -4612,7 +4613,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
 {
   stringstream unsupported_ss;
   int unsupported_count = 0;
-  if ((mon->get_quorum_features() & features) != features) {
+  if ((mon->get_quorum_con_features() & features) != features) {
     unsupported_ss << "the monitor cluster";
     ++unsupported_count;
   }

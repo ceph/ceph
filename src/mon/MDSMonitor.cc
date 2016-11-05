@@ -101,7 +101,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
   fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
-  if (mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL) {
+  if (mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL) {
     fs->fscid = fsm.next_filesystem_id++;
     // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
     // have initialized next_filesystem_id such that it's never used here.
@@ -196,7 +196,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // apply to paxos
   assert(get_last_committed() + 1 == pending_fsmap.epoch);
   bufferlist fsmap_bl;
-  pending_fsmap.encode(fsmap_bl, mon->get_quorum_features());
+  pending_fsmap.encode(fsmap_bl, mon->get_quorum_con_features());
 
   /* put everything in the transaction */
   put_version(t, pending_fsmap.epoch, fsmap_bl);
@@ -1545,7 +1545,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL;
+      bool jewel = mon->get_quorum_con_features() && CEPH_FEATURE_SERVER_JEWEL;
       if (flag_bool && !jewel) {
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;

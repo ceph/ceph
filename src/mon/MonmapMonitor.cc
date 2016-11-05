@@ -89,7 +89,7 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
   bufferlist bl;
-  pending_map.encode(bl, mon->get_quorum_features());
+  pending_map.encode(bl, mon->get_quorum_con_features());
 
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
@@ -98,6 +98,55 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.epoch == 1) {
     mon->prepare_new_fingerprint(t);
   }
+}
+
+class C_ApplyFeatures : public Context {
+  MonmapMonitor *svc;
+  mon_feature_t features;
+  public:
+  C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f) :
+    svc(s), features(f) { }
+  void finish(int r) {
+    if (r >= 0) {
+      svc->apply_mon_features(features);
+    } else if (r == -EAGAIN || r == -ECANCELED) {
+      // discard features if we're no longer on the quorum that
+      // established them in the first place.
+      return;
+    } else {
+      assert(0 == "bad C_ApplyFeatures return value");
+    }
+  }
+};
+
+void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
+{
+  if (!is_writeable()) {
+    dout(5) << __func__ << " wait for service to be writeable" << dendl;
+    wait_for_writeable_ctx(new C_ApplyFeatures(this, features));
+    return;
+  }
+
+  assert(is_writeable());
+  assert(features.contains_all(pending_map.persistent_features));
+
+  mon_feature_t new_features =
+    (pending_map.persistent_features ^
+     (features & ceph::features::mon::get_persistent()));
+
+  if (new_features.empty()) {
+    dout(10) << __func__ << " features match current pending: "
+             << features << dendl;
+    return;
+  }
+
+  new_features |= pending_map.persistent_features;
+
+  dout(5) << __func__ << " applying new features to monmap;"
+          << " had " << pending_map.persistent_features
+          << ", will have " << new_features << dendl;
+  pending_map.persistent_features = new_features;
+  propose_pending();
 }
 
 void MonmapMonitor::on_active()
@@ -120,6 +169,8 @@ void MonmapMonitor::on_active()
 
   if (mon->is_leader())
     mon->clog->info() << "monmap " << *mon->monmap << "\n";
+
+  apply_mon_features(mon->get_quorum_mon_features());
 }
 
 bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
