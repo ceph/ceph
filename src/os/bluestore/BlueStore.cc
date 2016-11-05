@@ -6694,7 +6694,7 @@ void BlueStore::_kv_sync_thread()
       KeyValueDB::Transaction synct = db->get_transaction();
 
       // increase {nid,blobid}_max?  note that this covers both the
-      // case wehre we are approaching the max and the case we passed
+      // case where we are approaching the max and the case we passed
       // it.  in either case, we increase the max in the earlier txn
       // we submit.
       uint64_t new_nid_max = 0, new_blobid_max = 0;
