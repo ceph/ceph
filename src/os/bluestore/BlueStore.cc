@@ -5677,7 +5677,7 @@ int BlueStore::_collection_list(
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
 	dout(20) << __func__ << " key " << pretty_binary_string(it->key())
-	<< " > " << end << dendl;
+	         << " >= " << end << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
 	  break;
