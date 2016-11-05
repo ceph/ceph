@@ -12,29 +12,31 @@
  *
  */
 
+#ifndef CEPH_COMPRESSION_PLUGIN_SNAPPY_H
+#define CEPH_COMPRESSION_PLUGIN_SNAPPY_H
 
 // -----------------------------------------------------------------------------
-#include "acconfig.h"
-#include "ceph_ver.h"
-#include "CompressionPluginZlib.h"
-
-#ifndef BUILDING_FOR_EMBEDDED
+#include "compressor/CompressionPlugin.h"
+#include "SnappyCompressor.h"
 // -----------------------------------------------------------------------------
 
-const char *__ceph_plugin_version()
-{
-  return CEPH_GIT_NICE_VER;
-}
+class CompressionPluginSnappy : public CompressionPlugin {
 
-// -----------------------------------------------------------------------------
+public:
 
-int __ceph_plugin_init(CephContext *cct,
-                       const std::string& type,
-                       const std::string& name)
-{
-  PluginRegistry *instance = cct->get_plugin_registry();
+  explicit CompressionPluginSnappy(CephContext* cct) : CompressionPlugin(cct)
+  {}
 
-  return instance->add(type, name, new CompressionPluginZlib(cct));
-}
+  virtual int factory(CompressorRef *cs,
+                      std::ostream *ss)
+  {
+    if (compressor == 0) {
+      SnappyCompressor *interface = new SnappyCompressor();
+      compressor = CompressorRef(interface);
+    }
+    *cs = compressor;
+    return 0;
+  }
+};
 
-#endif // !BUILDING_FOR_EMBEDDED
+#endif
