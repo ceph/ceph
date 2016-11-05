@@ -13,19 +13,6 @@
 #include <climits>
 
 
-cls_handle_t h_class;
-cls_method_handle_t h_get_idata_from_key;
-cls_method_handle_t h_get_next_idata;
-cls_method_handle_t h_get_prev_idata;
-cls_method_handle_t h_read_many;
-cls_method_handle_t h_check_writable;
-cls_method_handle_t h_assert_size_in_bound;
-cls_method_handle_t h_omap_insert;
-cls_method_handle_t h_create_with_omap;
-cls_method_handle_t h_omap_remove;
-cls_method_handle_t h_maybe_read_for_balance;
-
-
 /**
  * finds the index_data where a key belongs.
  *
@@ -644,9 +631,21 @@ static int maybe_read_for_balance_op(cls_method_context_t hctx,
 }
 
 
-void __cls_init()
+CLS_INIT(kvs)
 {
   CLS_LOG(20, "Loaded assert condition class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_get_idata_from_key;
+  cls_method_handle_t h_get_next_idata;
+  cls_method_handle_t h_get_prev_idata;
+  cls_method_handle_t h_read_many;
+  cls_method_handle_t h_check_writable;
+  cls_method_handle_t h_assert_size_in_bound;
+  cls_method_handle_t h_omap_insert;
+  cls_method_handle_t h_create_with_omap;
+  cls_method_handle_t h_omap_remove;
+  cls_method_handle_t h_maybe_read_for_balance;
 
   cls_register("kvs", &h_class);
   cls_register_cxx_method(h_class, "get_idata_from_key",

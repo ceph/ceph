@@ -18,6 +18,27 @@
 #include "include/cephd/libcephd.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "objclass/objclass.h"
+#include "osd/OSD.h"
+#include "osd/ClassHandler.h"
+
+// forward declarations of RADOS class init functions
+CLS_INIT(cephfs);
+CLS_INIT(hello);
+CLS_INIT(journal);
+CLS_INIT(kvs);
+CLS_INIT(lock);
+CLS_INIT(log);
+CLS_INIT(lua);
+CLS_INIT(numops);
+CLS_INIT(rbd);
+CLS_INIT(refcount);
+CLS_INIT(replica_log);
+CLS_INIT(rgw);
+CLS_INIT(statelog);
+CLS_INIT(timeindex);
+CLS_INIT(user);
+CLS_INIT(version);
 
 extern "C" void cephd_version(int *pmajor, int *pminor, int *ppatch)
 {
@@ -147,6 +168,56 @@ void cephd_preload_embedded_plugins()
       delete plugin;
     }
     assert(r == 0);
+  }
+}
+
+void cephd_preload_rados_classes(OSD *osd)
+{
+  // intialize RADOS classes
+  {
+    ClassHandler  *class_handler = osd->class_handler;
+    Mutex::Locker l(class_handler->mutex);
+
+#ifdef WITH_CEPHFS
+    class_handler->add_embedded_class("cephfs");
+    cephfs_cls_init();
+#endif
+    class_handler->add_embedded_class("hello");
+    hello_cls_init();
+    class_handler->add_embedded_class("journal");
+    journal_cls_init();
+#ifdef WITH_KVS
+    class_handler->add_embedded_class("kvs");
+    kvs_cls_init();
+#endif
+    class_handler->add_embedded_class("lock");
+    lock_cls_init();
+    class_handler->add_embedded_class("log");
+    log_cls_init();
+    class_handler->add_embedded_class("lua");
+    lua_cls_init();
+    class_handler->add_embedded_class("numops");
+    numops_cls_init();
+#ifdef WITH_RBD
+    class_handler->add_embedded_class("rbd");
+    rbd_cls_init();
+#endif
+    class_handler->add_embedded_class("refcount");
+    refcount_cls_init();
+    class_handler->add_embedded_class("replica_log");
+    replica_log_cls_init();
+#ifdef WITH_RADOSGW
+    class_handler->add_embedded_class("rgw");
+    rgw_cls_init();
+#endif
+    class_handler->add_embedded_class("statelog");
+    statelog_cls_init();
+    class_handler->add_embedded_class("timeindex");
+    timeindex_cls_init();
+    class_handler->add_embedded_class("user");
+    user_cls_init();
+    class_handler->add_embedded_class("version");
+    version_cls_init();
   }
 }
 
