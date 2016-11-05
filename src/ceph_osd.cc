@@ -249,6 +249,10 @@ int main(int argc, const char **argv)
     return -ENODEV;
   }
 
+#ifdef BUILDING_FOR_EMBEDDED
+  cephd_preload_embedded_plugins();
+#endif
+
   if (mkfs) {
     common_init_finish(g_ceph_context);
     MonClient mc(g_ceph_context);
@@ -602,6 +606,10 @@ int main(int argc, const char **argv)
          << TEXT_NORMAL << dendl;
     return 1;
   }
+
+#ifdef BUILDING_FOR_EMBEDDED
+  cephd_preload_rados_classes(osd);
+#endif
 
   // install signal handlers
   init_async_signal_handler();

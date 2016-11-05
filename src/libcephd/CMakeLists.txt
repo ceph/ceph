@@ -13,7 +13,10 @@ set(merge_libs
   kv
   global
   rocksdb
-  json_spirit)
+  json_spirit
+  erasure_code
+  cephd_compressor
+  cephd_ec)
 
 if(HAVE_ARMV8_CRC)
   list(APPEND merge_libs common_crc_aarch64)
