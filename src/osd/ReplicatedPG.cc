@@ -565,8 +565,9 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
-    if (peer_missing.count(peer) &&
-	peer_missing[peer].get_items().count(soid))
+    auto peer_missing_entry = peer_missing.find(peer);
+    if (peer_missing_entry != peer_missing.end() &&
+	peer_missing_entry->second.get_items().count(soid))
       return true;
 
     // Object is degraded if after last_backfill AND
@@ -5958,8 +5959,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
 	     i != assertions.end();
 	     ++i) {
-	  bufferlist &bl = out.count(i->first) ? 
-	    out[i->first] : empty;
+	  auto out_entry = out.find(i->first);
+	  bufferlist &bl = (out_entry != out.end()) ?
+	    out_entry->second : empty;
 	  switch (i->second.second) {
 	  case CEPH_OSD_CMPXATTR_OP_EQ:
 	    if (!(bl == i->second.first)) {
@@ -6687,8 +6689,9 @@ void ReplicatedPG::complete_disconnect_watches(
        i != to_disconnect.end();
        ++i) {
     pair<uint64_t, entity_name_t> watcher(i->cookie, i->name);
-    if (obc->watchers.count(watcher)) {
-      WatchRef watch = obc->watchers[watcher];
+    auto watchers_entry = obc->watchers.find(watcher);
+    if (watchers_entry != obc->watchers.end()) {
+      WatchRef watch = watchers_entry->second;
       dout(10) << "do_osd_op_effects disconnect watcher " << watcher << dendl;
       obc->watchers.erase(watcher);
       watch->remove(i->send_disconnect);
