@@ -65,11 +65,6 @@ include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${PROJECT_SOURCE_DIR}/src)
 
-if(LEVELDB_PREFIX)
-  include_directories(${LEVELDB_PREFIX}/include)
-  link_directories(${LEVELDB_PREFIX}/lib)
-endif()
-
 if(OFED_PREFIX)
   include_directories(${OFED_PREFIX}/include)
   link_directories(${OFED_PREFIX}/lib)
@@ -240,10 +235,14 @@ option(WITH_KVS "Key value store is here" ON)
 option(WITH_RBD "Remote block storage is here" ON)
 
 option(WITH_LEVELDB "LevelDB is here" ON)
-if(${WITH_LEVELDB})
-find_package(leveldb REQUIRED)
-find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
-endif(${WITH_LEVELDB})
+if(WITH_LEVELDB)
+  if(LEVELDB_PREFIX)
+    include_directories(${LEVELDB_PREFIX}/include)
+    link_directories(${LEVELDB_PREFIX}/lib)
+  endif()
+  find_package(leveldb REQUIRED)
+  find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
+endif(WITH_LEVELDB)
 
 find_package(atomic_ops REQUIRED)
 message(STATUS "${ATOMIC_OPS_LIBRARIES}")
