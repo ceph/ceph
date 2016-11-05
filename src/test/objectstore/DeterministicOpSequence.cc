@@ -78,9 +78,6 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
   case DSOP_COLL_CREATE:
     ok = do_coll_create(gen);
     break;
-  case DSOP_MERGE_DELETE:
-    ok = do_move_ranges_delete_srcobj(gen);
-    break;
 
   default:
     assert(0 == "bad op");
@@ -356,39 +353,6 @@ bool DeterministicOpSequence::do_clone_range(rngen_t& gen)
   return true;
 }
 
-bool DeterministicOpSequence::do_move_ranges_delete_srcobj(rngen_t& gen)
-{
-  coll_t coll;
-  hobject_t orig_obj, new_obj;
-  if (!_prepare_clone(gen, coll, orig_obj, new_obj)) {
-    return false;
-  }
-
-  /* Whenever we have to make a merge_delete() operation, just write to the
-   * object first, so we know we have something to move in the said range.
-   */
-
-  boost::uniform_int<> write_size_rng(100, (2 << 19));
-  size_t size = (size_t) write_size_rng(gen);
-  bufferlist bl;
-  _gen_random(gen, size, bl);
-
-  boost::uniform_int<> move_len(1, bl.length());
-  size = (size_t) move_len(gen);
-
-  vector<std::pair<uint64_t, uint64_t>> move_info = {
-    make_pair(0, size)
-  };
-
-  dout(0) << "do_move_ranges_delete_srcobj " << coll.to_str() << "/" << orig_obj.oid.name
-      << " (0~" << size << ")"
-      << " => " << coll.to_str() << "/" << new_obj.oid.name
-      << " (0)" << dendl;
-  _do_write_and_merge_delete(coll, orig_obj, new_obj, move_info, bl);
-  return true;
-}
-
-
 bool DeterministicOpSequence::_prepare_colls(rngen_t& gen,
 					     coll_entry_t* &orig_coll, coll_entry_t* &new_coll)
 {
@@ -560,24 +524,6 @@ void DeterministicOpSequence::_do_write_and_clone_range(coll_t coll,
   t.write(coll, ghobject_t(orig_obj), srcoff, bl.length(), bl);
   t.clone_range(coll, ghobject_t(orig_obj), ghobject_t(new_obj),
 		srcoff, srclen, dstoff);
-  m_store->apply_transaction(&m_osr, std::move(t));
-}
-
-void DeterministicOpSequence::_do_write_and_merge_delete(
-  coll_t coll,
-  hobject_t& orig_obj,
-  hobject_t& new_obj,
-  vector<std::pair<uint64_t, uint64_t>> move_info,
-  bufferlist& bl)
-{
-  ObjectStore::Transaction t;
-
-  note_txn(&t);
-  for (unsigned i = 0; i < move_info.size(); ++i) {
-    uint64_t off = move_info[i].first;
-    t.write(coll, ghobject_t(orig_obj), off, bl.length(), bl);
-  }
-  t.move_ranges_destroy_src(coll, ghobject_t(orig_obj), ghobject_t(new_obj), move_info);
   m_store->apply_transaction(&m_osr, std::move(t));
 }
 
