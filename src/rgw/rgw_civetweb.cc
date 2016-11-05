@@ -60,14 +60,14 @@ size_t RGWCivetWeb::complete_request()
 void RGWCivetWeb::init_env(CephContext *cct)
 {
   env.init(cct);
-  struct mg_request_info* const info = mg_get_request_info(conn);
+  const struct mg_request_info* info = mg_get_request_info(conn);
 
   if (! info) {
     return;
   }
 
   for (int i = 0; i < info->num_headers; i++) {
-    struct mg_request_info::mg_header* const header = &info->http_headers[i];
+    const struct mg_request_info::mg_header* header = &info->http_headers[i];
     const boost::string_ref name(header->name);
     const auto& value = header->value;
 
