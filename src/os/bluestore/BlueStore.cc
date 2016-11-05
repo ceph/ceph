@@ -4175,8 +4175,6 @@ int BlueStore::umount()
   dout(1) << __func__ << dendl;
 
   _sync();
-  _reap_collections();
-  coll_map.clear();
 
   mempool_thread.shutdown();
 
@@ -4192,6 +4190,8 @@ int BlueStore::umount()
     dout(20) << __func__ << " stopping finisher" << dendl;
     f->stop();
   }
+  _reap_collections();
+  coll_map.clear();
   dout(20) << __func__ << " closing" << dendl;
 
   mounted = false;
