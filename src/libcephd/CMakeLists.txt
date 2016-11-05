@@ -11,11 +11,10 @@ set(merge_libs
   cephd_base
   cephd_compressor
   cephd_ec
+  cephd_cls
+  cephd_cls_kvs
   cephd_rados
   cephd_rbd
-  cls_journal_client
-  cls_lock_client
-  cls_rbd_client
   common
   common_utf8
   erasure_code

@@ -629,6 +629,8 @@ endif(${WITH_RADOSGW})
 if(WITH_RBD)
   set(DENCODER_EXTRALIBS
       ${DENCODER_EXTRALIBS}
+      rbd_types
+      cls_rbd_client
       rbd_replay_types)
   if(LINUX)
     list(APPEND dencoder_srcs

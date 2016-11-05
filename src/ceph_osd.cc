@@ -92,6 +92,7 @@ static void usage()
 
 #ifdef BUILDING_FOR_EMBEDDED
 void cephd_preload_embedded_plugins();
+void cephd_preload_rados_classes(OSD *osd);
 extern "C" int cephd_osd(int argc, const char **argv)
 #else
 int main(int argc, const char **argv)

@@ -22,11 +22,7 @@
 #include "cls_cephfs.h"
 
 CLS_VER(1,0)
-CLS_NAME(cephfs_size_scan)
-
-cls_handle_t h_class;
-cls_method_handle_t h_accumulate_inode_metadata;
-
+CLS_NAME(cephfs)
 
 
 std::ostream &operator<<(std::ostream &out, const ObjCeiling &in)
@@ -195,11 +191,14 @@ PGLSFilter *inode_tag_filter()
  * We do two things here: we register the new class, and then register
  * all of the class's methods.
  */
-void __cls_init()
+CLS_INIT(cephfs)
 {
   // this log message, at level 0, will always appear in the ceph-osd
   // log file.
-  CLS_LOG(0, "loading cephfs_size_scan");
+  CLS_LOG(0, "loading cephfs");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_accumulate_inode_metadata;
 
   cls_register("cephfs", &h_class);
   cls_register_cxx_method(h_class, "accumulate_inode_metadata",
