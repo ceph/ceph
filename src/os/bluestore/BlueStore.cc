@@ -4965,10 +4965,10 @@ int BlueStore::set_collection_opts(
   if (!ch)
     return -ENOENT;
   Collection *c = static_cast<Collection*>(ch.get());
-  dout(15) << __func__ << " " << cid << " "
-    << " options " << opts << dendl;
+  dout(15) << __func__ << " " << cid << " options " << opts << dendl;
+  if (!c->exists)
+    return -ENOENT;
   RWLock::WLocker l(c->lock);
-
   c->pool_opts = opts;
   return 0;
 }
@@ -5379,7 +5379,7 @@ int BlueStore::fiemap(
 	     << " size 0x" << o->onode.size << std::dec << dendl;
 
     boost::intrusive::set<Extent>::iterator ep, eend;
-    if (offset > o->onode.size)
+    if (offset >= o->onode.size)
       goto out;
 
     if (offset + length > o->onode.size) {
@@ -5677,7 +5677,7 @@ int BlueStore::_collection_list(
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
 	dout(20) << __func__ << " key " << pretty_binary_string(it->key())
-	<< " > " << end << dendl;
+	         << " >= " << end << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
 	  break;
@@ -6694,7 +6694,7 @@ void BlueStore::_kv_sync_thread()
       KeyValueDB::Transaction synct = db->get_transaction();
 
       // increase {nid,blobid}_max?  note that this covers both the
-      // case wehre we are approaching the max and the case we passed
+      // case where we are approaching the max and the case we passed
       // it.  in either case, we increase the max in the earlier txn
       // we submit.
       uint64_t new_nid_max = 0, new_blobid_max = 0;
