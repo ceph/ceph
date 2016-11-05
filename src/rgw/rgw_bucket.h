@@ -314,6 +314,10 @@ public:
   static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true);
   static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  static int limit_check(RGWRados *store, RGWBucketAdminOpState& op_state,
+			 const std::list<std::string>& user_ids,
+			 RGWFormatterFlusher& flusher,
+			 bool warnings_only = false);
 };
 
 
