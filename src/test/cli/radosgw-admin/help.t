@@ -18,6 +18,7 @@
     key create                 create access key
     key rm                     remove access key
     bucket list                list buckets
+    bucket limit check         show bucket sharding stats
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
@@ -231,6 +232,9 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
+     --warnings-only           when specified with bucket limit check, list
+                               only buckets nearing or over the current max
+                               objects per shard value
      --bypass-gc               when specified with bucket deletion, triggers
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
