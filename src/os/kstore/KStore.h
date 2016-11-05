@@ -637,13 +637,6 @@ private:
 		   OnodeRef& oldo,
 		   OnodeRef& newo,
 		   uint64_t srcoff, uint64_t length, uint64_t dstoff);
-  int _move_ranges_destroy_src(
-    TransContext *txc,
-    CollectionRef& c,
-    OnodeRef& oldo,
-    CollectionRef& bc,
-    OnodeRef& newo,
-    vector<std::pair<uint64_t, uint64_t>> move_info);
   int _rename(TransContext *txc,
 	      CollectionRef& c,
 	      OnodeRef& oldo,
