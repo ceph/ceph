@@ -616,6 +616,36 @@ namespace librbd {
       return old_snapshot_list_finish(&it, names, sizes, snapc);
     }
 
+    void get_all_features_start(librados::ObjectReadOperation *op) {
+      bufferlist in;
+      op->exec("rbd", "get_all_features", in);
+    }
+
+    int get_all_features_finish(bufferlist::iterator *it,
+                                uint64_t *all_features) {
+      try {
+	::decode(*all_features, *it);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
+                         uint64_t *all_features) {
+      librados::ObjectReadOperation op;
+      get_all_features_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return get_all_features_finish(&it, all_features);
+    }
+
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data) {
       bufferlist out;

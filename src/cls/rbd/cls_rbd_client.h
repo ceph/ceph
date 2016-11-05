@@ -116,6 +116,12 @@ namespace librbd {
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
 
+    void get_all_features_start(librados::ObjectReadOperation *op);
+    int get_all_features_finish(bufferlist::iterator *it,
+                                uint64_t *all_features);
+    int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
+                         uint64_t *all_features);
+
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data);
     int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
