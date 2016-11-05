@@ -9,18 +9,24 @@ set_target_properties(cephd_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMB
 
 set(merge_libs
   cephd_base
-  mon
-  osd
+  cephd_compressor
+  cephd_ec
+  cephd_rados
+  cephd_rbd
+  cls_journal_client
+  cls_lock_client
+  cls_rbd_client
   common
   common_utf8
-  os
-  kv
-  global
-  rocksdb
-  json_spirit
   erasure_code
-  cephd_compressor
-  cephd_ec)
+  global
+  json_spirit
+  kv
+  mon
+  os
+  osd
+  osdc
+  rocksdb)
 
 if(HAVE_ARMV8_CRC)
   list(APPEND merge_libs common_crc_aarch64)
