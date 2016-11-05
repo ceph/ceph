@@ -36,6 +36,46 @@ CEPH_LIBCEPHD_API void cephd_version(int *pmajor, int *pminor, int *ppatch);
  */
 CEPH_LIBCEPHD_API const char *ceph_version(int *pmajor, int *pminor, int *ppatch);
 
+/**
+ * Generates a new cluster id (fsid) and returns a hexadecimal string.
+ *
+ * @param context where to the store the handle
+ * @param buf where to write the fsid
+ * @param len the size of buf in bytes (should be at least 37)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the buffer is too short to contain the key
+  */
+CEPH_LIBCEPHD_API int cephd_generate_fsid(char *buf, size_t len);
+
+/**
+ * Generates a new secret key and returns a base64 encoded string.
+ *
+ * @param context where to the store the handle
+ * @param buf where to write the fsid
+ * @param len the size of buf in bytes
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the buffer is too short to contain the key
+ */
+CEPH_LIBCEPHD_API int cephd_generate_secret_key(char *buf, size_t len);
+
+/**
+ * Runs ceph-mon passing in command line args
+ *
+ * @param argc number of parameters
+ * @param argv array of string arguments
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_LIBCEPHD_API int cephd_run_mon(int argc, const char **argv);
+
+/**
+ * Runs ceph-osd passing in command line args
+ *
+ * @param argc number of parameters
+ * @param argv array of string arguments
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_LIBCEPHD_API int cephd_run_osd(int argc, const char **argv);
+
 #ifdef __cplusplus
 }
 #endif
