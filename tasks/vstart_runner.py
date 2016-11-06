@@ -819,6 +819,7 @@ def exec_test():
             if os.path.exists(mount.mountpoint):
                 os.rmdir(mount.mountpoint)
     filesystem = LocalFilesystem(ctx)
+    ceph_cluster = LocalCephCluster(ctx)
     mds_cluster = LocalMDSCluster(ctx)
     mgr_cluster = LocalMgrCluster(ctx)
 
@@ -844,6 +845,7 @@ def exec_test():
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
         "mounts": mounts,
+        "ceph_cluster": ceph_cluster,
         "fs": filesystem,
         "mds_cluster": mds_cluster,
         "mgr_cluster": mgr_cluster,

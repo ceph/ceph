@@ -4,7 +4,8 @@ import os
 import unittest
 from unittest import suite, loader, case
 from teuthology.task import interactive
-from tasks.cephfs.filesystem import Filesystem, MDSCluster
+from teuthology import misc
+from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
 from tasks.mgr.mgr_test_case import MgrCluster
 
 log = logging.getLogger(__name__)
@@ -115,12 +116,23 @@ def task(ctx, config):
            fail_on_skip: false
 
     """
-    fs = Filesystem(ctx)
-    mds_cluster = MDSCluster(ctx)
-    mgr_cluster = MgrCluster(ctx)
+
+    ceph_cluster = CephCluster(ctx)
+
+    if len(list(misc.all_roles_of_type(ctx.cluster, 'mds'))):
+        mds_cluster = MDSCluster(ctx)
+        fs = Filesystem(ctx)
+    else:
+        mds_cluster = None
+        fs = None
+
+    if len(list(misc.all_roles_of_type(ctx.cluster, 'mgr'))):
+        mgr_cluster = MgrCluster(ctx)
+    else:
+        mgr_cluster = None
 
     # Mount objects, sorted by ID
-    if (hasattr(ctx, 'mounts')):
+    if hasattr(ctx, 'mounts'):
         mounts = [v for k, v in sorted(ctx.mounts.items(), lambda a, b: cmp(a[0], b[0]))]
     else:
         # The test configuration has a filesystem but no fuse/kclient mounts
@@ -130,6 +142,7 @@ def task(ctx, config):
         "ctx": ctx,
         "mounts": mounts,
         "fs": fs,
+        "ceph_cluster": ceph_cluster,
         "mds_cluster": mds_cluster,
         "mgr_cluster": mgr_cluster,
     })
