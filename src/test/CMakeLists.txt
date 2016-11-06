@@ -860,5 +860,9 @@ target_link_libraries(unittest_subprocess global)
 add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pageset)
 
+# unittest_tweakweights.sh
+
+add_ceph_test(unittest_tweakweights.sh ${CMAKE_CURRENT_SOURCE_DIR}/unittest_tweakweights.sh)
+
 #make check ends here
 
