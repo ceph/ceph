@@ -12,16 +12,16 @@ Usage (assuming teuthology, ceph, ceph-qa-suite checked out in ~/git):
     # Start a vstart cluster
     MDS=2 MON=1 OSD=3 ../src/vstart.sh -n
     # Invoke a test using this script, with PYTHONPATH set appropriately
-    python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py
+    python ~/git/ceph-qa-suite/tasks/vstart_runner.py
 
     # Alternatively, if you use different paths, specify them as follows:
-    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph-qa-suite:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py
+    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph-qa-suite:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph-qa-suite/tasks/vstart_runner.py
 
     # If you wish to drop to a python shell on failures, use --interactive:
-    python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py --interactive
+    python ~/git/ceph-qa-suite/tasks/vstart_runner.py --interactive
 
     # If you wish to run a named test case, pass it as an argument:
-    python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py tasks.cephfs.test_data_scan
+    python ~/git/ceph-qa-suite/tasks/vstart_runner.py tasks.cephfs.test_data_scan
 
 """
 
@@ -819,6 +819,7 @@ def exec_test():
             if os.path.exists(mount.mountpoint):
                 os.rmdir(mount.mountpoint)
     filesystem = LocalFilesystem(ctx)
+    ceph_cluster = LocalCephCluster(ctx)
     mds_cluster = LocalMDSCluster(ctx)
     mgr_cluster = LocalMgrCluster(ctx)
 
@@ -844,6 +845,7 @@ def exec_test():
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
         "mounts": mounts,
+        "ceph_cluster": ceph_cluster,
         "fs": filesystem,
         "mds_cluster": mds_cluster,
         "mgr_cluster": mgr_cluster,

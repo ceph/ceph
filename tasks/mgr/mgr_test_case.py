@@ -22,12 +22,6 @@ class MgrCluster(CephCluster):
             [(mgr_id, self._ctx.daemons.get_daemon('mgr', mgr_id)) for mgr_id
              in self.mgr_ids])
 
-    @property
-    def admin_remote(self):
-        first_mon = misc.get_first_mon(self._ctx, None)
-        (result,) = self._ctx.cluster.only(first_mon).remotes.iterkeys()
-        return result
-
     def mgr_stop(self, mgr_id):
         self.mgr_daemons[mgr_id].stop()
 

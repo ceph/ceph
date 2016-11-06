@@ -18,6 +18,7 @@ class CephTestCase(unittest.TestCase):
     # Environment references
     mounts = None
     fs = None
+    ceph_cluster = None
     mds_cluster = None
     mgr_cluster = None
     ctx = None
@@ -32,7 +33,7 @@ class CephTestCase(unittest.TestCase):
         :param expected_pattern: a string that you expect to see in the log output
         """
 
-        ceph_manager = self.fs.mon_manager
+        ceph_manager = self.ceph_cluster.mon_manager
 
         class ContextManager(object):
             def match(self):
@@ -73,7 +74,7 @@ class CephTestCase(unittest.TestCase):
         Wait until 'ceph health' contains messages matching the pattern
         """
         def seen_health_warning():
-            health = self.fs.mon_manager.get_mon_health()
+            health = self.ceph_cluster.mon_manager.get_mon_health()
             summary_strings = [s['summary'] for s in health['summary']]
             if len(summary_strings) == 0:
                 log.debug("Not expected number of summary strings ({0})".format(summary_strings))
@@ -93,7 +94,7 @@ class CephTestCase(unittest.TestCase):
         Wait until `ceph health` returns no messages
         """
         def is_clear():
-            health = self.fs.mon_manager.get_mon_health()
+            health = self.ceph_cluster.mon_manager.get_mon_health()
             return len(health['summary']) == 0
 
         self.wait_until_true(is_clear, timeout)
