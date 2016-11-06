@@ -1,10 +1,12 @@
 import json
 import logging
-from unittest import case
+from unittest import case, SkipTest
+
 from cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
+from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +58,9 @@ class TestFailover(CephFSTestCase):
         That a client will respect fuse_require_active_mds and error out
         when the cluster appears to be unavailable.
         """
+
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Requires FUSE client to inject client metadata")
 
         require_active = self.fs.get_config("fuse_require_active_mds", service_type="mon").lower() == "true"
         if not require_active:
