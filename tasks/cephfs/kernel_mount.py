@@ -41,7 +41,7 @@ class KernelMount(CephFSMount):
             ],
         )
 
-    def mount(self, mount_path=None):
+    def mount(self, mount_path=None, mount_fs_name=None):
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
@@ -61,6 +61,12 @@ class KernelMount(CephFSMount):
         if mount_path is None:
             mount_path = "/"
 
+        opts = 'name={id},secretfile={secret}'.format(id=self.client_id,
+                                                      secret=secret)
+
+        if mount_fs_name is not None:
+            opts += ",mds_namespace={0}".format(mount_fs_name)
+
         self.client_remote.run(
             args=[
                 'sudo',
@@ -72,8 +78,7 @@ class KernelMount(CephFSMount):
                 self.mountpoint,
                 '-v',
                 '-o',
-                'name={id},secretfile={secret}'.format(id=self.client_id,
-                                                       secret=secret),
+                opts
             ],
         )
 
