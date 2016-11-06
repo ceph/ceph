@@ -477,6 +477,7 @@ vc.disconnect()
         # one volume.
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
+            vc.deauthorize(vp, "{guest_entity}")
             vc.evict("{guest_entity}", volume_path=vp)
         """.format(
             group_id=group_id,
