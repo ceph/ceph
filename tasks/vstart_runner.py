@@ -400,7 +400,7 @@ class LocalFuseMount(FuseMount):
         if self.is_mounted():
             super(LocalFuseMount, self).umount()
 
-    def mount(self, mount_path=None):
+    def mount(self, mount_path=None, mount_fs_name=None):
         self.client_remote.run(
             args=[
                 'mkdir',
@@ -439,6 +439,9 @@ class LocalFuseMount(FuseMount):
 
         if mount_path is not None:
             prefix += ["--client_mountpoint={0}".format(mount_path)]
+
+        if mount_fs_name is not None:
+            prefix += ["--client_mds_namespace={0}".format(mount_fs_name)]
 
         self.fuse_daemon = self.client_remote.run(args=
                                             prefix + [
