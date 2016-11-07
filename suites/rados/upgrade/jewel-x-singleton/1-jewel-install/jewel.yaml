@@ -3,6 +3,7 @@ meta:
 tasks:
 - install:
     branch: jewel
+    exclude_packages: ['ceph-mgr']
 - print: "**** done install jewel"
 - ceph:
 - print: "**** done ceph"
