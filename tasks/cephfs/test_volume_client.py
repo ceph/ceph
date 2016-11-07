@@ -178,7 +178,7 @@ vc.disconnect()
 
         # I'm going to use mount_c later as a guest for mounting the created
         # shares
-        self.mounts[2].umount()
+        self.mounts[2].umount_wait()
 
         # I'm going to leave mount_b unmounted and just use it as a handle for
         # driving volumeclient.  It's a little hacky but we don't have a more
