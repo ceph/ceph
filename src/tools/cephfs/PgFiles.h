@@ -35,7 +35,7 @@ private:
   std::set<pg_t> pgs;
   std::set<uint64_t> pools;
 
-  void hit_file(std::string const &path, const struct stat &st);
+  void hit_file(std::string const &path, const struct ceph_statx &stx);
   void hit_dir(std::string const &path);
 
 
