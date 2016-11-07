@@ -13,11 +13,12 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include <urcu.h>
 #include <unistd.h>
 
 #include "include/Context.h"
 #include "common/errno.h"
+#include "common/RCU.h"
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
 
@@ -327,6 +328,8 @@ void AsyncConnection::process()
   bool need_dispatch_writer = false;
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
+
+  RCU<>::RCU_quiescent();
   do {
     ldout(async_msgr->cct, 20) << __func__ << " prev state is " << get_state_name(prev_state) << dendl;
     prev_state = state;

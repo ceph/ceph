@@ -14,7 +14,9 @@
  *
  */
 
+#include <urcu.h>
 #include "common/errno.h"
+#include "common/RCU.h"
 #include "Event.h"
 
 #ifdef HAVE_DPDK
@@ -389,11 +391,18 @@ int EventCenter::process_events(int timeout_microseconds)
 
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
+
+  RCU<>::RCU_offline();
   numevents = driver->event_wait(fired_events, &tv);
+  RCU<>::RCU_online();
+
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
     EventCallbackRef cb;
+
+    RCU<>::RCU_quiescent();
+
     event = _get_file_event(fired_events[j].fd);
 
     /* note the event->mask & mask & ... code: maybe an already processed

@@ -33,6 +33,7 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
+target_include_directories(osd BEFORE PUBLIC ${URCU_INCLUDE_DIRS})
 target_link_libraries(osd ${LEVELDB_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd oprequest-tp osd-tp pg-tp)

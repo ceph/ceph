@@ -2033,6 +2033,26 @@ protected:
   // -- placement groups --
   RWLock pg_map_lock; // this lock orders *above* individual PG _locks
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
+  ceph::unordered_map<spg_t, PG*> pg_map_shadow; // read only copy of map
+  ceph::unordered_map<spg_t, PG*> *pg_map_ptr;   // instantaneous pg_map
+
+  class PG_map_subscriber {
+    unordered_map<spg_t, PG*> *subscribed_pg_map;
+  public:
+    PG_map_subscriber(OSD *o);
+    unordered_map<spg_t, PG*> *get_pg_map() const;
+    unordered_map<spg_t, PG*>::iterator pg_map_find(const spg_t& pgid);
+    bool is_pg_map_end(unordered_map<spg_t, PG*>::iterator &i);
+    ~PG_map_subscriber();
+  };
+
+  class WLocker_and_pg_map_publish {
+    OSD *osd_ptr;
+    RWLock::WLocker l;
+  public:
+    WLocker_and_pg_map_publish(OSD *o);
+    ~WLocker_and_pg_map_publish();
+  };
 
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;

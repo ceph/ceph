@@ -146,6 +146,8 @@ public:
    */
   CryptoHandler *get_crypto_handler(int type);
 
+  pthread_key_t registered;
+
   /// check if experimental feature is enable, and emit appropriate warnings
   bool check_experimental_feature_enabled(const std::string& feature);
   bool check_experimental_feature_enabled(const std::string& feature,

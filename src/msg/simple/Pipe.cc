@@ -12,6 +12,7 @@
  * 
  */
 
+#include <urcu.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -28,6 +29,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/valgrind.h"
+#include "common/RCU.h"
 
 // Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
 
@@ -261,12 +263,22 @@ void *Pipe::DelayedDelivery::entry()
   Mutex::Locker locker(delay_lock);
   lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::entry start" << dendl;
 
+  RCU<> rcu(pipe->msgr->cct->registered, this);
+
   while (!stop_delayed_delivery) {
+
+    RCU<>::RCU_online();
+
     if (delay_queue.empty()) {
       lgeneric_subdout(pipe->msgr->cct, ms, 30) << *pipe << "DelayedDelivery::entry sleeping on delay_cond because delay queue is empty" << dendl;
+
+      RCU<>::RCU_offline();
       delay_cond.Wait(delay_lock);
       continue;
     }
+
+    RCU<>::RCU_quiescent();
+
     utime_t release = delay_queue.front().first;
     Message *m = delay_queue.front().second;
     string delay_msg_type = pipe->msgr->cct->_conf->ms_inject_delay_msg_type;
@@ -302,6 +314,7 @@ void *Pipe::DelayedDelivery::entry()
     }
     active_flush = false;
   }
+
   lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::entry stop" << dendl;
   return NULL;
 }
@@ -1588,10 +1601,14 @@ void Pipe::reader()
     assert(pipe_lock.is_locked());
   }
 
+  RCU<> rcu(msgr->cct->registered, this);
+
   // loop.
   while (state != STATE_CLOSED &&
 	 state != STATE_CONNECTING) {
     assert(pipe_lock.is_locked());
+
+    RCU<>::RCU_offline();
 
     // sleep if (re)connecting
     if (state == STATE_STANDBY) {
@@ -1606,6 +1623,7 @@ void Pipe::reader()
     pipe_lock.Unlock();
 
     char tag = -1;
+
     ldout(msgr->cct,20) << "reader reading tag..." << dendl;
     if (tcp_read((char*)&tag, 1) < 0) {
       pipe_lock.Lock();
@@ -1688,7 +1706,9 @@ void Pipe::reader()
 	continue;
       }
 
-      // check received seq#.  if it is old, drop the message.  
+    RCU<>::RCU_online();
+
+    // check received seq#.  if it is old, drop the message.  
       // note that incoming messages may skip ahead.  this is convenient for the client
       // side queueing because messages can't be renumbered, but the (kernel) client will
       // occasionally pull a message out of the sent queue to send elsewhere.  in that case
@@ -1768,7 +1788,6 @@ void Pipe::reader()
     }
   }
 
- 
   // reap?
   reader_running = false;
   reader_needs_join = true;

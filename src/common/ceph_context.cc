@@ -1,3 +1,4 @@
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
@@ -562,6 +563,8 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
+
+  pthread_key_create(&registered, 0);
 
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
