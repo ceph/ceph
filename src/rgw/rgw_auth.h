@@ -407,6 +407,34 @@ inline std::ostream& operator<<(std::ostream& out,
 }
 
 
+/* Interface for classes applying changes to request state/RADOS store
+ * imposed by a particular rgw::auth::Engine.
+ *
+ * In contrast to rgw::auth::Engine, implementations of this interface
+ * are allowed to handle req_state or RGWRados in the read-write manner.
+ *
+ * It's expected that most (if not all) of implementations will also
+ * conform to rgw::auth::Identity interface to provide authorization
+ * policy (ACLs, account's ownership and entitlement). */
+class IdentityApplier : public Identity {
+public:
+  typedef std::unique_ptr<IdentityApplier> aplptr_t;
+
+  virtual ~IdentityApplier() {};
+
+  /* Fill provided RGWUserInfo with information about the account that
+   * RGWOp will operate on. Errors are handled solely through exceptions.
+   *
+   * XXX: be aware that the "account" term refers to rgw_user. The naming
+   * is legacy. */
+  virtual void load_acct_info(RGWUserInfo& user_info) const = 0; /* out */
+
+  /* Apply any changes to request state. This method will be most useful for
+   * TempURL of Swift API or AWSv4. */
+  virtual void modify_request_state(req_state * s) const {}      /* in/out */
+};
+
+
 /* Interface class for authentication backends (auth engines) in RadosGW.
  *
  * An engine is supposed only to authenticate (not authorize!) requests
