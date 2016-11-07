@@ -334,7 +334,9 @@ cdef class LibRGWFS(object):
         """
         if self.state in ["mounted"]:
             with nogil:
-                rgw_umount(self.fs, 0);
+                ret = rgw_umount(self.fs, 0);
+            if ret != 0:
+                raise make_ex(ret, "error calling rgw_unmount")
             self.state = "shutdown"
 
     def __enter__(self):
