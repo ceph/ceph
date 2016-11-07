@@ -7624,8 +7624,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
   }
 
-  // pass original size if compressed
-  uint64_t accounted_size = ofs;
+  uint64_t accounted_size;
   {
     bool compressed{false};
     RGWCompressionInfo cs_info;
@@ -7634,7 +7633,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       ldout(cct, 0) << "ERROR: failed to read compression info" << dendl;
       return ret;
     }
-    accounted_size = cs_info.orig_size;
+    // pass original size if compressed
+    accounted_size = compressed ? cs_info.orig_size : ofs;
   }
 
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at);
