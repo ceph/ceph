@@ -222,6 +222,7 @@ class OpsFlightSocketHook;
 class HistoricOpsSocketHook;
 class TestOpsSocketHook;
 struct C_CompleteSplits;
+struct C_OpenPGs;
 class LogChannel;
 class CephContext;
 typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
@@ -1740,6 +1741,7 @@ private:
   friend class TestOpsSocketHook;
   TestOpsSocketHook *test_ops_hook;
   friend struct C_CompleteSplits;
+  friend struct C_OpenPGs;
 
   // -- op queue --
   enum io_queue {
