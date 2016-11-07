@@ -95,6 +95,7 @@ if(HAVE_LIBAIO)
 endif()
 
 if(WITH_SPDK)
+  include_directories("${CMAKE_SOURCE_DIR}/src/spdk/include")
   add_custom_target(build_spdk
     COMMAND
     $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
@@ -105,6 +106,7 @@ if(WITH_SPDK)
   foreach(lib nvme memory util)
     add_library(spdk_${lib} STATIC IMPORTED)
     add_dependencies(spdk_${lib} build_spdk)
+    target_link_libraries(os LINK_PRIVATE spdk_${lib})
     set_target_properties(spdk_${lib} PROPERTIES
       IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/lib/${lib}/libspdk_${lib}.a"
       INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
