@@ -4,6 +4,7 @@ import time
 import os
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -431,6 +432,9 @@ vc.disconnect()
         That a volume client can be evicted based on its auth ID and the volume
         path it has mounted.
         """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Requires FUSE client to inject client metadata")
 
         # mounts[1] would be used as handle for driving VolumeClient. mounts[2]
         # and mounts[3] would be used as guests to mount the volumes/shares.
