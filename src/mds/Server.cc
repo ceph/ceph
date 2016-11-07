@@ -3515,8 +3515,6 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	   << " complete=" << (int)complete
 	   << dendl;
   mdr->reply_extra_bl = dirbl;
-  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
-	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(now, dir, META_POP_IRD, -1, numfiles);
