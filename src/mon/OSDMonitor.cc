@@ -2171,7 +2171,6 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     }
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
   } else if (pending_inc.new_up_client.count(from)) {
-    //FIXME: should this be using new_up_client?
     // already prepared, just wait
     dout(7) << __func__ << " already prepared, waiting on "
 	    << m->get_orig_source_addr() << dendl;
