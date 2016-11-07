@@ -406,8 +406,6 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-  int r;
   if (!dir) {
     return -errno;
   }
@@ -416,14 +414,12 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
     seekdir(dir, *handle);
   }
 
-  struct dirent *de;
+  struct dirent *de = nullptr;
+  int r = 0;
   int listed = 0;
-  bool end = false;
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      end = true;
-      break;
-    }
+  bool end = true;
+  while ((de = ::readdir(dir))) {
+    end = false;
     if (max_objs > 0 && listed >= max_objs) {
       break;
     }
@@ -466,15 +462,11 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
   if (!dir)
     return -errno;
 
-  struct dirent *de;
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      break;
-    }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
     string short_name(de->d_name);
     string demangled_name;
     if (lfn_is_subdir(short_name, &demangled_name)) {
