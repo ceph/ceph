@@ -67,7 +67,7 @@ int Mantle::start()
   return 0;
 }
 
-int Mantle::execute(string script)
+int Mantle::execute(const string &script)
 {
   if (L == NULL) {
     dout(0) << "ERROR: mantle was not started" << dendl;
@@ -93,9 +93,9 @@ int Mantle::execute(string script)
   return 0;
 }
 
-int Mantle::balance(string script,
+int Mantle::balance(const string &script,
                     mds_rank_t whoami,
-                    vector < map<string, double> > metrics,
+                    const vector < map<string, double> > &metrics,
                     map<mds_rank_t,double> &my_targets)
 {
   if (start() != 0)
@@ -114,7 +114,7 @@ int Mantle::balance(string script,
     lua_newtable(L);
 
     /* push values into this mds's table; setfield assigns key/pops val */
-    for (map<string, double>::iterator it = metrics[i].begin();
+    for (map<string, double>::const_iterator it = metrics[i].begin();
          it != metrics[i].end();
          it++) {
       lua_pushnumber(L, it->second);
