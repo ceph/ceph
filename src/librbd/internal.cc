@@ -900,10 +900,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {
-    CephContext *cct = (CephContext *)io_ctx.cct();
-    bool old_format = cct->_conf->rbd_default_format == 1;
-    uint64_t features = old_format ? 0 : librbd::util::parse_rbd_default_features(cct);
-    return create(io_ctx, imgname, size, old_format, features, order, 0, 0);
+    uint64_t order_ = *order;
+    ImageOptions opts;
+
+    int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
+    assert(r == 0);
+
+    r = create(io_ctx, imgname, size, opts, "", "");
+
+    int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
+    assert(r1 == 0);
+    *order = order_;
+
+    return r;
   }
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
