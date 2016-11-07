@@ -35,7 +35,7 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
     }
   }
 
-  return std::move(ldap_bindpw);
+  return ldap_bindpw;
 }
 
 #if defined(HAVE_OPENLDAP)
