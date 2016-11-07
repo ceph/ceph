@@ -242,7 +242,7 @@ cdef errno_to_exception =  {
 }
 
 
-cdef class FileHandler(object):
+cdef class FileHandle(object):
     cdef rgw_file_handle *handler
 
 
@@ -374,7 +374,7 @@ cdef class LibRGWFS(object):
         if ret != 0:
             raise make_ex(ret, "error calling rgw_mount")
         self.state = "mounted"
-        dir_handler = FileHandler()
+        dir_handler = FileHandle()
         dir_handler.handler = <rgw_file_handle*>self.fs.root_fh
         return dir_handler
 
@@ -408,7 +408,7 @@ cdef class LibRGWFS(object):
                 'f_namemax': statbuf.f_namemax}
 
 
-    def create(self, FileHandler dir_handler, filename, flags = 0):
+    def create(self, FileHandle dir_handler, filename, flags = 0):
         self.require_state("mounted")
 
         if not isinstance(flags, int):
@@ -433,14 +433,14 @@ cdef class LibRGWFS(object):
         if ret < 0:
             raise make_ex(ret, "error in open '%s'" % filename)
 
-        file_handler = FileHandler()
+        file_handler = FileHandle()
         file_handler.handler = _file_handler
         return file_handler
 
-    def mkdir(self, FileHandler dir_handler, dirname, flags = 0):
+    def mkdir(self, FileHandle dir_handler, dirname, flags = 0):
         self.require_state("mounted")
         dirname = cstr(dirname, 'dirname')
-        new_dir_handler = FileHandler()
+        new_dir_handler = FileHandle()
         cdef:
             rgw_file_handle *_dir_handler = <rgw_file_handle*>dir_handler.handler
             rgw_file_handle *_new_dir_handler
@@ -455,7 +455,7 @@ cdef class LibRGWFS(object):
         new_dir_handler.handler = _new_dir_handler
         return new_dir_handler
 
-    def rename(self, FileHandler src_handler, src_name, FileHandler dst_handler, dst_name, flags = 0):
+    def rename(self, FileHandle src_handler, src_name, FileHandle dst_handler, dst_name, flags = 0):
         self.require_state("mounted")
 
         src_name = cstr(src_name, 'src_name')
@@ -476,7 +476,7 @@ cdef class LibRGWFS(object):
                                                                  dst_name))
         return ret
 
-    def unlink(self, FileHandler handler, name, flags = 0):
+    def unlink(self, FileHandle handler, name, flags = 0):
         self.require_state("mounted")
         name = cstr(name, 'name')
         cdef:
@@ -489,7 +489,7 @@ cdef class LibRGWFS(object):
             raise make_ex(ret, "error in unlink")
         return ret
 
-    def readdir(self, FileHandler dir_handler, iterate_cb, offset, flags = 0):
+    def readdir(self, FileHandle dir_handler, iterate_cb, offset, flags = 0):
         self.require_state("mounted")
 
         cdef:
@@ -505,7 +505,7 @@ cdef class LibRGWFS(object):
 
         return (_offset, _eof)
 
-    def fstat(self, FileHandler file_handler):
+    def fstat(self, FileHandle file_handler):
         self.require_state("mounted")
 
         cdef:
@@ -526,7 +526,7 @@ cdef class LibRGWFS(object):
                           st_mtime=datetime.fromtimestamp(statbuf.st_mtime),
                           st_ctime=datetime.fromtimestamp(statbuf.st_ctime))
 
-    def opendir(self, FileHandler dir_handler, dirname, flags = 0):
+    def opendir(self, FileHandle dir_handler, dirname, flags = 0):
         self.require_state("mounted")
 
         if not isinstance(flags, int):
@@ -546,11 +546,11 @@ cdef class LibRGWFS(object):
         if ret < 0:
             raise make_ex(ret, "error in open '%s'" % dirname)
 
-        file_handler = FileHandler()
+        file_handler = FileHandle()
         file_handler.handler = _file_handler
         return file_handler
 
-    def open(self, FileHandler dir_handler, filename, flags = 0):
+    def open(self, FileHandle dir_handler, filename, flags = 0):
         self.require_state("mounted")
 
         if not isinstance(flags, int):
@@ -574,11 +574,11 @@ cdef class LibRGWFS(object):
         if ret < 0:
             raise make_ex(ret, "error in open '%s'" % filename)
 
-        file_handler = FileHandler()
+        file_handler = FileHandle()
         file_handler.handler = _file_handler
         return file_handler
 
-    def close(self, FileHandler file_handler, flags = 0):
+    def close(self, FileHandle file_handler, flags = 0):
         self.require_state("mounted")
         cdef:
             rgw_file_handle *_file_handler = <rgw_file_handle*>file_handler.handler
@@ -588,7 +588,7 @@ cdef class LibRGWFS(object):
         if ret < 0:
             raise make_ex(ret, "error in close")
 
-    def read(self, FileHandler file_handler, offset, l, flags = 0):
+    def read(self, FileHandle file_handler, offset, l, flags = 0):
         self.require_state("mounted")
         if not isinstance(offset, int):
             raise TypeError('offset must be an int')
@@ -625,7 +625,7 @@ cdef class LibRGWFS(object):
             ref.Py_XDECREF(ret_s)
 
 
-    def write(self, FileHandler file_handler, offset, buf, flags = 0):
+    def write(self, FileHandle file_handler, offset, buf, flags = 0):
         self.require_state("mounted")
         if not isinstance(buf, bytes):
             raise TypeError('buf must be a bytes')
@@ -649,7 +649,7 @@ cdef class LibRGWFS(object):
         return ret
 
 
-    def fsync(self, FileHandler handler, flags = 0):
+    def fsync(self, FileHandle handler, flags = 0):
         self.require_state("mounted")
 
         cdef:
