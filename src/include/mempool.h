@@ -37,7 +37,7 @@ Memory Pools
 ============
 
 A memory pool is a method for accounting the consumption of memory of
-a set of containers.
+a set of containers and objects.
 
 Memory pools are statically declared (see pool_index_t).
 
@@ -75,7 +75,7 @@ Thus for mempool "unittest_1" we have automatically available to us:
    mempool::unittest_1::vector
    mempool::unittest_1::unordered_map
 
-These containers  operate identically to the std::xxxxx named version of same
+These containers operate identically to the std::xxxxx named version of same
 (same template parameters, etc.). However, while these are derived classes
 from the std::xxxxx namespace version they all have allocators provided which
 aren't compatible with the std::xxxxx version of the containers so that 
@@ -83,17 +83,17 @@ pointers, references, iterators, etc. aren't compatible.
 
 Best practice is to use a typedef to define the mempool/container and then use
 the typedef'ed name everywhere. Better documentation and easier to move
-containers from std::xxxx or to a difference mempool if the occasion warants.
+containers from std::xxxx or to a different mempool if the occasion warrants.
 (This is particularly helpful with slab_containers, see slab_containers.h)
 
 Putting objects in a mempool
 ----------------------------
 
 The stuff above applies to containers. In order to put a particular object
-into a namespace you must use the following declarations andmechanism. 
+into a namespace you must use the following declarations and mechanism. 
 Note that this mechanism is per-object-type, in other words you can't put 
 some instances of a class in one mempool and other instances of the class
-in another mempool It's all or nothing at all :)
+in another mempool (or outside of any mempool) -- It's all or nothing at all :)
 
 For a class declaration (the .h file):
 
@@ -107,7 +107,7 @@ Then, in an appropriate .cc file,
   MEMPOOL_DEFINE_OBJECT_FACTORY(Foo, foo, unittest_1);
 
 The second argument can generally be identical to the first, except
-when the type contains a nested scope.  For example, for
+when the type contains a nested scope. For example, for
 BlueStore::Onode, we need to do
 
   MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
@@ -121,7 +121,7 @@ without any additional decoration/machinery. It's all done through
 a per-class operator new and operator delete.
 
 NOTE: Right now it's strictly scalar new/data. Array new/delete will
-assert out. These' no fundamental problem here. Just didn't get around
+assert out. There is no fundamental problem here. Just didn't get around
 to writing the necessary code.
 
 When you look at the statistics, what you'll find is that there is a
@@ -180,7 +180,7 @@ This will dump information about *all* memory pools.  When debug mode
 is enabled, the runtime complexity of dump is O(num_shards *
 num_types).  When debug name is disabled it is O(num_shards).
 
-You can also interogate a specific pool programatically with
+You can also interrogate a specific pool programatically with
 
   size_t bytes       = mempool::unittest_2::allocated_bytes();
   size_t items       = mempool::unittest_2::allocated_items();
@@ -237,6 +237,11 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
+//
+// For each mempool, there is an array [num_shards] of these objects. The idea is that each shard
+// will be in it's own cacheline, so as to avoid cache ping pongs. We assume that a cacheline is
+// about 8 size_t objects (this is a pretty good assumption on all known processors)
+//
 struct shard_t {
   std::atomic<ssize_t> bytes = {0};       // Number of bytes currently malloc'ed
   std::atomic<ssize_t> items = {0};       // Number of client objects currently malloc'ed
@@ -244,6 +249,8 @@ struct shard_t {
   std::atomic<ssize_t> free_bytes = {0};  // Number of client objects      not in use by client (i.e., free in a slab)
   std::atomic<ssize_t> containers = {0};  // Number of containers (Object Factory = 1 container)
   std::atomic<ssize_t> slabs      = {0};  // Number of slabs
+  std::atomic<ssize_t> padding1;
+  std::atomic<ssize_t> padding2;
 };
 
 struct stats_t {
@@ -266,6 +273,10 @@ struct stats_t {
 pool_t& get_pool(pool_index_t ix);
 const char *get_pool_name(pool_index_t ix);
 
+//
+// Only used when debug mode is on, these accumulate per-object-type-signature statistics
+// we didn't bother to shard them or cache-line align them
+//
 struct type_t {
   const char *type_name;
   size_t item_size;
@@ -282,7 +293,7 @@ struct type_info_hash {
 };
 
 class pool_t {
-  shard_t shard[num_shards];
+  alignas(shard_t) shard_t shard[num_shards];
 
   mutable std::mutex lock;  // only used for types list
   std::unordered_map<const char *, type_t> type_map;
