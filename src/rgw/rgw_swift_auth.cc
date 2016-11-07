@@ -591,12 +591,12 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
 
   {
-    static constexpr size_t PREFIX_LEN = strlen("AUTH_rgwtk");
+    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
     char token_val[PREFIX_LEN + bl.length() * 2 + 1];
 
     snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
-               token_val + PREFIX_LEN);
+	       token_val + PREFIX_LEN);
 
     dump_header(s, "X-Storage-Token", token_val);
     dump_header(s, "X-Auth-Token", token_val);
