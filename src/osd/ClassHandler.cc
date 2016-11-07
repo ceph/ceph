@@ -48,10 +48,9 @@ int ClassHandler::open_all_classes()
   if (!dir)
     return -errno;
 
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-  struct dirent *pde;
+  struct dirent *pde = nullptr;
   int r = 0;
-  while ((r = ::readdir_r(dir, (dirent *)&buf, &pde)) == 0 && pde) {
+  while ((pde = ::readdir(dir))) {
     if (pde->d_name[0] == '.')
       continue;
     if (strlen(pde->d_name) > sizeof(CLS_PREFIX) - 1 + sizeof(CLS_SUFFIX) - 1 &&
