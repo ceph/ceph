@@ -1054,7 +1054,7 @@ TEST(LibRadosIoPP, XattrListPP) {
     TestAlarm alarm;
     ASSERT_EQ(0, my_completion->wait_for_complete());
   }
-  ASSERT_EQ(-ENODATA, my_completion->get_return_value());
+  ASSERT_EQ(0, my_completion->get_return_value());
   for (std::map<std::string, bufferlist>::iterator i = attrset.begin();
        i != attrset.end(); ++i) {
     if (i->first == string(attr1)) {
