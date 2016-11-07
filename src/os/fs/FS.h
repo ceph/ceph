@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include <boost/intrusive/list.hpp>
 
 class FS {
 public:
@@ -61,6 +62,8 @@ public:
     int rval;
     bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
+    boost::intrusive::list_member_hook<> queue_item;
+
     aio_t(void *p, int f) : priv(p), fd(f), rval(-1000) {
       memset(&iocb, 0, sizeof(iocb));
     }
@@ -85,9 +88,17 @@ public:
     }
   };
 
+  typedef boost::intrusive::list<
+    aio_t,
+    boost::intrusive::member_hook<
+      aio_t,
+      boost::intrusive::list_member_hook<>,
+      &aio_t::queue_item> > aio_list_t;
+
   struct aio_queue_t {
     int max_iodepth;
     io_context_t ctx;
+
 
     explicit aio_queue_t(unsigned max_iodepth)
       : max_iodepth(max_iodepth),
