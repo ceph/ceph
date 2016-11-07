@@ -1229,7 +1229,9 @@ public:
     boost::intrusive::list_member_hook<> wal_queue_item;
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
 
+    bool is_pipelined_io = false;
     bool kv_submitted = false; ///< true when we've been submitted to kv db
+    bool kv_submitted_sync = false; ///< true when ShardedOpWQ does sync db
 
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
@@ -1349,6 +1351,8 @@ public:
     uint64_t last_seq = 0;
 
     std::atomic_int kv_committing_serially = {0};
+
+    std::atomic_int kv_finisher_submitting = {0};
 
     OpSequencer()
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
@@ -1665,7 +1669,7 @@ private:
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
 
-  void _osr_reap_done(OpSequencer *osr);
+  void _osr_reap_done(OpSequencer *osr, bool need_qlock);
 
   void _kv_sync_thread();
   void _kv_stop() {

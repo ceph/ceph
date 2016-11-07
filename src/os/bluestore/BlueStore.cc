@@ -6199,6 +6199,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_PREPARE:
       txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
+	txc->is_pipelined_io = true;
 	txc->state = TransContext::STATE_AIO_WAIT;
 	_txc_aio_submit(txc);
 	return;
@@ -6214,6 +6215,8 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
+      ++txc->osr->kv_finisher_submitting;
+
       for (auto& sb : txc->shared_blobs_written) {
         sb->bc.finish_write(txc->seq);
       }
@@ -6240,10 +6243,18 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
 	  txc->kv_submitted = true;
+	  if (g_conf->bluestore_rtc && !txc->is_pipelined_io &&
+	    txc->osr->kv_finisher_submitting == 1) {
+	    txc->kv_submitted_sync = true;
+	    db->submit_transaction_sync(txc->t);
+	    _txc_state_proc(txc);
+	    return;
+	  }
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
       }
+      txc->is_pipelined_io = true;
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
@@ -6316,6 +6327,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
    * even though aio will complete in any order.
    */
 
+  TransContext *cursor;
   OpSequencer *osr = txc->osr.get();
   std::lock_guard<std::mutex> l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
@@ -6326,6 +6338,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
     if (p->state < TransContext::STATE_IO_DONE) {
       dout(20) << __func__ << " " << txc << " blocked by " << &*p << " "
 	       << p->get_state_name() << dendl;
+      txc->is_pipelined_io = true;
       return;
     }
     if (p->state > TransContext::STATE_IO_DONE) {
@@ -6334,7 +6347,8 @@ void BlueStore::_txc_finish_io(TransContext *txc)
     }
   }
   do {
-    _txc_state_proc(&*p++);
+    cursor = &*p++;
+    _txc_state_proc(cursor);
   } while (p != osr->q.end() &&
 	   p->state == TransContext::STATE_IO_DONE);
 }
@@ -6443,6 +6457,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     txc->oncommits.pop_front();
   }
 
+  --txc->osr->kv_finisher_submitting;
   throttle_ops.put(txc->ops);
   throttle_bytes.put(txc->bytes);
 }
@@ -6487,41 +6502,45 @@ void BlueStore::_txc_finish(TransContext *txc)
   throttle_wal_bytes.put(txc->bytes);
 
   OpSequencerRef osr = txc->osr;
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    txc->state = TransContext::STATE_DONE;
-  }
+  bool need_qlock = !txc->kv_submitted_sync || txc->wal_txn;
 
-  _osr_reap_done(osr.get());
+  std::unique_lock<std::mutex> l(osr->qlock, std::defer_lock);
+  if (need_qlock)
+    l.lock();
+  txc->state = TransContext::STATE_DONE;
+  if (need_qlock)
+    l.unlock();
+
+  _osr_reap_done(osr.get(), need_qlock);
 }
 
-void BlueStore::_osr_reap_done(OpSequencer *osr)
+void BlueStore::_osr_reap_done(OpSequencer *osr, bool need_qlock)
 {
   CollectionRef c;
-
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    dout(20) << __func__ << " osr " << osr << dendl;
-    while (!osr->q.empty()) {
-      TransContext *txc = &osr->q.front();
-      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
-	       << dendl;
-      if (txc->state != TransContext::STATE_DONE) {
-        break;
-      }
-
-      if (!c && txc->first_collection) {
-        c = txc->first_collection;
-      }
-
-      osr->q.pop_front();
-      txc->log_state_latency(logger, l_bluestore_state_done_lat);
-      delete txc;
-      osr->qcond.notify_all();
-      if (osr->q.empty())
-        dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
+  std::unique_lock<std::mutex> l(osr->qlock, std::defer_lock);
+  if (need_qlock)
+    l.lock();
+  dout(20) << __func__ << " osr " << osr << dendl;
+  while (!osr->q.empty()) {
+    TransContext *txc = &osr->q.front();
+    dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
+	     << dendl;
+    if (txc->state != TransContext::STATE_DONE) {
+      break;
     }
+
+    if (!c && txc->first_collection) {
+      c = txc->first_collection;
+    }
+    osr->q.pop_front();
+    txc->log_state_latency(logger, l_bluestore_state_done_lat);
+    delete txc;
+    osr->qcond.notify_all();
+    if (osr->q.empty())
+      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
   }
+  if(need_qlock)
+    l.unlock();
 
   if (c) {
     c->trim_cache();
