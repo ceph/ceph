@@ -6568,10 +6568,12 @@ force_request:
       CEPH_CAP_FILE_WR;
   }
   if (mask & CEPH_SETATTR_SIZE) {
-    if ((unsigned long)stx->stx_size < mdsmap->get_max_filesize())
+    if ((unsigned long)stx->stx_size < mdsmap->get_max_filesize()) {
       req->head.args.setattr.size = stx->stx_size;
-    else { //too big!
+      ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
+    } else { //too big!
       put_request(req);
+      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
       return -EFBIG;
     }
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
@@ -6680,6 +6682,23 @@ int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
     return -EBADF;
 #endif
   return _setattr(f->inode, attr, mask, perms);
+}
+
+int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fsetattr" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << mask  << std::endl;
+
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+#if defined(__linux__) && defined(O_PATH)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
+  return _setattrx(f->inode, stx, mask, perms);
 }
 
 int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
@@ -7307,7 +7326,8 @@ struct dentry_off_lt {
   }
 };
 
-int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
+int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
+			      int caps, bool getref)
 {
   assert(client_lock.is_locked());
   ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
@@ -7343,21 +7363,30 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
       continue;
     }
 
-    struct stat st;
+    int r = _getattr(dn->inode, caps, dirp->perms);
+    if (r < 0)
+      return r;
+
+    struct ceph_statx stx;
     struct dirent de;
-    int stmask = fill_stat(dn->inode, &st);
+    fill_statx(dn->inode, caps, &stx);
 
     uint64_t next_off = dn->offset + 1;
     ++pd;
     if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
 
-    fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, next_off);
+    Inode *in = NULL;
+    fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+    if (getref) {
+      in = dn->inode.get();
+      _ll_get(in);
+    }
 
     dn_name = dn->name; // fill in name while we have lock
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
+    r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.Lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
 		   << " = " << r << dendl;
@@ -7380,8 +7409,11 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
   return 0;
 }
 
-int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
+int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
+			 unsigned want, unsigned flags, bool getref)
 {
+  int caps = statx_to_mask(flags, want);
+
   Mutex::Locker lock(client_lock);
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
@@ -7391,9 +7423,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 		 << " hash_order=" << dirp->hash_order() << dendl;
 
   struct dirent de;
-  struct stat st;
+  struct ceph_statx stx;
   memset(&de, 0, sizeof(de));
-  memset(&st, 0, sizeof(st));
+  memset(&stx, 0, sizeof(stx));
 
   InodeRef& diri = dirp->inode;
 
@@ -7405,11 +7437,22 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     assert(diri->dn_set.size() < 2); // can't have multiple hard-links to a dir
     uint64_t next_off = 1;
 
-    fill_stat(diri, &st);
-    fill_dirent(&de, ".", S_IFDIR, st.st_ino, next_off);
+    int r;
+    r = _getattr(diri, caps, dirp->perms);
+    if (r < 0)
+      return r;
+
+    fill_statx(diri, caps, &stx);
+    fill_dirent(&de, ".", S_IFDIR, stx.stx_ino, next_off);
+
+    Inode *inode = NULL;
+    if (getref) {
+      inode = diri.get();
+      _ll_get(inode);
+    }
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, -1, next_off);
+    r = cb(p, &de, &stx, next_off, inode);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7427,11 +7470,22 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     else
       in = diri->get_first_parent()->inode;
 
-    fill_stat(in, &st);
-    fill_dirent(&de, "..", S_IFDIR, st.st_ino, next_off);
+    int r;
+    r = _getattr(diri, caps, dirp->perms);
+    if (r < 0)
+      return r;
+
+    fill_statx(in, caps, &stx);
+    fill_dirent(&de, "..", S_IFDIR, stx.stx_ino, next_off);
+
+    Inode *inode = NULL;
+    if (getref) {
+      inode = in.get();
+      _ll_get(inode);
+    }
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, -1, next_off);
+    r = cb(p, &de, &stx, next_off, inode);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7450,7 +7504,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   if (dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
-    int err = _readdir_cache_cb(dirp, cb, p);
+    int err = _readdir_cache_cb(dirp, cb, p, caps, getref);
     if (err != -EAGAIN)
       return err;
   }
@@ -7459,12 +7513,14 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     if (dirp->at_end())
       return 0;
 
+    bool check_caps = true;
     if (!dirp->is_cached()) {
       int r = _readdir_get_frag(dirp);
       if (r)
 	return r;
       // _readdir_get_frag () may updates dirp->offset if the replied dirfrag is
       // different than the requested one. (our dirfragtree was outdated)
+      check_caps = false;
     }
     frag_t fg = dirp->buffer_frag;
 
@@ -7478,11 +7534,25 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       dir_result_t::dentry &entry = *it;
 
       uint64_t next_off = entry.offset + 1;
-      int stmask = fill_stat(entry.inode, &st);
-      fill_dirent(&de, entry.name.c_str(), st.st_mode, st.st_ino, next_off);
+
+      int r;
+      if (check_caps) {
+	r = _getattr(entry.inode, caps, dirp->perms);
+	if (r < 0)
+	  return r;
+      }
+
+      fill_statx(entry.inode, caps, &stx);
+      fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+
+      Inode *inode = NULL;
+      if (getref) {
+	inode = entry.inode.get();
+	_ll_get(inode);
+      }
 
       client_lock.Unlock();
-      int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
+      r = cb(p, &de, &stx, next_off, inode);  // _next_ offset
       client_lock.Lock();
 
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
@@ -7532,7 +7602,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 
 int Client::readdir_r(dir_result_t *d, struct dirent *de)
 {  
-  return readdirplus_r(d, de, 0, 0);
+  return readdirplus_r(d, de, 0, 0, 0, NULL);
 }
 
 /*
@@ -7546,13 +7616,14 @@ int Client::readdir_r(dir_result_t *d, struct dirent *de)
 
 struct single_readdir {
   struct dirent *de;
-  struct stat *st;
-  int *stmask;
+  struct ceph_statx *stx;
+  Inode *inode;
   bool full;
 };
 
-static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st,
-				     int stmask, off_t off)
+static int _readdir_single_dirent_cb(void *p, struct dirent *de,
+				     struct ceph_statx *stx, off_t off,
+				     Inode *in)
 {
   single_readdir *c = static_cast<single_readdir *>(p);
 
@@ -7560,10 +7631,9 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
     return -1;  // already filled this dirent
 
   *c->de = *de;
-  if (c->st)
-    *c->st = *st;
-  if (c->stmask)
-    *c->stmask = stmask;
+  if (c->stx)
+    *c->stx = *stx;
+  c->inode = in;
   c->full = true;
   return 1;
 }
@@ -7571,13 +7641,11 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st
 struct dirent *Client::readdir(dir_result_t *d)
 {
   int ret;
-  static int stmask;
   static struct dirent de;
-  static struct stat st;
   single_readdir sr;
   sr.de = &de;
-  sr.st = &st;
-  sr.stmask = &stmask;
+  sr.stx = NULL;
+  sr.inode = NULL;
   sr.full = false;
 
   // our callback fills the dirent and sets sr.full=true on first
@@ -7593,19 +7661,23 @@ struct dirent *Client::readdir(dir_result_t *d)
   return (dirent *) NULL;
 }
 
-int Client::readdirplus_r(dir_result_t *d, struct dirent *de, struct stat *st, int *stmask)
+int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
+			  struct ceph_statx *stx, unsigned want,
+			  unsigned flags, Inode **out)
 {  
   single_readdir sr;
   sr.de = de;
-  sr.st = st;
-  sr.stmask = stmask;
+  sr.stx = stx;
+  sr.inode = NULL;
   sr.full = false;
 
   // our callback fills the dirent and sets sr.full=true on first
   // call, and returns -1 the second time around.
-  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
+  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr, want, flags, out);
   if (r < -1)
     return r;
+  if (out)
+    *out = sr.inode;
   if (sr.full)
     return 1;
   return 0;
@@ -7620,7 +7692,8 @@ struct getdents_result {
   bool fullent;
 };
 
-static int _readdir_getdent_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+static int _readdir_getdent_cb(void *p, struct dirent *de,
+			       struct ceph_statx *stx, off_t off, Inode *in)
 {
   struct getdents_result *c = static_cast<getdents_result *>(p);
 
@@ -7672,7 +7745,7 @@ struct getdir_result {
   int num;
 };
 
-static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+static int _getdir_cb(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in)
 {
   getdir_result *r = static_cast<getdir_result *>(p);
 
@@ -9769,31 +9842,70 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
-int Client::ll_walk(const char* name, Inode **out, struct stat *attr,
-		    const UserPerm& perms)
+int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
+		       struct ceph_statx *stx, unsigned want, unsigned flags,
+		       const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_lookupx " << parent << " " << name << dendl;
+  tout(cct) << "ll_lookupx" << std::endl;
+  tout(cct) << name << std::endl;
+
+  int r = 0;
+  if (!cct->_conf->fuse_default_permissions) {
+    r = may_lookup(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  string dname(name);
+  InodeRef in;
+
+  unsigned mask = statx_to_mask(flags, want);
+  r = _lookup(parent, dname, mask, &in, perms);
+  if (r < 0) {
+    stx->stx_ino = 0;
+    stx->stx_mask = 0;
+  } else {
+    assert(in);
+    fill_statx(in, mask, stx);
+    _ll_get(in.get());
+  }
+
+  ldout(cct, 3) << "ll_lookupx " << parent << " " << name
+	  << " -> " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
+  tout(cct) << stx->stx_ino << std::endl;
+  *out = in.get();
+  return r;
+}
+
+int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
+		    unsigned int want, unsigned int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   filepath fp(name, 0);
   InodeRef in;
   int rc;
+  unsigned mask = statx_to_mask(flags, want);
 
   ldout(cct, 3) << "ll_walk" << name << dendl;
   tout(cct) << "ll_walk" << std::endl;
   tout(cct) << name << std::endl;
 
-  rc = path_walk(fp, &in, perms, false, CEPH_STAT_CAP_INODE_ALL);
+  rc = path_walk(fp, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask);
   if (rc < 0) {
-    attr->st_ino = 0;
+    /* zero out mask, just in case... */
+    stx->stx_mask = 0;
+    stx->stx_ino = 0;
     *out = NULL;
     return rc;
   } else {
     assert(in);
-    fill_stat(in, attr);
+    fill_statx(in, mask, stx);
     *out = in.get();
     return 0;
   }
 }
-
 
 void Client::_ll_get(Inode *in)
 {
@@ -10846,6 +10958,42 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   return r;
 }
 
+int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
+		      dev_t rdev, Inode **out,
+		      struct ceph_statx *stx, unsigned want, unsigned flags,
+		      const UserPerm& perms)
+{
+  unsigned caps = statx_to_mask(flags, want);
+  Mutex::Locker lock(client_lock);
+
+  vinodeno_t vparent = _get_vino(parent);
+
+  ldout(cct, 3) << "ll_mknodx " << vparent << " " << name << dendl;
+  tout(cct) << "ll_mknodx" << std::endl;
+  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << name << std::endl;
+  tout(cct) << mode << std::endl;
+  tout(cct) << rdev << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  InodeRef in;
+  int r = _mknod(parent, name, mode, rdev, perms, &in);
+  if (r == 0) {
+    fill_statx(in, caps, stx);
+    _ll_get(in.get());
+  }
+  tout(cct) << stx->stx_ino << std::endl;
+  ldout(cct, 3) << "ll_mknodx " << vparent << " " << name
+	  << " = " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
+  *out = in.get();
+  return r;
+}
+
 int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 		    InodeRef *inp, Fh **fhp, int stripe_unit, int stripe_count,
 		    int object_size, const char *data_pool, bool *created,
@@ -11027,6 +11175,42 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   return r;
 }
 
+int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
+		      struct ceph_statx *stx, unsigned want, unsigned flags,
+		      const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+
+  vinodeno_t vparent = _get_vino(parent);
+
+  ldout(cct, 3) << "ll_mkdirx " << vparent << " " << name << dendl;
+  tout(cct) << "ll_mkdirx" << std::endl;
+  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << name << std::endl;
+  tout(cct) << mode << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  InodeRef in;
+  int r = _mkdir(parent, name, mode, perms, &in);
+  if (r == 0) {
+    fill_statx(in, statx_to_mask(flags, want), stx);
+    _ll_get(in.get());
+  } else {
+    stx->stx_ino = 0;
+    stx->stx_mask = 0;
+  }
+  tout(cct) << stx->stx_ino << std::endl;
+  ldout(cct, 3) << "ll_mkdirx " << vparent << " " << name
+	  << " = " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
+  *out = in.get();
+  return r;
+}
+
 int Client::_symlink(Inode *dir, const char *name, const char *target,
 		     const UserPerm& perms, InodeRef *inp)
 {
@@ -11102,6 +11286,40 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << attr->st_ino << std::endl;
   ldout(cct, 3) << "ll_symlink " << vparent << " " << name
 	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
+  *out = in.get();
+  return r;
+}
+
+int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
+			Inode **out, struct ceph_statx *stx, unsigned want,
+			unsigned flags, const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+
+  vinodeno_t vparent = _get_vino(parent);
+
+  ldout(cct, 3) << "ll_symlinkx " << vparent << " " << name << " -> " << value
+		<< dendl;
+  tout(cct) << "ll_symlinkx" << std::endl;
+  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << name << std::endl;
+  tout(cct) << value << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  InodeRef in;
+  int r = _symlink(parent, name, value, perms, &in);
+  if (r == 0) {
+    fill_statx(in, statx_to_mask(flags, want), stx);
+    _ll_get(in.get());
+  }
+  tout(cct) << stx->stx_ino << std::endl;
+  ldout(cct, 3) << "ll_symlinkx " << vparent << " " << name
+	  << " = " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
   *out = in.get();
   return r;
 }
@@ -11404,7 +11622,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
 }
 
 int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
-		    struct stat *attr, const UserPerm& perm)
+		    const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11422,25 +11640,19 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
   InodeRef target;
 
   if (!cct->_conf->fuse_default_permissions) {
-    if (S_ISDIR(in->mode)) {
-      r = -EPERM;
-      goto out;
-    }
+    if (S_ISDIR(in->mode))
+      return -EPERM;
+
     r = may_hardlink(in, perm);
     if (r < 0)
-      goto out;
+      return r;
+
     r = may_create(newparent, perm);
     if (r < 0)
-      goto out;
+      return r;
   }
 
-  r = _link(in, newparent, newname, perm, &target);
-  if (r == 0) {
-    assert(target);
-    fill_stat(target, attr);
-  }
-out:
-  return r;
+  return _link(in, newparent, newname, perm, &target);
 }
 
 int Client::ll_num_osds(void)
@@ -11614,17 +11826,15 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
   return r;
 }
 
-int Client::ll_create(Inode *parent, const char *name, mode_t mode,
-		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
+int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
+		      int flags, InodeRef *in, int caps, Fh **fhp,
 		      const UserPerm& perms)
 {
   *fhp = NULL;
 
-  Mutex::Locker lock(client_lock);
-
   vinodeno_t vparent = _get_vino(parent);
 
-  ldout(cct, 3) << "ll_create " << vparent << " " << name << " 0" << oct <<
+  ldout(cct, 3) << "_ll_create " << vparent << " " << name << " 0" << oct <<
     mode << dec << " " << flags << ", uid " << perms.uid()
 		<< ", gid " << perms.gid() << dendl;
   tout(cct) << "ll_create" << std::endl;
@@ -11634,8 +11844,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   tout(cct) << flags << std::endl;
 
   bool created = false;
-  InodeRef in;
-  int r = _lookup(parent, name, CEPH_STAT_CAP_INODE_ALL, &in, perms);
+  int r = _lookup(parent, name, caps, in, perms);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -11646,7 +11855,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
       if (r < 0)
 	goto out;
     }
-    r = _create(parent, name, flags, mode, &in, fhp, 0, 0, 0, NULL, &created,
+    r = _create(parent, name, flags, mode, in, fhp, 0, 0, 0, NULL, &created,
 		perms);
     if (r < 0)
       goto out;
@@ -11655,13 +11864,12 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   if (r < 0)
     goto out;
 
-  assert(in);
-  fill_stat(in, attr);
+  assert(*in);
 
-  ldout(cct, 20) << "ll_create created = " << created << dendl;
+  ldout(cct, 20) << "_ll_create created = " << created << dendl;
   if (!created) {
     if (!cct->_conf->fuse_default_permissions) {
-      r = may_open(in.get(), flags, perms);
+      r = may_open(in->get(), flags, perms);
       if (r < 0) {
 	if (*fhp) {
 	  int release_r = _release_fh(*fhp);
@@ -11671,30 +11879,82 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
       }
     }
     if (*fhp == NULL) {
-      r = _open(in.get(), flags, mode, fhp, perms);
+      r = _open(in->get(), flags, mode, fhp, perms);
       if (r < 0)
 	goto out;
     }
   }
 
 out:
-  if (r < 0)
-    attr->st_ino = 0;
-
   if (*fhp) {
     ll_unclosed_fh_set.insert(*fhp);
   }
-  tout(cct) << (unsigned long)*fhp << std::endl;
-  tout(cct) << attr->st_ino << std::endl;
-  ldout(cct, 3) << "ll_create " << parent << " " << name << " 0" << oct <<
-    mode << dec << " " << flags << " = " << r << " (" << *fhp << " " <<
-    hex << attr->st_ino << dec << ")" << dendl;
 
-  // passing an Inode in outp requires an additional ref
-  if (outp) {
-    if (in)
+  ino_t ino = 0;
+  if (r >= 0) {
+    Inode *inode = in->get();
+    if (use_faked_inos())
+      ino = inode->faked_ino;
+    else
+      ino = inode->ino;
+  }
+
+  tout(cct) << (unsigned long)*fhp << std::endl;
+  tout(cct) << ino << std::endl;
+  ldout(cct, 3) << "_ll_create " << parent << " " << name << " 0" << oct <<
+    mode << dec << " " << flags << " = " << r << " (" << *fhp << " " <<
+    hex << ino << dec << ")" << dendl;
+
+  return r;
+}
+
+int Client::ll_create(Inode *parent, const char *name, mode_t mode,
+		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
+		      const UserPerm& perms)
+{
+  InodeRef in;
+  Mutex::Locker lock(client_lock);
+
+  int r = _ll_create(parent, name, mode, flags, &in, CEPH_STAT_CAP_INODE_ALL,
+		      fhp, perms);
+  if (r >= 0) {
+    assert(in);
+
+    // passing an Inode in outp requires an additional ref
+    if (outp) {
       _ll_get(in.get());
-    *outp = in.get();
+      *outp = in.get();
+    }
+    fill_stat(in, attr);
+  } else {
+    attr->st_ino = 0;
+  }
+
+  return r;
+}
+
+int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
+			int oflags, Inode **outp, Fh **fhp,
+			struct ceph_statx *stx, unsigned want, unsigned lflags,
+			const UserPerm& perms)
+{
+  unsigned caps = statx_to_mask(lflags, want);
+  InodeRef in;
+  Mutex::Locker lock(client_lock);
+
+  int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
+  if (r >= 0) {
+    assert(in);
+
+    // passing an Inode in outp requires an additional ref
+    if (outp) {
+      _ll_get(in.get());
+      *outp = in.get();
+    }
+    fill_statx(in, caps, stx);
+  } else {
+    stx->stx_ino = 0;
+    stx->stx_mask = 0;
   }
 
   return r;

@@ -37,6 +37,7 @@ using namespace std;
 
 #include "common/errno.h"
 #include "include/assert.h"
+#include "include/cephfs/ceph_statx.h"
 
 #define dout_subsys ceph_subsys_client
 #undef dout_prefix
@@ -1023,11 +1024,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   const char *p = prefix.c_str();
   if (prefix.length()) {
     client->mkdir(prefix.c_str(), 0755, perms);
-    struct stat attr;
+    struct ceph_statx stx;
     i1 = client->ll_get_inode(vinodeno_t(1, CEPH_NOSNAP));
-    if (client->ll_lookup(i1, prefix.c_str(), &attr, &i2, perms) == 0) {
-      ll_inos[1] = attr.st_ino;
-      dout(5) << "'root' ino is " << inodeno_t(attr.st_ino) << dendl;
+    if (client->ll_lookupx(i1, prefix.c_str(), &i2, &stx, CEPH_STATX_INO, 0, perms) == 0) {
+      ll_inos[1] = stx.stx_ino;
+      dout(5) << "'root' ino is " << inodeno_t(stx.stx_ino) << dendl;
       client->ll_put(i1);
     } else {
       dout(0) << "warning: play_trace couldn't lookup up my per-client directory" << dendl;
@@ -1227,11 +1228,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t i = t.get_int();
       const char *name = t.get_string(buf, p);
       int64_t r = t.get_int();
-      struct stat attr;
+      struct ceph_statx stx;
       if (ll_inos.count(i)) {
 	  i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	  if (client->ll_lookup(i1, name, &attr, &i2, perms) == 0)
-	    ll_inos[r] = attr.st_ino;
+	  if (client->ll_lookupx(i1, name, &i2, &stx, CEPH_STATX_INO, 0, perms) == 0)
+	    ll_inos[r] = stx.stx_ino;
 	  client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_forget") == 0) {
@@ -1343,12 +1344,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t i = t.get_int();
       int64_t ni = t.get_int();
       const char *nn = t.get_string(buf, p);
-      struct stat attr;
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
 	i2 = client->ll_get_inode(vinodeno_t(ll_inos[ni],CEPH_NOSNAP));
-	client->ll_link(i1, i2, nn, &attr, perms);
+	client->ll_link(i1, i2, nn, perms);
 	client->ll_put(i1);
 	client->ll_put(i2);
       }
