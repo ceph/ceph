@@ -2136,7 +2136,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
-  dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb
+  dout(7) << __func__ << " from " << m->get_orig_source_inst() << " sb " << m->sb
 	  << " cluster_addr " << m->cluster_addr
 	  << " hb_back_addr " << m->hb_back_addr
 	  << " hb_front_addr " << m->hb_front_addr
@@ -2147,7 +2147,8 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 
   // does this osd exist?
   if (from >= osdmap.get_max_osd()) {
-    dout(1) << "boot from osd." << from << " >= max_osd " << osdmap.get_max_osd() << dendl;
+    dout(1) << "boot from osd." << from << " >= max_osd "
+	    << osdmap.get_max_osd() << dendl;
     return false;
   }
 
@@ -2157,7 +2158,8 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
-    dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
+    dout(7) << __func__ << " was up, first marking down "
+	    << osdmap.get_inst(from) << dendl;
     // preprocess should have caught these;  if not, assert.
     assert(osdmap.get_inst(from) != m->get_orig_source_inst());
     assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
@@ -2168,9 +2170,11 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       pending_inc.new_state[from] = CEPH_OSD_UP;
     }
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-  } else if (pending_inc.new_up_client.count(from)) { //FIXME: should this be using new_up_client?
+  } else if (pending_inc.new_up_client.count(from)) {
+    //FIXME: should this be using new_up_client?
     // already prepared, just wait
-    dout(7) << "prepare_boot already prepared, waiting on " << m->get_orig_source_addr() << dendl;
+    dout(7) << __func__ << " already prepared, waiting on "
+	    << m->get_orig_source_addr() << dendl;
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
   } else {
     // mark new guy up.
@@ -2187,7 +2191,8 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       osd_weight[from] = m->sb.weight;
 
     // set uuid?
-    dout(10) << " setting osd." << from << " uuid to " << m->sb.osd_fsid << dendl;
+    dout(10) << " setting osd." << from << " uuid to " << m->sb.osd_fsid
+	     << dendl;
     if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid) {
       // preprocess should have caught this;  if not, assert.
       assert(!osdmap.exists(from) || osdmap.get_uuid(from).is_zero());
@@ -2217,11 +2222,12 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       epoch_t begin = m->sb.mounted;
       epoch_t end = m->sb.clean_thru;
 
-      dout(10) << "prepare_boot osd." << from << " last_clean_interval "
-	       << "[" << info.last_clean_begin << "," << info.last_clean_end << ")"
-	       << " -> [" << begin << "-" << end << ")"
+      dout(10) << __func__ << " osd." << from << " last_clean_interval "
+	       << "[" << info.last_clean_begin << "," << info.last_clean_end
+	       << ") -> [" << begin << "-" << end << ")"
 	       << dendl;
-      pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(begin, end);
+      pending_inc.new_last_clean_interval[from] =
+	pair<epoch_t,epoch_t>(begin, end);
     }
 
     osd_xinfo_t xi = osdmap.get_xinfo(from);
@@ -2231,8 +2237,10 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       dout(10) << " not laggy, new xi " << xi << dendl;
     } else {
       if (xi.down_stamp.sec()) {
-        int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
-        if (g_conf->mon_osd_laggy_max_interval && (interval > g_conf->mon_osd_laggy_max_interval)) {
+        int interval = ceph_clock_now(g_ceph_context).sec() -
+	  xi.down_stamp.sec();
+        if (g_conf->mon_osd_laggy_max_interval &&
+	    (interval > g_conf->mon_osd_laggy_max_interval)) {
           interval =  g_conf->mon_osd_laggy_max_interval;
         }
         xi.laggy_interval =
@@ -2264,7 +2272,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	  pending_inc.new_weight[from] = CEPH_OSD_IN;
 	}
       } else {
-	dout(7) << "prepare_boot NOIN set, will not mark in "
+	dout(7) << __func__ << " NOIN set, will not mark in "
 		<< m->get_orig_source_addr() << dendl;
       }
     }
