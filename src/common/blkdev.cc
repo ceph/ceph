@@ -64,8 +64,6 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
 {
   struct stat st;
   int r = 0;
-  char buf[PATH_MAX*2];
-  struct dirent *de;
   DIR *dir;
   char devname[PATH_MAX], fn[PATH_MAX];
   char *p;
@@ -100,14 +98,8 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   if (!dir)
     return -errno;
 
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      if (errno) {
-	r = -errno;
-	goto out;
-      }
-      break;
-    }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
     if (de->d_name[0] == '.')
       continue;
     snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s", sandbox_dir, de->d_name,
