@@ -91,6 +91,7 @@ def check_sanity():
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
 
+        compiler.set_include_dirs([os.path.join(CEPH_SRC_DIR, 'include')])
         compiler.set_library_dirs([os.environ.get('CEPH_LIBDIR')])
 
     try:
@@ -99,7 +100,6 @@ def check_sanity():
         link_objects = compiler.compile(
             sources=[tmp_file],
             output_dir=tmp_dir,
-            extra_preargs=['-iquote{path}'.format(path=os.path.join(CEPH_SRC_DIR, 'include'))]
         )
 
         compiler.link_executable(
