@@ -43,6 +43,10 @@
   If you had manually configured the mon to use rocksdb, this file should
   be created and filled with the string "rocksdb" (newline optional).
 
+* The 'osd out ...' and 'osd in ...' commands now preserve the OSD
+  weight.  Previously the mons would only preserve the weight if the
+  mon automatically marked and OSD out and then in, but not when an
+  admin did so explicitly.
 
 11.0.0
 ------

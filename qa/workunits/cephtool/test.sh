@@ -1145,6 +1145,13 @@ function test_mon_osd()
   ceph osd dump | grep 'osd.0.*in'
   ceph osd find 0
 
+  # make sure mark out preserves weight
+  ceph osd reweight osd.0 .5
+  ceph osd dump | grep ^osd.0 | grep 'weight 0.5'
+  ceph osd out 0
+  ceph osd in 0
+  ceph osd dump | grep ^osd.0 | grep 'weight 0.5'
+
   f=$TEMP_DIR/map.$$
   ceph osd getcrushmap -o $f
   [ -s $f ]
