@@ -13,9 +13,7 @@
 
 TEST(blkdev, get_block_device_base) {
   char buf[PATH_MAX*2];
-  char buf2[PATH_MAX*2];
   char buf3[PATH_MAX*2];
-  struct dirent *de, *de2;
 
   ASSERT_EQ(-EINVAL, get_block_device_base("/etc/notindev", buf, 100));
 
@@ -32,9 +30,8 @@ TEST(blkdev, get_block_device_base) {
     sprintf(buf, "%s/sys/block", root.c_str());
     DIR *dir = opendir(buf);
     ASSERT_NE(dir, nullptr);
-    while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-      if (!de)
-	break;
+    struct dirent *de = nullptr;
+    while ((de = ::readdir(dir))) {
       if (de->d_name[0] == '.')
 	continue;
 
@@ -57,9 +54,8 @@ TEST(blkdev, get_block_device_base) {
       sprintf(subdirfn, "%s/sys/block/%s", root.c_str(), de->d_name);
       DIR *subdir = opendir(subdirfn);
       ASSERT_TRUE(subdir);
-      while (!::readdir_r(subdir, reinterpret_cast<struct dirent*>(buf2), &de2)) {
-	if (!de2)
-	  break;
+      struct dirent *de2 = nullptr;
+      while ((de2 = ::readdir(subdir))) {
 	if (de2->d_name[0] == '.')
 	  continue;
 	// partiions will be prefixed with the base name
