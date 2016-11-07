@@ -4,6 +4,10 @@
 #ifndef CEPH_RGW_KEYSTONE_H
 #define CEPH_RGW_KEYSTONE_H
 
+#include <type_traits>
+
+#include <boost/utility/string_ref.hpp>
+
 #include "rgw_common.h"
 #include "rgw_http_client.h"
 #include "common/Cond.h"
@@ -35,6 +39,67 @@ enum class ApiVersion {
   VER_3
 };
 
+
+class Config {
+protected:
+  Config() = default;
+  virtual ~Config() = default;
+
+public:
+  virtual std::string get_endpoint_url() const noexcept = 0;
+  virtual ApiVersion get_api_version() const noexcept = 0;
+
+  virtual boost::string_ref get_admin_token() const noexcept = 0;
+  virtual boost::string_ref get_admin_user() const noexcept = 0;
+  virtual boost::string_ref get_admin_password() const noexcept = 0;
+  virtual boost::string_ref get_admin_tenant() const noexcept = 0;
+  virtual boost::string_ref get_admin_project() const noexcept = 0;
+  virtual boost::string_ref get_admin_domain() const noexcept = 0;
+};
+
+class CephCtxConfig : public Config {
+protected:
+  CephCtxConfig() = default;
+  virtual ~CephCtxConfig() = default;
+
+public:
+  static CephCtxConfig& get_instance() {
+    static CephCtxConfig instance;
+    return instance;
+  }
+
+  std::string get_endpoint_url() const noexcept override;
+  ApiVersion get_api_version() const noexcept override;
+
+  boost::string_ref get_admin_token() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_token;
+  }
+
+  boost::string_ref get_admin_user() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_user;
+  }
+
+  boost::string_ref get_admin_password() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_password;
+  }
+
+  boost::string_ref get_admin_tenant() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_tenant;
+  }
+
+  boost::string_ref get_admin_project() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_project;
+  }
+
+  boost::string_ref get_admin_domain() const noexcept override {
+    return g_ceph_context->_conf->rgw_keystone_admin_domain;
+  }
+};
+
+
+class TokenEnvelope;
+class TokenCache;
+
 class Service {
 public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
@@ -60,12 +125,13 @@ public:
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
   typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
-  static ApiVersion get_api_version();
-
-  static int get_keystone_url(CephContext * const cct,
-                              std::string& url);
-  static int get_keystone_admin_token(CephContext * const cct,
-                                      std::string& token);
+  static int get_admin_token(CephContext* const cct,
+                             TokenCache& token_cache,
+                             const Config& config,
+                             std::string& token);
+  static int issue_admin_token_request(CephContext* const cct,
+                                       const Config& config,
+                                       TokenEnvelope& token);
 };
 
 
@@ -115,9 +181,13 @@ public:
   User user;
   list<Role> roles;
 
+  void decode_v3(JSONObj* obj);
+  void decode_v2(JSONObj* obj);
+
 public:
-  // FIXME: default ctor needs to be eradicated here
+  /* We really need the default ctor because of the internals of TokenCache. */
   TokenEnvelope() = default;
+
   time_t get_expires() const { return token.expires; }
   const std::string& get_domain_id() const {return project.domain.id;};
   const std::string& get_domain_name() const {return project.domain.name;};
@@ -130,10 +200,10 @@ public:
     uint64_t now = ceph_clock_now().sec();
     return (now >= (uint64_t)get_expires());
   }
-  int parse(CephContext *cct,
-            const string& token_str,
-            bufferlist& bl /* in */);
-  void decode_json(JSONObj *access_obj);
+  int parse(CephContext* cct,
+            const std::string& token_str,
+            ceph::buffer::list& bl /* in */,
+            ApiVersion version);
 };
 
 
@@ -143,7 +213,6 @@ class TokenCache {
     list<string>::iterator lru_iter;
   };
 
-  const rgw::keystone::Config& config;
   atomic_t down_flag;
 
   class RevokeThread : public Thread {
@@ -152,13 +221,17 @@ class TokenCache {
 
     CephContext * const cct;
     TokenCache* const cache;
+    const rgw::keystone::Config& config;
+
     Mutex lock;
     Cond cond;
 
     RevokeThread(CephContext* const cct,
-                 TokenCache* const cache)
+                 TokenCache* const cache,
+                 const rgw::keystone::Config& config)
       : cct(cct),
         cache(cache),
+        config(config),
         lock("rgw::keystone::TokenCache::RevokeThread") {
     }
     void *entry();
@@ -176,8 +249,8 @@ class TokenCache {
 
   const size_t max;
 
-  TokenCache()
-    : revocator(g_ceph_context, this),
+  TokenCache(const rgw::keystone::Config& config)
+    : revocator(g_ceph_context, this, config),
       cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
@@ -196,7 +269,10 @@ public:
   TokenCache(const TokenCache&) = delete;
   void operator=(const TokenCache&) = delete;
 
-  static TokenCache& get_instance();
+  template<class ConfigT>
+  static TokenCache& get_instance() {
+    static_assert(std::is_base_of<rgw::keystone::Config, ConfigT>::value,
+                  "ConfigT must be a subclass of rgw::keystone::Config");
 
     /* In C++11 this is thread safe. */
     static TokenCache instance(ConfigT::get_instance());
@@ -223,21 +299,21 @@ public:
 };
 
 class AdminTokenRequestVer2 : public AdminTokenRequest {
-  CephContext* cct;
+  const Config& conf;
 
 public:
-  AdminTokenRequestVer2(CephContext* const cct)
-    : cct(cct) {
+  AdminTokenRequestVer2(const Config& conf)
+    : conf(conf) {
   }
   void dump(Formatter* f) const;
 };
 
 class AdminTokenRequestVer3 : public AdminTokenRequest {
-  CephContext* cct;
+  const Config& conf;
 
 public:
-  AdminTokenRequestVer3(CephContext* const cct)
-    : cct(cct) {
+  AdminTokenRequestVer3(const Config& conf)
+    : conf(conf) {
   }
   void dump(Formatter* f) const;
 };

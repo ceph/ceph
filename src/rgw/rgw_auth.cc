@@ -297,7 +297,8 @@ RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) const
   }
 
   rgw::keystone::TokenEnvelope token_body;
-  ret = token_body.parse(cct, token, token_body_bl);
+  ret = token_body.parse(cct, token, token_body_bl,
+                         rgw::keystone::CephCtxConfig::get_instance().get_api_version());
   if (ret < 0) {
     throw ret;
   }
@@ -314,12 +315,13 @@ RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
   bufferlist token_body_bl;
   RGWValidateKeystoneToken validate(cct, &token_body_bl);
 
-  std::string url;
-  if (rgw::keystone::Service::get_keystone_url(cct, url) < 0) {
+  std::string url
+    = rgw::keystone::CephCtxConfig::get_instance().get_endpoint_url();
+  if (url.empty()) {
     throw -EINVAL;
   }
 
-  const auto keystone_version = rgw::keystone::Service::get_api_version();
+  const auto keystone_version = rgw::keystone::CephCtxConfig::get_instance().get_api_version();
   if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
     url.append("v2.0/tokens/" + token);
   } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
@@ -328,7 +330,11 @@ RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
   }
 
   std::string admin_token;
-  if (rgw::keystone::Service::get_keystone_admin_token(cct, admin_token) < 0) {
+  if (rgw::keystone::Service::get_admin_token(
+          cct,
+          rgw::keystone::TokenCache::get_instance<rgw::keystone::CephCtxConfig>(),
+          rgw::keystone::CephCtxConfig::get_instance(),
+          admin_token) < 0) {
     throw -EINVAL;
   }
 
@@ -359,7 +365,7 @@ RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
   }
 
   rgw::keystone::TokenEnvelope token_body;
-  ret = token_body.parse(cct, token, token_body_bl);
+  ret = token_body.parse(cct, token, token_body_bl, keystone_version);
   if (ret < 0) {
     throw ret;
   }
@@ -465,7 +471,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
   /* Check cache first. */
-  if (rgw::keystone::TokenCache::get_instance().find(token_id, t)) {
+  if (rgw::keystone::TokenCache::get_instance<rgw::keystone::CephCtxConfig>().find(token_id, t)) {
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
                    << dendl;
       return apl_factory->create_apl_remote(cct,
@@ -500,7 +506,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
       ldout(cct, 0) << "validated token: " << t.get_project_name()
                     << ":" << t.get_user_name()
                     << " expires: " << t.get_expires() << dendl;
-      rgw::keystone::TokenCache::get_instance().add(token_id, t);
+      rgw::keystone::TokenCache::get_instance<rgw::keystone::CephCtxConfig>().add(token_id, t);
       return apl_factory->create_apl_remote(cct,
                                             get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));

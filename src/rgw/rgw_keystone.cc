@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <fnmatch.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "include/types.h"
@@ -141,58 +143,72 @@ bool rgw_decode_pki_token(CephContext * const cct,
 namespace rgw {
 namespace keystone {
 
-ApiVersion Service::get_api_version()
+ApiVersion CephCtxConfig::get_api_version() const noexcept
 {
-  const int keystone_version = g_ceph_context->_conf->rgw_keystone_api_version;
-
-  if (keystone_version == 3) {
+  switch (g_ceph_context->_conf->rgw_keystone_api_version) {
+  case 3:
     return ApiVersion::VER_3;
-  } else if (keystone_version == 2) {
+  case 2:
     return ApiVersion::VER_2;
-  } else {
-    dout(0) << "ERROR: wrong Keystone API version: " << keystone_version
+  default:
+    dout(0) << "ERROR: wrong Keystone API version: "
+            << g_ceph_context->_conf->rgw_keystone_api_version
             << "; falling back to v2" <<  dendl;
     return ApiVersion::VER_2;
   }
 }
 
-int Service::get_keystone_url(CephContext* const cct,
-                                      std::string& url)
+std::string CephCtxConfig::get_endpoint_url() const noexcept
 {
-  url = cct->_conf->rgw_keystone_url;
-  if (url.empty()) {
-    ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
-    return -EINVAL;
-  }
+  static const std::string url = g_ceph_context->_conf->rgw_keystone_url;
 
-  if (url[url.size() - 1] != '/') {
-    url.append("/");
+  if (url.empty() || boost::algorithm::ends_with(url, "/")) {
+    return url;
+  } else {
+    static const std::string url_normalised = url + '/';
+    return url_normalised;
   }
-
-  return 0;
 }
 
-int Service::get_keystone_admin_token(CephContext* const cct,
-                                      std::string& token)
+int Service::get_admin_token(CephContext* const cct,
+                             TokenCache& token_cache,
+                             const Config& config,
+                             std::string& token)
 {
-  std::string token_url;
-
-  if (get_keystone_url(cct, token_url) < 0) {
-    return -EINVAL;
-  }
-
-  if (!cct->_conf->rgw_keystone_admin_token.empty()) {
-    token = cct->_conf->rgw_keystone_admin_token;
+  /* Let's check whether someone uses the deprecated "admin token" feauture
+   * based on a shared secret from keystone.conf file. */
+  const auto& admin_token = config.get_admin_token();
+  if (! admin_token.empty()) {
+    token = std::string(admin_token.data(), admin_token.length());
     return 0;
   }
 
   TokenEnvelope t;
 
-  /* Try cache first. */
-  if (TokenCache::get_instance<rgw::keystone::LegacyConfig>().find_admin(t)) {
+  /* Try cache first before calling Keystone for a new admin token. */
+  if (token_cache.find_admin(t)) {
     ldout(cct, 20) << "found cached admin token" << dendl;
     token = t.token.id;
     return 0;
+  }
+
+  /* Call Keystone now. */
+  const auto ret = issue_admin_token_request(cct, config, t);
+  if (! ret) {
+    token_cache.add_admin(t);
+    token = t.token.id;
+  }
+
+  return ret;
+}
+
+int Service::issue_admin_token_request(CephContext* const cct,
+                                       const Config& config,
+                                       TokenEnvelope& t)
+{
+  std::string token_url = config.get_endpoint_url();
+  if (token_url.empty()) {
+    return -EINVAL;
   }
 
   bufferlist token_bl;
@@ -200,9 +216,9 @@ int Service::get_keystone_admin_token(CephContext* const cct,
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
-  const auto keystone_version = Service::get_api_version();
+  const auto keystone_version = config.get_api_version();
   if (keystone_version == ApiVersion::VER_2) {
-    AdminTokenRequestVer2 req_serializer(cct);
+    AdminTokenRequestVer2 req_serializer(config);
     req_serializer.dump(&jf);
 
     std::stringstream ss;
@@ -212,7 +228,7 @@ int Service::get_keystone_admin_token(CephContext* const cct,
     token_url.append("v2.0/tokens");
 
   } else if (keystone_version == ApiVersion::VER_3) {
-    AdminTokenRequestVer3 req_serializer(cct);
+    AdminTokenRequestVer3 req_serializer(config);
     req_serializer.dump(&jf);
 
     std::stringstream ss;
@@ -235,12 +251,11 @@ int Service::get_keystone_admin_token(CephContext* const cct,
     return -EACCES;
   }
 
-  if (t.parse(cct, token_req.get_subject_token(), token_bl) != 0) {
+  if (t.parse(cct, token_req.get_subject_token(), token_bl,
+              keystone_version) != 0) {
     return -EINVAL;
   }
 
-  TokenCache::get_instance().add_admin(t);
-  token = t.token.id;
   return 0;
 }
 
@@ -258,33 +273,47 @@ bool TokenEnvelope::has_role(const std::string& r) const
 
 int TokenEnvelope::parse(CephContext* const cct,
                          const std::string& token_str,
-                         ceph::bufferlist& bl)
+                         ceph::bufferlist& bl,
+                         const ApiVersion version)
 {
   JSONParser parser;
-  if (!parser.parse(bl.c_str(), bl.length())) {
+  if (! parser.parse(bl.c_str(), bl.length())) {
     ldout(cct, 0) << "Keystone token parse error: malformed json" << dendl;
     return -EINVAL;
   }
 
-  try {
-    const auto version = rgw::keystone::Service::get_api_version();
+  JSONObjIter token_iter = parser.find_first("token");
+  JSONObjIter access_iter = parser.find_first("access");
 
+  try {
     if (version == rgw::keystone::ApiVersion::VER_2) {
-      if (!JSONDecoder::decode_json("access", *this, &parser)) {
-        /* TokenEnvelope structure doesn't follow Identity API v2, so the token
-         * must be in v3. Otherwise we can assume it's wrongly formatted. */
-        JSONDecoder::decode_json("token", *this, &parser, true);
+      if (! access_iter.end()) {
+        decode_v2(*access_iter);
+      } else if (! token_iter.end()) {
+        /* TokenEnvelope structure doesn't follow Identity API v2, so let's
+         * fallback to v3. Otherwise we can assume it's wrongly formatted.
+         * The whole mechanism is a workaround for s3_token middleware that
+         * speaks in v2 disregarding the promise to go with v3. */
+        decode_v3(*token_iter);
+
+        /* Identity v3 conveys the token inforamtion not as a part of JSON but
+         * in the X-Subject-Token HTTP header we're getting from caller. */
         token.id = token_str;
+      } else {
+        return -EINVAL;
       }
     } else if (version == rgw::keystone::ApiVersion::VER_3) {
-      if (!JSONDecoder::decode_json("token", *this, &parser)) {
-        /* If the token cannot be parsed according to V3, try V2. */
-        JSONDecoder::decode_json("access", *this, &parser, true);
-      } else {
+      if (! token_iter.end()) {
+        decode_v3(*token_iter);
         /* v3 suceeded. We have to fill token.id from external input as it
          * isn't a part of the JSON response anymore. It has been moved
          * to X-Subject-Token HTTP header instead. */
         token.id = token_str;
+      } else if (! access_iter.end()) {
+        /* If the token cannot be parsed according to V3, try V2. */
+        decode_v2(*access_iter);
+      } else {
+        return -EINVAL;
       }
     } else {
       return -ENOTSUP;
@@ -295,13 +324,6 @@ int TokenEnvelope::parse(CephContext* const cct,
   }
 
   return 0;
-}
-
-TokenCache& TokenCache::get_instance()
-{
-  /* In C++11 this is thread safe. */
-  static TokenCache instance;
-  return instance;
 }
 
 bool TokenCache::find(const std::string& token_id,
@@ -406,15 +428,18 @@ int TokenCache::RevokeThread::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (rgw::keystone::Service::get_keystone_admin_token(cct, token) < 0) {
+  if (rgw::keystone::Service::get_admin_token(cct, *cache, config, token) < 0) {
     return -EINVAL;
   }
-  if (rgw::keystone::Service::get_keystone_url(cct, url) < 0) {
+
+  url = config.get_endpoint_url();
+  if (url.empty()) {
     return -EINVAL;
   }
+
   req.append_header("X-Auth-Token", token);
 
-  const auto keystone_version = rgw::keystone::Service::get_api_version();
+  const auto keystone_version = config.get_api_version();
   if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
     url.append("v2.0/tokens/revoked");
   } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
