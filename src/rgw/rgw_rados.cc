@@ -5903,7 +5903,7 @@ int RGWRados::fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fi
 
   RGWObjState *astate = NULL;
   RGWObjectCtx rctx(this);
-  r = get_obj_state(&rctx, obj, &astate, NULL);
+  r = get_obj_state(&rctx, obj, &astate, false);
   if (r < 0)
     return r;
 
@@ -7092,7 +7092,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
-    ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, NULL);
+    ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, false);
     if (ret < 0)
       goto set_err_state;
 
@@ -7194,7 +7194,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (copy_if_newer && cb.is_canceled()) {
       ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.invalidate(dest_obj); /* object was overwritten */
-      ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, NULL);
+      ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, false);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
         goto set_err_state;
@@ -8031,7 +8031,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
 
   RGWObjState *state = NULL;
 
-  int r = get_obj_state(rctx, obj, &state, NULL);
+  int r = get_obj_state(rctx, obj, &state, false);
   if (r < 0)
     return r;
 
@@ -8723,7 +8723,7 @@ int RGWRados::append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
   if (!rctx)
     return 0;
 
-  int r = get_obj_state(rctx, obj, pstate, NULL);
+  int r = get_obj_state(rctx, obj, pstate, false);
   if (r < 0)
     return r;
 
@@ -9928,7 +9928,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx, rgw_obj& obj,
   bool reading_from_head = true;
   RGWObjState *astate = NULL;
 
-  int r = get_obj_state(&obj_ctx, obj, &astate, NULL);
+  int r = get_obj_state(&obj_ctx, obj, &astate, false);
   if (r < 0) {
     return r;
   }
@@ -12073,7 +12073,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 
   RGWObjState *astate = NULL;
   RGWObjectCtx rctx(this);
-  int r = get_obj_state(&rctx, obj, &astate, NULL);
+  int r = get_obj_state(&rctx, obj, &astate, false);
   if (r < 0)
     return r;
 
