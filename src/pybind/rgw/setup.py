@@ -165,8 +165,8 @@ setup(
         "This package contains Python bindings for interacting with the "
         "RGW library. RGW is a Object Storage Gateway "
         "that uses a Ceph Storage Cluster to store its data. The "
-        "Ceph Object Storage with its S3 and Swift APIs, "
-        "or native bindings (librados)."
+        "Ceph Object Storage support S3 and Swift APIs, "
+        "and file operations."
     ),
     url='https://github.com/ceph/ceph/tree/master/src/pybind/rgw',
     license='LGPLv2+',
