@@ -436,7 +436,8 @@ namespace rgw {
       rgw_fh->set_times(real_clock::now());
       /* save attrs */
       rgw_fh->encode_attrs(ux_key, ux_attrs);
-      rgw_fh->stat(st);
+      if (st)
+        rgw_fh->stat(st);
       get<0>(mkr) = rgw_fh;
     } else {
       get<1>(mkr) = -EIO;
@@ -553,7 +554,8 @@ namespace rgw {
 	  rgw_fh->set_times(real_clock::now());
 	  rgw_fh->open_for_create(); // XXX needed?
 	}
-	(void) rgw_fh->stat(st);
+        if (st)
+          (void) rgw_fh->stat(st);
 	get<0>(mkr) = rgw_fh;
       } else
 	rc = -EIO;
@@ -1085,6 +1087,16 @@ namespace rgw {
 
 /* librgw */
 extern "C" {
+
+void rgwfile_version(int *major, int *minor, int *extra)
+{
+  if (major)
+    *major = LIBRGW_FILE_VER_MAJOR;
+  if (minor)
+    *minor = LIBRGW_FILE_VER_MINOR;
+  if (extra)
+    *extra = LIBRGW_FILE_VER_EXTRA;
+}
 
 /*
  attach rgw namespace
