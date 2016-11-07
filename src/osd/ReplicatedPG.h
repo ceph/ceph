@@ -1235,7 +1235,7 @@ protected:
 
   void _applied_recovered_object(ObjectContextRef obc);
   void _applied_recovered_object_replica();
-  void _committed_pushed_object(epoch_t epoch, eversion_t lc);
+  void _committed_pushed_object(epoch_t epoch, eversion_t lc, int r);
   void recover_got(hobject_t oid, eversion_t v);
 
   // -- copyfrom --

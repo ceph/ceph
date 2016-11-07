@@ -6216,6 +6216,10 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       ++txc->osr->kv_finisher_submitting;
+      if (txc->oncommit) {
+	txc->oncommit = BlueStoreContext::create(txc->oncommit,
+	    &txc->osr->kv_doing_oncommit);
+      }
 
       for (auto& sb : txc->shared_blobs_written) {
         sb->bc.finish_write(txc->seq);
@@ -6444,7 +6448,12 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->oncommit) {
     logger->tinc(l_bluestore_commit_lat, ceph_clock_now(g_ceph_context) - txc->start);
-    finishers[n]->queue(txc->oncommit);
+    if (g_conf->bluestore_rtc_sync_completions && txc->kv_submitted_sync &&
+      txc->osr->is_finisher_done()) {
+      txc->oncommit->complete(Context::FLAG_SYNC);
+    } else {
+      finishers[n]->queue(txc->oncommit);
+    }
     txc->oncommit = NULL;
   }
   if (txc->onreadable) {

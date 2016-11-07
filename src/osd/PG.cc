@@ -1525,7 +1525,7 @@ struct C_PG_ActivateCommitted : public Context {
   C_PG_ActivateCommitted(PG *p, epoch_t e, epoch_t ae)
     : pg(p), epoch(e), activation_epoch(ae) {}
   void finish(int r) {
-    pg->_activate_committed(epoch, activation_epoch);
+    pg->_activate_committed(epoch, activation_epoch, r);
   }
 };
 
@@ -1965,9 +1965,10 @@ void PG::replay_queued_ops()
   publish_stats_to_osd();
 }
 
-void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
+void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch, int r)
 {
-  lock();
+  if (r != Context::FLAG_SYNC)
+    lock();
   if (pg_has_reset_since(epoch)) {
     dout(10) << "_activate_committed " << epoch
 	     << ", that was an old interval" << dendl;
@@ -2007,7 +2008,8 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
 
   assert(!dirty_info);
 
-  unlock();
+  if (r != Context::FLAG_SYNC)
+    unlock();
 }
 
 /*
@@ -2091,7 +2093,7 @@ struct C_PG_FinishRecovery : public Context {
   PGRef pg;
   explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
   void finish(int r) {
-    pg->_finish_recovery(this);
+    pg->_finish_recovery(this, r);
   }
 };
 
@@ -2164,11 +2166,13 @@ void PG::finish_recovery(list<Context*>& tfin)
   tfin.push_back(finish_sync_event);
 }
 
-void PG::_finish_recovery(Context *c)
+void PG::_finish_recovery(Context *c, int r)
 {
-  lock();
+  if (r != Context::FLAG_SYNC)
+    lock();
   if (deleting) {
-    unlock();
+    if (r != Context::FLAG_SYNC)
+      unlock();
     return;
   }
   if (c == finish_sync_event) {
@@ -2187,7 +2191,8 @@ void PG::_finish_recovery(Context *c)
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
-  unlock();
+  if (r != Context::FLAG_SYNC)
+    unlock();
 }
 
 void PG::start_recovery_op(const hobject_t& soid)

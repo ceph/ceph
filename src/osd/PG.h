@@ -528,12 +528,14 @@ public:
     eversion_t v;
     C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
       : pg(pg), e(e), v(v) {}
-    void finish(int) {
-      pg->lock();
+    void finish(int r) {
+      if (r != Context::FLAG_SYNC)
+	pg->lock();
       if (!pg->pg_has_reset_since(e)) {
 	pg->last_rollback_info_trimmed_to_applied = v;
       }
-      pg->unlock();
+      if (r != Context::FLAG_SYNC)
+        pg->unlock();
     }
   };
   // entries <= last_rollback_info_trimmed_to_applied have been trimmed,
@@ -1030,7 +1032,7 @@ public:
     map<int,
       vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map,
     RecoveryCtx *ctx);
-  void _activate_committed(epoch_t epoch, epoch_t activation_epoch);
+  void _activate_committed(epoch_t epoch, epoch_t activation_epoch, int r);
   void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
@@ -1060,7 +1062,7 @@ public:
   Context *finish_sync_event;
 
   void finish_recovery(list<Context*>& tfin);
-  void _finish_recovery(Context *c);
+  void _finish_recovery(Context *c, int r);
   void cancel_recovery();
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
@@ -1293,13 +1295,15 @@ public:
     QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
       pg(pg), epoch(epoch), evt(evt) {}
     void finish(int r) {
-      pg->lock();
+      if (r != Context::FLAG_SYNC)
+	pg->lock();
       pg->queue_peering_event(PG::CephPeeringEvtRef(
 				new PG::CephPeeringEvt(
 				  epoch,
 				  epoch,
 				  evt)));
-      pg->unlock();
+      if (r != Context::FLAG_SYNC)
+	pg->unlock();
     }
   };
 
