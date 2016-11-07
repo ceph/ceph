@@ -8511,14 +8511,17 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
+  string final_key;
+  _key_encode_u64(o->onode.omap_head, &final_key);
+  final_key.push_back('.');
   ::decode(num, p);
   while (num--) {
     string key;
     bufferlist value;
     ::decode(key, p);
     ::decode(value, p);
-    string final_key;
-    get_omap_key(o->onode.omap_head, key, &final_key);
+    final_key.resize(9); // keep prefix
+    final_key += key;
     dout(30) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
     txc->t->set(PREFIX_OMAP, final_key, value);
@@ -8556,16 +8559,19 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   int r = 0;
   bufferlist::iterator p = bl.begin();
   __u32 num;
+  string final_key;
 
   if (!o->onode.omap_head) {
     goto out;
   }
+  _key_encode_u64(o->onode.omap_head, &final_key);
+  final_key.push_back('.');
   ::decode(num, p);
   while (num--) {
     string key;
     ::decode(key, p);
-    string final_key;
-    get_omap_key(o->onode.omap_head, key, &final_key);
+    final_key.resize(9); // keep prefix
+    final_key += key;
     dout(30) << __func__ << "  rm " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
     txc->t->rmkey(PREFIX_OMAP, final_key);
