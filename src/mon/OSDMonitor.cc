@@ -6630,6 +6630,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  ss << "osd." << osd << " is already out. ";
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+	  if (osdmap.osd_weight[osd]) {
+	    if (pending_inc.new_xinfo.count(osd) == 0) {
+	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	    }
+	    pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
+	  }
 	  ss << "marked out osd." << osd << ". ";
 	  any = true;
 	}
@@ -6637,7 +6643,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (osdmap.is_in(osd)) {
 	  ss << "osd." << osd << " is already in. ";
 	} else {
-	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
+	  if (osdmap.osd_xinfo[osd].old_weight > 0) {
+	    pending_inc.new_weight[osd] = osdmap.osd_xinfo[osd].old_weight;
+	    if (pending_inc.new_xinfo.count(osd) == 0) {
+	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	    }
+	    pending_inc.new_xinfo[osd].old_weight = 0;
+	  } else {
+	    pending_inc.new_weight[osd] = CEPH_OSD_IN;
+	  }
 	  ss << "marked in osd." << osd << ". ";
 	  any = true;
 	}
