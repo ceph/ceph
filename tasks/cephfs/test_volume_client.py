@@ -215,86 +215,90 @@ vc.disconnect()
                                    mount_path, namespace_prefix)
         self.mounts[2].mount(mount_path=mount_path)
 
-        # df should see volume size, same as the quota set on volume's dir
-        self.assertEqual(self.mounts[2].df()['total'],
-                         volume_size * 1024 * 1024)
-        self.assertEqual(
-                self.mount_a.getfattr(
-                    os.path.join(volume_prefix.strip("/"), group_id, volume_id),
-                    "ceph.quota.max_bytes"),
-                "%s" % (volume_size * 1024 * 1024))
+        # The kernel client doesn't have the quota-based df behaviour,
+        # or quotas at all, so only exercise the client behaviour when
+        # running fuse.
+        if isinstance(self.mounts[2], FuseMount):
+            # df should see volume size, same as the quota set on volume's dir
+            self.assertEqual(self.mounts[2].df()['total'],
+                             volume_size * 1024 * 1024)
+            self.assertEqual(
+                    self.mount_a.getfattr(
+                        os.path.join(volume_prefix.strip("/"), group_id, volume_id),
+                        "ceph.quota.max_bytes"),
+                    "%s" % (volume_size * 1024 * 1024))
 
-        # df granularity is 4MB block so have to write at least that much
-        data_bin_mb = 4
-        self.mounts[2].write_n_mb("data.bin", data_bin_mb)
+            # df granularity is 4MB block so have to write at least that much
+            data_bin_mb = 4
+            self.mounts[2].write_n_mb("data.bin", data_bin_mb)
 
-        # Write something outside volume to check this space usage is
-        # not reported in the volume's DF.
-        other_bin_mb = 6
-        self.mount_a.write_n_mb("other.bin", other_bin_mb)
+            # Write something outside volume to check this space usage is
+            # not reported in the volume's DF.
+            other_bin_mb = 6
+            self.mount_a.write_n_mb("other.bin", other_bin_mb)
 
-        # global: df should see all the writes (data + other).  This is a >
-        # rather than a == because the global spaced used includes all pools
-        self.assertGreater(self.mount_a.df()['used'],
-                           (data_bin_mb + other_bin_mb) * 1024 * 1024)
+            # global: df should see all the writes (data + other).  This is a >
+            # rather than a == because the global spaced used includes all pools
+            self.assertGreater(self.mount_a.df()['used'],
+                               (data_bin_mb + other_bin_mb) * 1024 * 1024)
 
-        # Hack: do a metadata IO to kick rstats
-        self.mounts[2].run_shell(["touch", "foo"])
+            # Hack: do a metadata IO to kick rstats
+            self.mounts[2].run_shell(["touch", "foo"])
 
-        # volume: df should see the data_bin_mb consumed from quota, same
-        # as the rbytes for the volume's dir
-        self.wait_until_equal(
-                lambda: self.mounts[2].df()['used'],
-                data_bin_mb * 1024 * 1024, timeout=60)
-        self.wait_until_equal(
-                lambda: self.mount_a.getfattr(
-                    os.path.join(volume_prefix.strip("/"), group_id, volume_id),
-                    "ceph.dir.rbytes"),
-                "%s" % (data_bin_mb * 1024 * 1024), timeout=60)
+            # volume: df should see the data_bin_mb consumed from quota, same
+            # as the rbytes for the volume's dir
+            self.wait_until_equal(
+                    lambda: self.mounts[2].df()['used'],
+                    data_bin_mb * 1024 * 1024, timeout=60)
+            self.wait_until_equal(
+                    lambda: self.mount_a.getfattr(
+                        os.path.join(volume_prefix.strip("/"), group_id, volume_id),
+                        "ceph.dir.rbytes"),
+                    "%s" % (data_bin_mb * 1024 * 1024), timeout=60)
 
-        # sync so that file data are persist to rados
-        self.mounts[2].run_shell(["sync"])
+            # sync so that file data are persist to rados
+            self.mounts[2].run_shell(["sync"])
 
-        # Our data should stay in particular rados namespace
-        pool_name = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool")
-        namespace = "{0}{1}".format(namespace_prefix, volume_id)
-        ns_in_attr = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool_namespace")
-        self.assertEqual(namespace, ns_in_attr)
+            # Our data should stay in particular rados namespace
+            pool_name = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool")
+            namespace = "{0}{1}".format(namespace_prefix, volume_id)
+            ns_in_attr = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool_namespace")
+            self.assertEqual(namespace, ns_in_attr)
 
-        objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace).split("\n"))
-        self.assertNotEqual(objects_in_ns, set())
+            objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace).split("\n"))
+            self.assertNotEqual(objects_in_ns, set())
 
-        # De-authorize the guest
-        self._volume_client_python(self.mount_b, dedent("""
-            vp = VolumePath("{group_id}", "{volume_id}")
-            vc.deauthorize(vp, "{guest_entity}")
-            vc.evict("{guest_entity}")
-        """.format(
-            group_id=group_id,
-            volume_id=volume_id,
-            guest_entity=guest_entity
-        )), volume_prefix, namespace_prefix)
+            # De-authorize the guest
+            self._volume_client_python(self.mount_b, dedent("""
+                vp = VolumePath("{group_id}", "{volume_id}")
+                vc.deauthorize(vp, "{guest_entity}")
+                vc.evict("{guest_entity}")
+            """.format(
+                group_id=group_id,
+                volume_id=volume_id,
+                guest_entity=guest_entity
+            )), volume_prefix, namespace_prefix)
 
-        # Once deauthorized, the client should be unable to do any more metadata ops
-        # The way that the client currently behaves here is to block (it acts like
-        # it has lost network, because there is nothing to tell it that is messages
-        # are being dropped because it's identity is gone)
-        background = self.mounts[2].write_n_mb("rogue.bin", 1, wait=False)
-        time.sleep(10)  # Approximate check for 'stuck' as 'still running after 10s'
-        self.assertFalse(background.finished)
+            # Once deauthorized, the client should be unable to do any more metadata ops
+            # The way that the client currently behaves here is to block (it acts like
+            # it has lost network, because there is nothing to tell it that is messages
+            # are being dropped because it's identity is gone)
+            background = self.mounts[2].write_n_mb("rogue.bin", 1, wait=False)
+            time.sleep(10)  # Approximate check for 'stuck' as 'still running after 10s'
+            self.assertFalse(background.finished)
 
-        # After deauthorisation, the client ID should be gone (this was the only
-        # volume it was authorised for)
-        self.assertNotIn("client.{0}".format(guest_entity), [e['entity'] for e in self.auth_list()])
+            # After deauthorisation, the client ID should be gone (this was the only
+            # volume it was authorised for)
+            self.assertNotIn("client.{0}".format(guest_entity), [e['entity'] for e in self.auth_list()])
 
-        # Clean up the dead mount (ceph-fuse's behaviour here is a bit undefined)
-        self.mounts[2].kill()
-        self.mounts[2].kill_cleanup()
-        try:
-            background.wait()
-        except CommandFailedError:
-            # We killed the mount out from under you
-            pass
+            # Clean up the dead mount (ceph-fuse's behaviour here is a bit undefined)
+            self.mounts[2].kill()
+            self.mounts[2].kill_cleanup()
+            try:
+                background.wait()
+            except CommandFailedError:
+                # We killed the mount out from under you
+                pass
 
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
