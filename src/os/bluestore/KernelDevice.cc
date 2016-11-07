@@ -259,6 +259,10 @@ void KernelDevice::_aio_thread()
       for (int i = 0; i < r; ++i) {
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
+	if (aio[i]->queue_item.is_linked()) {
+	  std::lock_guard<std::mutex> l(debug_queue_lock);
+	  debug_aio_unlink(*aio[i]);
+	}
 	int left = --ioc->num_running;
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
@@ -271,6 +275,25 @@ void KernelDevice::_aio_thread()
 	  ioc->aio_wake();
 	  if (ioc->priv) {
 	    aio_callback(aio_callback_priv, ioc->priv);
+	  }
+	}
+      }
+    }
+    if (g_conf->bdev_debug_aio) {
+      utime_t now = ceph_clock_now(NULL);
+      std::lock_guard<std::mutex> l(debug_queue_lock);
+      if (debug_oldest) {
+	if (debug_stall_since == utime_t()) {
+	  debug_stall_since = now;
+	} else {
+	  utime_t cutoff = now;
+	  cutoff -= g_conf->bdev_debug_aio_suicide_timeout;
+	  if (debug_stall_since < cutoff) {
+	    derr << __func__ << " stalled aio " << debug_oldest
+		 << " since " << debug_stall_since << ", timeout is "
+		 << g_conf->bdev_debug_aio_suicide_timeout
+		 << "s, suicide" << dendl;
+	    assert(0 == "stalled aio... buggy kernel or bad device?");
 	  }
 	}
       }
@@ -307,6 +330,29 @@ void KernelDevice::_aio_log_start(
       assert(0);
     }
     debug_inflight.insert(offset, length);
+  }
+}
+
+void KernelDevice::debug_aio_link(FS::aio_t& aio)
+{
+  if (debug_queue.empty()) {
+    debug_oldest = &aio;
+  }
+  debug_queue.push_back(aio);
+}
+
+void KernelDevice::debug_aio_unlink(FS::aio_t& aio)
+{
+  if (aio.queue_item.is_linked()) {
+    debug_queue.erase(debug_queue.iterator_to(aio));
+    if (debug_oldest == &aio) {
+      if (debug_queue.empty()) {
+	debug_oldest = nullptr;
+      } else {
+	debug_oldest = &debug_queue.front();
+      }
+      debug_stall_since = utime_t();
+    }
   }
 }
 
@@ -365,6 +411,10 @@ void KernelDevice::aio_submit(IOContext *ioc)
     // do not dereference txc (or it's contents) after we submit (if
     // done == true and we don't loop)
     int retries = 0;
+    if (g_conf->bdev_debug_aio) {
+      std::lock_guard<std::mutex> l(debug_queue_lock);
+      debug_aio_link(*cur);
+    }
     int r = aio_queue.submit(*cur, &retries);
     if (retries)
       derr << __func__ << " retries " << retries << dendl;
