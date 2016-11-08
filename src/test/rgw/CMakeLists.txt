@@ -3,6 +3,11 @@ add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode rgw_a)
 
+#unittest_rgw_sync_crs
+add_executable(unittest_rgw_sync_crs test_rgw_sync_crs.cc)
+add_ceph_unittest(unittest_rgw_sync_crs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_sync_crs)
+target_link_libraries(unittest_rgw_sync_crs rgw_a)
+
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_period_history)

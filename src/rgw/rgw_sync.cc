@@ -722,41 +722,85 @@ int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
   return 0;
 }
 
-class RGWFetchAllMetaCR : public RGWCoroutine {
+class DefaultFetchAllMetaEnv : public RGWFetchAllMetaEnv {
   RGWMetaSyncEnv *sync_env;
+  rgw_bucket& pool;
+  using ReadCR = RGWReadRESTResourceCR<std::list<std::string>>;
+
+ public:
+  DefaultFetchAllMetaEnv(RGWMetaSyncEnv *sync_env)
+    : sync_env(sync_env),
+      pool(sync_env->store->get_zone_params().log_pool)
+  {}
+
+  RGWBaseContinuousLeaseCR* create_lease(RGWCoroutine *parent) override
+  {
+    auto cct = sync_env->store->ctx();
+    uint32_t duration = cct->_conf->rgw_sync_lease_period;
+    return new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store,
+                                    pool, sync_env->status_oid(),
+                                    "sync_lock", duration, parent);
+  }
+  RGWBaseShardedOmapCRManager* create_omap_mgr(RGWCoroutine *parent,
+                                               int num_shards) override
+  {
+    return new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store,
+                                       parent, num_shards, pool,
+                                       mdlog_sync_full_sync_index_prefix);
+  }
+  RGWCoroutine* create_read_sections(std::list<std::string> *result) override
+  {
+    auto cct = sync_env->store->ctx();
+    return new ReadCR(cct, sync_env->conn, sync_env->http_manager,
+                      "/admin/metadata", nullptr, result);
+  }
+  RGWCoroutine* create_read_keys(const std::string& section,
+                                      std::list<std::string> *result) override
+  {
+    auto cct = sync_env->store->ctx();
+    return new ReadCR(cct, sync_env->conn, sync_env->http_manager,
+                      string("/admin/metadata/") + section, nullptr, result);
+  }
+  RGWCoroutine* create_write_marker(int shard_id,
+                                    const rgw_meta_sync_marker& marker) override
+  {
+    using WriteCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
+    return new WriteCR(sync_env->async_rados, sync_env->store, pool,
+                       sync_env->shard_obj_name(shard_id), marker);
+  }
+
+  int get_log_shard_id(const std::string& section, const std::string& key,
+                       int *shard_id) override
+  {
+    return sync_env->store->meta_mgr->get_log_shard_id(section, key, shard_id);
+  }
+};
+
+class RGWFetchAllMetaCR : public RGWCoroutine {
+  RGWFetchAllMetaEnv *env;
 
   int num_shards;
-
-
-  int ret_status;
+  int ret_status{0};
 
   list<string> sections;
   list<string>::iterator sections_iter;
   list<string> result;
   list<string>::iterator iter;
 
-  RGWShardedOmapCRManager *entries_index;
+  std::unique_ptr<RGWBaseShardedOmapCRManager> entries_index;
 
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
-  bool lost_lock;
-  bool failed;
+  boost::intrusive_ptr<RGWBaseContinuousLeaseCR> lease_cr;
+  RGWCoroutinesStack *lease_stack{nullptr};
+  bool lost_lock{false};
+  bool failed{false};
 
   map<uint32_t, rgw_meta_sync_marker>& markers;
 
 public:
-  RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
-                    map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-						      num_shards(_num_shards),
-						      ret_status(0), entries_index(NULL), lease_cr(nullptr), lease_stack(nullptr),
-                                                      lost_lock(false), failed(false), markers(_markers) {
-  }
-
-  ~RGWFetchAllMetaCR() {
-    if (lease_cr) {
-      lease_cr->put();
-    }
-  }
+  RGWFetchAllMetaCR(CephContext *cct, RGWFetchAllMetaEnv *env,
+                    int num_shards, map<uint32_t, rgw_meta_sync_marker>& markers)
+    : RGWCoroutine(cct), env(env), num_shards(num_shards), markers(markers)
+  {}
 
   void append_section_from_set(set<string>& all_sections, const string& name) {
     set<string>::iterator iter = all_sections.find(name);
@@ -784,17 +828,11 @@ public:
   }
 
   int operate() {
-    RGWRESTConn *conn = sync_env->conn;
-
     reenter(this) {
       yield {
-        set_status(string("acquiring lock (") + sync_env->status_oid() + ")");
-	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
-        string lock_name = "sync_lock";
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+        set_status("acquiring lock");
+	lease_cr = env->create_lease(this);
+        lease_stack = spawn(lease_cr.get(), false);
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
@@ -805,13 +843,10 @@ public:
         set_sleeping(true);
         yield;
       }
-      entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
-						  sync_env->store->get_zone_params().log_pool,
-                                                  mdlog_sync_full_sync_index_prefix);
-      yield {
-	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
-				       "/admin/metadata", NULL, &sections));
-      }
+      entries_index.reset(env->create_omap_mgr(this, num_shards));
+
+      // read the list of metadata sections
+      yield call(env->create_read_sections(&sections));
       if (get_ret_status() < 0) {
         ldout(cct, 0) << "ERROR: failed to fetch metadata sections" << dendl;
         yield entries_index->finish();
@@ -822,12 +857,9 @@ public:
       rearrange_sections();
       sections_iter = sections.begin();
       for (; sections_iter != sections.end(); ++sections_iter) {
-        yield {
-	  string entrypoint = string("/admin/metadata/") + *sections_iter;
-          /* FIXME: need a better scaling solution here, requires streaming output */
-	  call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
-				       entrypoint, NULL, &result));
-	}
+        // read the metadata keys for this section
+        /* FIXME: need a better scaling solution here, requires streaming output */
+        yield call(env->create_read_keys(*sections_iter, &result));
         if (get_ret_status() < 0) {
           ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
           yield entries_index->finish();
@@ -837,23 +869,20 @@ public:
         }
         iter = result.begin();
         for (; iter != result.end(); ++iter) {
-          RGWRados *store;
-          int ret;
           yield {
             if (!lease_cr->is_locked()) {
               lost_lock = true;
               break;
             }
 	    ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
-	    string s = *sections_iter + ":" + *iter;
             int shard_id;
-            store = sync_env->store;
-            ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
+            int ret = env->get_log_shard_id(*sections_iter, *iter, &shard_id);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
               ret_status = ret;
               break;
             }
+	    string s = *sections_iter + ":" + *iter;
 	    if (!entries_index->append(s, shard_id)) {
               break;
             }
@@ -866,12 +895,11 @@ public:
         }
       }
       if (!failed) {
-        for (map<uint32_t, rgw_meta_sync_marker>::iterator iter = markers.begin(); iter != markers.end(); ++iter) {
+        for (auto iter = markers.begin(); iter != markers.end(); ++iter) {
           int shard_id = (int)iter->first;
           rgw_meta_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool,
-                                                                sync_env->shard_obj_name(shard_id), marker), true);
+          spawn(env->create_write_marker(shard_id, marker), true);
         }
       }
 
@@ -903,6 +931,12 @@ public:
     return 0;
   }
 };
+
+RGWCoroutine* create_fetch_all_meta_cr(CephContext *cct, RGWFetchAllMetaEnv *env,
+                                       int num_shards, std::map<uint32_t, rgw_meta_sync_marker>& markers)
+{
+  return new RGWFetchAllMetaCR(cct, env, num_shards, markers);
+}
 
 static string full_sync_index_shard_oid(int shard_id)
 {
@@ -1784,6 +1818,15 @@ public:
   }
 };
 
+RGWRemoteMetaLog::RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                                   RGWMetaSyncStatusManager *_sm)
+  : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+    store(_store), conn(NULL), async_rados(async_rados),
+    http_manager(store->ctx(), completion_mgr),
+    status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL)
+{
+}
+
 void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->cct = store->ctx();
   env->store = store;
@@ -1967,7 +2010,11 @@ int RGWRemoteMetaLog::run_sync()
     switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
         ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
-        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers));
+        {
+          DefaultFetchAllMetaEnv fetch_env(&sync_env);
+          r = run(create_fetch_all_meta_cr(store->ctx(), &fetch_env, num_shards,
+                                           sync_status.sync_markers));
+        }
         if (r == -EBUSY || r == -EAGAIN) {
           backoff.backoff_sleep();
           continue;
