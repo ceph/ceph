@@ -2000,6 +2000,14 @@ private:
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
 
+  void _do_garbage_collection(TransContext *txc,
+                              CollectionRef& c,
+                              OnodeRef o,
+                              uint64_t& offset,
+                              uint64_t& length,
+                              bufferlist& bl,
+                              WriteContext *wctx);
+
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
