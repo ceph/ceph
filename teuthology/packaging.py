@@ -926,6 +926,42 @@ class ShamanProject(GitbuilderProject):
         self.assert_result()
         return self._result.json()[0]['extra']['package_manager_version']
 
+    @property
+    def repo_url(self):
+        self.assert_result()
+        return urlparse.urljoin(
+            self._result.json()[0]['chacra_url'],
+            'repo',
+        )
+
+    def _install_rpm_repo(self):
+        self.remote.run(
+            args=[
+                'sudo', 'curl', '-s', '-o',
+                '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
+                self.repo_url,
+            ]
+        )
+
+    def _install_deb_repo(self):
+        self.remote.run(
+            args=[
+                'sudo', 'curl', '-s', '-o',
+                '/etc/apt/sources.list.d/{proj}.list'.format(
+                    proj=self.project),
+                self.repo_url,
+            ]
+        )
+
+    def _remove_rpm_repo(self):
+        self.remote.run(
+            args=[
+                'sudo',
+                'rm', '-f',
+                '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
+            ]
+        )
+
 
 def get_builder_project():
     """
