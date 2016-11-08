@@ -1008,16 +1008,19 @@ public:
   static void calc_replicated_acting(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     unsigned size,
+    unsigned min_size,
     const vector<int> &acting,
     pg_shard_t acting_primary,
     const vector<int> &up,
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
     bool compat_mode,
+    set<pg_shard_t> &strayset,
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
     pg_shard_t *want_primary,
+    unsigned max_updates,
     ostream &ss);
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool *history_les_bound);
