@@ -99,7 +99,8 @@ cdef extern from "rados/rgw_file.h" nogil:
         uint64_t  f_files    # inodes
         uint64_t  f_ffree    # free inodes
         uint64_t  f_favail   # free inodes for unprivileged users
-        uint64_t  f_fsid[2]  # /* file system ID
+        uint64_t  f_fsid     # file system ID
+        uint64_t  padding    # padding
         uint64_t  f_flag     # mount flags
         uint64_t  f_namemax  # maximum filename length
 
