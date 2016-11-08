@@ -1529,9 +1529,6 @@ int ECBackend::get_remaining_shards(
   const set<int> &avail,
   set<pg_shard_t> *to_read)
 {
-  map<hobject_t, set<pg_shard_t> >::const_iterator miter =
-    get_parent()->get_missing_loc_shards().find(hoid);
-
   set<int> need;
   map<shard_id_t, pg_shard_t> shards;
 
