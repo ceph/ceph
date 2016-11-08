@@ -10,6 +10,7 @@ bool is_feature_enabled(uint64_t feature);
 int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                     const std::string &name, uint64_t size);
 int get_image_id(librbd::Image &image, std::string *image_id);
+int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool *created);
 
 #define REQUIRE(x) {			  \
   if (!(x)) {				  \

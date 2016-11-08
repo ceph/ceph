@@ -161,6 +161,8 @@ public:
     _image_number = 0;
     ASSERT_EQ("", connect_cluster(&_cluster));
     ASSERT_EQ("", connect_cluster_pp(_rados));
+
+    create_optional_data_pool();
   }
 
   static void TearDownTestCase() {
@@ -195,6 +197,18 @@ public:
   std::string get_temp_image_name() {
     ++_image_number;
     return "image" + stringify(_image_number);
+  }
+
+  static void create_optional_data_pool() {
+    bool created = false;
+    std::string data_pool;
+    ASSERT_EQ(0, create_image_data_pool(_rados, data_pool, &created));
+    if (!data_pool.empty()) {
+      printf("using image data pool: %s\n", data_pool.c_str());
+      if (created) {
+        _unique_pool_names.push_back(data_pool);
+      }
+    }
   }
 
   std::string create_pool(bool unique = false) {

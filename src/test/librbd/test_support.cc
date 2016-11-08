@@ -48,3 +48,21 @@ int get_image_id(librbd::Image &image, std::string *image_id)
   return 0;
 }
 
+int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool *created) {
+  std::string pool;
+  int r = rados.conf_get("rbd_default_data_pool", pool);
+  if (r != 0) {
+    return r;
+  } else if (pool.empty()) {
+    return 0;
+  }
+
+  r = rados.pool_create(pool.c_str());
+  if ((r == 0) || (r == -EEXIST)) {
+    data_pool = pool;
+    *created = (r == 0);
+    return 0;
+  }
+
+  return r;
+}
