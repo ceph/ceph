@@ -360,6 +360,7 @@ set(libcommon_files
   common/io_priority.cc
   common/Clock.cc
   common/ceph_time.cc
+  common/mempool.cc
   common/Throttle.cc
   common/Timer.cc
   common/Finisher.cc
