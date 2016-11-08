@@ -131,8 +131,8 @@ public:
       standby_daemons(rhs.standby_daemons),
       standby_epochs(rhs.standby_epochs)
   {
-    for (auto &i : rhs.filesystems) {
-      auto fs = i.second;
+    for (const auto &i : rhs.filesystems) {
+      const auto &fs = i.second;
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
     }
   }
@@ -148,8 +148,8 @@ public:
     standby_daemons = rhs.standby_daemons;
     standby_epochs = rhs.standby_epochs;
 
-    for (auto &i : rhs.filesystems) {
-      auto fs = i.second;
+    for (const auto &i : rhs.filesystems) {
+      const auto &fs = i.second;
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
     }
 
@@ -182,8 +182,8 @@ public:
     }
 
     for (const auto &i : filesystems) {
-      auto fs_info = i.second->mds_map.get_mds_info();
-      for (auto j : fs_info) {
+      const auto &fs_info = i.second->mds_map.get_mds_info();
+      for (const auto &j : fs_info) {
         result[j.first] = j.second;
       }
     }
@@ -319,7 +319,7 @@ public:
       assert(info.state == MDSMap::STATE_STANDBY);
       standby_epochs[who] = epoch;
     } else {
-      auto fs = filesystems[mds_roles.at(who)];
+      const auto &fs = filesystems[mds_roles.at(who)];
       auto &info = fs->mds_map.mds_info.at(who);
       fn(&info);
 
@@ -353,7 +353,7 @@ public:
     // but this is a lot simpler because it doesn't require us to
     // track the compat versions for standby daemons.
     compat = c;
-    for (auto i : filesystems) {
+    for (const auto &i : filesystems) {
       MDSMap &mds_map = i.second->mds_map;
       mds_map.compat = c;
       mds_map.epoch = epoch;
@@ -389,7 +389,7 @@ public:
   std::shared_ptr<const Filesystem> get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
   std::shared_ptr<const Filesystem> get_filesystem(const std::string &name) const
   {
-    for (auto &i : filesystems) {
+    for (const auto &i : filesystems) {
       if (i.second->mds_map.fs_name == name) {
         return std::const_pointer_cast<const Filesystem>(i.second);
       }
