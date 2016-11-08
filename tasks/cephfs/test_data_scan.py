@@ -376,8 +376,7 @@ class TestDataScan(CephFSTestCase):
         # Start the MDS
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
-        import json
-        log.info(json.dumps(self.mds_cluster.get_fs_map(), indent=2))
+        log.info(str(self.mds_cluster.status()))
 
         # Mount a client
         self.mount_a.mount()
