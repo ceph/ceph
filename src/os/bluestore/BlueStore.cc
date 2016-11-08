@@ -7785,6 +7785,32 @@ int BlueStore::_do_alloc_write(
     });
   }
 
+  auto crr = select_option(
+    "compression_required_ratio",
+    g_conf->bluestore_compression_required_ratio,
+    [&]() {
+      double val;
+      if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
+        return boost::optional<double>(val);
+      }
+      return boost::optional<double>();
+    }
+  );
+
+  // checksum
+  int csum = csum_type.load();
+  csum = select_option(
+    "csum_type",
+    csum,
+    [&]() {
+      int val;
+      if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+        return  boost::optional<int>(val);
+      }
+      return boost::optional<int>();
+    }
+  );
+
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
     bluestore_blob_t& dblob = b->dirty_blob();
@@ -7815,18 +7841,6 @@ int BlueStore::_do_alloc_write(
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
       uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-
-      auto crr = select_option(
-	"compression_required_ratio",
-	g_conf->bluestore_compression_required_ratio,
-	[&]() {
-	  double val;
-	  if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
-	    return boost::optional<double>(val);
-	  }
-	  return boost::optional<double>();
-	}
-      );
       uint64_t want_len_raw = final_length * crr;
       uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
       if (newlen <= want_len && newlen < final_length) {
@@ -7891,20 +7905,6 @@ int BlueStore::_do_alloc_write(
       txc->allocated.insert(e.offset, e.length);
       dblob.extents.push_back(e);
     }
-
-    // checksum
-    int csum = csum_type.load();
-    csum = select_option(
-      "csum_type",
-      csum, 
-      [&]() {
-        int val;
-        if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-  	  return  boost::optional<int>(val);
-        }
-        return boost::optional<int>();
-      }
-    );
 
     dout(20) << __func__ << " blob " << *b
 	     << " csum_type " << Checksummer::get_csum_type_string(csum)
