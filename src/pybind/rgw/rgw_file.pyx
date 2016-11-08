@@ -3,7 +3,7 @@ This module is a thin wrapper around rgw_file.
 """
 
 
-from cpython cimport PyObject, ref, exc
+from cpython cimport PyObject, ref, exc, array
 from libc.stdint cimport *
 from libcpp cimport bool
 from libc.stdlib cimport malloc, realloc, free
@@ -91,7 +91,17 @@ cdef extern from "rados/rgw_file.h" nogil:
 
     # mount info hypothetical--emulate Unix, support at least UUID-length fsid
     cdef struct rgw_statvfs:
-        pass
+        uint64_t  f_bsize    # file system block size
+        uint64_t  f_frsize   # fragment size
+        uint64_t  f_blocks   # size of fs in f_frsize units
+        uint64_t  f_bfree    # free blocks
+        uint64_t  f_bavail   # free blocks for unprivileged users
+        uint64_t  f_files    # inodes
+        uint64_t  f_ffree    # free inodes
+        uint64_t  f_favail   # free inodes for unprivileged users
+        uint64_t  f_fsid[2]  # /* file system ID
+        uint64_t  f_flag     # mount flags
+        uint64_t  f_namemax  # maximum filename length
 
     void rgwfile_version(int *major, int *minor, int *extra)
 
@@ -387,6 +397,7 @@ cdef class LibRGWFS(object):
             ret = rgw_statfs(self.fs, <rgw_file_handle*>self.fs.root_fh, &statbuf, 0)
         if ret < 0:
             raise make_ex(ret, "statfs failed")
+        cdef uint64_t[:] fsid = statbuf.f_fsid
         return {'f_bsize': statbuf.f_bsize,
                 'f_frsize': statbuf.f_frsize,
                 'f_blocks': statbuf.f_blocks,
@@ -395,7 +406,7 @@ cdef class LibRGWFS(object):
                 'f_files': statbuf.f_files,
                 'f_ffree': statbuf.f_ffree,
                 'f_favail': statbuf.f_favail,
-                'f_fsid': statbuf.f_fsid,
+                'f_fsid': fsid,
                 'f_flag': statbuf.f_flag,
                 'f_namemax': statbuf.f_namemax}
 
