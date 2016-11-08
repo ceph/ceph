@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include <boost/intrusive/list.hpp>
 
 class FS {
 public:
@@ -61,6 +62,8 @@ public:
     int rval;
     bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
+    boost::intrusive::list_member_hook<> queue_item;
+
     aio_t(void *p, int f) : priv(p), fd(f), rval(-1000) {
       memset(&iocb, 0, sizeof(iocb));
     }
@@ -85,9 +88,17 @@ public:
     }
   };
 
+  typedef boost::intrusive::list<
+    aio_t,
+    boost::intrusive::member_hook<
+      aio_t,
+      boost::intrusive::list_member_hook<>,
+      &aio_t::queue_item> > aio_list_t;
+
   struct aio_queue_t {
     int max_iodepth;
     io_context_t ctx;
+
 
     explicit aio_queue_t(unsigned max_iodepth)
       : max_iodepth(max_iodepth),
@@ -109,44 +120,8 @@ public:
       }
     }
 
-    int submit(aio_t &aio, int *retries) {
-      // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
-      int attempts = 16;
-      int delay = 125;
-      iocb *piocb = &aio.iocb;
-      while (true) {
-	int r = io_submit(ctx, 1, &piocb);
-	if (r < 0) {
-	  if (r == -EAGAIN && attempts-- > 0) {
-	    usleep(delay);
-	    delay *= 2;
-	    (*retries)++;
-	    continue;
-	  }
-	  return r;
-	}
-	assert(r == 1);
-	break;
-      }
-      return 0;
-    }
-
-    int get_next_completed(int timeout_ms, aio_t **paio, int max) {
-      io_event event[max];
-      struct timespec t = {
-	timeout_ms / 1000,
-	(timeout_ms % 1000) * 1000 * 1000
-      };
-      int r = io_getevents(ctx, 1, max, event, &t);
-      if (r <= 0) {
-	return r;
-      }
-      for (int i=0; i<r; ++i) {
-	paio[i] = (aio_t *)event[i].obj;
-	paio[i]->rval = event[i].res;
-      }
-      return r;
-    }
+    int submit(aio_t &aio, int *retries);
+    int get_next_completed(int timeout_ms, aio_t **paio, int max);
   };
 #endif
 };
