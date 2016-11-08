@@ -41,11 +41,11 @@ function(distutils_add_cython_module name src)
     CC=${PY_CC}
     CXX=${PY_CXX}
     LDSHARED=${PY_LDSHARED}
-    OPT=\"-DNDEBUG -g -fwrapv -O2 -Wall\"
+    OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-    CFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"
+    CFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include -w\"
     ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
     build --verbose --build-base ${CYTHON_MODULE_DIR}
     --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
