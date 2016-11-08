@@ -1080,8 +1080,6 @@ public:
     bool map_any(std::function<bool(OnodeRef)> f);
   };
 
-  struct Cache;
-
   struct Collection : public CollectionImpl {
     BlueStore *store;
     Cache *cache;       ///< our cache shard
