@@ -911,9 +911,9 @@ def exec_test():
         log.info("Loaded: {0}".format(list(module_suites)))
         overall_suite = suite.TestSuite(module_suites)
     else:
-        log.info("Excuting all tests")
+        log.info("Executing all cephfs tests")
         overall_suite = decorating_loader.discover(
-            os.path.dirname(os.path.abspath(__file__))
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "cephfs")
         )
 
     # Filter out tests that don't lend themselves to interactive running,
