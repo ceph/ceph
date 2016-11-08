@@ -65,7 +65,7 @@ void PGLog::IndexedLog::split_into(
   unsigned split_bits,
   PGLog::IndexedLog *olog)
 {
-  list<pg_log_entry_t> oldlog;
+  mempool::osd::list<pg_log_entry_t> oldlog;
   oldlog.swap(log);
 
   eversion_t old_tail;
@@ -242,7 +242,7 @@ void PGLog::proc_replica_log(
     log.tail :
     first_non_divergent->version;
 
-  list<pg_log_entry_t> divergent;
+  mempool::osd::list<pg_log_entry_t> divergent;
   list<pg_log_entry_t>::const_iterator pp = olog.log.end();
   while (true) {
     if (pp == olog.log.begin())
@@ -318,7 +318,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   assert(newhead >= log.tail);
 
   list<pg_log_entry_t>::iterator p = log.log.end();
-  list<pg_log_entry_t> divergent;
+  mempool::osd::list<pg_log_entry_t> divergent;
   while (true) {
     if (p == log.log.begin()) {
       // yikes, the whole thing is divergent!
@@ -451,7 +451,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     mark_dirty_from(lower_bound);
 
     // move aside divergent items
-    list<pg_log_entry_t> divergent;
+    mempool::osd::list<pg_log_entry_t> divergent;
     while (!log.empty()) {
       pg_log_entry_t &oe = *log.log.rbegin();
       /*
@@ -469,7 +469,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       log.log.pop_back();
     }
 
-    list<pg_log_entry_t> entries;
+    mempool::osd::list<pg_log_entry_t> entries;
     entries.splice(entries.end(), olog.log, from, to);
     append_log_entries_update_missing(
       info.last_backfill,
