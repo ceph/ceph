@@ -1922,7 +1922,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 	le->assign_blob(b);
       }
       // we build ref_map dynamically for non-spanning blobs
-      le->blob->ref_map.get(le->blob_offset, le->length);
+      le->blob->get_ref(le->blob_offset, le->length);
     }
     pos += prev_len;
     ++n;
@@ -2217,7 +2217,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   extent_map_t *old_extents)
 {
   punch_hole(logical_offset, length, old_extents);
-  b->ref_map.get(blob_offset, length);
+  b->get_ref(blob_offset, length);
   Extent *le = new Extent(logical_offset, blob_offset, length, blob_depth, b);
   extent_map.insert(*le);
   if (!needs_reshard && spans_shard(logical_offset, length)) {
@@ -2252,7 +2252,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
       extent_map.insert(*ne);
       lb->ref_map.put(ep->blob_offset + left, ep->length - left, &released);
       ep->length = left;
-      rb->ref_map.get(ne->blob_offset, ne->length);
+      rb->get_ref(ne->blob_offset, ne->length);
       dout(30) << __func__ << "  split " << *ep << dendl;
       dout(30) << __func__ << "     to " << *ne << dendl;
     } else {
@@ -2261,7 +2261,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
       lb->ref_map.put(ep->blob_offset, ep->length, &released);
       ep->blob = rb;
       ep->blob_offset -= blob_offset;
-      rb->ref_map.get(ep->blob_offset, ep->length);
+      rb->get_ref(ep->blob_offset, ep->length);
       dout(30) << __func__ << "  adjusted " << *ep << dendl;
     }
   }
@@ -8802,7 +8802,7 @@ int BlueStore::_do_clone_range(
 			    e.blob_offset + skip_front,
 			    e.length - skip_front - skip_back, e.blob_depth, cb);
     newo->extent_map.extent_map.insert(*ne);
-    ne->blob->ref_map.get(ne->blob_offset, ne->length);
+    ne->blob->get_ref(ne->blob_offset, ne->length);
     // fixme: we may leave parts of new blob unreferenced that could
     // be freed (relative to the shared_blob).
     txc->statfs_delta.stored() += ne->length;
