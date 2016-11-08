@@ -53,6 +53,8 @@
 	filestore ondisk finisher threads = 3
 	filestore apply finisher threads = 3
 
+	bdev debug aio = true
+
 [mon]
 	debug ms = 1
 	debug mon = 20
