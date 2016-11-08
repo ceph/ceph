@@ -350,6 +350,7 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-rados (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
+         python-rgw (= ${binary:Version}),
          ${python:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
@@ -651,6 +652,7 @@ Architecture: linux-any
 Section: python
 Depends: python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
+         python-rgw (= ${binary:Version}),
          python-cephfs (= ${binary:Version})
 Description: Meta-package for python libraries for the Ceph libraries
  Ceph is a massively scalable, open-source, distributed
@@ -722,6 +724,38 @@ Description: Python 3 libraries for the Ceph librbd library
  .
  This package contains Python 3 libraries for interacting with Ceph's
  RBD block device library.
+
+Package: python-rgw
+Architecture: linux-any
+Section: python
+Depends: librgw1 (>= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python:Depends}
+Replaces: python-ceph (<< 0.92-1223)
+Breaks: python-ceph (<< 0.92-1223)
+Description: Python 2 libraries for the Ceph librgw library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 2 libraries for interacting with Ceph's
+ RGW library.
+
+Package: python3-rgw
+Architecture: linux-any
+Section: python
+Depends: librgw1 (>= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python3:Depends}
+Description: Python 3 libraries for the Ceph librgw library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 3 libraries for interacting with Ceph's
+ RGW library.
 
 Package: python-cephfs
 Architecture: linux-any
