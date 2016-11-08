@@ -77,7 +77,6 @@ const string biginfo_key("_biginfo");
 const string epoch_key("_epoch");
 const string fastinfo_key("_fastinfo");
 
-
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
@@ -4639,7 +4638,7 @@ void PG::share_pg_info()
 }
 
 bool PG::append_log_entries_update_missing(
-  const list<pg_log_entry_t> &entries,
+  const mempool::osd::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
   assert(!entries.empty());
@@ -4667,7 +4666,7 @@ bool PG::append_log_entries_update_missing(
 
 
 void PG::merge_new_log_entries(
-  const list<pg_log_entry_t> &entries,
+  const mempool::osd::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << " " << entries << dendl;
