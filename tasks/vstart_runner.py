@@ -645,8 +645,8 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
         # FIXME: unimplemented
         pass
 
-    def get_filesystem(self, name):
-        return LocalFilesystem(self._ctx, name)
+    def newfs(self, name):
+        return LocalFilesystem(self._ctx, create=name)
 
 
 class LocalMgrCluster(LocalCephCluster, MgrCluster):
@@ -665,16 +665,14 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
     def admin_remote(self):
         return LocalRemote()
 
-    def __init__(self, ctx, name=None):
+    def __init__(self, ctx, fscid=None, create=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
 
-        if name is None:
-            name = "cephfs"
-
-        self.name = name
-        self.metadata_pool_name = "{0}_metadata".format(name)
-        self.data_pool_name = "{0}_data".format(name)
+        self.id = None
+        self.name = None
+        self.metadata_pool_name = None
+        self.data_pools = None
 
         # Hack: cheeky inspection of ceph.conf to see what MDSs exist
         self.mds_ids = set()
@@ -697,6 +695,18 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
         self.client_remote = LocalRemote()
 
         self._conf = defaultdict(dict)
+
+        if create is not None:
+            if fscid is not None:
+                raise RuntimeError("cannot specify fscid when creating fs")
+            if create is True:
+                self.name = 'cephfs'
+            else:
+                self.name = create
+            self.create()
+        elif fscid is not None:
+            self.id = fscid
+        self.getinfo(refresh=True)
 
     @property
     def _prefix(self):
@@ -818,7 +828,6 @@ def exec_test():
         else:
             if os.path.exists(mount.mountpoint):
                 os.rmdir(mount.mountpoint)
-    filesystem = LocalFilesystem(ctx)
     ceph_cluster = LocalCephCluster(ctx)
     mds_cluster = LocalMDSCluster(ctx)
     mgr_cluster = LocalMgrCluster(ctx)
@@ -846,7 +855,6 @@ def exec_test():
         "ctx": ctx,
         "mounts": mounts,
         "ceph_cluster": ceph_cluster,
-        "fs": filesystem,
         "mds_cluster": mds_cluster,
         "mgr_cluster": mgr_cluster,
     })
@@ -854,17 +862,17 @@ def exec_test():
     # For the benefit of polling tests like test_full -- in teuthology land we set this
     # in a .yaml, here it's just a hardcoded thing for the developer's pleasure.
     remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "tell", "osd.*", "injectargs", "--osd-mon-report-interval-max", "5"])
-    filesystem.set_ceph_conf("osd", "osd_mon_report_interval_max", "5")
+    ceph_cluster.set_ceph_conf("osd", "osd_mon_report_interval_max", "5")
 
     # Vstart defaults to two segments, which very easily gets a "behind on trimming" health warning
     # from normal IO latency.  Increase it for running teests.
-    filesystem.set_ceph_conf("mds", "mds log max segments", "10")
+    ceph_cluster.set_ceph_conf("mds", "mds log max segments", "10")
 
     # Make sure the filesystem created in tests has uid/gid that will let us talk to
     # it after mounting it (without having to  go root).  Set in 'global' not just 'mds'
     # so that cephfs-data-scan will pick it up too.
-    filesystem.set_ceph_conf("global", "mds root ino uid", "%s" % os.getuid())
-    filesystem.set_ceph_conf("global", "mds root ino gid", "%s" % os.getgid())
+    ceph_cluster.set_ceph_conf("global", "mds root ino uid", "%s" % os.getuid())
+    ceph_cluster.set_ceph_conf("global", "mds root ino gid", "%s" % os.getgid())
 
     # Monkeypatch get_package_version to avoid having to work out what kind of distro we're on
     def _get_package_version(remote, pkg_name):
