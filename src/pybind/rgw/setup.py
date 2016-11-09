@@ -146,7 +146,7 @@ except ImportError:
 
         source = "rgw.c"
 else:
-    source = "rgw_file.pyx"
+    source = "rgw.pyx"
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and
