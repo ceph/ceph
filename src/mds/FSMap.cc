@@ -109,7 +109,7 @@ void FSMap::print(ostream& out) const
 
 
 
-void FSMap::print_summary(Formatter *f, ostream *out)
+void FSMap::print_summary(Formatter *f, ostream *out) const
 {
   map<mds_role_t,string> by_rank;
   map<string,int> by_state;
