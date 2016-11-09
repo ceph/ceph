@@ -105,6 +105,11 @@ public:
    * @returns number of requests being hold after this
    */
   int64_t put(int64_t c = 1);
+   /**
+   * reset the zero to the stock
+   */
+  void reset();
+
   bool should_wait(int64_t c) const {
     return _should_wait(c);
   }

@@ -97,7 +97,7 @@ int KqueueDriver::test_thread_change(const char* funcname) {
   return 0;
 }
 
-int KqueueDriver::init(int nevent)
+int KqueueDriver::init(EventCenter *c, int nevent)
 {
   // keep track of possible changes of our thread
   // because change of thread kills the kqfd
