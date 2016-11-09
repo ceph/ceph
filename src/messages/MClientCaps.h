@@ -18,9 +18,10 @@
 #include "msg/Message.h"
 #include "include/ceph_features.h"
 
+#define	CLIENT_CAPS_SYNC		(0x1)
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 9;
+  static const int HEAD_VERSION = 10;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -45,6 +46,9 @@ class MClientCaps : public Message {
   ceph_tid_t oldest_flush_tid;
   uint32_t caller_uid;
   uint32_t caller_gid;
+
+  /* advisory CLIENT_CAPS_* flags to send to mds */
+  unsigned flags;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -117,7 +121,8 @@ class MClientCaps : public Message {
       time_warp_seq(0),
       osd_epoch_barrier(0),
       oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0) {
+      caller_uid(0), caller_gid(0),
+      flags(0) {
     inline_version = 0;
   }
   MClientCaps(int op,
@@ -139,7 +144,8 @@ class MClientCaps : public Message {
       time_warp_seq(0),
       osd_epoch_barrier(oeb),
       oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0) {
+      caller_uid(0), caller_gid(0),
+      flags(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -165,7 +171,8 @@ class MClientCaps : public Message {
       time_warp_seq(0),
       osd_epoch_barrier(oeb),
       oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0) {
+      caller_uid(0), caller_gid(0),
+      flags(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -264,6 +271,9 @@ public:
       ::decode(btime, p);
       ::decode(change_attr, p);
     }
+    if (header.version >= 10) {
+      ::decode(flags, p);
+    }
   }
   void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
@@ -322,6 +332,7 @@ public:
     ::encode(layout.pool_ns, payload);
     ::encode(btime, payload);
     ::encode(change_attr, payload);
+    ::encode(flags, payload);
   }
 };
 
