@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
+#include <mutex>
 
 #include <curl/curl.h>
 #include <curl/easy.h>
