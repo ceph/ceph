@@ -628,7 +628,7 @@ protected:
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps();
-  void flush_caps(Inode *in, MetaSession *session);
+  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
@@ -654,6 +654,7 @@ protected:
 
   /* Flags for check_caps() */
 #define CHECK_CAPS_NODELAY	(0x1)
+#define CHECK_CAPS_SYNCHRONOUS	(0x2)
 
   void check_caps(Inode *in, unsigned flags);
   void get_cap_ref(Inode *in, int cap);

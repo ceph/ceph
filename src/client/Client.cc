@@ -3417,7 +3417,7 @@ void Client::check_caps(Inode *in, unsigned flags)
       if (in->cap_snaps.size())
 	flush_snaps(in, true);
       if (in->flushing_caps)
-	flush_caps(in, session);
+	flush_caps(in, session, flags & CHECK_CAPS_SYNCHRONOUS);
     }
 
     int flushing;
@@ -3429,8 +3429,8 @@ void Client::check_caps(Inode *in, unsigned flags)
       flush_tid = 0;
     }
 
-    send_cap(in, session, cap, false, cap_used, wanted, retain, flushing,
-	     flush_tid);
+    send_cap(in, session, cap, flags & CHECK_CAPS_SYNCHRONOUS, cap_used, wanted,
+	     retain, flushing, flush_tid);
   }
 }
 
@@ -4133,7 +4133,7 @@ void Client::flush_caps()
   }
 }
 
-void Client::flush_caps(Inode *in, MetaSession *session)
+void Client::flush_caps(Inode *in, MetaSession *session, bool sync)
 {
   ldout(cct, 10) << "flush_caps " << in << " mds." << session->mds_num << dendl;
   Cap *cap = in->auth_cap;
@@ -4142,7 +4142,14 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
        p != in->flushing_cap_tids.end();
        ++p) {
-    send_cap(in, session, cap, false, (get_caps_used(in) | in->caps_dirty()),
+    bool req_sync = false;
+
+    /* If this is a synchronous request, then flush the journal on last one */
+    if (sync && (p->first == in->flushing_cap_tids.rbegin()->first))
+      req_sync = true;
+
+    send_cap(in, session, cap, req_sync,
+	     (get_caps_used(in) | in->caps_dirty()),
 	     in->caps_wanted(), (cap->issued | cap->implemented),
 	     p->second, p->first);
   }
@@ -9047,7 +9054,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   }
   
   if (!syncdataonly && in->dirty_caps) {
-    check_caps(in, CHECK_CAPS_NODELAY);
+    check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
     if (in->flushing_caps)
       flush_tid = last_flush_tid;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
