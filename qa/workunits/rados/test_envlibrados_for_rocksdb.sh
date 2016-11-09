@@ -43,7 +43,7 @@ case $(lsb_release -si) in
 		install g++-4.7 libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev librados-dev
 		;;
 	CentOS|Fedora|RedHatEnterpriseServer)
-		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
+		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados-devel.x86_64
 		;;
 	*)
         echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
