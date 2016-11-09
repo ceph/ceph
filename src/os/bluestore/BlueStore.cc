@@ -7772,6 +7772,32 @@ int BlueStore::_do_alloc_write(
     });
   }
 
+  auto crr = select_option(
+    "compression_required_ratio",
+    g_conf->bluestore_compression_required_ratio,
+    [&]() {
+      double val;
+      if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
+        return boost::optional<double>(val);
+      }
+      return boost::optional<double>();
+    }
+  );
+
+  // checksum
+  int csum = csum_type.load();
+  csum = select_option(
+    "csum_type",
+    csum,
+    [&]() {
+      int val;
+      if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+        return  boost::optional<int>(val);
+      }
+      return boost::optional<int>();
+    }
+  );
+
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
     bluestore_blob_t& dblob = b->dirty_blob();
@@ -7802,18 +7828,6 @@ int BlueStore::_do_alloc_write(
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
       uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-
-      auto crr = select_option(
-	"compression_required_ratio",
-	g_conf->bluestore_compression_required_ratio,
-	[&]() {
-	  double val;
-	  if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
-	    return boost::optional<double>(val);
-	  }
-	  return boost::optional<double>();
-	}
-      );
       uint64_t want_len_raw = final_length * crr;
       uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
       if (newlen <= want_len && newlen < final_length) {
@@ -7878,20 +7892,6 @@ int BlueStore::_do_alloc_write(
       txc->allocated.insert(e.offset, e.length);
       dblob.extents.push_back(e);
     }
-
-    // checksum
-    int csum = csum_type.load();
-    csum = select_option(
-      "csum_type",
-      csum, 
-      [&]() {
-        int val;
-        if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-  	  return  boost::optional<int>(val);
-        }
-        return boost::optional<int>();
-      }
-    );
 
     dout(20) << __func__ << " blob " << *b
 	     << " csum_type " << Checksummer::get_csum_type_string(csum)
@@ -8037,6 +8037,61 @@ void BlueStore::_do_write_data(
     }
   }
 }
+
+void BlueStore::_do_garbage_collection(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef o,
+  uint64_t& offset,
+  uint64_t& length,
+  bufferlist& bl,
+  WriteContext *wctx)
+{
+  uint64_t gc_start_offset, gc_end_offset;
+  uint64_t end = offset + length;
+  bool do_collect =
+    o->extent_map.do_write_check_depth(o->onode.size,
+                                       offset, end, &wctx->blob_depth,
+                                       &gc_start_offset,
+		         	       &gc_end_offset);
+  if (do_collect) {
+    // we need garbage collection of blobs.
+    if (offset > gc_start_offset) {
+      bufferlist head_bl;
+      size_t read_len = offset - gc_start_offset;
+      int r = _do_read(c.get(), o, gc_start_offset, read_len, head_bl, 0);
+      assert(r == (int)read_len);
+      if (g_conf->bluestore_gc_merge_data) {
+        head_bl.claim_append(bl);
+        bl.swap(head_bl);
+        offset = gc_start_offset;
+	length = end - offset;
+      } else {
+        o->extent_map.fault_range(db, gc_start_offset, read_len);
+        _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, wctx);
+      }
+      logger->inc(l_bluestore_gc);
+      logger->inc(l_bluestore_gc_bytes, read_len);
+    }
+
+    if (end < gc_end_offset) {
+      bufferlist tail_bl;
+      size_t read_len = gc_end_offset - end;
+      int r = _do_read(c.get(), o, end, read_len, tail_bl, 0);
+      assert(r == (int)read_len);
+      if (g_conf->bluestore_gc_merge_data) {
+        bl.claim_append(tail_bl);
+        length += read_len;
+      } else {
+        o->extent_map.fault_range(db, end, read_len);
+        _do_write_data(txc, c, o, end, read_len, tail_bl, wctx);
+      }
+      logger->inc(l_bluestore_gc);
+      logger->inc(l_bluestore_gc_bytes, read_len);
+    }
+  }
+}
+
 int BlueStore::_do_write(
   TransContext *txc,
   CollectionRef& c,
@@ -8150,49 +8205,7 @@ int BlueStore::_do_write(
 	   << " target_blob_size 0x" << std::hex << wctx.target_blob_size
 	   << std::dec << dendl;
 
-  uint64_t gc_start_offset = offset, gc_end_offset = end;
-  bool do_collect = 
-    o->extent_map.do_write_check_depth(o->onode.size,
-                                       offset, end, &wctx.blob_depth,
-                                       &gc_start_offset,
-		         	       &gc_end_offset);
-  if (do_collect) {
-    // we need garbage collection of blobs.
-    if (offset > gc_start_offset) {
-      bufferlist head_bl;
-      size_t read_len = offset - gc_start_offset;
-      int r = _do_read(c.get(), o, gc_start_offset, read_len, head_bl, 0);
-      assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data) {
-        head_bl.claim_append(bl);
-        bl.swap(head_bl);
-        offset = gc_start_offset;
-	length = end - offset;
-      } else {
-        o->extent_map.fault_range(db, gc_start_offset, read_len);
-        _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, &wctx);
-      }
-      logger->inc(l_bluestore_gc);
-      logger->inc(l_bluestore_gc_bytes, read_len);
-    }
-
-    if (end < gc_end_offset) {
-      bufferlist tail_bl;
-      size_t read_len = gc_end_offset - end;
-      int r = _do_read(c.get(), o, end, read_len, tail_bl, 0);
-      assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data) {
-        bl.claim_append(tail_bl);
-        length += read_len;
-        end += read_len;
-      } else {
-        o->extent_map.fault_range(db, end, read_len);
-        _do_write_data(txc, c, o, end, read_len, tail_bl, &wctx);
-      }
-      logger->inc(l_bluestore_gc);
-      logger->inc(l_bluestore_gc_bytes, read_len);
-    }
-  }
+  _do_garbage_collection(txc, c, o, offset, length, bl, &wctx);
   o->extent_map.fault_range(db, offset, length);
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
 
