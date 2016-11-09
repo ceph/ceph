@@ -3175,8 +3175,8 @@ void Client::cap_delay_requeue(Inode *in)
 }
 
 void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
-		      int used, int want, int retain, int flush,
-		      ceph_tid_t flush_tid)
+		      bool sync, int used, int want, int retain,
+		      int flush, ceph_tid_t flush_tid)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -3186,6 +3186,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 
   ldout(cct, 10) << "send_cap " << *in
 	   << " mds." << session->mds_num << " seq " << cap->seq
+	   << (sync ? " sync " : " async ")
 	   << " used " << ccap_string(used)
 	   << " want " << ccap_string(want)
 	   << " flush " << ccap_string(flush)
@@ -3261,6 +3262,8 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->btime = in->btime;
   m->time_warp_seq = in->time_warp_seq;
   m->change_attr = in->change_attr;
+  if (sync)
+    m->flags |= CLIENT_CAPS_SYNC;
     
   if (flush & CEPH_CAP_FILE_WR) {
     m->inline_version = in->inline_version;
@@ -3426,7 +3429,8 @@ void Client::check_caps(Inode *in, bool no_delay)
       flush_tid = 0;
     }
 
-    send_cap(in, session, cap, cap_used, wanted, retain, flushing, flush_tid);
+    send_cap(in, session, cap, false, cap_used, wanted, retain, flushing,
+	     flush_tid);
   }
 }
 
@@ -4138,7 +4142,7 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
        p != in->flushing_cap_tids.end();
        ++p) {
-    send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
+    send_cap(in, session, cap, false, (get_caps_used(in) | in->caps_dirty()),
 	     in->caps_wanted(), (cap->issued | cap->implemented),
 	     p->second, p->first);
   }
