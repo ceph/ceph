@@ -43,7 +43,6 @@
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/operation/TrimRequest.h"
-#include "include/util.h"
 
 #include "journal/Journaler.h"
 

@@ -26,8 +26,7 @@ add_library(rbd_mirror_internal STATIC
   ${rbd_mirror_internal})
 
 add_executable(rbd-mirror
-  main.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
+  main.cc)
 target_link_libraries(rbd-mirror
   rbd_mirror_internal
   rbd_api
