@@ -49,9 +49,10 @@ struct peer_t {
   }
 };
 
+std::ostream& operator<<(std::ostream& lhs, const peer_t &peer);
+
 } // namespace mirror
 } // namespace rbd
 
-std::ostream& operator<<(std::ostream& lhs, const rbd::mirror::peer_t &peer);
 
 #endif // CEPH_RBD_MIRROR_TYPES_H
