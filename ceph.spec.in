@@ -251,6 +251,7 @@ Requires:	libcephfs2 = %{epoch}:%{version}-%{release}
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
+Requires:	python-rgw = %{epoch}:%{version}-%{release}
 Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
@@ -425,6 +426,27 @@ Obsoletes:	librgw2-devel < %{epoch}:%{version}-%{release}
 %description -n librgw-devel
 This package contains libraries and headers needed to develop programs
 that use RADOS gateway client library.
+
+%package -n python-rgw
+Summary:	Python 2 libraries for the RADOS gateway
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librgw2 = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
+%description -n python-rgw
+This package contains Python 2 libraries for interacting with Cephs RADOS
+gateway.
+
+%package -n python%{python3_pkgversion}-rgw
+Summary:	Python 3 libraries for the RADOS gateway
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librgw2 = %{epoch}:%{version}-%{release}
+Requires:	python%{python3_pkgversion}-rados = %{epoch}:%{version}-%{release}
+%description -n python%{python3_pkgversion}-rgw
+This package contains Python 3 libraries for interacting with Cephs RADOS
+gateway.
 
 %package -n python-rados
 Summary:	Python 2 libraries for the RADOS object store
@@ -648,12 +670,13 @@ Obsoletes:	python-ceph
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
+Requires:	python-rgw = %{epoch}:%{version}-%{release}
 Provides:	python-ceph
 %description -n python-ceph-compat
 This is a compatibility package to accommodate python-ceph split into
-python-rados, python-rbd and python-cephfs. Packages still depending on
-python-ceph should be fixed to depend on python-rados, python-rbd or
-python-cephfs instead.
+python-rados, python-rbd, python-rgw and python-cephfs. Packages still
+depending on python-ceph should be fixed to depend on python-rados,
+python-rbd, python-rgw or python-cephfs instead.
 
 #################################################################################
 # common
@@ -1417,6 +1440,16 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_includedir}/rados/librgw.h
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
+
+%files -n python-rgw
+%defattr(-,root,root,-)
+%{python_sitearch}/rgw.so
+%{python_sitearch}/rgw-*.egg-info
+
+%files -n python%{python3_pkgversion}-rgw
+%defattr(-,root,root,-)
+%{python3_sitearch}/rgw.cpython*.so
+%{python3_sitearch}/rgw-*.egg-info
 
 %files -n python-rbd
 %defattr(-,root,root,-)
