@@ -437,7 +437,7 @@ void PyModules::shutdown()
   // Signal modules to drop out of serve()
   for (auto i : modules) {
     auto module = i.second;
-    finisher.queue(new C_StdFunction([module](){
+    finisher.queue(new FunctionContext([module](int r){
       module->shutdown();
     }));
   }
@@ -469,7 +469,7 @@ void PyModules::notify_all(const std::string &notify_type,
     auto module = i.second;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
-    finisher.queue(new C_StdFunction([module, notify_type, notify_id](){
+    finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
       module->notify(notify_type, notify_id);
     }));
   }
