@@ -50,7 +50,7 @@ distributions, execute the following::
 To install ``librados`` development support files for C/C++ on RHEL/CentOS
 distributions, execute the following::
 
-	sudo yum install librados2-devel
+	sudo yum install librados-devel
 
 Once you install ``librados`` for developers, you can find the required 
 headers for C/C++ under ``/usr/include/rados``. ::
@@ -63,7 +63,7 @@ Getting librados for Python
 
 The ``rados`` module provides ``librados`` support to Python
 applications. The ``librados-dev`` package for Debian/Ubuntu
-and the ``librados2-devel`` package for RHEL/CentOS will install the
+and the ``librados-devel`` package for RHEL/CentOS will install the
 ``python-rados`` package for you. You may install ``python-rados``
 directly too.
 
