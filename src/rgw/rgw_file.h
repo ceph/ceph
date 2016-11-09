@@ -775,9 +775,12 @@ namespace rgw {
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
 	uid(_uid), key(_user_id, _key) {
 
+      /* fixup fs_inst */
+      root_fh.state.dev = ++fs_inst;
+
       /* no bucket may be named rgw_fs_inst-(.*) */
       fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
-	std::to_string(++(fs_inst));
+	std::to_string(fs_inst);
 
       root_fh.init_rootfs(fsid /* bucket */, RGWFileHandle::root_name);
 
