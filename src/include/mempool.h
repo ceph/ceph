@@ -323,24 +323,6 @@ public:
 };
 
 
-// There is one factory associated with every type that lives in a
-// mempool.
-
-template<pool_index_t pool_ix,typename o>
-class factory {
-public:
-  typedef pool_allocator<pool_ix,o> allocator_type;
-  static allocator_type alloc;
-
-  static void *allocate() {
-    return (void *)alloc.allocate(1);
-  }
-  static void free(void *p) {
-    alloc.deallocate((o *)p, 1);
-  }
-};
-
-
 // Namespace mempool
 
 #define P(x)								\
@@ -365,8 +347,6 @@ public:
 	     typename eq = std::equal_to<k>>				\
     using unordered_map =						\
       std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
-    template<typename v>						\
-    using factory = mempool::factory<id,v>;				\
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\
     }									\
