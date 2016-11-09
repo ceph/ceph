@@ -584,6 +584,18 @@ namespace rgw {
   {
     int rc, rc2;
     buffer::list ux_key, ux_attrs;
+
+    switch(rgw_fh->fh.fh_type) {
+    case RGW_FS_TYPE_FILE:
+    {
+      if (rgw_fh->deleted())
+	return -ESTALE;
+    }
+    break;
+    default:
+      break;
+    };
+
     string obj_name{rgw_fh->relative_object_name()};
 
     RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
