@@ -20,7 +20,8 @@ Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 			   lname, nonce, 0);
 }
 
-static std::default_random_engine random_engine;
+static std::random_device seed;
+static std::default_random_engine random_engine(seed());
 static Spinlock random_lock;
 
 Messenger *Messenger::create(CephContext *cct, const string &type,
