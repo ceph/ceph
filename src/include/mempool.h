@@ -140,6 +140,7 @@ namespace mempool {
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
   f(unittest_1)			      \
   f(unittest_2)			      \
+  f(osd)			      \
   f(bluestore_meta_onode)	      \
   f(bluestore_meta_other)
 
