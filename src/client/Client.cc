@@ -3283,7 +3283,16 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 }
 
 
-void Client::check_caps(Inode *in, bool is_delayed)
+/**
+ * check_caps
+ *
+ * Examine currently used and wanted versus held caps. Release, flush or ack
+ * revoked caps to the MDS as appropriate.
+ *
+ * @param in the inode to check
+ * @param no_delay whether we should delay sending caps
+ */
+void Client::check_caps(Inode *in, bool no_delay)
 {
   unsigned wanted = in->caps_wanted();
   unsigned used = get_caps_used(in);
@@ -3313,7 +3322,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	   << " used " << ccap_string(used)
 	   << " issued " << ccap_string(issued)
 	   << " revoking " << ccap_string(revoking)
-	   << " is_delayed=" << is_delayed
+	   << " no_delay=" << no_delay
 	   << dendl;
 
   if (in->snapid != CEPH_NOSNAP)
@@ -3329,10 +3338,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
   if (!in->cap_snaps.empty())
     flush_snaps(in);
 
-  if (!is_delayed)
-    cap_delay_requeue(in);
-  else
+  if (no_delay)
     in->hold_caps_until = utime_t();
+  else
+    cap_delay_requeue(in);
 
   utime_t now = ceph_clock_now(cct);
 
