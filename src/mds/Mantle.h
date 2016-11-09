@@ -16,12 +16,11 @@
 #define CEPH_MANTLE_H
 
 #include <lua.hpp>
-#include <list>
+#include <vector>
 #include <map>
+#include <string>
 
-#include "include/types.h"
-#include "common/Clock.h"
-#include "CInode.h"
+#include "mdstypes.h"
 
 class Mantle {
   protected:
