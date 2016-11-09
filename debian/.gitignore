@@ -24,9 +24,9 @@
 /libcephfs2-dbg
 /libcephfs-dev
 /libcephfs2
-/librados2-dbg
+/librados3-dbg
 /librados-dev
-/librados2
+/librados3
 /librbd1-dbg
 /librbd-dev
 /librbd1
