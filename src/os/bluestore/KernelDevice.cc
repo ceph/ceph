@@ -310,6 +310,7 @@ void KernelDevice::_aio_thread()
       }
     }
   }
+  reap_ioc();
   dout(10) << __func__ << " end" << dendl;
 }
 
