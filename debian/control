@@ -728,7 +728,7 @@ Description: Python 3 libraries for the Ceph librbd library
 Package: python-rgw
 Architecture: linux-any
 Section: python
-Depends: librgw1 (>= ${binary:Version}),
+Depends: librgw2 (>= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
          ${python:Depends}
@@ -745,7 +745,7 @@ Description: Python 2 libraries for the Ceph librgw library
 Package: python3-rgw
 Architecture: linux-any
 Section: python
-Depends: librgw1 (>= ${binary:Version}),
+Depends: librgw2 (>= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
          ${python3:Depends}
