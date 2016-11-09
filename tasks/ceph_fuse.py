@@ -98,7 +98,7 @@ def task(ctx, config):
     config = get_client_configs(ctx, config)
 
     # List clients we will configure mounts for, default is all clients
-    clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
+    clients = list(teuthology.get_clients(ctx=ctx, roles=filter(lambda x: 'client.' in x, config.keys())))
 
     all_mounts = getattr(ctx, 'mounts', {})
     mounted_by_me = {}
@@ -116,7 +116,7 @@ def task(ctx, config):
             # Catch bad configs where someone has e.g. tried to use ceph-fuse and kcephfs for the same client
             assert isinstance(all_mounts[id_], FuseMount)
 
-        if client_config.get('mounted', True):
+        if not config.get("disabled", False) and client_config.get('mounted', True):
             mounted_by_me[id_] = all_mounts[id_]
 
     ctx.mounts = all_mounts
