@@ -236,7 +236,6 @@ namespace rgw {
     static constexpr uint32_t FLAG_UNLINK_THIS = 0x0100;
     static constexpr uint32_t FLAG_LOCKED = 0x0200;
     static constexpr uint32_t FLAG_STATELESS_OPEN = 0x0400;
-    static constexpr uint32_t FLAG_EXACT_MATCH = 0x0800;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -1868,12 +1867,11 @@ public:
   std::string path;
   bool matched;
   bool is_dir;
-  bool exact_matched;
 
   RGWStatLeafRequest(CephContext* _cct, RGWUserInfo *_user,
 		     RGWFileHandle* _rgw_fh, const std::string& _path)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), path(_path),
-      matched(false), is_dir(false), exact_matched(false) {
+      matched(false), is_dir(false) {
     default_max = 1000; // logical max {"foo", "foo/"}
     op = this;
   }
@@ -1932,12 +1930,9 @@ public:
 			     << "list uri=" << s->relative_uri << " "
 			     << " prefix=" << prefix << " "
 			     << " obj path=" << name << ""
-			     << " target = " << path << ""
 			     << dendl;
       /* XXX is there a missing match-dir case (trailing '/')? */
       matched = true;
-      if (name == path)
-	exact_matched = true;
       return;
     }
     // try prefixes
@@ -1948,7 +1943,6 @@ public:
 			     << "list uri=" << s->relative_uri << " "
 			     << " prefix=" << prefix << " "
 			     << " pref path=" << name << " (not chomped)"
-			     << " target = " << path << ""
 			     << dendl;
       matched = true;
       is_dir = true;

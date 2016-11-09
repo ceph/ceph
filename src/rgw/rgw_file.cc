@@ -168,15 +168,6 @@ namespace rgw {
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  if (req.matched) {
-	    // we need rgw object's key name equal to file name, if not return NULL
-	    if ((flags & RGWFileHandle::FLAG_EXACT_MATCH) &&
-		!req.exact_matched) {
-	      lsubdout(get_context(), rgw, 15)
-	        << __func__
-		<< ": stat leaf not exact match file name = "
-		<< path << dendl;
-	      goto done;
-	    }
 	    fhr = lookup_fh(parent, path,
 			    RGWFileHandle::FLAG_CREATE|
 			    ((req.is_dir) ?
@@ -1271,7 +1262,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	return -ENOENT;
     }
   } else {
-    fhr = fs->stat_leaf(parent, path, RGWFileHandle::FLAG_EXACT_MATCH);
+    fhr = fs->stat_leaf(parent, path, RGWFileHandle::FLAG_NONE);
     if (! get<0>(fhr)) {
       if (! (flags & RGW_LOOKUP_FLAG_CREATE))
 	return -ENOENT;
