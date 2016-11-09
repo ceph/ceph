@@ -6376,7 +6376,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->state = TransContext::STATE_FINISHING;
       // ** fall-thru **
 
-    case TransContext::TransContext::STATE_FINISHING:
+    case TransContext::STATE_FINISHING:
       txc->log_state_latency(logger, l_bluestore_state_finishing_lat);
       _txc_finish(txc);
       return;
