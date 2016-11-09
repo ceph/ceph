@@ -133,7 +133,7 @@ namespace buffer CEPH_BUFFER_API {
   class raw_posix_aligned;
   class raw_hack_aligned;
   class raw_char;
-  class raw_pipe;
+  class raw_splice_kcrypt;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
   class raw_claim_buffer;
@@ -153,10 +153,28 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_static(unsigned len, char *buf);
   raw* create_aligned(unsigned len, unsigned align);
   raw* create_page_aligned(unsigned len);
-  raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
   raw* create_static(unsigned len, char *buf);
   raw* claim_buffer(unsigned len, char *buf, deleter del);
+  raw* create_zero_copy(size_t max_len);
+  raw* create_zero_copy(size_t count, int fd, off_t offset=-1);
+
+  /*
+   * Method to fill buffer::raw before adding to buffer::ptr.
+   * The method may or may not block, depending on behaviour of file \ref fd.
+   *
+   * \param _raw an empty buffer::raw
+   * \param position in buffer to write. It MUST point to end of buffer.
+   * \param count amount of bytes to transfer
+   * \param fd file to read from
+   * \param src_offset file offset to read from. When -1 means read from current file position.
+   *
+   * \return Amount of bytes transferred.
+   *
+   * \note If function is invoked multiple time for same \ref _raw, then \ref position and \ref src_offset
+   * should be adjusted according to amount of bytes already processed.
+   */
+  ssize_t insert_from_fd(raw* _raw, size_t position, size_t count, int fd, off_t src_offset = -1);
 
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
@@ -302,11 +320,11 @@ namespace buffer CEPH_BUFFER_API {
     unsigned raw_length() const;
     int raw_nref() const;
 
+    uint32_t crc32c(uint32_t crc) const;
     void copy_out(unsigned o, unsigned l, char *dest) const;
 
-    bool can_zero_copy() const;
-    int zero_copy_to_fd(int fd, int64_t *offset) const;
-
+    bool is_data_local() const;
+    ssize_t copy_to_fd(int fd, off_t ofs_from, ssize_t len, off_t dst_offset = -1) const;
     unsigned wasted();
 
     int cmp(const ptr& o) const;
@@ -330,7 +348,6 @@ namespace buffer CEPH_BUFFER_API {
     void zero(bool crc_reset);
     void zero(unsigned o, unsigned l);
     void zero(unsigned o, unsigned l, bool crc_reset);
-
   };
 
 
@@ -408,6 +425,7 @@ namespace buffer CEPH_BUFFER_API {
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
+      ssize_t copy(unsigned len, int fd, off_t dst_offset = -1);
 
       // get a pointer to the currenet iterator position, return the
       // number of bytes we can read from that position (up to want),
@@ -450,8 +468,8 @@ namespace buffer CEPH_BUFFER_API {
       void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
+      ssize_t copy(unsigned len, int fd, off_t dst_offset = -1);
       void copy_all(list &dest);
-
       // copy data in
       void copy_in(unsigned len, const char *src);
       void copy_in(unsigned len, const char *src, bool crc_reset);
@@ -705,7 +723,7 @@ namespace buffer CEPH_BUFFER_API {
     bool contents_equal(buffer::list& other);
     bool contents_equal(const buffer::list& other) const;
 
-    bool can_zero_copy() const;
+    bool is_data_local() const;
     bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
@@ -862,11 +880,10 @@ namespace buffer CEPH_BUFFER_API {
     void hexdump(std::ostream &out, bool trailing_newline = true) const;
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
-    int read_fd_zero_copy(int fd, size_t len);
+
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
     int write_fd(int fd, uint64_t offset) const;
-    int write_fd_zero_copy(int fd) const;
     void prepare_iov(std::vector<iovec> *piov) const;
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();

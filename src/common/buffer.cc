@@ -37,6 +37,7 @@
 #include <sstream>
 #include <sys/uio.h>
 #include <limits.h>
+#include <poll.h>
 
 #include <ostream>
 
@@ -74,8 +75,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       buffer_history_alloc_num.inc();
     }
   }
+    
   }
-
 
   int buffer::get_total_alloc() {
     return buffer_total_alloc.read();
@@ -116,7 +117,6 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #ifdef CEPH_HAVE_SETPIPE_SZ
     char buf[32];
     int r;
-    std::string err;
     struct stat stat_result;
     if (::stat("/proc/sys/fs/pipe-max-size", &stat_result) == -1)
       return -errno;
@@ -125,10 +125,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (r < 0)
       return r;
     buf[r] = '\0';
-    size_t size = strict_strtol(buf, 10, &err);
-    if (!err.empty())
-      return -EIO;
-    buffer_max_pipe_size.set(size);
+    errno = 0;
+    size_t size = strtoul(buf, nullptr, 10);
+    if (errno == 0)
+      buffer_max_pipe_size.set(size);
+    else
+      buffer_max_pipe_size.set(4096); //set something non-zero
 #endif
     return 0;
   }
@@ -193,12 +195,57 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       memcpy(c->data, data, len);
       return c;
     }
-    virtual bool can_zero_copy() const {
-      return false;
+    virtual bool is_data_local() const {
+      return true;
     }
-    virtual int zero_copy_to_fd(int fd, loff_t *offset) {
-      return -ENOTSUP;
+    /*
+     * Write buffer contents to file.
+     *
+     * \note This is default implementation. It is used for all, except zero-copy based buffers.
+     *
+     * \param fd file to write to
+     * \param src_pos start streaming from this byte
+     * \param count amount of bytes to write
+     * \param dst_offset offset in \ref fd to write to. use -1 to append to current file position.
+     */
+    virtual ssize_t copy_to_fd(int fd, off_t src_pos, ssize_t count, off_t dst_offset = -1) {
+      if (src_pos + count > len) {
+        throw end_of_buffer();
+      }
+      ssize_t r;
+      if (dst_offset == -1) {
+        r = safe_write(fd, data + src_pos, count);
+        if (r == 0)
+          r = count;
+      }
+      else
+        r = safe_pwrite(fd, data + src_pos, count, dst_offset);
+      return r;
     }
+
+    /*
+     * Read from file to buffer.
+     *
+     * \note This is default implementation. It is used for all, except zero-copy based buffers.
+     *
+     * \param dst_pos position in buffer to write to
+     * \param count amount of bytes to read
+     * \param fd file to read from
+     * \param src_offset offset in file to read from. use -1 to read from current file position.
+     */
+    virtual ssize_t insert_from_fd(size_t dst_pos, size_t count, int fd, off_t src_offset = -1)
+    {
+      if (dst_pos + count > len) {
+        throw end_of_buffer();
+      }
+      ssize_t w;
+      if (src_offset == -1)
+        w = safe_read(fd, data + dst_pos, count);
+      else
+        w = safe_pread(fd, data + dst_pos, count, src_offset);
+      return w;
+    }
+
     virtual bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
@@ -210,6 +257,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       // false if it is not safe to share the buffer, e.g., due to special
       // and/or registered memory that is scarce
       return true;
+    }
+    virtual uint32_t crc32c(unsigned int off, unsigned int len,uint32_t init_crc) {
+      uint32_t crc;
+      crc = ceph_crc32c(init_crc, reinterpret_cast<unsigned char*>(data) + off, len);
+      set_crc(make_pair(off, off + len), make_pair(init_crc, crc));
+      return crc;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
@@ -240,6 +293,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   };
 
   MEMPOOL_DEFINE_FACTORY(char, char, buffer_data);
+
+  ssize_t buffer::insert_from_fd(buffer::raw* _raw, size_t position, size_t count, int fd, off_t src_offset) {
+    return _raw->insert_from_fd(position, count, fd, src_offset);
+  }
 
   /*
    * raw_combined is always placed within a single allocation along
@@ -398,182 +455,388 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   };
 #endif
 
+
 #ifdef CEPH_HAVE_SPLICE
-  class buffer::raw_pipe : public buffer::raw {
-  public:
-    MEMPOOL_CLASS_HELPERS();
-
-    explicit raw_pipe(unsigned len) : raw(len), source_consumed(false) {
-      size_t max = get_max_pipe_size();
-      if (len > max) {
-	bdout << "raw_pipe: requested length " << len
-	      << " > max length " << max << bendl;
-	throw malformed_input("length larger than max pipe size");
-      }
-      pipefds[0] = -1;
-      pipefds[1] = -1;
-
-      int r;
-      if (::pipe(pipefds) == -1) {
-	r = -errno;
-	bdout << "raw_pipe: error creating pipe: " << cpp_strerror(r) << bendl;
-	throw error_code(r);
-      }
-
-      r = set_nonblocking(pipefds);
-      if (r < 0) {
-	bdout << "raw_pipe: error setting nonblocking flag on temp pipe: "
-	      << cpp_strerror(r) << bendl;
-	throw error_code(r);
-      }
-
-      r = set_pipe_size(pipefds, len);
-      if (r < 0) {
-	bdout << "raw_pipe: could not set pipe size" << bendl;
-	// continue, since the pipe should become large enough as needed
-      }
-
-      inc_total_alloc(len);
-      inc_history_alloc(len);
-      bdout << "raw_pipe " << this << " alloc " << len << " "
-	    << buffer::get_total_alloc() << bendl;
-    }
-
-    ~raw_pipe() override {
-      if (data)
-	free(data);
-      close_pipe(pipefds);
-      dec_total_alloc(len);
-      bdout << "raw_pipe " << this << " free " << (void *)data << " "
-	    << buffer::get_total_alloc() << bendl;
-    }
-
-    bool can_zero_copy() const override {
-      return true;
-    }
-
-    int set_source(int fd, loff_t *off) {
-      int flags = SPLICE_F_NONBLOCK;
-      ssize_t r = safe_splice(fd, off, pipefds[1], NULL, len, flags);
-      if (r < 0) {
-	bdout << "raw_pipe: error splicing into pipe: " << cpp_strerror(r)
-	      << bendl;
-	return r;
-      }
-      // update length with actual amount read
-      len = r;
-      return 0;
-    }
-
-    int zero_copy_to_fd(int fd, loff_t *offset) override {
-      assert(!source_consumed);
-      int flags = SPLICE_F_NONBLOCK;
-      ssize_t r = safe_splice_exact(pipefds[0], NULL, fd, offset, len, flags);
-      if (r < 0) {
-	bdout << "raw_pipe: error splicing from pipe to fd: "
-	      << cpp_strerror(r) << bendl;
-	return r;
-      }
-      source_consumed = true;
-      return 0;
-    }
-
-    buffer::raw* clone_empty() override {
-      // cloning doesn't make sense for pipe-based buffers,
-      // and is only used by unit tests for other types of buffers
-      return NULL;
-    }
-
-    char *get_data() override {
-      if (data)
-	return data;
-      return copy_pipe(pipefds);
-    }
-
-  private:
-    int set_pipe_size(int *fds, long length) {
-#ifdef CEPH_HAVE_SETPIPE_SZ
-      if (::fcntl(fds[1], F_SETPIPE_SZ, length) == -1) {
-	int r = -errno;
-	if (r == -EPERM) {
-	  // pipe limit must have changed - EPERM means we requested
-	  // more than the maximum size as an unprivileged user
-	  update_max_pipe_size();
-	  throw malformed_input("length larger than new max pipe size");
-	}
-	return r;
-      }
-#endif
-      return 0;
-    }
-
-    int set_nonblocking(int *fds) {
-      if (::fcntl(fds[0], F_SETFL, O_NONBLOCK) == -1)
-	return -errno;
-      if (::fcntl(fds[1], F_SETFL, O_NONBLOCK) == -1)
-	return -errno;
-      return 0;
-    }
-
-    static void close_pipe(const int *fds) {
-      if (fds[0] >= 0)
-	VOID_TEMP_FAILURE_RETRY(::close(fds[0]));
-      if (fds[1] >= 0)
-	VOID_TEMP_FAILURE_RETRY(::close(fds[1]));
-    }
-    char *copy_pipe(int *fds) {
-      /* preserve original pipe contents by copying into a temporary
-       * pipe before reading.
-       */
-      int tmpfd[2];
-      int r;
-
-      assert(!source_consumed);
-      assert(fds[0] >= 0);
-
-      if (::pipe(tmpfd) == -1) {
-	r = -errno;
-	bdout << "raw_pipe: error creating temp pipe: " << cpp_strerror(r)
-	      << bendl;
-	throw error_code(r);
-      }
-      auto sg = make_scope_guard([=] { close_pipe(tmpfd); });	  
-      r = set_nonblocking(tmpfd);
-      if (r < 0) {
-	bdout << "raw_pipe: error setting nonblocking flag on temp pipe: "
-	      << cpp_strerror(r) << bendl;
-	throw error_code(r);
-      }
-      r = set_pipe_size(tmpfd, len);
-      if (r < 0) {
-	bdout << "raw_pipe: error setting pipe size on temp pipe: "
-	      << cpp_strerror(r) << bendl;
-      }
-      int flags = SPLICE_F_NONBLOCK;
-      if (::tee(fds[0], tmpfd[1], len, flags) == -1) {
-	r = errno;
-	bdout << "raw_pipe: error tee'ing into temp pipe: " << cpp_strerror(r)
-	      << bendl;
-	throw error_code(r);
-      }
-      data = (char *)malloc(len);
-      if (!data) {
-	throw bad_alloc();
-      }
-      r = safe_read(tmpfd[0], data, len);
-      if (r < (ssize_t)len) {
-	bdout << "raw_pipe: error reading from temp pipe:" << cpp_strerror(r)
-	      << bendl;
-	free(data);
-	data = NULL;
-	throw error_code(r);
-      }
-      return data;
-    }
-    bool source_consumed;
-    int pipefds[2];
+/*
+ * Specialization of buffer::raw that implements zero-copy techniques.
+ * It is created for linux kernel. Uses syscalls and behaviours specific to it.
+ *
+ * Data is stored in series of linux pipes.
+ * If not specifically required by invoking \ref get_data(), data will remain in kernel space.
+ *
+ * \note For non-linux builds this class is not compiled and buffer::create_zero_copy produces regular buffer.
+ */
+class buffer::raw_splice_kcrypt : public buffer::raw {
+private:
+  static constexpr int read_end = 0;
+  static constexpr int write_end = 1;
+  static constexpr int min_pipe_size = 1024*256; // < drop from using zero-copy if pipes are too small
+  struct pipe_elem
+  {
+    size_t size;
+    int fd;
+    //necessary for emplace_back() and resize()
+    pipe_elem() = default;
+    pipe_elem(size_t size, int fd): size(size), fd(fd) {};
+    pipe_elem& operator=(const pipe_elem& o) = default;
   };
-#endif // CEPH_HAVE_SPLICE
+  std::vector<pipe_elem> pipe_read_elements;
+  int pipe_curr_write_fd; //this changes as writing progresses to next pipes
+  size_t total_content_size;
+  unsigned expected_len;
+
+  int close(int fd) {
+    return TEMP_FAILURE_RETRY(::close(fd));
+  }
+
+public:
+  MEMPOOL_CLASS_HELPERS();
+  explicit raw_splice_kcrypt(unsigned expected_len) : raw(0),
+      pipe_curr_write_fd(-1),
+      total_content_size(0),
+      expected_len(expected_len) {
+    update_max_pipe_size();
+    if (get_max_pipe_size()<min_pipe_size) {
+      data = new char[expected_len];
+      len = expected_len;
+      return;
+    }
+    int no_pipes = expected_len / get_max_pipe_size() + 1; //this is estimated #pipes to be needed
+    pipe_read_elements.reserve(no_pipes);
+    //we will have as much data as we read
+    len = 0;
+  }
+
+  ~raw_splice_kcrypt() {
+    if (data)
+      delete[] data;
+
+    if (pipe_curr_write_fd != -1) {
+      close(pipe_curr_write_fd);
+    }
+    for (auto& elem : pipe_read_elements) {
+      close(elem.fd);
+    }
+  }
+/*
+ * TODO - make crc32c calculation using kcrypto crc32c-intel algorithm, if possible
+ */
+  uint32_t crc32c(unsigned int off, unsigned int len,uint32_t init_crc) {
+    uint32_t crc;
+    get_data(); //make 'data' meaningfull
+    crc = ceph_crc32c(init_crc, reinterpret_cast<unsigned char*>(data) + off, len);
+    set_crc(make_pair(off, off + len), make_pair(init_crc, crc));
+    return crc;
+  }
+
+  bool append_pipe() {
+    if (pipe_curr_write_fd != -1) {
+      close(pipe_curr_write_fd);
+      pipe_curr_write_fd = -1;
+    }
+    int r;
+    int fds[2];
+    if (::pipe(fds) == -1) {
+      return false;
+    }
+    r = ::fcntl(fds[write_end], F_SETFL, O_NONBLOCK);
+    if (r != -1)
+      r = ::fcntl(fds[read_end], F_SETFL, O_NONBLOCK);
+    if (r < 0) {
+      close(fds[write_end]);
+      close(fds[read_end]);
+      return false;
+    }
+    pipe_curr_write_fd = fds[write_end];
+    set_pipe_size(pipe_curr_write_fd);
+    pipe_read_elements.emplace_back(0, fds[read_end]);
+    return true;
+  }
+
+
+  bool is_data_local() const {
+    return data != nullptr;
+  }
+
+  ssize_t consume_pipe(int fd, size_t len)
+  {
+    int devnull;
+    devnull = open("/dev/null", O_WRONLY);
+    if (devnull == -1)
+      return -1;
+    ssize_t r;
+    r = splice(fd, nullptr, devnull, nullptr, len, SPLICE_F_MOVE);
+    ::close(devnull);
+    return r;
+  }
+
+  bool is_pipe_full(int fd)
+  {
+    struct pollfd fds;
+    fds.fd = fd;
+    fds.events = POLLOUT;
+    fds.revents = 0;
+    int r = poll(&fds, 1, 0);
+    //when no fds.revents are set, means we are blocked
+    return (r == 0);
+  }
+
+  /*
+   * Streams data from buffer to specified file.
+   * If destination file is blocking, function will block until all data is transferred.
+   * If destination file is non-blocking, function will transfer as much data as possible.
+   *
+   * \note Transferred data is not lost from buffer.
+   *
+   * \param fd file to write to
+   * \param src_pos start streaming from this byte
+   * \param count amount of bytes to write
+   * \param dst_offset offset in \ref fd to write to. use -1 to append to current file position.
+   *
+   * \return amount of bytes transferred, or -1 if operation would block
+   *
+   * \throws end_of_buffer if request is outside buffer's range
+   */
+  ssize_t copy_to_fd(int fd, off_t ofs_from, ssize_t req_size, off_t dst_offset) {
+    if (ofs_from + req_size > len) {
+      throw end_of_buffer();
+    }
+    if (data != nullptr) {
+      return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+    }
+    //move to proper pipe
+    size_t i = 0;
+    off_t ofs = ofs_from;
+    for (i = 0; i < pipe_read_elements.size() && ofs >= (off_t)pipe_read_elements[i].size; i++ ) {
+      ofs -= pipe_read_elements[i].size;
+    }
+    assert(i < pipe_read_elements.size());
+    assert(ofs < (off_t)pipe_read_elements[i].size);
+    ssize_t total_moved = 0;
+    while (req_size > 0) {
+      assert(i < pipe_read_elements.size());
+      int fds[2];
+      if (::pipe(fds) == -1) {
+        get_data();
+        return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+     }
+
+      set_pipe_size(fds[write_end]);
+      //we do not check if pipe size is large enough
+      //we will check if it is ok by watching result of ::tee()
+      //in any case, for some file types (e.g. tcp sockets), linux kernel allows
+      //tee() to clone more than is capacity of pipe
+
+      ssize_t s;
+      s = ::tee(pipe_read_elements[i].fd, fds[write_end],
+                pipe_read_elements[i].size, SPLICE_F_MOVE);
+      close(fds[write_end]);
+      if (s < (ssize_t)pipe_read_elements[i].size) {
+        close(fds[read_end]);
+        get_data();
+        return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+      }
+
+      ssize_t tomove_size = pipe_read_elements[i].size;
+      if (ofs > 0) {
+        if (consume_pipe(fds[read_end], ofs) != ofs) {
+          close(fds[read_end]);
+          get_data();
+          return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+        }
+        tomove_size -= ofs;
+        ofs = 0;
+      }
+
+      if (req_size < tomove_size)
+        tomove_size = req_size;
+
+      loff_t off_out = dst_offset;
+      ssize_t moved_cnt;
+      moved_cnt = splice(fds[read_end], nullptr,
+                  fd, dst_offset == -1 ? nullptr : &off_out,
+                  tomove_size, SPLICE_F_NONBLOCK | SPLICE_F_MORE | SPLICE_F_MOVE);
+      if (moved_cnt < 0) {
+        close(fds[read_end]);
+        get_data();
+        return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+      }
+      if (dst_offset != -1)
+        dst_offset += moved_cnt;
+      req_size -= moved_cnt;
+      total_moved += moved_cnt;
+      ofs_from += moved_cnt; //fix it in case we have to continue after error
+
+      close(fds[read_end]);
+      if (moved_cnt != tomove_size) {
+        //there is something left not moved. it means we were blocked.
+        break;
+      }
+      i++;
+    }
+    return total_moved;
+  }
+
+  /*
+   * Read from file to buffer.
+   *
+   * \note This is special implementation for pipe-based zero-copy buffer.
+   * If any problem arises fallback to regular memory buffer is applied.
+   *
+   * \param dst_pos position in buffer to write to
+   * \param count amount of bytes to read
+   * \param fd file to read from
+   * \param src_offset offset in file to read from. use -1 to read from current file position.
+   */
+  ssize_t insert_from_fd(size_t dst_pos, size_t count, int fd, off_t src_offset)
+  {
+    if (data != nullptr) {
+      return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
+    }
+    if (dst_pos != total_content_size) {
+      //convert and do anyway
+      len = expected_len;
+      get_data();
+      return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
+    }
+    ssize_t total_moved = 0;
+    while (count > 0)
+    {
+      if (pipe_curr_write_fd == -1) {
+        if(!append_pipe()) {
+          len = expected_len;
+          get_data();
+          return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
+        }
+      }
+      size_t to_move = count;
+      ssize_t r;
+      if (src_offset == -1 )
+        r = splice(fd, nullptr, pipe_curr_write_fd, nullptr, to_move, SPLICE_F_NONBLOCK);
+      else
+      {
+        loff_t offset = src_offset;
+        r = splice(fd, &offset, pipe_curr_write_fd, nullptr, to_move, SPLICE_F_NONBLOCK);
+      }
+      if (r > 0) {
+        pipe_read_elements.back().size += r;
+        total_moved += r;
+        dst_pos += r;
+        total_content_size += r;
+        len += r;
+        if (src_offset != -1)
+          src_offset += r;
+        count -= r;
+      } else if (r == 0) {
+        //something got closed...
+        break;
+      } else {
+        //on linux, if you try to splice to pipe, you can get EAGAIN
+        //if you started from offset that was unaligned, last page cannot be filled
+        if (is_pipe_full(pipe_curr_write_fd)) {
+          //it is just pipe blocked
+          close(pipe_curr_write_fd);
+          pipe_curr_write_fd = -1;
+        } else {
+          int e = -errno;
+          if (e == -EAGAIN) {
+            if (total_moved == 0)
+              return e;
+            else
+              break;
+          } else {
+            close(pipe_curr_write_fd);
+            pipe_curr_write_fd = -1;
+            len = expected_len;
+            get_data();
+            return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
+          }
+        }
+      }
+    }
+   return total_moved;
+  }
+
+  buffer::raw* clone_empty() {
+    // cloning doesn't make sense for pipe-based buffers,
+    // and is only used by unit tests for other types of buffers
+    return NULL;
+  }
+
+  char *get_data() {
+    if (data)
+      return data;
+
+    if (pipe_curr_write_fd != -1) {
+      close(pipe_curr_write_fd);
+      pipe_curr_write_fd = -1;
+    }
+    data = new char[len];
+    //not checking data, it will throw std::bad_alloc
+
+    size_t pos = 0;
+    for (auto& elem : pipe_read_elements) {
+      assert(elem.fd >= 0 && "expected proper file descriptors");
+      if (elem.fd < 0) continue;
+      ssize_t r = safe_read(elem.fd, data + pos, len - pos);
+      close(elem.fd);
+      if (r >=0) {
+        pos += r;
+      } else {
+        assert(0 && "unexpected error when reading pipes");
+        //fallback for assertless compilation;
+        //data will be garbled, but at least we cleanup properly
+        continue;
+      }
+    }
+    pipe_read_elements.resize(0);
+
+    return data;
+  }
+
+private:
+  int set_pipe_size(int *fds, long length) {
+#ifdef CEPH_HAVE_SETPIPE_SZ
+    if (::fcntl(fds[1], F_SETPIPE_SZ, length) == -1) {
+      int r = -errno;
+      if (r == -EPERM) {
+        // pipe limit must have changed - EPERM means we requested
+        // more than the maximum size as an unprivileged user
+        update_max_pipe_size();
+        throw malformed_input("length larger than new max pipe size");
+      }
+      return r;
+    }
+#endif
+    return 0;
+  }
+
+  ssize_t set_pipe_size(int pipe_fd) {
+#ifdef CEPH_HAVE_SETPIPE_SZ
+    int length;
+    length = buffer_max_pipe_size.read();
+    if (::fcntl(pipe_fd, F_SETPIPE_SZ, length) == -1) {
+      int r = -errno;
+      if (r == -EPERM) {
+        // pipe limit must have changed - EPERM means we requested
+        // more than the maximum size as an unprivileged user
+        // let's try to rectify
+        update_max_pipe_size();
+        length = buffer_max_pipe_size.read();
+        if (::fcntl(pipe_fd, F_SETPIPE_SZ, length) == -1)
+          return -errno;
+      }
+      else
+        return r;
+    }
+    if (::fcntl(pipe_fd, F_GETPIPE_SZ, length) == -1)
+      return -errno;
+    return length;
+#endif
+    return 0;
+  }
+};
+#endif //CEPH_HAVE_SPLICE
 
   /*
    * primitive buffer types
@@ -754,18 +1017,51 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return create_aligned(len, CEPH_PAGE_SIZE);
   }
 
-  buffer::raw* buffer::create_zero_copy(unsigned len, int fd, int64_t *offset) {
+  /*
+   * Create zero-copy bufferlist.
+   * If not supported, fallback to page-aligned variant.
+   *
+   * After creation buffer is ready to perform \ref insert_from_fd.
+   *
+   * \param capacity size of buffer
+   */
+  buffer::raw* buffer::create_zero_copy(size_t capacity) {
 #ifdef CEPH_HAVE_SPLICE
-    buffer::raw_pipe* buf = new raw_pipe(len);
-    int r = buf->set_source(fd, (loff_t*)offset);
-    if (r < 0) {
-      delete buf;
-      throw error_code(r);
-    }
-    return buf;
+    return new raw_splice_kcrypt(capacity);
 #else
-    throw error_code(-ENOTSUP);
+    return create_page_aligned(capacity);
 #endif
+  }
+
+  /*
+   * Create zero-copy bufferlist and immediatelly fill from file.
+   * If zero-copy not supported, fallback to page-aligned variant.
+   *
+   * After creation buffer is ready to perform \ref insert_from_fd.
+   *
+   * \param count size of buffer to create and fill
+   * \param fd file to read from
+   * \param offset position in \ref fd to read from. Value -1 means to read from current file offset.
+   */
+  buffer::raw* buffer::create_zero_copy(size_t count, int fd, off_t offset) {
+#ifdef CEPH_HAVE_SPLICE
+    buffer::raw* buf = new raw_splice_kcrypt(count);
+#else
+    buffer::raw* buf = new create_page_aligned(count);
+#endif
+    ssize_t r;
+    size_t dst_ofs = 0;
+    while (dst_ofs < count)
+    {
+      r = buf->insert_from_fd(dst_ofs, count - dst_ofs, fd, offset);
+      if (r>0) {
+        dst_ofs += r;
+      }
+      if (r<=0)
+        throw error_code(-EINVAL);
+    }
+    buf->len = count;
+    return buf;
   }
 
   buffer::raw* buffer::create_unshareable(unsigned len) {
@@ -943,6 +1239,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
   int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
 
+  uint32_t buffer::ptr::crc32c(uint32_t crc) const {
+    if (_raw == nullptr) return crc;
+    return _raw->crc32c(_off,_len, crc);
+  }
   void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
     assert(_raw);
     if (o+l > _len)
@@ -1037,14 +1337,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
         _raw->invalidate_crc();
     memset(c_str()+o, 0, l);
   }
-  bool buffer::ptr::can_zero_copy() const
+  bool buffer::ptr::is_data_local() const
   {
-    return _raw->can_zero_copy();
+    return _raw->is_data_local();
   }
 
-  int buffer::ptr::zero_copy_to_fd(int fd, int64_t *offset) const
+  ssize_t buffer::ptr::copy_to_fd(int fd, off_t ofs_from, ssize_t len, off_t dst_offset) const
   {
-    return _raw->zero_copy_to_fd(fd, (loff_t*)offset);
+    return _raw->copy_to_fd(fd, ofs_from, len, dst_offset);
   }
 
   // -- buffer::list::iterator --
@@ -1262,6 +1562,38 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   template<bool is_const>
+  ssize_t buffer::list::iterator_impl<is_const>::copy(unsigned len, int fd, off_t dst_offset)
+  {
+    ssize_t total_written = 0;
+    while (len > 0) {
+      if (p == ls->end())
+        throw end_of_buffer();
+
+      unsigned howmuch = p->length() - p_off;
+      if (len < howmuch)
+        howmuch = len;
+      ssize_t r = p->copy_to_fd(fd, p_off, howmuch, dst_offset);
+      if (r>0)
+      {
+        len -= r;
+        advance(r);
+        total_written += r;
+        if (dst_offset == -1)
+          dst_offset += r;
+      }
+      else
+      {
+        if (total_written > 0)
+          return total_written;
+        else
+          return r;
+      }
+    }
+    return total_written;
+  }
+
+
+  template<bool is_const>
   size_t buffer::list::iterator_impl<is_const>::get_ptr_and_advance(
     size_t want, const char **data)
   {
@@ -1370,6 +1702,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::iterator::copy(unsigned len, std::string &dest)
   {
     buffer::list::iterator_impl<false>::copy(len, dest);
+  }
+
+  ssize_t buffer::list::iterator::copy(unsigned len, int fd, off_t dst_offset)
+  {
+    return buffer::list::iterator_impl<false>::copy(len, fd, dst_offset);
   }
 
   void buffer::list::iterator::copy_all(list &dest)
@@ -1493,13 +1830,17 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
 
-  bool buffer::list::can_zero_copy() const
+  /*
+   * Reformulated aggregation.
+   * Now all buffers have to be local to return true
+   */
+  bool buffer::list::is_data_local() const
   {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it)
-      if (!it->can_zero_copy())
-	return false;
+        it != _buffers.end();
+        ++it)
+      if (!it->is_data_local())
+        return false;
     return true;
   }
 
@@ -2160,10 +2501,16 @@ int buffer::list::read_file(const char *fn, std::string *error)
 ssize_t buffer::list::read_fd(int fd, size_t len)
 {
   // try zero copy first
-  if (false && read_fd_zero_copy(fd, len) == 0) {
-    // TODO fix callers to not require correct read size, which is not
-    // available for raw_pipe until we actually inspect the data
-    return 0;
+  if (len >= CEPH_PAGE_SIZE * 4)
+  {
+    try {
+        append(buffer::create_zero_copy(len, fd));
+      } catch (buffer::error_code &e) {
+        return e.code;
+      } catch (buffer::malformed_input &e) {
+        return -EIO;
+      }
+      return 0;
   }
   bufferptr bp = buffer::create(len);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
@@ -2172,22 +2519,6 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
     append(std::move(bp));
   }
   return ret;
-}
-
-int buffer::list::read_fd_zero_copy(int fd, size_t len)
-{
-#ifdef CEPH_HAVE_SPLICE
-  try {
-    append(buffer::create_zero_copy(len, fd, NULL));
-  } catch (buffer::error_code &e) {
-    return e.code;
-  } catch (buffer::malformed_input &e) {
-    return -EIO;
-  }
-  return 0;
-#else
-  return -ENOTSUP;
-#endif
 }
 
 int buffer::list::write_file(const char *fn, int mode)
@@ -2257,8 +2588,23 @@ static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen
 
 int buffer::list::write_fd(int fd) const
 {
-  if (can_zero_copy())
-    return write_fd_zero_copy(fd);
+  if (!is_data_local()) {
+    std::list<ptr>::const_iterator p = _buffers.begin();
+    while (p != _buffers.end()){
+      int r;
+      ssize_t pos = 0;
+      while (pos < p->length()) {
+        r = p->copy_to_fd(fd, pos, p->length()-pos);
+        if (r>0)
+          pos += r;
+        if (r==-1) {
+          //tiny sleep to prevent hard spin
+          usleep(1000);
+        }
+      }
+    }
+    return 0;
+  }
 
   // use writev!
   iovec iov[IOV_MAX];
@@ -2351,29 +2697,6 @@ void buffer::list::prepare_iov(std::vector<iovec> *piov) const
   }
 }
 
-int buffer::list::write_fd_zero_copy(int fd) const
-{
-  if (!can_zero_copy())
-    return -ENOTSUP;
-  /* pass offset to each call to avoid races updating the fd seek
-   * position, since the I/O may be non-blocking
-   */
-  int64_t offset = ::lseek(fd, 0, SEEK_CUR);
-  int64_t *off_p = &offset;
-  if (offset < 0 && errno != ESPIPE)
-    return -errno;
-  if (errno == ESPIPE)
-    off_p = NULL;
-  for (std::list<ptr>::const_iterator it = _buffers.begin();
-       it != _buffers.end(); ++it) {
-    int r = it->zero_copy_to_fd(fd, off_p);
-    if (r < 0)
-      return r;
-    if (off_p)
-      offset += it->length();
-  }
-  return 0;
-}
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
@@ -2404,9 +2727,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	    buffer_cached_crc_adjusted.inc();
 	}
       } else {
-	uint32_t base = crc;
-	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
-	r->set_crc(ofs, make_pair(base, crc));
+	crc = it->crc32c(crc);
       }
     }
   }
@@ -2549,7 +2870,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_mmap_pages, buffer_raw_mmap_pagse,
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
 			      buffer_raw_posix_aligned, buffer_meta);
 #ifdef CEPH_HAVE_SPLICE
-MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_pipe, buffer_raw_pipe, buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_splice_kcrypt, buffer_raw_splice_kcrypt, buffer_meta);
 #endif
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_char, buffer_raw_char, buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_unshareable, buffer_raw_unshareable,
