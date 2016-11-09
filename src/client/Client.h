@@ -651,7 +651,7 @@ protected:
   void send_cap(Inode *in, MetaSession *session, Cap *cap,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
-  void check_caps(Inode *in, bool is_delayed);
+  void check_caps(Inode *in, bool immediate);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false);
