@@ -32,6 +32,7 @@ from ceph_detect_init import main
 from ceph_detect_init import rhel
 from ceph_detect_init import suse
 from ceph_detect_init import gentoo
+from ceph_detect_init import freebsd
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.DEBUG)
@@ -41,6 +42,9 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_alpine(self):
         self.assertEqual('openrc', alpine.choose_init())
+
+    def test_freebsd(self):
+        self.assertEqual('bsdrc', freebsd.choose_init())
 
     def test_centos(self):
         with mock.patch('ceph_detect_init.centos.release',
@@ -165,6 +169,24 @@ class TestCephDetectInit(testtools.TestCase):
             self.assertEqual('6.0', distro.release)
             self.assertEqual('squeeze', distro.codename)
             self.assertEqual('sysvinit', distro.init)
+
+        with mock.patch.multiple('platform',
+                                 system=lambda: 'FreeBSD',
+                                 release=lambda: '11.0-RELEASE-p1',
+                                 version=lambda: 'foo bar baz foobar'):
+            distro = ceph_detect_init.get()
+            self.assertEqual(freebsd, distro)
+            self.assertEqual('freebsd', distro.name)
+            self.assertEqual('freebsd', distro.normalized_name)
+            self.assertEqual('freebsd', distro.distro)
+            self.assertFalse(distro.is_el)
+            self.assertEqual('11.0-RELEASE-p1', distro.release)
+            self.assertEqual('foobar', distro.codename)
+            self.assertEqual('bsdrc', distro.init)
+
+        with mock.patch('platform.system',
+                        lambda: 'cephix'):
+            self.assertRaises(exc.UnsupportedPlatform, ceph_detect_init.get)
 
     def test_get_distro(self):
         g = ceph_detect_init._get_distro
