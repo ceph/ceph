@@ -476,7 +476,7 @@ Description: RADOS striping interface (development files)
 Package: librbd1
 Architecture: linux-any
 Section: libs
-Depends: librados3 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: librados3, ${misc:Depends}, ${shlibs:Depends}
 Description: RADOS block device client library
  RBD is a block device striped across multiple distributed objects
  in RADOS, a reliable, autonomic distributed object storage cluster
@@ -658,7 +658,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados3 (= ${binary:Version}),
+Depends: librados2 | librados3,
          ${misc:Depends},
          ${shlibs:Depends},
          ${python:Depends}
@@ -675,7 +675,7 @@ Description: Python 2 libraries for the Ceph librados library
 Package: python3-rados
 Architecture: linux-any
 Section: python
-Depends: librados3 (= ${binary:Version}),
+Depends: librados2 | librados3,
          ${misc:Depends},
          ${shlibs:Depends},
          ${python3:Depends}
