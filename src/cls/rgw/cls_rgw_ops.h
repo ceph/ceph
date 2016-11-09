@@ -937,4 +937,5 @@ struct cls_rgw_bi_log_list_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_ret)
 
-#endif /* CEPH_CLS_RGW_OPS_H */
+
+#endif
