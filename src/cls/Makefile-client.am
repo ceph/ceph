@@ -1,5 +1,5 @@
 ## Rados object client classes
-
+xxx
 libcls_lock_client_la_SOURCES = \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
