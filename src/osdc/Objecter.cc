@@ -2114,13 +2114,17 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool const check_for_latest_map = _calc_target(&op->target, &op->last_force_resend) == RECALC_OP_TARGET_POOL_DNE;
+  bool check_for_latest_map = _calc_target(&op->target, &op->last_force_resend) == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, lc);
   if (r == -EAGAIN) {
     assert(s == NULL);
     lc.promote();
+    	  
+    if (!osdmap->is_up(op->target.osd))
+      check_for_latest_map |= (_calc_target(&op->target, &op->last_force_resend) == RECALC_OP_TARGET_POOL_DNE);  
+    
     r = _get_session(op->target.osd, &s, lc);
   }
   assert(r == 0);
