@@ -337,7 +337,7 @@ public:
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<k,v>>>;	\
     template<typename k, typename cmp = std::less<k> >			\
-    using set = std::set<k,cmp,pool_allocator<k>>; \
+    using set = std::set<k,cmp,pool_allocator<k>>;			\
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
     template<typename v>						\
@@ -366,8 +366,11 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
-  mempool::pool::pool_allocator<obj>					\
-  _factory_##pool##factoryname##_alloc = {true};
+  namespace mempool {							\
+    namespace pool {							\
+      pool_allocator<obj> alloc_##factoryname = {true};			\
+    }									\
+  }
 
 // Use this for each class that belongs to a mempool.  For example,
 //
@@ -387,10 +390,10 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 #define MEMPOOL_DEFINE_OBJECT_FACTORY(obj,factoryname,pool)		\
   MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
   void *obj::operator new(size_t size) {				\
-    return _factory_##pool##factoryname##_alloc.allocate(1);		\
+    return mempool::pool::alloc_##factoryname.allocate(1); \
   }									\
   void obj::operator delete(void *p)  {					\
-    return _factory_##pool##factoryname##_alloc.deallocate((obj*)p, 1); \
+    return mempool::pool::alloc_##factoryname.deallocate((obj*)p, 1);	\
   }
 
 #endif
