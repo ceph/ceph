@@ -252,7 +252,7 @@ namespace rgw {
 
 	/* rgw_fh ref+ */
 	rgw_fh = get_rgwfh(fh);
-	rgw_fh->mtx.lock(); /* LOCKED */
+	rgw_fh->mtx.lock();
       }
 
       std::string oname = rgw_fh->relative_object_name();
@@ -268,14 +268,6 @@ namespace rgw {
 
     rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
     fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
-
-#if 1 /* XXX verify clear cache */
-    fh_key fhk(rgw_fh->fh.fh_hk);
-    LookupFHResult tfhr = lookup_fh(fhk, RGWFileHandle::FLAG_LOCKED);
-    RGWFileHandle* nfh = get<0>(tfhr);
-    assert(!nfh);
-#endif
-
     rgw_fh->mtx.unlock();
     unref(rgw_fh);
 
@@ -289,8 +281,6 @@ namespace rgw {
     /* XXX initial implementation: try-copy, and delete if copy
      * succeeds */
     int rc = -EINVAL;
-
-    real_time t;
 
     std::string src_name{_src_name};
     std::string dst_name{_dst_name};
@@ -314,21 +304,11 @@ namespace rgw {
 			<< " rejecting attempt to rename directory path="
 			<< rgw_fh->full_object_name()
 			<< dendl;
+      rgw_fh->mtx.unlock(); /* !LOCKED */
+      unref(rgw_fh); /* -ref */
       rc = -EPERM;
-      goto unlock;
+      goto out;
     }
-
-    /* forbid renaming open files (violates intent, for now) */
-    if (rgw_fh->is_open()) {
-      ldout(get_context(), 12) << __func__
-			<< " rejecting attempt to rename open file path="
-			<< rgw_fh->full_object_name()
-			<< dendl;
-      rc = -EPERM;
-      goto unlock;
-    }
-
-    t = real_clock::now();
 
     for (int ix : {0, 1}) {
       switch (ix) {
@@ -339,26 +319,8 @@ namespace rgw {
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
-	  ldout(get_context(), 1)
-	    << __func__
-	    << " rename step 0 failed src="
-	    << src_fh->full_object_name() << " " << src_name
-	    << " dst=" << dst_fh->full_object_name()
-	    << " " << dst_name
-	    << "rc " << rc
-	    << dendl;
-	  goto unlock;
+	  goto out;
 	}
-	ldout(get_context(), 12)
-	  << __func__
-	  << " rename step 0 success src="
-	  << src_fh->full_object_name() << " " << src_name
-	  << " dst=" << dst_fh->full_object_name()
-	  << " " << dst_name
-	  << " rc " << rc
-	  << dendl;
-	/* update dst change id */
-	dst_fh->set_times(t);
       }
       break;
       case 1:
@@ -366,37 +328,14 @@ namespace rgw {
 	rc = this->unlink(rgw_fh /* LOCKED */, _src_name,
 			  RGWFileHandle::FLAG_UNLINK_THIS);
 	/* !LOCKED, -ref */
-	if (! rc) {
-	  ldout(get_context(), 12)
-	    << __func__
-	    << " rename step 1 success src="
-	    << src_fh->full_object_name() << " " << src_name
-	    << " dst=" << dst_fh->full_object_name()
-	    << " " << dst_name
-	    << " rc " << rc
-	    << dendl;
-	  /* update src change id */
-	  src_fh->set_times(t);
-	} else {
-	  ldout(get_context(), 1)
-	    << __func__
-	    << " rename step 1 failed src="
-	    << src_fh->full_object_name() << " " << src_name
-	    << " dst=" << dst_fh->full_object_name()
-	    << " " << dst_name
-	    << " rc " << rc
-	    << dendl;
-	}
+	if (! rc)
+	  goto out;
       }
       break;
       default:
 	abort();
       } /* switch */
     } /* ix */
-  unlock:
-    rgw_fh->mtx.unlock(); /* !LOCKED */
-    unref(rgw_fh); /* -ref */
-
   out:
     return rc;
   } /* RGWLibFS::rename */
@@ -1282,12 +1221,6 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-
-  int rc = -(fs->getattr(rgw_fh, st));
-  if (rc != 0) {
-    // do it again
-    rc = -(fs->getattr(rgw_fh, st));
-  }
 
   return -(fs->getattr(rgw_fh, st));
 }
