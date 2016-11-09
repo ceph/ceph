@@ -31,6 +31,7 @@
 
 #include <common/Formatter.h>
 
+
 /*
 
 Memory Pools
@@ -167,10 +168,14 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
+// align shard to a cacheline
 struct shard_t {
   std::atomic<size_t> bytes = {0};
   std::atomic<size_t> items = {0};
-};
+  char __padding[128 - sizeof(std::atomic<size_t>)*2];
+} __attribute__ ((aligned (128)));
+
+static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
 
 struct stats_t {
   ssize_t items = 0;
