@@ -175,3 +175,10 @@ class MaxWhileTries(Exception):
 
 class ConsoleError(Exception):
     pass
+
+
+class NoRemoteError(Exception):
+    message = "This operation requires a remote"
+
+    def __str__(self):
+        return self.message

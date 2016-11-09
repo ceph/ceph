@@ -12,8 +12,10 @@ from . import repo_utils
 
 from .config import config
 from .contextutil import safe_while
-from .exceptions import VersionNotFoundError, CommitNotFoundError
+from .exceptions import (VersionNotFoundError, CommitNotFoundError,
+                         NoRemoteError)
 from .orchestra.opsys import OS, DEFAULT_OS_VERSION
+from .orchestra.run import Raw
 
 log = logging.getLogger(__name__)
 
@@ -398,7 +400,7 @@ def _get_config_value_for_remote(ctx, remote, config, key):
     :param config: the config dict
     :param key: the name of the value to retrieve
     """
-    roles = ctx.cluster.remotes[remote]
+    roles = ctx.cluster.remotes[remote] if ctx else None
     if 'all' in config:
         return config['all'].get(key)
     elif roles:
@@ -436,6 +438,8 @@ class GitbuilderProject(object):
     """
     Represents a project that is built by gitbuilder.
     """
+    # gitbuilder always uses this value
+    rpm_release = "1-0"
 
     def __init__(self, project, job_config, ctx=None, remote=None):
         self.project = project
@@ -759,6 +763,77 @@ class GitbuilderProject(object):
 
         return sha1
 
+    def install_repo(self):
+        """
+        Install the .repo file or sources.list fragment on self.remote if there
+        is one. If not, raises an exception
+        """
+        if not self.remote:
+            raise NoRemoteError()
+        if self.remote.os.package_type == 'rpm':
+            self._install_rpm_repo()
+        elif self.remote.os.package_type == 'deb':
+            self._install_deb_repo()
+
+    def _install_rpm_repo(self):
+        dist_release = self.dist_release
+        project = self.project
+        if dist_release == 'opensuse':
+            proj_release = '{proj}-release-{release}.noarch'.format(
+                proj=project, release=self.rpm_release)
+        else:
+            proj_release = \
+                '{proj}-release-{release}.{dist_release}.noarch'.format(
+                    proj=project, release=self.rpm_release,
+                    dist_release=dist_release
+                )
+        rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
+        url = "{base_url}/noarch/{rpm_name}".format(
+            base_url=self.base_url, rpm_name=rpm_name)
+        if dist_release == 'opensuse':
+            self.remote.run(args=[
+                'sudo', 'zypper', '-n', 'install', '--capability', rpm_name
+            ])
+        else:
+            self.remote.run(args=['sudo', 'yum', '-y', 'install', url])
+
+    def _install_deb_repo(self):
+        self.remote.run(
+            args=[
+                'echo', 'deb', self.base_url, self.codename, 'main',
+                Raw('|'),
+                'sudo', 'tee',
+                '/etc/apt/sources.list.d/{proj}.list'.format(
+                    proj=self.project),
+            ],
+            stdout=StringIO(),
+        )
+
+    def remove_repo(self):
+        """
+        Remove the .repo file or sources.list fragment on self.remote if there
+        is one. If not, raises an exception
+        """
+        if not self.remote:
+            raise NoRemoteError()
+        if self.remote.os.package_type == 'rpm':
+            self._remove_rpm_repo()
+        elif self.remote.os.package_type == 'deb':
+            self._remove_deb_repo()
+
+    def _remove_rpm_repo(self):
+        remove_package('%s-release' % self.project, self.remote)
+
+    def _remove_deb_repo(self):
+        self.remote.run(
+            args=[
+                'sudo',
+                'rm', '-f',
+                '/etc/apt/sources.list.d/{proj}.list'.format(
+                    proj=self.project),
+            ]
+        )
+
 
 class ShamanProject(GitbuilderProject):
     def __init__(self, project, job_config, ctx=None, remote=None):
@@ -850,6 +925,42 @@ class ShamanProject(GitbuilderProject):
     def _get_package_version(self):
         self.assert_result()
         return self._result.json()[0]['extra']['package_manager_version']
+
+    @property
+    def repo_url(self):
+        self.assert_result()
+        return urlparse.urljoin(
+            self._result.json()[0]['chacra_url'],
+            'repo',
+        )
+
+    def _install_rpm_repo(self):
+        self.remote.run(
+            args=[
+                'sudo', 'curl', '-s', '-o',
+                '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
+                self.repo_url,
+            ]
+        )
+
+    def _install_deb_repo(self):
+        self.remote.run(
+            args=[
+                'sudo', 'curl', '-s', '-o',
+                '/etc/apt/sources.list.d/{proj}.list'.format(
+                    proj=self.project),
+                self.repo_url,
+            ]
+        )
+
+    def _remove_rpm_repo(self):
+        self.remote.run(
+            args=[
+                'sudo',
+                'rm', '-f',
+                '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
+            ]
+        )
 
 
 def get_builder_project():
