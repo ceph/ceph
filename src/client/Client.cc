@@ -4118,18 +4118,26 @@ void Client::flush_caps()
   ldout(cct, 10) << "flush_caps" << dendl;
   xlist<Inode*>::iterator p = delayed_caps.begin();
   while (!p.end()) {
+    unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
+
     ++p;
     delayed_caps.pop_front();
-    check_caps(in, CHECK_CAPS_NODELAY);
+    if (p.end() && cap_list.empty())
+      flags |= CHECK_CAPS_SYNCHRONOUS;
+    check_caps(in, flags);
   }
 
   // other caps, too
   p = cap_list.begin();
   while (!p.end()) {
+    unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
+
     ++p;
-    check_caps(in, CHECK_CAPS_NODELAY);
+    if (p.end())
+      flags |= CHECK_CAPS_SYNCHRONOUS;
+    check_caps(in, flags);
   }
 }
 
