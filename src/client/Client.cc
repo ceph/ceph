@@ -9033,7 +9033,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
   
-  if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
+  if (!syncdataonly && in->dirty_caps) {
     check_caps(in, true);
     if (in->flushing_caps)
       flush_tid = last_flush_tid;
