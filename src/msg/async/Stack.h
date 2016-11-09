@@ -243,6 +243,7 @@ class Worker {
                      const SocketOptions &opts, ServerSocket *) = 0;
   virtual int connect(const entity_addr_t &addr,
                       const SocketOptions &opts, ConnectedSocket *socket) = 0;
+  virtual void destroy() {}
 
   virtual void initialize() {}
   PerfCounters *get_perf_counter() { return perf_logger; }

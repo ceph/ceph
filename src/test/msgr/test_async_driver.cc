@@ -76,7 +76,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
 #endif
     if (strcmp(GetParam(), "select"))
       driver = new SelectDriver(g_ceph_context);
-    driver->init(100);
+    driver->init(NULL, 100);
   }
   virtual void TearDown() {
     delete driver;

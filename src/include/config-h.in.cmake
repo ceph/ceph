@@ -102,6 +102,9 @@
 /* SPDK conditional compilation */
 #cmakedefine HAVE_SPDK
 
+/* DPDK conditional compilation */
+#cmakedefine HAVE_DPDK
+
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
 
