@@ -598,6 +598,7 @@ $extra_conf
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool
+        mon allow pool delete = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
