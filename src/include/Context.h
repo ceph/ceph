@@ -451,8 +451,8 @@ typedef C_GatherBuilderBase<Context, C_Gather > C_GatherBuilder;
 
 class FunctionContext : public Context {
 public:
-  FunctionContext(const boost::function<void(int)> &callback)
-    : m_callback(callback)
+  FunctionContext(boost::function<void(int)> &&callback)
+    : m_callback(std::move(callback))
   {
   }
 
