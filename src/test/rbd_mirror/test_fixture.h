@@ -39,6 +39,7 @@ public:
 
   Threads *m_threads = nullptr;
 
+
   int create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
                    const std::string &name, uint64_t size);
   int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
@@ -48,11 +49,13 @@ public:
                   librados::snap_t *snap_id = nullptr);
 
   static std::string get_temp_image_name();
+  static int create_image_data_pool(std::string &data_pool);
 
   static std::string _local_pool_name;
   static std::string _remote_pool_name;
   static std::shared_ptr<librados::Rados> _rados;
   static uint64_t _image_number;
+  static std::string _data_pool;
 };
 
 } // namespace mirror
