@@ -125,7 +125,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
     if (oss.tellp() > 0) {
       oss << ",";
     }
-    oss << p;
+    oss << p.get_sockaddr();
   }
 
   oss << " name=" << cct->_conf->name.get_id();
