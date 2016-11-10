@@ -57,8 +57,6 @@ class AsyncConnection : public Connection {
     outcoming_bl.claim_append(bl);
     return _try_send(more);
   }
-  // if "send" is false, it will only append bl to send buffer
-  // the main usage is avoid error happen outside messenger threads
   ssize_t _try_send(bool more=false);
   ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
@@ -75,7 +73,7 @@ class AsyncConnection : public Connection {
   void requeue_sent();
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
-  void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
+  void _append_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl, bool more);
   void inject_delay();
   ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
