@@ -1809,6 +1809,8 @@ void ECBackend::start_write(Op *op) {
 
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
 
+  bool should_write_local = false;
+  ECSubWrite local_write_op;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_actingbackfill_shards().begin();
        i != get_parent()->get_actingbackfill_shards().end();
@@ -1839,12 +1841,8 @@ void ECBackend::start_write(Op *op) {
       op->temp_added,
       op->temp_cleared);
     if (*i == get_parent()->whoami_shard()) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	sop,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+      should_write_local = true;
+      local_write_op.claim(sop);
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
@@ -1852,6 +1850,14 @@ void ECBackend::start_write(Op *op) {
       get_parent()->send_message_osd_cluster(
 	i->osd, r, get_parent()->get_epoch());
     }
+  }
+  if (should_write_local) {
+      handle_sub_write(
+	get_parent()->whoami_shard(),
+	op->client_op,
+	local_write_op,
+	op->on_local_applied_sync);
+      op->on_local_applied_sync = 0;
   }
 }
 
