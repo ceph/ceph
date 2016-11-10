@@ -1356,6 +1356,47 @@ void PG::calc_replicated_acting(
 }
 
 /**
+ * For replicated pg, two up or acting sets are equal only when:
+ * 1) Primary are the same
+ * 2) Replicas are the same, but maybe in different order in the vector
+ */
+bool PG::is_up_or_acting_set_equal_replicated(const vector<int> &l,
+                                              const vector<int> &r)
+{
+  if (l.size() != r.size())
+    return false;
+
+  if ((l.size() >= 1) && (l[0] != r[0]))
+    return false;
+
+  if (l.size() >= 2) {
+    vector<int>::const_iterator p = l.begin();
+    vector<int> lr(++p, l.end());
+    vector<int>::const_iterator q = r.begin();
+    vector<int> rr(++q, r.end());
+
+    sort(lr.begin(), lr.end());
+    sort(rr.begin(), rr.end());
+    unsigned i = 0;
+    while (i < lr.size()) {
+      if (lr[i] != rr[i])
+	return false;
+      i++;
+    }
+  }
+
+  return true;
+}
+
+bool PG::is_up_or_acting_set_equal(const vector<int> &l, const vector<int> &r)
+{
+  if (pool.info.ec_pool())
+    return (l == r);
+  else
+    return is_up_or_acting_set_equal_replicated(l, r);
+}
+
+/**
  * choose acting
  *
  * calculate the desired acting, and request a change with the monitor
@@ -1376,7 +1417,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     find_best_info(all_info, history_les_bound);
 
   if (auth_log_shard == all_info.end()) {
-    if (up != acting) {
+    if (!is_up_or_acting_set_equal(up, acting)) {
       dout(10) << "choose_acting no suitable info found (incomplete backfills?),"
 	       << " reverting to up" << dendl;
       want_acting = up;
@@ -1484,12 +1525,12 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     return false;
   }
 
-  if (want != acting) {
+  if (!is_up_or_acting_set_equal(want, acting)) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
-    if (want_acting == up) {
+    if (is_up_or_acting_set_equal(want_acting, up)) {
       // There can't be any pending backfill if
       // want is the same as crush map up OSDs.
       assert(compat_mode || want_backfill.empty());
@@ -2159,7 +2200,7 @@ void PG::mark_clean()
   // only mark CLEAN if we have the desired number of replicas AND we
   // are not remapped.
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
-      up == acting)
+      is_up_or_acting_set_equal(up, acting))
     state_set(PG_STATE_CLEAN);
 
   // NOTE: this is actually a bit premature: we haven't purged the
@@ -5181,7 +5222,7 @@ void PG::start_peering_interval(
 
   // This will now be remapped during a backfill in cases
   // that it would not have been before.
-  if (up != acting)
+  if (!is_up_or_acting_set_equal(up, acting))
     state_set(PG_STATE_REMAPPED);
   else
     state_clear(PG_STATE_REMAPPED);
@@ -6787,8 +6828,8 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
 
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
-  if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard,
-						 &history_les_bound))
+  if (!pg->is_up_or_acting_set_equal(pg->acting, pg->up) &&
+      !pg->choose_acting(auth_log_shard, &history_les_bound))
     assert(pg->want_acting.size());
 
   if (context< Active >().all_replicas_activated)
