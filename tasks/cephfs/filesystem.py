@@ -377,6 +377,12 @@ class Filesystem(MDSCluster):
             self.id = fscid
         self.getinfo(refresh = True)
 
+        # Stash a reference to the first created filesystem on ctx, so
+        # that if someone drops to the interactive shell they can easily
+        # poke our methods.
+        if not hasattr(self._ctx, "filesystem"):
+            self._ctx.filesystem = self
+
     def getinfo(self, refresh = False):
         status = self.status()
         if self.id is not None:
@@ -436,6 +442,10 @@ class Filesystem(MDSCluster):
                                          self.name, self.metadata_pool_name, data_pool_name)
 
         self.getinfo(refresh = True)
+
+    def __del__(self):
+        if getattr(self._ctx, "filesystem", None) == self:
+            delattr(self._ctx, "filesystem")
 
     def exists(self):
         """
