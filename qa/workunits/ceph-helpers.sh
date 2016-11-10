@@ -368,6 +368,7 @@ function run_mon() {
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
+	--mon-allow-pool-delete \
         "$@" || return 1
 
     cat > $dir/ceph.conf <<EOF
