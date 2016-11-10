@@ -88,7 +88,7 @@ namespace crimson {
       friend std::ostream& operator<<(std::ostream& out,
 				      const ClientInfo& client) {
 	out <<
-	  "{ r:" << client.reservation <<
+	  "{ ClientInfo:: r:" << client.reservation <<
 	  " w:" << client.weight <<
 	  " l:" << client.limit <<
 	  " 1/r:" << client.reservation_inv <<
@@ -99,9 +99,6 @@ namespace crimson {
       }
     }; // class ClientInfo
 
-
-    std::ostream& operator<<(std::ostream& out,
-			     const crimson::dmclock::ClientInfo& client);
 
     struct RequestTag {
       double reservation;
@@ -181,19 +178,28 @@ namespace crimson {
 	}
       }
 
+      static std::string format_tag(double value) {
+	if (max_tag == value) return std::string("max");
+	else if (min_tag == value) return std::string("min");
+	else return format_time(value);
+      }
+
       friend std::ostream& operator<<(std::ostream& out,
 				      const RequestTag& tag) {
 	out <<
-	  "{ r:" << format_time(tag.reservation) <<
-	  " p:" << format_time(tag.proportion) <<
-	  " l:" << format_time(tag.limit) << " }";
+	  "{ RequestTag:: ready:" << (tag.ready ? "true" : "false") <<
+	  " r:" << format_tag(tag.reservation) <<
+	  " p:" << format_tag(tag.proportion) <<
+	  " l:" << format_tag(tag.limit) <<
+#if 0 // try to resolve this to make sure Time is operator<<'able.
+#ifndef DO_NOT_DELAY_TAG_CALC
+	  " arrival:" << tag.arrival <<
+#endif
+#endif
+	  " }";
 	return out;
       }
     }; // class RequestTag
-
-
-    std::ostream& operator<<(std::ostream& out,
-			     const crimson::dmclock::RequestTag& tag);
 
 
     // C is client identifier type, R is request type, B is heap
@@ -238,7 +244,8 @@ namespace crimson {
 	}
 
 	friend std::ostream& operator<<(std::ostream& out, const ClientReq& c) {
-	  out << c.tag;
+	  out << "{ ClientReq:: tag:" << c.tag << " client:" <<
+	    c.client_id << " }";
 	  return out;
 	}
       }; // class ClientReq
@@ -372,12 +379,21 @@ namespace crimson {
 	    return remove_by_req_filter_fw(filter_accum);
 	  }
 	}
-	
+
 	friend std::ostream&
 	operator<<(std::ostream& out,
 		   const typename PriorityQueueBase<C,R,B>::ClientRec& e) {
-	  out << "{ client:" << e.client << " top req: " <<
-	    (e.has_request() ? e.next_request() : "none") << " }";
+	  out << "{ ClientRec::" <<
+	    " client:" << e.client <<
+	    " prev_tag:" << e.prev_tag <<
+	    " top_req:";
+	  if (e.has_request()) {
+	    out << e.next_request();
+	  } else {
+	    out << "none";
+	  }
+	  out << " }";
+
 	  return out;
 	}
       }; // class ClientRec
@@ -496,6 +512,54 @@ namespace crimson {
       uint get_heap_branching_factor() const {
 	return B;
       }
+
+
+      friend std::ostream& operator<<(std::ostream& out,
+				      const PriorityQueueBase& q) {
+	std::lock_guard<decltype(q.data_mtx)> guard(q.data_mtx);
+
+	out << "{ PriorityQueue:: " << std::endl;
+	for (const auto& c : q.client_map) {
+	  out << "  { client:" << c.first << ", record:" << *c.second <<
+	    " }";
+	}
+	if (!q.resv_heap.empty()) {
+	  const auto& resv = q.resv_heap.top();
+	  out << std::endl << "  { reservation_top:" << resv << " }" << std::endl;
+	  const auto& ready = q.ready_heap.top();
+	  out << "  { ready_top:" << ready << " }" << std::endl;
+	  const auto& limit = q.limit_heap.top();
+	  out << "  { limit_top:" << limit << " }" << std::endl;
+	} else {
+	  out << " HEAPS-EMPTY";
+	}
+	out << " }" << std::endl;
+
+	return out;
+      }
+
+      // for debugging
+      void display_queues(std::ostream& out,
+			  bool show_res = true,
+			  bool show_lim = true,
+			  bool show_ready = true,
+			  bool show_prop = true) const {
+	auto filter = [](const ClientRec& e)->bool { return true; };
+	if (show_res) {
+	  resv_heap.display_sorted(out << "RESER:", filter) << std::endl;
+	}
+	if (show_lim) {
+	  limit_heap.display_sorted(out << "LIMIT:", filter) << std::endl;
+	}
+	if (show_ready) {
+	  ready_heap.display_sorted(out << "READY:", filter) << std::endl;
+	}
+#if USE_PROP_HEAP
+	if (show_prop) {
+	  prop_heap.display_sorted(out << "PROPO:", filter) << std::endl;
+	}
+#endif
+      } // display_queues
 
 
     protected:
@@ -661,7 +725,7 @@ namespace crimson {
 	// this pointer will help us create a reference to a shared
 	// pointer, no matter which of two codepaths we take
 	ClientRec* temp_client;
-	
+
 	auto client_it = client_map.find(client_id);
 	if (client_map.end() != client_it) {
 	  temp_client = &(*client_it->second); // address of obj of shared_ptr
@@ -725,7 +789,7 @@ namespace crimson {
 	    }
 	  }
 
-	  // if this conditional does not fire, it 
+	  // if this conditional does not fire, it
 	  if (lowest_prop_tag < lowest_prop_tag_trigger) {
 	    client.prop_delta = lowest_prop_tag - time;
 	  }
@@ -744,17 +808,14 @@ namespace crimson {
 	}
 #else
 	RequestTag tag(client.get_req_tag(), client.info, req_params, time, cost);
+	// copy tag to previous tag for client
+	client.update_req_tag(tag, tick);
 #endif
 
 	client.add_request(tag, client.client, std::move(request));
 
 	client.cur_rho = req_params.rho;
 	client.cur_delta = req_params.delta;
-
-#ifdef DO_NOT_DELAY_TAG_CALC
-	// copy tag to previous tag for client
-	client.update_req_tag(tag, tick);
-#endif
 
 	resv_heap.adjust(client);
 	limit_heap.adjust(client);
@@ -803,30 +864,6 @@ namespace crimson {
       } // pop_process_request
 
 
-      // for debugging
-      void display_queues(bool show_res = true,
-			  bool show_lim = true,
-			  bool show_ready = true,
-			  bool show_prop = true) {
-	auto filter = [](const ClientRecRef& e)->bool { return !e->handled; };
-	if (show_res) {
-	  resv_heap.display_sorted(std::cout << "RESER:", filter) << std::endl;
-	}
-	if (show_lim) {
-	  limit_heap.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
-	}
-	if (show_ready) {
-	  ready_heap.display_sorted(std::cout << "READY:", filter) << std::endl;
-	}
-#if USE_PROP_HEAP
-	if (show_prop) {
-	  prop_heap.display_sorted(std::cout << "PROPO:", filter) << std::endl;
-	}
-#endif
-	std::cout << "{ HEAP_BRANCHING:" << B << "}" << std::endl;
-      } // display_queues
-
-
       // data_mtx should be held when called
       void reduce_reservation_tags(ClientRec& client) {
 	for (auto& r : client.requests) {
@@ -857,7 +894,7 @@ namespace crimson {
       // data_mtx should be held when called
       NextReq do_next_request(Time now) {
 	NextReq result;
-	
+
 	// if reservation queue is empty, all are empty (i.e., no active clients)
 	if(resv_heap.empty()) {
 	  result.type = NextReqType::none;

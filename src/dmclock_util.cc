@@ -17,7 +17,7 @@
 std::string crimson::dmclock::format_time(const Time& time, uint modulo) {
   long subtract = long(time / modulo) * modulo;
   std::stringstream ss;
-  ss << std::fixed << std::setprecision(4) << time - subtract;
+  ss << std::fixed << std::setprecision(4) << (time - subtract);
   return ss.str();
 }
 
