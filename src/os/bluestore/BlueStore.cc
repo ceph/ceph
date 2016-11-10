@@ -6001,6 +6001,7 @@ int BlueStore::omap_get_values(
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
+  string final_key;
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6009,12 +6010,14 @@ int BlueStore::omap_get_values(
   if (!o->onode.omap_head)
     goto out;
   o->flush();
+  _key_encode_u64(o->onode.omap_head, &final_key);
+  final_key.push_back('.');
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
-    string key;
-    get_omap_key(o->onode.omap_head, *p, &key);
+    final_key.resize(9); // keep prefix
+    final_key += *p;
     bufferlist val;
-    if (db->get(PREFIX_OMAP, key, &val) >= 0) {
-      dout(30) << __func__ << "  got " << pretty_binary_string(key)
+    if (db->get(PREFIX_OMAP, final_key, &val) >= 0) {
+      dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
 	       << " -> " << *p << dendl;
       out->insert(make_pair(*p, val));
     }
@@ -6051,6 +6054,7 @@ int BlueStore::omap_check_keys(
     return -ENOENT;
   RWLock::RLocker l(c->lock);
   int r = 0;
+  string final_key;
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -6059,16 +6063,18 @@ int BlueStore::omap_check_keys(
   if (!o->onode.omap_head)
     goto out;
   o->flush();
+  _key_encode_u64(o->onode.omap_head, &final_key);
+  final_key.push_back('.');
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
-    string key;
-    get_omap_key(o->onode.omap_head, *p, &key);
+    final_key.resize(9); // keep prefix
+    final_key += *p;
     bufferlist val;
-    if (db->get(PREFIX_OMAP, key, &val) >= 0) {
-      dout(30) << __func__ << "  have " << pretty_binary_string(key)
+    if (db->get(PREFIX_OMAP, final_key, &val) >= 0) {
+      dout(30) << __func__ << "  have " << pretty_binary_string(final_key)
 	       << " -> " << *p << dendl;
       out->insert(*p);
     } else {
-      dout(30) << __func__ << "  miss " << pretty_binary_string(key)
+      dout(30) << __func__ << "  miss " << pretty_binary_string(final_key)
 	       << " -> " << *p << dendl;
     }
   }
