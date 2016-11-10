@@ -2808,6 +2808,29 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   return ret;
 }
 
+// special handling for rgw_compression_type = "random" with multipart uploads
+static CompressorRef get_compressor_plugin(const req_state *s)
+{
+  const auto& compression_type = s->cct->_conf->rgw_compression_type;
+  if (compression_type != "random") {
+    return Compressor::create(s->cct, compression_type);
+  }
+
+  bool is_multipart{false};
+  const auto& upload_id = s->info.args.get("uploadId", &is_multipart);
+
+  if (!is_multipart) {
+    return Compressor::create(s->cct, compression_type);
+  }
+
+  // use a hash of the multipart upload id so all parts use the same plugin
+  const auto alg = std::hash<std::string>{}(upload_id) % Compressor::COMP_ALG_LAST;
+  if (alg == Compressor::COMP_ALG_NONE) {
+    return nullptr;
+  }
+  return Compressor::create(s->cct, alg);
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -2824,7 +2847,6 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -2911,11 +2933,11 @@ void RGWPutObj::execute()
 
   fst = copy_source_range_fst;
   lst = copy_source_range_lst;
-  if (compression_type != "none") {
-    plugin = Compressor::create(s->cct, compression_type);
+  if (s->cct->_conf->rgw_compression_type != "none") {
+    plugin = get_compressor_plugin(s);
     if (!plugin) {
       ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-          << compression_type << dendl;
+          << s->cct->_conf->rgw_compression_type << dendl;
     } else {
       compressor = boost::in_place(s->cct, plugin, filter);
       filter = &*compressor;
