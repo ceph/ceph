@@ -202,11 +202,19 @@ struct librados::IoCtxImpl {
 		     const bufferlist& bl);
   int aio_writesame(const object_t &oid, AioCompletionImpl *c,
 		    const bufferlist& bl, size_t write_len, uint64_t off);
-  int aio_remove(const object_t &oid, AioCompletionImpl *c);
+  int aio_remove(const object_t &oid, AioCompletionImpl *c, int flags=0);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
   int aio_stat2(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, struct timespec *pts);
+  int aio_getxattr(const object_t& oid, AioCompletionImpl *c,
+		   const char *name, bufferlist& bl);
+  int aio_setxattr(const object_t& oid, AioCompletionImpl *c,
+		   const char *name, bufferlist& bl);
+  int aio_getxattrs(const object_t& oid, AioCompletionImpl *c,
+		    map<string, bufferlist>& attrset);
+  int aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
+		  const char *name);
   int aio_cancel(AioCompletionImpl *c);
 
   int pool_change_auid(unsigned long long auid);

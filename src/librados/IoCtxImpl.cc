@@ -974,7 +974,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
   return 0;
 }
 
-int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
+int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, int flags)
 {
   auto ut = ceph::real_clock::now(client->cct);
 
@@ -990,7 +990,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
 
   Objecter::Op *o = objecter->prepare_remove_op(
     oid, oloc,
-    snapc, ut, 0,
+    snapc, ut, flags,
     onack, onsafe, &c->objver);
   objecter->op_submit(o, &c->tid);
 
@@ -1024,6 +1024,73 @@ int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
+}
+
+int librados::IoCtxImpl::aio_getxattr(const object_t& oid, AioCompletionImpl *c,
+				      const char *name, bufferlist& bl)
+{
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getxattr(name, &bl, NULL);
+  int r = aio_operate_read(oid, &rd, c, 0, &bl);
+  return r;
+}
+
+int librados::IoCtxImpl::aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
+				     const char *name)
+{
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.rmxattr(name);
+  return aio_operate(oid, &op, c, snapc, 0);
+}
+
+int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
+				      const char *name, bufferlist& bl)
+{
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.setxattr(name, bl);
+  return aio_operate(oid, &op, c, snapc, 0);
+}
+
+struct AioGetxattrsData {
+  AioGetxattrsData(librados::AioCompletionImpl *c, map<string, bufferlist>* attrset,
+		   librados::RadosClient *_client) :
+    user_completion(c), user_attrset(attrset), client(_client) {}
+  struct librados::C_AioCompleteAndSafe user_completion;
+  map<string, bufferlist> result_attrset;
+  map<std::string, bufferlist>* user_attrset;
+  librados::RadosClient *client;
+};
+
+static void aio_getxattrs_complete(rados_completion_t c, void *arg) {
+  AioGetxattrsData *cdata = reinterpret_cast<AioGetxattrsData*>(arg);
+  int rc = rados_aio_get_return_value(c);
+  cdata->user_attrset->clear();
+  if (rc >= 0) {
+    for (map<string,bufferlist>::iterator p = cdata->result_attrset.begin();
+	 p != cdata->result_attrset.end();
+	 ++p) {
+      ldout(cdata->client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
+      (*cdata->user_attrset)[p->first] = p->second;
+    }
+  }
+  cdata->user_completion.finish(rc);
+  ((librados::AioCompletionImpl*)c)->put();
+  delete cdata;
+}
+
+int librados::IoCtxImpl::aio_getxattrs(const object_t& oid, AioCompletionImpl *c,
+				       map<std::string, bufferlist>& attrset)
+{
+  AioGetxattrsData *cdata = new AioGetxattrsData(c, &attrset, client);
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getxattrs(&cdata->result_attrset, NULL);
+  librados::AioCompletionImpl *comp = new librados::AioCompletionImpl;
+  comp->set_complete_callback(cdata, aio_getxattrs_complete);
+  return aio_operate_read(oid, &rd, comp, 0, NULL);
 }
 
 int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
