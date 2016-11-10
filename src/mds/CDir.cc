@@ -1005,6 +1005,8 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 {
   dout(10) << "merge " << subs << dendl;
 
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_merge);
+
   set_dir_auth(subs.front()->get_dir_auth());
   prepare_new_fragment(replay);
 
