@@ -86,8 +86,10 @@ int RGWRole::create(bool exclusive)
   real_clock::to_timeval(t, tv);
 
   char buf[30];
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", std::gmtime(&tv.tv_sec));
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec);
+  struct tm result;
+  gmtime_r(&tv.tv_sec, &result);
+  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
+  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
   auto& pool = store->get_zone_params().roles_pool;
