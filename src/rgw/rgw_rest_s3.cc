@@ -2297,6 +2297,8 @@ void RGWGetACLs_ObjStore_S3::send_response()
 int RGWPutACLs_ObjStore_S3::get_params()
 {
   int ret =  RGWPutACLs_ObjStore::get_params();
+  bufferptr in_ptr(data, len);
+  in_data.append(in_ptr);
   if (ret < 0)
     s->aws4_auth_needs_complete = false;
   if (s->aws4_auth_needs_complete) {
