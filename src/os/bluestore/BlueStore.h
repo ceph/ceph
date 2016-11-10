@@ -542,7 +542,7 @@ public:
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
     uint8_t  blob_depth = 0;          ///< blob overlapping count
-    BlobRef blob;                     ///< the blob with our data
+    BlobRef  blob;                    ///< the blob with our data
 
     /// ctor for lookup only
     explicit Extent(uint32_t lo) : logical_offset(lo) { }
@@ -577,19 +577,22 @@ public:
       return a.logical_offset == b.logical_offset;
     }
 
+    uint32_t blob_start() {
+      return logical_offset - blob_offset;
+    }
+
     uint32_t blob_end() {
-      return logical_offset + blob->get_blob().get_logical_length() -
-	blob_offset;
+      return blob_start() + blob->get_blob().get_logical_length();
     }
 
     uint32_t end() const {
       return logical_offset + length;
     }
 
+    // return true if any piece of the blob is out of
+    // the given range [o, o + l].
     bool blob_escapes_range(uint32_t o, uint32_t l) {
-      uint32_t bstart = logical_offset - blob_offset;
-      return (bstart < o ||
-	      bstart + blob->get_blob().get_logical_length() > o + l);
+      return blob_start() < o || blob_end() > o + l;
     }
   };
   typedef boost::intrusive::set<Extent> extent_map_t;
