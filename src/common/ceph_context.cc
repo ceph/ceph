@@ -510,7 +510,8 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
         def_conf.apply_changes(NULL);
 
         map<string, pair<string, string>> diff;
-        def_conf.diff_setting(_conf, &diff, ceph_setting, true);
+        set<string> unknown;
+        def_conf.diff(_conf, &diff, &unknown, ceph_setting);
         f->open_object_section("diff");
         f->open_object_section("current");
 
