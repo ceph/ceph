@@ -1185,10 +1185,14 @@ void PG::calc_replicated_acting(
   
   // select primary
   map<pg_shard_t,pg_info_t>::const_iterator primary;
+  if (up.size())
+    assert(auth_log_shard->second.last_update.version >=
+	all_info.find(up_primary)->second.last_update.version);
   if (up.size() &&
       !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
-        auth_log_shard->second.log_tail) {
+      all_info.find(up_primary)->second.last_update >= auth_log_shard->second.log_tail &&
+      auth_log_shard->second.last_update.version - all_info.find(up_primary)->second.last_update.version
+        < max_updates) {
     ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
     primary = all_info.find(up_primary); // prefer up[0], all thing being equal
   } else {
