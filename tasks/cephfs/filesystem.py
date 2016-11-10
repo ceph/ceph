@@ -762,6 +762,16 @@ class Filesystem(MDSCluster):
 
         return self.json_asok(command, 'mds', mds_id)
 
+    def read_cache(self, path, depth=None):
+        cmd = ["dump", "tree", path]
+        if depth is not None:
+            cmd.append(depth.__str__())
+        result = self.mds_asok(cmd)
+        if len(result) == 0:
+            raise RuntimeError("Path not found in cache: {0}".format(path))
+
+        return result
+
     def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None):
         """
         Block until the MDS reaches a particular state, or a failure condition
