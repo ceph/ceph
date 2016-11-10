@@ -71,6 +71,7 @@ def create_users(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     users = {'': 'foo', '2': 'bar'}
     for client in config['clients']:
+        cluster_name, daemon_type, client_id = teuthology.split_role(client)
         testswift_conf = config['testswift_conf'][client]
         for suffix, user in users.iteritems():
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
@@ -81,6 +82,7 @@ def create_users(ctx, config):
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'radosgw-admin',
                     '-n', client,
+                    '--cluster', cluster_name,
                     'user', 'create',
                     '--subuser', '{account}:{user}'.format(account=testswift_conf['func_test']['account{s}'.format(s=suffix)],user=user),
                     '--display-name', testswift_conf['func_test']['display_name{s}'.format(s=suffix)],
@@ -96,6 +98,7 @@ def create_users(ctx, config):
         for client in config['clients']:
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 ctx.cluster.only(client).run(
                     args=[
                         'adjust-ulimits',
@@ -103,6 +106,7 @@ def create_users(ctx, config):
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',
                         '-n', client,
+                        '--cluster', cluster_name,
                         'user', 'rm',
                         '--uid', uid,
                         '--purge-data',
