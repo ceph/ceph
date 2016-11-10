@@ -958,10 +958,10 @@ public:
 
     onode_lru_list_t onode_lru;
 
-    buffer_list_t buffer_hot;      //< "Am" hot buffers
-    buffer_list_t buffer_warm_in;  //< "A1in" newly warm buffers
-    buffer_list_t buffer_warm_out; //< "A1out" empty buffers we've evicted
-    uint64_t buffer_bytes = 0;     //< bytes
+    buffer_list_t buffer_hot;      ///< "Am" hot buffers
+    buffer_list_t buffer_warm_in;  ///< "A1in" newly warm buffers
+    buffer_list_t buffer_warm_out; ///< "A1out" empty buffers we've evicted
+    uint64_t buffer_bytes = 0;     ///< bytes
 
     enum {
       BUFFER_NEW = 0,
