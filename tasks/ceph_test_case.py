@@ -125,13 +125,14 @@ class CephTestCase(unittest.TestCase):
         elapsed = 0
         while True:
             if condition():
+                log.debug("wait_until_true: success in {0}s".format(elapsed))
                 return
             else:
                 if elapsed >= timeout:
-                    raise RuntimeError("Timed out after {0} seconds".format(elapsed))
+                    raise RuntimeError("Timed out after {0}s".format(elapsed))
                 else:
                     log.debug("wait_until_true: waiting...")
                 time.sleep(period)
                 elapsed += period
 
-        log.debug("wait_until_true: success")
+
