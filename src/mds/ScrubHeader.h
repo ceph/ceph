@@ -24,7 +24,7 @@ class CInode;
  */
 class ScrubHeader {
 public:
-  ScrubHeader(std::string tag_, bool force_, bool recursive_,
+  ScrubHeader(const std::string &tag_, bool force_, bool recursive_,
               bool repair_, Formatter *f_)
       : tag(tag_), force(force_), recursive(recursive_), repair(repair_),
         formatter(f_), origin(nullptr)
