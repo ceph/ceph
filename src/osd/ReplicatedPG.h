@@ -381,8 +381,13 @@ public:
       hoid.pool != (int64_t)info.pgid.pool() ||
       cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
       cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
-    if (!should_send)
+    if (!should_send) {
       assert(is_backfill_targets(peer));
+      return should_send;
+    }
+    if (peer_missing.count(peer) &&
+	peer_missing[peer].get_items().count(hoid))
+      should_send = false;
     return should_send;
   }
   

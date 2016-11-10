@@ -572,9 +572,11 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     return true;
   if (pg_log.get_missing().get_items().count(soid))
     return true;
-  assert(!actingbackfill.empty());
-  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-       i != actingbackfill.end();
+
+  // Object is degraded if missing in the actingset
+  assert(!actingset.empty());
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
@@ -582,11 +584,30 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     if (peer_missing_entry != peer_missing.end() &&
 	peer_missing_entry->second.get_items().count(soid))
       return true;
+  }
 
-    // Object is degraded if after last_backfill AND
-    // we are backfilling it
-    if (is_backfill_targets(peer) &&
-	cmp(peer_info[peer].last_backfill, soid, get_sort_bitwise()) <= 0 &&
+  // Object is degraded if under async recovering
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator q = actingbackfill.begin();
+       q != actingbackfill.end();
+       ++q) {
+    if (*q == get_primary()) continue;
+    if (actingset.count(*q)) continue;
+    pg_shard_t peer = *q;
+    if (peer_missing.count(peer) &&
+	peer_missing[peer].get_items().count(soid) &&
+	recovering.count(soid))
+      return true;
+  }
+
+  // Object is degraded if after last_backfill AND
+  // we are backfilling it
+  for (set<pg_shard_t>::iterator p = backfill_targets.begin();
+       p != backfill_targets.end();
+       ++p) {
+    if (*p == get_primary()) continue;
+    pg_shard_t backfill_peer = *p;
+    if (cmp(peer_info[backfill_peer].last_backfill, soid, get_sort_bitwise()) <= 0 &&
 	cmp(last_backfill_started, soid, get_sort_bitwise()) >= 0 &&
 	backfills_in_flight.count(soid))
       return true;

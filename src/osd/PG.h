@@ -404,6 +404,10 @@ public:
     void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have) {
       needs_recovery_map[hoid] = pg_missing_item(need, have);
     }
+    void remove_missing(const hobject_t &hoid) {
+      missing_loc.erase(hoid);
+      needs_recovery_map.erase(hoid);
+    }
     void revise_need(const hobject_t &hoid, eversion_t need) {
       assert(needs_recovery(hoid));
       needs_recovery_map[hoid].need = need;

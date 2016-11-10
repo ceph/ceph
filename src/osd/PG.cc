@@ -1324,7 +1324,7 @@ void PG::calc_replicated_acting(
 	set<pg_shard_t>::iterator r = strayset.find(pg_shard_t(p->second, shard_id_t::NO_SHARD));
 	if (r != strayset.end())
 	  strayset.erase(r);
-	backfill->insert(pg_shard_t(p->second, shard_id_t::NO_SHARD));
+	// backfill->insert(pg_shard_t(p->second, shard_id_t::NO_SHARD));
         ss << " too many updates for shard " << p->second
 	   << ", switch from recovery to backfill " << std::endl;
       } else {
@@ -3112,7 +3112,85 @@ void PG::append_log(
 	(cmp(p->soid, info.last_backfill, get_sort_bitwise()) > 0)) {
       pg_log.roll_forward(&handler);
     }
+
+    // update missing and missing_loc when deleting an object
+    if (p->is_delete()) {
+      if (is_primary()) {
+        // update peer_missing and missing_loc
+        for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+             i != actingbackfill.end();
+             ++i) {
+          if (*i == get_primary()) continue;
+          pg_shard_t peer = *i;
+          if (peer_missing.count(peer) &&
+              peer_missing[peer].get_items().count(p->soid)) {
+            peer_missing[peer].rm(p->soid);
+            missing_loc.remove_missing(p->soid);
+          }
+        }
+      } else {
+        if (pg_log.get_missing().is_missing(p->soid)) {
+          pg_log.missing_rm(p->soid);
+        }
+      }
+      continue;
+    }
+
+    // update missing and missing_loc when
+    // 1. cloning
+    // 2. creating the snapdir object
+    // deleting snapdir object is handled above
+    if ((p->is_clone() && !p->soid.is_head()) ||
+        (p->soid.is_snapdir())) {
+      if (is_primary()) {
+	bool update_missing_loc = false;
+        for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+             i != actingbackfill.end();
+             ++i) {
+          if (*i == get_primary()) continue;
+          pg_shard_t peer = *i;
+          if (peer_missing.count(peer) &&
+              peer_missing[peer].get_items().count(p->soid.get_head())) {
+            peer_missing[peer].add(p->soid, p->version, eversion_t());
+	    update_missing_loc = true;
+          }
+        }
+	if (update_missing_loc) {
+          missing_loc.add_missing(p->soid, p->version, eversion_t());
+	  // the object should exist on all osds of the actingset
+	  for (set<pg_shard_t>::iterator q = actingset.begin();
+	       q != actingset.end();
+	       ++q)
+            missing_loc.add_location(p->soid, *q);
+	}
+      } else {
+        if (pg_log.get_missing().is_missing(p->soid.get_head())) {
+          pg_log.missing_add(p->soid, p->version, eversion_t());
+        }
+      }
+      continue;
+    }
+
+    // for others, revise need
+    if (is_primary()) {
+      // update peer_missing and missing_loc
+      for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+           i != actingbackfill.end();
+           ++i) {
+        if (*i == get_primary()) continue;
+        pg_shard_t peer = *i;
+        if (peer_missing.count(peer) &&
+            peer_missing[peer].get_items().count(p->soid)) {
+          missing_loc.revise_need(p->soid, p->version);
+        }
+      }
+    } else {
+      if (pg_log.get_missing().is_missing(p->soid)) {
+        pg_log.revise_need(p->soid, p->version);
+      }
+    }
   }
+
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
     projected_log.skip_can_rollback_to_to_head();
