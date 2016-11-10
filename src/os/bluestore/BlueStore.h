@@ -624,7 +624,6 @@ public:
     }
 
     void clear() {
-      extent_map.clear();
       extent_map.clear_and_dispose([&](Extent *e) { delete e; });
       shards.clear();
       inline_bl.clear();
