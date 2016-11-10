@@ -6940,8 +6940,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!osdmap.exists(i) &&
 	  pending_inc.new_up_client.count(i) == 0 &&
 	  (pending_inc.new_state.count(i) == 0 ||
-	   (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0))
+	   (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
+        pending_inc.new_weight[i] = CEPH_OSD_OUT;
 	goto done;
+      }
     }
 
     // raise max_osd
