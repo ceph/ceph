@@ -339,6 +339,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
                << dendl;
   }
 
+  if (!is_primary) {
+    r = Journal<>::promote(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to promote image: " << cpp_strerror(r) << dendl;
+    }
+  }
+
   header_oid = ::journal::Journaler::header_oid(ictx->id);
 
   while(true) {
