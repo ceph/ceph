@@ -164,6 +164,8 @@ Targets starting with "unittest" are run in `make check` and thus can
 be run with `ctest`. Targets starting with "ceph_test" can not, and should
 be run by hand.)
 
+When failures occur, look in build/Testing/Temporary for logs.
+
 To build and run all tests and their dependencies without other
 unnecessary targets in Ceph:
 
