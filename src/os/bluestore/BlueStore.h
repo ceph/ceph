@@ -418,13 +418,12 @@ public:
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
 
-    /// refs from this shard.  ephemeral if id<0, persisted if spanning.
-    bluestore_extent_ref_map_t ref_map;
-
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
     mutable bool dirty = true;      ///< true if blob is newer than blob_bl
     mutable bufferlist blob_bl;     ///< cached encoded blob
+    /// refs from this shard.  ephemeral if id<0, persisted if spanning.
+    bluestore_extent_ref_map_t ref_map;
 
   public:
     Blob() {}
@@ -436,6 +435,9 @@ public:
 
     friend ostream& operator<<(ostream& out, const Blob &b);
 
+    const bluestore_extent_ref_map_t& get_ref_map() const {
+      return ref_map;
+    }
     bool is_spanning() const {
       return id >= 0;
     }
@@ -479,6 +481,8 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
 		 vector<bluestore_pextent_t> *r);
+    /// pass references for specific range to other blob
+    void pass_ref(Blob* other, uint64_t src_offset, uint64_t length, uint64_t dest_offset);
 
     /// split the blob
     void split(size_t blob_offset, Blob *o);
@@ -503,31 +507,49 @@ public:
 	assert(blob_bl.length());
       }
     }
-    void bound_encode(size_t& p) const {
+    void bound_encode(size_t& p, bool include_ref_map) const {
       _encode();
       p += blob_bl.length();
+      if (include_ref_map) {
+        ref_map.bound_encode(p);
+      }
     }
-    void encode(bufferlist::contiguous_appender& p) const {
+    void encode(bufferlist::contiguous_appender& p, bool include_ref_map) const {
       _encode();
       p.append(blob_bl);
+      if (include_ref_map) {
+        ref_map.encode(p);
+      }
     }
-    void decode(bufferptr::iterator& p) {
+    void decode(bufferptr::iterator& p, bool include_ref_map) {
       const char *start = p.get_pos();
       denc(blob, p);
       const char *end = p.get_pos();
       blob_bl.clear();
       blob_bl.append(start, end - start);
       dirty = false;
+      if (include_ref_map) {
+        ref_map.decode(p);
+      }
     }
 #else
-    void bound_encode(size_t& p) const {
+    void bound_encode(size_t& p, bool include_ref_map) const {
       denc(blob, p);
+      if (include_ref_map) {
+        ref_map.bound_encode(p);
+      }
     }
-    void encode(bufferlist::contiguous_appender& p) const {
+    void encode(bufferlist::contiguous_appender& p, bool include_ref_map) const {
       denc(blob, p);
+      if (include_ref_map) {
+        ref_map.encode(p);
+      }
     }
-    void decode(bufferptr::iterator& p) {
+    void decode(bufferptr::iterator& p, bool include_ref_map) {
       denc(blob, p);
+      if (include_ref_map) {
+        ref_map.decode(p);
+      }
     }
 #endif
   };
