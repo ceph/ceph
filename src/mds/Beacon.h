@@ -39,6 +39,42 @@ class MDSRank;
  */
 class Beacon : public Dispatcher
 {
+public:
+  Beacon(CephContext *cct_, MonClient *monc_, std::string name);
+  ~Beacon();
+
+  void init(MDSMap const *mdsmap);
+  void shutdown();
+
+  bool ms_dispatch(Message *m);
+  void ms_handle_connect(Connection *c) {}
+  bool ms_handle_reset(Connection *c) {return false;}
+  void ms_handle_remote_reset(Connection *c) {}
+  bool ms_handle_refused(Connection *c) {return false;}
+
+  void notify_mdsmap(MDSMap const *mdsmap);
+  void notify_health(MDSRank const *mds);
+
+  void handle_mds_beacon(MMDSBeacon *m);
+  void send();
+
+  void set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate);
+  MDSMap::DaemonState get_want_state() const;
+
+  /**
+   * Send a beacon, and block until the ack is received from the mon
+   * or `duration` seconds pass, whichever happens sooner.  Useful
+   * for emitting a last message on shutdown.
+   */
+  void send_and_wait(const double duration);
+
+  bool is_laggy();
+  utime_t get_laggy_until() const;
+
+private:
+  void _notify_mdsmap(MDSMap const *mdsmap);
+  void _send();
+
   //CephContext *cct;
   mutable Mutex lock;
   MonClient*    monc;
@@ -69,43 +105,8 @@ class Beacon : public Dispatcher
   class C_MDS_BeaconSender;
   C_MDS_BeaconSender *sender;
 
-  void _notify_mdsmap(MDSMap const *mdsmap);
-  void _send();
-
   version_t awaiting_seq;
   Cond waiting_cond;
-
-public:
-  Beacon(CephContext *cct_, MonClient *monc_, std::string name);
-  ~Beacon();
-
-  void init(MDSMap const *mdsmap);
-  void shutdown();
-
-  bool ms_dispatch(Message *m); 
-  void ms_handle_connect(Connection *c) {}
-  bool ms_handle_reset(Connection *c) {return false;}
-  void ms_handle_remote_reset(Connection *c) {}
-  bool ms_handle_refused(Connection *c) {return false;}
-
-  void notify_mdsmap(MDSMap const *mdsmap);
-  void notify_health(MDSRank const *mds);
-
-  void handle_mds_beacon(MMDSBeacon *m);
-  void send();
-
-  void set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate);
-  MDSMap::DaemonState get_want_state() const;
-
-  /**
-   * Send a beacon, and block until the ack is received from the mon
-   * or `duration` seconds pass, whichever happens sooner.  Useful
-   * for emitting a last message on shutdown.
-   */
-  void send_and_wait(const double duration);
-
-  bool is_laggy();
-  utime_t get_laggy_until() const;
 };
 
 #endif // BEACON_STATE_H
