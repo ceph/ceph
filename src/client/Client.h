@@ -627,7 +627,7 @@ protected:
   void mark_caps_dirty(Inode *in, int caps);
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
-  void flush_caps();
+  void flush_caps_sync();
   void flush_caps(Inode *in, MetaSession *session, bool sync=false);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);

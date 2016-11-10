@@ -4113,9 +4113,14 @@ void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSe
   new_s->flushing_caps.push_back(&in->flushing_cap_item);
 }
 
-void Client::flush_caps()
+/*
+ * Flush all caps back to the MDS. Because the callers generally wait on the
+ * result of this function (syncfs and umount cases), we set
+ * CHECK_CAPS_SYNCHRONOUS on the last check_caps call.
+ */
+void Client::flush_caps_sync()
 {
-  ldout(cct, 10) << "flush_caps" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   xlist<Inode*>::iterator p = delayed_caps.begin();
   while (!p.end()) {
     unsigned flags = CHECK_CAPS_NODELAY;
@@ -5773,7 +5778,7 @@ void Client::unmount()
     }
   }
 
-  flush_caps();
+  flush_caps_sync();
   wait_sync_caps(last_flush_tid);
 
   // empty lru cache
@@ -9670,7 +9675,7 @@ int Client::_sync_fs()
     flush_done = true;
 
   // flush caps
-  flush_caps();
+  flush_caps_sync();
   ceph_tid_t flush_tid = last_flush_tid;
 
   // wait for unsafe mds requests
