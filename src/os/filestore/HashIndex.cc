@@ -1065,7 +1065,7 @@ int HashIndex::list_by_hash_bitwise(
 	}
 	if (cmp_bitwise(j->second, end) >= 0) {
 	  if (next)
-	    *next = ghobject_t::get_max();
+	    *next = j->second;
 	  return 0;
 	}
 	if (!next || cmp_bitwise(j->second, *next) >= 0) {
@@ -1131,7 +1131,7 @@ int HashIndex::list_by_hash_nibblewise(
 	}
 	if (cmp_nibblewise(j->second, end) >= 0) {
 	  if (next)
-	    *next = ghobject_t::get_max();
+	    *next = j->second;
 	  return 0;
 	}
 	if (!next || cmp_nibblewise(j->second, *next) >= 0) {
