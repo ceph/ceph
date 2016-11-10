@@ -3596,9 +3596,29 @@ int RGWRados::init_zg_from_period(bool *initialized)
     // use endpoints from the zonegroup's master zone
     auto master = zg.zones.find(zg.master_zone);
     if (master == zg.zones.end()) {
-      ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for "
-          "master_zone=" << zg.master_zone << dendl;
-      return -EINVAL;
+      // fix missing master zone for a single zone zonegroup
+      if (zg.master_zone.empty() && zg.zones.size() == 1) {
+	master = zg.zones.begin();
+	ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing master_zone, setting zone " <<
+	  master->second.name << " id:" << master->second.id << " as master" << dendl;
+	if (zonegroup.get_id() == zg.get_id()) {
+	  zonegroup.master_zone = master->second.id;
+	  zonegroup.update();
+	} else {
+	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
+	  ret = fixed_zg.init(cct, this);
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
+	  fixed_zg.master_zone = master->second.id;
+	  fixed_zg.update();
+	}
+      } else {
+	ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for master_zone=" <<
+	  zg.master_zone << dendl;
+	return -EINVAL;
+      }
     }
     const auto& endpoints = master->second.endpoints;
     add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints));
@@ -3640,9 +3660,18 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
     // use endpoints from the zonegroup's master zone
     auto master = zonegroup.zones.find(zonegroup.master_zone);
     if (master == zonegroup.zones.end()) {
-      ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
+      // fix missing master zone for a single zone zonegroup
+      if (zonegroup.master_zone.empty() && zonegroup.zones.size() == 1) {
+	master = zonegroup.zones.begin();
+	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing master_zone, setting zone " <<
+	  master->second.name << " id:" << master->second.id << " as master" << dendl;
+	zonegroup.master_zone = master->second.id;
+	zonegroup.update();
+      } else {
+	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
           "master_zone=" << zonegroup.master_zone << dendl;
-      return -EINVAL;
+	return -EINVAL;
+      }
     }
     const auto& endpoints = master->second.endpoints;
     rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), endpoints);
