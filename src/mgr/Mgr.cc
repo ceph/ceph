@@ -136,7 +136,7 @@ void Mgr::background_init()
 
   finisher.start();
 
-  finisher.queue(new C_StdFunction([this](){
+  finisher.queue(new FunctionContext([this](int r){
     init();
   }));
 }

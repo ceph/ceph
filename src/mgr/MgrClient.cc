@@ -229,7 +229,7 @@ void MgrClient::send_report()
   session->con->send_message(report);
 
   if (stats_period != 0) {
-    report_callback = new C_StdFunction([this](){send_report();});
+    report_callback = new FunctionContext([this](int r){send_report();});
     timer.add_event_after(stats_period, report_callback);
   }
 

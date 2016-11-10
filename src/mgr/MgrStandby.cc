@@ -118,8 +118,8 @@ void MgrStandby::send_beacon()
                                  available);
                                  
   monc->send_mon_message(m);
-  timer.add_event_after(g_conf->mgr_beacon_period, new C_StdFunction(
-        [this](){
+  timer.add_event_after(g_conf->mgr_beacon_period, new FunctionContext(
+        [this](int r){
           send_beacon();
         }
   )); 
