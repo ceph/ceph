@@ -33,6 +33,10 @@ namespace rados {
       extern int unlock(librados::IoCtx *ioctx, const std::string& oid,
 			const std::string& name, const std::string& cookie);
 
+      extern int aio_unlock(librados::IoCtx *ioctx, const std::string& oid,
+			    const std::string& name, const std::string& cookie,
+			    librados::AioCompletion *completion);
+
       extern void break_lock(librados::ObjectWriteOperation *op,
 			     const std::string& name, const std::string& cookie,
 			     const entity_name_t& locker);

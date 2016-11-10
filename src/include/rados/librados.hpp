@@ -950,6 +950,7 @@ namespace librados
      * other than SNAP_HEAD
      */
     int aio_remove(const std::string& oid, AioCompletion *c);
+    int aio_remove(const std::string& oid, AioCompletion *c, int flags);
 
     /**
      * Wait for all currently pending aio writes to be safe.
@@ -967,7 +968,10 @@ namespace librados
      * @returns 0 on success, negative error code on failure
      */
     int aio_flush_async(AioCompletion *c);
-
+    int aio_getxattr(const std::string& oid, AioCompletion *c, const char *name, bufferlist& bl);
+    int aio_getxattrs(const std::string& oid, AioCompletion *c, std::map<std::string, bufferlist>& attrset);
+    int aio_setxattr(const std::string& oid, AioCompletion *c, const char *name, bufferlist& bl);
+    int aio_rmxattr(const std::string& oid, AioCompletion *c, const char *name);
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
     int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, struct timespec *pts);
 
@@ -981,6 +985,12 @@ namespace librados
 
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
 	         bufferlist& inbl, bufferlist *outbl);
+
+    /*
+     * asynchronous version of unlock
+     */
+    int aio_unlock(const std::string &oid, const std::string &name,
+	           const std::string &cookie, AioCompletion *c);
 
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);

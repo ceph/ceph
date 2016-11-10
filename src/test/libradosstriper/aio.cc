@@ -5,6 +5,7 @@
 #include "test/librados/test.h"
 #include "test/libradosstriper/TestCase.h"
 
+#include <boost/scoped_ptr.hpp>
 #include <fcntl.h>
 #include <semaphore.h>
 #include <errno.h>
@@ -21,6 +22,7 @@ public:
   }
 
   ~AioTestData() {
+    sem_unlink("test_libradosstriper_aio_sem");
     sem_close(m_sem);
   }
 
@@ -572,4 +574,44 @@ TEST_F(StriperTestPP, RoundTripWriteFullPP) {
   my_completion->release();
   my_completion2->release();
   my_completion3->release();
+}
+
+TEST_F(StriperTest, RemoveTest) {
+  char buf[128];
+  char buf2[sizeof(buf)];
+  // create oabject
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ(0, rados_striper_write(striper, "RemoveTest", buf, sizeof(buf), 0));
+  // async remove it
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  ASSERT_EQ(0, rados_striper_aio_remove(striper, "RemoveTest", my_completion));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  rados_aio_release(my_completion);
+  // check we get ENOENT on reading
+  ASSERT_EQ(-ENOENT, rados_striper_read(striper, "RemoveTest", buf2, sizeof(buf2), 0));
+}
+
+TEST_F(StriperTestPP, RemoveTestPP) {
+  char buf[128];
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, striper.write("RemoveTestPP", bl, sizeof(buf), 0));
+  AioCompletion *my_completion = cluster.aio_create_completion(0, 0, 0);
+  ASSERT_EQ(0, striper.aio_remove("RemoveTestPP", my_completion));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  bufferlist bl2;
+  ASSERT_EQ(-ENOENT, striper.read("RemoveTestPP", &bl2, sizeof(buf), 0));
+  my_completion->release();
 }
