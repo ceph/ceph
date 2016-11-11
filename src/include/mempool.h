@@ -146,6 +146,7 @@ namespace mempool {
   f(osd)			      \
   f(bluestore_meta_onode)	      \
   f(bluestore_meta_other)	      \
+  f(bluestore_alloc)		      \
   f(bluefs)
 
 // give them integer ids

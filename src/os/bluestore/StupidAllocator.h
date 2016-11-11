@@ -36,7 +36,7 @@ public:
 
   int alloc_extents(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, std::vector<AllocExtent> *extents, int *count);
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count);
 
   int allocate(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
