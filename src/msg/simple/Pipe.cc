@@ -912,7 +912,7 @@ int Pipe::connect()
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     rc = -errno;
-    lderr(msgr->cct) << "connect couldn't created socket " << cpp_strerror(rc) << dendl;
+    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(rc) << dendl;
     goto fail;
   }
 
