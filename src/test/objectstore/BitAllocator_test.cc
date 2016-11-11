@@ -49,7 +49,7 @@ TEST(BitAllocator, test_bmap_iter)
   };
   BmapEntityTmp *obj = NULL;
   int i = 0;
-  std::vector<BmapEntityTmp> *arr = new std::vector<BmapEntityTmp>(num_items);
+  mempool::bstore_balloc::vector<BmapEntityTmp> *arr = new mempool::bstore_balloc::vector<BmapEntityTmp>(num_items);
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
@@ -91,7 +91,7 @@ TEST(BitAllocator, test_bmap_iter)
   num_items = 4;
   off = num_items - 1;
 
-  arr = new std::vector<BmapEntityTmp>(num_items);
+  arr = new mempool::bstore_balloc::vector<BmapEntityTmp>(num_items);
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
@@ -364,7 +364,7 @@ TEST(BitAllocator, test_zone_alloc)
   }
 
   int64_t blk_size = 1024;
-  std::vector<AllocExtent> extents = std::vector<AllocExtent>
+  AllocExtentVector extents = AllocExtentVector
         (zone->size() / 2, AllocExtent(-1, -1));
 
   ExtentList *block_list = new ExtentList(&extents, blk_size);
@@ -388,7 +388,7 @@ TEST(BitAllocator, test_zone_alloc)
 
   {
     int64_t blk_size = 1024;
-    std::vector<AllocExtent> extents = std::vector<AllocExtent>
+    AllocExtentVector extents = AllocExtentVector
       (zone->size() / 2, AllocExtent(-1, -1));
 
     ExtentList *block_list = new ExtentList(&extents, blk_size);
@@ -486,7 +486,7 @@ TEST(BitAllocator, test_bmap_alloc)
     }
 
     int64_t blk_size = 1024;
-    auto extents = std::vector<AllocExtent>
+    auto extents = AllocExtentVector
           (alloc->size(), AllocExtent(-1, -1));
 
     ExtentList *block_list = new ExtentList(&extents, blk_size);
@@ -584,7 +584,7 @@ bool alloc_extents_max_block(BitAllocator *alloc,
   int64_t allocated = 0;
   int64_t verified = 0;
   int64_t count = 0;
-  std::vector<AllocExtent> extents = std::vector<AllocExtent>
+  AllocExtentVector extents = AllocExtentVector
         (total_alloc, AllocExtent(-1, -1));
 
   ExtentList *block_list = new ExtentList(&extents, blk_size, max_alloc);
@@ -671,7 +671,7 @@ do_work_dis(BitAllocator *alloc)
   int64_t alloced = 0;
   int64_t num_blocks = alloc->size() / NUM_THREADS;
 
-  std::vector<AllocExtent> extents = std::vector<AllocExtent>
+  AllocExtentVector extents = AllocExtentVector
         (num_blocks, AllocExtent(-1, -1));
   ExtentList *block_list = new ExtentList(&extents, 4096);
 
