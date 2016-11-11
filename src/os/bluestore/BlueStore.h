@@ -628,6 +628,7 @@ public:
   struct ExtentMap {
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
+    Extent dummy;                   ///< dummy extent for lookups
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
