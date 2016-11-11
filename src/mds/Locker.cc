@@ -2487,7 +2487,9 @@ void Locker::handle_client_caps(MClientCaps *m)
   client_t client = m->get_source().num();
 
   snapid_t follows = m->get_snap_follows();
-  dout(7) << "handle_client_caps on " << m->get_ino()
+  dout(7) << "handle_client_caps "
+	  << ((m->flags & CLIENT_CAPS_SYNC) ? "sync" : "async")
+	  << " on " << m->get_ino()
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
@@ -2706,10 +2708,10 @@ void Locker::handle_client_caps(MClientCaps *m)
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)
-    bool need_flush = false;
+    bool need_flush = m->flags & CLIENT_CAPS_SYNC;
     int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
     if (new_wanted != cap->wanted()) {
-      if (new_wanted & ~cap->pending()) {
+      if (!need_flush && (new_wanted & ~cap->pending())) {
 	// exapnding caps.  make sure we aren't waiting for a log flush
 	need_flush = _need_flush_mdlog(head_in, new_wanted & ~cap->pending());
       }
