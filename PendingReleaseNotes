@@ -56,6 +56,11 @@
 OSD: change the prefix from fs_* to os_*, because commit_latency and …
 …apply_latency will be used not only for filestore.
 
+* Monitors will no longer allow pools to be removed by default.
+  The setting mon_allow_pool_delete has to be set to true (defaults to false)
+  before they allow pools to be removed.
+  This is a additional safeguard against pools being removed by accident.
+
 11.0.0
 ------
 
