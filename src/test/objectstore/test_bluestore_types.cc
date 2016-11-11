@@ -341,8 +341,8 @@ TEST(Blob, put_ref)
     b.dirty_blob().extents.push_back(
       bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x8000));
     b.dirty_blob().extents.push_back(bluestore_pextent_t(0x4071f000, 0x5000));
-    b.ref_map.get(0, 0x1200);
-    b.ref_map.get(0xae00, 0x4200);
+    b.get_ref(0, 0x1200);
+    b.get_ref(0xae00, 0x4200);
     cout << b << std::endl;
     vector<bluestore_pextent_t> r;
 
@@ -697,8 +697,8 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(-1, string(), nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    B.ref_map.get(0x0, 0x3800);
-    B.ref_map.get(0x17c00, 0x6400);
+    B.get_ref(0x0, 0x3800);
+    B.get_ref(0x17c00, 0x6400);
     b.extents.push_back(bluestore_pextent_t(0x40101000, 0x4000));
     b.extents.push_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
 					    0x13000));
