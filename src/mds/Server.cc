@@ -4295,7 +4295,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    if (cur->inode.layout.pool_id != layout.pool_id) {
+    if (cur->inode.layout.pool_id != layout.pool_id
+        || cur->inode.layout.pool_ns != layout.pool_ns) {
       if (!check_access(mdr, cur, MAY_SET_POOL)) {
         return;
       }
@@ -4377,12 +4378,16 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 }
 
 void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
+				  file_layout_t *dir_layout,
 				  set<SimpleLock*> rdlocks,
 				  set<SimpleLock*> wrlocks,
 				  set<SimpleLock*> xlocks)
 {
   MClientRequest *req = mdr->client_request;
   string name(req->get_path2());
+
+  dout(10) << __func__ << " " << name << " on " << *cur << dendl;
+
   if (name == "ceph.dir.layout") {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -ENODATA);
@@ -4416,6 +4421,14 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
     mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
     journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
+    return;
+  } else if (name == "ceph.dir.layout.pool_namespace"
+          || name == "ceph.file.layout.pool_namespace") {
+    // Namespace is the only layout field that has a meaningful
+    // null/none value (empty string, means default layout).  Is equivalent
+    // to a setxattr with empty string: pass through the empty payload of
+    // the rmxattr request to do this.
+    handle_set_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
     return;
   }
 
@@ -4537,7 +4550,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   }
 
   if (name.compare(0, 5, "ceph.") == 0) {
-    handle_remove_vxattr(mdr, cur, rdlocks, wrlocks, xlocks);
+    handle_remove_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
     return;
   }
 
