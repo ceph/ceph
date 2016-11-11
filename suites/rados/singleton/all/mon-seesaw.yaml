@@ -23,4 +23,4 @@ tasks:
       pg_num: 1
 - ceph_manager.wait_for_clean:
     kwargs:
-      timeout: 10
+      timeout: 60
