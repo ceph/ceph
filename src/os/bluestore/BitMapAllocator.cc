@@ -150,7 +150,7 @@ int BitMapAllocator::allocate(
 
 int BitMapAllocator::alloc_extents(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
 {
   assert(!(alloc_unit % m_block_size));
   assert(alloc_unit);
@@ -177,7 +177,7 @@ int BitMapAllocator::alloc_extents(
  */
 int BitMapAllocator::alloc_extents_cont(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size, int64_t hint,
-  std::vector<AllocExtent> *extents, int *count)
+  mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
 {
   *count = 0;
   assert(alloc_unit);
@@ -215,7 +215,7 @@ int BitMapAllocator::alloc_extents_cont(
 
 int BitMapAllocator::alloc_extents_dis(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
 {
   ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
