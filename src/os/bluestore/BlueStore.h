@@ -557,7 +557,8 @@ public:
   typedef mempool::bluestore_meta_other::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
-  struct Extent : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>> {
+  typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
+  struct Extent : public ExtentBase {
     MEMPOOL_CLASS_HELPERS();
 
     uint32_t logical_offset = 0;      ///< logical offset
@@ -567,13 +568,14 @@ public:
     BlobRef  blob;                    ///< the blob with our data
 
     /// ctor for lookup only
-    explicit Extent(uint32_t lo) : logical_offset(lo) { }
+    explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
     /// ctor for delayed initialization (see decode_some())
-    explicit Extent() {
+    explicit Extent() : ExtentBase() {
     }
     /// ctor for general usage
     Extent(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b)
-      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd) {
+      : ExtentBase(),
+        logical_offset(lo), blob_offset(o), length(l), blob_depth(bd) {
       assign_blob(b);
     }
     ~Extent() {
@@ -628,7 +630,6 @@ public:
   struct ExtentMap {
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
-    Extent dummy;                   ///< dummy extent for lookups
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
