@@ -871,9 +871,9 @@ protected:
   int use_default(bool old_format = false);
 
 public:
-  RGWSystemMetaObj() {}
-  RGWSystemMetaObj(const string& _name): name(_name)  {}
-  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name) {}
+  RGWSystemMetaObj() : cct(NULL), store(NULL) {}
+  RGWSystemMetaObj(const string& _name): name(_name), cct(NULL), store(NULL)  {}
+  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name), cct(NULL), store(NULL) {}
   RGWSystemMetaObj(CephContext *_cct, RGWRados *_store): cct(_cct), store(_store){}
   RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWRados *_store): name(_name), cct(_cct), store(_store){}
   const string& get_name() const { return name; }
@@ -1559,10 +1559,11 @@ class RGWPeriod
   int update_sync_status();
 
 public:
-  RGWPeriod() : epoch(0) {}
+  RGWPeriod() : epoch(0), cct(NULL), store(NULL) {}
 
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
-    : id(period_id), epoch(_epoch) {}
+    : id(period_id), epoch(_epoch),
+      cct(NULL), store(NULL) {}
 
   const string& get_id() const { return id; }
   epoch_t get_epoch() const { return epoch; }

@@ -179,7 +179,7 @@ struct AsyncCompletePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_COMPLETE;
   static const bool CHECK_FOR_REFRESH = false;
 
-  AsyncCompletePayload() {}
+  AsyncCompletePayload() : result(0) {}
   AsyncCompletePayload(const AsyncRequestId &id, int r)
     : AsyncRequestPayloadBase(id), result(r) {}
 

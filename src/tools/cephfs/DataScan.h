@@ -91,7 +91,8 @@ class RecoveryDriver {
     }
 
     RecoveryDriver()
-      : force_corrupt(false)
+      : force_corrupt(false),
+	force_init(false)
     {}
 
     virtual ~RecoveryDriver() {}

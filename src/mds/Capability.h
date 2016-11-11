@@ -86,7 +86,7 @@ public:
     ceph_seq_t seq;
     ceph_seq_t mseq;
     utime_t last_issue_stamp;
-    Export() {}
+    Export() : cap_id(0), wanted(0), issued(0), pending(0), seq(0), mseq(0) {}
     Export(int64_t id, int w, int i, int p, snapid_t cf, ceph_seq_t s, ceph_seq_t m, utime_t lis) :
       cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
       seq(s), mseq(m), last_issue_stamp(lis) {}
@@ -99,7 +99,7 @@ public:
     int64_t cap_id;
     ceph_seq_t issue_seq;
     ceph_seq_t mseq;
-    Import() {}
+    Import() : cap_id(0), issue_seq(0), mseq(0) {}
     Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &p);
@@ -125,7 +125,7 @@ public:
   struct revoke_info {
     __u32 before;
     ceph_seq_t seq, last_issue;
-    revoke_info() {}
+    revoke_info() : before(0), seq(0), last_issue(0) {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);

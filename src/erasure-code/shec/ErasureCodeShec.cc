@@ -549,6 +549,9 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 {
   int mindup = k+1, minp = k+1;
   int want[k + m];
+
+  memset(want, 0, sizeof(want));
+
   for (int i = 0; i < k + m; ++i) {
     want[i] = want_[i];
   }
