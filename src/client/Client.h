@@ -627,8 +627,8 @@ protected:
   void mark_caps_dirty(Inode *in, int caps);
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
-  void flush_caps();
-  void flush_caps(Inode *in, MetaSession *session);
+  void flush_caps_sync();
+  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
@@ -648,10 +648,15 @@ protected:
   void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, MetaSession *session, Cap *cap,
+  void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
-  void check_caps(Inode *in, bool is_delayed);
+
+  /* Flags for check_caps() */
+#define CHECK_CAPS_NODELAY	(0x1)
+#define CHECK_CAPS_SYNCHRONOUS	(0x2)
+
+  void check_caps(Inode *in, unsigned flags);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false);
