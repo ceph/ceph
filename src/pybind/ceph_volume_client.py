@@ -1083,7 +1083,7 @@ class CephFSVolumeClient(object):
                     'caps': [
                         'mds', mds_cap_str,
                         'osd', osd_cap_str,
-                        'mon', cap['caps'].get('mon')]
+                        'mon', cap['caps'].get('mon', 'allow r')]
                 })
             caps = self._rados_command(
                 'auth get',
@@ -1217,7 +1217,7 @@ class CephFSVolumeClient(object):
                         'caps': [
                             'mds', mds_cap_str,
                             'osd', osd_cap_str,
-                            'mon', cap['caps'].get('mon')]
+                            'mon', cap['caps'].get('mon', 'allow r')]
                     })
 
         # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
