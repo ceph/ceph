@@ -2824,7 +2824,8 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
-  bool compression_enabled;
+  const auto& compression_type = s->cct->_conf->rgw_compression_type;
+  CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
@@ -2910,10 +2911,15 @@ void RGWPutObj::execute()
 
   fst = copy_source_range_fst;
   lst = copy_source_range_lst;
-  compression_enabled = s->cct->_conf->rgw_compression_type != "none";
-  if (compression_enabled) {
-    compressor = boost::in_place(s->cct, filter);
-    filter = &*compressor;
+  if (compression_type != "none") {
+    plugin = Compressor::create(s->cct, compression_type);
+    if (!plugin) {
+      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+          << compression_type << dendl;
+    } else {
+      compressor = boost::in_place(s->cct, plugin, filter);
+      filter = &*compressor;
+    }
   }
 
   do {
@@ -2993,8 +2999,8 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      if (compression_enabled) {
-        compressor = boost::in_place(s->cct, filter);
+      if (compressor) {
+        compressor = boost::in_place(s->cct, plugin, filter);
         filter = &*compressor;
       }
 
@@ -3050,10 +3056,10 @@ void RGWPutObj::execute()
 
   hash.Final(m);
 
-  if (compression_enabled && compressor->is_compressed()) {
+  if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
-    cs_info.compression_type = s->cct->_conf->rgw_compression_type;
+    cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s->obj_size;
     cs_info.blocks = move(compressor->get_compression_blocks());
     ::encode(cs_info, tmp);
@@ -3168,7 +3174,6 @@ void RGWPostObj::execute()
   MD5 hash;
   buffer::list bl, aclbl;
   int len = 0;
-  bool compression_enabled;
   boost::optional<RGWPutObj_Compress> compressor;
 
   // read in the data from the POST form
@@ -3209,10 +3214,17 @@ void RGWPostObj::execute()
   if (op_ret < 0)
     return;
 
-  compression_enabled = s->cct->_conf->rgw_compression_type != "none";
-  if (compression_enabled) {
-    compressor = boost::in_place(s->cct, filter);
-    filter = &*compressor;
+  const auto& compression_type = s->cct->_conf->rgw_compression_type;
+  CompressorRef plugin;
+  if (compression_type != "none") {
+    plugin = Compressor::create(s->cct, compression_type);
+    if (!plugin) {
+      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+          << compression_type << dendl;
+    } else {
+      compressor = boost::in_place(s->cct, plugin, filter);
+      filter = &*compressor;
+    }
   }
 
   while (data_pending) {
@@ -3267,10 +3279,10 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
   }
 
-  if (compression_enabled && compressor->is_compressed()) {
+  if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
-    cs_info.compression_type = s->cct->_conf->rgw_compression_type;
+    cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s->obj_size;
     cs_info.blocks = move(compressor->get_compression_blocks());
     ::encode(cs_info, tmp);
