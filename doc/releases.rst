@@ -12,10 +12,10 @@ Timeline
 |     First release          | August    | November  | May       | October   | April     | November     | April     |
 |                            | 2013      | 2013      | 2014      | 2014      | 2015      | 2015         | 2016      |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
-|  Estimated retirement      | March     |           | January   |           | November  | June 2016    | November  |
+|  Estimated retirement      | March     |           | January   |           | November  |              | November  |
 |                            | 2015      |           | 2016      |           | 2016      |              | 2017      |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
-|    Actual retirement       | May       | May       | December  | April     |           |              |           |
+|    Actual retirement       | May       | May       | December  | April     |           | April 2016   |           |
 |                            | 2015      | 2014      | 2015      | 2015      |           |              |           |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
 
