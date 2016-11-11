@@ -3086,6 +3086,10 @@ void RGWPutObj::execute()
     cs_info.blocks = move(compressor->get_compression_blocks());
     ::encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
+    ldout(s->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
+        << " with type=" << cs_info.compression_type
+        << ", orig_size=" << cs_info.orig_size
+        << ", blocks=" << cs_info.blocks.size() << dendl;
   }
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
