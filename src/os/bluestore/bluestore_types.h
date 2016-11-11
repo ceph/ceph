@@ -62,6 +62,8 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_DENC(bluestore_cnode_t)
 
+class AllocExtent;
+typedef mempool::bluestore_alloc::vector<AllocExtent> AllocExtentVector;
 class AllocExtent {
 public:
   uint64_t offset;
@@ -79,24 +81,24 @@ public:
 };
 
 class ExtentList {
-  std::vector<AllocExtent> *m_extents;
+  AllocExtentVector *m_extents;
   int64_t m_num_extents;
   int64_t m_block_size;
   uint64_t m_max_alloc_size;
 
 public:
-  void init(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+  void init(AllocExtentVector *extents, int64_t block_size, uint64_t max_alloc_size) {
     m_extents = extents;
     m_num_extents = 0;
     m_block_size = block_size;
     m_max_alloc_size = max_alloc_size;
   }
 
-  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size) {
+  ExtentList(AllocExtentVector *extents, int64_t block_size) {
     init(extents, block_size, 0);
   }
 
-  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+  ExtentList(AllocExtentVector *extents, int64_t block_size, uint64_t max_alloc_size) {
     init(extents, block_size, max_alloc_size);
   }
 
@@ -106,7 +108,7 @@ public:
 
   void add_extents(int64_t start, int64_t count);
 
-  std::vector<AllocExtent> *get_extents() {
+  AllocExtentVector *get_extents() {
     return m_extents;
   }
 
