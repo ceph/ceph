@@ -552,7 +552,7 @@ inline typename std::enable_if<!traits::supported>::type
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
-  for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
+  for (auto p = v.begin(); p != v.end(); ++p)
     encode(*p, bl, features);
 }
 template<class T, class Alloc, typename traits=denc_traits<T>>
@@ -561,7 +561,7 @@ inline typename std::enable_if<!traits::supported>::type
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
-  for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
+  for (auto p = v.begin(); p != v.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Alloc, typename traits=denc_traits<T>>

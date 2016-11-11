@@ -141,7 +141,8 @@ namespace mempool {
   f(unittest_1)			      \
   f(unittest_2)			      \
   f(bluestore_meta_onode)	      \
-  f(bluestore_meta_other)
+  f(bluestore_meta_other)	      \
+  f(bluefs)
 
 // give them integer ids
 #define P(x) mempool_##x,
