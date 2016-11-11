@@ -1782,7 +1782,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
 				       bufferlist& bl, unsigned *pn)
 {
-  dummy.logical_offset = offset;
+  Extent dummy(offset);
   auto start = extent_map.lower_bound(dummy);
   uint32_t end = offset + length;
 
@@ -2069,7 +2069,7 @@ void BlueStore::ExtentMap::dirty_range(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find(
   uint64_t offset)
 {
-  dummy.logical_offset = offset;
+  Extent dummy(offset);
   return extent_map.find(dummy);
 }
 
@@ -2085,7 +2085,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   uint64_t offset)
 {
-  dummy.logical_offset = offset;
+  Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
     --fp;
