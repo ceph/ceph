@@ -1840,9 +1840,7 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   bool same_id;
   bool populated;
-  //bool existing_email = false; // this check causes a fault
   rgw_user& op_id = op_state.get_user_id();
-  std::string op_email = op_state.get_user_email();
 
   RGWUserInfo user_info;
 
