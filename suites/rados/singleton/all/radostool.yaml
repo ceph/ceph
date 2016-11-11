@@ -2,6 +2,7 @@ roles:
 - - mon.a
   - osd.0
   - osd.1
+  - osd.2
   - client.0
 openstack:
   - volumes: # attached to each instance
