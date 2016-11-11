@@ -1365,9 +1365,6 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     ::decode(bucket->items[j], blp);
   }
 
-  bucket->perm = (__u32*)calloc(1, bucket->size * sizeof(__u32));
-  bucket->perm_n = 0;
-
   switch (bucket->alg) {
   case CRUSH_BUCKET_UNIFORM:
     ::decode((reinterpret_cast<crush_bucket_uniform*>(bucket))->item_weight, blp);
