@@ -38,7 +38,7 @@ public:
     m_handle_mismatch(handle_mismatch),
     m_invalidate(invalidate)
   {
-    m_io_ctx.dup(image_ctx->md_ctx);
+    m_io_ctx.dup(image_ctx->data_ctx);
     m_io_ctx.snap_set_read(CEPH_SNAPDIR);
   }
 
