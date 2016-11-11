@@ -25,7 +25,6 @@
     object rm                  remove object
     object unlink              unlink object from bucket index
     objects expire             run expired objects cleanup
-    period prepare             prepare a new period
     period delete              delete a period
     period get                 get period info
     period get-current         get current period info
