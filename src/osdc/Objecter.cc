@@ -2296,7 +2296,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool const check_for_latest_map = _calc_target(&op->target,
+  bool check_for_latest_map = _calc_target(&op->target,
 						 &op->last_force_resend)
     == RECALC_OP_TARGET_POOL_DNE;
 
@@ -2306,6 +2306,10 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     assert(s == NULL);
     sul.unlock();
     sul.lock();
+    
+    if (!osdmap->is_up(op->target.osd))
+     check_for_latest_map |= (_calc_target(&op->target, &op->last_force_resend) == RECALC_OP_TARGET_POOL_DNE); 
+    
     r = _get_session(op->target.osd, &s, sul);
   }
   assert(r == 0);
