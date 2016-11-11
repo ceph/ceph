@@ -175,6 +175,13 @@ To delete a pool, execute::
 
 	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
+
+To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
+configuration. Otherwise they will refuse to remove a pool.
+
+See `Monitor Configuration`_ for more information.
+
+.. _Monitor Configuration: ../../configuration/mon-config-ref
 	
 If you created your own rulesets and rules for a pool you created,  you should
 consider removing them when you no longer need your pool::
