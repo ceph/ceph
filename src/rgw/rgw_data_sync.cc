@@ -1642,13 +1642,14 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
 
   string lock_name;
   string cookie;
-  rgw_bucket_shard_sync_info status;
+  rgw_bucket_shard_sync_info& status;
 
   bucket_index_marker_info info;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
-                                        const rgw_bucket_shard& bs)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs) {
+                                        const rgw_bucket_shard& bs,
+                                        rgw_bucket_shard_sync_info& _status)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs), status(_status) {
     store = sync_env->store;
     lock_name = "sync_lock";
 
@@ -1709,7 +1710,7 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs);
+  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, init_status);
 }
 
 template <class T>
@@ -2640,8 +2641,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     yield {
       if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
-        call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs));
-        sync_status.state = rgw_bucket_shard_sync_info::StateFullSync;
+        call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
       }
     }
 

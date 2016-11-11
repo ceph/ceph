@@ -403,6 +403,7 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWHTTPManager *http_manager;
 
   RGWDataSyncEnv sync_env;
+  rgw_bucket_shard_sync_info init_status;
 
   RGWBucketSyncCR *sync_cr{nullptr};
 
