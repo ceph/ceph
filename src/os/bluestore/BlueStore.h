@@ -621,13 +621,17 @@ public:
 
     bool needs_reshard = false;   ///< true if we must reshard
 
+    struct DeleteDisposer {
+      void operator()(Extent *e) { delete e; }
+    };
+
     ExtentMap(Onode *o);
     ~ExtentMap() {
-      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+      extent_map.clear_and_dispose(DeleteDisposer());
     }
 
     void clear() {
-      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+      extent_map.clear_and_dispose(DeleteDisposer());
       shards.clear();
       inline_bl.clear();
       needs_reshard = false;
@@ -716,9 +720,7 @@ public:
 
     /// remove (and delete) an Extent
     void rm(extent_map_t::iterator p) {
-      Extent *e = &*p;
-      extent_map.erase(p);
-      delete e;
+      extent_map.erase_and_dispose(p, DeleteDisposer());
     }
 
     bool has_any_lextents(uint64_t offset, uint64_t length);
