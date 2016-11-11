@@ -49,7 +49,7 @@ TEST(BitAllocator, test_bmap_iter)
   };
   BmapEntityTmp *obj = NULL;
   int i = 0;
-  mempool::bstore_balloc::vector<BmapEntityTmp> *arr = new mempool::bstore_balloc::vector<BmapEntityTmp>(num_items);
+  mempool::bluestore_alloc::vector<BmapEntityTmp> *arr = new mempool::bluestore_alloc::vector<BmapEntityTmp>(num_items);
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
@@ -91,7 +91,7 @@ TEST(BitAllocator, test_bmap_iter)
   num_items = 4;
   off = num_items - 1;
 
-  arr = new mempool::bstore_balloc::vector<BmapEntityTmp>(num_items);
+  arr = new mempool::bluestore_alloc::vector<BmapEntityTmp>(num_items);
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
