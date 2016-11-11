@@ -9590,7 +9590,14 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
 
 void ReplicatedPG::failed_push(const list<pg_shard_t> &from, const hobject_t &soid)
 {
+  dout(20) << __func__ << ": " << soid << dendl;
   assert(recovering.count(soid));
+  auto obc = recovering[soid];
+  if (obc) {
+    list<OpRequestRef> blocked_ops;
+    obc->drop_recovery_read(&blocked_ops);
+    requeue_ops(blocked_ops);
+  }
   recovering.erase(soid);
   for (auto&& i : from)
     missing_loc.remove_location(soid, i);
