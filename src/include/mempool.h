@@ -283,7 +283,7 @@ public:
     shard_t *shard = pool->pick_a_shard();
     shard->bytes += total;
     shard->items += n;
-    if (debug_mode) {
+    if (type) {
       type->items += n;
     }
     T* r = reinterpret_cast<T*>(new char[total]);
