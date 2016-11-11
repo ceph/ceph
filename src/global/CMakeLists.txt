@@ -1,8 +1,7 @@
 set(libglobal_srcs
   global_init.cc
   pidfile.cc
-  signal_handler.cc
-  mempool.cc)
+  signal_handler.cc)
 set(global_common_files
   global_context.cc)
 add_library(global_common_objs OBJECT ${global_common_files})
