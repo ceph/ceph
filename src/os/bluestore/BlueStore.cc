@@ -1734,8 +1734,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 	dout(30) << __func__ << "  shard 0x" << std::hex << shard_start
 		 << " to 0x" << shard_end << std::dec << dendl;
       }
-      if (e.blob->id < 0 &&
-	  e.blob_escapes_range(shard_start, shard_end - shard_start)) {
+      if (!e.blob->is_spanning() &&
+	   e.blob_escapes_range(shard_start, shard_end - shard_start)) {
 	// We have two options: (1) split the blob into pieces at the
 	// shard boundaries (and adjust extents accordingly), or (2)
 	// mark it spanning.  We prefer to cut the blob if we can.  Note that
@@ -1744,8 +1744,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 	bool must_span = false;
 	BlobRef b = e.blob;
 	if (b->can_split()) {
-	  uint32_t bstart = e.logical_offset - e.blob_offset;
-	  uint32_t bend = bstart + b->get_blob().get_logical_length();
+	  uint32_t bstart = e.blob_start();
+	  uint32_t bend = e.blob_end();
 	  for (const auto& sh : shards) {
 	    if (bstart < sh.offset && bend > sh.offset) {
 	      uint32_t blob_offset = sh.offset - bstart;
@@ -1794,7 +1794,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
        ++p, ++n) {
     assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
-    if (p->blob->id < 0 && p->blob_escapes_range(offset, length)) {
+    if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       return true;
@@ -1821,7 +1821,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
 	 ++p, ++n) {
       unsigned blobid;
       bool include_blob = false;
-      if (p->blob->id >= 0) {
+      if (p->blob->is_spanning()) {
 	blobid = p->blob->id << BLOBID_SHIFT_BITS;
 	blobid |= BLOBID_FLAG_SPANNING;
       } else if (p->blob->last_encoded_id < 0) {
