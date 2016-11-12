@@ -36,7 +36,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
   int s, on = 1;
 
   if ((s = ::socket(domain, SOCK_STREAM, 0)) == -1) {
-    lderr(cct) << __func__ << " couldn't created socket " << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(errno) << dendl;
     return -errno;
   }
 
