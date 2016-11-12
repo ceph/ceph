@@ -801,8 +801,6 @@ std::string pg_state_string(int state)
     oss << "down+";
   if (state & PG_STATE_REPLAY)
     oss << "replay+";
-  if (state & PG_STATE_SPLITTING)
-    oss << "splitting+";
   if (state & PG_STATE_UNDERSIZED)
     oss << "undersized+";
   if (state & PG_STATE_DEGRADED)
@@ -849,8 +847,6 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_DOWN;
   else if (state == "replay")
     type = PG_STATE_REPLAY;
-  else if (state == "splitting")
-    type = PG_STATE_SPLITTING;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
   else if (state == "degraded")
