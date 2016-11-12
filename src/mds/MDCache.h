@@ -434,8 +434,9 @@ public:
   void remove_inode_recursive(CInode *in);
 
   bool is_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    return ambiguous_slave_updates.count(master) &&
-	   ambiguous_slave_updates[master].count(reqid);
+    auto ambiguous_slave_updates_entry = ambiguous_slave_updates.find(master);
+    return ambiguous_slave_updates_entry != ambiguous_slave_updates.end() &&
+           ambiguous_slave_updates_entry->second.count(reqid);
   }
   void add_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     ambiguous_slave_updates[master].insert(reqid);
@@ -539,10 +540,16 @@ public:
     cap_imports[ino][client][frommds] = icr;
   }
   const cap_reconnect_t *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
-    if (cap_imports.count(ino) &&
-	cap_imports[ino].count(client) &&
-	cap_imports[ino][client].count(MDS_RANK_NONE)) {
-      return &cap_imports[ino][client][MDS_RANK_NONE];
+    auto cap_imports_ino = cap_imports.find(ino);
+    if(cap_imports_ino != cap_imports.end()) {
+      auto cap_imports_client = cap_imports_ino->second.find(client);
+      if(cap_imports_client != cap_imports_ino->second.end())
+      {
+	auto cap_imports_frommds = cap_imports_client->second.find(MDS_RANK_NONE);
+	if(cap_imports_frommds != cap_imports_client->second.end()) {
+	  return &cap_imports_frommds->second;
+	}
+      }
     }
     return NULL;
   }
