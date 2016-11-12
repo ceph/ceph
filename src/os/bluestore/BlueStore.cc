@@ -1725,6 +1725,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
       dout(30) << " extent " << e << dendl;
       while (e.logical_offset >= shard_end) {
 	shard_start = shard_end;
+	assert(sp != esp);
 	++sp;
 	if (sp == esp) {
 	  shard_end = OBJECT_MAX_SIZE;
