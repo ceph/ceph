@@ -6577,6 +6577,11 @@ void OSD::sched_scrub()
 	break;
       }
 
+      if (!cct->_conf->osd_scrub_during_recovery && service.is_recovery_active()) {
+        dout(10) << __func__ << "not scheduling scrub of " << scrub.pgid << " due to active recovery ops" << dendl;
+        break;
+      }
+
       PG *pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
@@ -8551,6 +8556,14 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 #endif
 
   _maybe_queue_recovery();
+}
+
+bool OSDService::is_recovery_active()
+{
+  if (recovery_ops_active > 0)
+    return true;
+
+  return false;
 }
 
 // =========================================================
