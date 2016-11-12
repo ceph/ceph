@@ -917,7 +917,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
 #define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
 //#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
-#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
+//#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
 //#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
 #define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
