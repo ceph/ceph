@@ -4633,11 +4633,8 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
     return r;
   }
 
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-  struct dirent *de;
-  while ((r = ::readdir_r(dir, (struct dirent *)&buf, &de)) == 0) {
-    if (!de)
-      break;
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
     if (de->d_type == DT_UNKNOWN) {
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;
@@ -4675,7 +4672,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   if (r > 0) {
-    derr << "trying readdir_r " << fn << ": " << cpp_strerror(r) << dendl;
+    derr << "trying readdir " << fn << ": " << cpp_strerror(r) << dendl;
     r = -r;
   }
 
