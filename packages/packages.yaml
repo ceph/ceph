@@ -41,7 +41,7 @@ ceph:
   - cephfs-java
   - libcephfs_jni1
   - libcephfs2
-  - libcephfs2-devel
+  - libcephfs-devel
   - librados2
   - librbd1
   - python-ceph
