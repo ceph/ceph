@@ -140,7 +140,8 @@ int check_mon_data_empty()
   errno = 0;
   while ((de = ::readdir(dir))) {
     if (string(".") != de->d_name &&
-	string("..") != de->d_name) {
+	string("..") != de->d_name &&
+	string("kv_backend") != de->d_name) {
       code = -ENOTEMPTY;
       break;
     }
