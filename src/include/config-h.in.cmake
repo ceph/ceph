@@ -132,6 +132,9 @@
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 
+/* define if leveldb is enabled */
+#cmakedefine WITH_LEVELDB
+
 /* define if radosgw's asio frontend enabled */
 #cmakedefine WITH_RADOSGW_ASIO_FRONTEND
 
