@@ -1,0 +1,2 @@
+
+from module import *  # NOQA
