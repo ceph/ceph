@@ -4533,7 +4533,12 @@ int BlueStore::fsck(bool deep)
 		 << " sbid " << blob.sbid << " > blobid_max "
 		 << blobid_max << dendl;
 	    ++errors;
-	  }
+	  } else if (blob.sbid == 0) {
+            derr << __func__ << " " << oid << " blob " << blob
+                 << " marked as shared but has uninitialized sbid"
+                 << dendl;
+            ++errors;
+          }
 	  sb_info_t& sbi = sb_info[blob.sbid];
 	  sbi.sb = i.first->shared_blob;
 	  sbi.oids.push_back(oid);
