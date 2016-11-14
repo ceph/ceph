@@ -36,6 +36,8 @@
 #include "stdlib.h"
 #include "fcntl.h"
 #include "sys/stat.h"
+#include "include/crc32c.h"
+#include "common/sctp_crc32.h"
 
 #define MAX_TEST 1000000
 #define FILENAME "bufferlist"
@@ -2547,6 +2549,30 @@ TEST(BufferList, crc32c_append) {
   ASSERT_EQ(bl1.crc32c(0), bl2.crc32c(0));
 }
 
+TEST(BufferList, crc32c_zeros) {
+  char buffer[4*1024];
+  for (size_t i=0; i < sizeof(buffer); i++)
+  {
+    buffer[i] = i;
+  }
+
+  bufferlist bla;
+  bufferlist blb;
+
+  for (size_t j=0; j < 1000; j++)
+  {
+    bufferptr a(buffer, sizeof(buffer));
+
+    bla.push_back(a);
+    uint32_t crca = bla.crc32c(111);
+
+    blb.push_back(a);
+    uint32_t crcb = ceph_crc32c(111, (unsigned char*)blb.c_str(), blb.length());
+
+    EXPECT_EQ(crca, crcb);
+  }
+}
+
 TEST(BufferList, crc32c_append_perf) {
   int len = 256 * 1024 * 1024;
   bufferptr a(len);
@@ -2614,7 +2640,6 @@ TEST(BufferList, crc32c_append_perf) {
   }
   assert(buffer::get_cached_crc() == 1 + base_cached);
   assert(buffer::get_cached_crc_adjusted() == 2 + base_cached_adjusted);
-
   {
     utime_t start = ceph_clock_now();
     uint32_t r = blb.crc32c(0);

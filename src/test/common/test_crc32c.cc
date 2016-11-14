@@ -266,3 +266,83 @@ TEST(Crc32c, RangeNull) {
     ASSERT_EQ(crc, *check);
   }
 }
+
+double estimate_clock_resolution()
+{
+  volatile char* p = (volatile char*)malloc(1024);
+  utime_t start;
+  utime_t end;
+  std::set<double> S;
+  for(int j=10; j<200; j+=1) {
+    start = ceph_clock_now();
+    for (int i=0; i<j; i++)
+      p[i]=1;
+    end = ceph_clock_now();
+    S.insert((double)(end - start));
+  }
+  auto head = S.begin();
+  auto tail = S.end();
+  for (size_t i=0; i<S.size()/4; i++) {
+    ++head;
+    --tail;
+  }
+  double v = *(head++);
+  double range=0;
+  while (head != tail) {
+    range = max(range, *head - v);
+    v = *head;
+    head++;
+  }
+  free((void*)p);
+  return range;
+}
+
+TEST(Crc32c, zeros_performance_compare) {
+  double resolution = estimate_clock_resolution();
+  utime_t start;
+  utime_t pre_start;
+  utime_t end;
+  double time_adjusted;
+  using namespace std::chrono;
+  high_resolution_clock::now();
+  for (size_t scale=1; scale < 31; scale++)
+  {
+    size_t size = (1<<scale) + rand()%(1<<scale);
+    pre_start = ceph_clock_now();
+    start = ceph_clock_now();
+    uint32_t crc_a = ceph_crc32c(111, nullptr, size);
+    end = ceph_clock_now();
+    time_adjusted = (end - start) - (start - pre_start);
+    std::cout << "regular  method. size=" << size << " time= " << (double)(end-start)
+        << " at " << (double)size/(1024*1024)/(time_adjusted) << " MB/sec"
+        << " error=" << resolution / time_adjusted * 100 << "%" << std::endl;
+
+    pre_start = ceph_clock_now();
+    start = ceph_clock_now();
+    uint32_t crc_b = ceph_crc32c_func(111, nullptr, size);
+    end = ceph_clock_now();
+    time_adjusted = (end - start) - (start - pre_start);
+    std::cout << "fallback method. size=" << size << " time=" << (double)(end-start)
+        << " at " << (double)size/(1024*1024)/(time_adjusted) << " MB/sec"
+        << " error=" << resolution / time_adjusted * 100 << "%" << std::endl;
+    EXPECT_EQ(crc_a, crc_b);
+  }
+}
+
+TEST(Crc32c, zeros_performance) {
+  constexpr size_t ITER=100000;
+  utime_t start;
+  utime_t end;
+
+  start = ceph_clock_now();
+  for (size_t i=0; i<ITER; i++)
+  for (size_t scale=1; scale < 31; scale++)
+  {
+    size_t size = (1<<scale) + rand() % (1<<scale);
+    ceph_crc32c(rand(), nullptr, size);
+  }
+  end = ceph_clock_now();
+  std::cout << "iterations="<< ITER*31 << " time=" << (double)(end-start) << std::endl;
+
+}
+
