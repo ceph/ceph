@@ -904,6 +904,10 @@ struct cls_rgw_obj_chain {
   static void generate_test_instances(list<cls_rgw_obj_chain*>& ls) {
     ls.push_back(new cls_rgw_obj_chain);
   }
+
+  bool empty() {
+    return objs.empty();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_chain)
 
