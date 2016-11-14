@@ -424,7 +424,7 @@ information stored in OSDs.::
     rm -rf $ms
     ssh user@host <<EOF
       for osd in /var/lib/osd/osd-*; do
-        ceph-objectstore-tool --data-path $osd --op update-mon-db --mon-store-path $ms
+        ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms
       done
     EOF
     rsync -avz user@host:$ms $ms
@@ -441,11 +441,13 @@ information stored in OSDs.::
   # backup corrupted store.db just in case
   mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
   mv /tmp/mon-store/store.db /var/lib/ceph/mon/mon.0/store.db
+  chown -R ceph:ceph /var/lib/ceph/mon/mon.0/store.db
 
 The steps above
 
 #. collect the map from all OSD hosts,
 #. then rebuild the store,
+#. fill the entities in keyring file with appropriate caps
 #. replace the corrupted store on ``mon.0`` with the recovered copy.
 
 Known limitations
