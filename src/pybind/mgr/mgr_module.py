@@ -59,9 +59,15 @@ class MgrModule(object):
 
         self._logger.addHandler(CPlusPlusHandler())
 
+        self._version = ceph_state.get_version()
+
     @property
     def log(self):
         return self._logger
+
+    @property
+    def version(self):
+        return self._version
 
     def notify(self, notify_type, notify_id):
         """
