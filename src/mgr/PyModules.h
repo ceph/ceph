@@ -73,6 +73,7 @@ public:
   // send it to only the module that sent the command, not everyone
   void notify_all(const std::string &notify_type,
                   const std::string &notify_id);
+  void notify_all(const LogEntry &log_entry);
 
   int init();
   void start();

@@ -28,6 +28,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MLog.h"
 
 #include "Mgr.h"
 
@@ -180,6 +181,7 @@ void Mgr::init()
   // Subscribe to OSDMap update to pass on to ClusterState
   objecter->maybe_request_map();
 
+  monc->sub_want("log-info", 0, 0);
   monc->sub_want("mgrdigest", 0, 0);
 
   // Prepare to receive FSMap and request it
@@ -196,6 +198,7 @@ void Mgr::init()
   lock.Lock();
   waiting_for_fs_map = nullptr;
   dout(4) << "Got FSMap." << dendl;
+
 
   // Wait for MgrDigest...?
   // TODO
@@ -418,6 +421,13 @@ void Mgr::handle_osd_map()
   daemon_state.cull(CEPH_ENTITY_TYPE_OSD, names_exist);
 }
 
+void Mgr::handle_log(MLog *m)
+{
+  for (const auto &e : m->entries) {
+    py_modules.notify_all(e);
+  }
+}
+
 bool Mgr::ms_dispatch(Message *m)
 {
   derr << *m << dendl;
@@ -453,6 +463,10 @@ bool Mgr::ms_dispatch(Message *m)
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
       objecter->maybe_request_map();
+      m->put();
+      break;
+    case MSG_LOG:
+      handle_log(static_cast<MLog *>(m));
       m->put();
       break;
 

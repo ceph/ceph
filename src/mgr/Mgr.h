@@ -38,6 +38,7 @@
 
 class MCommand;
 class MMgrDigest;
+class MLog;
 class Objecter;
 
 
@@ -78,6 +79,7 @@ public:
   void handle_mgr_digest(MMgrDigest* m);
   void handle_fs_map(MFSMap* m);
   void handle_osd_map();
+  void handle_log(MLog *m);
 
   bool ms_dispatch(Message *m);
 
