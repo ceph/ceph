@@ -25,7 +25,6 @@ add_executable(unittest_rbd_mirror
   image_sync/test_mock_SnapshotCreateRequest.cc
   image_sync/test_mock_SyncPointCreateRequest.cc
   image_sync/test_mock_SyncPointPruneRequest.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   )
 add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
 set_target_properties(unittest_rbd_mirror PROPERTIES COMPILE_FLAGS
@@ -55,7 +54,6 @@ target_link_libraries(unittest_rbd_mirror
 
 add_executable(ceph_test_rbd_mirror
   test_main.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   )
 set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
