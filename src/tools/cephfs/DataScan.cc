@@ -212,8 +212,8 @@ int DataScan::main(const std::vector<const char*> &args)
   // If caller didn't specify a namespace, try to pick
   // one if only one exists
   if (fscid == FS_CLUSTER_ID_NONE) {
-    if (fsmap->get_filesystems().size() == 1) {
-      fscid = fsmap->get_filesystems().begin()->first;
+    if (fsmap->filesystem_count() == 1) {
+      fscid = fsmap->get_filesystem()->fscid;
     } else {
       std::cerr << "Specify a filesystem with --filesystem" << std::endl;
       return -EINVAL;
