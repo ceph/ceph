@@ -95,26 +95,19 @@ endif()
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
-if(LINUX)
-  list(APPEND librbd 
-    $<TARGET_OBJECTS:parse_secret_objs>  
-    $<TARGET_OBJECTS:krbd_objs>
-    )
-endif(LINUX)
 
 target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types
   journal
   librados 
-  common 
   osdc
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
+  common
   pthread
   udev
-  keyutils
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(ENABLE_SHARED)
