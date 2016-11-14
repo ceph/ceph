@@ -169,6 +169,11 @@ class TestJournalRepair(CephFSTestCase):
                               reject_fn=lambda v: v > 2 or v < 1)
         active_mds_names = self.fs.get_active_names()
 
+        # Switch off any unneeded MDS daemons
+        for unneeded_mds in set(self.mds_cluster.mds_ids) - set(active_mds_names):
+            self.mds_cluster.mds_stop(unneeded_mds)
+            self.mds_cluster.mds_fail(unneeded_mds)
+
         # Do a bunch of I/O such that at least some will hit the second MDS: create
         # lots of directories so that the balancer should find it easy to make a decision
         # to allocate some of them to the second mds.
