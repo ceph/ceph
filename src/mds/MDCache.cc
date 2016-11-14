@@ -817,7 +817,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool do_eval)
   if (dir->inode->is_base()) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0) {
-      subtrees[root].clear();
+      subtrees[root];
       root->get(CDir::PIN_SUBTREE);
     }
   } else {
@@ -834,7 +834,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool do_eval)
     // i am a new subtree.
     dout(10) << "  new subtree at " << *dir << dendl;
     assert(subtrees.count(dir) == 0);
-    subtrees[dir].clear();      // create empty subtree bounds list for me.
+    subtrees[dir];      // create empty subtree bounds list for me.
     dir->get(CDir::PIN_SUBTREE);
 
     // set dir_auth
@@ -1016,7 +1016,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_aut
   if (dir->ino() == MDS_INO_ROOT) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0) {
-      subtrees[root].clear();
+      subtrees[root];
       root->get(CDir::PIN_SUBTREE);
     }
   } else {
@@ -1035,7 +1035,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_aut
     // i am a new subtree.
     dout(10) << "  new subtree at " << *dir << dendl;
     assert(subtrees.count(dir) == 0);
-    subtrees[dir].clear();      // create empty subtree bounds list for me.
+    subtrees[dir];      // create empty subtree bounds list for me.
     dir->get(CDir::PIN_SUBTREE);
     
     // set dir_auth
