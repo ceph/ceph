@@ -4215,12 +4215,12 @@ int BlueStore::umount()
   return 0;
 }
 
-void apply(uint64_t off,
-           uint64_t len,
-           uint64_t granularity,
-           boost::dynamic_bitset<> &bitset,
-	   const char *what,
-          std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
+static void apply(uint64_t off,
+                  uint64_t len,
+                  uint64_t granularity,
+                  boost::dynamic_bitset<> &bitset,
+	          const char *what,
+                  std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
   while (off < end) {
     uint64_t pos = off / granularity;
