@@ -1248,13 +1248,13 @@ void PG::calc_replicated_acting(
 
   // This no longer has backfill OSDs, but they are covered above.
   if (usable < size) {
-    map<eversion_t, int> last_update_to_acting;
+    multimap<eversion_t, int> last_update_to_acting;
     for (vector<int>::const_iterator it = acting.begin(); it != acting.end(); ++it) {
       pg_shard_t shard(*it, shard_id_t::NO_SHARD);
       const pg_info_t &cur_info = all_info.find(shard)->second;
       last_update_to_acting.insert(std::make_pair(cur_info.last_update, *it));
     }
-    for (map<eversion_t, int>::reverse_iterator i = last_update_to_acting.rbegin();
+    for (multimap<eversion_t, int>::reverse_iterator i = last_update_to_acting.rbegin();
          i != last_update_to_acting.rend();
          ++i) {
       pg_shard_t acting_cand(i->second, shard_id_t::NO_SHARD);
@@ -1285,12 +1285,12 @@ void PG::calc_replicated_acting(
   }
 
   if (usable < size) {
-    map<eversion_t, map<pg_shard_t, pg_info_t>::const_iterator> last_update_to_shard;
+    multimap<eversion_t, map<pg_shard_t, pg_info_t>::const_iterator> last_update_to_shard;
     for (map<pg_shard_t, pg_info_t>::const_iterator it = all_info.begin();
 	 it != all_info.end(); ++it) {
       last_update_to_shard.insert(std::make_pair(it->second.last_update, it));
     }
-    for (map<eversion_t, map<pg_shard_t, pg_info_t>::const_iterator>::reverse_iterator i
+    for (multimap<eversion_t, map<pg_shard_t, pg_info_t>::const_iterator>::reverse_iterator i
              = last_update_to_shard.rbegin();
          i != last_update_to_shard.rend();
          ++i) {
@@ -1328,14 +1328,14 @@ void PG::calc_replicated_acting(
 
   // async recovery?
   if (want->size() > min_size) {
-    map<eversion_t, int> last_update_to_shard;
+    multimap<eversion_t, int> last_update_to_shard;
     for (vector<int>::iterator it = want->begin(); it != want->end(); ++it) {
       pg_shard_t shard(*it, shard_id_t::NO_SHARD);
       const pg_info_t &cur_info = all_info.find(shard)->second;
       last_update_to_shard.insert(std::make_pair(cur_info.last_update, *it));
     }
     eversion_t max_last_update = last_update_to_shard.rbegin()->first;
-    for (map<eversion_t, int>::iterator p = last_update_to_shard.begin();
+    for (multimap<eversion_t, int>::iterator p = last_update_to_shard.begin();
          p != last_update_to_shard.end(); ++p) {
       assert(p->first.epoch <= max_last_update.epoch);
       assert(p->first.version <= max_last_update.version);
