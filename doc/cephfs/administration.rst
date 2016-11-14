@@ -45,8 +45,7 @@ creation of multiple filesystems use ``ceph fs flag set enable_multiple true``.
 Daemons
 -------
 
-These commands act on specific mds daemons or ranks.  For convenience,
-they accept arguments that 
+These commands act on specific mds daemons or ranks.
 
 ::
 
