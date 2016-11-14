@@ -517,6 +517,7 @@ struct ceph_osd_op {
 			__le64 ver;     /* no longer used */
 			__u8 op;	/* CEPH_OSD_WATCH_OP_* */
 			__u32 gen;      /* registration generation */
+			__u32 timeout; /* connection timeout */
 		} __attribute__ ((packed)) watch;
 		struct {
 			__le64 cookie;
@@ -561,6 +562,18 @@ struct ceph_osd_op {
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
+
+/*
+ * Check the compatibility of struct ceph_osd_op
+ *  (2+4+(2*8+8+4)+4) = (sizeof(ceph_osd_op::op) +
+ *                     sizeof(ceph_osd_op::flags) +
+ *                     sizeof(ceph_osd_op::extent) +
+ *                     sizeof(ceph_osd_op::payload_len))
+ */
+#ifdef __cplusplus
+static_assert(sizeof(ceph_osd_op) == (2+4+(2*8+8+4)+4),
+              "sizeof(ceph_osd_op) breaks the compatibility");
+#endif
 
 struct ceph_osd_reply_head {
 	__le32 client_inc;                /* client incarnation */
