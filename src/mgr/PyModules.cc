@@ -476,6 +476,25 @@ void PyModules::notify_all(const std::string &notify_type,
   }
 }
 
+void PyModules::notify_all(const LogEntry &log_entry)
+{
+  Mutex::Locker l(lock);
+
+  dout(10) << __func__ << ": notify_all (clog)" << dendl;
+  for (auto i : modules) {
+    auto module = i.second;
+    // Send all python calls down a Finisher to avoid blocking
+    // C++ code, and avoid any potential lock cycles.
+    //
+    // Note intentional use of non-reference lambda binding on
+    // log_entry: we take a copy because caller's instance is
+    // probably ephemeral.
+    finisher.queue(new FunctionContext([module, log_entry](int r){
+      module->notify_clog(log_entry);
+    }));
+  }
+}
+
 bool PyModules::get_config(const std::string &handle,
     const std::string &key, std::string *val) const
 {

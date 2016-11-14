@@ -38,6 +38,9 @@ class PyFormatter : public ceph::Formatter
 public:
   PyFormatter(bool pretty = false, bool array = false)
   {
+    // It is forbidden to instantiate me outside of the GIL,
+    // because I construct python objects right away
+
     // Initialise cursor to an empty dict
     if (!array) {
       root = cursor = PyDict_New();
