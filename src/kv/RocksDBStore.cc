@@ -463,22 +463,6 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 
   return s.ok() ? 0 : -1;
 }
-int RocksDBStore::get_info_log_level(string info_log_level)
-{
-  if (info_log_level == "debug") {
-    return 0;
-  } else if (info_log_level == "info") {
-    return 1;
-  } else if (info_log_level == "warn") {
-    return 2;
-  } else if (info_log_level == "error") {
-    return 3;
-  } else if (info_log_level == "fatal") {
-    return 4;
-  } else {
-    return 1;
-  }
-}
 
 RocksDBStore::RocksDBTransactionImpl::RocksDBTransactionImpl(RocksDBStore *_db)
 {
