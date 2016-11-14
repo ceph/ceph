@@ -51,6 +51,11 @@ These commands act on specific mds daemons or ranks.
 
     mds fail <gid/name/role
 
+This command deactivates an MDS causing it to flush its entire journal to
+backing RADOS objects and close all open client sessions. Deactivating an MDS
+is primarily intended for bringing down a rank after reducing the number of
+active MDS (max_mds).
+
 ::
 
     mds deactivate <role>
