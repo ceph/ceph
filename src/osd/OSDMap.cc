@@ -1437,10 +1437,8 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
 
   // blacklist
-  for (map<entity_addr_t,utime_t>::const_iterator p = inc.new_blacklist.begin();
-       p != inc.new_blacklist.end();
-       ++p) {
-    blacklist[p->first] = p->second;
+  if (!inc.new_blacklist.empty()) {
+    blacklist.insert(inc.new_blacklist.begin(),inc.new_blacklist.end());
     new_blacklist_entries = true;
   }
   for (vector<entity_addr_t>::const_iterator p = inc.old_blacklist.begin();
