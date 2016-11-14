@@ -4,7 +4,7 @@
 #ifndef CEPH_RGW_LOG_H
 #define CEPH_RGW_LOG_H
 
-#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
@@ -14,7 +14,7 @@ class RGWRados;
 
 struct rgw_log_entry {
 
-  using headers_map = std::map<std::string, std::string>;
+  using headers_map = boost::container::flat_map<std::string, std::string>;
 
   rgw_user object_owner;
   rgw_user bucket_owner;
