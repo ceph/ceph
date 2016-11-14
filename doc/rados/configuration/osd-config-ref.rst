@@ -486,7 +486,7 @@ priority than requests to read or write data.
 
 :Description: The maximum number of backfills allowed to or from a single OSD.
 :Type: 64-bit Unsigned Integer
-:Default: ``10``
+:Default: ``1``
 
 
 ``osd backfill scan min`` 
