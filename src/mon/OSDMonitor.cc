@@ -2042,7 +2042,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   if (osdmap.exists(from) &&
-      osdmap.get_info(from).up_from > m->version) {
+      osdmap.get_info(from).up_from > m->version &&
+      osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(op, m->sb.current_epoch+1);
     return true;
