@@ -473,6 +473,20 @@ details. To upgrade from a post-Emperor point release, see the `Firefly release
 notes`_ for details.
 
 
+Upgrading to Hammer
+===================
+
+When upgrading from v0.94.6 (and lower) to Hammer (v0.94.7 and higher), you need
+to upgrade the OSD **before** the monitors.
+
+Due to changes in encoding of osdmap in v0.94.7, upgrading monitors before OSDs
+can lead to serious performance issues on large clusters that contain hundreds of
+OSDs. So, we should upgrade OSDs first to work around this issue. It is fixed
+in Jewel and higher versions of Ceph. So you can follow the general steps when
+upgrading from Hammer to Jewel, or from Jewel to Kraken.
+
+
+
 Ceph Config File Changes
 ------------------------
 

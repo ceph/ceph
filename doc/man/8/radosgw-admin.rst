@@ -167,6 +167,20 @@ Orphans Search Options
 
 	Number of shards to use for keeping the temporary scan info
 
+.. option:: --orphan-stale-secs
+
+        Number of seconds to wait before declaring an object to be an orphan.
+        Default is 86400 (24 hours).
+
+.. option:: --job-id
+
+        Set the job id (for orphans find)
+
+.. option:: --max-concurrent-ios
+
+        Maximum concurrent ios for orphans find.
+        Default is 32.
+
 
 Examples
 ========
