@@ -133,7 +133,7 @@ int PGBackend::objects_list_partial(
   int r = 0;
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
-    int r = store->collection_list(
+    r = store->collection_list(
       ch,
       _next,
       ghobject_t::get_max(),
@@ -141,8 +141,10 @@ int PGBackend::objects_list_partial(
       max - ls->size(),
       &objects,
       &_next);
-    if (r != 0)
+    if (r != 0) {
+      derr << __func__ << " list collection " << ch << " got: " << cpp_strerror(r) << dendl;
       break;
+    }
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
