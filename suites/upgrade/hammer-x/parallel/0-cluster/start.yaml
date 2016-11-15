@@ -16,7 +16,6 @@ overrides:
     log-whitelist:
     - scrub mismatch
     - ScrubResult
-    - failed to encode map
     - wrongly marked me down
     - soft lockup
     - detected stalls on CPUs
