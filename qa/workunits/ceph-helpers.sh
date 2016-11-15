@@ -610,8 +610,6 @@ function activate_osd() {
 
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
 
-    ceph osd crush create-or-move "$id" 1 root=default host=localhost
-
     wait_for_osd up $id || return 1
 }
 
