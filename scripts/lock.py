@@ -118,7 +118,7 @@ def parse_args(argv):
         help='lock description',
     )
     parser.add_argument(
-        '--machine-type',
+        '-m', '--machine-type',
         default=None,
         help='Type of machine to lock, valid choices: mira | plana | ' +
         'burnupi | vps | saya | tala',
