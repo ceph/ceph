@@ -1033,12 +1033,6 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
     yield
 
 @contextlib.contextmanager
-def wait_for_master():
-    log.debug("wait_for_master")
-    time.sleep(20)
-    yield
-
-@contextlib.contextmanager
 def task(ctx, config):
     """
     Either use configure apache to run a rados gateway, or use the built-in
@@ -1296,7 +1290,6 @@ def task(ctx, config):
         else:
             raise ValueError("frontend must be 'apache' or 'civetweb'")
 
-        subtasks.extend([lambda: wait_for_master(),])
         subtasks.extend([
             lambda: pull_configuration(ctx=ctx,
                                        config=config,
