@@ -234,8 +234,9 @@ void Mirror::run()
     if (!m_manual_stop) {
       update_replayers(m_local_cluster_watcher->get_pool_peers());
     }
-    m_cond.WaitInterval(g_ceph_context, m_lock,
-	utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
+    m_cond.WaitInterval(
+      m_lock,
+      utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
   }
 
   // stop all replayers in parallel

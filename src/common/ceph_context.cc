@@ -146,7 +146,7 @@ public:
 
       if (_cct->_conf->heartbeat_interval) {
         utime_t interval(_cct->_conf->heartbeat_interval, 0);
-        _cond.WaitInterval(_cct, _lock, interval);
+        _cond.WaitInterval(_lock, interval);
       } else
         _cond.Wait(_lock);
 

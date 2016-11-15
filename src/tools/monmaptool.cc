@@ -307,7 +307,7 @@ int main(int argc, const char **argv)
 
   if (create) {
     monmap.epoch = 0;
-    monmap.created = ceph_clock_now(g_ceph_context);
+    monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
     if (g_conf->fsid.is_zero()) {

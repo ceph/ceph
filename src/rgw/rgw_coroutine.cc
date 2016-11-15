@@ -160,7 +160,7 @@ stringstream& RGWCoroutine::Status::set_status()
   if (history.size() > (size_t)max_history) {
     history.pop_front();
   }
-  timestamp = ceph_clock_now(cct);
+  timestamp = ceph_clock_now();
 
   return status;
 }

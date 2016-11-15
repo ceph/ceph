@@ -133,10 +133,10 @@ Writer::Writer(OmapBench *omap_bench) : ob(omap_bench) {
   oid = name.str();
 }
 void Writer::start_time() {
-  begin_time = ceph_clock_now(g_ceph_context);
+  begin_time = ceph_clock_now();
 }
 void Writer::stop_time() {
-  end_time = ceph_clock_now(g_ceph_context);
+  end_time = ceph_clock_now();
 }
 double Writer::get_time() {
   return (end_time - begin_time) * 1000;

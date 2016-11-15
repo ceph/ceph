@@ -93,9 +93,9 @@ public:
   bool wait_for_entries_available(librbd::ImageCtx *ictx) {
     Mutex::Locker locker(m_replay_handler.lock);
     while (!m_replay_handler.entries_available) {
-      if (m_replay_handler.cond.WaitInterval(ictx->cct, m_replay_handler.lock,
-                                             utime_t(10, 0)) != 0) {
-        return false;
+      if (m_replay_handler.cond.WaitInterval(m_replay_handler.lock,
+					     utime_t(10, 0)) != 0) {
+	return false;
       }
     }
     m_replay_handler.entries_available = false;

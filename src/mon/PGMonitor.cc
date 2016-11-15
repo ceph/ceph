@@ -120,7 +120,7 @@ void PGMonitor::tick()
   handle_osd_timeouts();
 
   if (!pg_map.pg_sum_deltas.empty()) {
-    utime_t age = ceph_clock_now(g_ceph_context) - pg_map.stamp;
+    utime_t age = ceph_clock_now() - pg_map.stamp;
     if (age > 2 * g_conf->mon_delta_reset_interval) {
       dout(10) << " clearing pg_map delta (" << age << " > " << g_conf->mon_delta_reset_interval << " seconds old)" << dendl;
       pg_map.clear_delta();
@@ -138,7 +138,7 @@ void PGMonitor::tick()
     ceph::unordered_map<uint64_t,pair<pool_stat_t,utime_t> >::iterator it;
     for (it = pg_map.per_pool_sum_delta.begin();
          it != pg_map.per_pool_sum_delta.end(); ) {
-      utime_t age = ceph_clock_now(g_ceph_context) - it->second.second;
+      utime_t age = ceph_clock_now() - it->second.second;
       if (age > 2*g_conf->mon_delta_reset_interval) {
 	dout(10) << " clearing pg_map delta for pool " << it->first
 	         << " (" << age << " > " << g_conf->mon_delta_reset_interval
@@ -296,7 +296,7 @@ void PGMonitor::handle_osd_timeouts()
   if (!mon->is_leader())
     return;
 
-  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t now(ceph_clock_now());
   utime_t timeo(g_conf->mon_osd_report_timeout, 0);
   if (now - mon->get_leader_since() < timeo) {
     // We haven't been the leader for long enough to consider OSD timeouts
@@ -477,7 +477,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   version_t version = pending_inc.version;
   dout(10) << __func__ << " v " << version << dendl;
   assert(get_last_committed() + 1 == version);
-  pending_inc.stamp = ceph_clock_now(g_ceph_context);
+  pending_inc.stamp = ceph_clock_now();
 
   uint64_t features = mon->get_quorum_con_features();
 
@@ -772,7 +772,7 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
     return false;
   }
 
-  last_osd_report[from] = ceph_clock_now(g_ceph_context);
+  last_osd_report[from] = ceph_clock_now();
 
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
@@ -946,7 +946,7 @@ void PGMonitor::send_pg_creates()
   dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size()
            << " pgs" << dendl;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   for (map<int, map<epoch_t, set<pg_t> > >::iterator p =
          pg_map.creating_pgs_by_osd_epoch.begin();
        p != pg_map.creating_pgs_by_osd_epoch.end();
@@ -1006,7 +1006,7 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
     assert(mon->osdmon()->osdmap.is_up(osd));
     mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));
   }
-  last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
+  last_sent_pg_create[osd] = ceph_clock_now();
 
   // sub is current through last + 1
   return last + 1;
@@ -1032,7 +1032,7 @@ void PGMonitor::_try_mark_pg_stale(
     dout(10) << " marking pg " << pgid << " stale (acting_primary "
 	     << stat->acting_primary << ")" << dendl;
     stat->state |= PG_STATE_STALE;  
-    stat->last_unstale = ceph_clock_now(g_ceph_context);
+    stat->last_unstale = ceph_clock_now();
   }
 }
 
@@ -1469,7 +1469,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
       pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
       s.state = PG_STATE_CREATING;
       s.created = epoch;
-      s.last_change = ceph_clock_now(g_ceph_context);
+      s.last_change = ceph_clock_now();
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
@@ -1546,7 +1546,7 @@ static void note_stuck_detail(int what,
     if (since == utime_t()) {
       ss << " since forever";
     } else {
-      utime_t dur = ceph_clock_now(g_ceph_context) - since;
+      utime_t dur = ceph_clock_now() - since;
       ss << " for " << dur;
     }
     ss << ", current state " << pg_state_string(p->second.state)
@@ -1612,7 +1612,7 @@ namespace {
       return;
 
     int pgs_count = 0;
-    const utime_t now = ceph_clock_now(nullptr);
+    const utime_t now = ceph_clock_now();
     for (const auto& pg_entry : pg_stats) {
       const auto& pg_stat(pg_entry.second);
       const utime_t time_since_ls = now - pg_stat.last_scrub_stamp;
@@ -1693,7 +1693,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pgs;
-  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t now(ceph_clock_now());
   utime_t cutoff = now - utime_t(g_conf->mon_pg_stuck_threshold, 0);
   uint64_t num_inactive_pgs = 0;
   
@@ -2006,7 +2006,7 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
     }
   }
 
-  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t now(ceph_clock_now());
   utime_t cutoff = now - utime_t(threshold, 0);
 
   if (!f) {

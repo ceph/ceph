@@ -86,7 +86,7 @@ void Elector::start()
     int r = mon->store->apply_transaction(t);
     assert(r >= 0);
   }
-  start_stamp = ceph_clock_now(g_ceph_context);
+  start_stamp = ceph_clock_now();
   electing_me = true;
   acked_me[mon->rank].cluster_features = CEPH_FEATURES_ALL;
   acked_me[mon->rank].mon_features = ceph::features::mon::get_supported();
@@ -117,7 +117,7 @@ void Elector::defer(int who)
 
   // ack them
   leader_acked = who;
-  ack_stamp = ceph_clock_now(g_ceph_context);
+  ack_stamp = ceph_clock_now();
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
   m->sharing_bl = mon->get_supported_commands_bl();

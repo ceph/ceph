@@ -738,7 +738,7 @@ TEST_P(MessengerTest, MessageTest) {
     t += 1000*1000*500;
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.WaitInterval(g_ceph_context, cli_dispatcher.lock, t);
+      cli_dispatcher.cond.WaitInterval(cli_dispatcher.lock, t);
     ASSERT_TRUE(cli_dispatcher.got_new);
     cli_dispatcher.got_new = false;
   }
@@ -756,7 +756,7 @@ TEST_P(MessengerTest, MessageTest) {
     t += 1000*1000*500;
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.WaitInterval(g_ceph_context, cli_dispatcher.lock, t);
+      cli_dispatcher.cond.WaitInterval(cli_dispatcher.lock, t);
     ASSERT_TRUE(cli_dispatcher.got_new);
     cli_dispatcher.got_new = false;
   }

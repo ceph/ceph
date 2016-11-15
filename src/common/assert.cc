@@ -47,7 +47,7 @@ namespace ceph {
 			  const char *func)
   {
     ostringstream tss;
-    tss << ceph_clock_now(g_assert_context);
+    tss << ceph_clock_now();
 
     char buf[8096];
     BackTrace *bt = new BackTrace(1);
@@ -82,7 +82,7 @@ namespace ceph {
 			   const char *func, const char* msg, ...)
   {
     ostringstream tss;
-    tss << ceph_clock_now(g_assert_context);
+    tss << ceph_clock_now();
 
     class BufAppender {
     public:

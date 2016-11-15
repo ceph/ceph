@@ -283,12 +283,12 @@ TEST(ClsLock, TestLockDuration) {
   Lock l("lock");
   utime_t dur(5, 0);
   l.set_duration(dur);
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
   int r = l.lock_exclusive(&ioctx, oid);
   if (r == 0) {
     // it's possible to get success if we were just really slow...
-    ASSERT_TRUE(ceph_clock_now(NULL) > start + dur);
+    ASSERT_TRUE(ceph_clock_now() > start + dur);
   } else {
     ASSERT_EQ(-EEXIST, r);
   }

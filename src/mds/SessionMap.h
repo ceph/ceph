@@ -413,7 +413,7 @@ public:
     } else {
       s = session_map[i.name] = new Session;
       s->info.inst = i;
-      s->last_cap_renew = ceph_clock_now(g_ceph_context);
+      s->last_cap_renew = ceph_clock_now();
       if (logger) {
         logger->set(l_mdssm_session_count, session_map.size());
         logger->inc(l_mdssm_session_add);

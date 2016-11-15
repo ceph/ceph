@@ -117,7 +117,7 @@ void DaemonPerfCounters::update(MMgrReport *report)
     declared_types.insert(t.path);
   }
 
-  const auto now = ceph_clock_now(g_ceph_context);
+  const auto now = ceph_clock_now();
 
   // Parse packed data according to declared set of types
   bufferlist::iterator p = report->packed.begin();
