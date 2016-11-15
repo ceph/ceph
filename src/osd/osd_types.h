@@ -2900,6 +2900,7 @@ struct pg_log_t {
   eversion_t head;    // newest entry
   eversion_t tail;    // version prior to oldest
 
+protected:
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
 
@@ -2907,14 +2908,105 @@ struct pg_log_t {
   // data can be found
   eversion_t rollback_info_trimmed_to;
 
+public:
   mempool::osd::list<pg_log_entry_t> log;  // the actual log.
   
-  pg_log_t() {}
+  pg_log_t() = default;
+  pg_log_t(const eversion_t &last_update,
+	   const eversion_t &log_tail,
+	   const eversion_t &can_rollback_to,
+	   const eversion_t &rollback_info_trimmed_to,
+	   mempool::osd::list<pg_log_entry_t> &&entries)
+    : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_info_trimmed_to(rollback_info_trimmed_to),
+      log(std::move(entries)) {}
+  pg_log_t(const eversion_t &last_update,
+	   const eversion_t &log_tail,
+	   const eversion_t &can_rollback_to,
+	   const eversion_t &rollback_info_trimmed_to,
+	   const std::list<pg_log_entry_t> &entries)
+    : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_info_trimmed_to(rollback_info_trimmed_to) {
+    for (auto &&entry: entries) {
+      log.push_back(entry);
+    }
+  }
 
   void clear() {
     eversion_t z;
-    can_rollback_to = head = tail = z;
+    rollback_info_trimmed_to = can_rollback_to = head = tail = z;
     log.clear();
+  }
+
+  eversion_t get_rollback_info_trimmed_to() const {
+    return rollback_info_trimmed_to;
+  }
+  eversion_t get_can_rollback_to() const {
+    return can_rollback_to;
+  }
+
+
+  pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
+    mempool::osd::list<pg_log_entry_t> oldlog, childlog;
+    oldlog.swap(log);
+
+    eversion_t old_tail;
+    unsigned mask = ~((~0)<<split_bits);
+    for (auto i = oldlog.begin();
+	 i != oldlog.end();
+      ) {
+      if ((i->soid.get_hash() & mask) == child_pgid.m_seed) {
+	childlog.push_back(*i);
+      } else {
+	log.push_back(*i);
+      }
+      oldlog.erase(i++);
+    }
+
+    return pg_log_t(
+      head,
+      tail,
+      can_rollback_to,
+      rollback_info_trimmed_to,
+      std::move(childlog));
+  }
+
+  mempool::osd::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+    assert(newhead >= tail);
+
+    mempool::osd::list<pg_log_entry_t>::iterator p = log.end();
+    mempool::osd::list<pg_log_entry_t> divergent;
+    while (true) {
+      if (p == log.begin()) {
+	// yikes, the whole thing is divergent!
+	::swap(divergent, log);
+	break;
+      }
+      --p;
+      if (p->version.version <= newhead.version) {
+	/*
+	 * look at eversion.version here.  we want to avoid a situation like:
+	 *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  lower_bound = 100'9
+	 * i.e, same request, different version.  If the eversion.version is > the
+	 * lower_bound, we it is divergent.
+	 */
+	++p;
+	divergent.splice(divergent.begin(), log, p, log.end());
+	break;
+      }
+      assert(p->version > newhead);
+    }
+    head = newhead;
+
+    if (can_rollback_to > newhead)
+      can_rollback_to = newhead;
+
+    if (rollback_info_trimmed_to > newhead)
+      rollback_info_trimmed_to = newhead;
+
+    return divergent;
   }
 
   bool empty() const {
@@ -2970,7 +3062,7 @@ WRITE_CLASS_ENCODER(pg_log_t)
 inline ostream& operator<<(ostream& out, const pg_log_t& log) 
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
-      << log.can_rollback_to << ")";
+      << log.get_can_rollback_to() << ")";
   return out;
 }
 

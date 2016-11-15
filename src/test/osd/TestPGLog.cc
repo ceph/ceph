@@ -1972,19 +1972,9 @@ TEST_F(PGLogTest, filter_log_1) {
 
     const string hit_set_namespace("internal");
 
-    ObjectStore::Transaction t;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    //bool dirty_info = false;
-    //bool dirty_big_info = false;
-
-    hobject_t divergent_object;
-    eversion_t divergent_version;
-    eversion_t prior_version;
-    eversion_t newhead;
     {
       pg_log_entry_t e;
-      e.mod_desc.mark_unrollbackable();
+      e.mark_unrollbackable();
       e.op = pg_log_entry_t::MODIFY;
       e.soid.pool = pool_id;
 
@@ -2024,12 +2014,22 @@ TEST_F(PGLogTest, filter_log_1) {
     ASSERT_EQ(total, num_objects);
 
     // Some should be removed
-    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    {
+      pg_log_t filtered, reject;
+      pg_log_t::filter_log(
+	pgid, *osdmap, hit_set_namespace, log, filtered, reject);
+      log = IndexedLog(filtered);
+    }
     EXPECT_LE(log.log.size(), (size_t)total);
 
     // If we filter a second time, there should be the same total
     total = log.log.size();
-    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    {
+      pg_log_t filtered, reject;
+      pg_log_t::filter_log(
+	pgid, *osdmap, hit_set_namespace, log, filtered, reject);
+      log = IndexedLog(filtered);
+    }
     EXPECT_EQ(log.log.size(), (size_t)total);
 
     // Increase pg_num as if there would be a split
@@ -2046,7 +2046,12 @@ TEST_F(PGLogTest, filter_log_1) {
     ASSERT_EQ(ret, 0);
 
     // We should have fewer entries after a filter
-    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    {
+      pg_log_t filtered, reject;
+      pg_log_t::filter_log(
+	pgid, *osdmap, hit_set_namespace, log, filtered, reject);
+      log = IndexedLog(filtered);
+    }
     EXPECT_LE(log.log.size(), (size_t)total);
 
     // Make sure all internal entries are retained
