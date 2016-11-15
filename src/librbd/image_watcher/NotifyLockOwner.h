@@ -12,26 +12,26 @@ namespace librbd {
 
 struct ImageCtx;
 
-namespace object_watcher { class Notifier; }
+namespace watcher { class Notifier; }
 
 namespace image_watcher {
 
 class NotifyLockOwner {
 public:
   static NotifyLockOwner *create(ImageCtx &image_ctx,
-                                 object_watcher::Notifier &notifier,
+                                 watcher::Notifier &notifier,
                                  bufferlist &&bl, Context *on_finish) {
     return new NotifyLockOwner(image_ctx, notifier, std::move(bl), on_finish);
   }
 
-  NotifyLockOwner(ImageCtx &image_ctx, object_watcher::Notifier &notifier,
+  NotifyLockOwner(ImageCtx &image_ctx, watcher::Notifier &notifier,
                   bufferlist &&bl, Context *on_finish);
 
   void send();
 
 private:
   ImageCtx &m_image_ctx;
-  object_watcher::Notifier &m_notifier;
+  watcher::Notifier &m_notifier;
 
   bufferlist m_bl;
   bufferlist m_out_bl;

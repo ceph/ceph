@@ -44,7 +44,6 @@ set(librbd_internal_srcs
   image/SetFlagsRequest.cc
   image/SetSnapRequest.cc
   image_watcher/NotifyLockOwner.cc
-  image_watcher/RewatchRequest.cc
   journal/RemoveRequest.cc
   journal/CreateRequest.cc
   journal/OpenRequest.cc
