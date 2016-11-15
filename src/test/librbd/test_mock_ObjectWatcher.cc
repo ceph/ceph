@@ -153,8 +153,7 @@ public:
   bool wait_for_watch(MockImageCtx &mock_image_ctx, size_t count) {
     Mutex::Locker locker(m_lock);
     while (m_watch_count < count) {
-      if (m_cond.WaitInterval(mock_image_ctx.cct, m_lock,
-                              utime_t(10, 0)) != 0) {
+      if (m_cond.WaitInterval(m_lock, utime_t(10, 0)) != 0) {
         return false;
       }
     }

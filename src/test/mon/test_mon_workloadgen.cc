@@ -449,7 +449,7 @@ class OSDStub : public TestStub
   void boot() {
     dout(1) << __func__ << " boot?" << dendl;
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     if ((last_boot_attempt > 0.0)
 	&& ((now - last_boot_attempt)) <= STUB_BOOT_INTERVAL) {
       dout(1) << __func__ << " backoff and try again later." << dendl;
@@ -465,7 +465,7 @@ class OSDStub : public TestStub
 
   void add_pg(pg_t pgid, epoch_t epoch, pg_t parent) {
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
 
     pg_stat_t s;
     s.created = epoch;
@@ -543,7 +543,7 @@ class OSDStub : public TestStub
   void send_pg_stats() {
     dout(10) << __func__
 	     << " pgs " << pgs.size() << " osdmap " << osdmap << dendl;
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     MPGStats *mstats = new MPGStats(monc.get_fsid(), osdmap.get_epoch(), now);
 
     mstats->set_tid(1);
@@ -577,7 +577,7 @@ class OSDStub : public TestStub
     assert(pgs.count(pgid) > 0);
 
     pg_stat_t &s = pgs[pgid];
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
 
     if (now - s.last_change < 10.0) {
       dout(10) << __func__
@@ -702,7 +702,7 @@ class OSDStub : public TestStub
     dout(10) << __func__
 	     << " send " << num_entries << " log messages" << dendl;
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     int seq = 0;
     for (; num_entries > 0; --num_entries) {
       LogEntry e;

@@ -614,7 +614,7 @@ TestMemRadosClient::SharedFile TestMemIoCtxImpl::get_file(
 
     if (new_version) {
       file->snap_id = snapc.seq;
-      file->mtime = ceph_clock_now(m_client->cct()).sec();
+      file->mtime = ceph_clock_now().sec();
       m_pool->files[oid].push_back(file);
     }
     return file;

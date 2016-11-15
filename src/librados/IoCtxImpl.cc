@@ -408,7 +408,7 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
   prepare_assert_ops(&op);
   op.rollback(snapid);
   objecter->mutate(oid, oloc,
-		   op, snapc, ceph::real_clock::now(client->cct), 0,
+		   op, snapc, ceph::real_clock::now(), 0,
 		   onack, NULL, NULL);
 
   mylock.Lock();
@@ -667,7 +667,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 				 ceph::real_time *pmtime, int flags)
 {
   ceph::real_time ut = (pmtime ? *pmtime :
-    ceph::real_clock::now(client->cct));
+    ceph::real_clock::now());
 
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
@@ -761,7 +761,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
 				     const SnapContext& snap_context, int flags)
 {
-  auto ut = ceph::real_clock::now(client->cct);
+  auto ut = ceph::real_clock::now();
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
@@ -865,7 +865,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
 				   uint64_t off)
 {
-  auto ut = ceph::real_clock::now(client->cct);
+  auto ut = ceph::real_clock::now();
   ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
 
   if (len > UINT_MAX/2)
@@ -892,7 +892,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
 				    const bufferlist& bl, size_t len)
 {
-  auto ut = ceph::real_clock::now(client->cct);
+  auto ut = ceph::real_clock::now();
 
   if (len > UINT_MAX/2)
     return -E2BIG;
@@ -919,7 +919,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
 					AioCompletionImpl *c,
 					const bufferlist& bl)
 {
-  auto ut = ceph::real_clock::now(client->cct);
+  auto ut = ceph::real_clock::now();
 
   if (bl.length() > UINT_MAX/2)
     return -E2BIG;
@@ -948,7 +948,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 				       size_t write_len,
 				       uint64_t off)
 {
-  auto ut = ceph::real_clock::now(client->cct);
+  auto ut = ceph::real_clock::now();
 
   if ((bl.length() > UINT_MAX/2) || (write_len > UINT_MAX/2))
     return -E2BIG;
@@ -976,7 +976,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 
 int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, int flags)
 {
-  auto ut = ceph::real_clock::now(client->cct);
+  auto ut = ceph::real_clock::now();
 
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
@@ -1610,7 +1610,7 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   prepare_assert_ops(&wr);
   wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
-		   snapc, ceph::real_clock::now(client->cct), 0, NULL,
+		   snapc, ceph::real_clock::now(), 0, NULL,
 		   &onfinish, &ver);
   objecter->linger_cancel(linger_op);
 
@@ -1629,7 +1629,7 @@ int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
   prepare_assert_ops(&wr);
   wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
-		   snapc, ceph::real_clock::now(client->cct), 0, NULL,
+		   snapc, ceph::real_clock::now(), 0, NULL,
 		   oncomplete, &c->objver);
   return 0;
 }

@@ -446,7 +446,7 @@ int CryptoKey::create(CephContext *cct, int t)
   r = _set_secret(t, s);
   if (r < 0)
     return r;
-  created = ceph_clock_now(cct);
+  created = ceph_clock_now();
   return r;
 }
 

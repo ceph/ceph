@@ -889,7 +889,7 @@ double perf_ceph_clock_now()
   int count = 100000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    ceph_clock_now(g_ceph_context);
+    ceph_clock_now();
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;

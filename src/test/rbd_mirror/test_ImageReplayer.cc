@@ -262,7 +262,7 @@ public:
 
     Mutex::Locker locker(m_watch_ctx->lock);
     while (!m_watch_ctx->notified) {
-      if (m_watch_ctx->cond.WaitInterval(g_ceph_context, m_watch_ctx->lock,
+      if (m_watch_ctx->cond.WaitInterval(m_watch_ctx->lock,
 					 utime_t(seconds, 0)) != 0) {
         return false;
       }

@@ -135,7 +135,7 @@ int MonClient::get_monmap_privately()
 
     utime_t interval;
     interval.set_from_double(cct->_conf->mon_client_hunt_interval);
-    map_cond.WaitInterval(cct, monc_lock, interval);
+    map_cond.WaitInterval(monc_lock, interval);
 
     if (monmap.fsid.is_zero() && cur_con) {
       cur_con->mark_down();  // nope, clean that connection up
@@ -448,7 +448,7 @@ int MonClient::authenticate(double timeout)
   if (cur_mon.empty())
     _reopen_session();
 
-  utime_t until = ceph_clock_now(cct);
+  utime_t until = ceph_clock_now();
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
@@ -723,7 +723,7 @@ void MonClient::tick()
     _reopen_session();
   } else if (!cur_mon.empty()) {
     // just renew as needed
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
       ldout(cct, 10) << "renew subs? (now: " << now
 		     << "; renew after: " << sub_renew_after << ") -- "
@@ -786,7 +786,7 @@ void MonClient::_renew_subs()
     _reopen_session();
   else {
     if (sub_renew_sent == utime_t())
-      sub_renew_sent = ceph_clock_now(cct);
+      sub_renew_sent = ceph_clock_now();
 
     MMonSubscribe *m = new MMonSubscribe;
     m->what = sub_new;
@@ -847,7 +847,7 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
   utime_t issued_at_lower_bound = now;
@@ -885,7 +885,7 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   utime_t until = now;
   until += timeout;
 
@@ -903,7 +903,7 @@ int MonClient::wait_auth_rotating(double timeout)
     }
     ldout(cct, 10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
-    now = ceph_clock_now(cct);
+    now = ceph_clock_now();
   }
   ldout(cct, 10) << "wait_auth_rotating done" << dendl;
   return 0;

@@ -164,7 +164,7 @@ bool PaxosService::should_propose(double& delay)
   if (get_last_committed() <= 1)
     delay = 0.0;
   else {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     if ((now - paxos->last_commit_time) > g_conf->paxos_propose_interval)
       delay = (double)g_conf->paxos_min_wait;
     else

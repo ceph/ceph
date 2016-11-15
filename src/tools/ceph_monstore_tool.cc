@@ -494,7 +494,7 @@ int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
       }
       ::encode(ps->second, dirty_pgs);
     }
-    utime_t inc_stamp = ceph_clock_now(NULL);
+    utime_t inc_stamp = ceph_clock_now();
     ::encode(inc_stamp, trans_bl);
     ::encode_destructively(dirty_pgs, trans_bl);
     bufferlist dirty_osds;
@@ -635,7 +635,7 @@ static int update_pgmap_meta(MonitorDBStore& st)
   // the first pgmap_meta
   t->put(prefix, "version", 1);
   {
-    auto stamp = ceph_clock_now(g_ceph_context);
+    auto stamp = ceph_clock_now();
     bufferlist bl;
     ::encode(stamp, bl);
     t->put(prefix, "stamp", bl);

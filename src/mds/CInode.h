@@ -666,7 +666,7 @@ public:
     item_dirty_dirfrag_nest(this), 
     item_dirty_dirfrag_dirfragtree(this), 
     auth_pin_freeze_allowance(0),
-    pop(ceph_clock_now(g_ceph_context)),
+    pop(ceph_clock_now()),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
     linklock(this, &linklock_type),

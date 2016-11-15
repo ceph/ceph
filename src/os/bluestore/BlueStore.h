@@ -1207,7 +1207,7 @@ public:
     }
 
     void log_state_latency(PerfCounters *logger, int state) {
-      utime_t lat, now = ceph_clock_now(g_ceph_context);
+      utime_t lat, now = ceph_clock_now();
       lat = now - last_stamp;
       logger->tinc(state, lat);
       last_stamp = now;
@@ -1308,7 +1308,7 @@ public:
 	onreadable_sync(NULL),
 	wal_txn(NULL),
 	ioc(this),
-	start(ceph_clock_now(g_ceph_context)) {
+	start(ceph_clock_now()) {
         last_stamp = start;
     }
     ~TransContext() {

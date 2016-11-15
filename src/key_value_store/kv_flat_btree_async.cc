@@ -61,7 +61,7 @@ void IndexCache::push(const string &key, const index_data &idata) {
     utime_t old_time = new_it->second.second;
     t2kmap.erase(old_time);
   }
-  utime_t time = ceph_clock_now(g_ceph_context);
+  utime_t time = ceph_clock_now();
   k2itmap[idata.kdata] = make_pair(idata, time);
   t2kmap[time] = idata.kdata;
   if ((int)k2itmap.size() > cache_size) {
@@ -79,7 +79,7 @@ void IndexCache::push(const index_data &idata) {
     t2kmap.erase(old_time);
     k2itmap.erase(idata.kdata);
   }
-  utime_t time = ceph_clock_now(g_ceph_context);
+  utime_t time = ceph_clock_now();
   k2itmap[idata.kdata] = make_pair(idata, time);
   t2kmap[time] = idata.kdata;
   if ((int)k2itmap.size() > cache_size) {
@@ -190,7 +190,7 @@ int KvFlatBtreeAsync::next(const index_data &idata, index_data * out_data)
     out_data->kdata.parse(kvs.begin()->first);
     bufferlist::iterator b = kvs.begin()->second.begin();
     out_data->decode(b);
-    if (idata.is_timed_out(ceph_clock_now(g_ceph_context),timeout)) {
+    if (idata.is_timed_out(ceph_clock_now(), timeout)) {
       if (verbose) cout << client_name << " THINKS THE OTHER CLIENT DIED."
 	  << std::endl;
       //the client died after deleting the object. clean up.
@@ -217,7 +217,7 @@ int KvFlatBtreeAsync::prev(const index_data &idata, index_data * out_data)
     if (verbose) cout << "\t\t\t" << client_name
 	<< "-prev: getting index failed with error "
 	<< err << std::endl;
-    if (idata.is_timed_out(ceph_clock_now(g_ceph_context),timeout)) {
+    if (idata.is_timed_out(ceph_clock_now(), timeout)) {
       if (verbose) cout << client_name << " THINKS THE OTHER CLIENT DIED."
 	  << std::endl;
       //the client died after deleting the object. clean up.
@@ -276,7 +276,7 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
       (cache_size / cache_refresh >= 2? cache_size / cache_refresh: 2),
       &kvmap,&err);
   err = io_ctx.operate(index_name, &oro, NULL);
-  utime_t mytime = ceph_clock_now(g_ceph_context);
+  utime_t mytime = ceph_clock_now();
   if (err < 0){
     cerr << "\t" << client_name
 	<< "-read_index: getting keys failed with "
@@ -711,7 +711,7 @@ void KvFlatBtreeAsync::set_up_prefix_index(
   std::map<std::string, pair<bufferlist, int> > assertions;
   map<string, bufferlist> to_insert;
   idata->prefix = "1";
-  idata->ts = ceph_clock_now(g_ceph_context);
+  idata->ts = ceph_clock_now();
   for(vector<object_data>::const_iterator it = to_create.begin();
       it != to_create.end();
       ++it) {
@@ -1682,7 +1682,7 @@ int KvFlatBtreeAsync::get(const string &key, bufferlist *val) {
     return -ESUICIDE;
   }
   err = read_index(key, &idata, NULL, false);
-  mytime = ceph_clock_now(g_ceph_context);
+  mytime = ceph_clock_now();
   if (err < 0) {
     if (verbose) cout << "getting oid failed with code " << err << std::endl;
     return err;
@@ -2081,7 +2081,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  io_ctx.aio_operate(dit->obj, aioc, &oro, NULL);
 	  aioc->wait_for_safe();
 	  err = aioc->get_return_value();
-	  if (ceph_clock_now(g_ceph_context) - idata.ts > timeout) {
+	  if (ceph_clock_now() - idata.ts > timeout) {
 	    if (err < 0) {
 	      aioc->release();
 	      if (err == -ENOENT) {

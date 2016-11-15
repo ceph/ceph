@@ -2075,7 +2075,7 @@ void KStore::_kv_sync_thread()
     } else {
       dout(20) << __func__ << " committing " << kv_queue.size() << dendl;
       kv_committing.swap(kv_queue);
-      utime_t start = ceph_clock_now(NULL);
+      utime_t start = ceph_clock_now();
       l.unlock();
 
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
@@ -2092,7 +2092,7 @@ void KStore::_kv_sync_thread()
       }
       int r = db->submit_transaction_sync(t);
       assert(r == 0);
-      utime_t finish = ceph_clock_now(NULL);
+      utime_t finish = ceph_clock_now();
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " in " << dur << dendl;

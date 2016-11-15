@@ -122,7 +122,7 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
   MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
-  last_beacon[m->get_gid()] = ceph_clock_now(g_ceph_context);
+  last_beacon[m->get_gid()] = ceph_clock_now();
 
   if (pending_map.active_gid == m->get_gid()
       && pending_map.active_addr == m->get_server_addr()
@@ -163,7 +163,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     }
   }
 
-  last_beacon[m->get_gid()] = ceph_clock_now(g_ceph_context);
+  last_beacon[m->get_gid()] = ceph_clock_now();
 
   // Track whether we modified pending_map
   bool updated = false;
@@ -276,7 +276,7 @@ void MgrMonitor::send_digests()
 
 void MgrMonitor::tick()
 {
-  const utime_t now = ceph_clock_now(g_ceph_context);
+  const utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf->mon_mgr_beacon_grace;
 

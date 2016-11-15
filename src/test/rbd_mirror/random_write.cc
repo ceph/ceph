@@ -71,7 +71,7 @@ struct rbd_bencher {
     while (in_flight > max) {
       utime_t dur;
       dur.set_from_double(.2);
-      cond.WaitInterval(g_ceph_context, lock, dur);
+      cond.WaitInterval(lock, dur);
     }
   }
 
