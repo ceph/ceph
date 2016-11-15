@@ -4376,7 +4376,6 @@ int BlueStore::fsck(bool deep)
     list<string> expecting_shards;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       dout(30) << " key " << pretty_binary_string(it->key()) << dendl;
-      ghobject_t oid;
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
@@ -4397,7 +4396,7 @@ int BlueStore::fsck(bool deep)
         string okey;
         get_key_extent_shard(it->key(), &okey, &offset);
         derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
-                         << dendl;
+             << dendl;
         if (expecting_shards.empty()) {
           derr << __func__ << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
@@ -4417,6 +4416,8 @@ int BlueStore::fsck(bool deep)
 	}
 	continue;
       }
+
+      ghobject_t oid;
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
         derr << __func__ << "  bad object key "
