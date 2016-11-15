@@ -435,18 +435,16 @@ void PG::update_object_snap_mapping(
 void PG::merge_log(
   ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, pg_shard_t from)
 {
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, &t};
   pg_log.merge_log(
     t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
-  rollbacker.apply(this, &t);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, &t};
   pg_log.rewind_divergent_log(
     t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
-  rollbacker.apply(this, &t);
 }
 
 /*
@@ -1590,7 +1588,7 @@ void PG::activate(ObjectStore::Transaction& t,
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
   last_update_applied = info.last_update;
-  last_rollback_info_trimmed_to_applied = pg_log.get_rollback_trimmed_to();
+  last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
 
   need_up_thru = false;
 
@@ -1848,10 +1846,12 @@ void PG::activate(ObjectStore::Transaction& t,
 
     state_set(PG_STATE_ACTIVATING);
   }
+  if (is_primary()) {
+    projected_last_update = info.last_update;
+  }
   if (acting.size() >= pool.info.min_size) {
-    PGLogEntryHandler handler;
+    PGLogEntryHandler handler{this, &t};
     pg_log.roll_forward(&handler);
-    handler.apply(this, &t);
   }
 }
 
@@ -3053,21 +3053,29 @@ void PG::append_log(
   }
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
+  PGLogEntryHandler handler{this, &t};
+  if (!transaction_applied) {
+     /* We must be a backfill peer, so it's ok if we apply
+      * out-of-turn since we won't be considered when
+      * determining a min possible last_update.
+      */
+    pg_log.roll_forward(&handler);
+  }
+
   for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
        p != logv.end();
        ++p) {
-    add_log_entry(*p);
-  }
+    add_log_entry(*p, transaction_applied);
 
-  PGLogEntryHandler handler;
-  if (!transaction_applied) {
-    pg_log.roll_forward(&handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	info.last_update));
-  } else if (roll_forward_to > pg_log.get_rollback_trimmed_to()) {
+    /* We don't want to leave the rollforward artifacts around
+     * here past last_backfill.  It's ok for the same reason as
+     * above */
+    if (transaction_applied &&
+	(cmp(p->soid, info.last_backfill, get_sort_bitwise()) > 0)) {
+      pg_log.roll_forward(&handler);
+    }
+  }
+  if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
     pg_log.roll_forward_to(
       roll_forward_to,
       &handler);
@@ -3078,11 +3086,7 @@ void PG::append_log(
 	roll_forward_to));
   }
 
-  pg_log.trim(&handler, trim_to, info);
-
-  dout(10) << __func__ << ": rolling forward to " << roll_forward_to
-	   << " entries " << handler.to_trim << dendl;
-  handler.apply(this, &t);
+  pg_log.trim(trim_to, info);
 
   // update the local pg, pg log
   dirty_info = true;
@@ -4653,13 +4657,12 @@ bool PG::append_log_entries_update_missing(
   assert(!entries.empty());
   assert(entries.begin()->version > info.last_update);
 
-  PGLogEntryHandler rollbacker;
+  PGLogEntryHandler rollbacker{this, &t};
   bool invalidate_stats =
     pg_log.append_new_log_entries(info.last_backfill,
 				  info.last_backfill_bitwise,
 				  entries,
 				  &rollbacker);
-  rollbacker.apply(this, &t);
   info.last_update = pg_log.get_head();
 
   if (pg_log.get_missing().num_missing() == 0) {
@@ -4695,6 +4698,7 @@ void PG::merge_new_log_entries(
       pinfo.last_backfill,
       info.last_backfill_bitwise,
       entries,
+      true,
       NULL,
       pmissing,
       NULL,
@@ -5286,7 +5290,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
   if (!pg.backfill_targets.empty())
     out << " bft=" << pg.backfill_targets;
-  out << " crt=" << pg.pg_log.get_log().can_rollback_to;
+  out << " crt=" << pg.pg_log.get_can_rollback_to();
 
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
@@ -7126,9 +7130,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
 
-    PGLogEntryHandler rollbacker;
+    PGLogEntryHandler rollbacker{pg, t};
     pg->pg_log.reset_backfill_claim_log(msg->log, &rollbacker);
-    rollbacker.apply(pg, t);
 
     pg->pg_log.reset_backfill();
   } else {
