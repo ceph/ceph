@@ -3401,7 +3401,7 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
 		     const cls::rbd::MirrorImageStatus &status) {
   MirrorImageStatusOnDisk ondisk_status(status);
   ondisk_status.up = false;
-  ondisk_status.last_update = ceph_clock_now(g_ceph_context);
+  ondisk_status.last_update = ceph_clock_now();
 
   int r = cls_get_request_origin(hctx, &ondisk_status.origin);
   assert(r == 0);

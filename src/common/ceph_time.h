@@ -33,7 +33,6 @@
 int clock_gettime(int clk_id, struct timespec *tp);
 #endif
 
-class CephContext;
 struct ceph_timespec;
 
 namespace ceph {
@@ -84,12 +83,9 @@ namespace ceph {
 	clock_gettime(CLOCK_REALTIME, &ts);
 	return from_timespec(ts);
       }
-      // We need a version of 'now' that can take a CephContext for
-      // introducing configurable clock skew.
-      static time_point now(const CephContext* cct) noexcept;
 
       static bool is_zero(const time_point& t) {
-        return (t == time_point::min());
+	return (t == time_point::min());
       }
 
       // Allow conversion to/from any clock with the same interface as
@@ -182,7 +178,6 @@ namespace ceph {
 #endif
 	return from_timespec(ts);
       }
-      static time_point now(const CephContext* cct) noexcept;
 
       static time_t to_time_t(const time_point& t) noexcept {
 	return duration_cast<seconds>(t.time_since_epoch()).count();

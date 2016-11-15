@@ -298,7 +298,7 @@ int main(int argc, const char **argv)
   if (!create && r < 0) {
     cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(r) << std::endl;
     return -1;
-  }    
+  }
   else if (create && !clobber && r == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
@@ -306,7 +306,7 @@ int main(int argc, const char **argv)
 
   if (create) {
     monmap.epoch = 0;
-    monmap.created = ceph_clock_now(g_ceph_context);
+    monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
     if (g_conf->fsid.is_zero()) {

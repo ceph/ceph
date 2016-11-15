@@ -217,7 +217,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   bool r = mon_caps->parse("allow *", NULL);
   assert(r);
 
-  exited_quorum = ceph_clock_now(g_ceph_context);
+  exited_quorum = ceph_clock_now();
 
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
@@ -1218,7 +1218,7 @@ void Monitor::_reset()
 
   leader_since = utime_t();
   if (!quorum.empty()) {
-    exited_quorum = ceph_clock_now(g_ceph_context);
+    exited_quorum = ceph_clock_now();
   }
   quorum.clear();
   outside_quorum.clear();
@@ -1702,7 +1702,7 @@ void Monitor::sync_trim_providers()
 {
   dout(20) << __func__ << dendl;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   map<uint64_t,SyncProvider>::iterator p = sync_providers.begin();
   while (p != sync_providers.end()) {
     if (now > p->second.timeout) {
@@ -2049,11 +2049,11 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
-           << " mon_features " << mon_features
-           << dendl;
+	   << " mon_features " << mon_features
+	   << dendl;
   assert(is_electing());
   state = STATE_LEADER;
-  leader_since = ceph_clock_now(g_ceph_context);
+  leader_since = ceph_clock_now();
   leader = rank;
   quorum = active;
   quorum_con_features = features;
@@ -2398,7 +2398,7 @@ void Monitor::health_tick_stop()
 
 utime_t Monitor::health_interval_calc_next_update()
 {
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
 
   time_t secs = now.sec();
   int remainder = secs % cct->_conf->mon_health_to_clog_interval;
@@ -3068,9 +3068,9 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   if (prefix == "compact" || prefix == "mon compact") {
     dout(1) << "triggering manual compaction" << dendl;
-    utime_t start = ceph_clock_now(g_ceph_context);
+    utime_t start = ceph_clock_now();
     store->compact();
-    utime_t end = ceph_clock_now(g_ceph_context);
+    utime_t end = ceph_clock_now();
     end -= start;
     dout(1) << "finished manual compaction in " << end << " seconds" << dendl;
     ostringstream oss;
@@ -3159,7 +3159,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->dump_stream("cluster_fingerprint") << fingerprint;
     f->dump_string("version", ceph_version_to_str());
     f->dump_string("commit", git_version_to_str());
-    f->dump_stream("timestamp") << ceph_clock_now(NULL);
+    f->dump_stream("timestamp") << ceph_clock_now();
 
     vector<string> tagsvec;
     cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
@@ -3706,7 +3706,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
   Message *m = op->get_req();
   MonSession *s = op->get_session();
   ConnectionRef con = op->get_connection();
-  utime_t too_old = ceph_clock_now(g_ceph_context);
+  utime_t too_old = ceph_clock_now();
   too_old -= g_ceph_context->_conf->mon_lease;
   if (m->get_recv_stamp() > too_old &&
       con->is_connected()) {
@@ -3776,7 +3776,7 @@ void Monitor::_ms_dispatch(Message *m)
 
   assert(s);
 
-  s->session_timeout = ceph_clock_now(NULL);
+  s->session_timeout = ceph_clock_now();
   s->session_timeout += g_conf->mon_session_timeout;
 
   if (s->auth_handler) {
@@ -4094,7 +4094,7 @@ void Monitor::timecheck_start_round()
 
   if (timecheck_round % 2) {
     dout(10) << __func__ << " there's a timecheck going on" << dendl;
-    utime_t curr_time = ceph_clock_now(g_ceph_context);
+    utime_t curr_time = ceph_clock_now();
     double max = g_conf->mon_timecheck_interval*3;
     if (curr_time - timecheck_round_start < max) {
       dout(10) << __func__ << " keep current round going" << dendl;
@@ -4109,7 +4109,7 @@ void Monitor::timecheck_start_round()
   assert(timecheck_round % 2 == 0);
   timecheck_acks = 0;
   timecheck_round ++;
-  timecheck_round_start = ceph_clock_now(g_ceph_context);
+  timecheck_round_start = ceph_clock_now();
   dout(10) << __func__ << " new " << timecheck_round << dendl;
 
   timecheck();
@@ -4293,7 +4293,7 @@ void Monitor::timecheck()
       continue;
 
     entity_inst_t inst = monmap->get_inst(*it);
-    utime_t curr_time = ceph_clock_now(g_ceph_context);
+    utime_t curr_time = ceph_clock_now();
     timecheck_waiting[inst] = curr_time;
     MTimeCheck *m = new MTimeCheck(MTimeCheck::OP_PING);
     m->epoch = get_epoch();
@@ -4344,7 +4344,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
     return;
   }
 
-  utime_t curr_time = ceph_clock_now(g_ceph_context);
+  utime_t curr_time = ceph_clock_now();
 
   assert(timecheck_waiting.count(other) > 0);
   utime_t timecheck_sent = timecheck_waiting[other];
@@ -4472,7 +4472,7 @@ void Monitor::handle_timecheck_peon(MonOpRequestRef op)
 
   assert((timecheck_round % 2) != 0);
   MTimeCheck *reply = new MTimeCheck(MTimeCheck::OP_PONG);
-  utime_t curr_time = ceph_clock_now(g_ceph_context);
+  utime_t curr_time = ceph_clock_now();
   reply->timestamp = curr_time;
   reply->epoch = m->epoch;
   reply->round = m->round;
@@ -5088,7 +5088,7 @@ void Monitor::tick()
   }
   
   // trim sessions
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   xlist<MonSession*>::iterator p = session_map.sessions.begin();
 
   bool out_for_too_long = (!exited_quorum.is_zero()

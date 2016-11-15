@@ -211,7 +211,7 @@ void Migrator::export_empty_import(CDir *dir)
 
 void Migrator::find_stale_export_freeze()
 {
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf->mds_freeze_tree_timeout;
 
@@ -846,7 +846,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr)
   mds->send_message_mds(discover, it->second.peer);
   assert(g_conf->mds_kill_export_at != 2);
 
-  it->second.last_cum_auth_pins_change = ceph_clock_now(g_ceph_context);
+  it->second.last_cum_auth_pins_change = ceph_clock_now();
 
   // start the freeze, but hold it up with an auth_pin.
   dir->freeze_tree();
@@ -1237,7 +1237,7 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), it->second.peer);
 
   // take away the popularity we're sending.
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   mds->balancer->subtract_export(dir, now);
   
   // fill export message with cache data
@@ -1808,7 +1808,7 @@ void Migrator::export_finish(CDir *dir)
   // finish export (adjust local cache state)
   int num_dentries = 0;
   C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather> *fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather>(g_ceph_context);
-  finish_export_dir(dir, ceph_clock_now(g_ceph_context), it->second.peer,
+  finish_export_dir(dir, ceph_clock_now(), it->second.peer,
 		    it->second.peer_imported, fin->contexts, &num_dentries);
   dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
@@ -2226,7 +2226,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   assert(it->second.state == IMPORT_PREPPED);
   assert(it->second.tid == m->get_tid());
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   mds_rank_t oldauth = mds_rank_t(m->get_source().num());
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
   assert(dir->is_auth() == false);

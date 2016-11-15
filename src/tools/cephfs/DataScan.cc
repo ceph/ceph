@@ -336,8 +336,8 @@ int MetadataDriver::inject_unlinked_inode(
   // (we won't actually give the *correct* dirstat here though)
   inode.inode.dirstat.nfiles = 1;
 
-  inode.inode.ctime = 
-    inode.inode.mtime = ceph_clock_now(g_ceph_context);
+  inode.inode.ctime =
+    inode.inode.mtime = ceph_clock_now();
   inode.inode.nlink = 1;
   inode.inode.truncate_size = -1ull;
   inode.inode.truncate_seq = 1;

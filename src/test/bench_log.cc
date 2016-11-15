@@ -41,7 +41,7 @@ int main(int argc, const char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY, 0);
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
 
   list<T*> ls;
   for (int i=0; i<threads; i++) {
@@ -57,13 +57,13 @@ int main(int argc, const char **argv)
     delete t;
   }
 
-  utime_t t = ceph_clock_now(NULL);
+  utime_t t = ceph_clock_now();
   t -= start;
   cout << " flushing.. " << t << " so far ..." << std::endl;
 
   g_ceph_context->_log->flush();
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
 
   cout << dur << std::endl;

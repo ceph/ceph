@@ -73,8 +73,8 @@ int MDBalancer::proc_message(Message *m)
 void MDBalancer::tick()
 {
   static int num_bal_times = g_conf->mds_bal_max;
-  static utime_t first = ceph_clock_now(g_ceph_context);
-  utime_t now = ceph_clock_now(g_ceph_context);
+  static utime_t first = ceph_clock_now();
+  utime_t now = ceph_clock_now();
   utime_t elapsed = now;
   elapsed -= first;
 
@@ -194,7 +194,7 @@ int MDBalancer::localize_balancer()
            << " oid=" << oid << " oloc=" << oloc << dendl;
 
   /* timeout: if we waste half our time waiting for RADOS, then abort! */
-  double t = ceph_clock_now(g_ceph_context) + g_conf->mds_bal_interval/2;
+  double t = ceph_clock_now() + g_conf->mds_bal_interval/2;
   utime_t timeout;
   timeout.set_from_double(t);
   lock.Lock();
@@ -216,7 +216,7 @@ int MDBalancer::localize_balancer()
 
 void MDBalancer::send_heartbeat()
 {
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   
   if (mds->mdsmap->is_degraded()) {
     dout(10) << "send_heartbeat degraded" << dendl;
@@ -488,7 +488,7 @@ void MDBalancer::prep_rebalance(int beat)
   } else {
     int cluster_size = mds->get_mds_map()->get_num_in_mds();
     mds_rank_t whoami = mds->get_nodeid();
-    rebalance_time = ceph_clock_now(g_ceph_context);
+    rebalance_time = ceph_clock_now();
 
     // reset
     my_targets.clear();
@@ -515,7 +515,7 @@ void MDBalancer::prep_rebalance(int beat)
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
-      map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
+      map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now()));
       std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
       mds_load_t &load(r.first->second);
 
@@ -661,7 +661,7 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* prepare for balancing */
   int cluster_size = mds->get_mds_map()->get_num_in_mds();
-  rebalance_time = ceph_clock_now(g_ceph_context);
+  rebalance_time = ceph_clock_now();
   my_targets.clear();
   imported.clear();
   exported.clear();
@@ -672,7 +672,7 @@ int MDBalancer::mantle_prep_rebalance()
   for (mds_rank_t i=mds_rank_t(0);
        i < mds_rank_t(cluster_size);
        i++) {
-    map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
+    map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now()));
     std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
     mds_load_t &load(r.first->second);
 

@@ -159,14 +159,14 @@ TEST(AES, Loop) {
 TEST(AES, LoopKey) {
   bufferptr k(16);
   get_random_bytes(k.c_str(), k.length());
-  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(NULL), k);
+  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(), k);
 
   bufferlist data;
   bufferptr r(128);
   get_random_bytes(r.c_str(), r.length());
   data.append(r);
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   int n = 100000;
 
   for (int i=0; i<n; ++i) {
@@ -176,7 +176,7 @@ TEST(AES, LoopKey) {
     ASSERT_EQ(r, 0);
   }
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   cout << n << " encoded in " << dur << std::endl;
 }

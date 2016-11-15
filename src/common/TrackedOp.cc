@@ -122,7 +122,7 @@ bool OpTracker::dump_historic_ops(Formatter *f)
   if (!tracking_enabled)
     return false;
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   history.dump_ops(now, f);
   return true;
 }
@@ -136,10 +136,10 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
-    assert(NULL != sdata); 
+    assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
       if (print_only_blocked && (now - (*p)->get_initiated() <= complaint_time))
@@ -197,7 +197,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   if (!tracking_enabled)
     delete i;
   else {
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     history.insert(now, TrackedOpRef(i));
   }
 }
@@ -208,7 +208,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
   if (!tracking_enabled)
     return false;
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   utime_t too_old = now;
   too_old -= complaint_time;
   utime_t oldest_op = now;
@@ -296,7 +296,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 {
   h->clear();
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
 
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
@@ -347,7 +347,7 @@ void TrackedOp::mark_event(const string &event)
   if (!is_tracked)
     return;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   {
     Mutex::Locker l(lock);
     events.push_back(make_pair(now, event));

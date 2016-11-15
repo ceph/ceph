@@ -241,7 +241,7 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSDService::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
-  last_recalibrate(ceph_clock_now(NULL)),
+  last_recalibrate(ceph_clock_now()),
   promote_max_objects(0),
   promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
@@ -612,7 +612,7 @@ void OSDService::agent_stop()
 
 void OSDService::promote_throttle_recalibrate()
 {
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   double dur = now - last_recalibrate;
   last_recalibrate = now;
   unsigned prob = promote_probability_millis;
@@ -702,7 +702,7 @@ void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
   Mutex::Locker l(full_status_lock);
   enum s_names new_state;
 
-  time_t now = ceph_clock_gettime(NULL);
+  time_t now = ceph_clock_gettime();
 
   // We base ratio on kb_avail rather than kb_used because they can
   // differ significantly e.g. on btrfs volumes with a large number of
@@ -1165,10 +1165,10 @@ bool OSDService::prepare_to_stop()
 					      osdmap->get_epoch(),
 					      true  // request ack
 					      ));
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     utime_t timeout;
     timeout.set_from_double(now + cct->_conf->osd_mon_shutdown_timeout);
-    while ((ceph_clock_now(cct) < timeout) &&
+    while ((ceph_clock_now() < timeout) &&
        (get_state() != STOPPING)) {
       is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
     }
@@ -1463,7 +1463,7 @@ void OSDService::queue_for_snap_trim(PG *pg) {
 	PGSnapTrim(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_snap_trim_cost,
 	cct->_conf->osd_snap_trim_priority,
-	ceph_clock_now(cct),
+	ceph_clock_now(),
 	entity_inst_t())));
 }
 
@@ -2206,7 +2206,7 @@ int OSD::init()
   mgrc.set_pgstats_cb([this](){
       RWLock::RLocker l(map_lock);
       
-      utime_t had_for = ceph_clock_now(cct) - had_map_since;
+      utime_t had_for = ceph_clock_now() - had_map_since;
       osd_stat_t cur_stat = service.get_osd_stat();
       cur_stat.os_perf_stat = store->get_cur_stats();
 
@@ -3914,7 +3914,7 @@ void OSD::maybe_update_heartbeat_peers()
   assert(osd_lock.is_locked());
 
   if (is_waiting_for_healthy()) {
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     if (last_heartbeat_resample == utime_t()) {
       last_heartbeat_resample = now;
       heartbeat_set_peers_need_update();
@@ -4139,7 +4139,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	  i->second.last_rx_front = m->stamp;
 	}
 
-        utime_t cutoff = ceph_clock_now(cct);
+        utime_t cutoff = ceph_clock_now();
         cutoff -= cct->_conf->osd_heartbeat_grace;
         if (i->second.is_healthy(cutoff)) {
           // Cancel false reports
@@ -4197,7 +4197,7 @@ void OSD::heartbeat_entry()
     utime_t w;
     w.set_from_double(wait);
     dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
-    heartbeat_cond.WaitInterval(cct, heartbeat_lock, w);
+    heartbeat_cond.WaitInterval(heartbeat_lock, w);
     if (is_stopping())
       return;
     dout(30) << "heartbeat_entry woke up" << dendl;
@@ -4207,7 +4207,7 @@ void OSD::heartbeat_entry()
 void OSD::heartbeat_check()
 {
   assert(heartbeat_lock.is_locked());
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
 
   // check for incoming heartbeats (move me elsewhere?)
   utime_t cutoff = now;
@@ -4273,7 +4273,7 @@ void OSD::heartbeat()
 
   dout(5) << "heartbeat: " << service.get_osd_stat() << dendl;
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
 
   // send heartbeats
   for (map<int,HeartbeatInfo>::iterator i = heartbeat_peers.begin();
@@ -4410,7 +4410,7 @@ void OSD::tick_without_osd_lock()
     // mon report?
     bool reset = false;
     bool report = false;
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     pg_stat_queue_lock.Lock();
     double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
     double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
@@ -4778,7 +4778,7 @@ void OSD::ms_handle_connect(Connection *con)
       map_lock.get_read();
       Mutex::Locker l2(mon_report_lock);
 
-      utime_t now = ceph_clock_now(NULL);
+      utime_t now = ceph_clock_now();
       last_mon_report = now;
 
       // resend everything, it's a new session
@@ -4966,7 +4966,7 @@ bool OSD::_is_healthy()
 
   if (is_waiting_for_healthy()) {
     Mutex::Locker l(heartbeat_lock);
-    utime_t cutoff = ceph_clock_now(cct);
+    utime_t cutoff = ceph_clock_now();
     cutoff -= cct->_conf->osd_heartbeat_grace;
     int num = 0, up = 0;
     for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
@@ -5175,7 +5175,7 @@ void OSD::send_failures()
   assert(map_lock.is_locked());
   assert(mon_report_lock.is_locked());
   Mutex::Locker l(heartbeat_lock);
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
     entity_inst_t i = osdmap->get_inst(osd);
@@ -5242,7 +5242,7 @@ void OSD::send_pg_stats(const utime_t &now)
     }
 
     if (last_pg_stats_ack == utime_t() || !outstanding_pg_stats.empty()) {
-      last_pg_stats_ack = ceph_clock_now(cct);
+      last_pg_stats_ack = ceph_clock_now();
     }
     outstanding_pg_stats.insert(tid);
     dout(20) << __func__ << "  updates pending: " << outstanding_pg_stats << dendl;
@@ -5267,7 +5267,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
   pg_stat_queue_lock.Lock();
 
-  last_pg_stats_ack = ceph_clock_now(cct);
+  last_pg_stats_ack = ceph_clock_now();
 
   // decay timeout slowly (analogous to TCP)
   stats_ack_timeout =
@@ -5319,7 +5319,7 @@ void OSD::flush_pg_stats()
 {
   dout(10) << "flush_pg_stats" << dendl;
   osd_lock.Unlock();
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   map_lock.get_read();
   mon_report_lock.Lock();
   send_pg_stats(now);
@@ -5716,7 +5716,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       }
     }
 
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     for (int64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
       unsigned offset = 0;
@@ -5741,7 +5741,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	waiter.wait();
       }
     }
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
 
     // clean up
     store->queue_transaction(osr.get(), std::move(cleanupt), NULL);
@@ -6573,7 +6573,7 @@ void OSD::sched_scrub()
     return;
   }
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   bool time_permit = scrub_time_permit(now);
   bool load_is_low = scrub_load_below_threshold();
   dout(20) << "sched_scrub load_is_low=" << (int)load_is_low << dendl;
@@ -7024,7 +7024,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     }
   }
 
-  had_map_since = ceph_clock_now(cct);
+  had_map_since = ceph_clock_now();
 
   epoch_t _bind_epoch = service.get_bind_epoch();
   if (osdmap->is_up(whoami) &&
@@ -7099,7 +7099,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	do_restart = true;
 
 	//add markdown log
-	utime_t now = ceph_clock_now(g_ceph_context);
+	utime_t now = ceph_clock_now();
 	utime_t grace = utime_t(g_conf->osd_max_markdown_period, 0);
 	osd_markdown_log.push_back(now);
 	//clear all out-of-date log
@@ -8394,7 +8394,7 @@ void OSD::check_replay_queue()
 {
   assert(osd_lock.is_locked());
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   list< pair<spg_t,utime_t> > pgids;
   replay_queue_lock.Lock();
   while (!replay_queue.empty() &&
@@ -8454,7 +8454,7 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
   if (available_pushes)
     *available_pushes = max - recovery_ops_active - recovery_ops_reserved;
 
-  if (ceph_clock_now(cct) < defer_recovery_until) {
+  if (ceph_clock_now() < defer_recovery_until) {
     dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
     return false;
   }
@@ -8806,7 +8806,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
 
 void OSD::enqueue_op(PGRef pg, OpRequestRef& op)
 {
-  utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
+  utime_t latency = ceph_clock_now() - op->get_req()->get_recv_stamp();
   dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
 	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
@@ -8826,7 +8826,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
     osd->cct->get_heartbeat_map()->reset_timeout(hb,
       osd->cct->_conf->threadpool_default_timeout, 0);
     sdata->sdata_lock.Lock();
-    sdata->sdata_cond.WaitInterval(osd->cct, sdata->sdata_lock,
+    sdata->sdata_cond.WaitInterval(sdata->sdata_lock,
       utime_t(osd->cct->_conf->threadpool_empty_queue_max_wait, 0));
     sdata->sdata_lock.Unlock();
     sdata->sdata_op_ordering_lock.Lock();
@@ -8958,7 +8958,7 @@ void OSD::dequeue_op(
   PGRef pg, OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   op->set_dequeued_time(now);
   utime_t latency = now - op->get_req()->get_recv_stamp();
   dout(10) << "dequeue_op " << op << " prio " << op->get_req()->get_priority()

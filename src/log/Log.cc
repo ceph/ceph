@@ -225,13 +225,13 @@ void Log::submit_entry(Entry *e)
 Entry *Log::create_entry(int level, int subsys)
 {
   if (true) {
-    return new Entry(ceph_clock_now(NULL),
-		   pthread_self(),
-		   level, subsys);
+    return new Entry(ceph_clock_now(),
+		     pthread_self(),
+		     level, subsys);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now(NULL);
+    e->m_stamp = ceph_clock_now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -243,16 +243,16 @@ Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
 {
   if (true) {
     ANNOTATE_BENIGN_RACE_SIZED(expected_size, sizeof(*expected_size),
-                               "Log hint");
+			       "Log hint");
     size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
     void *ptr = ::operator new(sizeof(Entry) + size);
-    return new(ptr) Entry(ceph_clock_now(NULL),
+    return new(ptr) Entry(ceph_clock_now(),
        pthread_self(), level, subsys,
        reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now(NULL);
+    e->m_stamp = ceph_clock_now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;

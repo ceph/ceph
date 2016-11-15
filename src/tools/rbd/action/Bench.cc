@@ -156,7 +156,7 @@ struct rbd_bencher {
     while (in_flight > max) {
       utime_t dur;
       dur.set_from_double(.2);
-      cond.WaitInterval(g_ceph_context, lock, dur);
+      cond.WaitInterval(lock, dur);
     }
   }
 
@@ -208,7 +208,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   srand(time(NULL) % (unsigned long) -1);
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   utime_t last;
   unsigned ios = 0;
 
@@ -268,7 +268,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       cur_off += io_size;
     }
 
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     utime_t elapsed = now - start;
     if (last.is_zero()) {
       last = elapsed;
@@ -295,11 +295,11 @@ int do_bench(librbd::Image& image, io_type_t io_type,
               << std::endl;
   }
 
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   double elapsed = now - start;
 
   printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n",
-         (int)elapsed, ios, (double)ios / elapsed, (double)off / elapsed);
+	 (int)elapsed, ios, (double)ios / elapsed, (double)off / elapsed);
 
   return 0;
 }

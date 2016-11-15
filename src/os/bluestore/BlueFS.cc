@@ -1455,7 +1455,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     }
   }
   if (must_dirty) {
-    h->file->fnode.mtime = ceph_clock_now(NULL);
+    h->file->fnode.mtime = ceph_clock_now();
     assert(h->file->fnode.ino >= 1);
     if (h->file->dirty_seq == 0) {
       h->file->dirty_seq = log_seq + 1;
@@ -1598,13 +1598,13 @@ void BlueFS::wait_for_aio(FileWriter *h)
   // NOTE: this is safe to call without a lock, as long as our reference is
   // stable.
   dout(10) << __func__ << " " << h << dendl;
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   for (auto p : h->iocv) {
     if (p) {
       p->aio_wait();
     }
   }
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   dout(10) << __func__ << " " << h << " done in " << dur << dendl;
 }
@@ -1798,7 +1798,7 @@ void BlueFS::sync_metadata()
     return;
   }
   dout(10) << __func__ << dendl;
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   for (auto p : alloc) {
     if (p) {
       p->commit_start();
@@ -1819,7 +1819,7 @@ void BlueFS::sync_metadata()
     }
   }
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   dout(10) << __func__ << " done in " << dur << dendl;
 }
@@ -1879,7 +1879,7 @@ int BlueFS::open_for_write(
   }
   assert(file->fnode.ino > 1);
 
-  file->fnode.mtime = ceph_clock_now(NULL);
+  file->fnode.mtime = ceph_clock_now();
   file->fnode.prefer_bdev = BlueFS::BDEV_DB;
   if (dirname.length() > 5) {
     // the "db.slow" and "db.wal" directory names are hard-coded at
@@ -2112,7 +2112,7 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
 	     << " not found, creating" << dendl;
     file = new File;
     file->fnode.ino = ++ino_last;
-    file->fnode.mtime = ceph_clock_now(NULL);
+    file->fnode.mtime = ceph_clock_now();
     file_map[ino_last] = file;
     dir->file_map[filename] = file;
     ++file->refs;

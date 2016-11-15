@@ -105,7 +105,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   /* now trim expired locks */
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
 
   map<locker_id_t, locker_info_t>::iterator iter = lock->lockers.begin();
 
@@ -226,7 +226,7 @@ static int lock_obj(cls_method_context_t hctx,
   linfo.tag = tag;
   utime_t expiration;
   if (!duration.is_zero()) {
-    expiration = ceph_clock_now(g_ceph_context);
+    expiration = ceph_clock_now();
     expiration += duration;
 
   }

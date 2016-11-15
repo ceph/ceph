@@ -2645,7 +2645,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		 << dendl;
   epoch = e;
   set_fsid(fsid);
-  created = modified = ceph_clock_now(cct);
+  created = modified = ceph_clock_now();
 
   if (nosd >=  0) {
     set_max_osd(nosd);

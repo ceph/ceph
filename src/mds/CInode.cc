@@ -82,7 +82,7 @@ LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
 {
-  return out << ceph_clock_now(g_ceph_context) << " mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") ";
+  return out << ceph_clock_now() << " mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") ";
 }
 
 /*
@@ -994,7 +994,7 @@ void CInode::store(MDSInternalContextBase *fin)
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
 		     mdcache->mds->finisher);
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
-				 ceph::real_clock::now(g_ceph_context), 0,
+				 ceph::real_clock::now(), 0,
 				 NULL, newfin);
 }
 
@@ -1179,14 +1179,14 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     dout(20) << __func__ << ": no dirtypool or no old pools" << dendl;
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
-				   ceph::real_clock::now(g_ceph_context),
+				   ceph::real_clock::now(),
 				   0, NULL, fin2);
     return;
   }
 
   C_GatherBuilder gather(g_ceph_context, fin2);
   mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
-				 ceph::real_clock::now(g_ceph_context),
+				 ceph::real_clock::now(),
 				 0, NULL, gather.new_sub());
 
   // In the case where DIRTYPOOL is set, we update all old pools backtraces
@@ -1207,7 +1207,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
 
     object_locator_t oloc(*p);
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
-				   ceph::real_clock::now(g_ceph_context),
+				   ceph::real_clock::now(),
 				   0, NULL, gather.new_sub());
   }
   gather.activate();
@@ -2856,7 +2856,7 @@ Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, S
     cap->issue_norevoke(icr.capinfo.issued);
     cap->reset_seq();
   }
-  cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+  cap->set_last_issue_stamp(ceph_clock_now());
   return cap;
 }
 
@@ -3255,7 +3255,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       cap->issue_norevoke(issue);
       issue = cap->pending();
       cap->set_last_issue();
-      cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+      cap->set_last_issue_stamp(ceph_clock_now());
       cap->clear_new();
       ecap.caps = issue;
       ecap.wanted = cap->wanted();
@@ -3618,7 +3618,7 @@ void CInode::decode_import(bufferlist::iterator& p,
     _mark_dirty_parent(ls);
   }
 
-  ::decode(pop, ceph_clock_now(g_ceph_context), p);
+  ::decode(pop, ceph_clock_now(), p);
 
   ::decode(replica_map, p);
   if (!replica_map.empty())
@@ -3763,7 +3763,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         scrub_tag.setxattr("scrub_tag", tag_bl);
         SnapContext snapc;
         in->mdcache->mds->objecter->mutate(oid, object_locator_t(pool), scrub_tag, snapc,
-					   ceph::real_clock::now(g_ceph_context),
+					   ceph::real_clock::now(),
 					   0, NULL, NULL);
       }
     }
@@ -4256,7 +4256,7 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
   scrub_infop->header = header;
 
   scrub_infop->scrub_start_version = get_version();
-  scrub_infop->scrub_start_stamp = ceph_clock_now(g_ceph_context);
+  scrub_infop->scrub_start_stamp = ceph_clock_now();
   // right now we don't handle remote inodes
 }
 
@@ -4275,7 +4275,7 @@ int CInode::scrub_dirfrag_next(frag_t* out_dirfrag)
   while (i != scrub_infop->dirfrag_stamps.end()) {
     if (i->second.scrub_start_version < scrub_infop->scrub_start_version) {
       i->second.scrub_start_version = get_projected_version();
-      i->second.scrub_start_stamp = ceph_clock_now(g_ceph_context);
+      i->second.scrub_start_stamp = ceph_clock_now();
       *out_dirfrag = i->first;
       dout(20) << " return frag " << *out_dirfrag << dendl;
       return 0;

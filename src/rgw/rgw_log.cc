@@ -112,7 +112,7 @@ public:
     timer.init();
     Mutex::Locker l(timer_lock);
     set_timer();
-    utime_t ts = ceph_clock_now(cct);
+    utime_t ts = ceph_clock_now();
     recalc_round_timestamp(ts);
   }
 
@@ -222,7 +222,7 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   entry.add(op_name, data);
 
-  utime_t ts = ceph_clock_now(s->cct);
+  utime_t ts = ceph_clock_now();
 
   usage_logger->insert(ts, entry);
 }
@@ -348,7 +348,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now(s->cct) - s->time;
+  entry.total_time = ceph_clock_now() - s->time;
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
   if (s->err.http_ret) {

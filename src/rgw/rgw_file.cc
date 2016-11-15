@@ -1079,7 +1079,7 @@ namespace rgw {
   done:
     dispose_processor(processor);
     perfcounter->tinc(l_rgw_put_lat,
-		      (ceph_clock_now(s->cct) - s->time));
+		      (ceph_clock_now() - s->time));
     return op_ret;
   } /* exec_finish */
 

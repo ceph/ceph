@@ -1927,7 +1927,7 @@ FileStore::Op *FileStore::build_op(vector<Transaction>& tls,
   }
 
   Op *o = new Op;
-  o->start = ceph_clock_now(g_ceph_context);
+  o->start = ceph_clock_now();
   o->tls = std::move(tls);
   o->onreadable = onreadable;
   o->onreadable_sync = onreadable_sync;
@@ -2008,7 +2008,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   list<Context*> to_queue;
   Op *o = osr->dequeue(&to_queue);
 
-  utime_t lat = ceph_clock_now(g_ceph_context);
+  utime_t lat = ceph_clock_now();
   lat -= o->start;
 
   dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
@@ -2064,7 +2064,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     return 0;
   }
 
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
@@ -2125,7 +2125,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
       assert(0);
     }
     submit_manager.op_submit_finish(op_num);
-    utime_t end = ceph_clock_now(g_ceph_context);
+    utime_t end = ceph_clock_now();
     logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
@@ -2153,7 +2153,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     if (ondisk)
       apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
-    utime_t end = ceph_clock_now(g_ceph_context);
+    utime_t end = ceph_clock_now();
     logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
@@ -2190,7 +2190,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   submit_manager.op_submit_finish(op);
   apply_manager.op_apply_finish(op);
 
-  utime_t end = ceph_clock_now(g_ceph_context);
+  utime_t end = ceph_clock_now();
   logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
   return r;
 }
@@ -3808,10 +3808,10 @@ void FileStore::sync_entry()
     utime_t min_interval;
     min_interval.set_from_double(m_filestore_min_sync_interval);
 
-    utime_t startwait = ceph_clock_now(g_ceph_context);
+    utime_t startwait = ceph_clock_now();
     if (!force_sync) {
       dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
-      sync_cond.WaitInterval(g_ceph_context, lock, max_interval);
+      sync_cond.WaitInterval(lock, max_interval);
     } else {
       dout(20) << "sync_entry not waiting, force_sync set" << dendl;
     }
@@ -3824,7 +3824,7 @@ void FileStore::sync_entry()
       break;
     } else {
       // wait for at least the min interval
-      utime_t woke = ceph_clock_now(g_ceph_context);
+      utime_t woke = ceph_clock_now();
       woke -= startwait;
       dout(20) << "sync_entry woke after " << woke << dendl;
       if (woke < min_interval) {
@@ -3832,7 +3832,7 @@ void FileStore::sync_entry()
 	t -= woke;
 	dout(20) << "sync_entry waiting for another " << t
 		 << " to reach min interval " << min_interval << dendl;
-	sync_cond.WaitInterval(g_ceph_context, lock, t);
+	sync_cond.WaitInterval(lock, t);
       }
     }
 
@@ -3843,7 +3843,7 @@ void FileStore::sync_entry()
 
     op_tp.pause();
     if (apply_manager.commit_start()) {
-      utime_t start = ceph_clock_now(g_ceph_context);
+      utime_t start = ceph_clock_now();
       uint64_t cp = apply_manager.get_committing_seq();
 
       sync_entry_timeo_lock.Lock();
@@ -3920,7 +3920,7 @@ void FileStore::sync_entry()
 	}
       }
 
-      utime_t done = ceph_clock_now(g_ceph_context);
+      utime_t done = ceph_clock_now();
       utime_t lat = done - start;
       utime_t dur = done - startwait;
       dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;

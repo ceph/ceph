@@ -632,8 +632,7 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
     void wait_for_size(size_t size) {
       Mutex::Locker locker(m_lock);
       while (m_size != size) {
-	CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-	ASSERT_EQ(0, m_cond.WaitInterval(cct, m_lock, seconds(5)));
+	ASSERT_EQ(0, m_cond.WaitInterval(m_lock, seconds(5)));
       }
     }
     rbd_image_t &m_image;
@@ -684,8 +683,7 @@ TEST_F(TestLibRBD, UpdateWatchAndResizePP)
       void wait_for_size(size_t size) {
 	Mutex::Locker locker(m_lock);
 	while (m_size != size) {
-	  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-	  ASSERT_EQ(0, m_cond.WaitInterval(cct, m_lock, seconds(5)));
+	  ASSERT_EQ(0, m_cond.WaitInterval(m_lock, seconds(5)));
 	}
       }
       librbd::Image &m_image;

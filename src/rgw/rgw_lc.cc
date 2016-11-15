@@ -45,7 +45,7 @@ void RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 
 void *RGWLC::LCWorker::entry() {
   do {
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     if (should_work(start)) {
       dout(5) << "life cycle: start" << dendl;
       int r = lc->process();
@@ -57,7 +57,7 @@ void *RGWLC::LCWorker::entry() {
     if (lc->going_down())
       break;
 
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
     int secs = schedule_next_start_time(start, end);
     time_t next_time = end + secs;
     char buf[30];
@@ -65,7 +65,7 @@ void *RGWLC::LCWorker::entry() {
     dout(5) << "schedule life cycle next start time: " << nt <<dendl;
 
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(secs, 0));
+    cond.WaitInterval(lock, utime_t(secs, 0));
     lock.Unlock();
   } while (!lc->going_down());
 
@@ -103,7 +103,7 @@ bool RGWLC::if_already_run_today(time_t& start_date)
 {
   struct tm bdt;
   time_t begin_of_day;
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   localtime_r(&start_date, &bdt);
 
   if (cct->_conf->rgw_lc_debug_interval > 0) {
@@ -244,7 +244,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
       vector<RGWObjEnt>::iterator obj_iter;
       int pos = 0;
-      utime_t now = ceph_clock_now(cct);
+      utime_t now = ceph_clock_now();
       for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
         bool prefix_match = false;
         int match_days = 0;
@@ -311,7 +311,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
         vector<RGWObjEnt>::iterator obj_iter;
         int days = prefix_iter->second;
-        utime_t now = ceph_clock_now(cct);
+        utime_t now = ceph_clock_now();
 
         for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
           if (obj_has_expired(now - ceph::real_clock::to_time_t((*obj_iter).mtime), days)) {
@@ -417,7 +417,7 @@ int RGWLC::process(int index, int max_lock_secs)
 {
   rados::cls::lock::Lock l(lc_index_lock_name);
   do {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     pair<string, int > entry;//string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
     if (max_lock_secs <= 0)
       return -EAGAIN;

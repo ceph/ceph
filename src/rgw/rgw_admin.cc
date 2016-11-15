@@ -6213,7 +6213,7 @@ next:
       cerr << "ERROR: marker was not specified" <<std::endl;
       return EINVAL;
     }
-    utime_t time = ceph_clock_now(NULL);
+    utime_t time = ceph_clock_now();
     if (!date.empty()) {
       ret = parse_date_str(date, time);
       if (ret < 0) {
