@@ -205,11 +205,12 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
                    << "id=" << m_image_id << ", "
                    << "size=" << m_size << ", "
                    << "features=" << m_features << ", "
-                   << "order=" << m_order << ", "
+                   << "order=" << (uint64_t)m_order << ", "
                    << "stripe_unit=" << m_stripe_unit << ", "
                    << "stripe_count=" << m_stripe_count << ", "
-                   << "journal_order=" << m_journal_order << ", "
-                   << "journal_splay_width=" << m_journal_splay_width << ", "
+                   << "journal_order=" << (uint64_t)m_journal_order << ", "
+                   << "journal_splay_width="
+                   << (uint64_t)m_journal_splay_width << ", "
                    << "journal_pool=" << m_journal_pool << ", "
                    << "data_pool=" << m_data_pool << dendl;
 }
