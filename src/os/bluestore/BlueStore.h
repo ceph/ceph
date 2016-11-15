@@ -1229,7 +1229,6 @@ public:
 
     boost::intrusive::list_member_hook<> wal_queue_item;
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
-    vector<OnodeRef> wal_op_onodes;
 
     bool kv_submitted = false; ///< true when we've been submitted to kv db
 

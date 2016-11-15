@@ -103,6 +103,15 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 #define ONODE_KEY_SUFFIX 'o'
 
 /*
+ * extent shard key
+ *
+ * object prefix key
+ * u32
+ * 'x'
+ */
+#define EXTENT_SHARD_KEY_SUFFIX 'x'
+
+/*
  * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
@@ -114,16 +123,6 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  * and will get escaped if it is present in the string.
  *
  */
-
-/*
- * extent shard key
- *
- * object prefix key
- * u32
- * 'x'
- */
-#define EXTENT_SHARD_KEY_SUFFIX 'x'
-
 static void append_escaped(const string &in, string *out)
 {
   char hexbyte[8];
@@ -6616,22 +6615,24 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
   // same region in this transaction.  The freelist doesn't like that.
   // (Actually, the only thing that cares is the BitmapFreelistManager
   // debug check. But that's important.)
-  interval_set<uint64_t> overlap;
   interval_set<uint64_t> tmp_allocated, tmp_released;
   interval_set<uint64_t> *pallocated = &txc->allocated;
   interval_set<uint64_t> *preleased = &txc->released;
   if (!txc->allocated.empty() && !txc->released.empty()) {
+    interval_set<uint64_t> overlap;
     overlap.intersection_of(txc->allocated, txc->released);
-    tmp_allocated = txc->allocated;
-    tmp_allocated.subtract(overlap);
-    tmp_released = txc->released;
-    tmp_released.subtract(overlap);
-    dout(20) << __func__ << "  overlap 0x" << std::hex << overlap
-	     << ", new allocated 0x" << tmp_allocated
-	     << " released 0x" << tmp_released << std::dec
-	     << dendl;
-    pallocated = &tmp_allocated;
-    preleased = &tmp_released;
+    if (!overlap.empty()) {
+      tmp_allocated = txc->allocated;
+      tmp_allocated.subtract(overlap);
+      tmp_released = txc->released;
+      tmp_released.subtract(overlap);
+      dout(20) << __func__ << "  overlap 0x" << std::hex << overlap
+	       << ", new allocated 0x" << tmp_allocated
+	       << " released 0x" << tmp_released << std::dec
+	       << dendl;
+      pallocated = &tmp_allocated;
+      preleased = &tmp_released;
+    }
   }
 
   // update freelist with non-overlap sets
@@ -6814,7 +6815,6 @@ bluestore_wal_op_t *BlueStore::_get_wal_op(TransContext *txc, OnodeRef o)
     txc->wal_txn = new bluestore_wal_transaction_t;
   }
   txc->wal_txn->ops.push_back(bluestore_wal_op_t());
-  txc->wal_op_onodes.push_back(o);
   return &txc->wal_txn->ops.back();
 }
 
@@ -6836,10 +6836,9 @@ int BlueStore::_wal_apply(TransContext *txc)
   }
 
   assert(txc->ioc.pending_aios.empty());
-  vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
   for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
        p != wt.ops.end();
-       ++p, ++q) {
+       ++p) {
     int r = _do_wal_op(txc, *p);
     assert(r == 0);
   }
@@ -7024,7 +7023,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     cvec[j] = _get_collection(*p);
 
     // note first collection we reference
-    if (!j && !txc->first_collection)
+    if (!txc->first_collection)
       txc->first_collection = cvec[j];
   }
   vector<OnodeRef> ovec(i.objects.size());
