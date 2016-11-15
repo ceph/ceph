@@ -348,6 +348,11 @@ class TestCephDisk(object):
         osd_uuid = self.activate_dmcrypt('ceph-disk')
         c.destroy_osd(osd_uuid)
 
+    def test_activate_dmcrypt_luks_with_lockbox_custom_cephx(self):
+        c = CephDisk()
+        osd_uuid = self.activate_dmcrypt_with_cephx_user('ceph-disk')
+        c.destroy_osd(osd_uuid)
+
     def test_activate_lockbox(self):
         c = CephDisk()
         osd_uuid = self.activate_dmcrypt('ceph-disk')
@@ -375,6 +380,23 @@ class TestCephDisk(object):
         journal_uuid = str(uuid.uuid1())
         c.sh("ceph-disk --verbose zap " + disk)
         c.sh(ceph_disk + " --verbose prepare " +
+             " --osd-uuid " + osd_uuid +
+             " --journal-uuid " + journal_uuid +
+             " --dmcrypt " +
+             " " + disk)
+        c.wait_for_osd_up(osd_uuid)
+        c.check_osd_status(osd_uuid, 'journal')
+        return osd_uuid
+
+    def activate_dmcrypt_with_cephx_user(self, ceph_disk):
+        c = CephDisk()
+        disk = c.unused_disks()[0]
+        cephx_user = "lockbox_cephx"
+        osd_uuid = str(uuid.uuid1())
+        journal_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk --verbose zap " + disk)
+        c.sh(ceph_disk + " --verbose prepare " +
+             " --id " + cephx_user +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
              " --dmcrypt " +

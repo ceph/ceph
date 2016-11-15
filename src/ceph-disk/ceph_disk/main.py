@@ -1766,6 +1766,11 @@ class Prepare(object):
             help='unique OSD uuid to assign this disk to',
         )
         parser.add_argument(
+            '--id',
+            metavar='cephx_user',
+            help='Initial cephx user to create lockbox cephx with',
+        )
+        parser.add_argument(
             '--dmcrypt',
             action='store_true', default=None,
             help='encrypt DATA and/or JOURNAL devices with dm-crypt',
@@ -2382,26 +2387,31 @@ class Lockbox(object):
         key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
         key = open('/dev/urandom', 'rb').read(key_size / 8)
         base64_key = base64.b64encode(key)
-        command_check_call(
-            [
-                'ceph',
-                'config-key',
-                'put',
-                'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
-                base64_key,
-            ],
-        )
-        keyring, stderr, ret = command(
-            [
-                'ceph',
-                'auth',
-                'get-or-create',
-                'client.osd-lockbox.' + self.args.osd_uuid,
-                'mon',
-                ('allow command "config-key get" with key="dm-crypt/osd/' +
-                 self.args.osd_uuid + '/luks"'),
-            ],
-        )
+
+        ceph_cmd = ['ceph']
+        # If args.id is set use that specific user
+        # else default to the admin user
+        if self.args.id:
+            ceph_cmd = ['ceph', '--id', self.args.id]
+
+        config_key_args = [
+            'config-key',
+            'put',
+            'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
+            base64_key,
+        ]
+        command_check_call(ceph_cmd + config_key_args)
+
+        create_key_args = [
+            'auth',
+            'get-or-create',
+            'client.osd-lockbox.' + self.args.osd_uuid,
+            'mon',
+            ('allow command "config-key get" with key="dm-crypt/osd/' +
+             self.args.osd_uuid + '/luks"'),
+        ]
+        keyring, stderr, ret = command(ceph_cmd + create_key_args)
+
         LOG.debug("stderr " + stderr)
         assert ret == 0
         path = self.get_mount_point()
