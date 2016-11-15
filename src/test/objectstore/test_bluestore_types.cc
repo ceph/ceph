@@ -7,9 +7,7 @@
 #include "include/stringify.h"
 #include "common/ceph_time.h"
 #include "os/bluestore/BlueStore.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
+#include "test/ceph_test.h"
 
 #include <sstream>
 
@@ -1102,15 +1100,5 @@ TEST(ExtentMap, GarbageCollectorTest)
   ASSERT_EQ(gc_end_offset, 0x2f000ul);
 }
 
+WRITE_CEPH_UNITTEST_MAIN();
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
-  return r;
-}

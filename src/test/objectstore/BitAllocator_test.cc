@@ -14,6 +14,7 @@
 #include <math.h>
 #include <sstream>
 #include <gtest/gtest.h>
+#include "test/ceph_test.h"
 
 #define bmap_test_assert(x) ASSERT_EQ(true, (x))
 #define NUM_THREADS 16
@@ -731,17 +732,4 @@ TEST(BitAllocator, test_bmap_alloc_concurrent)
 
 }
 
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
-  return r;
-}
+WRITE_CEPH_UNITTEST_MAIN();

@@ -21,8 +21,6 @@
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
 #include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
@@ -32,6 +30,7 @@
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
+#include "test/ceph_test.h"
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
@@ -5713,13 +5712,7 @@ TEST_P(StoreTest, TooManyBlobsTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
+WRITE_CEPH_UNITTEST_MAIN({
 
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
@@ -5753,11 +5746,7 @@ int main(int argc, char **argv) {
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  ::testing::InitGoogleTest(&argc, argv);
-  int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
-  return r;
-}
+  });
 
 /*
  * Local Variables:
