@@ -319,13 +319,6 @@ static int get_fd_data(int fd, bufferlist &bl)
   return 0;
 }
 
-void myexit(int ret)
-{
-  if (g_ceph_context)
-    g_ceph_context->put();
-  exit(ret);
-}
-
 int get_log(ObjectStore *fs, __u8 struct_ver,
 	    coll_t coll, spg_t pgid, const pg_info_t &info,
 	    PGLog::IndexedLog &log, pg_missing_t &missing)
@@ -2378,12 +2371,12 @@ int main(int argc, char **argv)
 						   po::include_positional);
   } catch(po::error &e) {
     std::cerr << e.what() << std::endl;
-    myexit(1);
+    return 1;
   }
 
   if (vm.count("help")) {
     usage(desc);
-    myexit(1);
+    return 1;
   }
 
   if (!vm.count("debug")) {
@@ -2444,7 +2437,7 @@ int main(int argc, char **argv)
      !(op == "dump-journal" && type == "filestore")) {
     cerr << "Must provide --data-path" << std::endl;
     usage(desc);
-    myexit(1);
+    return 1;
   }
   if (type == "filestore" && !vm.count("journal-path")) {
     jpath = dpath + "/journal";
@@ -2452,29 +2445,29 @@ int main(int argc, char **argv)
   if (!vm.count("op") && !vm.count("object")) {
     cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
-    myexit(1);
+    return 1;
   }
   if (op != "list" &&
       vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
-    myexit(1);
+    return 1;
   }
   if (op == "apply-layout-settings" && !(vm.count("pool") ^ vm.count("pgid"))) {
     cerr << "apply-layout-settings requires either --pool or --pgid"
 	 << std::endl;
     usage(desc);
-    myexit(1);
+    return 1;
   }
   if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
-    myexit(1);
+    return 1;
   }
   if (op == "fuse" && mountpoint.length() == 0) {
     cerr << "Missing fuse mountpoint" << std::endl;
     usage(desc);
-    myexit(1);
+    return 1;
   }
   outistty = isatty(STDOUT_FILENO);
 
@@ -2483,7 +2476,7 @@ int main(int argc, char **argv)
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
-        myexit(1);
+        return 1;
       }
       file_fd = STDOUT_FILENO;
     } else {
@@ -2493,7 +2486,7 @@ int main(int argc, char **argv)
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
-        myexit(1);
+        return 1;
       }
       file_fd = STDIN_FILENO;
     } else {
@@ -2506,16 +2499,16 @@ int main(int argc, char **argv)
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
     cerr << "--file option only applies to import, export, "
 	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
-    myexit(1);
+    return 1;
   }
 
   if (file_fd != fd_none && file_fd < 0) {
     string err = string("file: ") + file;
     perror(err.c_str());
-    myexit(1);
+    return 1;
   }
 
-  global_init(
+  auto cct = global_init(
     NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
     //CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -2538,7 +2531,7 @@ int main(int argc, char **argv)
   formatter = Formatter::create(format);
   if (formatter == NULL) {
     cerr << "unrecognized format: " << format << std::endl;
-    myexit(1);
+    return 1;
   }
 
   // Special handling for filestore journal, so we can dump it without mounting
@@ -2547,10 +2540,10 @@ int main(int argc, char **argv)
     if (ret < 0) {
       cerr << "journal-path: " << jpath << ": "
 	   << cpp_strerror(ret) << std::endl;
-      myexit(1);
+      return 1;
     }
     formatter->flush(cout);
-    myexit(0);
+    return 0;
   }
 
   //Verify that data-path really exists
@@ -2558,40 +2551,40 @@ int main(int argc, char **argv)
   if (::stat(dpath.c_str(), &st) == -1) {
     string err = string("data-path: ") + dpath;
     perror(err.c_str());
-    myexit(1);
+    return 1;
   }
 
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
-    myexit(1);
+    return 1;
   }
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Unable to create store of type " << type << std::endl;
-    myexit(1);
+    return 1;
   }
 
   if (op == "fsck" || op == "fsck-deep") {
     int r = fs->fsck(op == "fsck-deep");
     if (r < 0) {
       cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
-      myexit(1);
+      return 1;
     }
     if (r > 0) {
       cerr << "fsck found " << r << " errors" << std::endl;
-      myexit(1);
+      return 1;
     }
     cout << "fsck found no errors" << std::endl;
-    exit(0);
+    return 0;
   }
   if (op == "mkfs") {
     int r = fs->mkfs();
     if (r < 0) {
       cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
-      myexit(1);
+      return 1;
     }
-    myexit(0);
+    return 0;
   }
 
   ObjectStore::Sequencer *osr = new ObjectStore::Sequencer(__func__);
@@ -2602,7 +2595,7 @@ int main(int argc, char **argv)
     } else {
       cerr << "Mount failed with '" << cpp_strerror(ret) << "'" << std::endl;
     }
-    myexit(1);
+    return 1;
   }
 
   if (op == "fuse") {
@@ -2612,12 +2605,12 @@ int main(int argc, char **argv)
     int r = fuse.main();
     if (r < 0) {
       cerr << "failed to mount fuse: " << cpp_strerror(r) << std::endl;
-      myexit(1);
+      return 1;
     }
 #else
     cerr << "fuse support not enabled" << std::endl;
 #endif
-    myexit(0);
+    return 0;
   }
 
   vector<coll_t> ls;
@@ -3328,5 +3321,5 @@ out:
 
   if (ret < 0)
     ret = 1;
-  myexit(ret);
+  return ret;
 }
