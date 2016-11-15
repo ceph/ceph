@@ -34,12 +34,12 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   const RotatingSecrets& secrets = iter->second;
 
   // second to oldest, unless it's expired
-  map<uint64_t, ExpiringCryptoKey>::const_iterator riter = 
+  map<uint64_t, ExpiringCryptoKey>::const_iterator riter =
 	secrets.secrets.begin();
   if (secrets.secrets.size() > 1)
     ++riter;
 
-  if (riter->second.expiration < ceph_clock_now(cct))
+  if (riter->second.expiration < ceph_clock_now())
     ++riter;   // "current" key has expired, use "next" key instead
 
   secret_id = riter->first;
@@ -189,7 +189,7 @@ int KeyServer::_rotate_secret(uint32_t service_id)
 {
   RotatingSecrets& r = data.rotating_secrets[service_id];
   int added = 0;
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
 
   while (r.need_new_secrets(now)) {
@@ -267,7 +267,7 @@ bool KeyServer::generate_secret(CryptoKey& secret)
   if (crypto->create(bp) < 0)
     return false;
 
-  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now(NULL));
+  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now());
 
   return true;
 }
@@ -426,7 +426,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
 {
   info.service_id = service_id;
   info.ticket = auth_ticket_info.ticket;
-  info.ticket.init_timestamps(ceph_clock_now(cct), cct->_conf->auth_service_ticket_ttl);
+  info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_service_ticket_ttl);
 
   generate_secret(info.session_key);
 

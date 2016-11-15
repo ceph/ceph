@@ -150,7 +150,7 @@ void ThreadPool::worker(WorkThread *wt)
       hb,
       cct->_conf->threadpool_default_timeout,
       0);
-    _cond.WaitInterval(cct, _lock,
+    _cond.WaitInterval(_lock,
       utime_t(
 	cct->_conf->threadpool_empty_queue_max_wait, 0));
   }
@@ -325,7 +325,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
        cct->get_heartbeat_map()->reset_timeout(
 	 hb,
 	 wq->timeout_interval, wq->suicide_interval);
-       shardedpool_cond.WaitInterval(cct, shardedpool_lock,
+       shardedpool_cond.WaitInterval(shardedpool_lock,
 	 utime_t(
 	   cct->_conf->threadpool_empty_queue_max_wait, 0));
       }
@@ -341,7 +341,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 	  cct->get_heartbeat_map()->reset_timeout(
 	    hb,
 	    wq->timeout_interval, wq->suicide_interval);
-          shardedpool_cond.WaitInterval(cct, shardedpool_lock,
+          shardedpool_cond.WaitInterval(shardedpool_lock,
 	    utime_t(
 	      cct->_conf->threadpool_empty_queue_max_wait, 0));
         }

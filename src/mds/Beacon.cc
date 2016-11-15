@@ -118,7 +118,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
 
   // update lab
   if (seq_stamp.count(seq)) {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     if (seq_stamp[seq] > last_acked_stamp) {
       last_acked_stamp = seq_stamp[seq];
       utime_t rtt = now - last_acked_stamp;
@@ -172,9 +172,9 @@ void Beacon::send_and_wait(const double duration)
            << " for up to " << duration << "s" << dendl;
 
   utime_t timeout;
-  timeout.set_from_double(ceph_clock_now(cct) + duration);
+  timeout.set_from_double(ceph_clock_now() + duration);
   while ((!seq_stamp.empty() && seq_stamp.begin()->first <= awaiting_seq)
-         && ceph_clock_now(cct) < timeout) {
+         && ceph_clock_now() < timeout) {
     waiting_cond.WaitUntil(lock, timeout);
   }
 
@@ -205,7 +205,7 @@ void Beacon::_send()
 	   << " seq " << last_seq
 	   << dendl;
 
-  seq_stamp[last_seq] = ceph_clock_now(g_ceph_context);
+  seq_stamp[last_seq] = ceph_clock_now();
 
   assert(want_state != MDSMap::STATE_NULL);
   
@@ -264,7 +264,7 @@ bool Beacon::is_laggy()
   if (last_acked_stamp == utime_t())
     return false;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   utime_t since = now - last_acked_stamp;
   if (since > g_conf->mds_beacon_grace) {
     dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
@@ -398,7 +398,7 @@ void Beacon::notify_health(MDSRank const *mds)
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
-    utime_t cutoff = ceph_clock_now(g_ceph_context);
+    utime_t cutoff = ceph_clock_now();
     cutoff -= g_conf->mds_recall_state_timeout;
     utime_t last_recall = mds->mdcache->last_recall_state;
 

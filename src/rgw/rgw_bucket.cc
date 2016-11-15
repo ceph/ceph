@@ -1873,7 +1873,7 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
 
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(interval, 0));
+    cond.WaitInterval(lock, utime_t(interval, 0));
     lock.Unlock();
   } while (!log->going_down());
 

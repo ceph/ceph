@@ -508,8 +508,8 @@ void * RGWKeystoneTokenCache::RevokeThread::entry()
     }
 
     lock.Lock();
-    cond.WaitInterval(cct, lock,
-                      utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
+    cond.WaitInterval(lock,
+		      utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
     lock.Unlock();
   } while (!cache->going_down());
 
