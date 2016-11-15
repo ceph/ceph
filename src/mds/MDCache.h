@@ -879,11 +879,6 @@ public:
    */
   int path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBase *fin, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
-  bool path_is_mine(filepath& path);
-  bool path_is_mine(string& p) {
-    filepath path(p, 1);
-    return path_is_mine(path);
-  }
 
   CInode *cache_traverse(const filepath& path);
 
