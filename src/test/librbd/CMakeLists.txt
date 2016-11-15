@@ -33,7 +33,6 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_ReacquireRequest.cc
   exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
-  image_watcher/test_mock_RewatchRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
