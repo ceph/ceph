@@ -103,6 +103,15 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 #define ONODE_KEY_SUFFIX 'o'
 
 /*
+ * extent shard key
+ *
+ * object prefix key
+ * u32
+ * 'x'
+ */
+#define EXTENT_SHARD_KEY_SUFFIX 'x'
+
+/*
  * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
@@ -114,16 +123,6 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  * and will get escaped if it is present in the string.
  *
  */
-
-/*
- * extent shard key
- *
- * object prefix key
- * u32
- * 'x'
- */
-#define EXTENT_SHARD_KEY_SUFFIX 'x'
-
 static void append_escaped(const string &in, string *out)
 {
   char hexbyte[8];
