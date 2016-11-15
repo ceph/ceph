@@ -96,6 +96,14 @@ public:
       get_state() == LOCK_MIX;
   }
 
+  void set_xlock_snap_sync(MDSInternalContextBase *c)
+  {
+    assert(get_type() == CEPH_LOCK_IFILE);
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    state = LOCK_XLOCKSNAP;
+    add_waiter(WAIT_STABLE, c);
+  }
+
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
 
   utime_t get_update_stamp() {
