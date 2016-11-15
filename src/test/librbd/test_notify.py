@@ -43,9 +43,12 @@ def get_features():
     if features is not None:
         features = int(features)
     else:
-        features = int(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_LAYERING)
+        features = int(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_LAYERING |
+                       RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF)
     assert((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0)
     assert((features & RBD_FEATURE_LAYERING) != 0)
+    assert((features & RBD_FEATURE_OBJECT_MAP) != 0)
+    assert((features & RBD_FEATURE_FAST_DIFF) != 0)
     return features
 
 def master(ioctx):
