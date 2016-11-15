@@ -416,16 +416,17 @@ int CrushCompiler::parse_bucket_type(iter_t const& i)
   return 0;
 }
 
+//bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}'
 int CrushCompiler::parse_bucket(iter_t const& i)
 {
-  string tname = string_node(i->children[0]);
+  string tname = string_node(i->children[0]);//类型名称
   if (!type_id.count(tname)) {
     err << "bucket type '" << tname << "' is not defined" << std::endl;
     return -1;
   }
   int type = type_id[tname];
 
-  string name = string_node(i->children[1]);
+  string name = string_node(i->children[1]);//device名称
   if (item_id.count(name)) {
     err << "bucket or device '" << name << "' is already defined" << std::endl;
     return -1;
@@ -437,14 +438,18 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   set<int> used_items;
   int size = 0;
   
+  //bucket_id = str_p("id") >> negint;
+  //bucket_alg = str_p("alg") >> name;
+  //bucket_hash = str_p("hash") >> ( integer | str_p("rjenkins1") );
+  //bucket_item = str_p("item") >> name >> !( str_p("weight") >> real_p ) >> !( str_p("pos") >> posint );
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
     //err << "tag " << tag << std::endl;
     if (tag == "id") 
-      id = int_node(sub->children[1]);
+      id = int_node(sub->children[1]);//处理bucket_id
     else if (tag == "alg") {
-      string a = string_node(sub->children[1]);
+      string a = string_node(sub->children[1]);//处理bucket_alg
       if (a == "uniform")
 	alg = CRUSH_BUCKET_UNIFORM;
       else if (a == "list")
@@ -460,19 +465,19 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	return -EINVAL;
       }
     }
-    else if (tag == "hash") {
+    else if (tag == "hash") {//处理bucket_hash
       string a = string_node(sub->children[1]);
       if (a == "rjenkins1")
 	hash = CRUSH_HASH_RJENKINS1;
       else
 	hash = atoi(a.c_str());
     }
-    else if (tag == "item") {
+    else if (tag == "item") {//处理bucket_item
       // first, just determine which item pos's are already used
       size++;
       for (unsigned q = 2; q < sub->children.size(); q++) {
 	string tag = string_node(sub->children[q++]);
-	if (tag == "pos") {
+	if (tag == "pos") {//仅考虑pos情况
 	  int pos = int_node(sub->children[q]);
 	  if (used_items.count(pos)) {
 	    err << "item '" << string_node(sub->children[1]) << "' in bucket '" << name << "' has explicit pos " << pos << ", which is occupied" << std::endl;
@@ -496,6 +501,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   bool have_uniform_weight = false;
   unsigned uniform_weight = 0;
   for (unsigned p=3; p<i->children.size()-1; p++) {
+	  //仅处理bucket_item = str_p("item") >> name >> !( str_p("weight") >> real_p ) >> !( str_p("pos") >> posint );情况
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
     if (tag == "item") {
@@ -505,18 +511,18 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	err << "item '" << iname << "' in bucket '" << name << "' is not defined" << std::endl;
 	return -1;
       }
-      int itemid = item_id[iname];
+      int itemid = item_id[iname];//item <item_name>
 
       unsigned weight = 0x10000;
       if (item_weight.count(itemid))
-	weight = item_weight[itemid];
+	weight = item_weight[itemid];//如果item_weight已有权重，否则默认为0x10000
 
       int pos = -1;
-      for (unsigned q = 2; q < sub->children.size(); q++) {
+      for (unsigned q = 2; q < sub->children.size(); q++) {//完成bucket_item解析
 	string tag = string_node(sub->children[q++]);
-	if (tag == "weight") {
-	  weight = float_node(sub->children[q]) * (float)0x10000;
-	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
+	if (tag == "weight") {//weight配置
+	  weight = float_node(sub->children[q]) * (float)0x10000;//配置的值不能超过１００
+	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {//weight过大
 	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
 	    return -ERANGE;
 	  }
@@ -532,7 +538,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	  ceph_abort();
 
       }
-      if (alg == CRUSH_BUCKET_UNIFORM) {
+      if (alg == CRUSH_BUCKET_UNIFORM) {//uniform要求权重相同
 	if (!have_uniform_weight) {
 	  have_uniform_weight = true;
 	  uniform_weight = weight;
@@ -546,7 +552,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	}
       }
 
-      if (pos >= size) {
+      if (pos >= size) {//pos指定超过size值，说明定位有误
 	err << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
 	return -1;
       }
@@ -579,7 +585,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_weight[id] = bucketweight;
   
   assert(id != 0);
-  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);
+  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);//添加桶（size是item的大小）
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;
@@ -591,25 +597,27 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   return r;
 }
 
+//规则解析
 int CrushCompiler::parse_rule(iter_t const& i)
 {
   int start;  // rule name is optional!
  
-  string rname = string_node(i->children[1]);
-  if (rname != "{") {
+  string rname = string_node(i->children[1]);//取名称
+  if (rname != "{") {//有名称的规则
     if (rule_id.count(rname)) {
       err << "rule name '" << rname << "' already defined\n" << std::endl;
       return -1;
     }
     start = 4;
-  } else {
+  } else {//无名称的规则
     rname = string();
     start = 3;
   }
 
+  //ruleset　id值的位置按有名称与无名称偏移量不同
   int ruleset = int_node(i->children[start]);
 
-  string tname = string_node(i->children[start+2]);
+  string tname = string_node(i->children[start+2]);//适用范围（副本，纠错码）
   int type;
   if (tname == "replicated")
     type = CEPH_PG_TYPE_REPLICATED;
@@ -618,86 +626,89 @@ int CrushCompiler::parse_rule(iter_t const& i)
   else 
     ceph_abort();
 
-  int minsize = int_node(i->children[start+4]);
-  int maxsize = int_node(i->children[start+6]);
+  int minsize = int_node(i->children[start+4]);//最小值
+  int maxsize = int_node(i->children[start+6]);//最大值
   
-  int steps = i->children.size() - start - 8;
+  int steps = i->children.size() - start - 8;//steps是语法树上'step'需要解析大小。我们一会就会解析这段数据
   //err << "num steps " << steps << std::endl;
   
-  int ruleno = crush.add_rule(steps, ruleset, type, minsize, maxsize, -1);
-  if (rname.length()) {
-    crush.set_rule_name(ruleno, rname.c_str());
+  int ruleno = crush.add_rule(steps, ruleset, type, minsize, maxsize, -1);//提前告诉rule,我们后面最多有steps个step{最大值,肯定不超过这个值}
+  if (rname.length()) {//有名称的规则
+    crush.set_rule_name(ruleno, rname.c_str());//设置规则名称
     rule_id[rname] = ruleno;
   }
 
+  //解析step对应的数据,给规则添加step操作
   int step = 0;
   for (iter_t p = i->children.begin() + start + 7; step < steps; p++) {
     iter_t s = p->children.begin() + 1;
     int stepid = s->value.id().to_long();
     switch (stepid) {
-    case crush_grammar::_step_take: 
+    case crush_grammar::_step_take: //处理take子规则，step_take = str_p("take") >> name;
       {
 	string item = string_node(s->children[1]);
 	if (!item_id.count(item)) {
 	  err << "in rule '" << rname << "' item '" << item << "' not defined" << std::endl;
 	  return -1;
 	}
-	crush.set_rule_step_take(ruleno, step++, item_id[item]);
+	crush.set_rule_step_take(ruleno, step++, item_id[item]);//这里将item转为id号
       }
       break;
 
-    case crush_grammar::_step_set_choose_tries:
+    case crush_grammar::_step_set_choose_tries://处理choose子规则，step_set_choose_tries = str_p("set_choose_tries") >> posint;
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_choose_tries(ruleno, step++, val);
       }
       break;
 
-    case crush_grammar::_step_set_choose_local_tries:
+    case crush_grammar::_step_set_choose_local_tries://step_set_choose_local_tries = str_p("set_choose_local_tries") >> posint;
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_choose_local_tries(ruleno, step++, val);
       }
       break;
 
-    case crush_grammar::_step_set_choose_local_fallback_tries:
+    case crush_grammar::_step_set_choose_local_fallback_tries://str_p("set_choose_local_fallback_tries") >> posint
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_choose_local_fallback_tries(ruleno, step++, val);
       }
       break;
 
-    case crush_grammar::_step_set_chooseleaf_tries:
+    case crush_grammar::_step_set_chooseleaf_tries://str_p("set_chooseleaf_tries") >> posint;
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_chooseleaf_tries(ruleno, step++, val);
       }
       break;
 
-    case crush_grammar::_step_set_chooseleaf_vary_r:
+    case crush_grammar::_step_set_chooseleaf_vary_r://str_p("set_chooseleaf_vary_r") >> posint;
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_chooseleaf_vary_r(ruleno, step++, val);
       }
       break;
 
-    case crush_grammar::_step_set_chooseleaf_stable:
+    case crush_grammar::_step_set_chooseleaf_stable://str_p("set_chooseleaf_stable") >> posint;
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_chooseleaf_stable(ruleno, step++, val);
       }
       break;
 
-    case crush_grammar::_step_choose:
-    case crush_grammar::_step_chooseleaf:
+    case crush_grammar::_step_choose://str_p("choose") >> ( str_p("indep") | str_p("firstn") )
+									 // >> integer >> str_p("type") >> name;
+    case crush_grammar::_step_chooseleaf:  //str_p("chooseleaf") >> ( str_p("indep") | str_p("firstn") )
+    								// >> integer >> str_p("type") >> name;
       {
 	string type = string_node(s->children[4]);
 	if (!type_id.count(type)) {
 	  err << "in rule '" << rname << "' type '" << type << "' not defined" << std::endl;
 	  return -1;
 	}
-	string choose = string_node(s->children[0]);
-	string mode = string_node(s->children[1]);
+	string choose = string_node(s->children[0]);//那种choose,{choose,chooseleaf}
+	string mode = string_node(s->children[1]);//那种模式 {'indep','firstn'}
 	if (choose == "choose") {
 	  if (mode == "firstn")
 	    crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
@@ -714,7 +725,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
       }
       break;
 
-    case crush_grammar::_step_emit:
+    case crush_grammar::_step_emit://step_emit = str_p("emit");
       crush.set_rule_step_emit(ruleno, step++);
       break;
 
@@ -750,19 +761,19 @@ int CrushCompiler::parse_crush(iter_t const& i)
     int r = 0;
     switch (p->value.id().to_long()) {
     case crush_grammar::_tunable:
-      r = parse_tunable(p);
+      r = parse_tunable(p);//定义可调整的一些参数“实际上没有必要，这些不可以做为配置项吗？
       break;
-    case crush_grammar::_device: 
-      r = parse_device(p);
+    case crush_grammar::_device: //device = str_p("device") >> posint >> name;
+      r = parse_device(p);//定义item项，起提前声明作用
       break;
-    case crush_grammar::_bucket_type: 
-      r = parse_bucket_type(p);
+    case crush_grammar::_bucket_type: //bucket_type = str_p("type") >> posint >> name;
+      r = parse_bucket_type(p);//定义type项，起提前声明作用
       break;
-    case crush_grammar::_bucket: 
+    case crush_grammar::_bucket: //bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}';
       r = parse_bucket(p);
       break;
-    case crush_grammar::_crushrule: 
-      r = parse_rule(p);
+    case crush_grammar::_crushrule: //rule <name> { .* }
+      r = parse_rule(p);//分析rule
       break;
     default:
       ceph_abort();

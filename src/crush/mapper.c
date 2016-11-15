@@ -38,6 +38,7 @@
  * @type: storage ruleset type (user defined)
  * @size: output set size
  */
+//遍历map中的rules,如果找到第一个ruleset,type,size时返回索引
 int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size)
 {
 	__u32 i;
@@ -46,8 +47,8 @@ int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size
 		if (map->rules[i] &&
 		    map->rules[i]->mask.ruleset == ruleset &&
 		    map->rules[i]->mask.type == type &&
-		    map->rules[i]->mask.min_size <= size &&
-		    map->rules[i]->mask.max_size >= size)
+		    map->rules[i]->mask.min_size <= size && //size 要大于min_size
+		    map->rules[i]->mask.max_size >= size)   //size 要少于max_size
 			return i;
 	}
 	return -1;
@@ -890,7 +891,7 @@ int crush_do_rule(const struct crush_map *map,
 	int vary_r = map->chooseleaf_vary_r;
 	int stable = map->chooseleaf_stable;
 
-	if ((__u32)ruleno >= map->max_rules) {
+	if ((__u32)ruleno >= map->max_rules) {//规则编号过大
 		dprintk(" bad ruleno %d\n", ruleno);
 		return 0;
 	}
@@ -903,7 +904,7 @@ int crush_do_rule(const struct crush_map *map,
 		const struct crush_rule_step *curstep = &rule->steps[step];
 
 		switch (curstep->op) {
-		case CRUSH_RULE_TAKE:
+		case CRUSH_RULE_TAKE://向w中写入arg1,wsize置为１
 			if ((curstep->arg1 >= 0 &&
 			     curstep->arg1 < map->max_devices) ||
 			    (-1-curstep->arg1 >= 0 &&
@@ -916,41 +917,41 @@ int crush_do_rule(const struct crush_map *map,
 			}
 			break;
 
-		case CRUSH_RULE_SET_CHOOSE_TRIES:
+		case CRUSH_RULE_SET_CHOOSE_TRIES://choose_tries置为arg1
 			if (curstep->arg1 > 0)
 				choose_tries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
+		case CRUSH_RULE_SET_CHOOSELEAF_TRIES://choose_leaf_tries置为arg1
 			if (curstep->arg1 > 0)
 				choose_leaf_tries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES:
+		case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES://choose_local_retries置为arg1
 			if (curstep->arg1 >= 0)
 				choose_local_retries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES:
+		case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES://choose_local_fallback_retries置为arg1
 			if (curstep->arg1 >= 0)
 				choose_local_fallback_retries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSELEAF_VARY_R:
+		case CRUSH_RULE_SET_CHOOSELEAF_VARY_R://vary_r置为arg1
 			if (curstep->arg1 >= 0)
 				vary_r = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSELEAF_STABLE:
+		case CRUSH_RULE_SET_CHOOSELEAF_STABLE://stable置为arg1
 			if (curstep->arg1 >= 0)
 				stable = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+		case CRUSH_RULE_CHOOSELEAF_FIRSTN://firstn置为１
 		case CRUSH_RULE_CHOOSE_FIRSTN:
 			firstn = 1;
 			/* fall through */
-		case CRUSH_RULE_CHOOSELEAF_INDEP:
+		case CRUSH_RULE_CHOOSELEAF_INDEP://如果wsize ==0 则忽略，否则继续，置recurse_to_leaf
 		case CRUSH_RULE_CHOOSE_INDEP:
 			if (wsize == 0)
 				break;
@@ -1046,7 +1047,7 @@ int crush_do_rule(const struct crush_map *map,
 
 
 		case CRUSH_RULE_EMIT:
-			for (i = 0; i < wsize && result_len < result_max; i++) {
+			for (i = 0; i < wsize && result_len < result_max; i++) {//输出结果
 				result[result_len] = w[i];
 				result_len++;
 			}

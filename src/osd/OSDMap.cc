@@ -1537,9 +1537,10 @@ int OSDMap::_pg_to_raw_osds(
   unsigned size = pool.get_size();
 
   // what crush rule?
+  //先找出对应的规则集
   int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
   if (ruleno >= 0)
-    crush->do_rule(ruleno, pps, *osds, size, osd_weight);
+    crush->do_rule(ruleno, pps, *osds, size, osd_weight);//执行此规则
 
   _remove_nonexistent_osds(pool, *osds);
 
@@ -2141,7 +2142,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
 
     ::decode(max_osd, bl);
     ::decode(osd_state, bl);
-    ::decode(osd_weight, bl);
+    ::decode(osd_weight, bl);//解析权重
     ::decode(osd_addrs->client_addr, bl);
 
     ::decode(*pg_temp, bl);
@@ -2159,7 +2160,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     bufferlist cbl;
     ::decode(cbl, bl);
     bufferlist::iterator cblp = cbl.begin();
-    crush->decode(cblp);
+    crush->decode(cblp);//crush规则是由monitor发送过来的
     if (struct_v >= 3) {
       ::decode(erasure_code_profiles, bl);
     } else {
@@ -2649,7 +2650,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 
   if (nosd >=  0) {
     set_max_osd(nosd);
-  } else {
+  } else {//如果没有设置osd的数目，就检查配置文件中的section找出最大的osd数目
     // count osds
     int maxosd = 0;
     const md_config_t *conf = cct->_conf;
@@ -2665,7 +2666,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
       if (*end != '\0')
 	continue;
 
-      if (o > cct->_conf->mon_max_osd) {
+      if (o > cct->_conf->mon_max_osd) {//o的数量不能大于mon_max_osd,
 	lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
 	return -ERANGE;
       }
@@ -2687,7 +2688,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   stringstream ss;
   int r;
   if (nosd >= 0)
-    r = build_simple_crush_map(cct, *crush, nosd, &ss);
+    r = build_simple_crush_map(cct, *crush, nosd, &ss);//此流程
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
   assert(r == 0);
@@ -2748,16 +2749,16 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
 
 int OSDMap::_build_crush_types(CrushWrapper& crush)
 {
-  crush.set_type_name(0, "osd");
-  crush.set_type_name(1, "host");
-  crush.set_type_name(2, "chassis");
-  crush.set_type_name(3, "rack");
-  crush.set_type_name(4, "row");
-  crush.set_type_name(5, "pdu");
+  crush.set_type_name(0, "osd");//osd
+  crush.set_type_name(1, "host");//主机
+  crush.set_type_name(2, "chassis");//机架
+  crush.set_type_name(3, "rack");//机架
+  crush.set_type_name(4, "row");//行
+  crush.set_type_name(5, "pdu");//机柜电源插座
   crush.set_type_name(6, "pod");
-  crush.set_type_name(7, "room");
-  crush.set_type_name(8, "datacenter");
-  crush.set_type_name(9, "region");
+  crush.set_type_name(7, "room");//房间
+  crush.set_type_name(8, "datacenter");//数据中心
+  crush.set_type_name(9, "region");//地区
   crush.set_type_name(10, "root");
   return 10;
 }
@@ -2768,10 +2769,10 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   crush.create();
 
   // root
-  int root_type = _build_crush_types(crush);
+  int root_type = _build_crush_types(crush);//载入默认类型，并返回root类型
   int rootid;
   int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT,
-			   root_type, 0, NULL, NULL, &rootid);
+			   root_type, 0, NULL, NULL, &rootid);//加入root bucket,返回root　bucket对应的id
   assert(r == 0);
   crush.set_item_name(rootid, "default");
 
@@ -2783,7 +2784,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     ldout(cct, 10) << " adding osd." << o << " at " << loc << dendl;
     char name[32];
     snprintf(name, sizeof(name), "osd.%d", o);
-    crush.insert_item(cct, o, 1.0, name, loc);
+    crush.insert_item(cct, o, 1.0, name, loc);//o为osd的id号，name为osd的osd.10
   }
 
   build_simple_crush_rulesets(cct, crush, "default", ss);

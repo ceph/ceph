@@ -29,6 +29,7 @@
 #endif
 using namespace boost::spirit;
 
+//定义了crush语法
 struct crush_grammar : public grammar<crush_grammar>
 {
   enum {

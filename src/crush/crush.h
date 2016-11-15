@@ -47,20 +47,20 @@ struct crush_rule_step {
 /* step op codes */
 enum {
 	CRUSH_RULE_NOOP = 0,
-	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */
-	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */
+	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */　//take子规则
+	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */ //choose子规则中的firstn模式
 				      /* arg2 = type */
-	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */
-	CRUSH_RULE_EMIT = 4,          /* no args */
-	CRUSH_RULE_CHOOSELEAF_FIRSTN = 6,
-	CRUSH_RULE_CHOOSELEAF_INDEP = 7,
+	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */ //choose子规则中indep模式
+	CRUSH_RULE_EMIT = 4,          /* no args */ //emit模式
+	CRUSH_RULE_CHOOSELEAF_FIRSTN = 6,//chooseleaf子规则中的firstn模式
+	CRUSH_RULE_CHOOSELEAF_INDEP = 7,//chooseleaf子规则中的indep模式
 
-	CRUSH_RULE_SET_CHOOSE_TRIES = 8, /* override choose_total_tries */
-	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */
-	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,
-	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,
-	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,
-	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13
+	CRUSH_RULE_SET_CHOOSE_TRIES = 8, /* override choose_total_tries */　//set_choose_tries子规则
+	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */ //set_chooseleaf_tries 子规则
+	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,//set_choose_local_tries 子规则
+	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,//set_choose_local_fallback_tries子规则
+	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,//set_chooseleaf_vary_r 子规则
+	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13//set_chooseleaf_stable子规则
 };
 
 /*
@@ -83,7 +83,7 @@ struct crush_rule_mask {
 };
 
 struct crush_rule {
-	__u32 len;
+	__u32 len;//steps数组的大小，step数组对应的是规则匹配后的action操作
 	struct crush_rule_mask mask;
 	struct crush_rule_step steps[0];
 };
@@ -132,7 +132,7 @@ struct crush_bucket {
 	__u8 alg;        /* one of CRUSH_BUCKET_* */
 	__u8 hash;       /* which hash function to use, CRUSH_HASH_* */
 	__u32 weight;    /* 16-bit fixed point */
-	__u32 size;      /* num items */
+	__u32 size;      /* num items */ //其下有多少个子项
 	__s32 *items;
 
 };
@@ -231,7 +231,7 @@ struct crush_map {
 	 * << CRUSH_BUCKET_WHATEVER).  The 0th bit is not used to
 	 * minimize confusion (bucket type values start at 1).
 	 */
-	__u32 allowed_bucket_algs;
+	__u32 allowed_bucket_algs;//指出容许bucket采用哪些算法
 
 	__u32 *choose_tries;
 #endif

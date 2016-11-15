@@ -198,7 +198,7 @@ public:
   };
   
 private:
-  uuid_d fsid;
+  uuid_d fsid;//fs id号
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
   utime_t created, modified; // epoch start time
   int32_t pool_max;     // the largest pool num, ever

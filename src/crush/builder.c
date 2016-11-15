@@ -81,20 +81,20 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 {
 	__u32 r;
 
-	if (ruleno < 0) {
+	if (ruleno < 0) {//查找空闲点，并填充
 		for (r=0; r < map->max_rules; r++)
 			if (map->rules[r] == 0)
 				break;
 		assert(r < CRUSH_MAX_RULES);
 	}
 	else
-		r = ruleno;
+		r = ruleno;//设置指定位置的规则
 
-	if (r >= map->max_rules) {
+	if (r >= map->max_rules) {//恰好找到了最后一个规则，需要扩展，每次扩展一个。
 		/* expand array */
 		int oldsize;
 		void *_realloc = NULL;
-		if (map->max_rules +1 > CRUSH_MAX_RULES)
+		if (map->max_rules +1 > CRUSH_MAX_RULES)//规则数超限
 			return -ENOSPC;
 		oldsize = map->max_rules;
 		map->max_rules = r+1;
@@ -108,9 +108,10 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 
 	/* add it */
 	map->rules[r] = rule;
-	return r;
+	return r;//返回放置规则的索引号
 }
 
+//构造rule
 struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, int maxsize)
 {
 	struct crush_rule *rule;
@@ -128,6 +129,7 @@ struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, 
 /*
  * be careful; this doesn't verify that the buffer you allocated is big enough!
  */
+//设置rule第n个steps
 void crush_rule_set_step(struct crush_rule *rule, int n, int op, int arg1, int arg2)
 {
 	assert((__u32)n < rule->len);
@@ -142,12 +144,12 @@ int crush_get_next_bucket_id(struct crush_map *map)
 {
 	int pos;
 	for (pos=0; pos < map->max_buckets; pos++)
-		if (map->buckets[pos] == 0)
+		if (map->buckets[pos] == 0)//找一个空的buckets
 			break;
 	return -1 - pos;
 }
 
-
+//添加bucket，idout返回bucket中的id号
 int crush_add_bucket(struct crush_map *map,
 		     int id,
 		     struct crush_bucket *bucket,
@@ -157,26 +159,26 @@ int crush_add_bucket(struct crush_map *map,
 
 	/* find a bucket id */
 	if (id == 0)
-		id = crush_get_next_bucket_id(map);
+		id = crush_get_next_bucket_id(map);//分配一个id
 	pos = -1 - id;
 
-	while (pos >= map->max_buckets) {
+	while (pos >= map->max_buckets) {//pos指向的位置较大，需要扩展
 		/* expand array */
 		int oldsize = map->max_buckets;
 		if (map->max_buckets)
-			map->max_buckets *= 2;
+			map->max_buckets *= 2;//每次增大一倍
 		else
-			map->max_buckets = 8;
+			map->max_buckets = 8;//首次定为８
 		void *_realloc = NULL;
 		if ((_realloc = realloc(map->buckets, map->max_buckets * sizeof(map->buckets[0]))) == NULL) {
 			return -ENOMEM; 
 		} else {
 			map->buckets = _realloc;
 		}
-		memset(map->buckets + oldsize, 0, (map->max_buckets-oldsize) * sizeof(map->buckets[0]));
+		memset(map->buckets + oldsize, 0, (map->max_buckets-oldsize) * sizeof(map->buckets[0]));//增加的内存清零
 	}
 
-	if (map->buckets[pos] != 0) {
+	if (map->buckets[pos] != 0) {//已占用
 		return -EEXIST;
 	}
 
@@ -188,6 +190,7 @@ int crush_add_bucket(struct crush_map *map,
 	return 0;
 }
 
+//移除pos
 int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucket)
 {
 	int pos = -1 - bucket->id;
@@ -647,7 +650,7 @@ err:
 }
 
 
-
+//创建５类bucket
 struct crush_bucket*
 crush_make_bucket(struct crush_map *map,
 		  int alg, int hash, int type, int size,
