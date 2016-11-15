@@ -10,6 +10,9 @@ import time
 import errno
 import util.rgw as rgw_utils
 
+from requests.packages.urllib3 import PoolManager
+from requests.packages.urllib3.util import Retry
+
 from cStringIO import StringIO
 
 from teuthology.orchestra import run
@@ -352,6 +355,17 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
             stdin=run.PIPE,
             wait=False,
             )
+
+    # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
+    # use a connection pool with retry/backoff to poll each gateway until it starts listening
+    http = PoolManager(retries=Retry(connect=8, backoff_factor=1))
+    for client in clients_to_run:
+        if client == except_client:
+            continue
+        host, port = ctx.rgw.role_endpoints[client]
+        endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
+        log.info('Polling {client} until it starts accepting connections on {endpoint}'.format(client=client, endpoint=endpoint))
+        http.request('GET', endpoint)
 
     try:
         yield
