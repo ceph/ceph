@@ -1285,10 +1285,17 @@ function test_wait_for_scrub() {
 
 function erasure_code_plugin_exists() {
     local plugin=$1
-
     local status
+    local grepstr
+    case `uname` in
+        FreeBSD) grepstr="Cannot open.*$plugin" ;;
+        *) grepstr="$plugin.*No such file" ;;
+    esac
+
     if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$plugin.*No such file" ; then
+        grep "$grepstr" ; then
+        # display why the string was rejected.
+        ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
         status=1
     else
         status=0
