@@ -53,6 +53,14 @@ protected:
 
 public:
   /**
+   * Various Messenger conditional config/type flags to allow
+   * different "transport" Messengers to tune themselves
+   */
+  static const int HAS_HEAVY_TRAFFIC    = 0x0001;
+  static const int HAS_MANY_CONNECTIONS = 0x0002;
+  static const int HEARTBEAT            = 0x0004;
+
+  /**
    *  The CephContext this Messenger uses. Many other components initialize themselves
    *  from this value.
    */
@@ -151,13 +159,14 @@ public:
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    * @param features bits for the local connection
+   * @param cflags general set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
                            const string &type,
                            entity_name_t name,
 			   string lname,
                            uint64_t nonce,
-			   uint64_t features = 0);
+			   uint64_t cflags);
 
   /**
    * create a new messenger
@@ -230,7 +239,7 @@ public:
    *
    * @param addr The address to use as a template.
    */
-  virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
+  virtual void set_addr_unknowns(const entity_addr_t &addr) = 0;
   /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   /**
@@ -671,6 +680,24 @@ public:
 	 ++p)
       (*p)->ms_handle_remote_reset(con);
   }
+
+  /**
+   * Notify each Dispatcher of a Connection for which reconnection
+   * attempts are being refused. Call this function whenever you
+   * detect that a lossy Connection has been disconnected and it's
+   * impossible to reconnect.
+   *
+   * @param con Pointer to the broken Connection.
+   */
+  void ms_deliver_handle_refused(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+         p != dispatchers.end();
+         ++p) {
+      if ((*p)->ms_handle_refused(con))
+        return;
+    }
+  }
+
   /**
    * Get the AuthAuthorizer for a new outgoing Connection.
    *

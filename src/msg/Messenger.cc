@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <random>
+#include "include/Spinlock.h"
 #include "include/types.h"
 #include "Messenger.h"
 
@@ -20,24 +22,29 @@ Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 
 Messenger *Messenger::create(CephContext *cct, const string &type,
 			     entity_name_t name, string lname,
-			     uint64_t nonce, uint64_t features)
+			     uint64_t nonce, uint64_t cflags)
 {
   int r = -1;
-  srand(time(NULL));
-  if (type == "random")
-    r = rand() % 2; // random does not include xio
+  if (type == "random") {
+    static std::random_device seed;
+    static std::default_random_engine random_engine(seed());
+    static Spinlock random_lock;
+
+    std::lock_guard<Spinlock> lock(random_lock);
+    std::uniform_int_distribution<> dis(0, 1);
+    r = dis(random_engine);
+  }
   if (r == 0 || type == "simple")
-    return new SimpleMessenger(cct, name, lname, nonce, features);
-  else if ((r == 1 || type == "async") &&
-	   cct->check_experimental_feature_enabled("ms-type-async"))
-    return new AsyncMessenger(cct, name, lname, nonce, features);
+    return new SimpleMessenger(cct, name, lname, nonce);
+  else if (r == 1 || type == "async")
+    return new AsyncMessenger(cct, name, lname, nonce);
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
 	   cct->check_experimental_feature_enabled("ms-type-xio"))
-    return new XioMessenger(cct, name, lname, nonce, features);
+    return new XioMessenger(cct, name, lname, nonce, cflags);
 #endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
-  return NULL;
+  return nullptr;
 }
 
 /*

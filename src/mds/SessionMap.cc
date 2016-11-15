@@ -28,7 +28,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
-
+namespace {
 class SessionMapIOContext : public MDSIOContextBase
 {
   protected:
@@ -39,8 +39,21 @@ class SessionMapIOContext : public MDSIOContextBase
       assert(sessionmap != NULL);
     }
 };
+};
 
-
+void SessionMap::register_perfcounters()
+{
+  PerfCountersBuilder plb(g_ceph_context, "mds_sessions",
+      l_mdssm_first, l_mdssm_last);
+  plb.add_u64(l_mdssm_session_count, "session_count",
+      "Session count");
+  plb.add_u64_counter(l_mdssm_session_add, "session_add",
+      "Sessions added");
+  plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
+      "Sessions removed");
+  logger = plb.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
+}
 
 void SessionMap::dump()
 {
@@ -52,7 +65,7 @@ void SessionMap::dump()
 	     << " state " << p->second->get_state_name()
 	     << " completed " << p->second->info.completed_requests
 	     << " prealloc_inos " << p->second->info.prealloc_inos
-	     << " used_ions " << p->second->info.used_inos
+	     << " used_inos " << p->second->info.used_inos
 	     << dendl;
 }
 
@@ -61,13 +74,14 @@ void SessionMap::dump()
 // LOAD
 
 
-object_t SessionMap::get_object_name()
+object_t SessionMap::get_object_name() const
 {
   char s[30];
   snprintf(s, sizeof(s), "mds%d_sessionmap", int(mds->get_nodeid()));
   return object_t(s);
 }
 
+namespace {
 class C_IO_SM_Load : public SessionMapIOContext {
 public:
   const bool first;  //< Am I the initial (header) load?
@@ -83,6 +97,7 @@ public:
     sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals);
   }
 };
+}
 
 
 /**
@@ -250,6 +265,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
   mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
 }
 
+namespace {
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
 public:
   bufferlist bl;
@@ -258,6 +274,7 @@ public:
     sessionmap->_load_legacy_finish(r, bl);
   }
 };
+}
 
 
 /**
@@ -311,6 +328,7 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
 // ----------------
 // SAVE
 
+namespace {
 class C_IO_SM_Save : public SessionMapIOContext {
   version_t version;
 public:
@@ -320,6 +338,7 @@ public:
     sessionmap->_save_finish(version);
   }
 };
+}
 
 void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 {
@@ -372,7 +391,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 
       // Serialize V
       bufferlist bl;
-      session->info.encode(bl);
+      session->info.encode(bl, mds->mdsmap->get_up_features());
 
       // Add to RADOS op
       to_set[k.str()] = bl;
@@ -557,6 +576,9 @@ void SessionMap::add_session(Session *s)
     by_state[s->state] = new xlist<Session*>;
   by_state[s->state]->push_back(&s->item_session_list);
   s->get();
+
+  logger->set(l_mdssm_session_count, session_map.size());
+  logger->inc(l_mdssm_session_add);
 }
 
 void SessionMap::remove_session(Session *s)
@@ -571,6 +593,9 @@ void SessionMap::remove_session(Session *s)
   }
   null_sessions.insert(s->info.inst.name);
   s->put();
+
+  logger->set(l_mdssm_session_count, session_map.size());
+  logger->inc(l_mdssm_session_remove);
 }
 
 void SessionMap::touch_session(Session *session)
@@ -634,7 +659,7 @@ version_t SessionMap::mark_projected(Session *s)
   return projected;
 }
 
-
+namespace {
 class C_IO_SM_Save_One : public SessionMapIOContext {
   MDSInternalContextBase *on_safe;
 public:
@@ -648,6 +673,7 @@ public:
     }
   }
 };
+}
 
 
 void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
@@ -710,7 +736,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 
     // Serialize V
     bufferlist bl;
-    session->info.encode(bl);
+    session->info.encode(bl, mds->mdsmap->get_up_features());
 
     // Add to RADOS op
     to_set[k.str()] = bl;
@@ -771,11 +797,8 @@ void Session::notify_cap_release(size_t n_caps)
 {
   if (!recalled_at.is_zero()) {
     recall_release_count += n_caps;
-    if (recall_release_count >= recall_count) {
-      recalled_at = utime_t();
-      recall_count = 0;
-      recall_release_count = 0;
-    }
+    if (recall_release_count >= recall_count)
+      clear_recalled_at();
   }
 }
 
@@ -790,11 +813,20 @@ void Session::notify_recall_sent(int const new_limit)
   if (recalled_at.is_zero()) {
     // Entering recall phase, set up counters so we can later
     // judge whether the client has respected the recall request
-    recalled_at = ceph_clock_now(g_ceph_context);
+    recalled_at = last_recall_sent = ceph_clock_now(g_ceph_context);
     assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
     recall_count = caps.size() - new_limit;
     recall_release_count = 0;
+  } else {
+    last_recall_sent = ceph_clock_now(g_ceph_context);
   }
+}
+
+void Session::clear_recalled_at()
+{
+  recalled_at = last_recall_sent = utime_t();
+  recall_count = 0;
+  recall_release_count = 0;
 }
 
 void Session::set_client_metadata(map<string, string> const &meta)
@@ -842,9 +874,10 @@ void Session::decode(bufferlist::iterator &p)
   _update_human_name();
 }
 
-bool Session::check_access(CInode *in, unsigned mask,
-			   int caller_uid, int caller_gid,
-			   int new_uid, int new_gid)
+int Session::check_access(CInode *in, unsigned mask,
+			  int caller_uid, int caller_gid,
+			  const vector<uint64_t> *caller_gid_list,
+			  int new_uid, int new_gid)
 {
   string path;
   CInode *diri = NULL;
@@ -854,18 +887,26 @@ bool Session::check_access(CInode *in, unsigned mask,
     path = in->get_projected_inode()->stray_prior_path;
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
-    in->make_path_string(path, false, in->get_projected_parent_dn());
+    in->make_path_string(path, in->get_projected_parent_dn());
     dout(20) << __func__ << " path " << path << dendl;
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
 
-  if (auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			   caller_uid, caller_gid, mask,
-			   new_uid, new_gid)) {
-    return true;
+  if (in->inode.is_dir() &&
+      in->inode.has_layout() &&
+      in->inode.layout.pool_ns.length() &&
+      !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
+    dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
+    return -EIO;
   }
-  return false;
+
+  if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+			    caller_uid, caller_gid, caller_gid_list, mask,
+			    new_uid, new_gid)) {
+    return -EACCES;
+  }
+  return 0;
 }
 
 int SessionFilter::parse(
@@ -952,9 +993,9 @@ bool SessionFilter::match(
     const Session &session,
     std::function<bool(client_t)> is_reconnecting) const
 {
-  for (auto m : metadata) {
-    auto k = m.first;
-    auto v = m.second;
+  for (const auto &m : metadata) {
+    const auto &k = m.first;
+    const auto &v = m.second;
     if (session.info.client_metadata.count(k) == 0) {
       return false;
     }

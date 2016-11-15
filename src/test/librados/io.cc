@@ -32,11 +32,13 @@ TEST_F(LibRadosIo, TooBig) {
   ASSERT_EQ(-E2BIG, rados_write(ioctx, "A", buf, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, rados_append(ioctx, "A", buf, UINT_MAX));
   ASSERT_EQ(-E2BIG, rados_write_full(ioctx, "A", buf, UINT_MAX));
+  ASSERT_EQ(-E2BIG, rados_writesame(ioctx, "A", buf, sizeof(buf), UINT_MAX, 0));
   IoCtx ioctx;
   bufferlist bl;
   ASSERT_EQ(-E2BIG, ioctx.write("foo", bl, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, ioctx.append("foo", bl, UINT_MAX));
   // ioctx.write_full no way to overflow bl.length()
+  ASSERT_EQ(-E2BIG, ioctx.writesame("foo", bl, UINT_MAX, 0));
 }
 
 TEST_F(LibRadosIo, ReadTimeout) {
@@ -48,12 +50,12 @@ TEST_F(LibRadosIo, ReadTimeout) {
     // set up a second client
     rados_t cluster;
     rados_ioctx_t ioctx;
-    rados_create(&cluster, "admin");
-    rados_conf_read_file(cluster, NULL);
-    rados_conf_parse_env(cluster, NULL);
-    rados_conf_set(cluster, "rados_osd_op_timeout", "0.00001"); // use any small value that will result in a timeout
-    rados_connect(cluster);
-    rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+    ASSERT_EQ(0, rados_create(&cluster, "admin"));
+    ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
+    ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
+    ASSERT_EQ(0, rados_conf_set(cluster, "rados_osd_op_timeout", "0.00001")); // use any small value that will result in a timeout
+    ASSERT_EQ(0, rados_connect(cluster));
+    ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
     rados_ioctx_set_namespace(ioctx, nspace.c_str());
 
     // then we show that the buffer is changed after rados_read returned

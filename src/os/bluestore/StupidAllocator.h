@@ -8,6 +8,7 @@
 
 #include "Allocator.h"
 #include "include/btree_interval_set.h"
+#include "os/bluestore/bluestore_types.h"
 
 class StupidAllocator : public Allocator {
   std::mutex lock;
@@ -33,8 +34,12 @@ public:
   int reserve(uint64_t need);
   void unreserve(uint64_t unused);
 
+  int alloc_extents(
+    uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count);
+
   int allocate(
-    uint64_t need_size, uint64_t alloc_unit, int64_t hint,
+    uint64_t want_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
 
   int release(

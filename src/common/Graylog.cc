@@ -8,8 +8,6 @@
 
 #include <arpa/inet.h>
 
-#include <boost/lexical_cast.hpp>
-
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
 #include "log/Entry.h"
@@ -17,14 +15,14 @@
 #include "include/uuid.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 Graylog::Graylog(const SubsystemMap * const s, std::string logger)
     : m_subs(s),
       m_log_dst_valid(false),
       m_hostname(""),
       m_fsid(""),
-      m_logger(logger),
+      m_logger(std::move(logger)),
       m_ostream_compressed(std::stringstream::in |
                            std::stringstream::out |
                            std::stringstream::binary)
@@ -38,7 +36,7 @@ Graylog::Graylog(std::string logger)
       m_log_dst_valid(false),
       m_hostname(""),
       m_fsid(""),
-      m_logger(logger),
+      m_logger(std::move(logger)),
       m_ostream_compressed(std::stringstream::in |
                            std::stringstream::out |
                            std::stringstream::binary)
@@ -55,8 +53,7 @@ void Graylog::set_destination(const std::string& host, int port)
 {
   try {
     boost::asio::ip::udp::resolver resolver(m_io_service);
-    boost::asio::ip::udp::resolver::query query(host,
-                                                boost::lexical_cast<std::string>(port));
+    boost::asio::ip::udp::resolver::query query(host, std::to_string(port));
     m_endpoint = *resolver.resolve(query);
     m_log_dst_valid = true;
   } catch (boost::system::system_error const& e) {
@@ -88,7 +85,7 @@ void Graylog::log_entry(Entry const * const e)
     m_formatter->dump_string("short_message", s);
     m_formatter->dump_string("_app", "ceph");
     m_formatter->dump_float("timestamp", e->m_stamp.sec() + (e->m_stamp.usec() / 1000000.0));
-    m_formatter->dump_int("_thread", e->m_thread);
+    m_formatter->dump_unsigned("_thread", (uint64_t)e->m_thread);
     m_formatter->dump_int("_level", e->m_prio);
     if (m_subs != NULL)
     m_formatter->dump_string("_subsys_name", m_subs->get_name(e->m_subsys));
@@ -170,5 +167,5 @@ void Graylog::log_log_entry(LogEntry const * const e)
   }
 }
 
-} // ceph::log::
+} // ceph::logging::
 } // ceph::

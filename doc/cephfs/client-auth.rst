@@ -33,6 +33,7 @@ for example, to restrict client ``foo`` to ``bar`` directory, we will use. ::
 
 ./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/bar' osd 'allow rw pool=data'
 
+See `User Management - Add a User to a Keyring`_. for additional details on user management
 
 To restrict a client to the specfied sub-directory only, we mention the specified
 directory while mounting following the undermentioned syntax. ::
@@ -42,6 +43,25 @@ directory while mounting following the undermentioned syntax. ::
 for example, to restrict client ``foo`` to ``mnt/bar`` directory, we will use. ::
 
 ./ceph-fuse -n client.foo mnt -r /bar
+
+Free space reporting
+--------------------
+
+By default, when a client is mounting a sub-directory, the used space (``df``)
+will be calculated from the quota on that sub-directory, rather than reporting
+the overall amount of space used on the cluster.
+
+If you would like the client to report the overall usage of the filesystem,
+and not just the quota usage on the sub-directory mounted, then set the
+following config option on the client:
+
+::
+
+    client quota df = false
+
+If quotas are not enabled, or no quota is set on the sub-directory mounted,
+then the overall usage of the filesystem will be reported irrespective of
+the value of this setting.
 
 OSD restriction
 ===============
@@ -86,3 +106,5 @@ for files, but client.1 cannot.
         caps: [mon] allow r
         caps: [osd] allow rw pool=data
 
+
+.. _User Management - Add a User to a Keyring: ../rados/operations/user-management/#add-a-user-to-a-keyring

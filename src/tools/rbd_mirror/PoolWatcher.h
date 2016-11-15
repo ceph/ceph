@@ -24,24 +24,50 @@ namespace mirror {
  */
 class PoolWatcher {
 public:
-  PoolWatcher(RadosRef cluster, double interval_seconds,
+  struct ImageId {
+    std::string id;
+    boost::optional<std::string> name;
+    std::string global_id;
+
+    ImageId(const std::string &id,
+            const boost::optional<std::string> &name = boost::none,
+            const std::string &global_id = "")
+      : id(id), name(name), global_id(global_id) {
+    }
+
+    inline bool operator==(const ImageId &rhs) const {
+      return (id == rhs.id && name == rhs.name && global_id == rhs.global_id);
+    }
+    inline bool operator<(const ImageId &rhs) const {
+      return id < rhs.id;
+    }
+  };
+  typedef std::set<ImageId> ImageIds;
+
+  PoolWatcher(librados::IoCtx &remote_io_ctx, double interval_seconds,
 	      Mutex &lock, Cond &cond);
   ~PoolWatcher();
   PoolWatcher(const PoolWatcher&) = delete;
   PoolWatcher& operator=(const PoolWatcher&) = delete;
-  const std::map<int64_t, std::set<std::string> >& get_images() const;
+
+  bool is_blacklisted() const;
+
+  const ImageIds& get_images() const;
   void refresh_images(bool reschedule=true);
 
 private:
+  librados::IoCtx m_remote_io_ctx;
   Mutex &m_lock;
   Cond &m_refresh_cond;
-  bool m_stopping;
 
-  RadosRef m_cluster;
+  bool m_stopping = false;
+  bool m_blacklisted = false;
   SafeTimer m_timer;
   double m_interval;
-  // pool id -> image id
-  std::map<int64_t, std::set<std::string> > m_images;
+
+  ImageIds m_images;
+
+  int refresh(ImageIds *image_ids);
 };
 
 } // namespace mirror

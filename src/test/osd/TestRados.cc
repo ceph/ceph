@@ -54,6 +54,10 @@ public:
     if (m_op <= m_objects) {
       stringstream oid;
       oid << m_op;
+      if (m_op % 2) {
+	// make it a long name
+	oid << " " << string(300, 'o');
+      }
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
@@ -115,6 +119,13 @@ private:
 	   << oid << " current snap is "
 	   << context.current_snap << std::endl;
       return new WriteOp(m_op, &context, oid, false, true, m_stats);
+
+    case TEST_OP_WRITESAME:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "writesame oid "
+	   << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteSameOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -226,6 +237,7 @@ private:
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       assert(0);
+      return nullptr;
     }
   }
 
@@ -261,6 +273,7 @@ int main(int argc, char **argv)
     { TEST_OP_READ, "read", true },
     { TEST_OP_WRITE, "write", false },
     { TEST_OP_WRITE_EXCL, "write_excl", false },
+    { TEST_OP_WRITESAME, "writesame", false },
     { TEST_OP_DELETE, "delete", true },
     { TEST_OP_SNAP_CREATE, "snap_create", true },
     { TEST_OP_SNAP_REMOVE, "snap_remove", true },

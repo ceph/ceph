@@ -197,6 +197,7 @@ TEST_F(TestClsJournal, GetClient) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   Client client;
   ASSERT_EQ(-ENOENT, client::get_client(ioctx, oid, "id", &client));
@@ -215,6 +216,7 @@ TEST_F(TestClsJournal, ClientRegister) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
@@ -230,28 +232,56 @@ TEST_F(TestClsJournal, ClientRegisterDuplicate) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(-EEXIST, client::client_register(ioctx, oid, "id1", bufferlist()));
 }
 
-TEST_F(TestClsJournal, ClientUpdate) {
+TEST_F(TestClsJournal, ClientUpdateData) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
-  ASSERT_EQ(-ENOENT, client::client_update(ioctx, oid, "id1", bufferlist()));
+  ASSERT_EQ(-ENOENT, client::client_update_data(ioctx, oid, "id1",
+                                                bufferlist()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   bufferlist data;
   data.append(std::string('1', 128));
-  ASSERT_EQ(0, client::client_update(ioctx, oid, "id1", data));
+  ASSERT_EQ(0, client::client_update_data(ioctx, oid, "id1", data));
 
   Client client;
   ASSERT_EQ(0, client::get_client(ioctx, oid, "id1", &client));
   Client expected_client("id1", data);
+  ASSERT_EQ(expected_client, client);
+}
+
+TEST_F(TestClsJournal, ClientUpdateState) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
+
+  ASSERT_EQ(-ENOENT, client::client_update_state(ioctx, oid, "id1",
+                                                 CLIENT_STATE_DISCONNECTED));
+
+  ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
+
+  bufferlist data;
+  data.append(std::string('1', 128));
+  ASSERT_EQ(0, client::client_update_state(ioctx, oid, "id1",
+                                           CLIENT_STATE_DISCONNECTED));
+
+  Client client;
+  ASSERT_EQ(0, client::get_client(ioctx, oid, "id1", &client));
+  Client expected_client;
+  expected_client.id = "id1";
+  expected_client.state = CLIENT_STATE_DISCONNECTED;
   ASSERT_EQ(expected_client, client);
 }
 
@@ -260,6 +290,7 @@ TEST_F(TestClsJournal, ClientUnregister) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id1"));
@@ -270,6 +301,7 @@ TEST_F(TestClsJournal, ClientUnregisterDNE) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id1"));
@@ -293,7 +325,7 @@ TEST_F(TestClsJournal, ClientUnregisterPruneTags) {
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
 
   librados::ObjectWriteOperation op1;
-  client::client_commit(&op1, "id1", {1, {{2, 120}}});
+  client::client_commit(&op1, "id1", {{{1, 2, 120}}});
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
 
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id2"));
@@ -314,12 +346,12 @@ TEST_F(TestClsJournal, ClientCommit) {
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
-  cls::journal::EntryPositions entry_positions;
-  entry_positions = {
-    cls::journal::EntryPosition(234, 120),
-    cls::journal::EntryPosition(235, 121)};
+  cls::journal::ObjectPositions object_positions;
+  object_positions = {
+    cls::journal::ObjectPosition(0, 234, 120),
+    cls::journal::ObjectPosition(3, 235, 121)};
   cls::journal::ObjectSetPosition object_set_position(
-    1, entry_positions);
+    object_positions);
 
   librados::ObjectWriteOperation op2;
   client::client_commit(&op2, "id1", object_set_position);
@@ -342,13 +374,13 @@ TEST_F(TestClsJournal, ClientCommitInvalid) {
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
-  cls::journal::EntryPositions entry_positions;
-  entry_positions = {
-    cls::journal::EntryPosition(234, 120),
-    cls::journal::EntryPosition(234, 121),
-    cls::journal::EntryPosition(235, 121)};
+  cls::journal::ObjectPositions object_positions;
+  object_positions = {
+    cls::journal::ObjectPosition(0, 234, 120),
+    cls::journal::ObjectPosition(4, 234, 121),
+    cls::journal::ObjectPosition(5, 235, 121)};
   cls::journal::ObjectSetPosition object_set_position(
-    1, entry_positions);
+    object_positions);
 
   librados::ObjectWriteOperation op2;
   client::client_commit(&op2, "id1", object_set_position);
@@ -468,7 +500,7 @@ TEST_F(TestClsJournal, TagCreatePrunesTags) {
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
 
   librados::ObjectWriteOperation op1;
-  client::client_commit(&op1, "id1", {1, {{2, 120}}});
+  client::client_commit(&op1, "id1", {{{1, 2, 120}}});
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
 
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 3, 0, bufferlist()));

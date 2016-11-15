@@ -89,7 +89,7 @@ namespace std {
 
 struct file_object_t {
   uint64_t ino, bno;
-  mutable char buf[33];
+  mutable char buf[34];
 
   file_object_t(uint64_t i=0, uint64_t b=0) : ino(i), bno(b) {
     buf[0] = 0;
@@ -97,7 +97,7 @@ struct file_object_t {
   
   const char *c_str() const {
     if (!buf[0])
-      sprintf(buf, "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
+      snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
     return buf;
   }
 
@@ -121,6 +121,22 @@ struct snapid_t {
 
 inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
 inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+
+template<>
+struct denc_traits<snapid_t> {
+  enum { supported = 2 };
+  enum { featured = false };
+  enum { bounded = true };
+  static void bound_encode(const snapid_t& o, size_t& p) {
+    denc(o.val, p);
+  }
+  static void encode(const snapid_t &o, buffer::list::contiguous_appender& p) {
+    denc(o.val, p);
+  }
+  static void decode(snapid_t& o, buffer::ptr::iterator &p) {
+    denc(o.val, p);
+  }
+};
 
 inline ostream& operator<<(ostream& out, snapid_t s) {
   if (s == CEPH_NOSNAP)

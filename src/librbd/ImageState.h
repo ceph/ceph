@@ -16,6 +16,8 @@ class RWLock;
 namespace librbd {
 
 class ImageCtx;
+class ImageUpdateWatchers;
+class UpdateWatchCtx;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageState {
@@ -34,10 +36,18 @@ public:
   bool is_refresh_required() const;
 
   int refresh();
-  void refresh(Context *on_finish);
   int refresh_if_required();
+  void refresh(Context *on_finish);
 
   void snap_set(const std::string &snap_name, Context *on_finish);
+
+  void prepare_lock(Context *on_ready);
+  void handle_prepare_lock_complete();
+
+  int register_update_watcher(UpdateWatchCtx *watcher, uint64_t *handle);
+  int unregister_update_watcher(uint64_t handle);
+  void flush_update_watchers(Context *on_finish);
+  void shut_down_update_watchers(Context *on_finish);
 
 private:
   enum State {
@@ -47,22 +57,25 @@ private:
     STATE_OPENING,
     STATE_CLOSING,
     STATE_REFRESHING,
-    STATE_SETTING_SNAP
+    STATE_SETTING_SNAP,
+    STATE_PREPARING_LOCK
   };
 
   enum ActionType {
     ACTION_TYPE_OPEN,
     ACTION_TYPE_CLOSE,
     ACTION_TYPE_REFRESH,
-    ACTION_TYPE_SET_SNAP
+    ACTION_TYPE_SET_SNAP,
+    ACTION_TYPE_LOCK
   };
 
   struct Action {
     ActionType action_type;
-    uint64_t refresh_seq;
+    uint64_t refresh_seq = 0;
     std::string snap_name;
+    Context *on_ready = nullptr;
 
-    Action(ActionType action_type) : action_type(action_type), refresh_seq(0) {
+    Action(ActionType action_type) : action_type(action_type) {
     }
     inline bool operator==(const Action &action) const {
       if (action_type != action.action_type) {
@@ -70,9 +83,11 @@ private:
       }
       switch (action_type) {
       case ACTION_TYPE_REFRESH:
-        return refresh_seq == action.refresh_seq;
+        return (refresh_seq == action.refresh_seq);
       case ACTION_TYPE_SET_SNAP:
         return snap_name == action.snap_name;
+      case ACTION_TYPE_LOCK:
+        return false;
       default:
         return true;
       }
@@ -91,6 +106,8 @@ private:
 
   uint64_t m_last_refresh;
   uint64_t m_refresh_seq;
+
+  ImageUpdateWatchers *m_update_watchers;
 
   bool is_transition_state() const;
   bool is_closed() const;
@@ -111,6 +128,8 @@ private:
 
   void send_set_snap_unlock();
   void handle_set_snap(int r);
+
+  void send_prepare_lock_unlock();
 
 };
 

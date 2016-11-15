@@ -41,6 +41,7 @@
 #include "rgw_rest_user.h"
 #include "rgw_rest_s3.h"
 #include "rgw_os_lib.h"
+#include "rgw_auth.h"
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
@@ -51,6 +52,7 @@
 #include <string>
 #include <string.h>
 #include <mutex>
+
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -80,6 +82,14 @@ namespace rgw {
 
   void RGWLibProcess::run()
   {
+    /* write completion interval */
+    RGWLibFS::write_completion_interval_s =
+      cct->_conf->rgw_nfs_write_completion_interval_s;
+
+    /* start write timer */
+    RGWLibFS::write_timer.resume();
+
+    /* gc loop */
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
       unique_lock uniq(mtx);
@@ -227,6 +237,12 @@ namespace rgw {
       goto done;
     }
 
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (! s->auth_identity) {
+      s->auth_identity = rgw_auth_transform_old_authinfo(s);
+    }
+
     req->log(s, "reading op permissions");
     ret = req->read_permissions(op);
     if (ret < 0) {
@@ -253,6 +269,8 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
@@ -272,9 +290,11 @@ namespace rgw {
     op->complete();
 
   done:
-    int r = io->complete_request();
-    if (r < 0) {
-      dout(0) << "ERROR: io->complete_request() returned " << r << dendl;
+    try {
+      io->complete_request();
+    } catch (rgw::io::Exception& e) {
+      dout(0) << "ERROR: io->complete_request() returned "
+              << e.what() << dendl;
     }
     if (should_log) {
       rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
@@ -331,6 +351,12 @@ namespace rgw {
       goto done;
     }
 
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (! s->auth_identity) {
+      s->auth_identity = rgw_auth_transform_old_authinfo(s);
+    }
+
     req->log(s, "reading op permissions");
     ret = req->read_permissions(op);
     if (ret < 0) {
@@ -357,6 +383,8 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
@@ -439,6 +467,7 @@ namespace rgw {
 
     store = RGWStoreManager::get_storage(g_ceph_context,
 					 g_conf->rgw_enable_gc_threads,
+					 g_conf->rgw_enable_lc_threads,
 					 g_conf->rgw_enable_quota_threads,
 					 g_conf->rgw_run_sync_thread);
 
@@ -463,6 +492,19 @@ namespace rgw {
 
     if (r)
       return -EIO;
+
+    const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
+    const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
+    const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
+    const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
+    const string& ldap_dnattr =
+      store->ctx()->_conf->rgw_ldap_dnattr;
+    std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
+
+    ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
+			      ldap_searchdn, ldap_searchfilter, ldap_dnattr);
+    ldh->init();
+    ldh->bind();
 
     rgw_user_init(store);
     rgw_bucket_init(store->meta_mgr);
@@ -501,6 +543,8 @@ namespace rgw {
     fe->join();
 
     delete fe;
+    delete fec;
+    delete ldh;
 
     rgw_log_usage_finalize();
 
@@ -532,16 +576,29 @@ namespace rgw {
   }
 
   int RGWLibRequest::read_permissions(RGWOp* op) {
+    /* bucket and object ops */
     int ret =
       rgw_build_bucket_policies(rgwlib.get_store(), get_state());
     if (ret < 0) {
-      ldout(get_state()->cct, 10) << "read_permissions on "
+      ldout(get_state()->cct, 10) << "read_permissions (bucket policy) on "
 				  << get_state()->bucket << ":"
 				  << get_state()->object
 				  << " only_bucket=" << only_bucket()
 				  << " ret=" << ret << dendl;
       if (ret == -ENODATA)
 	ret = -EACCES;
+    } else if (! only_bucket()) {
+      /* object ops */
+      ret = rgw_build_object_policies(rgwlib.get_store(), get_state(),
+				      op->prefetch_data());
+      if (ret < 0) {
+	ldout(get_state()->cct, 10) << "read_permissions (object policy) on"
+				    << get_state()->bucket << ":"
+				    << get_state()->object
+				    << " ret=" << ret << dendl;
+	if (ret == -ENODATA)
+	  ret = -EACCES;
+      }
     }
     return ret;
   } /* RGWLibRequest::read_permissions */

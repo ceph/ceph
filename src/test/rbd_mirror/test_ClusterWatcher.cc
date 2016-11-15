@@ -45,7 +45,8 @@ public:
   void create_pool(bool enable_mirroring, const peer_t &peer,
                    string *uuid = nullptr, string *name=nullptr) {
     string pool_name = get_temp_pool_name("test-rbd-mirror-");
-    ASSERT_EQ("", create_one_pool_pp(pool_name, *m_cluster));
+    ASSERT_EQ(0, m_cluster->pool_create(pool_name.c_str()));
+
     int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
     ASSERT_GE(pool_id, 0);
     m_pools.insert(pool_name);
@@ -59,7 +60,7 @@ public:
                                            uuid != nullptr ? uuid : &gen_uuid,
 					   peer.cluster_name,
 					   peer.client_name));
-      m_peer_configs[peer].insert(pool_id);
+      m_pool_peers[pool_id].insert(peer);
       m_mirrored_pools.insert(pool_name);
     }
     if (name != nullptr) {
@@ -70,11 +71,11 @@ public:
   void delete_pool(const string &name, const peer_t &peer) {
     int64_t pool_id = m_cluster->pool_lookup(name.c_str());
     ASSERT_GE(pool_id, 0);
-    if (m_peer_configs.find(peer) != m_peer_configs.end()) {
-      m_peer_configs[peer].erase(pool_id);
+    if (m_pool_peers.find(pool_id) != m_pool_peers.end()) {
+      m_pool_peers[pool_id].erase(peer);
       m_mirrored_pools.erase(name);
-      if (m_peer_configs[peer].empty()) {
-	m_peer_configs.erase(peer);
+      if (m_pool_peers[pool_id].empty()) {
+	m_pool_peers.erase(pool_id);
       }
     }
     m_pools.erase(name);
@@ -84,7 +85,8 @@ public:
   void create_cache_pool(const string &base_pool, string *cache_pool_name) {
     bufferlist inbl;
     *cache_pool_name = get_temp_pool_name("test-rbd-mirror-");
-    ASSERT_EQ("", create_one_pool_pp(*cache_pool_name, *m_cluster));
+    ASSERT_EQ(0, m_cluster->pool_create(cache_pool_name->c_str()));
+
     ASSERT_EQ(0, m_cluster->mon_command(
       "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool +
       "\", \"tierpool\": \"" + *cache_pool_name +
@@ -119,7 +121,7 @@ public:
   void check_peers() {
     m_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
-    ASSERT_EQ(m_peer_configs, m_cluster_watcher->get_peer_configs());
+    ASSERT_EQ(m_pool_peers, m_cluster_watcher->get_pool_peers());
     ASSERT_EQ(m_mirrored_pools, m_cluster_watcher->get_pool_names());
   }
 
@@ -129,7 +131,7 @@ public:
 
   set<string> m_pools;
   set<string> m_mirrored_pools;
-  map<peer_t, set<int64_t> > m_peer_configs;
+  ClusterWatcher::PoolPeers m_pool_peers;
 };
 
 TEST_F(TestClusterWatcher, NoPools) {

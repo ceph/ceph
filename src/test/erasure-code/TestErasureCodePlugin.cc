@@ -17,6 +17,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdlib.h>
 #include "common/Thread.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
@@ -30,13 +31,21 @@ protected:
 
   class Thread_factory : public Thread {
   public:
+    static void cleanup(void *arg) {
+      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+      if (instance.lock.is_locked())
+        instance.lock.Unlock();
+    }
+
     virtual void *entry() {
       ErasureCodeProfile profile;
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
+      pthread_cleanup_push(cleanup, NULL);
       instance.factory("hangs",
 		       g_conf->erasure_code_dir,
 		       profile, &erasure_code, &cerr);
+      pthread_cleanup_pop(0);
       return NULL;
     }
   };
@@ -74,7 +83,8 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
   ErasureCodeProfile profile;
-  string directory(".libs");
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);
@@ -123,7 +133,9 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

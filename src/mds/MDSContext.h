@@ -77,7 +77,24 @@ public:
 
 class MDSIOContextBase : public MDSContext
 {
-    void complete(int r);
+public:
+  void complete(int r);
+};
+
+/**
+ * Completion for an log operation, takes big MDSRank lock
+ * before executing finish function. Update log's safe pos
+ * after finish functuon return.
+ */
+class MDSLogContextBase : public MDSIOContextBase
+{
+protected:
+  uint64_t write_pos;
+public:
+  MDSLogContextBase() : write_pos(0) {}
+  void complete(int r) final;
+  void set_write_pos(uint64_t wp) { write_pos = wp; }
+  virtual void pre_finish(int r) {}
 };
 
 /**
@@ -129,15 +146,26 @@ public:
  */
 class C_IO_Wrapper : public MDSIOContext
 {
-private:
+protected:
+  bool async;
   MDSInternalContextBase *wrapped;
-public:
-  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) : MDSIOContext(mds_), wrapped(wrapped_) {
-    assert(wrapped != NULL);
-  }
   virtual void finish(int r) {
     wrapped->complete(r);
+    wrapped = nullptr;
   }
+public:
+  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
+    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
+    assert(wrapped != NULL);
+  }
+
+  ~C_IO_Wrapper() {
+    if (wrapped != nullptr) {
+      delete wrapped;
+      wrapped = nullptr;
+    }
+  }
+  virtual void complete(int r) final;
 };
 
 

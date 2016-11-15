@@ -39,7 +39,7 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(ino, payload);
     ::encode(cap_bl, payload);
-    ::encode(client_map, payload);
+    ::encode(client_map, payload, features);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

@@ -14,14 +14,12 @@ namespace client {
 
 namespace {
 
-static const uint64_t JOURNAL_MAX_RETURN = 256;
-
 struct C_AioExec : public Context {
-  librados::IoCtx ioctx;
+  librados::IoCtx &ioctx;
   std::string oid;
 
-  C_AioExec(librados::IoCtx &_ioctx, const std::string &_oid) : oid(_oid) {
-    ioctx.dup(_ioctx);
+  C_AioExec(librados::IoCtx &_ioctx, const std::string &_oid)
+    : ioctx(_ioctx), oid(_oid) {
   }
 
   static void rados_callback(rados_completion_t c, void *arg) {
@@ -177,15 +175,22 @@ struct C_MutableMetadata : public C_AioExec {
 
 } // anonymous namespace
 
+void create(librados::ObjectWriteOperation *op,
+            uint8_t order, uint8_t splay, int64_t pool_id) {
+  bufferlist bl;
+  ::encode(order, bl);
+  ::encode(splay, bl);
+  ::encode(pool_id, bl);
+
+  op->exec("journal", "create", bl);
+}
+
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
            uint8_t splay, int64_t pool_id) {
-  bufferlist inbl;
-  ::encode(order, inbl);
-  ::encode(splay, inbl);
-  ::encode(pool_id, inbl);
+  librados::ObjectWriteOperation op;
+  create(&op, order, splay, pool_id);
 
-  bufferlist outbl;
-  int r = ioctx.exec(oid, "journal", "create", inbl, outbl);
+  int r = ioctx.operate(oid, &op);
   if (r < 0) {
     return r;
   }
@@ -274,28 +279,50 @@ void client_register(librados::ObjectWriteOperation *op,
   op->exec("journal", "client_register", bl);
 }
 
-int client_update(librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &id, const bufferlist &data) {
+int client_update_data(librados::IoCtx &ioctx, const std::string &oid,
+                       const std::string &id, const bufferlist &data) {
   librados::ObjectWriteOperation op;
-  client_update(&op, id, data);
+  client_update_data(&op, id, data);
   return ioctx.operate(oid, &op);
 }
 
-void client_update(librados::ObjectWriteOperation *op,
-                   const std::string &id, const bufferlist &data) {
+void client_update_data(librados::ObjectWriteOperation *op,
+                        const std::string &id, const bufferlist &data) {
   bufferlist bl;
   ::encode(id, bl);
   ::encode(data, bl);
-  op->exec("journal", "client_update", bl);
+  op->exec("journal", "client_update_data", bl);
+}
+
+int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
+                        const std::string &id, cls::journal::ClientState state) {
+  librados::ObjectWriteOperation op;
+  client_update_state(&op, id, state);
+  return ioctx.operate(oid, &op);
+}
+
+void client_update_state(librados::ObjectWriteOperation *op,
+                         const std::string &id,
+                         cls::journal::ClientState state) {
+  bufferlist bl;
+  ::encode(id, bl);
+  ::encode(static_cast<uint8_t>(state), bl);
+  op->exec("journal", "client_update_state", bl);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                        const std::string &id) {
-  bufferlist inbl;
-  ::encode(id, inbl);
+  librados::ObjectWriteOperation op;
+  client_unregister(&op, id);
+  return ioctx.operate(oid, &op);
+}
 
-  bufferlist outbl;
-  return ioctx.exec(oid, "journal", "client_unregister", inbl, outbl);
+void client_unregister(librados::ObjectWriteOperation *op,
+		       const std::string &id) {
+
+  bufferlist bl;
+  ::encode(id, bl);
+  op->exec("journal", "client_unregister", bl);
 }
 
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
@@ -309,9 +336,14 @@ void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
                 std::set<cls::journal::Client> *clients) {
   C_SaferCond cond;
-  C_ClientList *client_list = new C_ClientList(ioctx, oid, clients, &cond);
-  client_list->send("");
+  client_list(ioctx, oid, clients, &cond);
   return cond.wait();
+}
+
+void client_list(librados::IoCtx &ioctx, const std::string &oid,
+                 std::set<cls::journal::Client> *clients, Context *on_finish) {
+  C_ClientList *client_list = new C_ClientList(ioctx, oid, clients, on_finish);
+  client_list->send("");
 }
 
 int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,

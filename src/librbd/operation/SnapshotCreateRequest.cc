@@ -1,13 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 
@@ -62,9 +62,12 @@ template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
                                                 Context *on_finish,
                                                 const std::string &snap_name,
-                                                uint64_t journal_op_tid)
+						const cls::rbd::SnapshotNamespace &snap_namespace,
+                                                uint64_t journal_op_tid,
+                                                bool skip_object_map)
   : Request<I>(image_ctx, on_finish, journal_op_tid), m_snap_name(snap_name),
-    m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
+  m_snap_namespace(snap_namespace),
+    m_skip_object_map(skip_object_map), m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
 }
 
 template <typename I>
@@ -115,7 +118,7 @@ Context *SnapshotCreateRequest<I>::handle_suspend_aio(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
     image_ctx.aio_work_queue->unblock_writes();
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   send_append_op_event();
@@ -146,7 +149,7 @@ Context *SnapshotCreateRequest<I>::handle_append_op_event(int *result) {
     image_ctx.aio_work_queue->unblock_writes();
     lderr(cct) << "failed to commit journal entry: " << cpp_strerror(*result)
                << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   send_allocate_snap_id();
@@ -175,10 +178,10 @@ Context *SnapshotCreateRequest<I>::handle_allocate_snap_id(int *result) {
 
   if (*result < 0) {
     save_result(result);
-    finalize(*result);
+    image_ctx.aio_work_queue->unblock_writes();
     lderr(cct) << "failed to allocate snapshot id: " << cpp_strerror(*result)
                << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   send_create_snap();
@@ -210,7 +213,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
     if (image_ctx.exclusive_lock != nullptr) {
       image_ctx.exclusive_lock->assert_header_locked(&op);
     }
-    cls_client::snapshot_add(&op, m_snap_id, m_snap_name);
+    cls_client::snapshot_add(&op, m_snap_id, m_snap_name, m_snap_namespace);
   }
 
   librados::AioCompletion *rados_completion = create_rados_safe_callback<
@@ -247,11 +250,11 @@ Context *SnapshotCreateRequest<I>::send_create_object_map() {
   update_snap_context();
 
   image_ctx.snap_lock.get_read();
-  if (image_ctx.object_map == nullptr) {
+  if (image_ctx.object_map == nullptr || m_skip_object_map) {
     image_ctx.snap_lock.put_read();
 
-    finalize(0);
-    return this->create_context_finisher();
+    image_ctx.aio_work_queue->unblock_writes();
+    return this->create_context_finisher(0);
   }
 
   CephContext *cct = image_ctx.cct;
@@ -276,8 +279,8 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
 
   assert(*result == 0);
 
-  finalize(0);
-  return this->create_context_finisher();
+  image_ctx.aio_work_queue->unblock_writes();
+  return this->create_context_finisher(0);
 }
 
 template <typename I>
@@ -304,20 +307,8 @@ Context *SnapshotCreateRequest<I>::handle_release_snap_id(int *result) {
   assert(m_ret_val < 0);
   *result = m_ret_val;
 
-  finalize(m_ret_val);
-  return this->create_context_finisher();
-}
-
-template <typename I>
-void SnapshotCreateRequest<I>::finalize(int r) {
-  I &image_ctx = this->m_image_ctx;
-  CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << r << dendl;
-
-  if (r == 0) {
-    this->commit_op_event(0);
-  }
   image_ctx.aio_work_queue->unblock_writes();
+  return this->create_context_finisher(m_ret_val);
 }
 
 template <typename I>
@@ -342,7 +333,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
          image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
-  image_ctx.add_snap(m_snap_name, m_snap_id, m_size, m_parent_info,
+  image_ctx.add_snap(m_snap_name, m_snap_namespace, m_snap_id, m_size, m_parent_info,
                      RBD_PROTECTION_STATUS_UNPROTECTED, 0);
 
   // immediately start using the new snap context if we

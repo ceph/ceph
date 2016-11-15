@@ -3,14 +3,19 @@
 
 #include "Allocator.h"
 #include "StupidAllocator.h"
+#include "BitMapAllocator.h"
 #include "common/debug.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
-Allocator *Allocator::create(string type)
+Allocator *Allocator::create(string type,
+                             int64_t size, int64_t block_size)
 {
-  if (type == "stupid")
+  if (type == "stupid") {
     return new StupidAllocator;
+  } else if (type == "bitmap") {
+    return new BitMapAllocator(size, block_size);
+  }
   derr << "Allocator::" << __func__ << " unknown alloc type " << type << dendl;
   return NULL;
 }

@@ -619,10 +619,25 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
   cluster.wait_for_latest_osdmap();
 
   // create some whiteouts, verify they behave
-  ASSERT_EQ(0, ioctx.remove("foo"));
+  {
+    ObjectWriteOperation op;
+    op.assert_exists();
+    op.remove();
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
 
-  ASSERT_EQ(-ENOENT, ioctx.remove("bar"));
-  ASSERT_EQ(-ENOENT, ioctx.remove("bar"));
+  {
+    ObjectWriteOperation op;
+    op.assert_exists();
+    op.remove();
+    ASSERT_EQ(-ENOENT, ioctx.operate("bar", &op));
+  }
+  {
+    ObjectWriteOperation op;
+    op.assert_exists();
+    op.remove();
+    ASSERT_EQ(-ENOENT, ioctx.operate("bar", &op));
+  }
 
   // verify the whiteouts are there in the cache tier
   {
@@ -3181,10 +3196,25 @@ TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
   cluster.wait_for_latest_osdmap();
 
   // create some whiteouts, verify they behave
-  ASSERT_EQ(0, ioctx.remove("foo"));
+  {
+    ObjectWriteOperation op;
+    op.assert_exists();
+    op.remove();
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
 
-  ASSERT_EQ(-ENOENT, ioctx.remove("bar"));
-  ASSERT_EQ(-ENOENT, ioctx.remove("bar"));
+  {
+    ObjectWriteOperation op;
+    op.assert_exists();
+    op.remove();
+    ASSERT_EQ(-ENOENT, ioctx.operate("bar", &op));
+  }
+  {
+    ObjectWriteOperation op;
+    op.assert_exists();
+    op.remove();
+    ASSERT_EQ(-ENOENT, ioctx.operate("bar", &op));
+  }
 
   // verify the whiteouts are there in the cache tier
   {
@@ -5324,6 +5354,7 @@ int main(int argc, char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args),
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);

@@ -6,7 +6,6 @@
 
 #include "include/Context.h"
 #include "include/atomic.h"
-#include "common/Cond.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include <list>
@@ -46,7 +45,7 @@ public:
     return (m_write_blockers > 0);
   }
 
-  void block_writes();
+  int block_writes();
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
@@ -103,6 +102,9 @@ private:
     RWLock::RLocker locker(m_lock);
     return (m_queued_writes.read() == 0);
   }
+
+  void finish_queued_op(AioImageRequest<ImageCtx> *req);
+  void finish_in_progress_write();
 
   int start_in_flight_op(AioCompletion *c);
   void finish_in_flight_op();

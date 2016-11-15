@@ -93,7 +93,7 @@ and `Monitoring OSDs and PGs`_ for additional details.
 Monitor Quorum
 --------------
 
-Our Getting Started section provides a trivial `Ceph configuration file`_ that
+Our Configuring ceph section provides a trivial `Ceph configuration file`_ that
 provides for one monitor in the test cluster. A cluster will run fine with a
 single monitor; however, **a single monitor is a single-point-of-failure**. To
 ensure high availability in a production Ceph Storage Cluster, you should run
@@ -228,6 +228,7 @@ the monitors. However, if you decide to change the monitor's IP address, you
 must follow a specific procedure. See `Changing a Monitor's IP Address`_ for
 details.
 
+Monitors can also be found by clients using DNS SRV records. See `Monitor lookup through DNS`_ for details.
 
 Cluster ID
 ----------
@@ -286,8 +287,10 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. Ceph Monitors do
-lots of ``fsync()``, which can interfere with Ceph OSD Daemon workloads.
+Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb is using
+``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
+very often, which can interfere with Ceph OSD Daemon workloads if the data
+store is co-located with the OSD Daemons.
 
 In Ceph versions 0.58 and earlier, Ceph Monitors store their data in files. This 
 approach allows users to inspect monitor data with common tools like ``ls``
@@ -580,20 +583,6 @@ Trimming requires that the placement groups are ``active + clean``.
 :Default: ``0.05``
 
 
-``paxos trim tolerance``
-
-:Description: The number of extra proposals tolerated before trimming.
-:Type: Integer
-:Default: ``30``
-
-
-``paxos trim disabled max versions``
-
-:Description: The maximimum number of version allowed to pass without trimming.
-:Type: Integer
-:Default: ``100``
-
-
 ``mon lease`` 
 
 :Description: The length (in seconds) of the lease on the monitor's versions.
@@ -782,6 +771,43 @@ Client
 :Default: ``100ul << 20``
 
 
+Pool settings
+=============
+Since version v0.94 there is support for pool flags which allow or disallow changes to be made to pools.
+
+Monitors can also disallow removal of pools if configured that way.
+
+``mon allow pool delete``
+
+:Description: If the monitors should allow pools to be removed. Regardless of what the pool flags say.
+:Type: Boolean
+:Default: ``false``
+
+``osd pool default flag hashpspool``
+
+:Description: Set the hashpspool flag on new pools
+:Type: Boolean
+:Default: ``true``
+
+``osd pool default flag nodelete``
+
+:Description: Set the nodelete flag on new pools. Prevents allow pool removal with this flag in any way.
+:Type: Boolean
+:Default: ``false``
+
+``osd pool default flag nopgchange``
+
+:Description: Set the nopgchange flag on new pools. Does not allow the number of PGs to be changed for a pool.
+:Type: Boolean
+:Default: ``false``
+
+``osd pool default flag nosizechange``
+
+:Description: Set the nosizechange flag on new pools. Does not allow the size to be changed of pool.
+:Type: Boolean
+:Default: ``false``
+
+For more information about the pool flags see `Pool values`_.
 
 Miscellaneous
 =============
@@ -843,11 +869,30 @@ Miscellaneous
 :Default: ``4096``
 
 
+``mon osd prime pg temp``
+
+:Description: Enables or disable priming the PGMap with the previous OSDs when an out
+              OSD comes back into the cluster. With the ``true`` setting the clients
+              will continue to use the previous OSDs until the newly in OSDs as that
+              PG peered.
+:Type: Boolean
+:Default: ``true``
+
+
+``mon osd prime pg temp max time``
+
+:Description: How much time in seconds the monitor should spend trying to prime the
+              PGMap when an out OSD comes back into the cluster.
+:Type: Float
+:Default: ``0.5``
+
+
 
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
-.. _Monitor Keyrings: ../../operations/authentication#monitor-keyrings
-.. _Ceph configuration file: ../../../start/quick-start/#add-a-configuration-file
+.. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
+.. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
+.. _Monitor lookup through DNS: ../mon-lookup-dns
 .. _ACID: http://en.wikipedia.org/wiki/ACID
 .. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons
 .. _Add/Remove a Monitor (ceph-deploy): ../../deployment/ceph-deploy-mon
@@ -857,3 +902,4 @@ Miscellaneous
 .. _Changing a Monitor's IP Address: ../../operations/add-or-rm-mons#changing-a-monitor-s-ip-address
 .. _Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
+.. _Pool values: ../../operations/pools/#set-pool-values

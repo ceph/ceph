@@ -15,7 +15,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source ../qa/workunits/ceph-helpers.sh
+source $(dirname $0)/../detect-build-env-vars.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -88,7 +89,8 @@ function TEST_osd_pool_get_set() {
     ceph osd pool create $ecpool 12 12 erasure default || return 1
     #erasue pool size=k+m, min_size=k
     local size=$(ceph osd pool get $ecpool size|awk '{print $2}')
-    local k=$(ceph osd pool get $ecpool min_size|awk '{print $2}')
+    local min_size=$(ceph osd pool get $ecpool min_size|awk '{print $2}')
+    local k=$(expr $min_size - 1)  # default min_size=k+1
     #erasure pool size can't change
     ! ceph osd pool set $ecpool size  $(expr $size + 1) || return 1
     #erasure pool min_size must be between in k and size

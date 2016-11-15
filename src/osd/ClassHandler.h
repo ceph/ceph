@@ -2,13 +2,11 @@
 #define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
-
 #include "objclass/objclass.h"
-
-#include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/ceph_context.h"
 
+//forward declaration
+class CephContext;
 
 class ClassHandler
 {
@@ -59,6 +57,8 @@ public:
     ClassHandler *handler;
     void *handle;
 
+    bool whitelisted;
+
     map<string, ClassMethod> methods_map;
     map<string, ClassFilter> filters_map;
 
@@ -103,8 +103,11 @@ private:
   Mutex mutex;
   map<string, ClassData> classes;
 
-  ClassData *_get_class(const string& cname);
+  ClassData *_get_class(const string& cname, bool check_allowed);
   int _load_class(ClassData *cls);
+
+  static bool in_class_list(const std::string& cname,
+      const std::string& list);
 
 public:
   explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}

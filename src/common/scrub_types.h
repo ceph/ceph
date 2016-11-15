@@ -51,13 +51,13 @@ public:
     errors |= err_t::SIZE_MISMATCH;
   }
   void set_attr_missing() {
-    errors |= err_t::ATTR_MISMATCH;
+    errors |= err_t::ATTR_MISSING;
   }
   void set_attr_mismatch() {
     errors |= err_t::ATTR_MISMATCH;
   }
   void set_attr_unexpected() {
-    errors |= err_t::ATTR_MISMATCH;
+    errors |= err_t::ATTR_UNEXPECTED;
   }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
@@ -96,9 +96,13 @@ struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   // soid claims that it is a head or a snapdir, but its SS_ATTR
   // is missing.
   void set_ss_attr_missing();
+  void set_oi_attr_missing();
   void set_ss_attr_corrupted();
+  void set_oi_attr_corrupted();
   // snapset with missing clone
   void set_clone_missing(snapid_t);
+  // Clones that are there
+  void set_clone(snapid_t);
   // the snapset is not consistent with itself
   void set_snapset_mismatch();
   // soid.snap inconsistent with snapset

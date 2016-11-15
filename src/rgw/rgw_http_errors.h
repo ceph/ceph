@@ -50,6 +50,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, 404, "NoSuchWebsiteConfiguration" },
     { ERR_NO_SUCH_UPLOAD, 404, "NoSuchUpload" },
     { ERR_NOT_FOUND, 404, "Not Found"},
+    { ERR_NO_SUCH_LC, 404, "NoSuchLifecycleConfiguration"},
     { ERR_METHOD_NOT_ALLOWED, 405, "MethodNotAllowed" },
     { ETIMEDOUT, 408, "RequestTimeout" },
     { EEXIST, 409, "BucketAlreadyExists" },
@@ -67,15 +68,17 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_LOCKED, 423, "Locked" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
     { ERR_NOT_IMPLEMENTED, 501, "NotImplemented" },
+    { ERR_SERVICE_UNAVAILABLE, 503, "ServiceUnavailable"}
 };
 
 const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
-    { EACCES, 401, "AccessDenied" },
+    { EACCES, 403, "AccessDenied" },
     { EPERM, 401, "AccessDenied" },
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
     { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
     { ERR_BAD_URL, 412, "Bad URL" },
-    { ERR_NOT_SLO_MANIFEST, 400, "Not an SLO manifest" }
+    { ERR_NOT_SLO_MANIFEST, 400, "Not an SLO manifest" },
+    { ERR_QUOTA_EXCEEDED, 413, "QuotaExceeded" }
 };
 
 struct rgw_http_status_code {
@@ -153,6 +156,8 @@ static inline int rgw_http_error_to_errno(int http_err)
         return -EACCES;
     case 404:
         return -ENOENT;
+    case 409:
+        return -ENOTEMPTY;
     default:
         return -EIO;
   }

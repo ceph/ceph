@@ -36,7 +36,7 @@ struct ETableServer : public LogEvent {
     LogEvent(EVENT_TABLESERVER),
     table(t), op(o), reqid(ri), bymds(m), tid(ti), version(v) { }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ETableServer*>& ls);
@@ -54,5 +54,6 @@ struct ETableServer : public LogEvent {
   void update_segment();
   void replay(MDSRank *mds);  
 };
+WRITE_CLASS_ENCODER_FEATURES(ETableServer)
 
 #endif

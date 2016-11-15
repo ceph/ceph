@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
@@ -78,10 +79,9 @@ public:
     ::encode(epoch, payload);
     ::encode(round, payload);
     ::encode(timestamp, payload);
-    ::encode(skews, payload);
-    ::encode(latencies, payload);
+    ::encode(skews, payload, features);
+    ::encode(latencies, payload, features);
   }
-
 };
 
 #endif /* CEPH_MTIMECHECK_H */

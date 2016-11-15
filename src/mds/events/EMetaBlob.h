@@ -62,6 +62,7 @@ public:
     static const int STATE_DIRTY =	 (1<<0);
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
+    static const int STATE_NEED_SNAPFLUSH = (1<<3);
     typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
     string  dn;         // dentry
     snapid_t dnfirst, dnlast;
@@ -100,7 +101,7 @@ public:
     fullbit() {}
     ~fullbit() {}
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
@@ -109,6 +110,7 @@ public:
     bool is_dirty() const { return (state & STATE_DIRTY); }
     bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
     bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
+    bool need_snapflush() const { return (state & STATE_NEED_SNAPFLUSH); }
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
@@ -130,7 +132,7 @@ public:
       return state_string;
     }
   };
-  WRITE_CLASS_ENCODER(fullbit)
+  WRITE_CLASS_ENCODER_FEATURES(fullbit)
   
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
@@ -262,9 +264,9 @@ public:
     }
 
     // if this changes, update the versioning in encode for it!
-    void _encode_bits() const {
+    void _encode_bits(uint64_t features) const {
       if (!dn_decoded) return;
-      ::encode(dfull, dnbl);
+      ::encode(dfull, dnbl, features);
       ::encode(dremote, dnbl);
       ::encode(dnull, dnbl);
     }
@@ -277,12 +279,12 @@ public:
       dn_decoded = true;
     }
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<dirlump*>& ls);
   };
-  WRITE_CLASS_ENCODER(dirlump)
+  WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
@@ -317,7 +319,7 @@ private:
   list<pair<metareqid_t,uint64_t> > client_flushes;
 
  public:
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void get_inodes(std::set<inodeno_t> &inodes) const;
   void get_paths(std::vector<std::string> &paths) const;
@@ -420,11 +422,13 @@ private:
 
   // return remote pointer to to-be-journaled inode
   void add_primary_dentry(CDentry *dn, CInode *in, bool dirty,
-			  bool dirty_parent=false, bool dirty_pool=false) {
+			  bool dirty_parent=false, bool dirty_pool=false,
+			  bool need_snapflush=false) {
     __u8 state = 0;
     if (dirty) state |= fullbit::STATE_DIRTY;
     if (dirty_parent) state |= fullbit::STATE_DIRTYPARENT;
     if (dirty_pool) state |= fullbit::STATE_DIRTYPOOL;
+    if (need_snapflush) state |= fullbit::STATE_NEED_SNAPFLUSH;
     add_primary_dentry(add_dir(dn->get_dir(), false), dn, in, state);
   }
   void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, __u8 state) {
@@ -580,11 +584,11 @@ private:
   void update_segment(LogSegment *ls);
   void replay(MDSRank *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
 };
-WRITE_CLASS_ENCODER(EMetaBlob)
-WRITE_CLASS_ENCODER(EMetaBlob::fullbit)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
 WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
 WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
-WRITE_CLASS_ENCODER(EMetaBlob::dirlump)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::dirlump)
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {
   t.print(out);

@@ -16,9 +16,18 @@
 #
 
 # run from the ceph-disk directory or from its parent
+: ${CEPH_DISK_VIRTUALENV:=/tmp/ceph-disk-virtualenv}
 test -d ceph-disk && cd ceph-disk
-source virtualenv/bin/activate
-tox > virtualenv/tox.out 2>&1
-status=$?
-grep -v InterpreterNotFound < virtualenv/tox.out
-exit $status
+
+if [ -e tox.ini ]; then
+    TOX_PATH=`readlink -f tox.ini`
+else
+    TOX_PATH=`readlink -f $(dirname $0)/tox.ini`
+fi
+
+if [ -z $CEPH_BUILD_DIR ]; then
+    export CEPH_BUILD_DIR=$(dirname ${TOX_PATH})
+fi
+
+source ${CEPH_DISK_VIRTUALENV}/bin/activate
+tox -c ${TOX_PATH}

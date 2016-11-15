@@ -17,12 +17,8 @@
 #include <limits.h>
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/MonitorDBStore.h"
-
-#include "common/config.h"
-#include "common/cmdparse.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -37,7 +33,7 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
 
 const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
 
-int ConfigKeyService::store_get(string key, bufferlist &bl)
+int ConfigKeyService::store_get(const string &key, bufferlist &bl)
 {
   return mon->store->get(STORE_PREFIX, key, bl);
 }
@@ -47,9 +43,8 @@ void ConfigKeyService::get_store_prefixes(set<string>& s)
   s.insert(STORE_PREFIX);
 }
 
-void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
+void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
 {
-  bufferlist proposal_bl;
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   t->put(STORE_PREFIX, key, bl);
   if (cb)
@@ -57,9 +52,8 @@ void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
   paxos->trigger_propose();
 }
 
-void ConfigKeyService::store_delete(string key, Context *cb)
+void ConfigKeyService::store_delete(const string &key, Context *cb)
 {
-  bufferlist proposal_bl;
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   t->erase(STORE_PREFIX, key);
   if (cb)
@@ -67,7 +61,7 @@ void ConfigKeyService::store_delete(string key, Context *cb)
   paxos->trigger_propose();
 }
 
-bool ConfigKeyService::store_exists(string key)
+bool ConfigKeyService::store_exists(const string &key)
 {
   return mon->store->exists(STORE_PREFIX, key);
 }
@@ -160,7 +154,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     // return for now; we'll put the message once it's done.
     return true;
 
-  } else if (prefix == "config-key del") {
+  } else if (prefix == "config-key del" ||
+             prefix == "config-key rm") {
     if (!mon->is_leader()) {
       mon->forward_request_leader(op);
       return true;

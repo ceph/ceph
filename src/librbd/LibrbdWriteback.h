@@ -5,13 +5,12 @@
 
 #include <queue>
 
-#include "include/Context.h"
-#include "include/types.h"
-#include "include/rados/librados.hpp"
+#include "common/snap_types.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 
 class Mutex;
+class Context;
 
 namespace librbd {
 
@@ -42,10 +41,8 @@ namespace librbd {
     using WritebackHandler::write;
 
     virtual void overwrite_extent(const object_t& oid, uint64_t off,
-				  uint64_t len, ceph_tid_t journal_tid);
-
-    virtual void get_client_lock();
-    virtual void put_client_lock();
+				  uint64_t len, ceph_tid_t original_journal_tid,
+                                  ceph_tid_t new_journal_tid);
 
     struct write_result_d {
       bool done;

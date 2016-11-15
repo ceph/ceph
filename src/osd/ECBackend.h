@@ -17,16 +17,16 @@
 
 #include "OSD.h"
 #include "PGBackend.h"
-#include "osd_types.h"
-#include <boost/optional/optional_io.hpp>
 #include "erasure-code/ErasureCodeInterface.h"
-#include "ECTransaction.h"
-#include "ECMsgTypes.h"
 #include "ECUtil.h"
-#include "messages/MOSDECSubOpWrite.h"
-#include "messages/MOSDECSubOpWriteReply.h"
-#include "messages/MOSDECSubOpRead.h"
-#include "messages/MOSDECSubOpReadReply.h"
+#include "ECTransaction.h"
+
+//forward declaration
+struct ECSubWrite;
+struct ECSubWriteReply;
+struct ECSubRead;
+struct ECSubReadReply;
+class ECTransaction;
 
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
@@ -80,7 +80,7 @@ public:
     );
 
   /// @see ReadOp below
-  void check_recovery_sources(const OSDMapRef osdmap);
+  void check_recovery_sources(const OSDMapRef& osdmap);
 
   void on_change();
   void clear_recovery_state();
@@ -95,7 +95,7 @@ public:
   void submit_transaction(
     const hobject_t &hoid,
     const eversion_t &at_version,
-    PGTransaction *t,
+    PGTransactionUPtr &&t,
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
     const vector<pg_log_entry_t> &log_entries,
@@ -202,7 +202,6 @@ private:
     ObjectRecoveryInfo recovery_info;
     ObjectRecoveryProgress recovery_progress;
 
-    bool pending_read;
     enum state_t { IDLE, READING, WRITING, COMPLETE } state;
 
     static const char* tostr(state_t state) {
@@ -237,7 +236,7 @@ private:
 
     void dump(Formatter *f) const;
 
-    RecoveryOp() : pending_read(false), state(IDLE) {}
+    RecoveryOp() : state(IDLE) {}
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
   map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator> recovery_ops;
@@ -313,7 +312,7 @@ public:
   };
   friend struct FinishReadOp;
   void filter_read_op(
-    const OSDMapRef osdmap,
+    const OSDMapRef& osdmap,
     ReadOp &op);
   void complete_read_op(ReadOp &rop, RecoveryMessages *m);
   friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
@@ -359,7 +358,7 @@ public:
     osd_reqid_t reqid;
     OpRequestRef client_op;
 
-    ECTransaction *t;
+    std::unique_ptr<ECTransaction> t;
 
     set<hobject_t, hobject_t::BitwiseComparator> temp_added;
     set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
@@ -369,7 +368,6 @@ public:
 
     map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> unstable_hash_infos;
     ~Op() {
-      delete t;
       delete on_local_applied_sync;
       delete on_all_applied;
       delete on_all_commit;
@@ -506,6 +504,8 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size) {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
+  void _failed_push(const hobject_t &hoid,
+    pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
 };
 
 #endif

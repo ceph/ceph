@@ -50,6 +50,8 @@ public:
 				     bi::list_member_hook<>,
 				     &XioSubmit::submit_list >
 		    > Queue;
+  virtual ~XioSubmit(){
+  }
 };
 
 #endif /* XIO_SUBMIT_H */

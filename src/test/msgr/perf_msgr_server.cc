@@ -25,7 +25,6 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "common/Cycles.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
@@ -94,6 +93,7 @@ class ServerDispatcher : public Dispatcher {
   bool ms_dispatch(Message *m) { return true; }
   bool ms_handle_reset(Connection *con) { return true; }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) { return false; }
   void ms_fast_dispatch(Message *m) {
     usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;
@@ -116,7 +116,7 @@ class MessengerServer {
  public:
   MessengerServer(string t, string addr, int threads, int delay):
       msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay) {
-    msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0);
+    msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0, 0);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
   }
   ~MessengerServer() {

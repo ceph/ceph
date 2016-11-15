@@ -9,6 +9,31 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "rgw period history: ")
 
+/// an ordered history of consecutive periods
+class RGWPeriodHistory::History : public bi::avl_set_base_hook<> {
+ public:
+  std::deque<RGWPeriod> periods;
+
+  epoch_t get_oldest_epoch() const {
+    return periods.front().get_realm_epoch();
+  }
+  epoch_t get_newest_epoch() const {
+    return periods.back().get_realm_epoch();
+  }
+  bool contains(epoch_t epoch) const {
+    return get_oldest_epoch() <= epoch && epoch <= get_newest_epoch();
+  }
+  RGWPeriod& get(epoch_t epoch) {
+    return periods[epoch - get_oldest_epoch()];
+  }
+  const RGWPeriod& get(epoch_t epoch) const {
+    return periods[epoch - get_oldest_epoch()];
+  }
+  const std::string& get_predecessor_id() const {
+    return periods.front().get_predecessor();
+  }
+};
+
 /// value comparison for avl_set
 bool operator<(const RGWPeriodHistory::History& lhs,
                const RGWPeriodHistory::History& rhs)
@@ -24,35 +49,98 @@ struct NewestEpochLess {
 };
 
 
-RGWPeriodHistory::RGWPeriodHistory(CephContext* cct, Puller* puller,
-                                   const RGWPeriod& current_period)
-  : cct(cct),
-    puller(puller),
-    current_epoch(current_period.get_realm_epoch())
-{
-  // copy the current period into a new history
-  auto history = new History;
-  history->periods.push_back(current_period);
+using Cursor = RGWPeriodHistory::Cursor;
 
-  // insert as our current history
-  current_history = histories.insert(*history).first;
+const RGWPeriod& Cursor::get_period() const
+{
+  std::lock_guard<std::mutex> lock(*mutex);
+  return history->get(epoch);
+}
+bool Cursor::has_prev() const
+{
+  std::lock_guard<std::mutex> lock(*mutex);
+  return epoch > history->get_oldest_epoch();
+}
+bool Cursor::has_next() const
+{
+  std::lock_guard<std::mutex> lock(*mutex);
+  return epoch < history->get_newest_epoch();
 }
 
-RGWPeriodHistory::~RGWPeriodHistory()
+
+class RGWPeriodHistory::Impl final {
+ public:
+  Impl(CephContext* cct, Puller* puller, const RGWPeriod& current_period);
+  ~Impl();
+
+  Cursor get_current() const { return current_cursor; }
+  Cursor attach(RGWPeriod&& period);
+  Cursor insert(RGWPeriod&& period);
+  Cursor lookup(epoch_t realm_epoch);
+
+ private:
+  /// an intrusive set of histories, ordered by their newest epoch. although
+  /// the newest epoch of each history is mutable, the ordering cannot change
+  /// because we prevent the histories from overlapping
+  using Set = bi::avl_set<RGWPeriodHistory::History>;
+
+  /// insert the given period into the period history, creating new unconnected
+  /// histories or merging existing histories as necessary. expects the caller
+  /// to hold a lock on mutex. returns a valid cursor regardless of whether it
+  /// ends up in current_history, though cursors in other histories are only
+  /// valid within the context of the lock
+  Cursor insert_locked(RGWPeriod&& period);
+
+  /// merge the periods from the src history onto the end of the dst history,
+  /// and return an iterator to the merged history
+  Set::iterator merge(Set::iterator dst, Set::iterator src);
+
+  /// construct a Cursor object using Cursor's private constuctor
+  Cursor make_cursor(Set::const_iterator history, epoch_t epoch);
+
+  CephContext *const cct;
+  Puller *const puller; //< interface for pulling missing periods
+  Cursor current_cursor; //< Cursor to realm's current period
+
+  mutable std::mutex mutex; //< protects the histories
+
+  /// set of disjoint histories that are missing intermediate periods needed to
+  /// connect them together
+  Set histories;
+
+  /// iterator to the history that contains the realm's current period
+  Set::const_iterator current_history;
+};
+
+RGWPeriodHistory::Impl::Impl(CephContext* cct, Puller* puller,
+                             const RGWPeriod& current_period)
+  : cct(cct), puller(puller)
+{
+  if (!current_period.get_id().empty()) {
+    // copy the current period into a new history
+    auto history = new History;
+    history->periods.push_back(current_period);
+
+    // insert as our current history
+    current_history = histories.insert(*history).first;
+
+    // get a cursor to the current period
+    current_cursor = make_cursor(current_history, current_period.get_realm_epoch());
+  }
+}
+
+RGWPeriodHistory::Impl::~Impl()
 {
   // clear the histories and delete each entry
   histories.clear_and_dispose(std::default_delete<History>{});
 }
 
-using Cursor = RGWPeriodHistory::Cursor;
-
-Cursor RGWPeriodHistory::get_current() const
+Cursor RGWPeriodHistory::Impl::attach(RGWPeriod&& period)
 {
-  return Cursor{current_history, &mutex, current_epoch};
-}
+  if (current_history == histories.end()) {
+    return Cursor{-EINVAL};
+  }
 
-Cursor RGWPeriodHistory::attach(RGWPeriod&& period)
-{
   const auto epoch = period.get_realm_epoch();
 
   std::string predecessor_id;
@@ -70,7 +158,7 @@ Cursor RGWPeriodHistory::attach(RGWPeriod&& period)
       }
 
       // take the predecessor id of the most recent history
-      if (cursor.get_epoch() > current_epoch) {
+      if (cursor.get_epoch() > current_cursor.get_epoch()) {
         predecessor_id = cursor.history->get_predecessor_id();
       } else {
         predecessor_id = current_history->get_predecessor_id();
@@ -90,11 +178,15 @@ Cursor RGWPeriodHistory::attach(RGWPeriod&& period)
   }
 
   // return a cursor to the requested period
-  return Cursor{current_history, &mutex, epoch};
+  return make_cursor(current_history, epoch);
 }
 
-Cursor RGWPeriodHistory::insert(RGWPeriod&& period)
+Cursor RGWPeriodHistory::Impl::insert(RGWPeriod&& period)
 {
+  if (current_history == histories.end()) {
+    return Cursor{-EINVAL};
+  }
+
   std::lock_guard<std::mutex> lock(mutex);
 
   auto cursor = insert_locked(std::move(period));
@@ -105,21 +197,22 @@ Cursor RGWPeriodHistory::insert(RGWPeriod&& period)
   // we can only provide cursors that are safe to use outside of the mutex if
   // they're within the current_history, because other histories can disappear
   // in a merge. see merge() for the special handling of current_history
-  if (cursor.history == current_history) {
+  if (cursor.history == &*current_history) {
     return cursor;
   }
   return Cursor{};
 }
 
-Cursor RGWPeriodHistory::lookup(epoch_t realm_epoch)
+Cursor RGWPeriodHistory::Impl::lookup(epoch_t realm_epoch)
 {
-  if (current_history->contains(realm_epoch)) {
-    return Cursor{current_history, &mutex, realm_epoch};
+  if (current_history != histories.end() &&
+      current_history->contains(realm_epoch)) {
+    return make_cursor(current_history, realm_epoch);
   }
   return Cursor{};
 }
 
-Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
+Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
 {
   auto epoch = period.get_realm_epoch();
 
@@ -133,7 +226,7 @@ Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
     if (epoch == last->get_newest_epoch() + 1) {
       // insert at the back of the last history
       last->periods.emplace_back(std::move(period));
-      return Cursor{last, &mutex, epoch};
+      return make_cursor(last, epoch);
     }
 
     // create a new history for this period
@@ -142,7 +235,7 @@ Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
     histories.insert(last, *history);
 
     i = Set::s_iterator_to(*history);
-    return Cursor{i, &mutex, epoch};
+    return make_cursor(i, epoch);
   }
 
   if (i->contains(epoch)) {
@@ -159,7 +252,7 @@ Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
     if (period.get_epoch() > existing.get_epoch()) {
       existing = std::move(period);
     }
-    return Cursor{i, &mutex, epoch};
+    return make_cursor(i, epoch);
   }
 
   if (epoch + 1 == i->get_oldest_epoch()) {
@@ -173,7 +266,7 @@ Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
         i = merge(prev, i);
       }
     }
-    return Cursor{i, &mutex, epoch};
+    return make_cursor(i, epoch);
   }
 
   if (i != histories.begin()) {
@@ -181,7 +274,7 @@ Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
     if (epoch == prev->get_newest_epoch() + 1) {
       // insert at the back of the previous history
       prev->periods.emplace_back(std::move(period));
-      return Cursor{prev, &mutex, epoch};
+      return make_cursor(prev, epoch);
     }
   }
 
@@ -191,11 +284,11 @@ Cursor RGWPeriodHistory::insert_locked(RGWPeriod&& period)
   histories.insert(i, *history);
 
   i = Set::s_iterator_to(*history);
-  return Cursor{i, &mutex, epoch};
+  return make_cursor(i, epoch);
 }
 
-RGWPeriodHistory::Set::iterator RGWPeriodHistory::merge(Set::iterator dst,
-                                                        Set::iterator src)
+RGWPeriodHistory::Impl::Set::iterator
+RGWPeriodHistory::Impl::merge(Set::iterator dst, Set::iterator src)
 {
   assert(dst->get_newest_epoch() + 1 == src->get_oldest_epoch());
 
@@ -217,33 +310,31 @@ RGWPeriodHistory::Set::iterator RGWPeriodHistory::merge(Set::iterator dst,
   return dst;
 }
 
-
-epoch_t RGWPeriodHistory::History::get_oldest_epoch() const
-{
-  return periods.front().get_realm_epoch();
+Cursor RGWPeriodHistory::Impl::make_cursor(Set::const_iterator history,
+                                           epoch_t epoch) {
+  return Cursor{&*history, &mutex, epoch};
 }
 
-epoch_t RGWPeriodHistory::History::get_newest_epoch() const
-{
-  return periods.back().get_realm_epoch();
-}
 
-bool RGWPeriodHistory::History::contains(epoch_t epoch) const
-{
-  return get_oldest_epoch() <= epoch && epoch <= get_newest_epoch();
-}
+RGWPeriodHistory::RGWPeriodHistory(CephContext* cct, Puller* puller,
+                                   const RGWPeriod& current_period)
+  : impl(new Impl(cct, puller, current_period)) {}
 
-RGWPeriod& RGWPeriodHistory::History::get(epoch_t epoch)
-{
-  return periods[epoch - get_oldest_epoch()];
-}
+RGWPeriodHistory::~RGWPeriodHistory() = default;
 
-const RGWPeriod& RGWPeriodHistory::History::get(epoch_t epoch) const
+Cursor RGWPeriodHistory::get_current() const
 {
-  return periods[epoch - get_oldest_epoch()];
+  return impl->get_current();
 }
-
-const std::string& RGWPeriodHistory::History::get_predecessor_id() const
+Cursor RGWPeriodHistory::attach(RGWPeriod&& period)
 {
-  return periods.front().get_predecessor();
+  return impl->attach(std::move(period));
+}
+Cursor RGWPeriodHistory::insert(RGWPeriod&& period)
+{
+  return impl->insert(std::move(period));
+}
+Cursor RGWPeriodHistory::lookup(epoch_t realm_epoch)
+{
+  return impl->lookup(realm_epoch);
 }

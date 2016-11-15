@@ -12,6 +12,7 @@
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
+#include "rgw_client_io_filters.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -20,10 +21,12 @@ void RGWFCGXProcess::run()
   string socket_path;
   string socket_port;
   string socket_host;
+  int socket_backlog;
 
   conf->get_val("socket_path", "", &socket_path);
   conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
   conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
+  socket_backlog = g_conf->rgw_fcgi_socket_backlog;
 
   if (socket_path.empty() && socket_port.empty() && socket_host.empty()) {
     socket_path = g_conf->rgw_socket_path;
@@ -54,7 +57,7 @@ void RGWFCGXProcess::run()
     }
 
     const char *path = path_str.c_str();
-    sock_fd = FCGX_OpenSocket(path, SOCKET_BACKLOG);
+    sock_fd = FCGX_OpenSocket(path, socket_backlog);
     if (sock_fd < 0) {
       dout(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned "
 	      << sock_fd << dendl;
@@ -66,7 +69,7 @@ void RGWFCGXProcess::run()
     }
   } else if (!socket_port.empty()) {
     string bind = socket_host + ":" + socket_port;
-    sock_fd = FCGX_OpenSocket(bind.c_str(), SOCKET_BACKLOG);
+    sock_fd = FCGX_OpenSocket(bind.c_str(), socket_backlog);
     if (sock_fd < 0) {
       dout(0) << "ERROR: FCGX_OpenSocket (" << bind.c_str() << ") returned "
 	      << sock_fd << dendl;
@@ -111,18 +114,23 @@ void RGWFCGXProcess::run()
 
 void RGWFCGXProcess::handle_request(RGWRequest* r)
 {
-  RGWFCGXRequest* req = static_cast<RGWFCGXRequest*>(r);
-  FCGX_Request* fcgx = req->fcgx;
-  RGWFCGX client_io(fcgx);
+  RGWFCGXRequest* const req = static_cast<RGWFCGXRequest*>(r);
+
+  RGWFCGX fcgxfe(req->fcgx);
+  auto real_client_io = rgw::io::add_reordering(
+                          rgw::io::add_buffering(
+                            rgw::io::add_chunking(
+                              &fcgxfe)));
+  RGWRestfulIO client_io(&real_client_io);
 
  
-  int ret = process_request(store, rest, req, &client_io, olog);
+  int ret = process_request(store, rest, req, uri_prefix, &client_io, olog);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
   }
 
-  FCGX_Finish_r(fcgx);
+  FCGX_Finish_r(req->fcgx);
 
   delete req;
 } /* RGWFCGXProcess::handle_request */

@@ -3,6 +3,7 @@
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
+#include "tools/rbd/Utils.h"
 #include "include/rbd/features.h"
 #include "common/config.h"
 #include "common/strtol.h"
@@ -17,13 +18,15 @@ namespace argument_types {
 namespace po = boost::program_options;
 
 const std::map<uint64_t, std::string> ImageFeatures::FEATURE_MAPPING = {
-  {RBD_FEATURE_LAYERING, "layering"},
-  {RBD_FEATURE_STRIPINGV2, "striping"},
-  {RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive-lock"},
-  {RBD_FEATURE_OBJECT_MAP, "object-map"},
-  {RBD_FEATURE_FAST_DIFF, "fast-diff"},
-  {RBD_FEATURE_DEEP_FLATTEN, "deep-flatten"},
-  {RBD_FEATURE_JOURNALING, "journaling"}};
+  {RBD_FEATURE_LAYERING, RBD_FEATURE_NAME_LAYERING},
+  {RBD_FEATURE_STRIPINGV2, RBD_FEATURE_NAME_STRIPINGV2},
+  {RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_NAME_EXCLUSIVE_LOCK},
+  {RBD_FEATURE_OBJECT_MAP, RBD_FEATURE_NAME_OBJECT_MAP},
+  {RBD_FEATURE_FAST_DIFF, RBD_FEATURE_NAME_FAST_DIFF},
+  {RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_NAME_DEEP_FLATTEN},
+  {RBD_FEATURE_JOURNALING, RBD_FEATURE_NAME_JOURNALING},
+  {RBD_FEATURE_DATA_POOL, RBD_FEATURE_NAME_DATA_POOL},
+};
 
 Format::Formatter Format::create_formatter(bool pretty) const {
   if (value == "json") {
@@ -54,6 +57,15 @@ std::string get_description_prefix(ArgumentModifier modifier) {
   default:
     return "";
   }
+}
+
+void add_special_pool_option(po::options_description *opt,
+			     std::string prefix) {
+  std::string name = prefix + "-" + POOL_NAME;
+  std::string description = prefix + " pool name";
+
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
 void add_pool_option(po::options_description *opt,
@@ -92,6 +104,29 @@ void add_image_option(po::options_description *opt,
     break;
   case ARGUMENT_MODIFIER_DEST:
     name = DEST_IMAGE_NAME;
+    description = "destination " + description;
+    break;
+  }
+  description += desc_suffix;
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
+void add_group_option(po::options_description *opt,
+		      ArgumentModifier modifier,
+		      const std::string &desc_suffix) {
+  std::string name = GROUP_NAME;
+  std::string description = "group name";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+    break;
+  case ARGUMENT_MODIFIER_SOURCE:
+    description = "source " + description;
+    break;
+  case ARGUMENT_MODIFIER_DEST:
+    name = DEST_GROUP_NAME;
     description = "destination " + description;
     break;
   }
@@ -166,6 +201,17 @@ void add_image_spec_options(po::options_description *pos,
   add_image_option(opt, modifier);
 }
 
+void add_group_spec_options(po::options_description *pos,
+			    po::options_description *opt,
+			    ArgumentModifier modifier) {
+  pos->add_options()
+    ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
+     (get_description_prefix(modifier) + "group specification\n" +
+      "(example: [<pool-name>/]<group-name>)").c_str());
+  add_pool_option(opt, modifier);
+  add_group_option(opt, modifier);
+}
+
 void add_snap_spec_options(po::options_description *pos,
                            po::options_description *opt,
                            ArgumentModifier modifier) {
@@ -209,7 +255,8 @@ void add_create_image_options(po::options_description *opt,
   // TODO get default image format from conf
   if (include_format) {
     opt->add_options()
-      (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(), "image format [1 or 2]")
+      (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(),
+       "image format [1 (deprecated) or 2]")
       (IMAGE_NEW_FORMAT.c_str(),
        po::value<ImageNewFormat>()->zero_tokens(),
        "use image format 2\n(deprecated)");
@@ -224,7 +271,8 @@ void add_create_image_options(po::options_description *opt,
      ("image features\n" + get_short_features_help(true)).c_str())
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
     (IMAGE_STRIPE_UNIT.c_str(), po::value<uint64_t>(), "stripe unit")
-    (IMAGE_STRIPE_COUNT.c_str(), po::value<uint64_t>(), "stripe count");
+    (IMAGE_STRIPE_COUNT.c_str(), po::value<uint64_t>(), "stripe count")
+    (IMAGE_DATA_POOL.c_str(), po::value<std::string>(), "data pool");
 
   add_create_journal_options(opt);
 }
@@ -252,6 +300,13 @@ void add_path_options(boost::program_options::options_description *pos,
     (PATH_NAME.c_str(), po::value<std::string>(), description.c_str());
   opt->add_options()
     (PATH.c_str(), po::value<std::string>(), description.c_str());
+}
+
+void add_limit_option(po::options_description *opt) {
+  std::string description = "maximum allowed snapshot count";
+
+  opt->add_options()
+    (LIMIT.c_str(), po::value<uint64_t>(), description.c_str());
 }
 
 void add_no_progress_option(boost::program_options::options_description *opt) {
@@ -288,11 +343,13 @@ std::string get_short_features_help(bool append_suffix) {
 
     std::string suffix;
     if (append_suffix) {
+      if ((pair.first & rbd::utils::parse_rbd_default_features(g_ceph_context)) != 0) {
+        suffix += "+";
+      }
       if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {
         suffix += "*";
-      }
-      if ((pair.first & g_conf->rbd_default_features) != 0) {
-        suffix += "+";
+      } else if ((pair.first & RBD_FEATURES_DISABLE_ONLY) != 0) {
+        suffix += "-";
       }
       if (!suffix.empty()) {
         suffix = "(" + suffix + ")";
@@ -308,6 +365,7 @@ std::string get_long_features_help() {
   std::ostringstream oss;
   oss << "Image Features:" << std::endl
       << "  (*) supports enabling/disabling on existing images" << std::endl
+      << "  (-) supports disabling-only on existing images" << std::endl
       << "  (+) enabled by default for new images if features not specified"
       << std::endl;
   return oss.str();

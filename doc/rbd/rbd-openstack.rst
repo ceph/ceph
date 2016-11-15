@@ -115,7 +115,7 @@ On the ``nova-compute``, ``cinder-backup`` and on the ``cinder-volume`` node,
 use both the Python bindings and the client command line tools::
 
   sudo apt-get install ceph-common
-  sudo yum install ceph
+  sudo yum install ceph-common
 
 
 Setup Ceph Client Authentication
@@ -176,7 +176,7 @@ Save the uuid of the secret for configuring ``nova-compute`` later.
    However from a platform consistency perspective, it's better to keep the
    same UUID.
 
-.. _cephx authentication: ../../rados/operations/authentication
+.. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
 
 
 Configure OpenStack to use Ceph
@@ -215,11 +215,22 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
     rbd_store_ceph_conf = /etc/ceph/ceph.conf
     rbd_store_chunk_size = 8
 
-
-For more information about the configuration options available in Glance please see: http://docs.openstack.org/trunk/config-reference/content/section_glance-api.conf.html.
-
 .. important:: Glance has not completely moved to 'store' yet.
-    So we still need to configure the store in the DEFAULT section.
+    So we still need to configure the store in the DEFAULT section until Kilo.
+
+Kilo
+~~~~
+Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
+
+    [glance_store]
+    stores = rbd
+    default_store = rbd
+    rbd_store_pool = images
+    rbd_store_user = glance
+    rbd_store_ceph_conf = /etc/ceph/ceph.conf
+    rbd_store_chunk_size = 8
+
+For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
 
 Any OpenStack version
 ~~~~~~~~~~~~~~~~~~~~~
@@ -255,6 +266,11 @@ OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack node, edit
 ``/etc/cinder/cinder.conf`` by adding::
 
+    [DEFAULT]
+    ...
+    enabled_backends = ceph
+    ...
+    [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
     rbd_pool = volumes
     rbd_ceph_conf = /etc/ceph/ceph.conf
@@ -267,6 +283,8 @@ specify the pool name for the block device. On your OpenStack node, edit
 If you're using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
+    [ceph]
+    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 

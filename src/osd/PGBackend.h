@@ -18,8 +18,6 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "OSDMap.h"
-#include "PGLog.h"
 #include "osd_types.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
@@ -31,6 +29,11 @@ namespace Scrub {
   class Store;
 }
 struct shard_info_wrapper;
+
+//forward declaration
+class OSDMap;
+class PGLog;
+typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
   * PGBackend
@@ -94,7 +97,7 @@ struct shard_info_wrapper;
        pg_shard_t peer,
        const hobject_t oid) = 0;
 
-     virtual void failed_push(pg_shard_t from, const hobject_t &soid) = 0;
+     virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
      
      virtual void cancel_pull(const hobject_t &soid) = 0;
 
@@ -128,10 +131,10 @@ struct shard_info_wrapper;
      virtual const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards()
        const = 0;
 
-     virtual const pg_missing_t &get_local_missing() const = 0;
+     virtual const pg_missing_tracker_t &get_local_missing() const = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
-     virtual boost::optional<const pg_missing_t &> maybe_get_shard_missing(
+     virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(
        pg_shard_t peer) const {
        if (peer == primary_shard()) {
 	 return get_local_missing();
@@ -139,14 +142,14 @@ struct shard_info_wrapper;
 	 map<pg_shard_t, pg_missing_t>::const_iterator i =
 	   get_shard_missing().find(peer);
 	 if (i == get_shard_missing().end()) {
-	   return boost::optional<const pg_missing_t &>();
+	   return boost::optional<const pg_missing_const_i &>();
 	 } else {
 	   return i->second;
 	 }
        }
      }
-     virtual const pg_missing_t &get_shard_missing(pg_shard_t peer) const {
-       boost::optional<const pg_missing_t &> m = maybe_get_shard_missing(peer);
+     virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
+       auto m = maybe_get_shard_missing(peer);
        assert(m);
        return *m;
      }
@@ -186,7 +189,7 @@ struct shard_info_wrapper;
        const eversion_t &trim_to,
        const eversion_t &trim_rollback_to,
        bool transaction_applied,
-       ObjectStore::Transaction *t) = 0;
+       ObjectStore::Transaction &t) = 0;
 
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
@@ -215,7 +218,6 @@ struct shard_info_wrapper;
      virtual uint64_t min_peer_features() const = 0;
      virtual bool sort_bitwise() const = 0;
 
-     virtual bool transaction_use_tbl() = 0;
      virtual hobject_t get_temp_recovery_object(eversion_t version,
 						snapid_t snap) = 0;
 
@@ -317,7 +319,7 @@ struct shard_info_wrapper;
      OpRequestRef op ///< [in] message received
      ) = 0; ///< @return true if the message was handled
 
-   virtual void check_recovery_sources(const OSDMapRef osdmap) = 0;
+   virtual void check_recovery_sources(const OSDMapRef& osdmap) = 0;
 
 
    /**
@@ -401,7 +403,8 @@ struct shard_info_wrapper;
      virtual void set_alloc_hint(
        const hobject_t &hoid,
        uint64_t expected_object_size,
-       uint64_t expected_write_size
+       uint64_t expected_write_size,
+       uint32_t flags
        ) = 0;
 
      /// Optional, not supported on ec-pool
@@ -472,6 +475,8 @@ struct shard_info_wrapper;
      virtual uint64_t get_bytes_written() const = 0;
      virtual ~PGTransaction() {}
    };
+   using PGTransactionUPtr = std::unique_ptr<PGTransaction>;
+
    /// Get implementation specific empty transaction
    virtual PGTransaction *get_transaction() = 0;
 
@@ -479,7 +484,7 @@ struct shard_info_wrapper;
    virtual void submit_transaction(
      const hobject_t &hoid,               ///< [in] object
      const eversion_t &at_version,        ///< [in] version
-     PGTransaction *t,                    ///< [in] trans to execute
+     PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
      const eversion_t &trim_rollback_to,  ///< [in] trim rollback info to here
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
@@ -493,6 +498,11 @@ struct shard_info_wrapper;
      OpRequestRef op                      ///< [in] op
      ) = 0;
 
+
+   void try_stash(
+     const hobject_t &hoid,
+     version_t v,
+     ObjectStore::Transaction *t);
 
    void rollback(
      const hobject_t &hoid,
@@ -513,6 +523,12 @@ struct shard_info_wrapper;
 
    /// Unstash object to rollback stash
    void rollback_stash(
+     const hobject_t &hoid,
+     version_t old_version,
+     ObjectStore::Transaction *t);
+
+   /// Unstash object to rollback stash
+   void rollback_try_stash(
      const hobject_t &hoid,
      version_t old_version,
      ObjectStore::Transaction *t);
@@ -574,18 +590,15 @@ struct shard_info_wrapper;
      pg_shard_t auth_shard,
      const ScrubMap::object &auth,
      const object_info_t& auth_oi,
-     bool okseed,
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
-     bool okseed,
      object_info_t *auth_oi);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
-     bool okseed,   ///< true if scrub digests have same seed our oi digests
      bool repair,
      map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
      map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
@@ -612,30 +625,6 @@ struct shard_info_wrapper;
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
- };
-
-struct PG_SendMessageOnConn: public Context {
-  PGBackend::Listener *pg;
-  Message *reply;
-  ConnectionRef conn;
-  PG_SendMessageOnConn(
-    PGBackend::Listener *pg,
-    Message *reply,
-    ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
-  void finish(int) {
-    pg->send_message_osd_cluster(reply, conn.get());
-  }
-};
-
-struct PG_RecoveryQueueAsync : public Context {
-  PGBackend::Listener *pg;
-  GenContext<ThreadPool::TPHandle&> *c;
-  PG_RecoveryQueueAsync(
-    PGBackend::Listener *pg,
-    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
-  void finish(int) {
-    pg->schedule_recovery_work(c);
-  }
 };
 
 #endif

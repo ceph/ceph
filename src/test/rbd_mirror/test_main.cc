@@ -11,12 +11,16 @@
 extern void register_test_cluster_watcher();
 extern void register_test_pool_watcher();
 extern void register_test_rbd_mirror();
+extern void register_test_rbd_mirror_image_deleter();
+extern void register_test_image_sync();
 
 int main(int argc, char **argv)
 {
   register_test_cluster_watcher();
   register_test_pool_watcher();
   register_test_rbd_mirror();
+  register_test_rbd_mirror_image_deleter();
+  register_test_image_sync();
 
   ::testing::InitGoogleTest(&argc, argv);
 

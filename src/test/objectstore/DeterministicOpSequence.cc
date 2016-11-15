@@ -78,6 +78,7 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
   case DSOP_COLL_CREATE:
     ok = do_coll_create(gen);
     break;
+
   default:
     assert(0 == "bad op");
   }

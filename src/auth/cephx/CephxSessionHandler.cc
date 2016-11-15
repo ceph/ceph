@@ -19,9 +19,9 @@
 #include <sstream>
 
 #include "common/config.h"
-#include "include/assert.h"
 #include "include/ceph_features.h"
-
+#include "msg/Message.h"
+ 
 #define dout_subsys ceph_subsys_auth
 
 int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)

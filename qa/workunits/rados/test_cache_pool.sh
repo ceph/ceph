@@ -127,6 +127,37 @@ expect_false rados -p base cache-flush-evict-all
 rados -p cache cache-try-flush-evict-all
 rados -p cache ls - | wc -l | grep 0
 
+# cache flush/evit when clone objects exist
+rados -p base put testclone /etc/passwd
+rados -p cache ls - | wc -l | grep 1
+ceph osd pool mksnap base snap
+rados -p base put testclone /etc/hosts
+rados -p cache cache-flush-evict-all
+rados -p cache ls - | wc -l | grep 0
+
+ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+rados -p base -s snap get testclone testclone.txt
+diff -q testclone.txt /etc/passwd
+rados -p base get testclone testclone.txt
+diff -q testclone.txt /etc/hosts
+
+# test --with-clones option
+ceph osd tier cache-mode cache writeback
+rados -p base put testclone2 /etc/passwd
+rados -p cache ls - | wc -l | grep 1
+ceph osd pool mksnap base snap1
+rados -p base put testclone2 /etc/hosts
+expect_false rados -p cache cache-flush testclone2
+rados -p cache cache-flush testclone2 --with-clones
+expect_false rados -p cache cache-evict testclone2
+rados -p cache cache-evict testclone2 --with-clones
+rados -p cache ls - | wc -l | grep 0
+
+rados -p base -s snap1 get testclone2 testclone2.txt
+diff -q testclone2.txt /etc/passwd
+rados -p base get testclone2 testclone2.txt
+diff -q testclone2.txt /etc/hosts
+
 # cleanup
 ceph osd tier remove-overlay base
 ceph osd tier remove base cache

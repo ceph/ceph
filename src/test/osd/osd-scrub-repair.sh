@@ -14,7 +14,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source ../qa/workunits/ceph-helpers.sh
+source $(dirname $0)/../detect-build-env-vars.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -75,8 +76,13 @@ function corrupt_and_repair_two() {
     #
     # 1) remove the corresponding file from the OSDs
     #
-    objectstore_tool $dir $first SOMETHING remove || return 1
-    objectstore_tool $dir $second SOMETHING remove || return 1
+    pids=""
+    run_in_background pids objectstore_tool $dir $first SOMETHING remove
+    run_in_background pids objectstore_tool $dir $second SOMETHING remove
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
     #
     # 2) repair the PG
     #
@@ -85,8 +91,13 @@ function corrupt_and_repair_two() {
     #
     # 3) The files must be back
     #
-    objectstore_tool $dir $first SOMETHING list-attrs || return 1
-    objectstore_tool $dir $second SOMETHING list-attrs || return 1
+    pids=""
+    run_in_background pids objectstore_tool $dir $first SOMETHING list-attrs
+    run_in_background pids objectstore_tool $dir $second SOMETHING list-attrs
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
     rados --pool $poolname get SOMETHING $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
 }
@@ -258,9 +269,14 @@ function TEST_unfound_erasure_coded() {
     #
     # 1) remove the corresponding file from the OSDs
     #
-    objectstore_tool $dir $not_primary_first SOMETHING remove || return 1
-    objectstore_tool $dir $not_primary_second SOMETHING remove || return 1
-    objectstore_tool $dir $not_primary_third SOMETHING remove || return 1
+    pids=""
+    run_in_background pids objectstore_tool $dir $not_primary_first SOMETHING remove
+    run_in_background pids objectstore_tool $dir $not_primary_second SOMETHING remove
+    run_in_background pids objectstore_tool $dir $not_primary_third SOMETHING remove
+    wait_background pids
+    return_code=$?
+    if [ $return_code -ne 0 ]; then return $return_code; fi
+
     #
     # 2) repair the PG
     #
@@ -297,19 +313,39 @@ function TEST_list_missing_erasure_coded() {
     wait_for_clean || return 1
 
     # Put an object and remove the two shards (including primary)
-    add_something $dir $poolname OBJ0 || return 1
-    local -a osds=($(get_osds $poolname OBJ0))
-    objectstore_tool $dir ${osds[0]} OBJ0 remove || return 1
-    objectstore_tool $dir ${osds[1]} OBJ0 remove || return 1
+    add_something $dir $poolname MOBJ0 || return 1
+    local -a osds0=($(get_osds $poolname MOBJ0))
 
     # Put another object and remove two shards (excluding primary)
-    add_something $dir $poolname OBJ1 || return 1
-    local -a osds=($(get_osds $poolname OBJ1))
-    objectstore_tool $dir ${osds[1]} OBJ1 remove || return 1
-    objectstore_tool $dir ${osds[2]} OBJ1 remove || return 1
+    add_something $dir $poolname MOBJ1 || return 1
+    local -a osds1=($(get_osds $poolname MOBJ1))
+
+    # Stop all osd daemons
+    for id in $(seq 0 2) ; do
+        kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
+    done
+
+    id=${osds0[0]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        MOBJ0 remove || return 1
+    id=${osds0[1]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        MOBJ0 remove || return 1
+
+    id=${osds1[1]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        MOBJ1 remove || return 1
+    id=${osds1[2]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        MOBJ1 remove || return 1
+
+    for id in $(seq 0 2) ; do
+        activate_osd $dir $id >&2 || return 1
+    done
+    wait_for_clean >&2
 
     # Get get - both objects should in the same PG
-    local pg=$(get_pg $poolname OBJ0)
+    local pg=$(get_pg $poolname MOBJ0)
 
     # Repair the PG, which triggers the recovering,
     # and should mark the object as unfound
@@ -317,10 +353,59 @@ function TEST_list_missing_erasure_coded() {
     
     for i in $(seq 0 120) ; do
         [ $i -lt 60 ] || return 1
-        matches=$(ceph pg $pg list_missing | egrep "OBJ0|OBJ1" | wc -l)
+        matches=$(ceph pg $pg list_missing | egrep "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
     done
 
+    teardown $dir || return 1
+}
+
+#
+# Corrupt one copy of a replicated pool
+#
+function TEST_corrupt_scrub_replicated() {
+    local dir=$1
+    local poolname=csr_pool
+    local total_objs=4
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    wait_for_clean || return 1
+
+    ceph osd pool create $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 0 $total_objs) ; do
+      objname=ROBJ${i}
+      add_something $dir $poolname $objname
+      if [ $i = "0" ];
+      then
+        local payload=UVWXYZ
+        echo $payload > $dir/CORRUPT
+        objectstore_tool $dir $(expr $i % 2) $objname set-bytes $dir/CORRUPT || return 1
+      else
+        objectstore_tool $dir $(expr $i % 2) $objname remove || return 1
+      fi
+    done
+
+    local pg=$(get_pg $poolname ROBJ0)
+    pg_scrub $pg
+
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pg || return 1
+
+    rados list-inconsistent-obj $pg > $dir/json || return 1
+    # Get epoch for repair-get requests
+    epoch=$(jq .epoch $dir/json)
+    # Check object count
+    test $(jq '.inconsistents | length' $dir/json) = "$total_objs" || return 1
+
+    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 

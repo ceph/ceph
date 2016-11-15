@@ -36,14 +36,10 @@ struct rgw_http_param_pair {
   const char *val;
 };
 
-using param_pair_t = pair<string, string>;
-// TODO: consider vector instead of list
-using param_list_t = std::list<param_pair_t>;
-
 // copy a null-terminated rgw_http_param_pair list into a list of string pairs
-inline param_list_t make_param_list(const rgw_http_param_pair* pp)
+inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
 {
-  param_list_t params;
+  param_vec_t params;
   while (pp && pp->key) {
     string k = pp->key;
     string v = (pp->val ? pp->val : "");
@@ -88,28 +84,29 @@ public:
   /* async request */
   int put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
                    map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req);
-  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime);
+  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, ceph::real_time *mtime);
 
   int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
-              const time_t *mod_ptr, const time_t *unmod_ptr,
+              const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
-              bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
-  int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
+              bool prepend_metadata, bool get_op, bool rgwx_stat,
+              RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
+  int complete_request(RGWRESTStreamRWRequest *req, string& etag, ceph::real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   int get_resource(const string& resource,
-                   param_list_t *extra_params,
+		   param_vec_t *extra_params,
                    map<string, string>* extra_headers,
                    bufferlist& bl, RGWHTTPManager *mgr = NULL);
 
   template <class T>
-  int get_json_resource(const string& resource, param_list_t *params, T& t);
+  int get_json_resource(const string& resource, param_vec_t *params, T& t);
   template <class T>
   int get_json_resource(const string& resource, const rgw_http_param_pair *pp, T& t);
 };
 
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource, param_list_t *params, T& t)
+int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, T& t)
 {
   bufferlist bl;
   int ret = get_resource(resource, params, NULL, bl);
@@ -128,7 +125,7 @@ int RGWRESTConn::get_json_resource(const string& resource, param_list_t *params,
 template<class T>
 int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param_pair *pp, T& t)
 {
-  param_list_t params = make_param_list(pp);
+  param_vec_t params = make_param_list(pp);
   return get_json_resource(resource, &params, t);
 }
 
@@ -146,7 +143,7 @@ class RGWRESTReadResource : public RefCountedObject {
   CephContext *cct;
   RGWRESTConn *conn;
   string resource;
-  param_list_t params;
+  param_vec_t params;
   map<string, string> headers;
   bufferlist bl;
   RGWStreamIntoBufferlist cb;
@@ -154,19 +151,19 @@ class RGWRESTReadResource : public RefCountedObject {
   RGWHTTPManager *mgr;
   RGWRESTStreamReadRequest req;
 
-  void init_common(param_list_t *extra_headers);
+  void init_common(param_vec_t *extra_headers);
 
 public:
   RGWRESTReadResource(RGWRESTConn *_conn,
 		      const string& _resource,
 		      const rgw_http_param_pair *pp,
-		      param_list_t *extra_headers,
+		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
   RGWRESTReadResource(RGWRESTConn *_conn,
 		      const string& _resource,
-		      param_list_t& _params,
-		      param_list_t *extra_headers,
+		      param_vec_t& _params,
+		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
   void set_user_info(void *user_info) {
@@ -193,7 +190,6 @@ public:
 
   int wait_bl(bufferlist *pbl) {
     int ret = req.wait();
-    put();
     if (ret < 0) {
       return ret;
     }
@@ -246,7 +242,6 @@ template <class T>
 int RGWRESTReadResource::wait(T *dest)
 {
   int ret = req.wait();
-  put();
   if (ret < 0) {
     return ret;
   }
@@ -258,11 +253,12 @@ int RGWRESTReadResource::wait(T *dest)
   return 0;
 }
 
-class RGWRESTPostResource : public RefCountedObject {
+class RGWRESTSendResource : public RefCountedObject {
   CephContext *cct;
   RGWRESTConn *conn;
+  string method;
   string resource;
-  param_list_t params;
+  param_vec_t params;
   map<string, string> headers;
   bufferlist bl;
   RGWStreamIntoBufferlist cb;
@@ -270,19 +266,21 @@ class RGWRESTPostResource : public RefCountedObject {
   RGWHTTPManager *mgr;
   RGWRESTStreamRWRequest req;
 
-  void init_common(param_list_t *extra_headers);
+  void init_common(param_vec_t *extra_headers);
 
 public:
-  RGWRESTPostResource(RGWRESTConn *_conn,
+  RGWRESTSendResource(RGWRESTConn *_conn,
+                      const string& _method,
 		      const string& _resource,
 		      const rgw_http_param_pair *pp,
-		      param_list_t *extra_headers,
+		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  RGWRESTPostResource(RGWRESTConn *_conn,
+  RGWRESTSendResource(RGWRESTConn *_conn,
+                      const string& _method,
 		      const string& _resource,
-		      param_list_t& params,
-		      param_list_t *extra_headers,
+		      param_vec_t& params,
+		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
   void set_user_info(void *user_info) {
@@ -309,7 +307,6 @@ public:
 
   int wait_bl(bufferlist *pbl) {
     int ret = req.wait();
-    put();
     if (ret < 0) {
       return ret;
     }
@@ -326,7 +323,7 @@ public:
 };
 
 template <class T>
-int RGWRESTPostResource::decode_resource(T *dest)
+int RGWRESTSendResource::decode_resource(T *dest)
 {
   int ret = req.get_status();
   if (ret < 0) {
@@ -340,10 +337,9 @@ int RGWRESTPostResource::decode_resource(T *dest)
 }
 
 template <class T>
-int RGWRESTPostResource::wait(T *dest)
+int RGWRESTSendResource::wait(T *dest)
 {
   int ret = req.wait();
-  put();
   if (ret < 0) {
     return ret;
   }
@@ -354,5 +350,61 @@ int RGWRESTPostResource::wait(T *dest)
   }
   return 0;
 }
+
+class RGWRESTPostResource : public RGWRESTSendResource {
+public:
+  RGWRESTPostResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      const rgw_http_param_pair *pp,
+		      param_vec_t *extra_headers,
+		      RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "POST", _resource,
+                                                                  pp, extra_headers, _mgr) {}
+
+  RGWRESTPostResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      param_vec_t& params,
+		      param_vec_t *extra_headers,
+		      RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "POST", _resource,
+                                                                  params, extra_headers, _mgr) {}
+
+};
+
+class RGWRESTPutResource : public RGWRESTSendResource {
+public:
+  RGWRESTPutResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     const rgw_http_param_pair *pp,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "PUT", _resource,
+                                                                  pp, extra_headers, _mgr) {}
+
+  RGWRESTPutResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     param_vec_t& params,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "PUT", _resource,
+                                                                  params, extra_headers, _mgr) {}
+
+};
+
+class RGWRESTDeleteResource : public RGWRESTSendResource {
+public:
+  RGWRESTDeleteResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     const rgw_http_param_pair *pp,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "DELETE", _resource,
+                                                                  pp, extra_headers, _mgr) {}
+
+  RGWRESTDeleteResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     param_vec_t& params,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "DELETE", _resource,
+                                                                  params, extra_headers, _mgr) {}
+
+};
+
+
 
 #endif

@@ -20,7 +20,7 @@ class ClsCephFSClient
       librados::IoCtx &ctx,
       const std::string &oid,
       inode_backtrace_t *backtrace,
-      ceph_file_layout *layout,
+      file_layout_t *layout,
       AccumulateResult *result);
 
   static void build_tag_filter(

@@ -150,7 +150,7 @@ cluster topology, which is inclusive of 5 maps collectively referred to as the
 #. **The MDS Map:** Contains the current MDS map epoch, when the map was 
    created, and the last time it changed. It also contains the pool for 
    storing metadata, a list of metadata servers, and which metadata servers
-   are ``up`` and ``in``. To view an MDS map, execute ``ceph mds dump``.
+   are ``up`` and ``in``. To view an MDS map, execute ``ceph fs dump``.
 
 Each map maintains an iterative history of its operating state changes. Ceph
 Monitors maintain a master copy of the cluster map including the cluster
@@ -1241,11 +1241,11 @@ Data Striping
 
 Storage devices have throughput limitations, which impact performance and
 scalability. So storage systems often support `striping`_--storing sequential
-pieces of information across across multiple storage devices--to increase
-throughput and performance. The most common form of data striping comes from
-`RAID`_. The RAID type most similar to Ceph's striping is `RAID 0`_, or a
-'striped volume.' Ceph's striping offers the throughput of RAID 0 striping,
-the reliability of n-way RAID mirroring and faster recovery.
+pieces of information across multiple storage devices--to increase throughput
+and performance. The most common form of data striping comes from `RAID`_.
+The RAID type most similar to Ceph's striping is `RAID 0`_, or a 'striped
+volume'. Ceph's striping offers the throughput of RAID 0 striping, the
+reliability of n-way RAID mirroring and faster recovery.
 
 Ceph provides three types of clients: Ceph Block Device, Ceph Filesystem, and
 Ceph Object Storage. A Ceph Client converts its data from the representation 
@@ -1500,9 +1500,9 @@ daemons throughout the cluster.
 Thin-provisioned snapshottable Ceph Block Devices are an attractive option for
 virtualization and cloud computing. In virtual machine scenarios, people
 typically deploy a Ceph Block Device with the ``rbd`` network storage driver in
-Qemu/KVM, where the host machine uses ``librbd`` to provide a block device
+QEMU/KVM, where the host machine uses ``librbd`` to provide a block device
 service to the guest. Many cloud computing stacks use ``libvirt`` to integrate
-with hypervisors. You can use thin-provisioned Ceph Block Devices with Qemu and
+with hypervisors. You can use thin-provisioned Ceph Block Devices with QEMU and
 ``libvirt`` to support OpenStack and CloudStack among other solutions.
 
 While we do not provide ``librbd`` support with other hypervisors at this time,
@@ -1584,7 +1584,7 @@ instance for high availability.
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
 .. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure
 .. _Ceph Authentication and Authorization: ../rados/operations/auth-intro/
-.. _Hardware Recommendations: ../install/hardware-recommendations
+.. _Hardware Recommendations: ../start/hardware-recommendations
 .. _Network Config Reference: ../rados/configuration/network-config-ref
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _striping: http://en.wikipedia.org/wiki/Data_striping

@@ -86,6 +86,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 }
 
 int ObjectStore::probe_block_device_fsid(
+  CephContext *cct,
   const string& path,
   uuid_d *fsid)
 {
@@ -95,14 +96,20 @@ int ObjectStore::probe_block_device_fsid(
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
   r = BlueStore::get_block_device_fsid(path, fsid);
-  if (r == 0)
+  if (r == 0) {
+    lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
+			  << *fsid << dendl;
     return r;
+  }
 #endif
 
   // okay, try FileStore (journal).
   r = FileStore::get_block_device_fsid(path, fsid);
-  if (r == 0)
+  if (r == 0) {
+    lgeneric_dout(cct, 0) << __func__ << " " << path << " is filestore, "
+			  << *fsid << dendl;
     return r;
+  }
 
   return -EINVAL;
 }
@@ -177,7 +184,7 @@ int ObjectStore::queue_transactions(
   Context *oncomplete,
   TrackedOpRef op = TrackedOpRef())
 {
-  RunOnDeleteRef _complete(new RunOnDelete(oncomplete));
+  RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(oncomplete));
   Context *_onreadable = new Wrapper<RunOnDeleteRef>(
     onreadable, _complete);
   Context *_oncommit = new Wrapper<RunOnDeleteRef>(

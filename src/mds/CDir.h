@@ -19,9 +19,11 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
-#include "mdstypes.h"
+#include "common/bloom_filter.hpp"
 #include "common/config.h"
 #include "common/DecayCounter.h"
+
+#include "MDSCacheObject.h"
 
 #include <iosfwd>
 
@@ -35,13 +37,13 @@
 
 class CDentry;
 class MDCache;
-class MDCluster;
-class bloom_filter;
 
 struct ObjectOperation;
 
 ostream& operator<<(ostream& out, const class CDir& dir);
 class CDir : public MDSCacheObject {
+  friend ostream& operator<<(ostream& out, const class CDir& dir);
+
   /*
    * This class uses a boost::pool to handle allocation. This is *not*
    * thread-safe, so don't do allocations from multiple threads!
@@ -253,7 +255,9 @@ public:
     scrub_stamps last_local; // when we last did a local scrub
 
     bool directory_scrubbing; /// safety check
+    bool need_scrub_local;
     bool last_scrub_dirty; /// is scrub info dirty or is it flushed to fnode?
+    bool pending_scrub_error;
 
     /// these are lists of children in each stage of scrubbing
     set<dentry_key_t> directories_to_scrub;
@@ -263,7 +267,13 @@ public:
     set<dentry_key_t> others_scrubbing;
     set<dentry_key_t> others_scrubbed;
 
-    scrub_info_t() : directory_scrubbing(false), last_scrub_dirty(false) {}
+    ScrubHeaderRefConst header;
+
+    scrub_info_t() :
+      directory_scrubbing(false),
+      need_scrub_local(false),
+      last_scrub_dirty(false),
+      pending_scrub_error(false) {}
   };
   /**
    * Call to start this CDir on a new scrub.
@@ -271,7 +281,7 @@ public:
    * @pre The CDir is marked complete.
    * @post It has set up its internal scrubbing state.
    */
-  void scrub_initialize();
+  void scrub_initialize(const ScrubHeaderRefConst& header);
   /**
    * Get the next dentry to scrub. Gives you a CDentry* and its meaning. This
    * function will give you all directory-representing dentries before any
@@ -329,7 +339,7 @@ private:
 
 
 protected:
-  scrub_info_t *scrub_infop;
+  std::unique_ptr<scrub_info_t> scrub_infop;
 
   // contents of this directory
   map_t items;       // non-null AND null
@@ -386,15 +396,13 @@ protected:
   friend class C_IO_Dir_OMAP_Fetched;
   friend class C_IO_Dir_Committed;
 
-  bloom_filter *bloom;
+  std::unique_ptr<bloom_filter> bloom;
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
 
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
   ~CDir() {
-    delete scrub_infop;
-    remove_bloom();
     g_num_dir--;
     g_num_dirs++;
   }
@@ -403,7 +411,7 @@ protected:
     if (!scrub_infop) {
       scrub_info_create();
     }
-    return scrub_infop;
+    return scrub_infop.get();
   }
 
 
@@ -425,7 +433,7 @@ protected:
   unsigned get_num_snap_null() const { return num_snap_null; }
   unsigned get_num_any() const { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
   
-  bool check_rstats();
+  bool check_rstats(bool scrub=false);
 
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 
@@ -440,16 +448,11 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last) {
-    map_t::iterator p = items.find(dentry_key_t(last, dname.c_str()));
-    if (p == items.end())
-      return NULL;
-    return p->second;
+  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last);
+  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP);
+  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
+    return lookup(std::string(n), snap);
   }
-  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(n.c_str(), snap);
-  }
-  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
   CDentry* add_null_dentry(const std::string& dname, 
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
@@ -467,7 +470,9 @@ protected:
   void add_to_bloom(CDentry *dn);
   bool is_in_bloom(const std::string& name);
   bool has_bloom() { return (bloom ? true : false); }
-  void remove_bloom();
+  void remove_bloom() {
+    bloom.reset();
+  }
 private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
@@ -506,6 +511,8 @@ private:
    *             <parent,mds2>       subtree_root     
    */
   mds_authority_t dir_auth;
+
+  std::string get_path() const;
 
  public:
   mds_authority_t authority() const;
@@ -598,8 +605,11 @@ private:
   }
   void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
   void fetch(MDSInternalContextBase *c, const std::string& want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
 protected:
-  void _omap_fetch(const std::string& want_dn);
+  compact_set<string> wanted_items;
+
+  void _omap_fetch(MDSInternalContextBase *fin, const std::set<dentry_key_t>& keys);
   CDentry *_load_dentry(
       const std::string &key,
       const std::string &dname,
@@ -611,14 +621,22 @@ protected:
       list<CInode*> *undef_inodes);
 
   /**
-   * Mark this fragment as BADFRAG
+   * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
    */
-  void go_bad();
+  void _go_bad();
+
+  /**
+   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
+   */
+  void go_bad_dentry(snapid_t last, const std::string &dname);
+
+  /**
+   * Go bad due to a damaged header (register with damagetable and go BADFRAG)
+   */
+  void go_bad(bool complete);
 
   void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
-		     const std::string& want_dn, int r);
-  void _tmap_fetch(const std::string& want_dn);
-  void _tmap_fetched(bufferlist &bl, const std::string& want_dn, int r);
+		     bool complete, int r);
 
   // -- commit --
   compact_map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;

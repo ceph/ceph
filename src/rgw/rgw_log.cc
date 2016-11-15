@@ -127,14 +127,16 @@ public:
     round_timestamp = ts.round_to_hour();
   }
 
-  void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+  void insert_user(utime_t& timestamp, const rgw_user& user, rgw_usage_log_entry& entry) {
     lock.Lock();
     if (timestamp.sec() > round_timestamp + 3600)
       recalc_round_timestamp(timestamp);
     entry.epoch = round_timestamp.sec();
     bool account;
-    rgw_user_bucket ub(entry.owner, entry.bucket);
-    usage_map[ub].insert(round_timestamp, entry, &account);
+    string u = user.to_str();
+    rgw_user_bucket ub(u, entry.bucket);
+    real_time rt = round_timestamp.to_real_time();
+    usage_map[ub].insert(rt, entry, &account);
     if (account)
       num_entries++;
     bool need_flush = (num_entries > cct->_conf->rgw_usage_log_flush_threshold);
@@ -142,6 +144,14 @@ public:
     if (need_flush) {
       Mutex::Locker l(timer_lock);
       flush();
+    }
+  }
+
+  void insert(utime_t& timestamp, rgw_usage_log_entry& entry) {
+    if (entry.payer.empty()) {
+      insert_user(timestamp, entry.owner, entry);
+    } else {
+      insert_user(timestamp, entry.payer, entry);
     }
   }
 
@@ -178,22 +188,36 @@ static void log_usage(struct req_state *s, const string& op_name)
     return;
 
   rgw_user user;
+  rgw_user payer;
+  string bucket_name;
 
-  if (!s->bucket_name.empty())
+  bucket_name = s->bucket_name;
+
+  if (!bucket_name.empty()) {
     user = s->bucket_owner.get_id();
-  else
-    user = s->user->user_id;
+    if (s->bucket_info.requester_pays) {
+      payer = s->user->user_id;
+    }
+  } else {
+      user = s->user->user_id;
+  }
 
-  string id = user.to_str();
-  rgw_usage_log_entry entry(id, s->bucket.name);
+  bool error = s->err.is_err();
+  if (error && s->err.http_ret == 404) {
+    bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
+  }
 
-  uint64_t bytes_sent = s->cio->get_bytes_sent();
-  uint64_t bytes_received = s->cio->get_bytes_received();
+  string u = user.to_str();
+  string p = payer.to_str();
+  rgw_usage_log_entry entry(u, p, bucket_name);
+
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!s->err.is_err())
+  if (!error)
     data.successful_ops = 1;
 
   entry.add(op_name, data);
@@ -221,7 +245,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
-  uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+  uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
 
   formatter->dump_int("total_time", total_time);
   formatter->dump_string("user_agent",  entry.user_agent);
@@ -320,8 +344,8 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
 
-  uint64_t bytes_sent = s->cio->get_bytes_sent();
-  uint64_t bytes_received = s->cio->get_bytes_received();
+  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
   entry.total_time = ceph_clock_now(s->cct) - s->time;

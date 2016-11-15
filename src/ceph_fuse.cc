@@ -30,8 +30,11 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#if defined(__linux__)
 #include "common/linux_version.h"
+#endif
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/safe_io.h"
        
 #include <sys/types.h>
@@ -71,7 +74,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
     usage();
-    return 0;
   }
   env_to_vec(args);
 
@@ -159,7 +161,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
 	  char buf[5050];
 	  string mountpoint = cfuse->get_mount_point();
-	  snprintf(buf, 5049, "fusermount -u -z %s", mountpoint.c_str());
+	  snprintf(buf, sizeof(buf), "fusermount -u -z %s", mountpoint.c_str());
 	  int umount_r = system(buf);
 	  if (umount_r) {
 	    if (umount_r != -1) {
@@ -187,6 +189,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     Messenger *messenger = NULL;
     Client *client;
     CephFuse *cfuse;
+    UserPerm perms;
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
@@ -221,6 +224,9 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_messenger_start_failed;
     }
 
+    init_async_signal_handler();
+    register_async_signal_handler(SIGHUP, sighup_handler);
+
     // start client
     r = client->init();
     if (r < 0) {
@@ -229,10 +235,11 @@ int main(int argc, const char **argv, const char *envp[]) {
     }
     
     client->update_metadata("mount_point", cfuse->get_mount_point());
-
+    perms = client->pick_my_perms();
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    r = client->mount(g_conf->client_mountpoint.c_str(), g_ceph_context->_conf->fuse_require_active_mds);
+    r = client->mount(g_conf->client_mountpoint.c_str(), perms,
+		      g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
       if (r == CEPH_FUSE_NO_MDS_UP)
         cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
@@ -258,19 +265,20 @@ int main(int argc, const char **argv, const char *envp[]) {
     
   out_client_unmount:
     client->unmount();
-    //cout << "unmounted" << std::endl;
-    
     cfuse->finalize();
-    delete cfuse;
-    
   out_shutdown:
     client->shutdown();
   out_init_failed:
+    unregister_async_signal_handler(SIGHUP, sighup_handler);
+    shutdown_async_signal_handler();
+
     // wait for messenger to finish
     messenger->shutdown();
     messenger->wait();
   out_messenger_start_failed:
+    delete cfuse;
     delete client;
+    delete messenger;
   out_mc_start_failed:
     
     if (g_conf->daemonize) {
@@ -279,7 +287,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       foo += ::write(fd[1], &r, sizeof(r));
     }
     
-    delete messenger;
     g_ceph_context->put();
     free(newargv);
     

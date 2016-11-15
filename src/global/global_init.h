@@ -15,9 +15,7 @@
 #ifndef CEPH_COMMON_GLOBAL_INIT_H
 #define CEPH_COMMON_GLOBAL_INIT_H
 
-#include <deque>
 #include <stdint.h>
-#include <string>
 #include <vector>
 
 #include "common/code_environment.h"
@@ -35,7 +33,8 @@ void global_init(std::vector < const char * > *alt_def_args,
 		 uint32_t module_type,
 		 code_environment_t code_env,
 		 int flags,
-		 const char *data_dir_option = 0);
+		 const char *data_dir_option = 0,
+		 bool run_pre_init = true);
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.
@@ -88,6 +87,12 @@ void global_init_chdir(const CephContext *cct);
  * If this is called, it *must* be called before common_init_finish
  */
 int global_init_shutdown_stderr(CephContext *cct);
+
+/*
+ * Preload the erasure coding libraries to detect early issues with
+ * configuration.
+ */
+int global_init_preload_erasure_code(const CephContext *cct);
 
 /**
  * print daemon startup banner/warning

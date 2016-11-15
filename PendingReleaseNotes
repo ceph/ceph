@@ -1,20 +1,92 @@
-v10.0.0
-======
+>= 11.0.0
+------
 
-* The rbd CLI no longer accepts the deprecated '--image-features' option
-  during create, import, and clone operations.  The '--image-feature'
-  option should be used instead.
+* The list of monitor hosts/addresses for building the monmap can now be
+  obtained from DNS SRV records. The service name used in when querying the DNS 
+  is defined in the "mon_dns_srv_name" config option, which defaults to
+  "ceph-mon".
 
-* The 'send_pg_creates' and 'map_pg_creates' mon CLI commands are
-  obsolete and no longer supported.
+* The 'osd class load list' config option is a list of object class names that
+  the OSD is permitted to load (or '*' for all classes). By default it
+  contains all existing in-tree classes for backwards compatibility.
 
-* A new configure option 'mon_election_timeout' is added to specifically
-  limit max waiting time of monitor election process, which was previously
-  restricted by 'mon_lease'.
+* The 'osd class default list' config option is a list of object class names
+  (or '*' for all classes) that clients may invoke having only the '*', 'x',
+  'class-read', or 'class-write' capabilities. By default it contains all
+  existing in-tree classes for backwards compatibility. Invoking classes not
+  listed in 'osd class default list' requires a capability naming the class
+  (e.g. 'allow class foo').
 
-v9.3.0
-======
-* Some symbols wrongly exposed by librados in v9.1.0 and v9.2.0 were removed.
-  If you compiled your own application against librados shipped with these
-  releases, it is very likely referencing these removed symbols. So you will
-  need to recompile it.
+* The 'rgw rest getusage op compat' config option allows you to dump the description of user stats
+  or not in s3 GetUsage API. This config option is of bool type and defaults to false.
+  If the value is true, the reponse data of s3 GetUsage like below:
+
+    "stats": {
+                "TotalBytes": 516,
+                "TotalBytesRounded": 1024,
+                "TotalEntries": 1
+             }
+
+  Or if the value is false, the  reponse of s3 GetUsage like below and as it does before we add this config option:
+
+    {
+         516,
+         1024,
+         1
+    }.
+
+* If your monitors are configured to use the experimental rocksdb
+  backend, you may need to manually adjust the store before upgraded.
+  Monitors now explicitly record what keyvalue backend type they use.  If
+  the kv_backend file is missing from the mon_data directory (normally
+  /var/lib/ceph/mon/$cluster-$name/kv_backend) it is now assumed to be leveldb.
+  If you had manually configured the mon to use rocksdb, this file should
+  be created and filled with the string "rocksdb" (newline optional).
+
+* The 'osd out ...' and 'osd in ...' commands now preserve the OSD
+  weight.  Previously the mons would only preserve the weight if the
+  mon automatically marked and OSD out and then in, but not when an
+  admin did so explicitly.
+
+11.0.0
+------
+
+* If you have manually specified the monitor user rocksdb via the
+  ``mon keyvaluedb = rocksdb`` option, you will need to manually add a file
+  to the mon data directory to preserve this option::
+
+     echo rocksdb > /var/lib/ceph/mon/ceph-`hostname`/kv_backend
+
+  New monitors will now use rocksdb by default, but if that file is
+  not present, existing monitors will use leveldb.  The ``mon keyvaluedb`` option
+  now only affects the backend chosen when a monitor is created.
+
+* The 'osd crush initial weight' option allows you to specify a CRUSH
+  weight for a newly added OSD.  Previously a value of 0 (the default)
+  meant that we should use the size of the OSD's store to weight the
+  new OSD.  Now, a value of 0 means it should have a weight of 0, and
+  a negative value (the new default) means we should automatically
+  weight the OSD based on its size.  If your configuration file
+  explicitly specifies a value of 0 for this option you will need to
+  change it to a negative value (e.g., -1) to preserve the current
+  behavior.
+
+* The `osd crush location` config option is no longer supported.  Please
+  update your ceph.conf to use the `crush location` option instead.
+
+* The static libraries are not included by the debian development packages
+  (lib*-dev) any more. As it is not required per debian packaging policy.
+  And their shared versions are packaged as before.
+
+* The libtool pseudo-libraries (.la files) are not included by the debian
+  development packages (lib*-dev) any more. As it is unneeded, and per
+  https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
+  https://www.debian.org/doc/manuals/maint-guide/advanced.en.html,
+  we should remove them.
+
+* The jerasure and shec plugins can now detect SIMD instruction at runtime
+  and no longer need to be built for different processors. The following 
+  plugins are now deprecated: jerasure_generic, jerasure_sse3, jerasure_sse4, 
+  jerasure_neon, shec_generic, shec_sse3, shec_sse4, and shec_neon. If you use any
+  of these plugins directly you will see a warning in the mon log file.
+  Please switch to using just 'jerasure' or 'shec'.

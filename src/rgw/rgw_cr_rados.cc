@@ -8,6 +8,9 @@
 #define dout_subsys ceph_subsys_rgw
 
 bool RGWAsyncRadosProcessor::RGWWQ::_enqueue(RGWAsyncRadosRequest *req) {
+  if (processor->is_going_down()) {
+    return false;
+  }
   req->get();
   processor->m_req_queue.push_back(req);
   dout(20) << "enqueued request req=" << hex << req << dec << dendl;
@@ -61,6 +64,7 @@ void RGWAsyncRadosProcessor::start() {
 }
 
 void RGWAsyncRadosProcessor::stop() {
+  going_down.set(1);
   m_tp.drain(&req_wq);
   m_tp.stop();
   for (auto iter = m_req_queue.begin(); iter != m_req_queue.end(); ++iter) {
@@ -83,9 +87,9 @@ int RGWAsyncGetSystemObj::_send_request()
   return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, pattrs, NULL);
 }
 
-RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
+RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
                        RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(cn), store(_store), obj_ctx(_obj_ctx),
+                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(caller, cn), store(_store), obj_ctx(_obj_ctx),
                                                                    objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl), pattrs(NULL),
                                                                   ofs(_ofs), end(_end)
 {
@@ -94,7 +98,7 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWAioCompletionNotifier *cn, RGWRado
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncGetSystemObj(stack->create_completion_notifier(),
+  req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
 			         store, &obj_ctx, NULL,
 				 obj,
 				 &bl, 0, -1);
@@ -115,9 +119,9 @@ int RGWAsyncPutSystemObj::_send_request()
   return store->put_system_obj_data(NULL, obj, bl, -1, exclusive);
 }
 
-RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                      rgw_obj& _obj, bool _exclusive,
-                     bufferlist& _bl) : RGWAsyncRadosRequest(cn), store(_store),
+                     bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                        obj(_obj), exclusive(_exclusive),
                                                        bl(_bl)
 {
@@ -128,18 +132,19 @@ int RGWAsyncPutSystemObjAttrs::_send_request()
   return store->system_obj_set_attrs(NULL, obj, *attrs, NULL, objv_tracker);
 }
 
-RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                      RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(cn), store(_store),
+                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                        objv_tracker(_objv_tracker), obj(_obj),
                                                        attrs(_attrs)
 {
 }
 
 
-RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid)
+RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+                             uint64_t _window_size)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
-                        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0), total_entries(0)
+                        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0), window_size(_window_size), total_entries(0)
 {
 }
 
@@ -162,9 +167,9 @@ int RGWAsyncLockSystemObj::_send_request()
   return l.lock_exclusive(&ioctx, obj.get_object());
 }
 
-RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                       RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(cn), store(_store),
+                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                               obj(_obj),
                                                               lock_name(_name),
                                                               cookie(_cookie),
@@ -189,9 +194,9 @@ int RGWAsyncUnlockSystemObj::_send_request()
   return l.unlock(&ioctx, obj.get_object());
 }
 
-RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                                                  RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                                                 const string& _name, const string& _cookie) : RGWAsyncRadosRequest(cn), store(_store),
+                                                 const string& _name, const string& _cookie) : RGWAsyncRadosRequest(caller, cn), store(_store),
   obj(_obj),
   lock_name(_name), cookie(_cookie)
 {
@@ -285,6 +290,37 @@ int RGWRadosGetOmapKeysCR::send_request() {
   return ioctx.aio_operate(oid, cn->completion(), &op, NULL);
 }
 
+RGWRadosRemoveOmapKeysCR::RGWRadosRemoveOmapKeysCR(RGWRados *_store,
+                      const rgw_bucket& _pool, const string& _oid,
+                      const set<string>& _keys) : RGWSimpleCoroutine(_store->ctx()),
+                                                store(_store),
+                                                keys(_keys),
+                                                pool(_pool), oid(_oid), cn(NULL)
+{
+  set_description() << "remove omap keys dest=" << pool.name << "/" << oid << " keys=" << keys;
+}
+
+RGWRadosRemoveOmapKeysCR::~RGWRadosRemoveOmapKeysCR()
+{
+}
+
+int RGWRadosRemoveOmapKeysCR::send_request() {
+  librados::Rados *rados = store->get_rados_handle();
+  int r = rados->ioctx_create(pool.name.c_str(), ioctx); /* system object only! */
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to open pool (" << pool.name << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "send request";
+
+  librados::ObjectWriteOperation op;
+  op.omap_rm_keys(keys);
+
+  cn = stack->create_completion_notifier();
+  return ioctx.aio_operate(oid, cn->completion(), &op);
+}
+
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                       const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
                       const string& _cookie,
@@ -301,10 +337,11 @@ RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados,
   s << "rados lock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
 }
 
-RGWSimpleRadosLockCR::~RGWSimpleRadosLockCR()
+void RGWSimpleRadosLockCR::request_cleanup()
 {
   if (req) {
     req->finish();
+    req = NULL;
   }
 }
 
@@ -312,7 +349,7 @@ int RGWSimpleRadosLockCR::send_request()
 {
   set_status() << "sending request";
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncLockSystemObj(stack->create_completion_notifier(),
+  req = new RGWAsyncLockSystemObj(this, stack->create_completion_notifier(),
                                  store, NULL, obj, lock_name, cookie, duration);
   async_rados->queue(req);
   return 0;
@@ -337,10 +374,11 @@ RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_ra
   set_description() << "rados unlock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie;
 }
 
-RGWSimpleRadosUnlockCR::~RGWSimpleRadosUnlockCR()
+void RGWSimpleRadosUnlockCR::request_cleanup()
 {
   if (req) {
     req->finish();
+    req = NULL;
   }
 }
 
@@ -349,7 +387,7 @@ int RGWSimpleRadosUnlockCR::send_request()
   set_status() << "sending request";
 
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncUnlockSystemObj(stack->create_completion_notifier(),
+  req = new RGWAsyncUnlockSystemObj(this, stack->create_completion_notifier(),
                                  store, NULL, obj, lock_name, cookie);
   async_rados->queue(req);
   return 0;
@@ -362,7 +400,6 @@ int RGWSimpleRadosUnlockCR::request_complete()
 }
 
 
-#define OMAP_APPEND_MAX_ENTRIES 100
 int RGWOmapAppend::operate() {
   reenter(this) {
     for (;;) {
@@ -377,11 +414,11 @@ int RGWOmapAppend::operate() {
         while (consume(&entry)) {
           set_status() << "adding entry: " << entry;
           entries[entry] = bufferlist();
-          if (entries.size() >= OMAP_APPEND_MAX_ENTRIES) {
+          if (entries.size() >= window_size) {
             break;
           }
         }
-        if (entries.size() >= OMAP_APPEND_MAX_ENTRIES || going_down) {
+        if (entries.size() >= window_size || going_down) {
           set_status() << "flushing to omap";
           call(new RGWRadosSetOmapKeysCR(store, pool, oid, entries));
           entries.clear();
@@ -409,7 +446,7 @@ bool RGWOmapAppend::append(const string& s) {
   }
   ++total_entries;
   pending_entries.push_back(s);
-  if (++num_pending_entries >= OMAP_APPEND_MAX_ENTRIES) {
+  if (++num_pending_entries >= (int)window_size) {
     flush_pending();
   }
   return true;
@@ -424,12 +461,11 @@ bool RGWOmapAppend::finish() {
 
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
-  string id = bucket_name + ":" + bucket_id;
   RGWObjectCtx obj_ctx(store);
-
-  int r = store->get_bucket_instance_info(obj_ctx, id, *bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info, NULL, NULL);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for bucket id=" << id << dendl;
+    ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
+        << bucket << dendl;
     return r;
   }
 
@@ -456,16 +492,18 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        user_id,
                        client_id,
                        op_id,
+                       false, /* don't record op state in ops log */
                        NULL, /* req_info */
                        source_zone,
                        dest_obj,
                        src_obj,
                        bucket_info, /* dest */
                        bucket_info, /* source */
-                       NULL, /* time_t *src_mtime, */
-                       NULL, /* time_t *mtime, */
-                       NULL, /* const time_t *mod_ptr, */
-                       NULL, /* const time_t *unmod_ptr, */
+                       NULL, /* real_time* src_mtime, */
+                       NULL, /* real_time* mtime, */
+                       NULL, /* const real_time* mod_ptr, */
+                       NULL, /* const real_time* unmod_ptr, */
+                       false, /* high precision time */
                        NULL, /* const char *if_match, */
                        NULL, /* const char *if_nomatch, */
                        RGWRados::ATTRSMOD_NONE,
@@ -473,13 +511,53 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        attrs,
                        RGW_OBJ_CATEGORY_MAIN,
                        versioned_epoch,
-                       0, /* delete_at */
+                       real_time(), /* delete_at */
                        &key.instance, /* string *version_id, */
                        NULL, /* string *ptag, */
                        NULL, /* string *petag, */
                        NULL, /* struct rgw_err *err, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL); /* void *progress_data*); */
+
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+  }
+  return r;
+}
+
+int RGWAsyncStatRemoteObj::_send_request()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  string user_id;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
+  string client_id = store->zone_id() + buf;
+  string op_id = store->unique_id(store->get_new_req_id());
+
+  rgw_obj src_obj(bucket_info.bucket, key.name);
+  src_obj.set_instance(key.instance);
+
+  rgw_obj dest_obj(src_obj);
+
+  int r = store->stat_remote_obj(obj_ctx,
+                       user_id,
+                       client_id,
+                       nullptr, /* req_info */
+                       source_zone,
+                       src_obj,
+                       bucket_info, /* source */
+                       pmtime, /* real_time* src_mtime, */
+                       psize, /* uint64_t * */
+                       nullptr, /* const real_time* mod_ptr, */
+                       nullptr, /* const real_time* unmod_ptr, */
+                       true, /* high precision time */
+                       nullptr, /* const char *if_match, */
+                       nullptr, /* const char *if_nomatch, */
+                       pattrs,
+                       nullptr,
+                       nullptr, /* string *ptag, */
+                       nullptr); /* string *petag, */
 
   if (r < 0) {
     ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
@@ -543,6 +621,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.obj_owner.set_id(owner);
   del_op.params.obj_owner.set_name(owner_display_name);
   del_op.params.mtime = timestamp;
+  del_op.params.high_precision_time = true;
 
   ret = del_op.delete_obj();
   if (ret < 0) {
@@ -610,4 +689,82 @@ int RGWRadosTimelogAddCR::request_complete()
   set_status() << "request complete; ret=" << r;
 
   return r;
+}
+
+RGWRadosTimelogTrimCR::RGWRadosTimelogTrimCR(RGWRados *store,
+                                             const std::string& oid,
+                                             const real_time& start_time,
+                                             const real_time& end_time,
+                                             const std::string& from_marker,
+                                             const std::string& to_marker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), oid(oid),
+    start_time(start_time), end_time(end_time),
+    from_marker(from_marker), to_marker(to_marker)
+{
+  set_description() << "timelog trim oid=" <<  oid
+      << " start_time=" << start_time << " end_time=" << end_time
+      << " from_marker=" << from_marker << " to_marker=" << to_marker;
+}
+
+RGWRadosTimelogTrimCR::~RGWRadosTimelogTrimCR()
+{
+  if (cn) {
+    cn->put();
+  }
+}
+
+int RGWRadosTimelogTrimCR::send_request()
+{
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  cn->get();
+  return store->time_log_trim(oid, start_time, end_time, from_marker,
+                              to_marker, cn->completion());
+}
+
+int RGWRadosTimelogTrimCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
+int RGWAsyncStatObj::_send_request()
+{
+  return store->raw_obj_stat(obj, psize, pmtime, pepoch,
+                             nullptr, nullptr, objv_tracker);
+}
+
+RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
+                           const rgw_obj& obj, uint64_t *psize,
+                           real_time* pmtime, uint64_t *pepoch,
+                           RGWObjVersionTracker *objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), async_rados(async_rados),
+    obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),
+    objv_tracker(objv_tracker)
+{
+}
+
+void RGWStatObjCR::request_cleanup()
+{
+  if (req) {
+    req->finish();
+    req = NULL;
+  }
+}
+
+int RGWStatObjCR::send_request()
+{
+  req = new RGWAsyncStatObj(this, stack->create_completion_notifier(),
+                            store, obj, psize, pmtime, pepoch, objv_tracker);
+  async_rados->queue(req);
+  return 0;
+}
+
+int RGWStatObjCR::request_complete()
+{
+  return req->get_ret_status();
 }

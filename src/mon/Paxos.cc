@@ -15,14 +15,13 @@
 #include <sstream>
 #include "Paxos.h"
 #include "Monitor.h"
-#include "MonitorDBStore.h"
-
 #include "messages/MMonPaxos.h"
 
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/stringify.h"
-#include "common/Formatter.h"
+#include "common/Timer.h"
+#include "messages/PaxosServiceMessage.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
@@ -37,6 +36,70 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
 }
+
+class Paxos::C_CollectTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_CollectTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->collect_timeout();
+  }
+};
+
+class Paxos::C_AcceptTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_AcceptTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->accept_timeout();
+  }
+};
+
+class Paxos::C_LeaseAckTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->lease_ack_timeout();
+  }
+};
+
+class Paxos::C_LeaseTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_LeaseTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->lease_timeout();
+  }
+};
+
+class Paxos::C_LeaseRenew : public Context {
+  Paxos *paxos;
+public:
+  explicit C_LeaseRenew(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->lease_renew_timeout();
+  }
+};
+
+class Paxos::C_Trimmed : public Context {
+  Paxos *paxos;
+public:
+  explicit C_Trimmed(Paxos *p) : paxos(p) { }
+  void finish(int r) {
+    paxos->trimming = false;
+  }
+};
 
 MonitorDBStore *Paxos::get_store()
 {
@@ -196,6 +259,7 @@ void Paxos::collect(version_t oldpn)
 // peon
 void Paxos::handle_collect(MonOpRequestRef op)
 {
+  
   op->mark_paxos_event("handle_collect");
 
   MMonPaxos *collect = static_cast<MMonPaxos*>(op->get_req());
@@ -205,6 +269,9 @@ void Paxos::handle_collect(MonOpRequestRef op)
 
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
+
+  //update the peon recovery timeout 
+  reset_lease_timeout();
 
   if (collect->first_committed > last_committed+1) {
     dout(2) << __func__
@@ -357,7 +424,7 @@ bool Paxos::store_state(MMonPaxos *m)
     // ignore everything if values start in the future.
     dout(10) << "store_state ignoring all values, they start at " << start->first
 	     << " > last_committed+1" << dendl;
-    start = m->values.end();
+    return false;
   }
 
   // push forward the start position on the message's values iterator, up until
@@ -425,24 +492,7 @@ bool Paxos::store_state(MMonPaxos *m)
     changed = true;
   }
 
-  remove_legacy_versions();
-
   return changed;
-}
-
-void Paxos::remove_legacy_versions()
-{
-  if (get_store()->exists(get_name(), "conversion_first")) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-    version_t v = get_store()->get(get_name(), "conversion_first");
-    dout(10) << __func__ << " removing pre-conversion paxos states from " << v
-	     << " until " << first_committed << dendl;
-    for (; v < first_committed; ++v) {
-      t->erase(get_name(), v);
-    }
-    t->erase(get_name(), "conversion_first");
-    get_store()->apply_transaction(t);
-  }
 }
 
 void Paxos::_sanity_check_store()
@@ -901,8 +951,6 @@ void Paxos::commit_finish()
   // get ready for a new round.
   new_value.clear();
 
-  remove_legacy_versions();
-
   // WRITING -> REFRESH
   // among other things, this lets do_refresh() -> mon->bootstrap() know
   // it doesn't need to flush the store queue
@@ -1036,9 +1084,7 @@ void Paxos::commit_proposal()
   assert(mon->is_leader());
   assert(is_refresh());
 
-  list<Context*> ls;
-  ls.swap(committing_finishers);
-  finish_contexts(g_ceph_context, ls);
+  finish_contexts(g_ceph_context, committing_finishers);
 }
 
 void Paxos::finish_round()
@@ -1444,9 +1490,7 @@ bool Paxos::is_readable(version_t v)
     ret =
       (mon->is_peon() || mon->is_leader()) &&
       (is_active() || is_updating() || is_writing()) &&
-      last_committed > 0 &&           // must have a value
-      (mon->get_quorum().size() == 1 ||  // alone, or
-       is_lease_valid()); // have lease
+      last_committed > 0 && is_lease_valid(); // must have a value alone, or have lease
   dout(5) << __func__ << " = " << (int)ret
 	  << " - now=" << ceph_clock_now(g_ceph_context)
 	  << " lease_expire=" << lease_expire

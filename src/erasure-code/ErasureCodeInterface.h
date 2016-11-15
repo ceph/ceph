@@ -437,7 +437,7 @@ namespace ceph {
 
     /**
      * Decode the first **get_data_chunk_count()** **chunks** and
-     * concatenate them them into **decoded**.
+     * concatenate them into **decoded**.
      *
      * Returns 0 on success.
      *

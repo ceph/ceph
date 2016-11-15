@@ -28,16 +28,22 @@ else
     exit 1
 fi
 
+if [ `uname` = FreeBSD ]; then
+    GETOPT=/usr/local/bin/getopt
+else
+    GETOPT=getopt
+fi
+
 function osdmap_get() {
     local store_path=$1
     local query=$2
     local epoch=${3:+-v $3}
     local osdmap=`mktemp`
 
-    ceph-monstore-tool $store_path get osdmap -- \
+    $CEPH_BIN/ceph-monstore-tool $store_path get osdmap -- \
                        $epoch -o $osdmap > /dev/null || return
 
-    echo $(osdmaptool --dump xml $osdmap 2> /dev/null | \
+    echo $($CEPH_BIN/osdmaptool --dump xml $osdmap 2> /dev/null | \
            $XMLSTARLET sel -t -m "$query" -v .)
 
     rm -f $osdmap
@@ -50,11 +56,11 @@ function test_crush() {
     local crush=$4
     local osdmap=`mktemp`
 
-    ceph-monstore-tool $store_path get osdmap -- \
+    $CEPH_BIN/ceph-monstore-tool $store_path get osdmap -- \
                        -v $epoch -o $osdmap > /dev/null
-    osdmaptool --export-crush $crush $osdmap &> /dev/null
+    $CEPH_BIN/osdmaptool --export-crush $crush $osdmap &> /dev/null
 
-    if crushtool --test --check $max_osd -i $crush > /dev/null; then
+    if $CEPH_BIN/crushtool --test --check $max_osd -i $crush > /dev/null; then
         good=true
     else
         good=false
@@ -90,7 +96,7 @@ EOF
 
 function main() {
     local temp
-    temp=$(getopt -o h --long verbose,help,mon-store:,out:,rewrite -n $0 -- "$@") || return 1
+    temp=$($GETOPT -o h --long verbose,help,mon-store:,out:,rewrite -n $0 -- "$@") || return 1
 
     eval set -- "$temp"
     local rewrite
@@ -157,14 +163,14 @@ function main() {
     if test $good_epoch -eq $last_osdmap_epoch; then
         echo "and mon store has no faulty crush maps."
     elif test $output; then
-        crushtool --decompile $good_crush --outfn $output
+        $CEPH_BIN/crushtool --decompile $good_crush --outfn $output
     elif test $rewrite; then
-        ceph-monstore-tool $store_path rewrite-crush --  \
+        $CEPH_BIN/ceph-monstore-tool $store_path rewrite-crush --  \
                            --crush $good_crush      \
                            --good-epoch $good_epoch
     else
         echo
-        crushtool --decompile $good_crush
+        $CEPH_BIN/crushtool --decompile $good_crush
     fi
     rm -f $good_crush
 }

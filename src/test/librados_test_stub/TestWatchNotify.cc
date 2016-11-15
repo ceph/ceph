@@ -49,13 +49,30 @@ int TestWatchNotify::list_watchers(const std::string& o,
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
-    strcpy(obj.addr, ":/0");
+    strcpy(obj.addr, "-");
     obj.watcher_id = static_cast<int64_t>(it->second.gid);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;
     out_watchers->push_back(obj);
   }
   return 0;
+}
+
+void TestWatchNotify::aio_flush(Context *on_finish) {
+  m_finisher->queue(on_finish);
+}
+
+void TestWatchNotify::aio_watch(const std::string& o, uint64_t gid,
+                                uint64_t *handle,
+                                librados::WatchCtx2 *watch_ctx,
+                                Context *on_finish) {
+  int r = watch(o, gid, handle, nullptr, watch_ctx);
+  m_finisher->queue(on_finish, r);
+}
+
+void TestWatchNotify::aio_unwatch(uint64_t handle, Context *on_finish) {
+  unwatch(handle);
+  m_finisher->queue(on_finish);
 }
 
 void TestWatchNotify::aio_notify(const std::string& oid, bufferlist& bl,

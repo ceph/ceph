@@ -31,7 +31,8 @@ void ResizeRequest::send() {
   m_num_objs = Striper::get_num_objects(m_image_ctx.layout, m_new_size);
 
   std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
-  ldout(cct, 5) << &m_image_ctx << " resizing on-disk object map: "
+  ldout(cct, 5) << this << " resizing on-disk object map: "
+                << "ictx=" << &m_image_ctx << ", "
                 << "oid=" << oid << ", num_objs=" << m_num_objs << dendl;
 
   librados::ObjectWriteOperation op;
@@ -49,7 +50,7 @@ void ResizeRequest::send() {
 void ResizeRequest::finish_request() {
   CephContext *cct = m_image_ctx.cct;
 
-  ldout(cct, 5) << &m_image_ctx << " resizing in-memory object map: "
+  ldout(cct, 5) << this << " resizing in-memory object map: "
 		<< m_num_objs << dendl;
   resize(m_object_map, m_num_objs, m_default_object_state);
 }

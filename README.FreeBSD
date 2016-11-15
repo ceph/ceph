@@ -1,0 +1,127 @@
+The FreeBSD build will build most of the tools in Ceph.
+Note that the RBD dependant items will not work since FreeBSD does not 
+have RBD (yet)
+
+I started looking into Ceph, because the HAST solution with CARP and 
+ggate did not really do what I was looking for. But I'm aiming for 
+running a Ceph storage cluster of storage nodes that are running ZFS.
+End station would be running bhyve on RBD disk that are stored in Ceph.
+
+Progress from last report:
+==========================
+
+Most important change:
+ -	All test (but one) run to completion for the current selection of 
+	tools. This is only the case for "My Fork" repository. Some of the 
+	commits need to be pulled into the HEAD
+
+ -	Cmake is now the only way of building Ceph
+ -	Reworked threading/polling code for the simple socket code.
+	Now uses a selfpipe, instead of using an odd shutdown() signaling 
+	Linux feature.
+ -	Modified the EventKqueue code to work around the "feature" that 
+	starting threads destroys the the kqueue handles. Just finshed the 
+	code so it is not yet submitted to the main repository
+
+Build Prerequisites
+===================
+
+	Compiling and building Ceph is tested on 12-CURRENT, but I guess 
+	11-RELEASE will also work. And Clang is at 3.8.0.
+	It uses the CLANG toolset that is available, 3.7 is not tested, but was 
+	working when that was with 11-CURRENT. 
+	Clang 3.4 (on 10.2-STABLE) does not have all required capabilites to 
+	compile everything
+
+The following setup will get things running for FreeBSD:
+
+ -	Install bash and link it in /bin
+	# requires root privileges
+	sudo pkg install bash
+	sudo ln -s /usr/local/bin/bash /bin/bash
+ -	Need to add one compatability line to 
+	/usr/include/errno.h
+	#define    ENODATA         87              /* Attribute not found */
+	(Otherwise some cython compiles will fail.)
+
+Getting the FreeBSD work on Ceph:
+=================================
+
+ - 	cd "place to work on this"
+	git clone https://github.com/wjwithagen/ceph.git
+	cd ceph
+	git checkout wip-wjw-freebsd-cmake
+
+Building Ceph
+=============
+ - 	Go and start building
+	./do_freebsd.sh
+	
+Note that the old way of building using automake is no longer used.
+  
+Parts not (yet) included:
+=========================
+
+ -	RBD
+	Rados Block Devices is implemented in the Linux kernel
+	It seems that there used to be a userspace implementation first.
+	And perhaps ggated could be used as a template since it does some of 
+	the same, other than just between 2 disks. And it has a userspace 
+	counterpart.
+ -	BlueStore.
+	FreeBSD and Linux have different AIO API, and that needs to be made 
+	compatible Next to that is there discussion in FreeBSD about 
+	aio_cancel not working for all devicetypes
+ -	CephFS
+	Cython tries to access an internal field in dirent which does not 
+	compile
+
+Tests that verify the correct working of the above are also excluded 
+from the testset
+
+Tests not (yet) include:
+=======================
+
+ -	run-tox-ceph-disk
+	This is the main test that tests the basic Ceph disk install tool.
+	One of the next things to complete porting for.
+ -	ceph-detect-init/run-tox.sh
+	Because the current implementation does not know anything about 
+	FreeBSD rc-init.
+ - 	Tests that make use of nosetests.
+	Calling these does not really work since nosetests is not in 
+	/usr/bin, and /usr/bin/env nosetests does not work on FreeBSD.
+	test/pybind/test_ceph_argparse.py
+	test/pybind/test_ceph_daemon.py
+
+Task to do:
+===========
+ -	Build an automated test platform that will build ceph/master on 
+	FreeBSD and report the results back to the Ceph developers. This will 
+	increase the maintainability of the FreeBSD side of things. 
+	Developers are signalled that they are using Linux-isms that will not
+	compile/run on FreeBSD Ceph has several projects for this: Jenkins, 
+	teuthology, pulpito, ...
+	But even just a while { compile } loop and report the build data on a 
+	static webpage would do for starters.
+
+ -	Run integration tests to see if the FreeBSD daemons will work with a 
+	Linux Ceph platform.
+
+ -	Get the python tests that are currently excluded to work, and test OKE
+
+ -	Compile and test the user space RBD (Rados Block Device).
+
+ -	Investigate and see if an in-kernel RBD device could be developed a la 
+	'ggate'
+
+ -	Investigate the keystore, which could be kernel embedded on Linux an 
+	currently prevents building Cephfs and some other parts.
+
+ -	Scheduler information is not used atm, because the schedulers work 
+	rather different. But at a certain point in time, this would need some 
+	attention:
+	in: ./src/common/Thread.cc
+
+ -	Integrate the FreeBSD /etc/rc.d init scripts in the Ceph stack. Both 
+	for testing, but mainly for running Ceph on production machines.

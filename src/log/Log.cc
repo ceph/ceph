@@ -6,24 +6,18 @@
 #include <errno.h>
 #include <syslog.h>
 
-#include <iostream>
-#include <sstream>
-
-#include <boost/asio.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
-#include <boost/shared_ptr.hpp>
-
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
 #include "common/Graylog.h"
 #include "common/valgrind.h"
-#include "common/Formatter.h"
+
 #include "include/assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
-#include "include/uuid.h"
+
+#include "Entry.h"
+#include "SubsystemMap.h"
 
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
@@ -32,7 +26,7 @@
 
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 static OnExitManager exit_callbacks;
 
@@ -51,6 +45,9 @@ Log::Log(SubsystemMap *s)
     m_flush_mutex_holder(0),
     m_new(), m_recent(),
     m_fd(-1),
+    m_uid(0),
+    m_gid(0),
+    m_fd_last_error(0),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
     m_graylog_log(-3), m_graylog_crash(-3),
@@ -137,10 +134,32 @@ void Log::reopen_log_file()
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   if (m_log_file.length()) {
     m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0644);
+    if (m_fd >= 0 && (m_uid || m_gid)) {
+      int r = ::fchown(m_fd, m_uid, m_gid);
+      if (r < 0) {
+	r = -errno;
+	cerr << "failed to chown " << m_log_file << ": " << cpp_strerror(r)
+	     << std::endl;
+      }
+    }
   } else {
     m_fd = -1;
   }
   m_flush_mutex_holder = 0;
+  pthread_mutex_unlock(&m_flush_mutex);
+}
+
+void Log::chown_log_file(uid_t uid, gid_t gid)
+{
+  pthread_mutex_lock(&m_flush_mutex);
+  if (m_fd >= 0) {
+    int r = ::fchown(m_fd, uid, gid);
+    if (r < 0) {
+      r = -errno;
+      cerr << "failed to chown " << m_log_file << ": " << cpp_strerror(r)
+	   << std::endl;
+    }
+  }
   pthread_mutex_unlock(&m_flush_mutex);
 }
 
@@ -190,7 +209,7 @@ void Log::submit_entry(Entry *e)
   m_queue_mutex_holder = pthread_self();
 
   if (m_inject_segv)
-    *(int *)(0) = 0xdead;
+    *(volatile int *)(0) = 0xdead;
 
   // wait for flush to catch up
   while (m_new.m_len > m_max_new)
@@ -281,9 +300,10 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 
       char *buf;
       size_t buf_size = 80 + e->size();
-      bool need_dynamic = buf_size >= 0x10000; //avoids >64K buffers allocation at stack
+      bool need_dynamic = buf_size >= 0x10000; //avoids >64K buffers
+					       //allocation at stack
       char buf0[need_dynamic ? 1 : buf_size];
-      if(need_dynamic) {
+      if (need_dynamic) {
         buf = new char[buf_size];
       } else {
         buf = buf0;
@@ -296,13 +316,14 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 			(unsigned long)e->m_thread, e->m_prio);
 
       buflen += e->snprintf(buf + buflen, buf_size - buflen - 1);
-      if (buflen > buf_size - 1) { //paranoid check, buf was declared to hold everything
+      if (buflen > buf_size - 1) { //paranoid check, buf was declared
+				   //to hold everything
         buflen = buf_size - 1;
         buf[buflen] = 0;
       }
 
       if (do_syslog) {
-        syslog(LOG_USER|LOG_DEBUG, "%s", buf);
+        syslog(LOG_USER|LOG_INFO, "%s", buf);
       }
 
       if (do_stderr) {
@@ -311,11 +332,16 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       if (do_fd) {
         buf[buflen] = '\n';
         int r = safe_write(m_fd, buf, buflen+1);
-        if (r < 0)
-          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
+	if (r != m_fd_last_error) {
+	  if (r < 0)
+	    cerr << "problem writing to " << m_log_file
+		 << ": " << cpp_strerror(r)
+		 << std::endl;
+	  m_fd_last_error = r;
+	}
       }
-      if(need_dynamic)
-        delete buf;
+      if (need_dynamic)
+        delete[] buf;
     }
     if (do_graylog2 && m_graylog) {
       m_graylog->log_entry(e);
@@ -335,7 +361,7 @@ void Log::_log_message(const char *s, bool crash)
       cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER|LOG_DEBUG, "%s", s);
+    syslog(LOG_USER|LOG_INFO, "%s", s);
   }
 
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
@@ -442,5 +468,5 @@ void Log::inject_segv()
   m_inject_segv = true;
 }
 
-} // ceph::log::
+} // ceph::logging::
 } // ceph::

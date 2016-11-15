@@ -14,25 +14,23 @@
 #ifndef CEPH_MON_CONFIG_KEY_SERVICE_H
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
-#include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 
-#include "messages/MMonHealth.h"
-
-#include "common/config.h"
-#include "common/Formatter.h"
-
 class Paxos;
+class Monitor;
+namespace ceph {
+class Formatter;
+}
 
 class ConfigKeyService : public QuorumService
 {
   Paxos *paxos;
 
-  int store_get(string key, bufferlist &bl);
-  void store_put(string key, bufferlist &bl, Context *cb = NULL);
-  void store_delete(string key, Context *cb = NULL);
+  int store_get(const string &key, bufferlist &bl);
+  void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
+  void store_delete(const string &key, Context *cb = NULL);
   void store_list(stringstream &ss);
-  bool store_exists(string key);
+  bool store_exists(const string &key);
 
   static const string STORE_PREFIX;
 

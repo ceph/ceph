@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -109,7 +110,9 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress)
     if (fd < 0) {
       return -errno;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   utils::ProgressContext pc("Exporting image", no_progress);
@@ -160,7 +163,8 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }

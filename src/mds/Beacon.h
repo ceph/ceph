@@ -50,6 +50,8 @@ class Beacon : public Dispatcher
   CompatSet compat;
   mds_rank_t standby_for_rank;
   std::string standby_for_name;
+  fs_cluster_id_t standby_for_fscid;
+  bool standby_replay;
   MDSMap::DaemonState want_state;
 
   // Internal beacon state
@@ -85,18 +87,17 @@ public:
   Beacon(CephContext *cct_, MonClient *monc_, std::string name);
   ~Beacon();
 
-  void init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, mds_rank_t standby_rank_, std::string const &standby_name_);
+  void init(MDSMap const *mdsmap);
   void shutdown();
 
   bool ms_dispatch(Message *m); 
   void ms_handle_connect(Connection *c) {}
   bool ms_handle_reset(Connection *c) {return false;}
   void ms_handle_remote_reset(Connection *c) {}
+  bool ms_handle_refused(Connection *c) {return false;}
 
   void notify_mdsmap(MDSMap const *mdsmap);
   void notify_health(MDSRank const *mds);
-
-  void set_standby_for(mds_rank_t rank_, std::string const &name_);
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();

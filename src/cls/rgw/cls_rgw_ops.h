@@ -4,6 +4,7 @@
 #include <map>
 
 #include "include/types.h"
+#include "common/ceph_time.h"
 #include "cls/rgw/cls_rgw_types.h"
 
 struct rgw_cls_tag_timeout_op
@@ -164,12 +165,13 @@ struct rgw_cls_link_olh_op {
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
-  time_t unmod_since; /* only create delete marker if newer then this */
+  real_time unmod_since; /* only create delete marker if newer then this */
+  bool high_precision_time;
 
-  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0) {}
+  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0), high_precision_time(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(key, bl);
     ::encode(olh_tag, bl);
     ::encode(delete_marker, bl);
@@ -178,12 +180,15 @@ struct rgw_cls_link_olh_op {
     ::encode(olh_epoch, bl);
     ::encode(log_op, bl);
     ::encode(bilog_flags, bl);
+    uint64_t t = ceph::real_clock::to_time_t(unmod_since);
+    ::encode(t, bl);
     ::encode(unmod_since, bl);
+    ::encode(high_precision_time, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(4, bl);
     ::decode(key, bl);
     ::decode(olh_tag, bl);
     ::decode(delete_marker, bl);
@@ -192,8 +197,16 @@ struct rgw_cls_link_olh_op {
     ::decode(olh_epoch, bl);
     ::decode(log_op, bl);
     ::decode(bilog_flags, bl);
-    if (struct_v >= 2) {
+    if (struct_v == 2) {
+      uint64_t t;
+      ::decode(t, bl);
+      unmod_since = ceph::real_clock::from_time_t(static_cast<time_t>(t));
+    }
+    if (struct_v >= 3) {
       ::decode(unmod_since, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(high_precision_time, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -209,26 +222,31 @@ struct rgw_cls_unlink_instance_op {
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  string olh_tag;
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(key, bl);
     ::encode(op_tag, bl);
     ::encode(olh_epoch, bl);
     ::encode(log_op, bl);
     ::encode(bilog_flags, bl);
+    ::encode(olh_tag, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(key, bl);
     ::decode(op_tag, bl);
     ::decode(olh_epoch, bl);
     ::decode(log_op, bl);
     ::decode(bilog_flags, bl);
+    if (struct_v >= 2) {
+      ::decode(olh_tag, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -425,6 +443,30 @@ struct rgw_cls_check_index_ret
 };
 WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 
+struct rgw_cls_bucket_update_stats_op
+{
+  bool absolute{false};
+  map<uint8_t, rgw_bucket_category_stats> stats;
+
+  rgw_cls_bucket_update_stats_op() {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(absolute, bl);
+    ::encode(stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(absolute, bl);
+    ::decode(stats, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_bucket_update_stats_op *>& o);
+};
+WRITE_CLASS_ENCODER(rgw_cls_bucket_update_stats_op)
+
 struct rgw_cls_obj_remove_op {
   list<string> keep_attr_prefixes;
 
@@ -482,24 +524,29 @@ struct rgw_cls_obj_check_attrs_prefix {
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_attrs_prefix)
 
 struct rgw_cls_obj_check_mtime {
-  utime_t mtime;
+  ceph::real_time mtime;
   RGWCheckMTimeType type;
+  bool high_precision_time;
 
-  rgw_cls_obj_check_mtime() : type(CLS_RGW_CHECK_TIME_MTIME_EQ) {}
+  rgw_cls_obj_check_mtime() : type(CLS_RGW_CHECK_TIME_MTIME_EQ), high_precision_time(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(mtime, bl);
     ::encode((uint8_t)type, bl);
+    ::encode(high_precision_time, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(mtime, bl);
     uint8_t c;
     ::decode(c, bl);
     type = (RGWCheckMTimeType)c;
+    if (struct_v >= 2) {
+      ::decode(high_precision_time, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -507,16 +554,23 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
+  rgw_user user;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(info, bl);
+    ::encode(user.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(info, bl);
+    if (struct_v >= 2) {
+      string s;
+      ::decode(s, bl);
+      user.from_str(s);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -907,5 +961,162 @@ struct cls_rgw_bi_log_list_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_ret)
 
+struct cls_rgw_lc_get_next_entry_op {
+  string marker;
+  cls_rgw_lc_get_next_entry_op() {}
 
-#endif
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_op)
+
+struct cls_rgw_lc_get_next_entry_ret {
+  pair<string, int> entry;
+
+  cls_rgw_lc_get_next_entry_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_ret)
+
+struct cls_rgw_lc_rm_entry_op {
+  pair<string, int> entry;
+  cls_rgw_lc_rm_entry_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_rm_entry_op)
+
+struct cls_rgw_lc_set_entry_op {
+  pair<string, int> entry;
+  cls_rgw_lc_set_entry_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_set_entry_op)
+
+struct cls_rgw_lc_put_head_op {
+  cls_rgw_lc_obj_head head;
+
+
+  cls_rgw_lc_put_head_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(head, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(head, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_put_head_op)
+
+struct cls_rgw_lc_get_head_ret {
+  cls_rgw_lc_obj_head head;
+
+  cls_rgw_lc_get_head_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(head, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(head, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_head_ret)
+
+struct cls_rgw_lc_list_entries_op {
+  string marker;
+  uint32_t max_entries;
+
+  cls_rgw_lc_list_entries_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(marker, bl);
+    ::encode(max_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(marker, bl);
+    ::decode(max_entries, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
+
+struct cls_rgw_lc_list_entries_ret {
+  map<string, int> entries;
+
+  cls_rgw_lc_list_entries_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
+
+#endif /* CEPH_CLS_RGW_OPS_H */

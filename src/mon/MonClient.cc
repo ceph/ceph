@@ -12,7 +12,6 @@
  * 
  */
 
-#include "msg/Messenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -26,8 +25,6 @@
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
-#include "common/ConfUtils.h"
-#include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/LogClient.h"
 
@@ -37,11 +34,7 @@
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 #include "auth/AuthMethodList.h"
-
-#include "include/str_list.h"
-#include "include/addr_parsing.h"
-
-#include "common/config.h"
+#include "auth/RotatingKeyRing.h"
 
 
 #define dout_subsys ceph_subsys_monc
@@ -56,7 +49,6 @@ MonClient::MonClient(CephContext *cct_) :
   rng(getpid()),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock), finisher(cct_),
-  authorize_handler_registry(NULL),
   initialized(false),
   no_keyring_disabled_cephx(false),
   log_client(NULL),
@@ -426,18 +418,19 @@ void MonClient::shutdown()
     waiting_for_session.pop_front();
   }
 
-  monc_lock.Unlock();
-
-  if (initialized) {
-    finisher.stop();
-  }
-  monc_lock.Lock();
-  timer.shutdown();
-
   if (cur_con)
     cur_con->mark_down();
   cur_con.reset(NULL);
   cur_mon.clear();
+
+  monc_lock.Unlock();
+
+  if (initialized) {
+    finisher.wait_for_empty();
+    finisher.stop();
+  }
+  monc_lock.Lock();
+  timer.shutdown();
 
   monc_lock.Unlock();
 }
@@ -501,6 +494,18 @@ void MonClient::handle_auth(MAuthReply *m)
 	m->put();
 	return;
       }
+      // do not request MGR key unless the mon has the SERVER_KRAKEN
+      // feature.  otherwise it will give us an auth error.  note that
+      // we have to check for both the kraken and jewel key because
+      // pre-jewel the kraken feature bit was used for something else.
+      if ((want_keys & CEPH_ENTITY_TYPE_MGR) &&
+	  !(m->get_connection()->has_feature(CEPH_FEATURE_SERVER_KRAKEN) &&
+	    m->get_connection()->has_feature(CEPH_FEATURE_SERVER_JEWEL))) {
+	ldout(cct, 1) << __func__
+		      << " not requesting MGR keys from pre-kraken monitor"
+		      << dendl;
+	want_keys &= ~CEPH_ENTITY_TYPE_MGR;
+      }
       auth->set_want_keys(want_keys);
       auth->init(entity_name);
       auth->set_global_id(global_id);
@@ -534,6 +539,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (ret == 0) {
     if (state != MC_STATE_HAVE_SESSION) {
       state = MC_STATE_HAVE_SESSION;
+      last_rotating_renew_sent = utime_t();
       while (!waiting_for_session.empty()) {
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
@@ -750,6 +756,14 @@ void MonClient::tick()
 
 void MonClient::schedule_tick()
 {
+  struct C_Tick : public Context {
+    MonClient *monc;
+    explicit C_Tick(MonClient *m) : monc(m) {}
+    void finish(int r) {
+      monc->tick();
+    }
+  };
+
   if (hunting)
     timer.add_event_after(cct->_conf->mon_client_hunt_interval
                           * reopen_interval_multiplier, new C_Tick(this));
@@ -778,7 +792,9 @@ void MonClient::_renew_subs()
     m->what = sub_new;
     _send_mon_message(m);
 
-    sub_sent.insert(sub_new.begin(), sub_new.end());
+    // update sub_sent with sub_new
+    sub_new.insert(sub_sent.begin(), sub_sent.end());
+    std::swap(sub_new, sub_sent);
     sub_new.clear();
   }
 }
@@ -831,8 +847,11 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t cutoff = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now(cct);
+  utime_t cutoff = now;
   cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  utime_t issued_at_lower_bound = now;
+  issued_at_lower_bound -= cct->_conf->auth_service_ticket_ttl;
   if (!rotating_secrets->need_new_secrets(cutoff)) {
     ldout(cct, 10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();
@@ -840,9 +859,22 @@ int MonClient::_check_auth_rotating()
   }
 
   ldout(cct, 10) << "_check_auth_rotating renewing rotating keys (they expired before " << cutoff << ")" << dendl;
+  if (!rotating_secrets->need_new_secrets() &&
+      rotating_secrets->need_new_secrets(issued_at_lower_bound)) {
+    // the key has expired before it has been issued?
+    lderr(cct) << __func__ << " possible clock skew, rotating keys expired way too early"
+               << " (before " << issued_at_lower_bound << ")" << dendl;
+  }
+  if ((now > last_rotating_renew_sent) &&
+      double(now - last_rotating_renew_sent) < 1) {
+    ldout(cct, 10) << __func__ << " called too often (last: "
+                   << last_rotating_renew_sent << "), skipping refresh" << dendl;
+    return 0;
+  }
   MAuth *m = new MAuth;
   m->protocol = auth->get_protocol();
   if (auth->build_rotating_request(m->auth_payload)) {
+    last_rotating_renew_sent = now;
     _send_mon_message(m);
   } else {
     m->put();
@@ -853,7 +885,8 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t until = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now(cct);
+  utime_t until = now;
   until += timeout;
 
   if (auth->get_protocol() == CEPH_AUTH_NONE)
@@ -863,14 +896,14 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 rotating_secrets->need_new_secrets()) {
-    utime_t now = ceph_clock_now(cct);
+	 rotating_secrets->need_new_secrets(now)) {
     if (now >= until) {
       ldout(cct, 0) << "wait_auth_rotating timed out after " << timeout << dendl;
       return -ETIMEDOUT;
     }
     ldout(cct, 10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
+    now = ceph_clock_now(cct);
   }
   ldout(cct, 10) << "wait_auth_rotating done" << dendl;
   return 0;
@@ -997,6 +1030,16 @@ int MonClient::start_mon_command(const vector<string>& cmd,
   r->prs = outs;
   r->onfinish = onfinish;
   if (cct->_conf->rados_mon_op_timeout > 0) {
+    class C_CancelMonCommand : public Context
+    {
+      uint64_t tid;
+      MonClient *monc;
+      public:
+      C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
+      void finish(int r) {
+	monc->_cancel_mon_command(tid, -ETIMEDOUT);
+      }
+    };
     r->ontimeout = new C_CancelMonCommand(r->tid, this);
     timer.add_event_after(cct->_conf->rados_mon_op_timeout, r->ontimeout);
   }

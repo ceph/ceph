@@ -52,13 +52,13 @@ using namespace std;
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-#define BTRFS_SUPER_MAGIC 0x9123683E
+#define BTRFS_SUPER_MAGIC 0x9123683EL
 # endif
 # ifndef XFS_SUPER_MAGIC
-#define XFS_SUPER_MAGIC 0x58465342
+#define XFS_SUPER_MAGIC 0x58465342L
 # endif
 # ifndef ZFS_SUPER_MAGIC
-#define ZFS_SUPER_MAGIC 0x2fc12fc1
+#define ZFS_SUPER_MAGIC 0x2fc12fc1L
 # endif
 #endif
 
@@ -66,6 +66,31 @@ using namespace std;
 class FileStoreBackend;
 
 #define CEPH_FS_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(1, "sharded objects")
+
+enum {
+  l_filestore_first = 84000,
+  l_filestore_journal_queue_ops,
+  l_filestore_journal_queue_bytes,
+  l_filestore_journal_ops,
+  l_filestore_journal_bytes,
+  l_filestore_journal_latency,
+  l_filestore_journal_wr,
+  l_filestore_journal_wr_bytes,
+  l_filestore_journal_full,
+  l_filestore_committing,
+  l_filestore_commitcycle,
+  l_filestore_commitcycle_interval,
+  l_filestore_commitcycle_latency,
+  l_filestore_op_queue_max_ops,
+  l_filestore_op_queue_ops,
+  l_filestore_ops,
+  l_filestore_op_queue_max_bytes,
+  l_filestore_op_queue_bytes,
+  l_filestore_bytes,
+  l_filestore_apply_latency,
+  l_filestore_queue_transaction_latency_avg,
+  l_filestore_last,
+};
 
 class FSSuperblock {
 public:
@@ -143,14 +168,12 @@ private:
   bool _need_temp_object_collection(const coll_t& cid, const ghobject_t& oid) {
     // - normal temp case: cid is pg, object is temp (pool < -1)
     // - hammer temp case: cid is pg (or already temp), object pool is -1
-    return (cid.is_pg() && (oid.hobj.pool < -1 ||
-			oid.hobj.pool == -1));
+    return cid.is_pg() && oid.hobj.pool <= -1;
   }
   void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
     // - normal temp case: cid is pg, object is temp (pool < -1)
     // - hammer temp case: cid is pg (or already temp), object pool is -1
-    if (cid.is_pg() && (oid.hobj.pool < -1 ||
-			oid.hobj.pool == -1))
+    if (cid.is_pg() && oid.hobj.pool <= -1)
       cid = cid.get_temp();
   }
   void init_temp_collections();
@@ -340,8 +363,9 @@ private:
   WBThrottle wbthrottle;
 
   atomic_t next_osr_id;
+  bool m_disable_wbthrottle;
   deque<OpSequencer*> op_queue;
-  Throttle throttle_ops, throttle_bytes;
+  BackoffThrottle throttle_ops, throttle_bytes;
   const int m_ondisk_finisher_num;
   const int m_apply_finisher_num;
   vector<Finisher*> ondisk_finishers;
@@ -387,7 +411,7 @@ private:
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
-  void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
+  void op_queue_reserve_throttle(Op *o);
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
@@ -431,10 +455,9 @@ public:
   int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
-  unsigned get_max_object_name_length() {
-    // not safe for all file systems, btw!  use the tunable to limit this.
-    return 4096;
-  }
+
+  int validate_hobject_key(const hobject_t &obj) const override;
+
   unsigned get_max_attr_name_length() {
     // xattr limit is 128; leave room for our prefixes (user.ceph._),
     // some margin, and cap at 100
@@ -463,7 +486,7 @@ public:
 
   void collect_metadata(map<string,string> *pm);
 
-  int statfs(struct statfs *buf);
+  int statfs(struct store_statfs_t *buf) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
@@ -499,7 +522,8 @@ public:
 				const SequencerPosition &spos);
 
   /// close a replay guard opened with in_progress=true
-  void _close_replay_guard(int fd, const SequencerPosition& spos);
+  void _close_replay_guard(int fd, const SequencerPosition& spos,
+			   const ghobject_t *oid=0);
   void _close_replay_guard(const coll_t& cid, const SequencerPosition& spos);
 
   /**
@@ -536,6 +560,10 @@ public:
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false);
+  using ObjectStore::set_collection_opts;
+  int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts);
   using ObjectStore::read;
   int read(
     const coll_t& cid,
@@ -559,7 +587,7 @@ public:
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 	     const SequencerPosition& spos);
-  int _clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+  int _clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
@@ -587,6 +615,8 @@ public:
     fsid = u;
   }
   uuid_d get_fsid() { return fsid; }
+  
+  uint64_t estimate_objects_overhead(uint64_t num_objects);
 
   // DEBUG read error injection, an object is removed from both on delete()
   Mutex read_error_lock;
@@ -613,13 +643,6 @@ public:
   int _rmattrs(const coll_t& cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
-  int collection_getattr(const coll_t& c, const char *name, void *value, size_t size);
-  int collection_getattr(const coll_t& c, const char *name, bufferlist& bl);
-  int collection_getattrs(const coll_t& cid, map<string,bufferptr> &aset);
-
-  int _collection_setattr(const coll_t& c, const char *name, const void *value, size_t size);
-  int _collection_rmattr(const coll_t& c, const char *name);
-  int _collection_setattrs(const coll_t& cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 
@@ -630,10 +653,9 @@ public:
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int list_collections(vector<coll_t>& ls);
   int list_collections(vector<coll_t>& ls, bool include_temp);
-  int collection_version_current(const coll_t& c, uint32_t *version);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
   // omap (see ObjectStore.h for documentation)
   using ObjectStore::omap_get;
@@ -675,7 +697,8 @@ public:
 		      const SequencerPosition& spos);
   int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 			      coll_t c, const ghobject_t& o,
-			      const SequencerPosition& spos);
+			      const SequencerPosition& spos,
+			      bool ignore_enoent = false);
 
   int _set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
                       uint64_t expected_object_size,
@@ -684,6 +707,8 @@ public:
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
+
+  virtual int apply_layout_settings(const coll_t &cid);
 
 private:
   void _inject_failure();
@@ -710,6 +735,7 @@ private:
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed);
+  int set_throttle_params();
   float m_filestore_commit_timeout;
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
@@ -723,10 +749,6 @@ private:
   bool m_journal_dio, m_journal_aio, m_journal_force_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;
-  int m_filestore_queue_max_ops;
-  int m_filestore_queue_max_bytes;
-  int m_filestore_queue_committing_max_ops;
-  int m_filestore_queue_committing_max_bytes;
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
@@ -740,6 +762,7 @@ private:
   void set_xattr_limits_via_conf();
   uint32_t m_filestore_max_inline_xattr_size;
   uint32_t m_filestore_max_inline_xattrs;
+  uint32_t m_filestore_max_xattr_value_size;
 
   FSSuperblock superblock;
 

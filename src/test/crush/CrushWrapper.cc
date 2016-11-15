@@ -708,6 +708,48 @@ TEST(CrushWrapper, insert_item) {
   delete c;
 }
 
+TEST(CrushWrapper, remove_item) {
+  auto *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  {
+    int root;
+    ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			       ROOT_TYPE, 0, NULL, NULL, &root));
+    c->set_item_name(root, "root0");
+  }
+
+  {
+    int host;
+    c->add_bucket(0, CRUSH_BUCKET_TREE, CRUSH_HASH_RJENKINS1,
+		  HOST_TYPE, 0, NULL, NULL, &host);
+    c->set_item_name(host, "host0");
+  }
+
+  const int num_osd = 12;
+  {
+    map<string, string> loc = {{"root", "root0"},
+			       {"host", "host0"}};
+    string name{"osd."};
+    for (int item = 0; item < num_osd; item++) {
+      ASSERT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				  name + to_string(item), loc));
+    }
+  }
+  const int item_to_remove = num_osd / 2;
+  map<string, string> loc;
+  loc.insert(c->get_immediate_parent(item_to_remove));
+  ASSERT_EQ(0, c->remove_item(g_ceph_context, item_to_remove, true));
+  float weight;
+  EXPECT_FALSE(c->check_item_loc(g_ceph_context, item_to_remove, loc, &weight));
+}
+
 TEST(CrushWrapper, item_bucket_names) {
   CrushWrapper *c = new CrushWrapper;
   int index = 123;

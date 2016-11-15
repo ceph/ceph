@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-#include <memory>
 #include "include/memory.h"
 #include <errno.h>
 #include <map>
@@ -34,14 +33,11 @@
 #endif
 
 #include "messages/MMonHealth.h"
-#include "include/types.h"
-#include "include/Context.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
 #include "mon/DataHealthService.h"
 
 #define dout_subsys ceph_subsys_mon

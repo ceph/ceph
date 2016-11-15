@@ -16,6 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "include/mempool.h"
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
@@ -75,6 +76,55 @@ private:
   bool m_registered;
 };
 
+class MempoolObs : public md_config_obs_t,
+		  public AdminSocketHook {
+  CephContext *cct;
+
+public:
+  explicit MempoolObs(CephContext *cct) : cct(cct) {
+    cct->_conf->add_observer(this);
+    int r = cct->get_admin_socket()->register_command(
+      "dump_mempools",
+      "dump_mempools",
+      this,
+      "get mempool stats");
+    assert(r == 0);
+  }
+  ~MempoolObs() {
+    cct->_conf->remove_observer(this);
+    cct->get_admin_socket()->unregister_command("dump_mempools");
+  }
+
+  // md_config_obs_t
+  const char** get_tracked_conf_keys() const {
+    static const char *KEYS[] = {
+      "mempool_debug",
+      NULL
+    };
+    return KEYS;
+  }
+
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set <std::string> &changed) {
+    if (changed.count("mempool_debug")) {
+      mempool::set_debug_mode(cct->_conf->mempool_debug);
+    }
+  }
+
+  // AdminSocketHook
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    if (command == "dump_mempools") {
+      std::unique_ptr<Formatter> f(Formatter::create(format));
+      f->open_object_section("mempools");
+      mempool::dump(f.get());
+      f->close_section();
+      f->flush(out);
+      return true;
+    }
+    return false;
+  }
+};
 
 } // anonymous namespace
 
@@ -147,10 +197,10 @@ private:
  * logging-related config changes to the log.
  */
 class LogObs : public md_config_obs_t {
-  ceph::log::Log *log;
+  ceph::logging::Log *log;
 
 public:
-  explicit LogObs(ceph::log::Log *l) : log(l) {}
+  explicit LogObs(ceph::logging::Log *l) : log(l) {}
 
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
@@ -239,6 +289,7 @@ public:
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
       "enable_experimental_unrecoverable_data_corrupting_features",
+      "crush_location",
       NULL
     };
     return KEYS;
@@ -246,13 +297,20 @@ public:
 
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) {
-    ceph_spin_lock(&cct->_feature_lock);
-    get_str_set(conf->enable_experimental_unrecoverable_data_corrupting_features,
-		cct->_experimental_features);
-    ceph_spin_unlock(&cct->_feature_lock);
-    if (!cct->_experimental_features.empty())
-      lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
-		 << cct->_experimental_features << dendl;
+    if (changed.count(
+	  "enable_experimental_unrecoverable_data_corrupting_features")) {
+      ceph_spin_lock(&cct->_feature_lock);
+      get_str_set(
+	conf->enable_experimental_unrecoverable_data_corrupting_features,
+	cct->_experimental_features);
+      ceph_spin_unlock(&cct->_feature_lock);
+      if (!cct->_experimental_features.empty())
+	lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
+		   << cct->_experimental_features << dendl;
+    }
+    if (changed.count("crush_location")) {
+      cct->crush_location.update_from_conf();
+    }
   }
 };
 
@@ -332,12 +390,17 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
   }
   else if (command == "perf reset") {
     std::string var;
+    string section = command;
+    f->open_object_section(section.c_str());
     if (!cmd_getval(this, cmdmap, "var", var)) {
       f->dump_string("error", "syntax error: 'perf reset <var>'");
     } else {
      if(!_perf_counters_collection->reset(var))
         f->dump_stream("error") << "Not find: " << var;
+     else
+       f->dump_string("success", command + ' ' + var);
     }
+    f->close_section();
   }
   else {
     string section = command;
@@ -439,6 +502,10 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _log(NULL),
     _module_type(module_type_),
     _init_flags(init_flags_),
+    _set_uid(0),
+    _set_gid(0),
+    _set_uid_string(),
+    _set_gid_string(),
     _crypto_inited(false),
     _service_thread(NULL),
     _log_obs(NULL),
@@ -450,14 +517,16 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _crypto_aes(NULL),
     _plugin_registry(NULL),
     _lockdep_obs(NULL),
+    crush_location(this),
     _cct_perf(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
+  ceph_spin_init(&_fork_watchers_lock);
   ceph_spin_init(&_feature_lock);
   ceph_spin_init(&_cct_perf_lock);
 
-  _log = new ceph::log::Log(&_conf->subsys);
+  _log = new ceph::logging::Log(&_conf->subsys);
   _log->start();
 
   _log_obs = new LogObs(_log);
@@ -496,6 +565,9 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
 
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
+
+  MempoolObs *mempool_obs = 0;
+  lookup_or_create_singleton_object(mempool_obs, "mempool_obs");
 }
 
 CephContext::~CephContext()
@@ -557,6 +629,7 @@ CephContext::~CephContext()
 
   delete _conf;
   ceph_spin_destroy(&_service_thread_lock);
+  ceph_spin_destroy(&_fork_watchers_lock);
   ceph_spin_destroy(&_associated_objs_lock);
   ceph_spin_destroy(&_feature_lock);
   ceph_spin_destroy(&_cct_perf_lock);
@@ -579,8 +652,10 @@ void CephContext::put() {
 
 void CephContext::init_crypto()
 {
-  ceph::crypto::init(this);
-  _crypto_inited = true;
+  if (!_crypto_inited) {
+    ceph::crypto::init(this);
+    _crypto_inited = true;
+  }
 }
 
 void CephContext::start_service_thread()
@@ -635,6 +710,11 @@ void CephContext::join_service_thread()
 uint32_t CephContext::get_module_type() const
 {
   return _module_type;
+}
+
+void CephContext::set_init_flags(int flags)
+{
+  _init_flags = flags;
 }
 
 int CephContext::get_init_flags() const

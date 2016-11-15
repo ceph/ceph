@@ -3,8 +3,9 @@
 #include "log/Log.h"
 #include "common/Clock.h"
 #include "common/PrebufferedStreambuf.h"
+#include "SubsystemMap.h"
 
-using namespace ceph::log;
+using namespace ceph::logging;
 
 TEST(Log, Simple)
 {

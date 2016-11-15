@@ -28,11 +28,16 @@ class StrayManager
   protected:
   class QueuedStray {
     public:
-    CDentry *dn;
+    CDir *dir;
+    std::string name;
     bool trunc;
     uint32_t ops_required;
-    QueuedStray(CDentry *dn_, bool t, uint32_t ops)
-      : dn(dn_), trunc(t), ops_required(ops) {}
+    QueuedStray(CDentry *dn, bool t, uint32_t ops)
+      : dir(dn->get_dir()), name(dn->name),
+	trunc(t), ops_required(ops) {}
+    bool operator<(const QueuedStray& o) const {
+      return (name < o.name);
+    }
   };
 
   // Has passed through eval_stray and still has refs
@@ -40,6 +45,11 @@ class StrayManager
 
   // No more refs, can purge these
   std::list<QueuedStray> ready_for_purge;
+
+  // strays that have been trimmed from cache
+  std::set<std::string> trimmed_strays;
+  // strays that are being fetching
+  std::set<QueuedStray> fetching_strays;
 
   // Global references for doing I/O
   MDSRank *mds;
@@ -83,8 +93,11 @@ class StrayManager
   void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
 
   friend class StrayManagerIOContext;
+  friend class StrayManagerLogContext;
   friend class StrayManagerContext;
 
+  friend class C_StraysFetched;
+  friend class C_OpenSnapParents;
   friend class C_PurgeStrayLogged;
   friend class C_TruncateStrayLogged;
   friend class C_IO_PurgeStrayPurged;
@@ -113,6 +126,9 @@ class StrayManager
    * false if insufficient resource was available.
    */
   bool _consume(CDentry *dn, bool trunc, uint32_t ops_required);
+
+  void _process(CDentry *dn, bool trunc, uint32_t ops_required);
+
 
   /**
    * Return the maximum number of concurrent RADOS ops that
@@ -154,6 +170,8 @@ class StrayManager
   void set_logger(PerfCounters *l) {logger = l;}
 
   bool eval_stray(CDentry *dn, bool delay=false);
+
+  uint64_t get_num_strays() const { return num_strays; }
 
   /**
    * Where eval_stray was previously invoked with delay=true, call
@@ -236,6 +254,15 @@ class StrayManager
    * Call this whenever one of those operands changes.
    */
   void update_op_limit();
+
+  /*
+   * track stray dentries that have been trimmed from cache
+   */
+  void notify_stray_trimmed(CDentry *dn);
+  /*
+   * restore stray dentry's previous stats
+   */
+  void notify_stray_loaded(CDentry *dn);
 };
 
 #endif  // STRAY_MANAGER_H

@@ -16,7 +16,7 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
-#include "mdstypes.h"
+#include "MDSCacheObject.h"
 #include "MDSContext.h"
 
 // -- lock types --
@@ -306,7 +306,7 @@ public:
     parent->take_waiting(mask << get_wait_shift(), ls);
   }
   void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
-    parent->add_waiter(mask << get_wait_shift(), c);
+    parent->add_waiter((mask << get_wait_shift()) | MDSCacheObject::WAIT_ORDERED, c);
   }
   bool is_waiter_for(uint64_t mask) const {
     return parent->is_waiter_for(mask << get_wait_shift());
@@ -334,6 +334,11 @@ public:
 
   bool is_stable() const {
     return get_sm()->states[state].next == 0;
+  }
+  bool is_unstable_and_locked() const {
+    if (is_stable())
+      return false;
+    return is_rdlocked() || is_wrlocked() || is_xlocked();
   }
   int get_next_state() {
     return get_sm()->states[state].next;

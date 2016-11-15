@@ -4,8 +4,9 @@
 #ifndef CEPH_LIBRBD_IMAGE_OPEN_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_OPEN_REQUEST_H
 
-#include "include/int_types.h"
 #include "include/buffer.h"
+#include <map>
+#include <string>
 
 class Context;
 
@@ -30,33 +31,39 @@ private:
    *
    * <start>
    *    |
-   *    | (v1)                          (read only)
-   *    |-----> V1_DETECT_HEADER  . . . . . . . . . . . . . . . . .
-   *    |           |                                             .
-   *    |           \-------------------------------\             .
-   *    | (v2)                                      |             .
-   *    \-----> V2_DETECT_HEADER                    |             .
-   *                |                               |             .
-   *                v                               |             .
-   *            V2_GET_ID|NAME                      |             .
-   *                |                               |             .
-   *                v                               |             .
-   *            V2_GET_IMMUTABLE_METADATA           |             .
-   *                |                               |             .
-   *                v                               v             .
-   *            V2_GET_STRIPE_UNIT_COUNT  ----> REGISTER_WATCH    .
-   *                .                               |             .
-   *                .  (read only)                  v             .
-   *                . . . . . . . . . . . . . > REFRESH < . . . . .
-   *                                             .   |
-   *                                             .   |
-   *                                             .   \--> SET_SNAP
-   *                                   (no snap) .          |
-   *                                             .          v
-   *                                             . . . > <finish>
-   *                                                        ^
-   *     (on error)                                         |
-   *    * * * * * * > CLOSE --------------------------------/
+   *    | (v1)
+   *    |-----> V1_DETECT_HEADER
+   *    |           |
+   *    |           \-------------------------------\
+   *    | (v2)                                      |
+   *    \-----> V2_DETECT_HEADER                    |
+   *                |                               |
+   *                v                               |
+   *            V2_GET_ID|NAME                      |
+   *                |                               |
+   *                v                               |
+   *            V2_GET_IMMUTABLE_METADATA           |
+   *                |                               |
+   *                v                               |
+   *            V2_GET_STRIPE_UNIT_COUNT            |
+   *                |                               |
+   *                v                               |
+   *            V2_GET_DATA_POOL                    |
+   *                |                               |
+   *                v                               |
+   *      /---> V2_APPLY_METADATA -------------> REGISTER_WATCH (skip if
+   *      |         |                               |            read-only)
+   *      \---------/                               v
+   *                                             REFRESH
+   *                                                |
+   *                                                v
+   *                                             SET_SNAP (skip if no snap)
+   *                                                |
+   *                                                v
+   *                                             <finish>
+   *                                                ^
+   *     (on error)                                 |
+   *    * * * * * * > CLOSE ------------------------/
    *
    * @endverbatim
    */
@@ -68,6 +75,9 @@ private:
 
   bufferlist m_out_bl;
   int m_error_result;
+
+  std::string m_last_metadata_key;
+  std::map<std::string, bufferlist> m_metadata;
 
   void send_v1_detect_header();
   Context *handle_v1_detect_header(int *result);
@@ -86,6 +96,12 @@ private:
 
   void send_v2_get_stripe_unit_count();
   Context *handle_v2_get_stripe_unit_count(int *result);
+
+  void send_v2_get_data_pool();
+  Context *handle_v2_get_data_pool(int *result);
+
+  void send_v2_apply_metadata();
+  Context *handle_v2_apply_metadata(int *result);
 
   void send_register_watch();
   Context *handle_register_watch(int *result);

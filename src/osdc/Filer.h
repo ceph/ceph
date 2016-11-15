@@ -56,7 +56,7 @@ class Filer {
     typedef std::lock_guard<std::mutex> lock_guard;
     typedef std::unique_lock<std::mutex> unique_lock;
     inodeno_t ino;
-    ceph_file_layout layout;
+    file_layout_t layout;
     snapid_t snapid;
 
     uint64_t *psize;
@@ -80,7 +80,7 @@ class Filer {
     int err;
     bool found_size;
 
-    Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
+    Probe(inodeno_t i, file_layout_t &l, snapid_t sn,
 	  uint64_t f, uint64_t *e, ceph::real_time *m, int fl, bool fw,
 	  Context *c) :
       ino(i), layout(l), snapid(sn),
@@ -88,7 +88,7 @@ class Filer {
       probing_off(f), probing_len(0),
       err(0), found_size(false) {}
 
-    Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
+    Probe(inodeno_t i, file_layout_t &l, snapid_t sn,
 	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw,
 	  Context *c) :
       ino(i), layout(l), snapid(sn),
@@ -117,8 +117,8 @@ class Filer {
 
   /*** async file interface.  scatter/gather as needed. ***/
 
-  int read(inodeno_t ino,
-	   ceph_file_layout *layout,
+  void read(inodeno_t ino,
+	   file_layout_t *layout,
 	   snapid_t snap,
 	   uint64_t offset,
 	   uint64_t len,
@@ -130,11 +130,10 @@ class Filer {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_read(extents, snap, bl, flags, onfinish, op_flags);
-    return 0;
   }
 
-  int read_trunc(inodeno_t ino,
-		 ceph_file_layout *layout,
+  void read_trunc(inodeno_t ino,
+		 file_layout_t *layout,
 		 snapid_t snap,
 		 uint64_t offset,
 		 uint64_t len,
@@ -150,11 +149,10 @@ class Filer {
 			     extents);
     objecter->sg_read_trunc(extents, snap, bl, flags,
 			    truncate_size, truncate_seq, onfinish, op_flags);
-    return 0;
   }
 
-  int write(inodeno_t ino,
-	    ceph_file_layout *layout,
+  void write(inodeno_t ino,
+	    file_layout_t *layout,
 	    const SnapContext& snapc,
 	    uint64_t offset,
 	    uint64_t len,
@@ -168,11 +166,10 @@ class Filer {
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit,
 		       op_flags);
-    return 0;
   }
 
-  int write_trunc(inodeno_t ino,
-		  ceph_file_layout *layout,
+  void write_trunc(inodeno_t ino,
+		  file_layout_t *layout,
 		  const SnapContext& snapc,
 		  uint64_t offset,
 		  uint64_t len,
@@ -189,11 +186,10 @@ class Filer {
 			     extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
 		       truncate_size, truncate_seq, onack, oncommit, op_flags);
-    return 0;
   }
 
-  int truncate(inodeno_t ino,
-	       ceph_file_layout *layout,
+  void truncate(inodeno_t ino,
+	       file_layout_t *layout,
 	       const SnapContext& snapc,
 	       uint64_t offset,
 	       uint64_t len,
@@ -228,11 +224,10 @@ class Filer {
       gack.activate();
       gcom.activate();
     }
-    return 0;
   }
 
-  int zero(inodeno_t ino,
-	   ceph_file_layout *layout,
+  void zero(inodeno_t ino,
+	   file_layout_t *layout,
 	   const SnapContext& snapc,
 	   uint64_t offset,
 	   uint64_t len,
@@ -244,7 +239,7 @@ class Filer {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     if (extents.size() == 1) {
-      if (extents[0].offset == 0 && extents[0].length == layout->fl_object_size
+      if (extents[0].offset == 0 && extents[0].length == layout->object_size
 	  && (!keep_first || extents[0].objectno != 0))
 	objecter->remove(extents[0].oid, extents[0].oloc,
 			 snapc, mtime, flags, onack, oncommit);
@@ -258,7 +253,7 @@ class Filer {
       for (vector<ObjectExtent>::iterator p = extents.begin();
 	   p != extents.end();
 	   ++p) {
-	if (p->offset == 0 && p->length == layout->fl_object_size &&
+	if (p->offset == 0 && p->length == layout->object_size &&
 	    (!keep_first || p->objectno != 0))
 	  objecter->remove(p->oid, p->oloc,
 			   snapc, mtime, flags,
@@ -273,11 +268,10 @@ class Filer {
       gack.activate();
       gcom.activate();
     }
-    return 0;
   }
 
-  int zero(inodeno_t ino,
-	   ceph_file_layout *layout,
+  void zero(inodeno_t ino,
+	   file_layout_t *layout,
 	   const SnapContext& snapc,
 	   uint64_t offset,
 	   uint64_t len,
@@ -285,16 +279,15 @@ class Filer {
 	   int flags,
 	   Context *onack,
 	   Context *oncommit) {
-
-    return zero(ino, layout,
-		snapc, offset,
-		len, mtime,
-		flags, false,
-		onack, oncommit);
+    zero(ino, layout,
+         snapc, offset,
+         len, mtime,
+         flags, false,
+         onack, oncommit);
   }
   // purge range of ino.### objects
   int purge_range(inodeno_t ino,
-		  ceph_file_layout *layout,
+		  file_layout_t *layout,
 		  const SnapContext& snapc,
 		  uint64_t first_obj, uint64_t num_obj,
 		  ceph::real_time mtime,
@@ -307,7 +300,7 @@ class Filer {
    *  and whether we stop when we find data, or hole.
    */
   int probe(inodeno_t ino,
-	    ceph_file_layout *layout,
+	    file_layout_t *layout,
 	    snapid_t snapid,
 	    uint64_t start_from,
 	    uint64_t *end,
@@ -317,7 +310,7 @@ class Filer {
 	    Context *onfinish);
 
   int probe(inodeno_t ino,
-	    ceph_file_layout *layout,
+	    file_layout_t *layout,
 	    snapid_t snapid,
 	    uint64_t start_from,
 	    uint64_t *end,
@@ -329,7 +322,7 @@ class Filer {
   }
 
   int probe(inodeno_t ino,
-	    ceph_file_layout *layout,
+	    file_layout_t *layout,
 	    snapid_t snapid,
 	    uint64_t start_from,
 	    uint64_t *end,
@@ -339,7 +332,7 @@ class Filer {
 	    Context *onfinish);
 
 private:
-  int probe_impl(Probe* probe, ceph_file_layout *layout,
+  int probe_impl(Probe* probe, file_layout_t *layout,
 		 uint64_t start_from, uint64_t *end);
 };
 

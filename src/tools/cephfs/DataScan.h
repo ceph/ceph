@@ -28,7 +28,10 @@ class RecoveryDriver {
     bool force_init;
 
   public:
-    virtual int init(librados::Rados &rados, const MDSMap *mdsmap) = 0;
+    virtual int init(
+        librados::Rados &rados,
+        const FSMap *fsmap,
+        fs_cluster_id_t fscid) = 0;
 
     void set_force_corrupt(const bool val)
     {
@@ -88,7 +91,8 @@ class RecoveryDriver {
     }
 
     RecoveryDriver()
-      : force_corrupt(false)
+      : force_corrupt(false),
+	force_init(false)
     {}
 
     virtual ~RecoveryDriver() {}
@@ -112,7 +116,10 @@ class LocalFileDriver : public RecoveryDriver
     {}
 
     // Implement RecoveryDriver interface
-    int init(librados::Rados &rados, const MDSMap *mdsmap);
+    int init(
+        librados::Rados &rados,
+        const FSMap *fsmap,
+        fs_cluster_id_t fscid);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
@@ -142,16 +149,16 @@ class MetadataTool
    */
   void build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const ceph_file_layout &layout,
+    const file_layout_t &layout,
     InodeStore *out);
 
   /**
    * Construct a synthetic InodeStore for a directory
    */
   void build_dir_dentry(
-    inodeno_t ino, uint64_t nfiles,
-    time_t mtime,
-    const ceph_file_layout &layout,
+    inodeno_t ino,
+    const frag_info_t &fragstat,
+    const file_layout_t &layout,
     InodeStore *out);
 
   /**
@@ -188,9 +195,6 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
         frag_t fragment,
         bool *created);
 
-    int inject_linkage(
-        inodeno_t dir_ino, const std::string &dname,
-        const frag_t fragment, const InodeStore &inode);
 
     /**
      * Work out which fragment of a directory should contain a named
@@ -205,7 +209,14 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
   public:
 
     // Implement RecoveryDriver interface
-    int init(librados::Rados &rados, const MDSMap *mdsmap);
+    int init(
+        librados::Rados &rados,
+        const FSMap *fsmap,
+        fs_cluster_id_t fscid);
+
+    int inject_linkage(
+        inodeno_t dir_ino, const std::string &dname,
+        const frag_t fragment, const InodeStore &inode);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
@@ -224,6 +235,7 @@ class DataScan : public MDSUtility, public MetadataTool
 {
   protected:
     RecoveryDriver *driver;
+    fs_cluster_id_t fscid;
 
     // IoCtx for data pool (where we scrape file backtraces from)
     librados::IoCtx data_io;
@@ -249,7 +261,15 @@ class DataScan : public MDSUtility, public MetadataTool
      */
     int scan_frags();
 
-    // Accept pools which are not in the MDSMap
+    /**
+     * Check if an inode number is in the permitted ranges
+     */
+    bool valid_ino(inodeno_t ino) const;
+
+
+    int scan_links();
+
+    // Accept pools which are not in the FSMap
     bool force_pool;
     // Respond to decode errors by overwriting
     bool force_corrupt;
@@ -291,7 +311,7 @@ class DataScan : public MDSUtility, public MetadataTool
     int main(const std::vector<const char *> &args);
 
     DataScan()
-      : driver(NULL), data_pool_id(-1), n(0), m(1),
+      : driver(NULL), fscid(FS_CLUSTER_ID_NONE), data_pool_id(-1), n(0), m(1),
         force_pool(false), force_corrupt(false),
         force_init(false)
     {

@@ -41,6 +41,7 @@ public:
   RWLock(const std::string &n, bool track_lock=true, bool ld=true, bool prioritize_write=false)
     : name(n), id(-1), nrlock(0), nwlock(0), track(track_lock),
       lockdep(ld) {
+#if defined(PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)
     if (prioritize_write) {
       pthread_rwlockattr_t attr;
       pthread_rwlockattr_init(&attr);
@@ -50,7 +51,10 @@ public:
       pthread_rwlockattr_setkind_np(&attr,
           PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
       pthread_rwlock_init(&L, &attr);
-    } else {
+    } else 
+#endif 
+    // Next block is in {} to possibly connect to the above if when code is used.
+    {
       pthread_rwlock_init(&L, NULL);
     }
     ANNOTATE_BENIGN_RACE_SIZED(&id, sizeof(id), "RWLock lockdep id");

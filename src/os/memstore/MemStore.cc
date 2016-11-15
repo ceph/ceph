@@ -220,17 +220,14 @@ int MemStore::mkfs()
   return 0;
 }
 
-int MemStore::statfs(struct statfs *st)
+int MemStore::statfs(struct store_statfs_t *st)
 {
-  dout(10) << __func__ << dendl;
-  st->f_bsize = 4096;
-
-  // Device size is a configured constant
-  st->f_blocks = g_conf->memstore_device_bytes / st->f_bsize;
-
-  dout(10) << __func__ << ": used_bytes: " << used_bytes << "/" << g_conf->memstore_device_bytes << dendl;
-  st->f_bfree = st->f_bavail = MAX((long(st->f_blocks) - long(used_bytes / st->f_bsize)), 0);
-
+   dout(10) << __func__ << dendl;
+  st->reset();
+  st->total = g_conf->memstore_device_bytes;
+  st->available = MAX(int64_t(st->total) - int64_t(used_bytes), 0ll);
+  dout(10) << __func__ << ": used_bytes: " << used_bytes
+	   << "/" << g_conf->memstore_device_bytes << dendl;
   return 0;
 }
 
@@ -303,6 +300,13 @@ int MemStore::stat(
   st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_nlink = 1;
   return 0;
+}
+
+int MemStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
 }
 
 int MemStore::read(
@@ -444,15 +448,15 @@ bool MemStore::collection_exists(const coll_t& cid)
   return coll_map.count(cid);
 }
 
-bool MemStore::collection_empty(const coll_t& cid)
+int MemStore::collection_empty(const coll_t& cid, bool *empty)
 {
   dout(10) << __func__ << " " << cid << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
-    return false;
+    return -ENOENT;
   RWLock::RLocker l(c->lock);
-
-  return c->object_map.empty();
+  *empty = c->object_map.empty();
+  return 0;
 }
 
 int MemStore::collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
@@ -599,6 +603,51 @@ int MemStore::omap_check_keys(
   }
   return 0;
 }
+
+class MemStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+  CollectionRef c;
+  ObjectRef o;
+  map<string,bufferlist>::iterator it;
+public:
+  OmapIteratorImpl(CollectionRef c, ObjectRef o)
+    : c(c), o(o), it(o->omap.begin()) {}
+
+  int seek_to_first() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    it = o->omap.begin();
+    return 0;
+  }
+  int upper_bound(const string &after) {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    it = o->omap.upper_bound(after);
+    return 0;
+  }
+  int lower_bound(const string &to) {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    it = o->omap.lower_bound(to);
+    return 0;
+  }
+  bool valid() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    return it != o->omap.end();
+  }
+  int next(bool validate=true) {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    ++it;
+    return 0;
+  }
+  string key() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    return it->first;
+  }
+  bufferlist value() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    return it->second;
+  }
+  int status() {
+    return 0;
+  }
+};
 
 ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(const coll_t& cid,
 							 const ghobject_t& oid)
@@ -860,6 +909,19 @@ void MemStore::_do_transaction(Transaction& t)
         coll_t newcid = i.get_cid(op->dest_cid);
         ghobject_t newoid = i.get_oid(op->dest_oid);
 	r = _collection_move_rename(oldcid, oldoid, newcid, newoid);
+	if (r == -ENOENT)
+	  r = 0;
+      }
+      break;
+
+    case Transaction::OP_TRY_RENAME:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oldoid = i.get_oid(op->oid);
+        ghobject_t newoid = i.get_oid(op->dest_oid);
+	r = _collection_move_rename(cid, oldoid, cid, newoid);
+	if (r == -ENOENT)
+	  r = 0;
       }
       break;
 
@@ -979,7 +1041,7 @@ void MemStore::_do_transaction(Transaction& t)
 	  dump_all();
 	}
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op->op
+	derr    << " error " << cpp_strerror(r) << " not handled on operation " << op->op
 		<< " (op " << pos << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
@@ -1021,9 +1083,11 @@ int MemStore::_write(const coll_t& cid, const ghobject_t& oid,
     return -ENOENT;
 
   ObjectRef o = c->get_or_create_object(oid);
-  const ssize_t old_size = o->get_size();
-  o->write(offset, bl);
-  used_bytes += (o->get_size() - old_size);
+  if (len > 0) {
+    const ssize_t old_size = o->get_size();
+    o->write(offset, bl);
+    used_bytes += (o->get_size() - old_size);
+  }
 
   return 0;
 }
@@ -1341,15 +1405,8 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
     return -ENOENT;
 
   // note: c and oc may be the same
-  if (&(*c) == &(*oc)) {
-    c->lock.get_write();
-  } else if (&(*c) < &(*oc)) {
-    c->lock.get_write();
-    oc->lock.get_write();
-  } else if (&(*c) > &(*oc)) {
-    oc->lock.get_write();
-    c->lock.get_write();
-  }
+  assert(&(*c) == &(*oc));
+  c->lock.get_write();
 
   int r = -EEXIST;
   if (c->object_hash.count(oid))
@@ -1367,8 +1424,6 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
   r = 0;
  out:
   c->lock.put_write();
-  if (&(*c) != &(*oc))
-    oc->lock.put_write();
   return r;
 }
 
@@ -1401,9 +1456,35 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
 
   return 0;
 }
+namespace {
+struct BufferlistObject : public MemStore::Object {
+  Spinlock mutex;
+  bufferlist data;
 
+  size_t get_size() const override { return data.length(); }
+
+  int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
+  int write(uint64_t offset, const bufferlist &bl) override;
+  int clone(Object *src, uint64_t srcoff, uint64_t len,
+            uint64_t dstoff) override;
+  int truncate(uint64_t offset) override;
+
+  void encode(bufferlist& bl) const override {
+    ENCODE_START(1, 1, bl);
+    ::encode(data, bl);
+    encode_base(bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) override {
+    DECODE_START(1, p);
+    ::decode(data, p);
+    decode_base(p);
+    DECODE_FINISH(p);
+  }
+};
+}
 // BufferlistObject
-int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
+int BufferlistObject::read(uint64_t offset, uint64_t len,
                                      bufferlist &bl)
 {
   std::lock_guard<Spinlock> lock(mutex);
@@ -1411,7 +1492,7 @@ int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
   return bl.length();
 }
 
-int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
+int BufferlistObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
 
@@ -1422,8 +1503,10 @@ int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
   if (get_size() >= offset) {
     newdata.substr_of(data, 0, offset);
   } else {
-    newdata.substr_of(data, 0, get_size());
-    newdata.append(offset - get_size());
+    if (get_size()) {
+      newdata.substr_of(data, 0, get_size());
+    }
+    newdata.append_zero(offset - get_size());
   }
 
   newdata.append(src);
@@ -1439,7 +1522,7 @@ int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
   return 0;
 }
 
-int MemStore::BufferlistObject::clone(Object *src, uint64_t srcoff,
+int BufferlistObject::clone(Object *src, uint64_t srcoff,
                                       uint64_t len, uint64_t dstoff)
 {
   auto srcbl = dynamic_cast<BufferlistObject*>(src);
@@ -1458,7 +1541,7 @@ int MemStore::BufferlistObject::clone(Object *src, uint64_t srcoff,
   return write(dstoff, bl);
 }
 
-int MemStore::BufferlistObject::truncate(uint64_t size)
+int BufferlistObject::truncate(uint64_t size)
 {
   std::lock_guard<Spinlock> lock(mutex);
   if (get_size() > size) {
@@ -1474,6 +1557,41 @@ int MemStore::BufferlistObject::truncate(uint64_t size)
 }
 
 // PageSetObject
+
+struct MemStore::PageSetObject : public Object {
+  PageSet data;
+  uint64_t data_len;
+#if defined(__GLIBCXX__)
+  // use a thread-local vector for the pages returned by PageSet, so we
+  // can avoid allocations in read/write()
+  static thread_local PageSet::page_vector tls_pages;
+#endif
+
+  explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
+
+  size_t get_size() const override { return data_len; }
+
+  int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
+  int write(uint64_t offset, const bufferlist &bl) override;
+  int clone(Object *src, uint64_t srcoff, uint64_t len,
+            uint64_t dstoff) override;
+  int truncate(uint64_t offset) override;
+
+  void encode(bufferlist& bl) const override {
+    ENCODE_START(1, 1, bl);
+    ::encode(data_len, bl);
+    data.encode(bl);
+    encode_base(bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) override {
+    DECODE_START(1, p);
+    ::decode(data_len, p);
+    data.decode(p);
+    decode_base(p);
+    DECODE_FINISH(p);
+  }
+};
 
 #if defined(__GLIBCXX__)
 // use a thread-local vector for the pages returned by PageSet, so we
@@ -1543,8 +1661,7 @@ int MemStore::PageSetObject::write(uint64_t offset, const bufferlist &src)
 
   auto page = tls_pages.begin();
 
-  // XXX: cast away the const because bufferlist doesn't have a const_iterator
-  auto p = const_cast<bufferlist&>(src).begin();
+  auto p = src.begin();
   while (len > 0) {
     unsigned page_offset = offset - (*page)->offset;
     unsigned pageoff = data.get_page_size() - page_offset;
@@ -1576,34 +1693,78 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
   PageSet::page_vector dst_pages;
 
   while (len) {
-    const auto count = std::min(len, (uint64_t)src_page_size * 16);
+    // limit to 16 pages at a time so tls_pages doesn't balloon in size
+    auto count = std::min(len, (uint64_t)src_page_size * 16);
     src_data.get_range(srcoff, count, tls_pages);
+
+    // allocate the destination range
+    // TODO: avoid allocating pages for holes in the source range
+    dst_data.alloc_range(srcoff + delta, count, dst_pages);
+    auto dst_iter = dst_pages.begin();
 
     for (auto &src_page : tls_pages) {
       auto sbegin = std::max(srcoff, src_page->offset);
       auto send = std::min(srcoff + count, src_page->offset + src_page_size);
-      dst_data.alloc_range(sbegin + delta, send - sbegin, dst_pages);
+
+      // zero-fill holes before src_page
+      if (srcoff < sbegin) {
+        while (dst_iter != dst_pages.end()) {
+          auto &dst_page = *dst_iter;
+          auto dbegin = std::max(srcoff + delta, dst_page->offset);
+          auto dend = std::min(sbegin + delta, dst_page->offset + dst_page_size);
+          std::fill(dst_page->data + dbegin - dst_page->offset,
+                    dst_page->data + dend - dst_page->offset, 0);
+          if (dend < dst_page->offset + dst_page_size)
+            break;
+          ++dst_iter;
+        }
+        const auto c = sbegin - srcoff;
+        count -= c;
+        len -= c;
+      }
 
       // copy data from src page to dst pages
-      for (auto &dst_page : dst_pages) {
+      while (dst_iter != dst_pages.end()) {
+        auto &dst_page = *dst_iter;
         auto dbegin = std::max(sbegin + delta, dst_page->offset);
         auto dend = std::min(send + delta, dst_page->offset + dst_page_size);
 
         std::copy(src_page->data + (dbegin - delta) - src_page->offset,
                   src_page->data + (dend - delta) - src_page->offset,
                   dst_page->data + dbegin - dst_page->offset);
+        if (dend < dst_page->offset + dst_page_size)
+          break;
+        ++dst_iter;
       }
-      dst_pages.clear(); // drop page refs
+
+      const auto c = send - sbegin;
+      count -= c;
+      len -= c;
+      srcoff = send;
+      dstoff = send + delta;
     }
-    srcoff += count;
-    dstoff += count;
-    len -= count;
     tls_pages.clear(); // drop page refs
+
+    // zero-fill holes after the last src_page
+    if (count > 0) {
+      while (dst_iter != dst_pages.end()) {
+        auto &dst_page = *dst_iter;
+        auto dbegin = std::max(dstoff, dst_page->offset);
+        auto dend = std::min(dstoff + count, dst_page->offset + dst_page_size);
+        std::fill(dst_page->data + dbegin - dst_page->offset,
+                  dst_page->data + dend - dst_page->offset, 0);
+        ++dst_iter;
+      }
+      srcoff += count;
+      dstoff += count;
+      len -= count;
+    }
+    dst_pages.clear(); // drop page refs
   }
 
   // update object size
-  if (data_len < dstoff + len)
-    data_len = dstoff + len;
+  if (data_len < dstoff)
+    data_len = dstoff;
   return 0;
 }
 
@@ -1628,4 +1789,11 @@ int MemStore::PageSetObject::truncate(uint64_t size)
   std::fill(data + (size - page_offset), data + page_size, 0);
   tls_pages.clear(); // drop page ref
   return 0;
+}
+
+
+MemStore::ObjectRef MemStore::Collection::create_object() const {
+  if (use_page_set)
+    return new PageSetObject(cct->_conf->memstore_page_size);
+  return new BufferlistObject();
 }

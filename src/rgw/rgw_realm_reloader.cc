@@ -47,6 +47,11 @@ class RGWRealmReloader::C_Reload : public Context {
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
                                      bufferlist::iterator& p)
 {
+  if (!store) {
+    /* we're in the middle of reload */
+    return;
+  }
+
   CephContext *const cct = store->ctx();
 
   Mutex::Locker lock(mutex);
@@ -75,6 +80,10 @@ void RGWRealmReloader::reload()
   frontends->pause();
 
   ldout(cct, 1) << "Frontends paused" << dendl;
+
+  // TODO: make RGWRados responsible for rgw_log_usage lifetime
+  rgw_log_usage_finalize();
+
   // destroy the existing store
   RGWStoreManager::close_storage(store);
   store = nullptr;
@@ -91,6 +100,7 @@ void RGWRealmReloader::reload()
     // recreate and initialize a new store
     store = RGWStoreManager::get_storage(cct,
                                          cct->_conf->rgw_enable_gc_threads,
+                                         cct->_conf->rgw_enable_lc_threads,
                                          cct->_conf->rgw_enable_quota_threads,
                                          cct->_conf->rgw_run_sync_thread);
 

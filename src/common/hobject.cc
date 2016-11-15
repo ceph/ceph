@@ -112,6 +112,7 @@ void hobject_t::encode(bufferlist& bl) const
   ::encode(max, bl);
   ::encode(nspace, bl);
   ::encode(pool, bl);
+  assert(!max || (*this == hobject_t(hobject_t::get_max())));
   ENCODE_FINISH(bl);
 }
 
@@ -141,6 +142,12 @@ void hobject_t::decode(bufferlist::iterator& bl)
 	oid.name.empty()) {
       pool = INT64_MIN;
       assert(is_min());
+    }
+
+    // for compatibility with some earlier verisons which might encoded
+    // a non-canonical max object
+    if (max) {
+      *this = hobject_t::get_max();
     }
   }
   DECODE_FINISH(bl);
@@ -384,6 +391,7 @@ int cmp_bitwise(const hobject_t& l, const hobject_t& r)
 // version 5.
 void ghobject_t::encode(bufferlist& bl) const
 {
+  // when changing this, remember to update encoded_size() too.
   ENCODE_START(6, 3, bl);
   ::encode(hobj.key, bl);
   ::encode(hobj.oid, bl);
@@ -396,6 +404,47 @@ void ghobject_t::encode(bufferlist& bl) const
   ::encode(shard_id, bl);
   ::encode(max, bl);
   ENCODE_FINISH(bl);
+}
+
+size_t ghobject_t::encoded_size() const
+{
+  // this is not in order of encoding or appearance, but rather
+  // in order of known constants first, so it can be (mostly) computed
+  // at compile time.
+  //  - encoding header + 3 string lengths
+  size_t r = sizeof(ceph_le32) + 2 * sizeof(__u8) + 3 * sizeof(__u32);
+
+  // hobj.snap
+  r += sizeof(uint64_t);
+
+  // hobj.hash
+  r += sizeof(uint32_t);
+
+  // hobj.max
+  r += sizeof(bool);
+
+  // hobj.pool
+  r += sizeof(uint64_t);
+
+  // hobj.generation
+  r += sizeof(uint64_t);
+
+  // hobj.shard_id
+  r += sizeof(int8_t);
+
+  // max
+  r += sizeof(bool);
+
+  // hobj.key
+  r += hobj.key.size();
+
+  // hobj.oid
+  r += hobj.oid.name.size();
+
+  // hobj.nspace
+  r += hobj.nspace.size();
+
+  return r;
 }
 
 void ghobject_t::decode(bufferlist::iterator& bl)
@@ -499,7 +548,7 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
     return out << "GHMAX";
   if (o.shard_id != shard_id_t::NO_SHARD)
     out << std::hex << o.shard_id << std::dec;
-  out << '!' << o.hobj << '!';
+  out << '#' << o.hobj << '#';
   if (o.generation != ghobject_t::NO_GEN)
     out << std::hex << (unsigned long long)(o.generation) << std::dec;
   return out;
@@ -516,12 +565,12 @@ bool ghobject_t::parse(const string& s)
     return true;
   }
 
-  // look for shard! prefix
+  // look for shard# prefix
   const char *start = s.c_str();
   const char *p;
   int sh = shard_id_t::NO_SHARD;
   for (p = start; *p && isxdigit(*p); ++p) ;
-  if (!*p && *p != '!')
+  if (!*p && *p != '#')
     return false;
   if (p > start) {
     int r = sscanf(s.c_str(), "%x", &sh);
@@ -532,13 +581,13 @@ bool ghobject_t::parse(const string& s)
     ++start;
   }
 
-  // look for !generation suffix
+  // look for #generation suffix
   long long unsigned g = NO_GEN;
   const char *last = start + strlen(start) - 1;
   p = last;
   while (isxdigit(*p))
     p--;
-  if (*p != '!')
+  if (*p != '#')
     return false;
   if (p < last) {
     sscanf(p + 1, "%llx", &g);

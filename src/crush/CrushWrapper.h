@@ -50,7 +50,6 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
 
 using namespace std;
 class CrushWrapper {
-  mutable Mutex mapper_lock;
 public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
@@ -78,8 +77,7 @@ public:
   CrushWrapper(const CrushWrapper& other);
   const CrushWrapper& operator=(const CrushWrapper& other);
 
-  CrushWrapper() : mapper_lock("CrushWrapper::mapper_lock"),
-		   crush(0), have_rmaps(false) {
+  CrushWrapper() : crush(0), have_rmaps(false) {
     create();
   }
   ~CrushWrapper() {
@@ -164,7 +162,7 @@ public:
     crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
-    set_tunables_bobtail();
+    set_tunables_firefly();
     crush->straw_calc_version = 1;
   }
 
@@ -232,7 +230,6 @@ public:
       crush->chooseleaf_descend_once == 0 &&
       crush->chooseleaf_vary_r == 0 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 0 &&
       crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_bobtail_tunables() const {
@@ -243,7 +240,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 0 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 0 &&
       crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_firefly_tunables() const {
@@ -254,7 +250,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 0 &&
       crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_hammer_tunables() const {
@@ -265,7 +260,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 0 &&
-      crush->straw_calc_version == 1 &&
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
@@ -279,7 +273,6 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 1 &&
-      crush->straw_calc_version == 1 &&
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
@@ -320,6 +313,19 @@ public:
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
   bool is_v5_rule(unsigned ruleid) const;
+
+  string get_min_required_version() const {
+    if (has_v5_rules() || has_nondefault_tunables5())
+      return "jewel";
+    else if (has_v4_buckets())
+      return "hammer";
+    else if (has_nondefault_tunables3())
+      return "firefly";
+    else if (has_nondefault_tunables2() || has_nondefault_tunables())
+      return "bobtail";
+    else
+      return "argonaut";
+  }
 
   // default bucket types
   unsigned get_default_bucket_alg() const {
@@ -718,7 +724,7 @@ private:
   }
   crush_rule_step *get_rule_step(unsigned ruleno, unsigned step) const {
     crush_rule *n = get_rule(ruleno);
-    if (!n) return (crush_rule_step *)(-EINVAL);
+    if (IS_ERR(n)) return (crush_rule_step *)(-EINVAL);
     if (step >= n->len) return (crush_rule_step *)(-EINVAL);
     return &n->steps[step];
   }
@@ -897,7 +903,7 @@ private:
       return (-EINVAL);
 
     // check that the bucket that we want to detach exists
-    assert( get_bucket(item) );
+    assert(bucket_exists(item));
 
     // get the bucket's weight
     crush_bucket *b = get_bucket(item);
@@ -1018,9 +1024,13 @@ public:
 
   void start_choose_profile() {
     free(crush->choose_tries);
-    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * crush->choose_total_tries);
+    /*
+     * the original choose_total_tries value was off by one (it
+     * counted "retries" and not "tries").  add one to alloc.
+     */
+    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
     memset(crush->choose_tries, 0,
-	   sizeof(*crush->choose_tries) * crush->choose_total_tries);
+	   sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
   }
   void stop_choose_profile() {
     free(crush->choose_tries);
@@ -1076,10 +1086,11 @@ public:
 
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
-    Mutex::Locker l(mapper_lock);
     int rawout[maxout];
-    int scratch[maxout * 3];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
+    char work[crush_work_size(crush, maxout)];
+    crush_init_workspace(crush, work);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
+			       weight.size(), work);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
@@ -1087,19 +1098,29 @@ public:
       out[i] = rawout[i];
   }
 
-  int read_from_file(const char *fn) {
-    bufferlist bl;
-    std::string error;
-    int r = bl.read_file(fn, &error);
-    if (r < 0) return r;
-    bufferlist::iterator blp = bl.begin();
-    decode(blp);
-    return 0;
-  }
-  int write_to_file(const char *fn) {
-    bufferlist bl;
-    encode(bl);
-    return bl.write_file(fn);
+  bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
+    assert(crush);
+
+    __u32 i;
+    for (i = 0; i < crush->max_rules; i++) {
+      if (crush->rules[i] &&
+	  crush->rules[i]->mask.ruleset == ruleset &&
+	  crush->rules[i]->mask.type == type) {
+
+        if (crush->rules[i]->mask.min_size <= size &&
+            crush->rules[i]->mask.max_size >= size) {
+          return true;
+        } else if (size < crush->rules[i]->mask.min_size) {
+          ss << "pool size is smaller than the crush rule min size";
+          return false;
+        } else {
+          ss << "pool size is bigger than the crush rule max size";
+          return false;
+        }
+      }
+    }
+
+    return false;
   }
 
   void encode(bufferlist &bl, bool lean=false) const;

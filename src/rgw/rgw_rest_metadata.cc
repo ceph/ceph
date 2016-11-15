@@ -20,6 +20,7 @@
 #include "rgw_client_io.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -118,13 +119,13 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
     if (!data) {
        return -ENOMEM;
     }
-    int r = STREAM_IO(s)->read(data, cl, &read_len);
+    read_len = recv_body(s, data, cl);
     if (cl != (size_t)read_len) {
-      dout(10) << "cio->read incomplete" << dendl;
+      dout(10) << "recv_body incomplete" << dendl;
     }
-    if (r < 0) {
+    if (read_len < 0) {
       free(data);
-      return r;
+      return read_len;
     }
     bl.append(data, read_len);
   } else {
@@ -138,10 +139,10 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
       return -ENOMEM;
     }
     do {
-      int r = STREAM_IO(s)->read(data, chunk_size, &read_len);
-      if (r < 0) {
+      read_len = recv_body(s, data, chunk_size);
+      if (read_len < 0) {
 	free(data);
-	return r;
+	return read_len;
       }
       bl.append(data, read_len);
     } while (read_len == chunk_size);
@@ -204,8 +205,8 @@ void RGWOp_Metadata_Put::send_response() {
   stringstream ver_stream;
   ver_stream << "ver:" << ondisk_version.ver
 	     <<",tag:" << ondisk_version.tag;
-  dump_pair(s, "RGWX_UPDATE_STATUS", update_status.c_str());
-  dump_pair(s, "RGWX_UPDATE_VERSION", ver_stream.str().c_str());
+  dump_header_if_nonempty(s, "RGWX_UPDATE_STATUS", update_status);
+  dump_header_if_nonempty(s, "RGWX_UPDATE_VERSION", ver_stream.str());
   end_header(s);
 }
 
@@ -249,8 +250,7 @@ void RGWOp_Metadata_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = store->meta_mgr->lock_exclusive(metadata_key, time, lock_id);
+  http_ret = store->meta_mgr->lock_exclusive(metadata_key, make_timespan(dur), lock_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }

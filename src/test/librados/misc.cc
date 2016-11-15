@@ -59,7 +59,10 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
   ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
 
-  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000001"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000000001"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "debug_monc", "20"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "debug_ms", "1"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "log_to_stderr", "true"));
 
   ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
                                          test_rados_log_cb, NULL));
@@ -90,6 +93,88 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
   ASSERT_EQ(0, ioctx.write(string(maxlen, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen+1, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen*2, 'a').c_str(), bl, bl.length(), 0));
+}
+
+TEST_F(LibRadosMiscPP, LongLocatorPP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_object_name_len;
+  ioctx.locator_set_key(
+    string((maxlen/2), 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen - 1, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen+1, 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string((maxlen*2), 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+}
+
+TEST_F(LibRadosMiscPP, LongNSpacePP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_object_namespace_len;
+  ioctx.set_namespace(
+    string((maxlen/2), 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen - 1, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen+1, 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string((maxlen*2), 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
 }
 
 TEST_F(LibRadosMiscPP, LongAttrNamePP) {
@@ -369,6 +454,24 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   ASSERT_NE(all_features, (unsigned)0);
 }
 
+void set_completion_complete(rados_completion_t cb, void *arg)
+{
+  bool *my_aio_complete = (bool*)arg;
+  *my_aio_complete = true;
+}
+
+TEST_F(LibRadosMiscPP, BadFlagsPP) {
+  unsigned badflags = CEPH_OSD_FLAG_PARALLELEXEC;
+  {
+    bufferlist bl;
+    bl.append("data");
+    ASSERT_EQ(0, ioctx.write("badfoo", bl, bl.length(), 0));
+  }
+  {
+    ASSERT_EQ(-EINVAL, ioctx.remove("badfoo", badflags));
+  }
+}
+
 TEST_F(LibRadosMiscPP, Operate1PP) {
   ObjectWriteOperation o;
   {
@@ -460,12 +563,6 @@ TEST_F(LibRadosMiscPP, BigObjectPP) {
   // this test only works on 64-bit platforms
   ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, bl.length(), 500000000000ull));
 #endif
-}
-
-void set_completion_complete(rados_completion_t cb, void *arg)
-{
-  bool *my_aio_complete = (bool*)arg;
-  *my_aio_complete = true;
 }
 
 TEST_F(LibRadosMiscPP, AioOperatePP) {
@@ -731,15 +828,29 @@ std::string LibRadosTwoPoolsECPP::src_pool_name;
 
 //copy_from between ecpool and no-ecpool.
 TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
-  //create object w/ omapheader
+  bufferlist z;
+  z.append_zero(4194304*2);
   bufferlist b;
   b.append("copyfrom");
-  ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
 
-  version_t uv = src_ioctx.get_last_version();
-  ObjectWriteOperation op;
-  op.copy_from("foo", src_ioctx, uv);
-  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+  // create big object w/ omapheader
+  {
+    ASSERT_EQ(0, src_ioctx.write_full("foo", z));
+    ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
+    version_t uv = src_ioctx.get_last_version();
+    ObjectWriteOperation op;
+    op.copy_from("foo", src_ioctx, uv);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+  }
+
+  // same with small object
+  {
+    ASSERT_EQ(0, src_ioctx.omap_set_header("bar", b));
+    version_t uv = src_ioctx.get_last_version();
+    ObjectWriteOperation op;
+    op.copy_from("bar", src_ioctx, uv);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("bar.copy", &op));
+  }
 }
 
 TEST_F(LibRadosMiscPP, CopyScrubPP) {
@@ -834,7 +945,76 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
   }
 }
 
+TEST_F(LibRadosMiscPP, WriteSamePP) {
+  bufferlist bl;
+  char buf[128];
+  bufferlist fl;
+  char full[128 * 4];
+  char *cmp;
 
+  /* zero the full range before using writesame */
+  memset(full, 0, sizeof(full));
+  fl.append(full, sizeof(full));
+  ASSERT_EQ(0, ioctx.write("ws", fl, fl.length(), 0));
+
+  memset(buf, 0xcc, sizeof(buf));
+  bl.clear();
+  bl.append(buf, sizeof(buf));
+  /* write the same buf four times */
+  ASSERT_EQ(0, ioctx.writesame("ws", bl, sizeof(full), 0));
+
+  /* read back the full buffer and confirm that it matches */
+  fl.clear();
+  fl.append(full, sizeof(full));
+  ASSERT_EQ((int)fl.length(), ioctx.read("ws", fl, fl.length(), 0));
+
+  for (cmp = fl.c_str(); cmp < fl.c_str() + fl.length(); cmp += sizeof(buf)) {
+    ASSERT_EQ(0, memcmp(cmp, buf, sizeof(buf)));
+  }
+
+  /* write_len not a multiple of data_len should throw error */
+  bl.clear();
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(-EINVAL, ioctx.writesame("ws", bl, (sizeof(buf) * 4) - 1, 0));
+  ASSERT_EQ(-EINVAL,
+	    ioctx.writesame("ws", bl, bl.length() / 2, 0));
+  /* write_len = data_len, i.e. same as write() */
+  ASSERT_EQ(0, ioctx.writesame("ws", bl, sizeof(buf), 0));
+  bl.clear();
+  ASSERT_EQ(-EINVAL,
+	    ioctx.writesame("ws", bl, sizeof(buf), 0));
+}
+
+TEST_F(LibRadosMisc, WriteSame) {
+  char buf[128];
+  char full[128 * 4];
+  char *cmp;
+
+  /* zero the full range before using writesame */
+  memset(full, 0, sizeof(full));
+  ASSERT_EQ(0, rados_write(ioctx, "ws", full, sizeof(full), 0));
+
+  memset(buf, 0xcc, sizeof(buf));
+  /* write the same buf four times */
+  ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(full), 0));
+
+  /* read back the full buffer and confirm that it matches */
+  ASSERT_EQ((int)sizeof(full), rados_read(ioctx, "ws", full, sizeof(full), 0));
+
+  for (cmp = full; cmp < full + sizeof(full); cmp += sizeof(buf)) {
+    ASSERT_EQ(0, memcmp(cmp, buf, sizeof(buf)));
+  }
+
+  /* write_len not a multiple of data_len should throw error */
+  ASSERT_EQ(-EINVAL, rados_writesame(ioctx, "ws", buf, sizeof(buf),
+				     (sizeof(buf) * 4) - 1, 0));
+  ASSERT_EQ(-EINVAL,
+	    rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf) / 2, 0));
+  ASSERT_EQ(-EINVAL,
+	    rados_writesame(ioctx, "ws", buf, 0, sizeof(buf), 0));
+  /* write_len = data_len, i.e. same as rados_write() */
+  ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf), 0));
+}
 
 int main(int argc, char **argv)
 {

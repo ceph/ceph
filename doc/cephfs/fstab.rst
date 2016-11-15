@@ -15,12 +15,12 @@ following to ``/etc/fstab``::
 
 For example:: 
 
-	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime    0       2
+	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime,_netdev    0       2
 	
 .. important:: The ``name`` and ``secret`` or ``secretfile`` options are 
    mandatory when you have Ceph authentication running. 
  
-See `Authentication`_ for details. 
+See `User Management`_ for details.
    
    
 FUSE
@@ -30,7 +30,7 @@ To mount Ceph FS in your file systems table as a filesystem in user space, add t
 following to ``/etc/fstab``::
 
 	#DEVICE                                  PATH         TYPE      OPTIONS
-	id={user-ID}[,conf={path/to/conf.conf}] /mount/path  fuse.ceph defaults 0 0
+	id={user-ID}[,conf={path/to/conf.conf}] /mount/path  fuse.ceph defaults,_netdev 0 0
 
 For example::
 
@@ -41,7 +41,7 @@ The ``DEVICE`` field is a comma-delimited list of options to pass to the command
 Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass any valid 
 ``ceph-fuse`` option to the command line this way.
 
-See `Authentication`_ for details. 
+See `User Management`_ for details.
 
 
-.. _Authentication: ../../rados/operations/authentication/
+.. _User Management: ../../rados/operations/user-management/

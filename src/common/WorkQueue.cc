@@ -12,6 +12,8 @@
  * 
  */
 
+#include "include/compat.h"
+
 #include <sstream>
 
 #include "include/types.h"
@@ -28,7 +30,7 @@
 
 
 ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option)
-  : cct(cct_), name(nm), thread_name(tn),
+  : cct(cct_), name(std::move(nm)), thread_name(std::move(tn)),
     lockname(nm + "::lock"),
     _lock(lockname.c_str()),  // this should be safe due to declaration order
     _stop(false),
@@ -78,7 +80,7 @@ void ThreadPool::handle_conf_change(const struct md_config_t *conf,
     assert(r >= 0);
     int v = atoi(buf);
     free(buf);
-    if (v > 0) {
+    if (v >= 0) {
       _lock.Lock();
       _num_threads = v;
       start_threads();
@@ -94,8 +96,10 @@ void ThreadPool::worker(WorkThread *wt)
   ldout(cct,10) << "worker start" << dendl;
   
   std::stringstream ss;
-  ss << name << " thread " << (void*)pthread_self();
-  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str());
+  char name[16] = {0};
+  ceph_pthread_getname(pthread_self(), name, sizeof(name));
+  ss << name << " thread " << name;
+  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!_stop) {
 
@@ -287,9 +291,19 @@ void ThreadPool::set_ioprio(int cls, int priority)
 }
 
 ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, string tn,
-  uint32_t pnum_threads): cct(pcct_),name(nm),thread_name(tn),lockname(nm + "::lock"),
-  shardedpool_lock(lockname.c_str()),num_threads(pnum_threads),stop_threads(0), 
-  pause_threads(0),drain_threads(0), num_paused(0), num_drained(0), wq(NULL) {}
+  uint32_t pnum_threads):
+  cct(pcct_),
+  name(std::move(nm)),
+  thread_name(std::move(tn)),
+  lockname(name + "::lock"),
+  shardedpool_lock(lockname.c_str()),
+  num_threads(pnum_threads),
+  stop_threads(0),
+  pause_threads(0),
+  drain_threads(0),
+  num_paused(0),
+  num_drained(0),
+  wq(NULL) {}
 
 void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 {
@@ -297,8 +311,10 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
   ldout(cct,10) << "worker start" << dendl;
 
   std::stringstream ss;
-  ss << name << " thread " << (void*)pthread_self();
-  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str());
+  char name[16] = {0};
+  ceph_pthread_getname(pthread_self(), name, sizeof(name));
+  ss << name << " thread " << name;
+  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!stop_threads.read()) {
     if(pause_threads.read()) {

@@ -23,6 +23,7 @@ class GenericFileStoreBackend : public FileStoreBackend {
 private:
   bool ioctl_fiemap;
   bool seek_data_hole;
+  bool use_splice;
   bool m_filestore_fiemap;
   bool m_filestore_seek_data_hole;
   bool m_filestore_fsync_flushes_journal_data;
@@ -50,7 +51,7 @@ public:
     return _copy_range(from, to, srcoff, len, dstoff);
   }
   virtual int set_alloc_hint(int fd, uint64_t hint) { return -EOPNOTSUPP; }
-  virtual bool has_splice() const { return m_filestore_splice; }
+  virtual bool has_splice() const { return use_splice; }
 private:
   int _crc_load_or_init(int fd, SloppyCRCMap *cm);
   int _crc_save(int fd, SloppyCRCMap *cm);

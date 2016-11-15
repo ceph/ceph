@@ -15,7 +15,7 @@
 #ifndef CEPH_AUTHNONEAUTHORIZEHANDLER_H
 #define CEPH_AUTHNONEAUTHORIZEHANDLER_H
 
-#include "../AuthAuthorizeHandler.h"
+#include "auth/AuthAuthorizeHandler.h"
 
 class CephContext;
 

@@ -2,6 +2,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+#include "include/utime.h"
 
 
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
@@ -16,7 +17,8 @@ void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_in
 void rgw_bucket_pending_info::dump(Formatter *f) const
 {
   encode_json("state", (int)state, f);
-  encode_json("timestamp", timestamp, f);
+  utime_t ut(timestamp);
+  encode_json("timestamp", ut, f);
   encode_json("op", (int)op, f);
 }
 
@@ -24,7 +26,8 @@ void rgw_bucket_pending_info::decode_json(JSONObj *obj) {
   int val;
   JSONDecoder::decode_json("state", val, obj);
   state = (RGWPendingState)val;
-  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  utime_t ut(timestamp);
+  JSONDecoder::decode_json("timestamp", ut, obj);
   JSONDecoder::decode_json("op", val, obj);
   op = (uint8_t)val;
 }
@@ -51,7 +54,8 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
 {
   encode_json("category", (int)category, f);
   encode_json("size", size, f);
-  encode_json("mtime", mtime, f);
+  utime_t ut(mtime);
+  encode_json("mtime", ut, f);
   encode_json("etag", etag, f);
   encode_json("owner", owner, f);
   encode_json("owner_display_name", owner_display_name, f);
@@ -64,7 +68,8 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("category", val, obj);
   category = (uint8_t)val;
   JSONDecoder::decode_json("size", size, obj);
-  JSONDecoder::decode_json("mtime", mtime, obj);
+  utime_t ut(mtime);
+  JSONDecoder::decode_json("mtime", ut, obj);
   JSONDecoder::decode_json("etag", etag, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
@@ -232,6 +237,38 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
   dump_bi_entry(data, type, f);
 }
 
+bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats)
+{
+  bool account = false;
+  bufferlist::iterator iter = data.begin();
+  switch (type) {
+    case PlainIdx:
+    case InstanceIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        ::decode(entry, iter);
+        *key = entry.key;
+        *category = entry.meta.category;
+        accounted_stats->num_entries++;
+        accounted_stats->total_size += entry.meta.accounted_size;
+        accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        account = true;
+      }
+      break;
+    case OLHIdx:
+      {
+        rgw_bucket_olh_entry entry;
+        ::decode(entry, iter);
+        *key = entry.key;
+      }
+      break;
+    default:
+      break;
+  }
+
+  return account;
+}
+
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
   encode_json("key", key, f);
@@ -343,7 +380,9 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
     state = CLS_RGW_STATE_UNKNOWN;
   }
   JSONDecoder::decode_json("index_ver", index_ver, obj);
-  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("timestamp", ut, obj);
+  timestamp = ut.to_real_time();
   uint32_t f;
   JSONDecoder::decode_json("bilog_flags", f, obj);
   JSONDecoder::decode_json("ver", ver, obj);
@@ -399,7 +438,8 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   }
 
   f->dump_int("index_ver", index_ver);
-  timestamp.gmtime(f->dump_stream("timestamp"));
+  utime_t ut(timestamp);
+  ut.gmtime_nsec(f->dump_stream("timestamp"));
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();
@@ -415,7 +455,7 @@ void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
   ls.push_back(new rgw_bi_log_entry);
   ls.back()->id = "midf";
   ls.back()->object = "obj";
-  ls.back()->timestamp = utime_t(2, 3);
+  ls.back()->timestamp = ceph::real_clock::from_ceph_timespec({2, 3});
   ls.back()->index_ver = 4323;
   ls.back()->tag = "tagasdfds";
   ls.back()->op = CLS_RGW_OP_DEL;
@@ -428,6 +468,7 @@ void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category
   s->total_size = 1024;
   s->total_size_rounded = 4096;
   s->num_entries = 2;
+  s->actual_size = 1024;
   o.push_back(s);
   o.push_back(new rgw_bucket_category_stats);
 }
@@ -437,6 +478,7 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
   f->dump_unsigned("total_size", total_size);
   f->dump_unsigned("total_size_rounded", total_size_rounded);
   f->dump_unsigned("num_entries", num_entries);
+  f->dump_unsigned("actual_size", actual_size);
 }
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)

@@ -15,12 +15,10 @@
 #ifndef CEPH_KEYSSERVER_H
 #define CEPH_KEYSSERVER_H
 
-#include "common/config.h"
-
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
-
-#include "common/Timer.h"
+#include "CephxKeyServer.h"
+#include "common/Mutex.h"
 
 class CephContext;
 
@@ -243,10 +241,12 @@ public:
   }
 
   void clear_secrets() {
+    Mutex::Locker l(lock);
     data.clear_secrets();
   }
 
   void apply_data_incremental(KeyServerData::Incremental& inc) {
+    Mutex::Locker l(lock);
     data.apply_incremental(inc);
   }
   void set_ver(version_t ver) {
@@ -269,19 +269,16 @@ public:
     return (b != data.secrets_end());
   }
   int get_num_secrets() {
+    Mutex::Locker l(lock);
     return data.secrets.size();
   }
 
-  /*void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
-    Mutex::Locker l(lock);
-    data.add_rotating_secret(service_id, key);
-  }
-  */
   void clone_to(KeyServerData& dst) const {
     Mutex::Locker l(lock);
     dst = data;
   }
   void export_keyring(KeyRing& keyring) {
+    Mutex::Locker l(lock);
     for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
 	 p != data.secrets.end();
 	 ++p) {

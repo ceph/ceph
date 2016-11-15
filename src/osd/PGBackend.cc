@@ -24,6 +24,9 @@
 #include "PGBackend.h"
 #include "OSD.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "OSDMap.h"
+#include "PGLog.h"
+#include "common/LogClient.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -59,6 +62,12 @@ struct RollbackVisitor : public ObjectModDesc::Visitor {
     temp.append(t);
     temp.swap(t);
   }
+  void try_rmobject(version_t old_version) {
+    ObjectStore::Transaction temp;
+    pg->rollback_try_stash(hoid, old_version, &temp);
+    temp.append(t);
+    temp.swap(t);
+  }
   void create() {
     ObjectStore::Transaction temp;
     pg->rollback_create(hoid, &temp);
@@ -81,6 +90,17 @@ void PGBackend::rollback(
   t->append(vis.t);
 }
 
+
+void PGBackend::try_stash(
+  const hobject_t &hoid,
+  version_t v,
+  ObjectStore::Transaction *t)
+{
+  t->try_rename(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    ghobject_t(hoid, v, get_parent()->whoami_shard().shard));
+}
 
 void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
@@ -114,9 +134,13 @@ int PGBackend::objects_list_partial(
     _next = ghobject_t(begin, 0, get_parent()->whoami_shard().shard);
   ls->reserve(max);
   int r = 0;
+
+  if (min > max)
+    min = max;
+
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
-    int r = store->collection_list(
+    r = store->collection_list(
       ch,
       _next,
       ghobject_t::get_max(),
@@ -124,8 +148,10 @@ int PGBackend::objects_list_partial(
       max - ls->size(),
       &objects,
       &_next);
-    if (r != 0)
+    if (r != 0) {
+      derr << __func__ << " list collection " << ch << " got: " << cpp_strerror(r) << dendl;
       break;
+    }
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
@@ -253,6 +279,20 @@ void PGBackend::rollback_stash(
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
 }
 
+void PGBackend::rollback_try_stash(
+  const hobject_t &hoid,
+  version_t old_version,
+  ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
+  t->remove(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+  t->try_rename(
+    coll,
+    ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard),
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+}
+
 void PGBackend::rollback_create(
   const hobject_t &hoid,
   ObjectStore::Transaction *t) {
@@ -369,7 +409,6 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   pg_shard_t auth_shard,
   const ScrubMap::object &auth,
   const object_info_t& auth_oi,
-  bool okseed,
   const ScrubMap::object &candidate,
   shard_info_wrapper &result,
   ostream &errorstream)
@@ -388,7 +427,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
-      bool known = okseed && auth_oi.is_data_digest() &&
+      bool known = auth_oi.is_data_digest() &&
 	auth.digest == auth_oi.data_digest;
       errorstream << "data_digest 0x" << std::hex << candidate.digest
 		  << " != "
@@ -403,7 +442,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
-      bool known = okseed && auth_oi.is_omap_digest() &&
+      bool known = auth_oi.is_omap_digest() &&
 	auth.omap_digest == auth_oi.omap_digest;
       errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		  << " != "
@@ -463,7 +502,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   PGBackend::be_select_auth_object(
   const hobject_t &obj,
   const map<pg_shard_t,ScrubMap*> &maps,
-  bool okseed,
   object_info_t *auth_oi)
 {
   map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
@@ -525,7 +563,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       continue;
     }
     if (parent->get_pool().is_replicated()) {
-      if (okseed && oi.is_data_digest() && i->second.digest_present &&
+      if (oi.is_data_digest() && i->second.digest_present &&
 	  oi.data_digest != i->second.digest) {
 	dout(10) << __func__ << ": rejecting osd " << j->first
 		 << " for obj " << obj
@@ -534,7 +572,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 		 << std::dec << dendl;
 	continue;
       }
-      if (okseed && oi.is_omap_digest() && i->second.omap_digest_present &&
+      if (oi.is_omap_digest() && i->second.omap_digest_present &&
 	  oi.omap_digest != i->second.omap_digest) {
 	dout(10) << __func__ << ": rejecting osd " << j->first
 		 << " for obj " << obj
@@ -555,7 +593,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
 void PGBackend::be_compare_scrubmaps(
   const map<pg_shard_t,ScrubMap*> &maps,
-  bool okseed,
   bool repair,
   map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
   map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
@@ -585,7 +622,7 @@ void PGBackend::be_compare_scrubmaps(
        ++k) {
     object_info_t auth_oi;
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
-      be_select_auth_object(*k, maps, okseed, &auth_oi);
+      be_select_auth_object(*k, maps, &auth_oi);
     inconsistent_obj_wrapper object_error{*k};
 
     list<pg_shard_t> auth_list;
@@ -614,7 +651,6 @@ void PGBackend::be_compare_scrubmaps(
 	  be_compare_scrub_objects(auth->first,
 				   auth_object,
 				   auth_oi,
-				   okseed,
 				   j->second->objects[*k],
 				   shard_info,
 				   ss);
@@ -652,8 +688,7 @@ void PGBackend::be_compare_scrubmaps(
       object_error.add_shard(auth->first, auth_shard);
     }
 
-    if (okseed &&
-	clean &&
+    if (clean &&
 	parent->get_pool().is_replicated()) {
       enum {
 	NO = 0,

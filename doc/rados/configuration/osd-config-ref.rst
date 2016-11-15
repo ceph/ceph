@@ -265,7 +265,7 @@ scrubbing operations.
 
 ``osd scrub min interval`` 
 
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
+:Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
@@ -329,6 +329,42 @@ recovery operations to ensure optimal performance during recovery.
 
 :Type: 32-bit Integer
 :Default: ``2`` 
+
+
+``osd op queue``
+
+:Description: This sets the type of queue to be used for prioritizing ops
+              in the OSDs. Both queues feature a strict sub-queue which is
+              dequeued before the normal queue. The normal queue is different
+              between implementations. The original PrioritizedQueue (``prio``) uses a
+              token bucket system which when there are sufficient tokens will
+              dequeue high priority queues first. If there are not enough
+              tokens available, queues are dequeued low priority to high priority.
+              The new WeightedPriorityQueue (``wpq``) dequeues all priorities in
+              relation to their priorities to prevent starvation of any queue.
+              WPQ should help in cases where a few OSDs are more overloaded
+              than others. Requires a restart.
+
+:Type: String
+:Valid Choices: prio, wpq
+:Default: ``prio``
+
+
+``osd op queue cut off``
+
+:Description: This selects which priority ops will be sent to the strict
+              queue verses the normal queue. The ``low`` setting sends all
+              replication ops and higher to the strict queue, while the ``high``
+              option sends only replication acknowledgement ops and higher to
+              the strict queue. Setting this to ``high`` should help when a few
+              OSDs in the cluster are very busy especially when combined with
+              ``wpq`` in the ``osd op queue`` setting. OSDs that are very busy
+              handling replication traffic could starve primary client traffic
+              on these OSDs without these settings. Requires a restart.
+
+:Type: String
+:Valid Choices: low, high
+:Default: ``low``
 
 
 ``osd client op priority``
@@ -450,7 +486,7 @@ priority than requests to read or write data.
 
 :Description: The maximum number of backfills allowed to or from a single OSD.
 :Type: 64-bit Unsigned Integer
-:Default: ``10``
+:Default: ``1``
 
 
 ``osd backfill scan min`` 

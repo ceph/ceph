@@ -18,6 +18,7 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapSnapshotRemoveRequest : public TestMockFixture {
 public:
@@ -25,11 +26,11 @@ public:
     std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(snap_oid, _, "rbd", "object_map_load", _, _, _))
+                  exec(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _))
                     .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(snap_oid, _, "rbd", "object_map_load", _, _, _))
+                  exec(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _))
                     .WillOnce(DoDefault());
     }
   }
@@ -38,14 +39,14 @@ public:
     std::string oid(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "lock", "assert_locked", _, _, _))
+                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                     .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "lock", "assert_locked", _, _, _))
+                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                     .WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "rbd", "object_map_snap_remove", _, _, _))
+                  exec(oid, _, StrEq("rbd"), StrEq("object_map_snap_remove"), _, _, _))
                     .WillOnce(DoDefault());
     }
   }
@@ -53,20 +54,20 @@ public:
   void expect_remove_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
     std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
     if (r < 0) {
-      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid))
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(Return(r));
     } else {
-      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid))
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(DoDefault());
     }
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+                exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                   .Times(0);
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .WillOnce(DoDefault());
   }
 };
@@ -85,6 +86,31 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, Success) {
     expect_remove_snapshot(ictx, 0);
   }
   expect_remove_map(ictx, snap_id, 0);
+
+  ceph::BitVector<2> object_map;
+  C_SaferCond cond_ctx;
+  AsyncRequest<> *request = new SnapshotRemoveRequest(
+    *ictx, &object_map, snap_id, &cond_ctx);
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::WLocker snap_locker(ictx->snap_lock);
+    request->send();
+  }
+  ASSERT_EQ(0, cond_ctx.wait());
+
+  expect_unlock_exclusive_lock(*ictx);
+}
+
+TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapMissing) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
+
+  uint64_t snap_id = ictx->snap_info.rbegin()->first;
+  expect_load_map(ictx, snap_id, -ENOENT);
 
   ceph::BitVector<2> object_map;
   C_SaferCond cond_ctx;

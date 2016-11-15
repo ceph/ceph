@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
@@ -17,13 +18,16 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapSnapshotCreateRequest : public TestMockFixture {
 public:
   void inject_snap_info(librbd::ImageCtx *ictx, uint64_t snap_id) {
     RWLock::WLocker snap_locker(ictx->snap_lock);
     RWLock::RLocker parent_locker(ictx->parent_lock);
-    ictx->add_snap("snap name", snap_id, ictx->size, ictx->parent_md,
+    ictx->add_snap("snap name",
+	  cls::rbd::UserSnapshotNamespace(), snap_id,
+		   ictx->size, ictx->parent_md,
                    RBD_PROTECTION_STATUS_UNPROTECTED, 0);
   }
 
@@ -57,21 +61,21 @@ public:
     std::string oid(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "lock", "assert_locked", _, _, _))
+                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                     .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "lock", "assert_locked", _, _, _))
+                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                     .WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "rbd", "object_map_snap_add", _, _, _))
+                  exec(oid, _, StrEq("rbd"), StrEq("object_map_snap_add"), _, _, _))
                     .WillOnce(DoDefault());
     }
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .WillOnce(DoDefault());
   }
 };

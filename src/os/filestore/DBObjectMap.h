@@ -413,7 +413,7 @@ private:
 
   typedef ceph::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
   DBObjectMapIterator _get_iterator(Header header) {
-    return DBObjectMapIterator(new DBObjectMapIteratorImpl(this, header));
+    return std::make_shared<DBObjectMapIteratorImpl>(this, header);
   }
 
   /// sys

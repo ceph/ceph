@@ -38,7 +38,7 @@ public:
   void operator++();
   JSONObj *operator*();
 
-  bool end() {
+  bool end() const {
     return (cur == last);
   }
 };
@@ -73,7 +73,8 @@ public:
   JSONObjIter find_first(const string& name);
   JSONObj *find_obj(const string& name);
 
-  friend ostream& operator<<(ostream& out, JSONObj& obj); // does not work, FIXME
+  friend ostream& operator<<(ostream &out,
+			     const JSONObj &obj); // does not work, FIXME
 
   bool is_array();
   bool is_object();
@@ -344,7 +345,6 @@ void encode_json(const char *name, unsigned long val, ceph::Formatter *f);
 void encode_json(const char *name, long long val, ceph::Formatter *f);
 void encode_json(const char *name, const utime_t& val, ceph::Formatter *f);
 void encode_json(const char *name, const bufferlist& bl, ceph::Formatter *f);
-void encode_json(const char *name, long long val, ceph::Formatter *f);
 void encode_json(const char *name, long long unsigned val, ceph::Formatter *f);
 
 template<class T>

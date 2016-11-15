@@ -37,13 +37,6 @@ void MetaRequest::dump(Formatter *f) const
 
   f->dump_int("got_unsafe", got_unsafe);
 
-  if (head.op == CEPH_MDS_OP_READDIR ||
-      head.op == CEPH_MDS_OP_LSSNAP) {
-    f->dump_stream("readdir_frag") << readdir_frag;
-    f->dump_string("readdir_start", readdir_start);
-    f->dump_unsigned("readdir_offset", readdir_offset);
-  }
-
   f->dump_unsigned("uid", head.caller_uid);
   f->dump_unsigned("gid", head.caller_gid);
 

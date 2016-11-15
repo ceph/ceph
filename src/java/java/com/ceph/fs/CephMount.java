@@ -42,13 +42,14 @@ public class CephMount {
    *
    * Must be synchronized with JNI if changed.
    */
-  public static final int O_RDONLY = 1;
-  public static final int O_RDWR   = 2;
-  public static final int O_APPEND = 4;
-  public static final int O_CREAT  = 8;
-  public static final int O_TRUNC  = 16;
-  public static final int O_EXCL   = 32;
-  public static final int O_WRONLY = 64;
+  public static final int O_RDONLY    = 1;
+  public static final int O_RDWR      = 2;
+  public static final int O_APPEND    = 4;
+  public static final int O_CREAT     = 8;
+  public static final int O_TRUNC     = 16;
+  public static final int O_EXCL      = 32;
+  public static final int O_WRONLY    = 64;
+  public static final int O_DIRECTORY = 128;
 
   /*
    * Whence flags for seek().

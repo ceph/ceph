@@ -28,7 +28,7 @@ void usage()
   cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
-  cout << "   --test-map-pgs [--pool <poolid>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
@@ -73,6 +73,7 @@ int main(int argc, const char **argv)
   bool test_map_pgs = false;
   bool test_map_pgs_dump = false;
   bool test_random = false;
+  int64_t pg_num = -1;
 
   std::string val;
   std::ostringstream err;
@@ -133,6 +134,13 @@ int main(int argc, const char **argv)
       test_map_object = val;
     } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
       test_crush = true;
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)NULL)) {
+      string interr;
+      pg_num = strict_strtoll(val.c_str(), 10, &interr);
+      if (interr.length() > 0) {
+        cerr << "error parsing integer value " << interr << std::endl;
+        exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
@@ -302,18 +310,17 @@ int main(int argc, const char **argv)
   if (!test_map_pg.empty()) {
     pg_t pgid;
     if (!pgid.parse(test_map_pg.c_str())) {
-      cerr << me << ": failed to parse pg '" << test_map_pg
-	   << "', r = " << r << std::endl;
+      cerr << me << ": failed to parse pg '" << test_map_pg << std::endl;
       usage();
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
     vector<int> raw, up, acting;
-    int calced_primary, up_primary, acting_primary;
-    osdmap.pg_to_osds(pgid, &raw, &calced_primary);
+    int raw_primary, up_primary, acting_primary;
+    osdmap.pg_to_raw_osds(pgid, &raw, &raw_primary);
     osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
                                 &acting, &acting_primary);
-    cout << pgid << " raw (" << raw << ", p" << calced_primary
+    cout << pgid << " raw (" << raw << ", p" << raw_primary
          << ") up (" << up << ", p" << up_primary
          << ") acting (" << acting << ", p" << acting_primary << ")"
          << std::endl;
@@ -330,11 +337,14 @@ int main(int argc, const char **argv)
     vector<int> size(30, 0);
     if (test_random)
       srand(getpid());
-    const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-    for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+    map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
+    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
 	 p != pools.end(); ++p) {
       if (pool != -1 && p->first != pool)
 	continue;
+      if (pg_num > 0) 
+        p->second.set_pg_num(pg_num);
+      
       cout << "pool " << p->first
 	   << " pg_num " << p->second.get_pg_num() << std::endl;
       for (unsigned i = 0; i < p->second.get_pg_num(); ++i) {

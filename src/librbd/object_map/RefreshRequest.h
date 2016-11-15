@@ -6,8 +6,9 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "include/Context.h"
 #include "common/bit_vector.hpp"
+
+class Context;
 
 namespace librbd {
 
@@ -28,24 +29,25 @@ private:
    * @verbatim
    *
    * <start> -----> LOCK (skip if snapshot)
-   *                  |
-   *                  v  (other errors)
-   *                LOAD * * * * * * * > INVALIDATE ------------\
-   *                  |    *                                    |
-   *                  |    * (-EINVAL or too small)             |
-   *                  |    * * * * * * > INVALIDATE_AND_RESIZE  |
-   *                  |                      |              *   |
-   *                  |                      |              *   |
-   *                  |                      v              *   |
-   *                  |                    RESIZE           *   |
-   *                  |                      |              *   |
-   *                  |                      |  * * * * * * *   |
-   *                  |                      |  *               |
-   *                  |                      v  v               |
-   *                  \--------------------> LOCK <-------------/
-   *                                          |
-   *                                          v
-   *                                      <finish>
+   *    *             |
+   *    *             v  (other errors)
+   *    *           LOAD * * * * * * * > INVALIDATE ------------\
+   *    *             |    *                                    |
+   *    *             |    * (-EINVAL or too small)             |
+   *    *             |    * * * * * * > INVALIDATE_AND_RESIZE  |
+   *    *             |                      |              *   |
+   *    *             |                      |              *   |
+   *    *             |                      v              *   |
+   *    *             |                    RESIZE           *   |
+   *    *             |                      |              *   |
+   *    *             |                      |  * * * * * * *   |
+   *    *             |                      |  *               |
+   *    *             |                      v  v               |
+   *    *             \--------------------> LOCK <-------------/
+   *    *                                     |
+   *    v                                     v
+   * INVALIDATE_AND_CLOSE ---------------> <finish>
+   *
    * @endverbatim
    */
 
@@ -73,6 +75,9 @@ private:
 
   void send_resize();
   Context *handle_resize(int *ret_val);
+
+  void send_invalidate_and_close();
+  Context *handle_invalidate_and_close(int *ret_val);
 
   void apply();
 };

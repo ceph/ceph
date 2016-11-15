@@ -7,12 +7,11 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
-#include "include/rbd/librbd.hpp"
 #include "common/Mutex.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
-#include <set>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -33,22 +32,29 @@ public:
   Replay(ImageCtxT &image_ctx);
   ~Replay();
 
-  void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
+  int decode(bufferlist::iterator *it, EventEntry *event_entry);
+  void process(const EventEntry &event_entry,
+               Context *on_ready, Context *on_safe);
 
-  void shut_down(Context *on_finish);
+  void shut_down(bool cancel_ops, Context *on_finish);
   void flush(Context *on_finish);
 
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
 
 private:
+  typedef std::unordered_set<int> ReturnValues;
+
   struct OpEvent {
     bool op_in_progress = false;
+    bool finish_on_ready = false;
     Context *on_op_finish_event = nullptr;
     Context *on_start_ready = nullptr;
     Context *on_start_safe = nullptr;
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
     Context *on_op_complete = nullptr;
+    ReturnValues op_finish_error_codes;
+    ReturnValues ignore_error_codes;
   };
 
   typedef std::list<uint64_t> OpTids;
@@ -118,6 +124,7 @@ private:
   ContextSet m_aio_modify_safe_contexts;
 
   OpEvents m_op_events;
+  uint64_t m_in_flight_op_events = 0;
 
   Context *m_flush_ctx = nullptr;
   Context *m_on_aio_ready = nullptr;
@@ -148,6 +155,16 @@ private:
                     Context *on_safe);
   void handle_event(const FlattenEvent &event, Context *on_ready,
                     Context *on_safe);
+  void handle_event(const DemoteEvent &event, Context *on_ready,
+                    Context *on_safe);
+  void handle_event(const SnapLimitEvent &event, Context *on_ready,
+		    Context *on_safe);
+  void handle_event(const UpdateFeaturesEvent &event, Context *on_ready,
+                    Context *on_safe);
+  void handle_event(const MetadataSetEvent &event, Context *on_ready,
+                    Context *on_safe);
+  void handle_event(const MetadataRemoveEvent &event, Context *on_ready,
+                    Context *on_safe);
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 
@@ -155,15 +172,15 @@ private:
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 
-  Context *create_op_context_callback(uint64_t op_tid, Context *on_safe,
-                                      OpEvent **op_event);
+  Context *create_op_context_callback(uint64_t op_tid, Context *on_ready,
+                                      Context *on_safe, OpEvent **op_event);
   void handle_op_complete(uint64_t op_tid, int r);
 
   AioCompletion *create_aio_modify_completion(Context *on_ready,
                                               Context *on_safe,
+                                              aio_type_t aio_type,
                                               bool *flush_required);
-  AioCompletion *create_aio_flush_completion(Context *on_ready,
-                                             Context *on_safe);
+  AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(AioCompletion *aio_comp);
 
 };

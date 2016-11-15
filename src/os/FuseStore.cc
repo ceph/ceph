@@ -2,17 +2,23 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "FuseStore.h"
+#include "os/ObjectStore.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 
 #define FUSE_USE_VERSION 30
-#include <fuse/fuse.h>
+#include <fuse.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>           /* Definition of AT_* constants */
 #include <sys/stat.h>
+
+#if defined(DARWIN) || defined(__FreeBSD__)
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
 
 #define dout_subsys ceph_subsys_fuse
 #include "common/debug.h"
@@ -27,12 +33,35 @@ struct fs_info {
   char *mountpoint;
 };
 
+int FuseStore::open_file(string p, struct fuse_file_info *fi,
+			 std::function<int(bufferlist *bl)> f)
+{
+  if (open_files.count(p)) {
+    OpenFile *o = open_files[p];
+    fi->fh = reinterpret_cast<uint64_t>(o);
+    ++o->ref;
+    return 0;
+  }
+  bufferlist bl;
+  int r = f(&bl);
+  if (r < 0) {
+    return r;
+  }
+  OpenFile *o = new OpenFile;
+  o->path = p;
+  o->bl.claim(bl);
+  open_files[p] = o;
+  fi->fh = reinterpret_cast<uint64_t>(o);
+  ++o->ref;
+  return 0;
+}
+
 FuseStore::FuseStore(ObjectStore *s, string p)
   : store(s),
     mount_point(p),
     fuse_thread(this)
 {
-  info = new fs_info;
+  info = new fs_info();
 }
 
 FuseStore::~FuseStore()
@@ -199,6 +228,7 @@ static int parse_fn(const char *path, coll_t *cid, ghobject_t *oid, string *key,
 
 static int os_getattr(const char *path, struct stat *stbuf)
 {
+  dout(10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -209,6 +239,7 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
   stbuf->st_size = 0;
   stbuf->st_uid = 0;
@@ -348,6 +379,7 @@ static int os_readdir(const char *path,
 		      off_t offset,
 		      struct fuse_file_info *fi)
 {
+  dout(10) << __func__ << " " << path << " offset " << offset << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -358,6 +390,7 @@ static int os_readdir(const char *path,
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
   // we can't shift 32 bits or else off_t will go negative
   const int hash_shift = 31;
@@ -507,6 +540,7 @@ static int os_readdir(const char *path,
 
 static int os_open(const char *path, struct fuse_file_info *fi)
 {
+  dout(10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -517,6 +551,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
   bufferlist *pbl = 0;
   switch (t) {
@@ -589,10 +624,12 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   case FN_OBJECT_DATA:
     {
-      pbl = new bufferlist;
-      int r = fs->store->read(cid, oid, 0, 0, *pbl);
+      int r = fs->open_file(
+	path, fi,
+	[&](bufferlist *pbl) {
+	  return fs->store->read(cid, oid, 0, 0, *pbl);
+	});
       if (r < 0) {
-        delete pbl;
         return r;
       }
     }
@@ -600,48 +637,64 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   case FN_OBJECT_ATTR_VAL:
     {
-      bufferptr bp;
-      int r = fs->store->getattr(cid, oid, key.c_str(), bp);
+      int r = fs->open_file(
+	path, fi,
+	[&](bufferlist *pbl) {
+	  bufferptr bp;
+	  int r = fs->store->getattr(cid, oid, key.c_str(), bp);
+	  if (r < 0)
+	    return r;
+	  pbl->append(bp);
+	  return 0;
+	});
       if (r < 0)
         return r;
-      pbl = new bufferlist;
-      pbl->append(bp);
     }
     break;
 
   case FN_OBJECT_OMAP_VAL:
     {
-      set<string> k;
-      k.insert(key);
-      map<string,bufferlist> v;
-      int r = fs->store->omap_get_values(cid, oid, k, &v);
+      int r = fs->open_file(
+	path, fi,
+	[&](bufferlist *pbl) {
+	  set<string> k;
+	  k.insert(key);
+	  map<string,bufferlist> v;
+	  int r = fs->store->omap_get_values(cid, oid, k, &v);
+	  if (r < 0)
+	    return r;
+	  *pbl = v[key];
+	  return 0;
+	});
       if (r < 0)
-        return r;
-      pbl = new bufferlist;
-      *pbl = v[key];
+	return r;
     }
     break;
 
   case FN_OBJECT_OMAP_HEADER:
     {
-      bufferlist bl;
-      int r = fs->store->omap_get_header(cid, oid, &bl);
+      int r = fs->open_file(
+	path, fi,
+	[&](bufferlist *pbl) {
+	  return fs->store->omap_get_header(cid, oid, pbl);
+	});
       if (r < 0)
        return r;
-      pbl = new bufferlist;
-      pbl->claim(bl);
     }
     break;
   }
 
   if (pbl) {
-    fi->fh = reinterpret_cast<uint64_t>(pbl);
+    FuseStore::OpenFile *o = new FuseStore::OpenFile;
+    o->bl.claim(*pbl);
+    fi->fh = reinterpret_cast<uint64_t>(o);
   }
   return 0;
 }
 
 static int os_mkdir(const char *path, mode_t mode)
 {
+  dout(10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -652,6 +705,7 @@ static int os_mkdir(const char *path, mode_t mode)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
   ObjectStore::Transaction t;
   switch (f) {
@@ -700,11 +754,13 @@ static int os_mkdir(const char *path, mode_t mode)
 
 static int os_chmod(const char *path, mode_t mode)
 {
+  dout(10) << __func__ << " " << path << dendl;
   return 0;
 }
 
 static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
+  dout(10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -715,6 +771,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
   ObjectStore::Transaction t;
   bufferlist *pbl = 0;
@@ -767,30 +824,46 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   }
 
   if (pbl) {
-    fi->fh = reinterpret_cast<uint64_t>(pbl);
+    FuseStore::OpenFile *o = new FuseStore::OpenFile;
+    o->bl.claim(*pbl);
+    o->dirty = true;
+    fi->fh = reinterpret_cast<uint64_t>(o);
   }
   return 0;
 }
 
 static int os_release(const char *path, struct fuse_file_info *fi)
 {
-  bufferlist *pbl = reinterpret_cast<bufferlist*>(fi->fh);
-  delete pbl;
+  dout(10) << __func__ << " " << path << dendl;
+  fuse_context *fc = fuse_get_context();
+  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  if (--o->ref == 0) {
+    dout(10) << __func__ << " closing last " << o->path << dendl;
+    fs->open_files.erase(o->path);
+    delete o;
+  }
   return 0;
 }
 
 static int os_read(const char *path, char *buf, size_t size, off_t offset,
 		   struct fuse_file_info *fi)
 {
-  bufferlist *pbl = reinterpret_cast<bufferlist*>(fi->fh);
-  if (!pbl)
+  dout(10) << __func__ << " " << path << " offset " << offset
+	   << " size " << size << dendl;
+  fuse_context *fc = fuse_get_context();
+  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  if (!o)
     return 0;
-  if (offset >= pbl->length())
+  if (offset >= o->bl.length())
     return 0;
-  if (offset + size > pbl->length())
-    size = pbl->length() - offset;
+  if (offset + size > o->bl.length())
+    size = o->bl.length() - offset;
   bufferlist r;
-  r.substr_of(*pbl, offset, size);
+  r.substr_of(o->bl, offset, size);
   memcpy(buf, r.c_str(), r.length());
   return r.length();
 }
@@ -798,32 +871,39 @@ static int os_read(const char *path, char *buf, size_t size, off_t offset,
 static int os_write(const char *path, const char *buf, size_t size,
 		    off_t offset, struct fuse_file_info *fi)
 {
-  bufferlist *pbl = reinterpret_cast<bufferlist*>(fi->fh);
-  if (!pbl)
+  dout(10) << __func__ << " " << path << " offset " << offset
+	   << " size " << size << dendl;
+  fuse_context *fc = fuse_get_context();
+  FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  if (!o)
     return 0;
 
   bufferlist final;
   if (offset) {
-    if (offset > pbl->length()) {
-      final.substr_of(*pbl, 0, offset);
+    if (offset > o->bl.length()) {
+      final.substr_of(o->bl, 0, offset);
     } else {
-      final.claim_append(*pbl);
+      final.claim_append(o->bl);
       size_t zlen = offset - final.length();
       final.append_zero(zlen);
     }
   }
   final.append(buf, size);
-  if (offset + size < pbl->length()) {
+  if (offset + size < o->bl.length()) {
     bufferlist rest;
-    rest.substr_of(*pbl, offset + size, pbl->length() - offset - size);
+    rest.substr_of(o->bl, offset + size, o->bl.length() - offset - size);
     final.claim_append(rest);
   }
-  *pbl = final;
+  o->bl = final;
+  o->dirty = true;
   return size;
 }
 
 int os_flush(const char *path, struct fuse_file_info *fi)
 {
+  dout(10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -834,32 +914,35 @@ int os_flush(const char *path, struct fuse_file_info *fi)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
-  bufferlist *pbl = reinterpret_cast<bufferlist*>(fi->fh);
-  if (!pbl)
+  FuseStore::OpenFile *o = reinterpret_cast<FuseStore::OpenFile*>(fi->fh);
+  if (!o)
+    return 0;
+  if (!o->dirty)
     return 0;
 
   ObjectStore::Transaction t;
 
   switch (f) {
   case FN_OBJECT_DATA:
-    t.write(cid, oid, 0, pbl->length(), *pbl);
+    t.write(cid, oid, 0, o->bl.length(), o->bl);
     break;
 
   case FN_OBJECT_ATTR_VAL:
-    t.setattr(cid, oid, key.c_str(), *pbl);
+    t.setattr(cid, oid, key.c_str(), o->bl);
     break;
 
   case FN_OBJECT_OMAP_VAL:
     {
       map<string,bufferlist> aset;
-      aset[key] = *pbl;
+      aset[key] = o->bl;
       t.omap_setkeys(cid, oid, aset);
       break;
     }
 
   case FN_OBJECT_OMAP_HEADER:
-    t.omap_setheader(cid, oid, *pbl);
+    t.omap_setheader(cid, oid, o->bl);
     break;
 
   default:
@@ -878,6 +961,7 @@ int os_flush(const char *path, struct fuse_file_info *fi)
 
 static int os_unlink(const char *path)
 {
+  dout(10) << __func__ << " " << path << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -888,6 +972,7 @@ static int os_unlink(const char *path)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
   ObjectStore::Transaction t;
 
@@ -916,9 +1001,15 @@ static int os_unlink(const char *path)
     break;
 
   case FN_COLLECTION:
-    if (!fs->store->collection_empty(cid))
-      return -ENOTEMPTY;
-    t.remove_collection(cid);
+    {
+      bool empty;
+      int r = fs->store->collection_empty(cid, &empty);
+      if (r < 0)
+        return r;
+      if (!empty)
+        return -ENOTEMPTY;
+      t.remove_collection(cid);
+    }
     break;
 
   case FN_OBJECT_DATA:
@@ -941,6 +1032,7 @@ static int os_unlink(const char *path)
 
 static int os_truncate(const char *path, off_t size)
 {
+  dout(10) << __func__ << " " << path << " size " << size << dendl;
   coll_t cid;
   ghobject_t oid;
   string key;
@@ -961,6 +1053,16 @@ static int os_truncate(const char *path, off_t size)
 
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
+
+  if (fs->open_files.count(path)) {
+    FuseStore::OpenFile *o = fs->open_files[path];
+    if (o->bl.length() > size) {
+      bufferlist t;
+      t.substr_of(o->bl, 0, size);
+      o->bl.swap(t);
+    }
+  }
 
   ObjectStore::Transaction t;
   t.truncate(cid, oid, size);
@@ -975,19 +1077,19 @@ static int os_truncate(const char *path, off_t size)
 
 static int os_statfs(const char *path, struct statvfs *stbuf)
 {
+  dout(10) << __func__ << " " << path << dendl;
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
+  std::lock_guard<std::mutex> l(fs->lock);
 
-  struct statfs s;
+  struct store_statfs_t s;
   int r = fs->store->statfs(&s);
   if (r < 0)
     return r;
-  stbuf->f_bsize = s.f_bsize;
-  stbuf->f_blocks = s.f_blocks;
-  stbuf->f_bfree = s.f_bfree;
-  stbuf->f_bavail = s.f_bavail;
-  stbuf->f_files = s.f_files;
-  stbuf->f_ffree = s.f_ffree;
+  stbuf->f_bsize = 4096;   // LIES!
+  stbuf->f_blocks = s.total / 4096;
+  stbuf->f_bavail = s.available / 4096;
+
   return 0;
 }
 

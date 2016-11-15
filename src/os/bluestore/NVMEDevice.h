@@ -28,31 +28,17 @@
 
 #include "include/atomic.h"
 #include "include/interval_set.h"
-#include "include/utime.h"
+#include "common/ceph_time.h"
 #include "common/Mutex.h"
 #include "BlockDevice.h"
 
 enum class IOCommand {
   READ_COMMAND,
   WRITE_COMMAND,
-  ZERO_COMMAND,
   FLUSH_COMMAND
 };
 
-class NVMEDevice;
-
-struct Task {
-  NVMEDevice *device = nullptr;
-  IOContext *ctx = nullptr;
-  IOCommand command;
-  uint64_t offset = 0;
-  uint64_t len = 0;
-  void *buf = nullptr;
-  Task *next = nullptr;
-  int64_t return_code = 0;
-  utime_t start;
-};
-
+class Task;
 class PerfCounters;
 class SharedDriverData;
 
@@ -123,7 +109,7 @@ class NVMEDevice : public BlockDevice {
           }
           ++it;
         } else {
-          assert(it->first > off) ;
+          assert(it->first > off);
           if (extent_it_end > end) {
             //  <-     data    ->
             //      <-           it          ->
@@ -215,13 +201,6 @@ class NVMEDevice : public BlockDevice {
 
   static void init();
  public:
-  void queue_buffer_task(Task *t) {
-    Mutex::Locker l(buffer_lock);
-    assert(t->next == nullptr);
-    t->next = buffered_task_head;
-    buffered_task_head = t;
-  }
-
   SharedDriverData *get_driver() { return driver; }
 
  public:
@@ -247,11 +226,9 @@ class NVMEDevice : public BlockDevice {
 
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
-                bool buffered) override ;
-  int aio_zero(uint64_t off, uint64_t len,
-               IOContext *ioc) override;
+                bool buffered) override;
   int flush() override;
-  int read_buffered(uint64_t off, uint64_t len, char *buf) override;
+  int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;

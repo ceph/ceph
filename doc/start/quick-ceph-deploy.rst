@@ -105,6 +105,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
 .. note:: The bootstrap-rgw keyring is only created during installation of clusters
    running Hammer or newer
 
+.. note:: If this process fails with a message similar to
+   "Unable to find /etc/ceph/ceph.client.admin.keyring", please ensure that the IP
+   listed for the monitor node in ceph.conf is the Public IP, not the Private IP.
 
 #. Add two OSDs. For fast setup, this quick start uses a directory rather
    than an entire disk per Ceph OSD Daemon. See `ceph-deploy osd`_ for
@@ -195,7 +198,7 @@ quorum of Ceph Monitors.
 
 .. ditaa::
            /------------------\         /----------------\
-           |    ceph–deploy   |         |     node1      |
+           |    ceph-deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |
            |                  +-------->+   mon.node1    |
            |                  |         |     osd.2      |
@@ -321,7 +324,8 @@ Add two Ceph Monitors to your cluster. ::
 
 For example::
 
-	ceph-deploy mon add node2 node3
+	ceph-deploy mon add node2
+	ceph-deploy mon add node3
 
 Once you have added your new Ceph Monitors, Ceph will begin synchronizing
 the monitors and form a quorum. You can check the quorum status by executing
@@ -358,6 +362,7 @@ example::
 	``rados put`` command on the command line. For example::
 
 		echo {Test-data} > testfile.txt
+		rados mkpool data
 		rados put {object-name} {file-path} --pool=data
 		rados put test-object-1 testfile.txt --pool=data
 

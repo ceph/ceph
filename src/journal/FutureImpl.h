@@ -9,12 +9,12 @@
 #include "common/RefCountedObj.h"
 #include "journal/Future.h"
 #include <list>
+#include <map>
 #include <boost/noncopyable.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include "include/assert.h"
 
 class Context;
-class Finisher;
 
 namespace journal {
 
@@ -31,8 +31,7 @@ public:
   };
   typedef boost::intrusive_ptr<FlushHandler> FlushHandlerPtr;
 
-  FutureImpl(Finisher &finisher, uint64_t tag_tid, uint64_t entry_tid,
-             uint64_t commit_tid);
+  FutureImpl(uint64_t tag_tid, uint64_t entry_tid, uint64_t commit_tid);
 
   void init(const FutureImplPtr &prev_future);
 
@@ -58,13 +57,14 @@ public:
   }
   inline void set_flush_in_progress() {
     Mutex::Locker locker(m_lock);
+    assert(m_flush_handler);
+    m_flush_handler.reset();
     m_flush_state = FLUSH_STATE_IN_PROGRESS;
   }
 
   bool attach(const FlushHandlerPtr &flush_handler);
   inline void detach() {
     Mutex::Locker locker(m_lock);
-    assert(m_flush_handler);
     m_flush_handler.reset();
   }
   inline FlushHandlerPtr get_flush_handler() const {
@@ -77,6 +77,7 @@ public:
 private:
   friend std::ostream &operator<<(std::ostream &, const FutureImpl &);
 
+  typedef std::map<FlushHandlerPtr, FutureImplPtr> FlushHandlers;
   typedef std::list<Context *> Contexts;
 
   enum FlushState {
@@ -95,7 +96,6 @@ private:
     virtual void finish(int r) {}
   };
 
-  Finisher &m_finisher;
   uint64_t m_tag_tid;
   uint64_t m_entry_tid;
   uint64_t m_commit_tid;
@@ -111,6 +111,8 @@ private:
 
   C_ConsistentAck m_consistent_ack;
   Contexts m_contexts;
+
+  FutureImplPtr prepare_flush(FlushHandlers *flush_handlers);
 
   void consistent(int r);
   void finish_unlock();

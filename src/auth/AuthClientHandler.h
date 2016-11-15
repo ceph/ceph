@@ -17,12 +17,7 @@
 
 
 #include "auth/Auth.h"
-
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "common/RWLock.h"
-
-#include "common/Timer.h"
 
 class CephContext;
 struct MAuthReply;
@@ -52,11 +47,6 @@ public:
     want = keys | CEPH_ENTITY_TYPE_AUTH;
     validate_tickets();
   }
-  void add_want_keys(__u32 keys) {
-    RWLock::WLocker l(lock);
-    want |= keys;
-    validate_tickets();
-  }   
 
   virtual int get_protocol() const = 0;
 

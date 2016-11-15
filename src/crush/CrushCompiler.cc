@@ -746,8 +746,8 @@ int CrushCompiler::parse_crush(iter_t const& i)
 { 
   find_used_bucket_ids(i);
 
-  int r = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    int r = 0;
     switch (p->value.id().to_long()) {
     case crush_grammar::_tunable:
       r = parse_tunable(p);
@@ -767,10 +767,10 @@ int CrushCompiler::parse_crush(iter_t const& i)
     default:
       assert(0);
     }
+    if (r < 0) {
+      return r;
+    }
   }
-
-  if (r < 0)
-    return r;
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
   crush.finalize();
@@ -815,6 +815,54 @@ void CrushCompiler::dump(iter_t const& i, int ind)
     dump(i->children.begin() + j, ind+1); 
 }
 
+/**
+*  This function fix the problem like below
+*   rack using_foo { item foo }  
+*   host foo { ... }
+*
+*  if an item being used by a bucket is defined after that bucket. 
+*  CRUSH compiler will create a map by which we can 
+*  not identify that item when selecting in that bucket.
+**/
+int CrushCompiler::adjust_bucket_item_place(iter_t const &i)
+{
+  map<string,set<string> > bucket_items;
+  map<string,iter_t> bucket_itrer;
+  vector<string> buckets;
+  for (iter_t p = i->children.begin(); p != i->children.end(); ++p) {
+    if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
+      string name = string_node(p->children[1]);
+      buckets.push_back(name);
+      bucket_itrer[name] = p;
+      //skip non-bucket-item children in the bucket's parse tree
+      for (unsigned q=3; q < p->children.size()-1; ++q) {
+        iter_t sub = p->children.begin() + q;
+        if ((int)sub->value.id().to_long() 
+          == crush_grammar::_bucket_item) {
+          string iname = string_node(sub->children[1]);
+          bucket_items[name].insert(iname);
+        }         
+      }       
+    }     
+  }
+  
+  //adjust the bucket
+  for (unsigned i=0; i < buckets.size(); ++i) { 
+    for (unsigned j=i+1; j < buckets.size(); ++j) {
+      if (bucket_items[buckets[i]].count(buckets[j])) {
+        if (bucket_items[buckets[j]].count(buckets[i])) {
+          err << "bucket  '" <<  buckets[i] << "' and bucket '"
+          << buckets[j] << "' are included each other" << std::endl;
+          return -1; 
+        } else {  
+	   std::iter_swap(bucket_itrer[buckets[i]], bucket_itrer[buckets[j]]);
+        } 
+      } 
+    }
+  }
+	
+  return 0;
+}
 
 int CrushCompiler::compile(istream& in, const char *infn)
 {
@@ -833,7 +881,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
   while (getline(in, str)) {
     // remove newline
     int l = str.length();
-    if (l && str[l] == '\n')
+    if (l && str[l - 1] == '\n')
       str.erase(l-1, 1);
 
     line_val[line] = str;
@@ -880,7 +928,11 @@ int CrushCompiler::compile(istream& in, const char *infn)
 	<< " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
     return -1;
   }
-
+  
+  int r = adjust_bucket_item_place(info.trees.begin());
+  if (r < 0) {
+    return r;
+  }
   //out << "parsing succeeded\n";
   //dump(info.trees.begin());
   return parse_crush(info.trees.begin());

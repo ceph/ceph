@@ -2,6 +2,9 @@
 #include "include/int_types.h"
 #include "common/crc32c_aarch64.h"
 
+/* Request crc extension capabilities from the assembler */
+asm(".arch_extension crc");
+
 #define CRC32CX(crc, value) __asm__("crc32cx %w[c], %w[c], %x[v]":[c]"+r"(crc):[v]"r"(value))
 #define CRC32CW(crc, value) __asm__("crc32cw %w[c], %w[c], %w[v]":[c]"+r"(crc):[v]"r"(value))
 #define CRC32CH(crc, value) __asm__("crc32ch %w[c], %w[c], %w[v]":[c]"+r"(crc):[v]"r"(value))

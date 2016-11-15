@@ -28,8 +28,8 @@ extern "C" {
 #include "include/atomic.h"
 #include "auth/AuthSessionHandler.h"
 
-#define XIO_ALL_FEATURES (CEPH_FEATURES_ALL & \
-			  ~CEPH_FEATURE_MSGR_KEEPALIVE2)
+#define XIO_ALL_FEATURES (CEPH_FEATURES_ALL)
+
 
 #define XIO_NOP_TAG_MARKDOWN 0x0001
 
@@ -37,7 +37,7 @@ namespace bi = boost::intrusive;
 
 class XioPortal;
 class XioMessenger;
-class XioMsg;
+class XioSend;
 
 class XioConnection : public Connection
 {
@@ -93,18 +93,18 @@ private:
     /* XXX */
     uint32_t reconnects;
     uint32_t connect_seq, peer_global_seq;
-    uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic_t out_seq; // atomic<uint32_t>
+    uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
+    atomic64_t out_seq; // atomic<uint32_t>
 
     lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
 		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
 		  out_seq(0) {}
 
-    void set_in_seq(uint32_t seq) {
+    void set_in_seq(uint64_t seq) {
       in_seq = seq;
     }
 
-    uint32_t next_out_seq() {
+    uint64_t next_out_seq() {
       return out_seq.inc();
     }
 
@@ -139,8 +139,8 @@ private:
 
     uint32_t reconnects;
     uint32_t connect_seq, global_seq, peer_global_seq;
-    uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic_t out_seq; // atomic<uint32_t>
+    uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
+    atomic64_t out_seq; // atomic<uint64_t>
 
     uint32_t flags;
 
@@ -168,11 +168,11 @@ private:
       return startup_state.read();
     }
 
-    void set_in_seq(uint32_t seq) {
+    void set_in_seq(uint64_t seq) {
       in_seq = seq;
     }
 
-    uint32_t next_out_seq() {
+    uint64_t next_out_seq() {
       return out_seq.inc();
     };
 
@@ -195,8 +195,13 @@ private:
 
   // message submission queue
   struct SendQ {
+    bool keepalive;
+    bool ack;
+    utime_t ack_time;
     Message::Queue mqueue; // deferred
     XioSubmit::Queue requeue;
+
+    SendQ():keepalive(false), ack(false){}
   } outgoing;
 
   // conns_entity_map comparison functor
@@ -231,12 +236,12 @@ private:
   friend class XioMessenger;
   friend class XioDispatchHook;
   friend class XioMarkDownHook;
-  friend class XioMsg;
+  friend class XioSend;
 
   int on_disconnect_event() {
     connected.set(false);
     pthread_spin_lock(&sp);
-    discard_input_queue(CState::OP_FLAG_LOCKED);
+    discard_out_queues(CState::OP_FLAG_LOCKED);
     pthread_spin_unlock(&sp);
     return 0;
   }
@@ -267,11 +272,13 @@ public:
     if (conn)
       xio_connection_destroy(conn);
   }
+  ostream& conn_prefix(std::ostream *_dout);
 
   bool is_connected() override { return connected.read(); }
 
   int send_message(Message *m) override;
-  void send_keepalive() override {}
+  void send_keepalive() override {send_keepalive_or_ack();}
+  void send_keepalive_or_ack(bool ack = false, const utime_t *tp = nullptr);
   void mark_down() override;
   int _mark_down(uint32_t flags);
   void mark_disposable() override;
@@ -311,16 +318,20 @@ public:
 
   int passive_setup(); /* XXX */
 
-  int on_msg_req(struct xio_session *session, struct xio_msg *req,
+  int handle_data_msg(struct xio_session *session, struct xio_msg *msg,
+		 int more_in_batch, void *cb_user_context);
+  int on_msg(struct xio_session *session, struct xio_msg *msg,
 		 int more_in_batch, void *cb_user_context);
   int on_ow_msg_send_complete(struct xio_session *session, struct xio_msg *msg,
 			      void *conn_user_context);
   int on_msg_error(struct xio_session *session, enum xio_status error,
 		   struct xio_msg  *msg, void *conn_user_context);
-  void msg_send_fail(XioMsg *xmsg, int code);
+  void msg_send_fail(XioSend *xsend, int code);
   void msg_release_fail(struct xio_msg *msg, int code);
-  int flush_input_queue(uint32_t flags);
-  int discard_input_queue(uint32_t flags);
+private:
+  void send_keepalive_or_ack_internal(bool ack = false, const utime_t *tp = nullptr);
+  int flush_out_queues(uint32_t flags);
+  int discard_out_queues(uint32_t flags);
   int adjust_clru(uint32_t flags);
 };
 
@@ -329,7 +340,7 @@ typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
 class XioLoopbackConnection : public Connection
 {
 private:
-  atomic_t seq;
+  atomic64_t seq;
 public:
   explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {
@@ -346,15 +357,15 @@ public:
   bool is_connected() override { return true; }
 
   int send_message(Message *m) override;
-  void send_keepalive() override {}
+  void send_keepalive() override;
   void mark_down() override {}
   void mark_disposable() override {}
 
-  uint32_t get_seq() {
+  uint64_t get_seq() {
     return seq.read();
   }
 
-  uint32_t next_seq() {
+  uint64_t next_seq() {
     return seq.inc();
   }
 };

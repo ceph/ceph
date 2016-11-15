@@ -51,10 +51,10 @@ class QueueStrategy : public DispatchStrategy {
 
 public:
   explicit QueueStrategy(int n_threads);
-  virtual void ds_dispatch(Message *m);
-  virtual void shutdown();
-  virtual void start();
-  virtual void wait();
+  void ds_dispatch(Message *m) override;
+  void shutdown() override;
+  void start() override;
+  void wait() override;
   void entry(QSThread *thrd);
   virtual ~QueueStrategy() {}
 };

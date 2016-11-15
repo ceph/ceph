@@ -18,39 +18,22 @@ if [ -z "$id"  ]; then
 fi
 
 data="/var/lib/ceph/osd/${cluster:-ceph}-$id"
-journal="$data/journal"
 
-update="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_update_on_start || :)"
-
-if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
-    # update location in crush
-    hook="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_location_hook || :)"
-    if [ -z "$hook" ]; then
-        hook="/usr/bin/ceph-crush-location"
-    fi
-    location="$($hook --cluster ${cluster:-ceph} --id $id --type osd)"
-    weight="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_initial_weight || :)"
-    defaultweight=`df -P -k $data/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.4f", d); print r }'`
-    ceph \
-        --cluster="${cluster:-ceph}" \
-        --name="osd.$id" \
-        --keyring="$data/keyring" \
-        osd crush create-or-move \
-        -- \
-        "$id" \
-        "${weight:-${defaultweight:-1}}" \
-        $location
+# assert data directory exists - see http://tracker.ceph.com/issues/17091
+if [ ! -d "$data" ]; then
+    echo "OSD data directory $data does not exist; bailing out." 1>&2
+    exit 1
 fi
+
+journal="$data/journal"
 
 if [ -L "$journal" -a ! -e "$journal" ]; then
     udevadm settle --timeout=5 || :
     if [ -L "$journal" -a ! -e "$journal" ]; then
-        echo "ceph-osd($UPSTART_INSTANCE): journal not present, not starting yet." 1>&2
-        stop
+        echo "ceph-osd(${cluster:-ceph}-$id): journal not present, not starting yet." 1>&2
         exit 0
     fi
 fi
-
 
 # ensure ownership is correct
 owner=`stat -c %U $data/.`

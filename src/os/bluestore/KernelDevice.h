@@ -62,6 +62,16 @@ class KernelDevice : public BlockDevice {
 
   int _lock();
 
+  int direct_read_unaligned(uint64_t off, uint64_t len, char *buf);
+
+  // stalled aio debugging
+  FS::aio_list_t debug_queue;
+  std::mutex debug_queue_lock;
+  FS::aio_t *debug_oldest;
+  utime_t debug_stall_since;
+  void debug_aio_link(FS::aio_t& aio);
+  void debug_aio_unlink(FS::aio_t& aio);
+
 public:
   KernelDevice(aio_callback_t cb, void *cbpriv);
 
@@ -77,13 +87,11 @@ public:
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
 	   bool buffered) override;
-  int read_buffered(uint64_t off, uint64_t len, char *buf) override;
+  int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
   int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc,
 		bool buffered) override;
-  int aio_zero(uint64_t off, uint64_t len,
-	       IOContext *ioc) override;
   int flush() override;
 
   // for managing buffered readers/writers

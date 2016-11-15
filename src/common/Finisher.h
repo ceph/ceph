@@ -173,8 +173,17 @@ public:
     assert(fin != NULL);
     assert(con != NULL);
   }
+
+  ~C_OnFinisher() {
+    if (con != nullptr) {
+      delete con;
+      con = nullptr;
+    }
+  }
+
   void finish(int r) {
     fin->queue(con, r);
+    con = nullptr;
   }
 };
 

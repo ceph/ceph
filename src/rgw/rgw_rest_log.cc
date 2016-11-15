@@ -18,12 +18,15 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_log.h"
 #include "rgw_client_io.h"
+#include "rgw_sync.h"
+#include "rgw_data_sync.h"
 #include "common/errno.h"
+#include "include/assert.h"
 
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
 #define dout_subsys ceph_subsys_rgw
 
-static int parse_date_str(string& in, utime_t& out) {
+static int parse_date_str(string& in, real_time& out) {
   uint64_t epoch = 0;
   uint64_t nsec = 0;
 
@@ -33,7 +36,7 @@ static int parse_date_str(string& in, utime_t& out) {
       return -EINVAL;
     }
   }
-  out = utime_t(epoch, nsec);
+  out = utime_t(epoch, nsec).to_real_time();
   return 0;
 }
 
@@ -45,8 +48,8 @@ void RGWOp_MDLog_List::execute() {
            et = s->info.args.get("end-time"),
            marker = s->info.args.get("marker"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   void    *handle;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
@@ -77,17 +80,22 @@ void RGWOp_MDLog_List::execute() {
   } 
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id" << dendl;
-    http_ret = -EINVAL;
-    return;
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id" << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
   }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
 
-  meta_log->init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
+  RGWMetadataLog meta_log{s->cct, store, period};
+
+  meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
   do {
-    http_ret = meta_log->list_entries(handle, max_entries, entries,
-				      &last_marker, &truncated);
+    http_ret = meta_log.list_entries(handle, max_entries, entries,
+				     &last_marker, &truncated);
     if (http_ret < 0) 
       break;
 
@@ -95,7 +103,7 @@ void RGWOp_MDLog_List::execute() {
       max_entries -= entries.size();
   } while (truncated && (max_entries > 0));
 
-  meta_log->complete_list_entries(handle);
+  meta_log.complete_list_entries(handle);
 }
 
 void RGWOp_MDLog_List::send_response() {
@@ -125,7 +133,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->meta_mgr->get_oldest_log_period();
+  period = store->meta_mgr->read_oldest_log_period();
   http_ret = period.get_error();
 }
 
@@ -157,13 +165,18 @@ void RGWOp_MDLog_ShardInfo::execute() {
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id" << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
 
-  http_ret = meta_log->get_info(shard_id, &info);
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id" << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+  }
+  RGWMetadataLog meta_log{s->cct, store, period};
+
+  http_ret = meta_log.get_info(shard_id, &info);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
@@ -183,8 +196,8 @@ void RGWOp_MDLog_Delete::execute() {
            period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   unsigned shard_id;
 
   http_ret = 0;
@@ -211,13 +224,18 @@ void RGWOp_MDLog_Delete::execute() {
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id" << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
 
-  http_ret = meta_log->trim(shard_id, ut_st, ut_et, start_marker, end_marker);
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id" << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+  }
+  RGWMetadataLog meta_log{s->cct, store, period};
+
+  http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 void RGWOp_MDLog_Lock::execute() {
@@ -231,6 +249,11 @@ void RGWOp_MDLog_Lock::execute() {
   duration_str = s->info.args.get("length");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+  }
 
   if (period.empty() ||
       shard_id_str.empty() ||
@@ -250,7 +273,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
+  RGWMetadataLog meta_log{s->cct, store, period};
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -258,8 +281,8 @@ void RGWOp_MDLog_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = meta_log->lock_exclusive(shard_id, time, zone_id, locker_id);
+  http_ret = meta_log.lock_exclusive(shard_id, make_timespan(dur), zone_id,
+				     locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
@@ -274,6 +297,11 @@ void RGWOp_MDLog_Unlock::execute() {
   shard_id_str = s->info.args.get("id");
   locker_id    = s->info.args.get("locker-id");
   zone_id      = s->info.args.get("zone-id");
+
+  if (period.empty()) {
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+  }
 
   if (period.empty() ||
       shard_id_str.empty() ||
@@ -292,8 +320,8 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  RGWMetadataLog *meta_log = store->meta_mgr->get_log(period);
-  http_ret = meta_log->unlock(shard_id, zone_id, locker_id);
+  RGWMetadataLog meta_log{s->cct, store, period};
+  http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
 }
 
 void RGWOp_MDLog_Notify::execute() {
@@ -544,8 +572,8 @@ void RGWOp_DATALog_List::execute() {
            max_entries_str = s->info.args.get("max-entries"),
            marker = s->info.args.get("marker"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   s->info.args.get_bool("extra-info", &extra_info, false);
@@ -694,8 +722,7 @@ void RGWOp_DATALog_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = store->data_log->lock_exclusive(shard_id, time, zone_id, locker_id);
+  http_ret = store->data_log->lock_exclusive(shard_id, make_timespan(dur), zone_id, locker_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
@@ -782,8 +809,8 @@ void RGWOp_DATALog_Delete::execute() {
            end_marker = s->info.args.get("end-marker"),
            shard = s->info.args.get("id"),
            err;
-  utime_t  ut_st, 
-           ut_et;
+  real_time  ut_st, 
+             ut_et;
   unsigned shard_id;
 
   http_ret = 0;
@@ -812,6 +839,85 @@ void RGWOp_DATALog_Delete::execute() {
   http_ret = store->data_log->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
+// not in header to avoid pulling in rgw_sync.h
+class RGWOp_MDLog_Status : public RGWRESTOp {
+  rgw_meta_sync_status status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("mdlog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override;
+  void send_response() override;
+  const string name() override { return "get_metadata_log_status"; }
+};
+
+void RGWOp_MDLog_Status::execute()
+{
+  auto sync = store->get_meta_sync_manager();
+  if (sync == nullptr) {
+    ldout(s->cct, 1) << "no sync manager" << dendl;
+    http_ret = -ENOENT;
+    return;
+  }
+  http_ret = sync->read_sync_status();
+  status = sync->get_sync_status();
+}
+
+void RGWOp_MDLog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+// not in header to avoid pulling in rgw_data_sync.h
+class RGWOp_DATALog_Status : public RGWRESTOp {
+  rgw_data_sync_status status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("datalog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override ;
+  void send_response() override;
+  const string name() override { return "get_data_changes_log_status"; }
+};
+
+void RGWOp_DATALog_Status::execute()
+{
+  const auto source_zone = s->info.args.get("source-zone");
+  auto sync = store->get_data_sync_manager(source_zone);
+  if (sync == nullptr) {
+    ldout(s->cct, 1) << "no sync manager for source-zone " << source_zone << dendl;
+    http_ret = -ENOENT;
+    return;
+  }
+  http_ret = sync->read_sync_status(&status);
+}
+
+void RGWOp_DATALog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+
 RGWOp *RGWHandler_Log::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
@@ -827,6 +933,8 @@ RGWOp *RGWHandler_Log::op_get() {
       } else {
         return new RGWOp_MDLog_List;
       }
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_MDLog_Status;
     } else {
       return new RGWOp_MDLog_Info;
     }
@@ -843,6 +951,8 @@ RGWOp *RGWHandler_Log::op_get() {
       } else {
         return new RGWOp_DATALog_List;
       }
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_DATALog_Status;
     } else {
       return new RGWOp_DATALog_Info;
     }

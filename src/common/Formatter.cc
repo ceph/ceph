@@ -44,7 +44,7 @@ namespace ceph {
 /*
  * FormatterAttrs(const char *attr, ...)
  *
- * Requires a list of of attrs followed by NULL. The attrs should be char *
+ * Requires a list of attrs followed by NULL. The attrs should be char *
  * pairs, first one is the name, second one is the value. E.g.,
  *
  * FormatterAttrs("name1", "value1", "name2", "value2", NULL);

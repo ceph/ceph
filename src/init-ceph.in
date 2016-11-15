@@ -17,25 +17,37 @@ if [ -e /lib/lsb/init-functions ]; then
     . /lib/lsb/init-functions
 fi
 
-# detect systemd, also check whether the systemd-run binary exists
-SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
-grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
-
-# if we start up as ./init-ceph, assume everything else is in the
-# current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
+    # looks like an autotools src dir build
     BINDIR=.
     SBINDIR=.
-    LIBDIR=.
+    LIBEXECDIR=.
     ETCDIR=.
-    SYSTEMD_RUN=""
     ASSUME_DEV=1
 else
-    BINDIR=@bindir@
-    SBINDIR=@prefix@/sbin
-    LIBDIR=@libdir@/ceph
-    ETCDIR=@sysconfdir@/ceph
-    ASSUME_DEV=0
+    if [ -e CMakeCache.txt ] && [ -e bin/init-ceph ]; then
+	# looks like a cmake build directory
+	CEPH_ROOT=`grep ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+	BINDIR=bin
+	SBINDIR=bin
+	LIBEXECDIR=$CEPH_ROOT/src
+	ETCDIR=.
+	ASSUME_DEV=1
+    else
+	BINDIR=@bindir@
+	SBINDIR=@sbindir@
+	LIBEXECDIR=@libexecdir@/ceph
+	ETCDIR=@sysconfdir@/ceph
+	ASSUME_DEV=0
+    fi
+fi
+
+if [ -n "$CEPH_BIN" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BUILD_DIR" ]; then
+  BINDIR=$CEPH_BIN
+  SBINDIR=$CEPH_ROOT/src
+  ETCDIR=$CEPH_BIN
+  LIBEXECDIR=$CEPH_ROOT/src
+  ASSUME_DEV=1
 fi
 
 usage_exit() {
@@ -65,9 +77,9 @@ usage_exit() {
 
 # behave if we are not completely installed (e.g., Debian "removed,
 # config remains" state)
-test -f $LIBDIR/ceph_common.sh || exit 0
+test -f $LIBEXECDIR/ceph_common.sh || exit 0
 
-. $LIBDIR/ceph_common.sh
+. $LIBEXECDIR/ceph_common.sh
 
 EXIT_STATUS=0
 
@@ -340,19 +352,14 @@ for name in $what; do
 
 	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
 
-	    if [ -n "$SYSTEMD_RUN" ]; then
-                time=`date +%s.%N` 
-		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
-	    else
-		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
-	    fi
+	    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
 		get_conf fs_type "" "osd mkfs type"
 
 		if [ -z "$fs_type" ]; then
-		    # try to fallback to to old keys
+		    # try to fallback to old keys
 		    get_conf tmp_devs "" "btrfs devs"
 		    if [ -n "$tmp_devs" ]; then
 			fs_type="btrfs"
@@ -398,7 +405,7 @@ for name in $what; do
 
 	    if [ "$type" = "osd" ]; then
 		get_conf update_crush "" "osd crush update on start"
-		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
+		case "${update_crush:-1}" in 1|[Tt][Rr][Uu][Ee])
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
 		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
@@ -410,7 +417,7 @@ for name in $what; do
 			EXIT_STATUS=$ERR
 			continue
 		    fi
-		fi
+		esac
 	    fi
 
 	    echo Starting Ceph $name on $host...
@@ -427,22 +434,6 @@ for name in $what; do
 	    if [ "$ERR" != "0" ]; then
 		EXIT_STATUS=$ERR
 		continue
-	    fi
-
-	    if [ "$type" = "mon" ]; then
-		# this will only work if we are using default paths
-		# for the mon data and admin socket.  if so, run
-		# ceph-create-keys.  this is the case for (normal)
-		# chef and ceph-deploy clusters, which is who needs
-		# these keys.  it's also true for legacy installs
-		# via mkcephfs, which is fine too; there is no harm
-		# in creating these keys.
-		get_conf mon_data "/var/lib/ceph/mon/$cluster-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/$cluster-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
-		    echo Starting ceph-create-keys on $host...
-		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
-		    do_cmd "$cmd2"
-		fi
 	    fi
 
 	    [ -n "$post_start" ] && do_cmd "$post_start"

@@ -222,6 +222,14 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
   }
 }
 
+int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {
+  c->get();
+  Context *ctx = new FunctionContext(boost::bind(
+    &TestRadosClient::finish_aio_completion, this, c, _1));
+  get_watch_notify().aio_flush(ctx);
+  return 0;
+}
+
 void TestRadosClient::finish_aio_completion(AioCompletionImpl *c, int r) {
   librados::finish_aio_completion(c, r);
 }

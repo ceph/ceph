@@ -12,13 +12,11 @@
  *
  */
 
-#include <boost/variant.hpp>
-#include <boost/optional/optional_io.hpp>
 #include <iostream>
 #include <vector>
 #include <sstream>
 
-#include "ECBackend.h"
+#include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 
@@ -162,6 +160,12 @@ struct TransGenerator : public boost::static_visitor<void> {
 	 ++i) {
       assert(buffers.count(i->first));
       bufferlist &enc_bl = buffers[i->first];
+      i->second.set_alloc_hint(
+	get_coll_ct(i->first, op.oid),
+	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
+	0, 0,
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE |
+	CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY);
       i->second.write(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
@@ -265,7 +269,7 @@ struct TransGenerator : public boost::static_visitor<void> {
       i->second.set_alloc_hint(
         get_coll_ct(i->first, op.oid),
         ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
-        object_size, write_size);
+        object_size, write_size, op.flags);
     }
   }
   void operator()(const ECTransaction::NoOp &op) {}

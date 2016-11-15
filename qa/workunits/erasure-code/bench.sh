@@ -49,7 +49,7 @@ export PATH=/sbin:$PATH
 : ${VERBOSE:=false}
 : ${CEPH_ERASURE_CODE_BENCHMARK:=ceph_erasure_code_benchmark}
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
-: ${PLUGINS:=isa jerasure_generic jerasure_sse4}
+: ${PLUGINS:=isa jerasure}
 : ${TECHNIQUES:=vandermonde cauchy}
 : ${TOTAL_SIZE:=$((1024 * 1024))}
 : ${SIZE:=4096}
@@ -111,12 +111,6 @@ function bench_run() {
     k2ms[4]="2 3"
     k2ms[6]="2 3 4"
     k2ms[10]="3 4"
-    local isa2technique_vandermonde='reed_sol_van'
-    local isa2technique_cauchy='cauchy'
-    local jerasure_generic2technique_vandermonde='reed_sol_van'
-    local jerasure_generic2technique_cauchy='cauchy_good'
-    local jerasure_sse42technique_vandermonde='reed_sol_van'
-    local jerasure_sse42technique_cauchy='cauchy_good'
     for technique in ${TECHNIQUES} ; do
         for plugin in ${PLUGINS} ; do
             eval technique_parameter=\$${plugin}2technique_${technique}

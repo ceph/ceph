@@ -16,9 +16,6 @@
 #define CEPH_AUTHTYPES_H
 
 #include "Crypto.h"
-#include "msg/msg_types.h"
-
-#include "common/config.h"
 #include "common/entity_name.h"
 
 class Cond;
@@ -241,7 +238,9 @@ public:
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)
 {
   uint32_t ty(name.get_type());
-  return ((ty == CEPH_ENTITY_TYPE_OSD) || (ty == CEPH_ENTITY_TYPE_MDS));
+  return ((ty == CEPH_ENTITY_TYPE_OSD)
+      || (ty == CEPH_ENTITY_TYPE_MDS)
+      || (ty == CEPH_ENTITY_TYPE_MGR));
 }
 
 #endif

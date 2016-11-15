@@ -6,6 +6,8 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 // reject 'period push' if we would have to fetch too many intermediate periods
@@ -15,6 +17,7 @@ static const uint32_t PERIOD_HISTORY_FETCH_MAX = 64;
 class RGWOp_Period_Base : public RGWRESTOp {
  protected:
   RGWPeriod period;
+  std::ostringstream error_stream;
  public:
   int verify_permission() override { return 0; }
   void send_response() override;
@@ -23,14 +26,22 @@ class RGWOp_Period_Base : public RGWRESTOp {
 // reply with the period object on success
 void RGWOp_Period_Base::send_response()
 {
+  s->err.message = error_stream.str();
+
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
 
-  if (http_ret < 0)
+  if (http_ret < 0) {
+    if (!s->err.message.empty()) {
+      ldout(s->cct, 4) << "Request failed with " << http_ret
+          << ": " << s->err.message << dendl;
+    }
+    end_header(s);
     return;
+  }
 
   encode_json("period", period, s->formatter);
+  end_header(s, NULL, "application/json", s->formatter->get_len());
   flusher.flush();
 }
 
@@ -83,8 +94,8 @@ void RGWOp_Period_Post::execute()
 
   // require period.realm_id to match our realm
   if (period.get_realm() != store->realm.get_id()) {
-    lderr(cct) << "period with realm id " << period.get_realm()
-        << " doesn't match current realm " << store->realm.get_id() << dendl;
+    error_stream << "period with realm id " << period.get_realm()
+        << " doesn't match current realm " << store->realm.get_id() << std::endl;
     http_ret = -EINVAL;
     return;
   }
@@ -110,7 +121,7 @@ void RGWOp_Period_Post::execute()
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    http_ret = period.commit(realm, current_period);
+    http_ret = period.commit(realm, current_period, error_stream);
     if (http_ret < 0) {
       lderr(cct) << "master zone failed to commit period" << dendl;
     }
@@ -217,7 +228,8 @@ class RGWHandler_Period : public RGWHandler_Auth_S3 {
 
 class RGWRESTMgr_Period : public RGWRESTMgr {
  public:
-  RGWHandler_REST* get_handler(struct req_state*) override {
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_Period;
   }
 };
@@ -252,12 +264,14 @@ void RGWOp_Realm_Get::send_response()
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
 
-  if (http_ret < 0)
+  if (http_ret < 0) {
+    end_header(s);
     return;
+  }
 
   encode_json("realm", *realm, s->formatter);
+  end_header(s, NULL, "application/json", s->formatter->get_len());
   flusher.flush();
 }
 
@@ -272,7 +286,8 @@ RGWRESTMgr_Realm::RGWRESTMgr_Realm()
   register_resource("period", new RGWRESTMgr_Period);
 }
 
-RGWHandler_REST* RGWRESTMgr_Realm::get_handler(struct req_state*)
+RGWHandler_REST* RGWRESTMgr_Realm::get_handler(struct req_state*,
+                                               const std::string&)
 {
   return new RGWHandler_Realm;
 }

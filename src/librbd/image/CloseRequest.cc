@@ -4,10 +4,8 @@
 #include "librbd/image/CloseRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
@@ -33,18 +31,46 @@ CloseRequest<I>::CloseRequest(I *image_ctx, Context *on_finish)
 
 template <typename I>
 void CloseRequest<I>::send() {
-  // TODO
-  send_shut_down_aio_queue();
-  //send_unregister_image_watcher();
+  send_shut_down_update_watchers();
+}
+
+template <typename I>
+void CloseRequest<I>::send_shut_down_update_watchers() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->state->shut_down_update_watchers(create_async_context_callback(
+    *m_image_ctx, create_context_callback<
+      CloseRequest<I>, &CloseRequest<I>::handle_shut_down_update_watchers>(this)));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_shut_down_update_watchers(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to shut down update watchers: " << cpp_strerror(r)
+               << dendl;
+  }
+
+  send_unregister_image_watcher();
 }
 
 template <typename I>
 void CloseRequest<I>::send_unregister_image_watcher() {
+  if (m_image_ctx->image_watcher == nullptr) {
+    send_shut_down_aio_queue();
+    return;
+  }
+
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // prevent incoming requests from our peers
-
+  m_image_ctx->image_watcher->unregister_watch(create_context_callback<
+    CloseRequest<I>, &CloseRequest<I>::handle_unregister_image_watcher>(this));
 }
 
 template <typename I>
@@ -83,9 +109,10 @@ template <typename I>
 void CloseRequest<I>::send_shut_down_exclusive_lock() {
   {
     RWLock::WLocker owner_locker(m_image_ctx->owner_lock);
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
-    std::swap(m_exclusive_lock, m_image_ctx->exclusive_lock);
+    m_exclusive_lock = m_image_ctx->exclusive_lock;
 
+    // if reading a snapshot -- possible object map is open
+    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
     if (m_exclusive_lock == nullptr) {
       delete m_image_ctx->object_map;
       m_image_ctx->object_map = nullptr;
@@ -100,6 +127,8 @@ void CloseRequest<I>::send_shut_down_exclusive_lock() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
+  // in-flight IO will be flushed and in-flight requests will be canceled
+  // before releasing lock
   m_exclusive_lock->shut_down(create_context_callback<
     CloseRequest<I>, &CloseRequest<I>::handle_shut_down_exclusive_lock>(this));
 }
@@ -109,10 +138,18 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  // object map and journal closed during exclusive lock shutdown
-  assert(m_image_ctx->journal == nullptr);
-  assert(m_image_ctx->object_map == nullptr);
+  {
+    RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
+    assert(m_image_ctx->exclusive_lock == nullptr);
+
+    // object map and journal closed during exclusive lock shutdown
+    RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+    assert(m_image_ctx->journal == nullptr);
+    assert(m_image_ctx->object_map == nullptr);
+  }
+
   delete m_exclusive_lock;
+  m_exclusive_lock = nullptr;
 
   save_result(r);
   if (r < 0) {
@@ -149,8 +186,9 @@ void CloseRequest<I>::send_flush_readahead() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  m_image_ctx->readahead.wait_for_pending(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_flush_readahead>(this));
+  m_image_ctx->readahead.wait_for_pending(create_async_context_callback(
+    *m_image_ctx, create_context_callback<
+      CloseRequest<I>, &CloseRequest<I>::handle_flush_readahead>(this)));
 }
 
 template <typename I>
@@ -240,9 +278,12 @@ void CloseRequest<I>::send_flush_image_watcher() {
 template <typename I>
 void CloseRequest<I>::handle_flush_image_watcher(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  assert(r == 0);
+  if (r < 0) {
+    lderr(cct) << "error flushing image watcher: " << cpp_strerror(r) << dendl;
+  }
+  save_result(r);
   finish();
 }
 

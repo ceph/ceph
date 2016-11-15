@@ -32,19 +32,13 @@ using namespace std;
 #include "osd/OSDMap.h"
 
 #include "PaxosService.h"
-#include "Session.h"
 
 class Monitor;
 class PGMap;
-
-#include "messages/MOSDBoot.h"
-#include "messages/MMonCommand.h"
-#include "messages/MOSDMap.h"
-#include "messages/MPoolOp.h"
+class MonSession;
+class MOSDMap;
 
 #include "erasure-code/ErasureCodeInterface.h"
-
-#include "common/TrackedOp.h"
 #include "mon/MonOpRequest.h"
 
 #define OSD_METADATA_PREFIX "osd_metadata"
@@ -84,9 +78,7 @@ struct failure_info_t {
 			     MonOpRequestRef op) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end()) {
-      if (max_failed_since == utime_t())
-	max_failed_since = failed_since;
-      else if (max_failed_since < failed_since)
+      if (max_failed_since < failed_since)
 	max_failed_since = failed_since;
       p = reporters.insert(map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
     }
@@ -134,8 +126,9 @@ private:
   SimpleLRU<version_t, bufferlist> inc_osd_cache;
   SimpleLRU<version_t, bufferlist> full_osd_cache;
 
-  void check_failures(utime_t now);
+  bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+  void force_failure(utime_t now, int target_osd);
 
   // map thrashing
   int thrash_map;
@@ -226,10 +219,18 @@ public:
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
 			MonOpRequestRef req = MonOpRequestRef());
-private:
-  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
-			      const set<int64_t> *pools);
 
+private:
+  int reweight_by_utilization(int oload,
+			      double max_change,
+			      int max_osds,
+			      bool by_pg,
+			      const set<int64_t> *pools,
+			      bool no_increasing,
+			      bool dry_run,
+			      std::stringstream *ss,
+			      std::string *out_str,
+			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
@@ -249,6 +250,7 @@ private:
   bool prepare_boot(MonOpRequestRef op);
   void _booted(MonOpRequestRef op, bool logit);
 
+  void update_up_thru(int from, epoch_t up_thru);
   bool preprocess_alive(MonOpRequestRef op);
   bool prepare_alive(MonOpRequestRef op);
   void _reply_map(MonOpRequestRef op, epoch_t e);
@@ -276,7 +278,11 @@ private:
   int crush_rename_bucket(const string& srcname,
 			  const string& dstname,
 			  ostream *ss);
-  int normalize_profile(ErasureCodeProfile &profile, ostream *ss);
+  void check_legacy_ec_plugin(const string& plugin, 
+			      const string& profile) const;
+  int normalize_profile(const string& profilename, 
+			ErasureCodeProfile &profile,
+			ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
 				   int *ruleset,
@@ -410,7 +416,6 @@ private:
 
   void handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
-  void mark_all_down();
 
   void send_latest(MonOpRequestRef op, epoch_t start=0);
   void send_latest_now_nodelete(MonOpRequestRef op, epoch_t start=0) {

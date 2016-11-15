@@ -36,9 +36,11 @@ public:
   };
   typedef boost::shared_ptr<Method> SharedMethod;
   typedef std::map<std::string, SharedMethod> Methods;
+  typedef std::map<std::string, cls_cxx_filter_factory_t> Filters;
 
   struct Class {
     Methods methods;
+    Filters filters;
   };
   typedef boost::shared_ptr<Class> SharedClass;
 
@@ -54,6 +56,9 @@ public:
                                          const std::string &oid,
                                          const SnapContext &snapc);
 
+  int create_filter(cls_handle_t hclass, const std::string& filter_name,
+		    cls_cxx_filter_factory_t fn);
+
 private:
 
   typedef std::map<std::string, SharedClass> Classes;
@@ -61,6 +66,7 @@ private:
 
   Classes m_classes;
   ClassHandles m_class_handles;
+  Filters m_filters;
 
   void open_class(const std::string& name, const std::string& path);
 

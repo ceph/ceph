@@ -50,15 +50,12 @@ namespace librbd {
    */
   class C_ReadRequest : public Context {
   public:
-    C_ReadRequest(CephContext *cct, Context *c, RWLock *owner_lock,
-                  Mutex *cache_lock)
-      : m_cct(cct), m_ctx(c), m_owner_lock(owner_lock),
-        m_cache_lock(cache_lock) {
+    C_ReadRequest(CephContext *cct, Context *c, Mutex *cache_lock)
+      : m_cct(cct), m_ctx(c), m_cache_lock(cache_lock) {
     }
     virtual void finish(int r) {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
-        RWLock::RLocker owner_locker(*m_owner_lock);
         Mutex::Locker cache_locker(*m_cache_lock);
 	m_ctx->complete(r);
       }
@@ -67,7 +64,6 @@ namespace librbd {
   private:
     CephContext *m_cct;
     Context *m_ctx;
-    RWLock *m_owner_lock;
     Mutex *m_cache_lock;
   };
 
@@ -157,13 +153,33 @@ namespace librbd {
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "journal committed: sending write request" << dendl;
 
-      RWLock::RLocker owner_locker(image_ctx->owner_lock);
       assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
       AioObjectWrite *req = new AioObjectWrite(image_ctx, oid, object_no, off,
-                                               bl, snapc, this);
+                                               bl, snapc, this, 0);
       req->send();
+    }
+  };
+
+  struct C_CommitIOEventExtent : public Context {
+    ImageCtx *image_ctx;
+    uint64_t journal_tid;
+    uint64_t offset;
+    uint64_t length;
+
+    C_CommitIOEventExtent(ImageCtx *image_ctx, uint64_t journal_tid,
+                          uint64_t offset, uint64_t length)
+      : image_ctx(image_ctx), journal_tid(journal_tid), offset(offset),
+        length(length) {
+    }
+
+    virtual void finish(int r) {
+      // all IO operations are flushed prior to closing the journal
+      assert(image_ctx->journal != nullptr);
+
+      image_ctx->journal->commit_io_event_extent(journal_tid, offset, length,
+                                                 r);
     }
   };
 
@@ -178,8 +194,7 @@ namespace librbd {
 			     __u32 trunc_seq, int op_flags, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
-    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_ictx->owner_lock,
-                                     &m_lock);
+    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
 
     {
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
@@ -218,7 +233,7 @@ namespace librbd {
     // reverse map this object extent onto the parent
     vector<pair<uint64_t,uint64_t> > objectx;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			  object_no, 0, m_ictx->layout.fl_object_size,
+			  object_no, 0, m_ictx->layout.object_size,
 			  objectx);
     uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
     bool may = object_overlap > 0;
@@ -236,7 +251,6 @@ namespace librbd {
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
 				    Context *oncommit)
   {
-    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     write_result_d *result = new write_result_d(oid.name, oncommit);
@@ -248,12 +262,12 @@ namespace librbd {
     assert(journal_tid == 0 || m_ictx->journal != NULL);
     if (journal_tid != 0) {
       m_ictx->journal->flush_event(
-	journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
-					      bl, snapc, req_comp,
+        journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
+                                              bl, snapc, req_comp,
 					      journal_tid));
     } else {
       AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
-					       off, bl, snapc, req_comp);
+					       off, bl, snapc, req_comp, 0);
       req->send();
     }
     return ++m_tid;
@@ -262,31 +276,37 @@ namespace librbd {
 
   void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
 					 uint64_t len,
-					 ceph_tid_t journal_tid) {
+					 ceph_tid_t original_journal_tid,
+                                         ceph_tid_t new_journal_tid) {
     typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
-    assert(m_ictx->owner_lock.is_locked());
+    ldout(m_ictx->cct, 20) << __func__ << ": " << oid << " "
+                           << off << "~" << len << " "
+                           << "journal_tid=" << original_journal_tid << ", "
+                           << "new_journal_tid=" << new_journal_tid << dendl;
+
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     // all IO operations are flushed prior to closing the journal
-    assert(journal_tid != 0 && m_ictx->journal != NULL);
+    assert(original_journal_tid != 0 && m_ictx->journal != NULL);
 
     Extents file_extents;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
 			    len, file_extents);
     for (Extents::iterator it = file_extents.begin();
 	 it != file_extents.end(); ++it) {
-      m_ictx->journal->commit_io_event_extent(journal_tid, it->first,
-					      it->second, 0);
+      if (new_journal_tid != 0) {
+        // ensure new journal event is safely committed to disk before
+        // committing old event
+        m_ictx->journal->flush_event(
+          new_journal_tid, new C_CommitIOEventExtent(m_ictx,
+                                                     original_journal_tid,
+                                                     it->first, it->second));
+      } else {
+        m_ictx->journal->commit_io_event_extent(original_journal_tid, it->first,
+					        it->second, 0);
+      }
     }
-  }
-
-  void LibrbdWriteback::get_client_lock() {
-    m_ictx->owner_lock.get_read();
-  }
-
-  void LibrbdWriteback::put_client_lock() {
-    m_ictx->owner_lock.put_read();
   }
 
   void LibrbdWriteback::complete_writes(const std::string& oid)

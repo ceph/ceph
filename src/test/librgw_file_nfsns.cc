@@ -38,11 +38,19 @@ namespace {
   using std::string;
 
   librgw_t rgw_h = nullptr;
-  string uid("testuser");
+  string userid("testuser");
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
   CephContext* cct = nullptr;
+
+  uint32_t owner_uid = 867;
+  uint32_t owner_gid = 5309;
+
+  uint32_t magic_uid = 1701;
+  uint32_t magic_gid = 9876;
+
+  uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
   string bucket_name("nfsroot");
   string dirs1_bucket_name("bdirs1");
@@ -70,6 +78,11 @@ namespace {
 	    struct rgw_file_handle* _parent_fh, RGWFileHandle* _rgw_fh)
       : name(std::move(_name)), fh(_fh), parent_fh(_parent_fh),
 	rgw_fh(_rgw_fh) {}
+
+    void clear() {
+      fh = nullptr;
+      rgw_fh = nullptr;
+    }
 
     void sync() {
       if (fh)
@@ -142,6 +155,7 @@ namespace {
   bool do_create = false;
   bool do_delete = false;
   bool do_rename = false;
+  bool do_setattr = false;
   bool verbose = false;
 
   string marker_dir("nfs_marker");
@@ -175,7 +189,7 @@ TEST(LibRGW, INIT) {
 }
 
 TEST(LibRGW, MOUNT) {
-  int ret = rgw_mount(rgw_h, uid.c_str(), access_key.c_str(),
+  int ret = rgw_mount(rgw_h, userid.c_str(), access_key.c_str(),
 		      secret_key.c_str(), &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
@@ -191,8 +205,13 @@ TEST(LibRGW, SETUP_HIER1)
     if (! bucket_fh) {
       if (do_create) {
 	struct stat st;
-	int rc = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st,
-			   &bucket_fh, RGW_MKDIR_FLAG_NONE);
+
+	st.st_uid = owner_uid;
+	st.st_gid = owner_gid;
+	st.st_mode = 755;
+
+	int rc = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st,
+			  create_mask, &bucket_fh, RGW_MKDIR_FLAG_NONE);
 	ASSERT_EQ(rc, 0);
       }
     }
@@ -239,6 +258,10 @@ TEST(LibRGW, SETUP_DIRS1) {
     int rc;
     struct stat st;
 
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
     dirs1_b.parent_fh = fs->root_fh;
 
     (void) rgw_lookup(fs, dirs1_b.parent_fh, dirs1_bucket_name.c_str(),
@@ -246,9 +269,12 @@ TEST(LibRGW, SETUP_DIRS1) {
 
     if (! dirs1_b.fh) {
       if (do_create) {
-	rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), 755, &st,
-		       &dirs1_b.fh, RGW_MKDIR_FLAG_NONE);
+	rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), &st,
+		      create_mask, &dirs1_b.fh, RGW_MKDIR_FLAG_NONE);
 	ASSERT_EQ(rc, 0);
+      } else {
+	/* no top-level dir and can't create it--skip remaining tests */
+	return;
       }
     }
     dirs1_b.sync();
@@ -266,7 +292,7 @@ TEST(LibRGW, SETUP_DIRS1) {
 			RGW_LOOKUP_FLAG_NONE);
       if (! dir.fh) {
 	if (do_create) {
-	  rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), 755, &st,
+	  rc = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), &st, create_mask,
 			 &dir.fh, RGW_MKDIR_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
@@ -289,8 +315,8 @@ TEST(LibRGW, SETUP_DIRS1) {
 
 	if (! sdir.fh) {
 	  if (do_create) {
-	    rc = rgw_mkdir(fs, sdir.parent_fh, sdir.name.c_str(), 755,
-			   &st, &sdir.fh, RGW_MKDIR_FLAG_NONE);
+	    rc = rgw_mkdir(fs, sdir.parent_fh, sdir.name.c_str(), &st,
+			  create_mask, &sdir.fh, RGW_MKDIR_FLAG_NONE);
 	    ASSERT_EQ(rc, 0);
 	  }
 	}
@@ -318,8 +344,16 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    ASSERT_EQ(rc, 0);
 	    sf.sync();
 	    ASSERT_TRUE(sf.rgw_fh->is_file());
+
+	    /* because we made it the hard way, fixup attributes */
+	    struct stat st;
+	    st.st_uid = owner_uid;
+	    st.st_gid = owner_gid;
+	    st.st_mode = 644;
+	    sf.rgw_fh->create_stat(&st, create_mask);
+
 	    /* open handle */
-	    rc = rgw_open(fs, sf.fh, 0 /* flags */);
+	    rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
 	    ASSERT_EQ(rc, 0);
 	    ASSERT_TRUE(sf.rgw_fh->is_open());
 	    /* stage seq write */
@@ -346,12 +380,115 @@ TEST(LibRGW, SETUP_DIRS1) {
   } /* dirs1 top-level !exist */
 }
 
+TEST(LibRGW, SETATTR) {
+  if (do_dirs1) {
+    if (do_setattr) {
+
+      int rc;
+      struct stat st;
+
+      st.st_uid = owner_uid;
+      st.st_gid = owner_gid;
+      st.st_mode = 755;
+
+      std::string dname{"dir_0"};
+      obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
+
+      /* dir_0 MUST exist and MUST be resident */
+      (void) rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
+			RGW_LOOKUP_FLAG_NONE);
+
+      ASSERT_NE(dir.fh, nullptr);
+      dir.sync();
+      ASSERT_NE(dir.rgw_fh, nullptr);
+      ASSERT_TRUE(dir.rgw_fh->is_dir());
+
+      /* child file */
+      std::string sfname{"setattr_file_0"};
+      obj_rec sf{sfname, nullptr, dir.fh, nullptr};
+
+      (void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			RGW_LOOKUP_FLAG_NONE);
+
+      if (! sf.fh) {
+	/* make a new file object (the hard way) */
+	rc = rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			RGW_LOOKUP_FLAG_CREATE);
+	ASSERT_EQ(rc, 0);
+	sf.sync();
+	ASSERT_TRUE(sf.rgw_fh->is_file());
+
+	/* because we made it the hard way, fixup attributes */
+	st.st_uid = owner_uid;
+	st.st_gid = owner_gid;
+	st.st_mode = 644;
+	sf.rgw_fh->create_stat(&st, create_mask);
+
+	/* open handle */
+	rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
+	ASSERT_EQ(rc, 0);
+	ASSERT_TRUE(sf.rgw_fh->is_open());
+	/* stage seq write */
+	size_t nbytes;
+	string data = "data for " + sf.name;
+	rc = rgw_write(fs, sf.fh, 0, data.length(), &nbytes,
+		      (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	ASSERT_EQ(nbytes, data.length());
+	/* commit write transaction */
+	rc = rgw_close(fs, sf.fh, 0 /* flags */);
+	ASSERT_EQ(rc, 0);
+      } else {
+	sf.sync();
+	ASSERT_TRUE(sf.rgw_fh->is_file());
+      }
+
+      /* sf MUST now be materialized--now change it's attributes */
+      st.st_uid = magic_uid;
+      st.st_gid = magic_gid;
+
+      rc = rgw_setattr(fs, sf.fh, &st, create_mask, RGW_SETATTR_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+
+      /* force evict--subsequent lookups must reload */
+      static_cast<RGWLibFS*>(fs->fs_private)->release_evict(sf.rgw_fh);
+
+      sf.clear();
+
+      /* revalidate -- expect magic uid and gid */
+      (void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			RGW_LOOKUP_FLAG_NONE);
+      sf.sync();
+      ASSERT_NE(sf.fh, nullptr);
+
+      memset(&st, 0, sizeof(struct stat)); /* nothing up my sleeve... */
+
+      rc =  rgw_getattr(fs, sf.fh, &st, RGW_GETATTR_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+
+      ASSERT_EQ(st.st_uid, magic_uid);
+      ASSERT_EQ(st.st_gid, magic_gid);
+
+      /* release 1 ref on sf */
+      rgw_fh_rele(fs, sf.fh, RGW_FH_RELE_FLAG_NONE);
+
+      /* release 1 ref on dir */
+      rgw_fh_rele(fs, dir.fh, RGW_FH_RELE_FLAG_NONE);
+    } /* dirs1 */
+  }
+}
+
 TEST(LibRGW, RGW_CREATE_DIRS1) {
   /* verify rgw_create (create [empty] file objects the easy way) */
   if (do_dirs1) {
     if (do_create) {
       int rc;
       struct stat st;
+
+      st.st_uid = owner_uid;
+      st.st_gid = owner_gid;
+      st.st_mode = 644;
+
       for (auto& dirs_rec : dirs_vec) {
 	/* create 1 more file in each sdir */
 	obj_rec& dir = get<0>(dirs_rec);
@@ -360,8 +497,8 @@ TEST(LibRGW, RGW_CREATE_DIRS1) {
 	(void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
 			  RGW_LOOKUP_FLAG_NONE);
 	if (! sf.fh) {
-	  rc = rgw_create(fs, sf.parent_fh, sf.name.c_str(), 644, &st, &sf.fh,
-			  RGW_CREATE_FLAG_NONE);
+	  rc = rgw_create(fs, sf.parent_fh, sf.name.c_str(), &st, create_mask,
+			  &sf.fh, 0 /* posix flags */, RGW_CREATE_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
 	sf.sync();
@@ -377,6 +514,11 @@ TEST(LibRGW, RGW_SETUP_RENAME1) {
     int rc;
     struct stat st;
     obj_vec ovec;
+
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
     for (int b_ix : {0, 1}) {
       std::string bname{"brename_" + to_string(b_ix)};
       obj_rec brec{bname, nullptr, nullptr, nullptr};
@@ -385,13 +527,16 @@ TEST(LibRGW, RGW_SETUP_RENAME1) {
       if (! brec.fh) {
 	if (do_create) {
 	  struct stat st;
-	  int rc = rgw_mkdir(fs, fs->root_fh, brec.name.c_str(), 755, &st,
-			     &brec.fh, RGW_MKDIR_FLAG_NONE);
+	  int rc = rgw_mkdir(fs, fs->root_fh, brec.name.c_str(), &st,
+			    create_mask, &brec.fh, RGW_MKDIR_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
       }
       ASSERT_NE(brec.fh, nullptr);
       brec.sync();
+
+      st.st_mode = 644; /* file mask */
+
       for (int f_ix : {0, 1}) {
 	std::string rfname{"rfile_"};
 	rfname += to_string(f_ix);
@@ -399,8 +544,8 @@ TEST(LibRGW, RGW_SETUP_RENAME1) {
 	(void) rgw_lookup(fs, rf.parent_fh, rf.name.c_str(), &rf.fh,
 			  RGW_LOOKUP_FLAG_NONE);
 	if (! rf.fh) {
-	  rc = rgw_create(fs, rf.parent_fh, rf.name.c_str(), 644, &st, &rf.fh,
-			  RGW_CREATE_FLAG_NONE);
+	  rc = rgw_create(fs, rf.parent_fh, rf.name.c_str(), &st, create_mask,
+			  &rf.fh, 0 /* posix flags */, RGW_CREATE_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
 	rf.sync();
@@ -453,6 +598,12 @@ TEST(LibRGW, RGW_CROSSBUCKET_RENAME1) {
 TEST(LibRGW, BAD_DELETES_DIRS1) {
   if (do_dirs1) {
     int rc;
+
+    if (dirs_vec.size() == 0) {
+      /* skip */
+      return;
+    }
+
     if (do_delete) {
       /* try to unlink a non-empty directory (bucket) */
       rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(),
@@ -460,7 +611,8 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
       ASSERT_NE(rc, 0);
     }
     /* try to unlink a non-empty directory (non-bucket) */
-    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];    ASSERT_EQ(sdir_0.name, "sdir_0");
+    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];
+    ASSERT_EQ(sdir_0.name, "sdir_0");
     ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
     /* XXX we can't enforce this currently */
 #if 0
@@ -497,6 +649,9 @@ TEST(LibRGW, GETATTR_DIRS1)
 	  ASSERT_TRUE(sobj.rgw_fh->is_dir());
 	  ASSERT_TRUE(S_ISDIR(st.st_mode));
 	}
+	/* validate Unix owners */
+	ASSERT_EQ(st.st_uid, owner_uid);
+	ASSERT_EQ(st.st_gid, owner_gid);
 	if (verbose) {
 	  obj_rec_st rec_st{sobj, st};
 	  std::cout << "\t"
@@ -513,7 +668,7 @@ TEST(LibRGW, READ_DIRS1)
   if (do_dirs1) {
     int rc;
     char buf[256];
-    uint64_t nread;
+    size_t nread;
     for (auto& dirs_rec : dirs_vec) {
       obj_rec& dir = get<0>(dirs_rec);
       if (verbose) {
@@ -531,6 +686,10 @@ TEST(LibRGW, READ_DIRS1)
 	  ASSERT_EQ(sobj.rgw_fh->get_size(), 16UL);
 	  // do it
 	  memset(buf, 0, 256);
+	  if (verbose) {
+	    std::cout << "reading 0,256 " << sobj.rgw_fh->relative_object_name()
+		      << std::endl;
+	  }
 	  rc = rgw_read(fs, sobj.fh, 0, 256, &nread, buf, RGW_READ_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	  if (verbose) {
@@ -583,7 +742,7 @@ TEST(LibRGW, READF_DIRS1) {
       uint64_t offset = 0;
       uint64_t length = bufsz;
       for (int ix = 0; ix < 6; ++ix) {
-	uint64_t nread = 0;
+	size_t nread = 0;
 	memset(buffer, 0, length); // XXX
 	rc = rgw_read(fs, fobj.fh, offset, length, &nread, buffer,
 		      RGW_READ_FLAG_NONE);
@@ -623,7 +782,7 @@ TEST(LibRGW, WRITEF_DIRS1) {
       fobj.sync();
 
       /* begin write transaction */
-      rc = rgw_open(fs, fobj.fh, 0 /* flags */);
+      rc = rgw_open(fs, fobj.fh, 0 /* posix flags */, 0 /* flags */);
       ASSERT_EQ(rc, 0);
       ASSERT_TRUE(fobj.rgw_fh->is_open());
 
@@ -635,7 +794,7 @@ TEST(LibRGW, WRITEF_DIRS1) {
       for (int ix = 0; ix < 6; ++ix) {
 	ASSERT_TRUE(ifs.good());
 	ifs.read(buffer, bufsz);
-	uint64_t nwritten = 0;
+	size_t nwritten = 0;
 	string str;
 	str.assign(buffer, 4);
 	if (verbose) {
@@ -796,9 +955,13 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
     struct stat st;
     int ret;
 
+    st.st_uid = owner_uid;
+    st.st_gid = owner_gid;
+    st.st_mode = 755;
+
     if (do_create) {
-      ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), 755, &st, &marker_fh,
-		      RGW_MKDIR_FLAG_NONE);
+      ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), &st, create_mask,
+		      &marker_fh, RGW_MKDIR_FLAG_NONE);
     } else {
       ret = rgw_lookup(fs, bucket_fh, marker_dir.c_str(), &marker_fh,
 		       RGW_LOOKUP_FLAG_NONE);
@@ -824,7 +987,7 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
-      ret = rgw_open(fs, obj.fh, RGW_OPEN_FLAG_NONE);
+      ret = rgw_open(fs, obj.fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       ASSERT_TRUE(obj.rgw_fh->is_open());
       // unstable write data
@@ -966,12 +1129,18 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
 				     (char*) nullptr)) {
       secret_key = val;
-    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--userid",
 				     (char*) nullptr)) {
-      uid = val;
+      userid = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
 				     (char*) nullptr)) {
       bucket_name = val;
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
+				     (char*) nullptr)) {
+      owner_uid = std::stoi(val);
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--gid",
+				     (char*) nullptr)) {
+      owner_gid = std::stoi(val);
     } else if (ceph_argparse_flag(args, arg_iter, "--hier1",
 					    (char*) nullptr)) {
       do_hier1 = true;
@@ -981,6 +1150,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--marker1",
 					    (char*) nullptr)) {
       do_marker1 = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--setattr",
+					    (char*) nullptr)) {
+      do_setattr = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--create",
 					    (char*) nullptr)) {
       do_create = true;

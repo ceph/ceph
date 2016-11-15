@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
+#include <signal.h>
 
 #include "HeartbeatMap.h"
 #include "ceph_context.h"
@@ -44,7 +46,7 @@ HeartbeatMap::~HeartbeatMap()
   assert(m_workers.empty());
 }
 
-heartbeat_handle_d *HeartbeatMap::add_worker(const string& name)
+heartbeat_handle_d *HeartbeatMap::add_worker(const string& name, pthread_t thread_id)
 {
   m_rwlock.get_write();
   ldout(m_cct, 10) << "add_worker '" << name << "'" << dendl;
@@ -55,6 +57,7 @@ heartbeat_handle_d *HeartbeatMap::add_worker(const string& name)
                              "heartbeat_handle_d suicide_timeout");
   m_workers.push_front(h);
   h->list_item = m_workers.begin();
+  h->thread_id = thread_id;
   m_rwlock.put_write();
   return h;
 }
@@ -83,6 +86,8 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who, time_t n
   if (was && was < now) {
     ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had suicide timed out after " << h->suicide_grace << dendl;
+    pthread_kill(h->thread_id, SIGABRT);
+    sleep(1);
     assert(0 == "hit suicide timeout");
   }
   return healthy;

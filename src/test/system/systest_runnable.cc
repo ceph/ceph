@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/errno.h"
 #include "include/atomic.h"
 #include "systest_runnable.h"
@@ -30,10 +31,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
-
-#if defined(__FreeBSD__)
-#include <pthread_np.h>
-#endif
 
 using std::ostringstream;
 using std::string;

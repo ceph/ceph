@@ -559,16 +559,18 @@ void CDentry::dump(Formatter *f) const
   make_path(path);
 
   f->dump_string("path", path.get_path());
-  f->dump_int("snap_first", first);
-  f->dump_int("snap_last", last);
-
-  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_unsigned("path_ino", path.get_ino().val);
+  f->dump_unsigned("snap_first", first);
+  f->dump_unsigned("snap_last", last);
+  
+  f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
-    f->dump_int("inode", get_linkage()->get_inode()->ino());
+    f->dump_unsigned("inode", get_linkage()->get_inode()->ino());
   } else {
-    f->dump_int("inode", 0);
+    f->dump_unsigned("inode", 0);
   }
 
   if (linkage.is_remote()) {
@@ -577,8 +579,8 @@ void CDentry::dump(Formatter *f) const
     f->dump_string("remote_type", "");
   }
 
-  f->dump_int("version", get_version());
-  f->dump_int("projected_version", get_projected_version());
+  f->dump_unsigned("version", get_version());
+  f->dump_unsigned("projected_version", get_projected_version());
 
   f->dump_int("auth_pins", auth_pins);
   f->dump_int("nested_auth_pins", nested_auth_pins);
@@ -620,58 +622,4 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     case S_IFIFO: return "fifo";
     default: assert(0); return "";
   }
-}
-
-void CDentry::scrub_initialize(CDir *parent, bool recurse, bool children,
-                        ScrubHeaderRefConst header,
-                               Context *f)
-{
-  if (!scrub_infop)
-    scrub_info_create();
-  else
-    assert(!scrub_infop->dentry_scrubbing);
-
-  scrub_infop->scrub_parent = parent;
-  scrub_infop->scrub_recursive = recurse;
-  scrub_infop->scrub_children = children;
-  scrub_infop->dentry_scrubbing = true;
-  scrub_infop->on_finish = f;
-  scrub_infop->header = header;
-
-  auth_pin(this);
-}
-
-void CDentry::scrub_finished(Context **c)
-{
-  dout(10) << __func__ << dendl;
-  assert(scrub_info()->dentry_scrubbing);
-
-  if (scrub_infop->scrub_parent) {
-    scrub_infop->scrub_parent->scrub_dentry_finished(this);
-  }
-
-  *c = scrub_infop->on_finish;
-
-  if (scrub_infop->header && scrub_infop->header->origin == this) {
-    // We are at the point that a tagging scrub was initiated
-    LogChannelRef clog = dir->cache->mds->clog;
-    clog->info() << "scrub complete with tag '"
-      << scrub_infop->header->tag << "'";
-  }
-
-  delete scrub_infop;
-  scrub_infop = NULL;
-
-  auth_unpin(this);
-}
-
-void CDentry::scrub_info_create() const
-{
-  assert(!scrub_infop);
-
-  // break out of const-land to set up implicit initial state
-  CDentry *me = const_cast<CDentry*>(this);
-
-  // we don't need to change or set up any default parameters; assign directly
-  me->scrub_infop = new scrub_info_t();
 }

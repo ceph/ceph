@@ -14,4 +14,8 @@ def choose_init():
             return 'systemd'
         else:
             return 'upstart'
-    return 'sysvinit'
+    if distro.lower() == 'debian':
+        if codename in ('squeeze', 'wheezy'):
+            return 'sysvinit'
+        else:
+            return 'systemd'

@@ -85,6 +85,7 @@ public:
   virtual int64_t pool_lookup(const std::string &name) = 0;
   virtual int pool_reverse_lookup(int64_t id, std::string *name) = 0;
 
+  virtual int aio_watch_flush(AioCompletionImpl *c);
   virtual int watch_flush() = 0;
 
   virtual int blacklist_add(const std::string& client_address,

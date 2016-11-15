@@ -58,21 +58,27 @@ int get_block_device_size(int fd, int64_t *psize)
  *  e.g.,
  *   /dev/sda3 -> sda
  *   /dev/cciss/c0d1p2 -> cciss/c0d1
+ *  dev can a symbolic link.
  */
 int get_block_device_base(const char *dev, char *out, size_t out_len)
 {
   struct stat st;
   int r = 0;
-  char buf[PATH_MAX*2];
-  struct dirent *de;
   DIR *dir;
   char devname[PATH_MAX], fn[PATH_MAX];
   char *p;
+  char realname[PATH_MAX] = {0};
 
-  if (strncmp(dev, "/dev/", 5) != 0)
-    return -EINVAL;
+  if (strncmp(dev, "/dev/", 5) != 0) {
+    if ((readlink(dev, realname, sizeof(realname)) == -1) || (strncmp(realname, "/dev/", 5) != 0))
+      return -EINVAL;
+  }
 
-  strncpy(devname, dev + 5, PATH_MAX-1);
+  if (strlen(realname))
+    strncpy(devname, realname + 5, PATH_MAX -1);
+  else
+    strncpy(devname, dev + 5, PATH_MAX-1);
+
   devname[PATH_MAX-1] = '\0';
   for (p = devname; *p; ++p)
     if (*p == '/')
@@ -92,14 +98,8 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   if (!dir)
     return -errno;
 
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      if (errno) {
-	r = -errno;
-	goto out;
-      }
-      break;
-    }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
     if (de->d_name[0] == '.')
       continue;
     snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s", sandbox_dir, de->d_name,
@@ -139,7 +139,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
     return r;
 
   snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/queue/discard_granularity", sandbox_dir, basename);
+	   "%s/sys/block/%s/queue/%s", sandbox_dir, basename, property);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -175,6 +175,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 {
   uint64_t range[2] = {(uint64_t)offset, (uint64_t)len};
   return ioctl(fd, BLKDISCARD, range);
+}
+
+bool block_device_is_rotational(const char *devname)
+{
+  return get_block_device_int_property(devname, "rotational") > 0;
 }
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
@@ -243,6 +248,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
+bool block_device_is_rotational(const char *devname)
+{
+  return false;
+}
+
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
@@ -269,11 +279,40 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
+bool block_device_is_rotational(const char *devname)
+{
+  return false;
+}
+
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
   return -EOPNOTSUPP;
 }
 #else
-# error "Unable to query block device size: unsupported platform, please report."
+int get_block_device_size(int fd, int64_t *psize)
+{
+  return -EOPNOTSUPP;
+}
+
+bool block_device_support_discard(const char *devname)
+{
+  return false;
+}
+
+int block_device_discard(int fd, int64_t offset, int64_t len)
+{
+  return -EOPNOTSUPP;
+}
+
+bool block_device_is_rotational(const char *devname)
+{
+  return false;
+}
+
+int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
+	char* device)
+{
+  return -EOPNOTSUPP;
+}
 #endif

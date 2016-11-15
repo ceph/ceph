@@ -56,12 +56,13 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
     }
   }
 
-  if (!m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+  if (m_image_ctx.read_only ||
+      !m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     int r = 0;
     if (send_refresh_parent(&r) != nullptr) {
       send_complete();
-      return;
     }
+    return;
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -136,13 +137,12 @@ Context *SetSnapRequest<I>::handle_block_writes(int *result) {
 
 template <typename I>
 Context *SetSnapRequest<I>::send_shut_down_exclusive_lock(int *result) {
-  ExclusiveLock<I> *exclusive_lock;
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    exclusive_lock = m_image_ctx.exclusive_lock;
+    m_exclusive_lock = m_image_ctx.exclusive_lock;
   }
 
-  if (exclusive_lock == nullptr) {
+  if (m_exclusive_lock == nullptr) {
     return send_refresh_parent(result);
   }
 
@@ -152,7 +152,7 @@ Context *SetSnapRequest<I>::send_shut_down_exclusive_lock(int *result) {
   using klass = SetSnapRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_shut_down_exclusive_lock>(this);
-  exclusive_lock->shut_down(ctx);
+  m_exclusive_lock->shut_down(ctx);
   return nullptr;
 }
 
@@ -272,8 +272,12 @@ Context *SetSnapRequest<I>::handle_open_object_map(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
-  // object map should never report errors
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << "failed to open object map: " << cpp_strerror(*result)
+               << dendl;
+    delete m_object_map;
+    m_object_map = nullptr;
+  }
 
   *result = apply();
   if (*result < 0) {
@@ -323,11 +327,13 @@ int SetSnapRequest<I>::apply() {
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
   if (m_snap_id != CEPH_NOSNAP) {
+    assert(m_image_ctx.exclusive_lock == nullptr);
     int r = m_image_ctx.snap_set(m_snap_name);
     if (r < 0) {
       return r;
     }
   } else {
+    std::swap(m_image_ctx.exclusive_lock, m_exclusive_lock);
     m_image_ctx.snap_unset();
   }
 
@@ -335,7 +341,6 @@ int SetSnapRequest<I>::apply() {
     m_refresh_parent->apply();
   }
 
-  std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
   std::swap(m_object_map, m_image_ctx.object_map);
   return 0;
 }

@@ -137,7 +137,7 @@ int JournalScanner::scan_events()
   uint64_t object_size = g_conf->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
-    object_size = g_default_file_layout.fl_object_size;
+    object_size = file_layout_t::get_default().object_size;
   }
 
   uint64_t read_offset = header->expire_pos;

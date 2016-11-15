@@ -23,7 +23,7 @@
 #include "include/lru.h"
 #include "include/compact_set.h"
 
-#include "mdstypes.h"
+#include "MDSCacheObject.h"
 #include "flock.h"
 
 #include "CDentry.h"
@@ -89,11 +89,11 @@ public:
   static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
-  void encode(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void encode(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
   void decode(bufferlist::iterator &bl, bufferlist& snap_blob);
 
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
-  void encode_bare(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void encode_bare(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
   void decode_bare(bufferlist::iterator &bl, bufferlist &snap_blob, __u8 struct_v=5);
 
   /* For test/debug output */
@@ -108,14 +108,14 @@ class InodeStore : public InodeStoreBase {
 public:
   bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
 			 // rehydrate it without full MDCache
-  void encode(bufferlist &bl) const {
-    InodeStoreBase::encode(bl, &snap_blob);
+  void encode(bufferlist &bl, uint64_t features) const {
+    InodeStoreBase::encode(bl, features, &snap_blob);
   }
   void decode(bufferlist::iterator &bl) {
     InodeStoreBase::decode(bl, snap_blob);
   }
-  void encode_bare(bufferlist &bl) const {
-    InodeStoreBase::encode_bare(bl, &snap_blob);
+  void encode_bare(bufferlist &bl, uint64_t features) const {
+    InodeStoreBase::encode_bare(bl, features, &snap_blob);
   }
   void decode_bare(bufferlist::iterator &bl) {
     InodeStoreBase::decode_bare(bl, snap_blob);
@@ -123,6 +123,7 @@ public:
 
   static void generate_test_instances(std::list<InodeStore*>& ls);
 };
+WRITE_CLASS_ENCODER_FEATURES(InodeStore)
 
 // cached inode wrapper
 class CInode : public MDSCacheObject, public InodeStoreBase {
@@ -170,6 +171,7 @@ public:
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
+  static const int PIN_SCRUBQUEUE =       25;
 
   const char *pin_name(int p) const {
     switch (p) {
@@ -194,6 +196,7 @@ public:
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: return generic_pin_name(p);
     }
   }
@@ -213,6 +216,8 @@ public:
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
   static const int STATE_DIRTYPOOL =   (1<<18);
+  static const int STATE_REPAIRSTATS = (1<<19);
+  static const int STATE_MISSINGOBJS = (1<<20);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -253,23 +258,40 @@ public:
     /// time we started our most recent finished scrub
     utime_t last_scrub_stamp;
     scrub_stamp_info_t() : scrub_start_version(0), last_scrub_version(0) {}
+    void reset() {
+      scrub_start_version = 0;
+      scrub_start_stamp = utime_t();
+    }
   };
 
   class scrub_info_t : public scrub_stamp_info_t {
   public:
+    CDentry *scrub_parent;
+    MDSInternalContextBase *on_finish;
+
     bool last_scrub_dirty; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress; /// are we currently scrubbing?
+    bool children_scrubbed;
+
     /// my own (temporary) stamps and versions for each dirfrag we have
     std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
 
-    scrub_info_t() : scrub_stamp_info_t(), last_scrub_dirty(false),
-        scrub_in_progress(false) {}
+    ScrubHeaderRefConst header;
+
+    scrub_info_t() : scrub_stamp_info_t(),
+	scrub_parent(NULL), on_finish(NULL),
+	last_scrub_dirty(false), scrub_in_progress(false),
+	children_scrubbed(false) {}
   };
 
   const scrub_info_t *scrub_info() const{
     if (!scrub_infop)
       scrub_info_create();
     return scrub_infop;
+  }
+
+  bool scrub_is_in_progress() const {
+    return (scrub_infop && scrub_infop->scrub_in_progress);
   }
   /**
    * Start scrubbing on this inode. That could be very short if it's
@@ -279,7 +301,9 @@ public:
    * @param scrub_version What version are we scrubbing at (usually, parent
    * directory's get_projected_version())
    */
-  void scrub_initialize(version_t scrub_version);
+  void scrub_initialize(CDentry *scrub_parent,
+			const ScrubHeaderRefConst& header,
+			MDSInternalContextBase *f);
   /**
    * Get the next dirfrag to scrub. Gives you a frag_t in output param which
    * you must convert to a CDir (and possibly load off disk).
@@ -310,7 +334,17 @@ public:
    * @param c An out param which is filled in with a Context* that must
    * be complete()ed.
    */
-  void scrub_finished(Context **c);
+  void scrub_finished(MDSInternalContextBase **c);
+  /**
+   * Report to the CInode that alldirfrags it owns have been scrubbed.
+   */
+  void scrub_children_finished() {
+    scrub_infop->children_scrubbed = true;
+  }
+  void scrub_set_finisher(MDSInternalContextBase *c) {
+    assert(!scrub_infop->on_finish);
+    scrub_infop->on_finish = c;
+  }
 
 private:
   /**
@@ -527,13 +561,13 @@ protected:
   compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
 
-  compact_map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:
+  compact_map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
   compact_map<snapid_t, std::set<client_t> > client_need_snapflush;
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
-  void split_need_snapflush(CInode *cowin, CInode *in);
+  bool split_need_snapflush(CInode *cowin, CInode *in);
 
 protected:
 
@@ -542,7 +576,7 @@ protected:
 
   ceph_lock_state_t *get_fcntl_lock_state() {
     if (!fcntl_locks)
-      fcntl_locks = new ceph_lock_state_t(g_ceph_context);
+      fcntl_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FCNTL);
     return fcntl_locks;
   }
   void clear_fcntl_lock_state() {
@@ -551,7 +585,7 @@ protected:
   }
   ceph_lock_state_t *get_flock_lock_state() {
     if (!flock_locks)
-      flock_locks = new ceph_lock_state_t(g_ceph_context);
+      flock_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FLOCK);
     return flock_locks;
   }
   void clear_flock_lock_state() {
@@ -596,6 +630,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item item_scrub;
 
 public:
   int auth_pin_freeze_allowance;
@@ -704,7 +739,7 @@ public:
 
   // -- misc -- 
   bool is_projected_ancestor_of(CInode *other);
-  void make_path_string(std::string& s, bool force=false, CDentry *use_parent=NULL) const;
+  void make_path_string(std::string& s, CDentry *use_parent=NULL) const;
   void make_path_string_projected(std::string& s) const;
   void make_path(filepath& s) const;
   void name_stray_dentry(std::string& dname);
@@ -735,6 +770,15 @@ public:
   void store_backtrace(MDSInternalContextBase *fin, int op_prio=-1);
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, bufferlist *backtrace);
+protected:
+  /**
+   * Return the pool ID where we currently write backtraces for
+   * this inode (in addition to inode.old_pools)
+   *
+   * @returns a pool ID >=0
+   */
+  int64_t get_backtrace_pool() const;
+public:
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
   void verify_diri_backtrace(bufferlist &bl, int err);
@@ -743,10 +787,10 @@ public:
 
   void encode_snap_blob(bufferlist &bl);
   void decode_snap_blob(bufferlist &bl);
-  void encode_store(bufferlist& bl);
+  void encode_store(bufferlist& bl, uint64_t features);
   void decode_store(bufferlist::iterator& bl);
 
-  void encode_replica(mds_rank_t rep, bufferlist& bl) {
+  void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features) {
     assert(is_auth());
     
     // relax locks?
@@ -756,7 +800,7 @@ public:
     __u32 nonce = add_replica(rep);
     ::encode(nonce, bl);
     
-    _encode_base(bl);
+    _encode_base(bl, features);
     _encode_locks_state_for_replica(bl);
   }
   void decode_replica(bufferlist::iterator& p, bool is_new) {
@@ -781,7 +825,7 @@ public:
   void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls);
 
   // -- encode/decode helpers --
-  void _encode_base(bufferlist& bl);
+  void _encode_base(bufferlist& bl, uint64_t features);
   void _decode_base(bufferlist::iterator& p);
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
@@ -927,14 +971,15 @@ public:
 
   const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
-    if (client_caps.count(client))
-      return client_caps[client];
+    auto client_caps_entry = client_caps.find(client);
+    if (client_caps_entry != client_caps.end())
+      return client_caps_entry->second;
     return 0;
   }
   int get_client_cap_pending(client_t client) const {
-    if (client_caps.count(client)) {
-      std::map<client_t, Capability*>::const_iterator found = client_caps.find(client);
-      return found->second->pending();
+    auto client_caps_entry = client_caps.find(client);
+    if (client_caps_entry != client_caps.end()) {
+      return client_caps_entry->second->pending();
     } else {
       return 0;
     }
@@ -944,7 +989,7 @@ public:
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
-  Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session);
+  Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
 
@@ -954,7 +999,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(client_t client) const;
+  int get_caps_allowed_for_client(Session *s, inode_t *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
@@ -1075,9 +1120,14 @@ public:
     bool performed_validation;
     bool passed_validation;
 
+    struct raw_stats_t {
+      frag_info_t dirstat;
+      nest_info_t rstat;
+    };
+
     member_status<inode_backtrace_t> backtrace;
     member_status<inode_t> inode;
-    member_status<nest_info_t> raw_rstats;
+    member_status<raw_stats_t> raw_stats;
 
     validated_data() : performed_validation(false),
         passed_validation(false) {}
@@ -1099,7 +1149,6 @@ public:
    * @param fin Context to call back on completion (or NULL)
    */
   void validate_disk_state(validated_data *results,
-                           MDRequestRef& mdr,
                            MDSInternalContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);

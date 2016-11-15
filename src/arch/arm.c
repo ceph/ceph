@@ -18,13 +18,10 @@ int ceph_arch_aarch64_crc32 = 0;
 static unsigned long get_auxval(unsigned long type)
 {
 	unsigned long result = 0;
-	int read = 0;
 	FILE *f = fopen("/proc/self/auxv", "r");
 	if (f) {
 		ElfW(auxv_t) entry;
-		while ((read = fread(&entry, sizeof(entry), 1, f)) > 0) {
-			if (read != 1)
-				break;
+		while (fread(&entry, sizeof(entry), 1, f) == 1) {
 			if (entry.a_type == type) {
 				result = entry.a_un.a_val;
 				break;

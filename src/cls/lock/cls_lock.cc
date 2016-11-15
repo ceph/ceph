@@ -45,6 +45,7 @@ cls_method_handle_t h_break_lock;
 cls_method_handle_t h_get_info;
 cls_method_handle_t h_list_locks;
 cls_method_handle_t h_assert_locked;
+cls_method_handle_t h_set_cookie;
 
 #define LOCK_PREFIX    "lock."
 
@@ -55,9 +56,9 @@ typedef struct lock_info_s {
                                                       //      as long as set of non expired lockers
                                                       //      is bigger than 0.
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(lockers, bl);
+    ::encode(lockers, bl, features);
     uint8_t t = (uint8_t)lock_type;
     ::encode(t, bl);
     ::encode(tag, bl);
@@ -74,8 +75,7 @@ typedef struct lock_info_s {
   }
   lock_info_s() : lock_type(LOCK_NONE) {}
 } lock_info_t;
-WRITE_CLASS_ENCODER(lock_info_t)
-
+WRITE_CLASS_ENCODER_FEATURES(lock_info_t)
 
 static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t *lock)
 {
@@ -131,7 +131,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
   key.append(name);
 
   bufferlist lock_bl;
-  ::encode(lock, lock_bl);
+  ::encode(lock, lock_bl, cls_get_client_features(hctx));
 
   int r = cls_cxx_setxattr(hctx, key.c_str(), &lock_bl);
   if (r < 0)
@@ -398,7 +398,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ret.lock_type = linfo.lock_type;
   ret.tag = linfo.tag;
 
-  ::encode(ret, *out);
+  ::encode(ret, *out, cls_get_client_features(hctx));
 
   return 0;
 }
@@ -513,6 +513,94 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Update the cookie associated with an object lock
+ *
+ * Input:
+ * @param cls_lock_set_cookie_op request input
+ *
+ * Output:
+ * @param none
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "set_cookie");
+
+  cls_lock_set_cookie_op op;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(op, iter);
+  } catch (const buffer::error& err) {
+    return -EINVAL;
+  }
+
+  if (op.type != LOCK_EXCLUSIVE && op.type != LOCK_SHARED) {
+    return -EINVAL;
+  }
+
+  if (op.name.empty()) {
+    return -EINVAL;
+  }
+
+  // see if there's already a locker
+  lock_info_t linfo;
+  int r = read_lock(hctx, op.name, &linfo);
+  if (r < 0) {
+    CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (linfo.lockers.empty()) {
+    CLS_LOG(20, "object not locked");
+    return -EBUSY;
+  }
+
+  if (linfo.lock_type != op.type) {
+    CLS_LOG(20, "lock type mismatch: current=%s, assert=%s",
+            cls_lock_type_str(linfo.lock_type), cls_lock_type_str(op.type));
+    return -EBUSY;
+  }
+
+  if (linfo.tag != op.tag) {
+    CLS_LOG(20, "lock tag mismatch: current=%s, assert=%s", linfo.tag.c_str(),
+            op.tag.c_str());
+    return -EBUSY;
+  }
+
+  entity_inst_t inst;
+  r = cls_get_request_origin(hctx, &inst);
+  assert(r == 0);
+
+  locker_id_t id;
+  id.cookie = op.cookie;
+  id.locker = inst.name;
+
+  map<locker_id_t, locker_info_t>::iterator iter = linfo.lockers.find(id);
+  if (iter == linfo.lockers.end()) {
+    CLS_LOG(20, "not locked by client");
+    return -EBUSY;
+  }
+
+  id.cookie = op.new_cookie;
+  if (linfo.lockers.count(id) != 0) {
+    CLS_LOG(20, "lock cookie in-use");
+    return -EBUSY;
+  }
+
+  locker_info_t locker_info(iter->second);
+  linfo.lockers.erase(iter);
+
+  linfo.lockers[id] = locker_info;
+  r = write_lock(hctx, op.name, linfo);
+  if (r < 0) {
+    CLS_ERR("Could not update lock info: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded lock class!");
@@ -536,6 +624,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "assert_locked",
                           CLS_METHOD_RD | CLS_METHOD_PROMOTE,
                           assert_locked, &h_assert_locked);
+  cls_register_cxx_method(h_class, "set_cookie",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
+                          set_cookie, &h_set_cookie);
 
   return;
 }

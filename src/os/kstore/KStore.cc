@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "KStore.h"
+#include "osd/osd_types.h"
 #include "kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -84,10 +85,10 @@ static void append_escaped(const string &in, string *out)
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') {
-      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (unsigned)*i);
+      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else if (*i >= '~') {
-      snprintf(hexbyte, sizeof(hexbyte), "~%02x", (unsigned)*i);
+      snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else {
       out->push_back(*i);
@@ -630,6 +631,7 @@ KStore::KStore(CephContext *cct, const string& path)
     fsid_fd(-1),
     mounted(false),
     coll_lock("KStore::coll_lock"),
+    nid_last(0),
     nid_max(0),
     throttle_ops(cct, "kstore_max_ops", cct->_conf->kstore_max_ops),
     throttle_bytes(cct, "kstore_max_bytes", cct->_conf->kstore_max_bytes),
@@ -652,11 +654,22 @@ KStore::~KStore()
 void KStore::_init_logger()
 {
   // XXX
+  PerfCountersBuilder b(g_ceph_context, "KStore",
+                        l_kstore_first, l_kstore_last);
+  b.add_time_avg(l_kstore_state_prepare_lat, "state_prepare_lat", "Average prepare state latency");
+  b.add_time_avg(l_kstore_state_kv_queued_lat, "state_kv_queued_lat", "Average kv_queued state latency");
+  b.add_time_avg(l_kstore_state_kv_done_lat, "state_kv_done_lat", "Average kv_done state latency");
+  b.add_time_avg(l_kstore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
+  b.add_time_avg(l_kstore_state_done_lat, "state_done_lat", "Average done state latency");
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
 void KStore::_shutdown_logger()
 {
   // XXX
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
 }
 
 int KStore::_open_path()
@@ -961,7 +974,7 @@ int KStore::mount()
   dout(1) << __func__ << " path " << path << dendl;
 
   if (g_conf->kstore_fsck_on_mount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->kstore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
   }
@@ -1032,319 +1045,10 @@ int KStore::umount()
   return 0;
 }
 
-int KStore::fsck()
+int KStore::fsck(bool deep)
 {
   dout(1) << __func__ << dendl;
   int errors = 0;
-#if 0
-  set<uint64_t> used_nids;
-  set<uint64_t> used_omap_head;
-  interval_set<uint64_t> used_blocks;
-  KeyValueDB::Iterator it;
-
-  int r = _open_path();
-  if (r < 0)
-    return r;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
-
-  r = _read_fsid(&fsid);
-  if (r < 0)
-    goto out_fsid;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
-
-  r = _open_bdev(false);
-  if (r < 0)
-    goto out_fsid;
-
-  r = _open_db(false);
-  if (r < 0)
-    goto out_bdev;
-
-  r = _open_alloc();
-  if (r < 0)
-    goto out_db;
-
-  r = _open_super_meta();
-  if (r < 0)
-    goto out_alloc;
-
-  r = _open_collections(&errors);
-  if (r < 0)
-    goto out_alloc;
-
-  if (bluefs) {
-    used_blocks.insert(0, BLUEFS_START);
-    used_blocks.insert(bluefs_extents);
-    r = bluefs->fsck();
-    if (r < 0)
-      goto out_alloc;
-    if (r > 0)
-      errors += r;
-  }
-
-  // walk collections, objects
-  for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
-       p != coll_map.end() && !errors;
-       ++p) {
-    dout(1) << __func__ << " collection " << p->first << dendl;
-    CollectionRef c = _get_collection(p->first);
-    RWLock::RLocker l(c->lock);
-    ghobject_t pos;
-    while (!errors) {
-      vector<ghobject_t> ols;
-      int r = collection_list(p->first, pos, ghobject_t::get_max(), true,
-			      100, &ols, &pos);
-      if (r < 0) {
-	++errors;
-	break;
-      }
-      if (ols.empty()) {
-	break;
-      }
-      for (auto& oid : ols) {
-	dout(10) << __func__ << "  " << oid << dendl;
-	OnodeRef o = c->get_onode(oid, false);
-	if (!o || !o->exists) {
-	  ++errors;
-	  break;
-	}
-	if (o->onode.nid) {
-	  if (used_nids.count(o->onode.nid)) {
-	    derr << " " << oid << " nid " << o->onode.nid << " already in use"
-		 << dendl;
-	    ++errors;
-	    break;
-	  }
-	  used_nids.insert(o->onode.nid);
-	}
-	// blocks
-	for (auto& b : o->onode.block_map) {
-	  if (used_blocks.contains(b.second.offset, b.second.length)) {
-	    derr << " " << oid << " extent " << b.first << ": " << b.second
-		 << " already allocated" << dendl;
-	    ++errors;
-	    continue;
-	  }
-	  used_blocks.insert(b.second.offset, b.second.length);
-	  if (b.second.end() > bdev->get_size()) {
-	    derr << " " << oid << " extent " << b.first << ": " << b.second
-		 << " past end of block device" << dendl;
-	    ++errors;
-	  }
-	}
-	// overlays
-	set<string> overlay_keys;
-	map<uint64_t,int> refs;
-	for (auto& v : o->onode.overlay_map) {
-	  if (v.first + v.second.length > o->onode.size) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " extends past end of object" << dendl;
-	    ++errors;
-	  }
-	  if (v.second.key > o->onode.last_overlay_key) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " is > last_overlay_key " << o->onode.last_overlay_key
-		 << dendl;
-	    ++errors;
-	  }
-	  ++refs[v.second.key];
-	  string key;
-	  bufferlist val;
-	  get_overlay_key(o->onode.nid, v.second.key, &key);
-	  overlay_keys.insert(key);
-	  int r = db->get(PREFIX_OVERLAY, key, &val);
-	  if (r < 0) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " failed to fetch: " << cpp_strerror(r) << dendl;
-	    ++errors;
-	  }
-	  if (val.length() < v.second.value_offset + v.second.length) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " too short, " << val.length() << dendl;
-	    ++errors;
-	  }
-	}
-	for (auto& vr : o->onode.overlay_refs) {
-	  if (refs[vr.first] != vr.second) {
-	    derr << " " << oid << " overlay key " << vr.first
-		 << " says " << vr.second << " refs but we have "
-		 << refs[vr.first] << dendl;
-	    ++errors;
-	  }
-	  refs.erase(vr.first);
-	}
-	for (auto& p : refs) {
-	  if (p.second > 1) {
-	    derr << " " << oid << " overlay key " << p.first
-		 << " has " << p.second << " refs but they are not recorded"
-		 << dendl;
-	    ++errors;
-	  }
-	}
-	do {
-	  string start;
-	  get_overlay_key(o->onode.nid, 0, &start);
-	  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OVERLAY);
-	  if (!it)
-	    break;
-	  for (it->lower_bound(start); it->valid(); it->next()) {
-	    string k = it->key();
-	    const char *p = k.c_str();
-	    uint64_t nid;
-	    p = _key_decode_u64(p, &nid);
-	    if (nid != o->onode.nid)
-	      break;
-	    if (!overlay_keys.count(k)) {
-	      derr << " " << oid << " has stray overlay kv pair for "
-		   << k << dendl;
-	      ++errors;
-	    }
-	  }
-	} while (false);
-	// omap
-	while (o->onode.omap_head) {
-	  if (used_omap_head.count(o->onode.omap_head)) {
-	    derr << " " << oid << " omap_head " << o->onode.omap_head
-		 << " already in use" << dendl;
-	    ++errors;
-	    break;
-	  }
-	  used_omap_head.insert(o->onode.omap_head);
-	  // hrm, scan actual key/value pairs?
-	  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
-	  if (!it)
-	    break;
-	  string head, tail;
-	  get_omap_header(o->onode.omap_head, &head);
-	  get_omap_tail(o->onode.omap_head, &tail);
-	  it->lower_bound(head);
-	  while (it->valid()) {
-	    if (it->key() == head) {
-	      dout(30) << __func__ << "  got header" << dendl;
-	    } else if (it->key() >= tail) {
-	      dout(30) << __func__ << "  reached tail" << dendl;
-	      break;
-	    } else {
-	      string user_key;
-	      decode_omap_key(it->key(), &user_key);
-	      dout(30) << __func__
-		       << "  got " << pretty_binary_string(it->key())
-		       << " -> " << user_key << dendl;
-	      assert(it->key() < tail);
-	    }
-	    it->next();
-	  }
-	  break;
-	}
-      }
-    }
-  }
-
-  dout(1) << __func__ << " checking for stray objects" << dendl;
-  it = db->get_iterator(PREFIX_OBJ);
-  if (it) {
-    CollectionRef c;
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      ghobject_t oid;
-      int r = get_key_object(it->key(), &oid);
-      if (r < 0) {
-	dout(30) << __func__ << "  bad object key "
-		 << pretty_binary_string(it->key()) << dendl;
-	++errors;
-	continue;
-      }
-      if (!c || !c->contains(oid)) {
-	c = NULL;
-	for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
-	       coll_map.begin();
-	     p != coll_map.end() && !errors;
-	     ++p) {
-	  if (p->second->contains(oid)) {
-	    c = p->second;
-	    break;
-	  }
-	}
-	if (!c) {
-	  dout(30) << __func__ << "  stray object " << oid
-		   << " not owned by any collection" << dendl;
-	  ++errors;
-	  continue;
-	}
-      }
-    }
-  }
-
-  dout(1) << __func__ << " checking for stray overlay data" << dendl;
-  it = db->get_iterator(PREFIX_OVERLAY);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      string key = it->key();
-      const char *p = key.c_str();
-      uint64_t nid;
-      p = _key_decode_u64(p, &nid);
-      if (used_nids.count(nid) == 0) {
-	derr << __func__ << " found stray overlay data on nid " << nid << dendl;
-	++errors;
-      }
-    }
-  }
-
-  dout(1) << __func__ << " checking for stray omap data" << dendl;
-  it = db->get_iterator(PREFIX_OMAP);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      string key = it->key();
-      const char *p = key.c_str();
-      uint64_t omap_head;
-      p = _key_decode_u64(p, &omap_head);
-      if (used_omap_head.count(omap_head) == 0) {
-	derr << __func__ << " found stray omap data on omap_head " << omap_head
-	     << dendl;
-	++errors;
-      }
-    }
-  }
-
-  dout(1) << __func__ << " checking freelist vs allocated" << dendl;
-  {
-    const map<uint64_t,uint64_t>& free = fm->get_freelist();
-    for (map<uint64_t,uint64_t>::const_iterator p = free.begin();
-	 p != free.end(); ++p) {
-      if (used_blocks.contains(p->first, p->second)) {
-	derr << __func__ << " free extent " << p->first << "~" << p->second
-	     << " intersects allocated blocks" << dendl;
-	++errors;
-	continue;
-      }
-      used_blocks.insert(p->first, p->second);
-    }
-    if (!used_blocks.contains(0, bdev->get_size())) {
-      derr << __func__ << " leaked some space; free+used = "
-	   << used_blocks
-	   << " != expected 0~" << bdev->get_size()
-	   << dendl;
-      ++errors;
-    }
-  }
-  coll_map.clear();
- out_alloc:
-  _close_alloc();
- out_db:
-  it.reset();  // before db is closed
-  _close_db();
- out_bdev:
-  _close_bdev();
- out_fsid:
-  _close_fsid();
- out_path:
-  _close_path();
-
-#endif
   dout(1) << __func__ << " finish with " << errors << " errors" << dendl;
   return errors;
 }
@@ -1363,7 +1067,7 @@ void KStore::_sync()
   dout(10) << __func__ << " done" << dendl;
 }
 
-int KStore::statfs(struct statfs *buf)
+int KStore::statfs(struct store_statfs_t* buf)
 {
   return db->get_statfs(buf);
 }
@@ -1451,6 +1155,13 @@ int KStore::stat(
   st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_nlink = 1;
   return 0;
+}
+
+int KStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
 }
 
 int KStore::read(
@@ -1673,18 +1384,21 @@ bool KStore::collection_exists(const coll_t& c)
   return coll_map.count(c);
 }
 
-bool KStore::collection_empty(const coll_t& cid)
+int KStore::collection_empty(const coll_t& cid, bool *empty)
 {
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
   int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 1,
 			  &ls, &next);
-  if (r < 0)
-    return false;  // fixme?
-  bool empty = ls.empty();
-  dout(10) << __func__ << " " << cid << " = " << (int)empty << dendl;
-  return empty;
+  if (r < 0) {
+    derr << __func__ << " collection_list returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
+  *empty = ls.empty();
+  dout(10) << __func__ << " " << cid << " = " << (int)(*empty) << dendl;
+  return 0;
 }
 
 int KStore::collection_list(
@@ -1692,14 +1406,42 @@ int KStore::collection_list(
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
-  dout(15) << __func__ << " " << cid
-	   << " start " << start << " end " << end << " max " << max << dendl;
-  if (!sort_bitwise)
-    return -EOPNOTSUPP;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  return collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+}
+
+int KStore::collection_list(
+  CollectionHandle &c_, ghobject_t start, ghobject_t end,
+  bool sort_bitwise, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->cid
+           << " start " << start << " end " << end << " max " << max << dendl;
+  int r;
+  {
+    RWLock::RLocker l(c->lock);
+    r = _collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+  }
+
+  dout(10) << __func__ << " " << c->cid
+    << " start " << start << " end " << end << " max " << max
+    << " = " << r << ", ls.size() = " << ls->size()
+    << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
+  return r;
+}
+
+int KStore::_collection_list(
+  Collection* c, ghobject_t start, ghobject_t end,
+  bool sort_bitwise, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+{
+  if (!sort_bitwise)
+    return -EOPNOTSUPP;
+
   int r = 0;
   KeyValueDB::Iterator it;
   string temp_start_key, temp_end_key;
@@ -1712,9 +1454,11 @@ int KStore::collection_list(
   if (!pnext)
     pnext = &static_next;
 
-  if (start == ghobject_t::get_max())
+  if (start == ghobject_t::get_max() ||
+    start.hobj.is_max()) {
     goto out;
-  get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
+  }
+  get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
 		     &start_key, &end_key);
   dout(20) << __func__
 	   << " range " << pretty_binary_string(temp_start_key)
@@ -1723,7 +1467,7 @@ int KStore::collection_list(
 	   << " to " << pretty_binary_string(end_key)
 	   << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t() || start == cid.get_min_hobj()) {
+  if (start == ghobject_t() || start == c->cid.get_min_hobj()) {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
@@ -1755,7 +1499,7 @@ int KStore::collection_list(
   }
   dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
   while (true) {
-    if (!it->valid() || it->key() > pend) {
+    if (!it->valid() || it->key() >= pend) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
@@ -1787,14 +1531,10 @@ int KStore::collection_list(
     ls->push_back(oid);
     it->next();
   }
+out:
   if (!set_next) {
     *pnext = ghobject_t::get_max();
   }
- out:
-  dout(10) << __func__ << " " << cid
-	   << " start " << start << " end " << end << " max " << max
-	   << " = " << r << ", ls.size() = " << ls->size()
-	   << ", next = " << *pnext << dendl;
   return r;
 }
 
@@ -2170,29 +1910,37 @@ void KStore::_txc_state_proc(TransContext *txc)
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
+      txc->log_state_latency(logger, l_kstore_state_prepare_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->kstore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
 	if (g_conf->kstore_sync_submit_transaction) {
-	  db->submit_transaction(txc->t);
+          int r = db->submit_transaction(txc->t);
+	  assert(r == 0);
 	}
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
 	return;
       }
-      db->submit_transaction_sync(txc->t);
+      {
+	int r = db->submit_transaction_sync(txc->t);
+	assert(r == 0);
+      }
       break;
 
     case TransContext::STATE_KV_QUEUED:
+      txc->log_state_latency(logger, l_kstore_state_kv_queued_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
+      txc->log_state_latency(logger, l_kstore_state_kv_done_lat);
       txc->state = TransContext::STATE_FINISHING;
-      break;
+      // ** fall-thru **
 
     case TransContext::TransContext::STATE_FINISHING:
+      txc->log_state_latency(logger, l_kstore_state_finishing_lat);
       _txc_finish(txc);
       return;
 
@@ -2205,7 +1953,7 @@ void KStore::_txc_state_proc(TransContext *txc)
   }
 }
 
-int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+void KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 {
   dout(20) << __func__ << " osr " << osr << " txc " << txc
 	   << " onodes " << txc->onodes << dendl;
@@ -2222,8 +1970,6 @@ int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
   }
-
-  return 0;
 }
 
 void KStore::_txc_finish_kv(TransContext *txc)
@@ -2280,8 +2026,10 @@ void KStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  std::lock_guard<std::mutex> l(osr->qlock);
-  txc->state = TransContext::STATE_DONE;
+  {
+    std::lock_guard<std::mutex> l(osr->qlock);
+    txc->state = TransContext::STATE_DONE;
+  }
 
   _osr_reap_done(osr.get());
 }
@@ -2303,6 +2051,7 @@ void KStore::_osr_reap_done(OpSequencer *osr)
     }
 
     osr->q.pop_front();
+    txc->log_state_latency(logger, l_kstore_state_done_lat);
     delete txc;
     osr->qcond.notify_all();
     if (osr->q.empty())
@@ -2337,10 +2086,12 @@ void KStore::_kv_sync_thread()
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
-	  db->submit_transaction((*it)->t);
+	  int r = db->submit_transaction((*it)->t);
+	  assert(r == 0);
 	}
       }
-      db->submit_transaction_sync(t);
+      int r = db->submit_transaction_sync(t);
+      assert(r == 0);
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
@@ -2375,7 +2126,6 @@ int KStore::queue_transactions(
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  int r;
 
   // set up the sequencer
   OpSequencer *osr;
@@ -2403,8 +2153,7 @@ int KStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  r = _txc_finalize(osr, txc);
-  assert(r == 0);
+  _txc_finalize(osr, txc);
 
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
@@ -2414,7 +2163,7 @@ int KStore::queue_transactions(
   return 0;
 }
 
-int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
+void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
 
@@ -2517,9 +2266,9 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
     }
     if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r)
-	      << " not handled on operation " << op->op
-	      << " (op " << pos << ", counting from 0)" << dendl;
+      derr << " error " << cpp_strerror(r)
+	   << " not handled on operation " << op->op
+	   << " (op " << pos << ", counting from 0)" << dendl;
       dout(0) << " transaction dump:\n";
       JSONFormatter f(true);
       f.open_object_section("transaction");
@@ -2671,6 +2420,17 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+	const ghobject_t& noid = i.get_oid(op->dest_oid);
+	OnodeRef no = c->get_onode(noid, true);
+	r = _rename(txc, c, o, no, noid);
+	if (r == -ENOENT)
+	  r = 0;
+	o.reset();
+      }
+      break;
+
     case Transaction::OP_OMAP_CLEAR:
       {
 	r = _omap_clear(txc, c, o);
@@ -2710,9 +2470,11 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
+	uint32_t flags = op->alloc_hint_flags;
 	r = _setallochint(txc, c, o,
 			  expected_object_size,
-			  expected_write_size);
+			  expected_write_size,
+			  flags);
       }
       break;
 
@@ -2765,8 +2527,6 @@ int KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
     }
   }
-
-  return 0;
 }
 
 
@@ -3317,15 +3077,19 @@ int KStore::_setallochint(TransContext *txc,
 			  CollectionRef& c,
 			  OnodeRef& o,
 			  uint64_t expected_object_size,
-			  uint64_t expected_write_size)
+			  uint64_t expected_write_size,
+			  uint32_t flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
+	   << " flags " << flags
 	   << dendl;
   int r = 0;
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
+  o->onode.alloc_hint_flags = flags;
+
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
@@ -3517,19 +3281,46 @@ int KStore::_remove_collection(TransContext *txc, coll_t cid,
       r = -ENOENT;
       goto out;
     }
-    pair<ghobject_t,OnodeRef> next;
-    while ((*c)->onode_map.get_next(next.first, &next)) {
-      if (next.second->exists) {
+    size_t nonexistent_count = 0;
+    pair<ghobject_t,OnodeRef> next_onode;
+    while ((*c)->onode_map.get_next(next_onode.first, &next_onode)) {
+      if (next_onode.second->exists) {
 	r = -ENOTEMPTY;
 	goto out;
       }
+      ++nonexistent_count;
     }
-    coll_map.erase(cid);
-    txc->removed_collections.push_back(*c);
-    c->reset();
+    vector<ghobject_t> ls;
+    ghobject_t next;
+    // Enumerate onodes in db, up to nonexistent_count + 1
+    // then check if all of them are marked as non-existent.
+    // Bypass the check if returned number is greater than nonexistent_count
+    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(), true,
+                         nonexistent_count + 1, &ls, &next);
+    if (r >= 0) {
+      bool exists = false; //ls.size() > nonexistent_count;
+      for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
+        dout(10) << __func__ << " oid " << *it << dendl;
+        auto onode = (*c)->onode_map.lookup(*it);
+        exists = !onode || onode->exists;
+        if (exists) {
+          dout(10) << __func__ << " " << *it
+                   << " exists in db" << dendl;
+        }
+      }
+      if (!exists) {
+        coll_map.erase(cid);
+        txc->removed_collections.push_back(*c);
+        c->reset();
+        txc->t->rmkey(PREFIX_COLL, stringify(cid));
+        r = 0;
+      } else {
+        dout(10) << __func__ << " " << cid
+                 << " is non-empty" << dendl;
+        r = -ENOTEMPTY;
+      }
+    }
   }
-  txc->t->rmkey(PREFIX_COLL, stringify(cid));
-  r = 0;
 
  out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;

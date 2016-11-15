@@ -22,13 +22,12 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "EpollDriver."
 
-int EpollDriver::init(int nevent)
+int EpollDriver::init(EventCenter *c, int nevent)
 {
   events = (struct epoll_event*)malloc(sizeof(struct epoll_event)*nevent);
   if (!events) {
-    lderr(cct) << __func__ << " unable to malloc memory: "
-                           << cpp_strerror(errno) << dendl;
-    return -errno;
+    lderr(cct) << __func__ << " unable to malloc memory. " << dendl;
+    return -ENOMEM;
   }
   memset(events, 0, sizeof(struct epoll_event)*nevent);
 
@@ -88,7 +87,7 @@ int EpollDriver::del_event(int fd, int cur_mask, int delmask)
     if ((r = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: modify fd=" << fd << " mask=" << mask
                  << " failed." << cpp_strerror(errno) << dendl;
-      return r;
+      return -errno;
     }
   } else {
     /* Note, Kernel < 2.6.9 requires a non null event pointer even for
@@ -96,7 +95,7 @@ int EpollDriver::del_event(int fd, int cur_mask, int delmask)
     if ((r = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: delete fd=" << fd
                  << " failed." << cpp_strerror(errno) << dendl;
-      return r;
+      return -errno;
     }
   }
   return 0;
@@ -124,8 +123,8 @@ int EpollDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval
 
       if (e->events & EPOLLIN) mask |= EVENT_READABLE;
       if (e->events & EPOLLOUT) mask |= EVENT_WRITABLE;
-      if (e->events & EPOLLERR) mask |= EVENT_WRITABLE;
-      if (e->events & EPOLLHUP) mask |= EVENT_WRITABLE;
+      if (e->events & EPOLLERR) mask |= EVENT_READABLE|EVENT_WRITABLE;
+      if (e->events & EPOLLHUP) mask |= EVENT_READABLE|EVENT_WRITABLE;
       fired_events[j].fd = e->data.fd;
       fired_events[j].mask = mask;
     }

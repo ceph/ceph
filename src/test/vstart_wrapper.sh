@@ -16,10 +16,10 @@
 # GNU Library Public License for more details.
 #
 
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
-export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
+export CEPH_DIR="${TMPDIR:-$PWD}/testdir/test-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
 
@@ -30,7 +30,8 @@ function vstart_setup()
     trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
     export PATH="$(pwd):${PATH}"
-    ./vstart.sh \
+    $CEPH_ROOT/src/vstart.sh \
+        --short \
         -o 'paxos propose interval = 0.01' \
         -n -l $CEPH_START || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf

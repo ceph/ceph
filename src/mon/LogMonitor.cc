@@ -24,13 +24,8 @@
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
-
-#include "common/Timer.h"
 #include "common/Graylog.h"
-
-#include "osd/osd_types.h"
 #include "common/errno.h"
-#include "common/config.h"
 #include "common/strtol.h"
 #include "include/assert.h"
 #include "include/str_list.h"
@@ -46,26 +41,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
 		<< ").log v" << v << " ";
 }
 
-ostream& operator<<(ostream& out, LogMonitor& pm)
+ostream& operator<<(ostream &out, const LogMonitor &pm)
 {
-  /*
-  std::stringstream ss;
-  for (ceph::unordered_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
-       p != pm.pg_map.num_pg_by_state.end();
-       ++p) {
-    if (p != pm.pg_map.num_pg_by_state.begin())
-      ss << ", ";
-    ss << p->second << " " << pg_state_string(p->first);
-  }
-  string states = ss.str();
-  return out << "v" << pm.pg_map.version << ": "
-	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states << "; "
-	     << kb_t(pm.pg_map.total_pg_kb()) << " data, " 
-	     << kb_t(pm.pg_map.total_used_kb()) << " used, "
-	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
-	     << kb_t(pm.pg_map.total_kb()) << " free";
-  */
   return out << "log";
 }
 
@@ -154,7 +131,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       }
 
       if (channels.do_log_to_graylog(channel)) {
-	ceph::log::Graylog::Ref graylog = channels.get_graylog(channel);
+	ceph::logging::Graylog::Ref graylog = channels.get_graylog(channel);
 	if (graylog) {
 	  graylog->log_log_entry(&le);
 	}
@@ -223,17 +200,6 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   check_subs();
 }
 
-void LogMonitor::store_do_append(MonitorDBStore::TransactionRef t,
-    const string& key, bufferlist& bl)
-{
-  bufferlist existing_bl;
-  int err = get_value(key, existing_bl);
-  assert(err == 0);
-
-  existing_bl.append(bl);
-  put_value(t, key, existing_bl);
-}
-
 void LogMonitor::create_pending()
 {
   pending_log.clear();
@@ -250,7 +216,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ::encode(v, bl);
   multimap<utime_t,LogEntry>::iterator p;
   for (p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl);
+    p->second.encode(bl, mon->get_quorum_con_features());
 
   put_version(t, version, bl);
   put_last_committed(t, version);
@@ -262,7 +228,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  ::encode(summary, summary_bl);
+  ::encode(summary, summary_bl, mon->get_quorum_con_features());
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
@@ -270,9 +236,12 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 
 version_t LogMonitor::get_trim_to()
 {
+  if (!mon->is_leader())
+    return 0;
+
   unsigned max = g_conf->mon_max_log_epochs;
   version_t version = get_last_committed();
-  if (mon->is_leader() && version > max)
+  if (version > max)
     return version - max;
   return 0;
 }
@@ -343,6 +312,18 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
  done:
   return true;
 }
+
+struct LogMonitor::C_Log : public C_MonOp {
+  LogMonitor *logmon;
+  C_Log(LogMonitor *p, MonOpRequestRef o) :
+    C_MonOp(o), logmon(p) {}
+  void _finish(int r) {
+    if (r == -ECANCELED) {
+      return;
+    }
+    logmon->_updated_log(op);
+  }
+};
 
 bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
@@ -464,7 +445,7 @@ int LogMonitor::sub_name_to_id(const string& n)
     return CLOG_WARN;
   if (n == "log-error")
     return CLOG_ERROR;
-  return -1;
+  return CLOG_UNKNOWN;
 }
 
 void LogMonitor::check_subs()
@@ -744,14 +725,14 @@ bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
   return ret;
 }
 
-ceph::log::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
+ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
     const string &channel)
 {
   generic_dout(25) << __func__ << " for channel '"
 		   << channel << "'" << dendl;
 
   if (graylogs.count(channel) == 0) {
-    ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
+    ceph::logging::Graylog::Ref graylog = ceph::logging::Graylog::Ref(new ceph::logging::Graylog("mon"));
 
     graylog->set_fsid(g_conf->fsid);
     graylog->set_hostname(g_conf->host);
@@ -780,9 +761,7 @@ void LogMonitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_cluster_log_file_level") ||
       changed.count("mon_cluster_log_to_graylog") ||
       changed.count("mon_cluster_log_to_graylog_host") ||
-      changed.count("mon_cluster_log_to_graylog_port") ||
-      changed.count("fsid") ||
-      changed.count("host")) {
+      changed.count("mon_cluster_log_to_graylog_port")) {
     update_log_channels();
   }
 }

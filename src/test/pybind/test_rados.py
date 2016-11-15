@@ -3,7 +3,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
                    ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
-                   LIBRADOS_SNAP_HEAD, MonitorLog)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
 import time
 import threading
 import json
@@ -143,8 +143,10 @@ class TestRados(object):
         cmd = {'prefix': 'mon dump', 'format':'json'}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         for mon in json.loads(buf.decode('utf8'))['mons']:
-            buf = json.loads(self.rados.ping_monitor(mon['name']))
-            assert buf.get('health')
+            while True:
+                buf = json.loads(self.rados.ping_monitor(mon['name']))
+                if buf.get('health'):
+                    break
 
     def test_create(self):
         self.rados.create_pool('foo')
@@ -219,7 +221,7 @@ class TestRados(object):
                 eq(ret, 0)
 
                 try:
-                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly"}
+                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly", "sure":"--yes-i-really-mean-it"}
                     ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
 
@@ -444,21 +446,86 @@ class TestIoctx(object):
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
+            write_op.set_flags(LIBRADOS_OPERATION_SKIPRWLOCKS)
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
+            eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
-            iter.next()
+            next(iter)
             eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "2", "", 4)
+            eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
-            eq(("3", b"ccc"), iter.next())
+            eq(("3", b"ccc"), next(iter))
             eq(list(iter), [("4", b"\x04\x04\x04\x04")])
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "2", 4)
+            eq(ret, 0)
+            read_op.set_flags(LIBRADOS_OPERATION_BALANCE_READS)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("2", b"bbb")])
+
+    def test_set_omap_aio(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+
+        keys = ("1", "2", "3", "4")
+        values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
+        with WriteOpCtx(self.ioctx) as write_op:
+            self.ioctx.set_omap(write_op, keys, values)
+            comp = self.ioctx.operate_aio_write_op(write_op, "hw", cb, cb)
+            comp.wait_for_complete()
+            comp.wait_for_safe()
+            with lock:
+                while count[0] < 2:
+                    lock.wait()
+            eq(comp.get_return_value(), 0)
+
+        with ReadOpCtx(self.ioctx) as read_op:
+            iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
+            eq(ret, 0)
+            comp = self.ioctx.operate_aio_read_op(read_op, "hw", cb, cb)
+            comp.wait_for_complete()
+            comp.wait_for_safe()
+            with lock:
+                while count[0] < 4:
+                    lock.wait()
+            eq(comp.get_return_value(), 0)
+            next(iter)
+            eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
+
+    def test_write_ops(self):
+        with WriteOpCtx(self.ioctx) as write_op:
+            write_op.new(0)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'')
+            write_op.write_full(b'1')
+            write_op.append(b'2')
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12')
+            write_op.write_full(b'12345')
+            write_op.write(b'x', 2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12x45')
+            write_op.write_full(b'12345')
+            write_op.zero(2, 2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12\x00\x005')
+            write_op.write_full(b'12345')
+            write_op.truncate(2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12')
+            write_op.remove()
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            with assert_raises(ObjectNotFound):
+                self.ioctx.read('write_ops')
 
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
@@ -468,8 +535,14 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
+            eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
+        with ReadOpCtx(self.ioctx) as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
+            eq(ret, 0)
+            with assert_raises(ObjectNotFound):
+                self.ioctx.operate_read_op(read_op, "no_such")
 
     def test_get_omap_keys(self):
         keys = ("1", "2", "3")
@@ -479,8 +552,14 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_keys(read_op,"",2)
+            eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("1", None), ("2", None)])
+        with ReadOpCtx(self.ioctx) as read_op:
+            iter, ret = self.ioctx.get_omap_keys(read_op,"",2)
+            eq(ret, 0)
+            with assert_raises(ObjectNotFound):
+                self.ioctx.operate_read_op(read_op, "no_such")
 
     def test_clear_omap(self):
         keys = ("1", "2", "3")
@@ -493,6 +572,7 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op_1, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("1",))
+            eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
@@ -592,6 +672,32 @@ class TestIoctx(object):
         eq(contents, b"bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_stat(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(_, size, mtime):
+            with lock:
+                count[0] += 1
+                lock.notify()
+
+        comp = self.ioctx.aio_stat("foo", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), -2)
+
+        self.ioctx.write("foo", b"bar")
+
+        comp = self.ioctx.aio_stat("foo", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+
+        [i.remove() for i in self.ioctx.list_objects()]
+
     def _take_down_acting_set(self, pool, objectname):
         # find acting_set for pool:objectname and take it down; used to
         # verify that async reads don't complete while acting set is missing
@@ -649,6 +755,7 @@ class TestIoctx(object):
         assert(loops <= 10)
 
         eq(retval[0], payload)
+        eq(sys.getrefcount(comp), 2)
 
         # test2: use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
@@ -666,6 +773,25 @@ class TestIoctx(object):
         comp.wait_for_complete_and_cb()
         assert(retval[0] is not None)
         eq(retval[0], payload)
+        eq(sys.getrefcount(comp), 2)
+
+        # test3: error case, use wait_for_complete_and_cb(), verify retval[0] is
+        # set by the time we regain control
+
+        retval[0] = 1
+        self._take_down_acting_set('test_pool', 'bar')
+        comp = self.ioctx.aio_read("bar", len(payload), 0, cb)
+        eq(False, comp.is_complete())
+        time.sleep(3)
+        eq(False, comp.is_complete())
+        with lock:
+            eq(1, retval[0])
+        self._let_osds_back_up()
+
+        comp.wait_for_complete_and_cb()
+        eq(None, retval[0])
+        assert(comp.get_return_value() < 0)
+        eq(sys.getrefcount(comp), 2)
 
         [i.remove() for i in self.ioctx.list_objects()]
 
@@ -712,8 +838,10 @@ class TestObject(object):
 
     def tearDown(self):
         self.ioctx.close()
+        self.ioctx = None
         self.rados.delete_pool('test_pool')
         self.rados.shutdown()
+        self.rados = None
 
     def test_read(self):
         eq(self.object.read(3), b'bar')

@@ -2,10 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
-#include "msg/Message.h"
-#include "osd/OSD.h"
 #include "ClassHandler.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
 
 #include <dlfcn.h>
 
@@ -16,6 +15,7 @@
 #endif
 
 #include "common/config.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -29,7 +29,9 @@
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
   Mutex::Locker lock(mutex);
-  ClassData *cls = _get_class(cname);
+  ClassData *cls = _get_class(cname, true);
+  if (!cls)
+    return -EPERM;
   if (cls->status != ClassData::CLASS_OPEN) {
     int r = _load_class(cls);
     if (r)
@@ -46,10 +48,9 @@ int ClassHandler::open_all_classes()
   if (!dir)
     return -errno;
 
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-  struct dirent *pde;
+  struct dirent *pde = nullptr;
   int r = 0;
-  while ((r = ::readdir_r(dir, (dirent *)&buf, &pde)) == 0 && pde) {
+  while ((pde = ::readdir(dir))) {
     if (pde->d_name[0] == '.')
       continue;
     if (strlen(pde->d_name) > sizeof(CLS_PREFIX) - 1 + sizeof(CLS_SUFFIX) - 1 &&
@@ -60,8 +61,9 @@ int ClassHandler::open_all_classes()
       cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
       dout(10) << __func__ << " found " << cname << dendl;
       ClassData *cls;
+      // skip classes that aren't in 'osd class load list'
       r = open_class(cname, &cls);
-      if (r < 0)
+      if (r < 0 && r != -EPERM)
 	goto out;
     }
   }
@@ -72,13 +74,38 @@ int ClassHandler::open_all_classes()
 
 void ClassHandler::shutdown()
 {
-  for (map<string, ClassData>::iterator p = classes.begin(); p != classes.end(); ++p) {
-    dlclose(p->second.handle);
+  for (auto& cls : classes) {
+    if (cls.second.handle) {
+      dlclose(cls.second.handle);
+    }
   }
   classes.clear();
 }
 
-ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
+/*
+ * Check if @cname is in the whitespace delimited list @list, or the @list
+ * contains the wildcard "*".
+ *
+ * This is expensive but doesn't consume memory for an index, and is performed
+ * only once when a class is loaded.
+ */
+bool ClassHandler::in_class_list(const std::string& cname,
+    const std::string& list)
+{
+  std::istringstream ss(list);
+  std::istream_iterator<std::string> begin{ss};
+  std::istream_iterator<std::string> end{};
+
+  const std::vector<std::string> targets{cname, "*"};
+
+  auto it = std::find_first_of(begin, end,
+      targets.begin(), targets.end());
+
+  return it != end;
+}
+
+ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
+    bool check_allowed)
 {
   ClassData *cls;
   map<string, ClassData>::iterator iter = classes.find(cname);
@@ -86,10 +113,15 @@ ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
   if (iter != classes.end()) {
     cls = &iter->second;
   } else {
+    if (check_allowed && !in_class_list(cname, cct->_conf->osd_class_load_list)) {
+      dout(0) << "_get_class not permitted to load " << cname << dendl;
+      return NULL;
+    }
     cls = &classes[cname];
     dout(10) << "_get_class adding new class name " << cname << " " << cls << dendl;
     cls->name = cname;
     cls->handler = this;
+    cls->whitelisted = in_class_list(cname, cct->_conf->osd_class_default_list);
   }
   return cls;
 }
@@ -132,7 +164,7 @@ int ClassHandler::_load_class(ClassData *cls)
       while (deps) {
 	if (!deps->name)
 	  break;
-	ClassData *cls_dep = _get_class(deps->name);
+	ClassData *cls_dep = _get_class(deps->name, false);
 	cls->dependencies.insert(cls_dep);
 	if (cls_dep->status != ClassData::CLASS_OPEN)
 	  cls->missing_dependencies.insert(cls_dep);
@@ -173,7 +205,7 @@ ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
   assert(mutex.is_locked());
 
-  ClassData *cls = _get_class(cname);
+  ClassData *cls = _get_class(cname, false);
   dout(10) << "register_class " << cname << " status " << cls->status << dendl;
 
   if (cls->status != ClassData::CLASS_INITIALIZING) {

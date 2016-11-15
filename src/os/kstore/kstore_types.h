@@ -47,6 +47,7 @@ struct kstore_onode_t {
 
   uint32_t expected_object_size;
   uint32_t expected_write_size;
+  uint32_t alloc_hint_flags;
 
   kstore_onode_t()
     : nid(0),
@@ -54,7 +55,8 @@ struct kstore_onode_t {
       omap_head(0),
       stripe_size(0),
       expected_object_size(0),
-      expected_write_size(0) {}
+      expected_write_size(0),
+      alloc_hint_flags(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

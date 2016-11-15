@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (C) 2015 Red Hat <contact@redhat.com>
+# Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd
@@ -18,7 +18,10 @@
 # GNU Library Public License for more details.
 #
 
+from __future__ import print_function
+
 import argparse
+import base64
 import errno
 import fcntl
 import json
@@ -35,8 +38,12 @@ import time
 import shlex
 import pwd
 import grp
+import textwrap
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
+CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
+
+KEY_MANAGEMENT_MODE_V1 = 'ceph-mon v1'
 
 PTYPE = {
     'regular': {
@@ -50,9 +57,23 @@ PTYPE = {
             'ready': 'cafecafe-9b03-4f30-b4c6-b4b80ceff106',
             'tobe': 'cafecafe-9b03-4f30-b4c6-b4b80ceff106',
         },
+        'block.db': {
+            # identical because creating a block is atomic
+            'ready': '30cd0809-c2b2-499c-8879-2d6b78529876',
+            'tobe': '30cd0809-c2b2-499c-8879-2d6b785292be',
+        },
+        'block.wal': {
+            # identical because creating a block is atomic
+            'ready': '5ce17fce-4087-4169-b7ff-056cc58473f9',
+            'tobe': '5ce17fce-4087-4169-b7ff-056cc58472be',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-062c0ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be',
+        },
+        'lockbox': {
+            'ready': 'fb3aabf9-d25f-47cc-bf5e-721d1816496b',
+            'tobe': 'fb3aabf9-d25f-47cc-bf5e-721d181642be',
         },
     },
     'luks': {
@@ -63,6 +84,14 @@ PTYPE = {
         'block': {
             'ready': 'cafecafe-9b03-4f30-b4c6-35865ceff106',
             'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
+        },
+        'block.db': {
+            'ready': '166418da-c469-4022-adf4-b30afd37f176',
+            'tobe': '7521c784-4626-4260-bc8d-ba77a0f5f2be',
+        },
+        'block.wal': {
+            'ready': '86a32090-3647-40b9-bbbd-38d8c573aa86',
+            'tobe': '92dad30f-175b-4d40-a5b0-5c0a258b42be',
         },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-35865ceff05d',
@@ -78,6 +107,14 @@ PTYPE = {
             'ready': 'cafecafe-9b03-4f30-b4c6-5ec00ceff106',
             'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
         },
+        'block.db': {
+            'ready': '93b0052d-02d9-4d8a-a43b-33a3ee4dfbc3',
+            'tobe': '69d17c68-3e58-4399-aff0-b68265f2e2be',
+        },
+        'block.wal': {
+            'ready': '306e8683-4fe2-4330-b7c0-00a917c16966',
+            'tobe': 'f2d89683-a621-4063-964a-eb1f7863a2be',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be',
@@ -92,9 +129,21 @@ PTYPE = {
             'ready': 'cafecafe-8ae0-4982-bf9d-5a8d867af560',
             'tobe': 'cafecafe-8ae0-4982-bf9d-5a8d867af560',
         },
+        'block.db': {
+            'ready': 'ec6d6385-e346-45dc-be91-da2a7c8b3261',
+            'tobe': 'ec6d6385-e346-45dc-be91-da2a7c8b32be',
+        },
+        'block.wal': {
+            'ready': '01b41e1b-002a-453c-9f17-88793989ff8f',
+            'tobe': '01b41e1b-002a-453c-9f17-88793989f2be',
+        },
         'osd': {
             'ready': '4fbd7e29-8ae0-4982-bf9d-5a8d867af560',
             'tobe': '89c57f98-8ae0-4982-bf9d-5a8d867af560',
+        },
+        'lockbox': {
+            'ready': '7f4a666a-16f3-47a2-8445-152ef4d03f6c',
+            'tobe': '7f4a666a-16f3-47a2-8445-152ef4d032be',
         },
     },
 }
@@ -108,7 +157,7 @@ class Ptype(object):
 
     @staticmethod
     def get_ready_by_name(name):
-        return [x[name]['ready'] for x in PTYPE.values()]
+        return [x[name]['ready'] for x in PTYPE.values() if name in x]
 
     @staticmethod
     def is_regular_space(ptype):
@@ -155,6 +204,7 @@ class Ptype(object):
                 return True
         return False
 
+
 DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
@@ -197,6 +247,7 @@ INIT_SYSTEMS = [
     'upstart',
     'sysvinit',
     'systemd',
+    'openrc',
     'auto',
     'none',
 ]
@@ -228,19 +279,20 @@ CEPH_PREF_USER = None
 CEPH_PREF_GROUP = None
 
 
-class filelock(object):
+class FileLock(object):
     def __init__(self, fn):
         self.fn = fn
         self.fd = None
 
-    def acquire(self):
+    def __enter__(self):
         assert not self.fd
-        self.fd = file(self.fn, 'w')
+        self.fd = os.open(self.fn, os.O_WRONLY | os.O_CREAT)
         fcntl.lockf(self.fd, fcntl.LOCK_EX)
 
-    def release(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
         self.fd = None
 
 
@@ -250,8 +302,8 @@ class Error(Exception):
     """
 
     def __str__(self):
-        doc = self.__doc__.strip()
-        return ': '.join([doc] + [str(a) for a in self.args])
+        doc = _bytes2str(self.__doc__.strip())
+        return ': '.join([doc] + [_bytes2str(a) for a in self.args])
 
 
 class MountError(Error):
@@ -309,11 +361,8 @@ def is_systemd():
     """
     Detect whether systemd is running
     """
-    with file('/proc/1/comm', 'rb') as i:
-        for line in i:
-            if 'systemd' in line:
-                return True
-    return False
+    with open('/proc/1/comm', 'r') as f:
+        return 'systemd' in f.read()
 
 
 def is_upstart():
@@ -321,9 +370,7 @@ def is_upstart():
     Detect whether upstart is running
     """
     (out, err, _) = command(['init', '--version'])
-    if 'upstart' in out:
-        return True
-    return False
+    return 'upstart' in out
 
 
 def maybe_mkdir(*a, **kw):
@@ -337,7 +384,7 @@ def maybe_mkdir(*a, **kw):
         os.unlink(*a)
     try:
         os.mkdir(*a, **kw)
-    except OSError, e:
+    except OSError as e:
         if e.errno == errno.EEXIST:
             pass
         else:
@@ -346,10 +393,7 @@ def maybe_mkdir(*a, **kw):
 
 def which(executable):
     """find the location of an executable"""
-    if 'PATH' in os.environ:
-        envpath = os.environ['PATH']
-    else:
-        envpath = os.defpath
+    envpath = os.environ.get('PATH') or os.defpath
     PATH = envpath.split(os.pathsep)
 
     locations = PATH + [
@@ -373,7 +417,7 @@ def _get_command_executable(arguments):
     Return the full path for an executable, raise if the executable is not
     found. If the executable has already a full path do not perform any checks.
     """
-    if arguments[0].startswith('/'):  # an absolute path
+    if os.path.isabs(arguments[0]):  # an absolute path
         return arguments
     executable = which(arguments[0])
     if not executable:
@@ -392,14 +436,16 @@ def command(arguments, **kwargs):
     executable exists and raising a helpful error message
     if it does not.
 
-    .. note:: This should be the prefered way of calling ``subprocess.Popen``
+    .. note:: This should be the preferred way of calling ``subprocess.Popen``
     since it provides the caller with the safety net of making sure that
     executables *will* be found and will error nicely otherwise.
 
     This returns the output of the command and the return code of the
     process in a tuple: (output, returncode).
     """
-    arguments = _get_command_executable(arguments)
+
+    arguments = list(map(_bytes2str, _get_command_executable(arguments)))
+
     LOG.info('Running command: %s' % ' '.join(arguments))
     process = subprocess.Popen(
         arguments,
@@ -407,7 +453,12 @@ def command(arguments, **kwargs):
         stderr=subprocess.PIPE,
         **kwargs)
     out, err = process.communicate()
-    return out, err, process.returncode
+
+    return _bytes2str(out), _bytes2str(err), process.returncode
+
+
+def _bytes2str(string):
+    return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
 def command_check_call(arguments):
@@ -415,7 +466,7 @@ def command_check_call(arguments):
     Safely execute a ``subprocess.check_call`` call making sure that the
     executable exists and raising a helpful error message if it does not.
 
-    .. note:: This should be the prefered way of calling
+    .. note:: This should be the preferred way of calling
     ``subprocess.check_call`` since it provides the caller with the safety net
     of making sure that executables *will* be found and will error nicely
     otherwise.
@@ -569,7 +620,7 @@ def get_dev_size(dev, size='megabytes'):
     try:
         device_size = os.lseek(fd, 0, os.SEEK_END)
         divider = dividers.get(size, 1024 * 1024)  # default to megabytes
-        return device_size / divider
+        return device_size // divider
     except Exception as error:
         LOG.warning('failed to get size of %s: %s' % (dev, str(error)))
     finally:
@@ -729,17 +780,17 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts', 'rb') as proc_mounts:
+    with open('/proc/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
                 continue
             mounts_dev = fields[0]
             path = fields[1]
-            if mounts_dev.startswith('/') and os.path.exists(mounts_dev):
+            if os.path.isabs(mounts_dev) and os.path.exists(mounts_dev):
                 mounts_dev = os.path.realpath(mounts_dev)
                 if mounts_dev == dev:
-                    return path
+                    return _bytes2str(path)
     return None
 
 
@@ -804,6 +855,8 @@ def must_be_one_line(line):
     :raises: TruncatedLineError or TooManyLinesError
     :return: Content of the line, or None if line isn't valid.
     """
+    line = _bytes2str(line)
+
     if line[-1:] != '\n':
         raise TruncatedLineError(line)
     line = line[:-1]
@@ -822,7 +875,7 @@ def read_one_line(parent, name):
     """
     path = os.path.join(parent, name)
     try:
-        line = file(path, 'rb').read()
+        line = open(path, 'rb').read()
     except IOError as e:
         if e.errno == errno.ENOENT:
             return None
@@ -849,8 +902,8 @@ def write_one_line(parent, name, text):
     """
     path = os.path.join(parent, name)
     tmp = '{path}.{pid}.tmp'.format(path=path, pid=os.getpid())
-    with file(tmp, 'wb') as tmp_file:
-        tmp_file.write(text + '\n')
+    with open(tmp, 'wb') as tmp_file:
+        tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
     path_set_context(tmp)
     os.rename(tmp, path)
@@ -942,7 +995,7 @@ def get_ceph_user():
             pwd.getpwnam(CEPH_PREF_USER)
             return CEPH_PREF_USER
         except KeyError:
-            print "No such user: " + CEPH_PREF_USER
+            print("No such user:", CEPH_PREF_USER)
             sys.exit(2)
     else:
         try:
@@ -960,7 +1013,7 @@ def get_ceph_group():
             grp.getgrnam(CEPH_PREF_GROUP)
             return CEPH_PREF_GROUP
         except KeyError:
-            print "No such group: " + CEPH_PREF_GROUP
+            print("No such group:", CEPH_PREF_GROUP)
             sys.exit(2)
     else:
         try:
@@ -987,7 +1040,7 @@ def _check_output(args=None, **kwargs):
         error = subprocess.CalledProcessError(ret, cmd)
         error.output = out + err
         raise error
-    return out
+    return _bytes2str(out)
 
 
 def get_conf(cluster, variable):
@@ -1085,49 +1138,58 @@ def get_dmcrypt_key_path(
     return path
 
 
-def get_or_create_dmcrypt_key(
+def get_dmcrypt_key(
     _uuid,
     key_dir,
-    key_size,
     luks
 ):
-    """
-    Get path to existing dmcrypt key or create a new key file.
-
-    :return: Path to the dmcrypt key file.
-    """
-    path = get_dmcrypt_key_path(_uuid, key_dir, luks)
+    legacy_path = get_dmcrypt_key_path(_uuid, key_dir, luks)
+    if os.path.exists(legacy_path):
+        return (legacy_path,)
+    path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
-        return path
-
-    # make a new key
-    try:
-        if not os.path.exists(key_dir):
-            os.makedirs(key_dir, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-        with file('/dev/urandom', 'rb') as i:
-            key = i.read(key_size / 8)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT,
-                         stat.S_IRUSR | stat.S_IWUSR)
-            assert os.write(fd, key) == len(key)
-            os.close(fd)
-        return path
-    except:
-        raise Error('unable to read or create dm-crypt key', path)
+        mode = get_oneliner(path, 'key-management-mode')
+        osd_uuid = get_oneliner(path, 'osd-uuid')
+        if mode == KEY_MANAGEMENT_MODE_V1:
+            key, stderr, ret = command(
+                [
+                    'ceph',
+                    '--name',
+                    'client.osd-lockbox.' + osd_uuid,
+                    '--keyring',
+                    os.path.join(path, 'keyring'),
+                    'config-key',
+                    'get',
+                    'dm-crypt/osd/' + osd_uuid + '/luks',
+                ],
+            )
+            LOG.debug("stderr " + stderr)
+            assert ret == 0
+            return base64.b64decode(key)
+        else:
+            raise Error('unknown key-management-mode ' + str(mode))
+    raise Error('unable to read dm-crypt key', path, legacy_path)
 
 
 def _dmcrypt_map(
     rawdev,
-    keypath,
+    key,
     _uuid,
     cryptsetup_parameters,
     luks,
     format_dev=False,
 ):
-    """
-    Maps a device to a dmcrypt device.
+    dev = dmcrypt_is_mapped(_uuid)
+    if dev:
+        return dev
 
-    :return: Path to the dmcrypt device.
-    """
+    if isinstance(key, tuple):
+        # legacy, before lockbox
+        assert os.path.exists(key[0])
+        keypath = key[0]
+        key = None
+    else:
+        keypath = '-'
     dev = '/dev/mapper/' + _uuid
     luksFormat_args = [
         'cryptsetup',
@@ -1156,15 +1218,27 @@ def _dmcrypt_map(
         rawdev,
     ] + cryptsetup_parameters
 
+    def run(args, stdin):
+        LOG.info(" ".join(args))
+        process = subprocess.Popen(
+            args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        out, err = process.communicate(stdin)
+        LOG.debug(out)
+        LOG.error(err)
+        assert process.returncode == 0
+
     try:
         if luks:
             if format_dev:
-                command_check_call(luksFormat_args)
-            command_check_call(luksOpen_args)
+                run(luksFormat_args, key)
+            run(luksOpen_args, key)
         else:
             # Plain mode has no format function, nor any validation
             # that the key is correct.
-            command_check_call(create_args)
+            run(create_args, key)
         # set proper ownership of mapped device
         command_check_call(['chown', 'ceph:ceph', dev])
         return dev
@@ -1176,9 +1250,8 @@ def _dmcrypt_map(
 def dmcrypt_unmap(
     _uuid
 ):
-    """
-    Removes the dmcrypt device with the given UUID.
-    """
+    if not os.path.exists('/dev/mapper/' + _uuid):
+        return
     retries = 0
     while True:
         try:
@@ -1361,10 +1434,11 @@ def update_partition(dev, description):
     LOG.debug('Calling partprobe on %s device %s', description, dev)
     partprobe_ok = False
     error = 'unknown error'
-    for i in (1, 2, 3, 4, 5):
+    partprobe = _get_command_executable(['partprobe'])[0]
+    for i in range(5):
         command_check_call(['udevadm', 'settle', '--timeout=600'])
         try:
-            _check_output(['partprobe', dev])
+            _check_output(['flock', '-s', dev, partprobe, dev])
             partprobe_ok = True
             break
         except subprocess.CalledProcessError as e:
@@ -1395,9 +1469,9 @@ def zap(dev):
         # isn't too thorough.
         lba_size = 4096
         size = 33 * lba_size
-        with file(dev, 'wb') as dev_file:
+        with open(dev, 'wb') as dev_file:
             dev_file.seek(-size, os.SEEK_END)
-            dev_file.write(size * '\0')
+            dev_file.write(size * b'\0')
 
         command_check_call(
             [
@@ -1492,8 +1566,14 @@ class Device(object):
         return num
 
     def ptype_tobe_for_name(self, name):
+        LOG.debug("name = " + name)
         if name == 'data':
             name = 'osd'
+        if name == 'lockbox':
+            if is_mpath(self.path):
+                return PTYPE['mpath']['lockbox']['tobe']
+            else:
+                return PTYPE['regular']['lockbox']['tobe']
         if self.ptype_map is None:
             partition = DevicePartition.factory(
                 path=self.path, dev=None, args=self.args)
@@ -1589,7 +1669,7 @@ class DevicePartitionCrypt(DevicePartition):
 
     def __init__(self, args):
         super(DevicePartitionCrypt, self).__init__(args)
-        self.osd_dm_keypath = None
+        self.osd_dm_key = None
         self.cryptsetup_parameters = CryptHelpers.get_cryptsetup_parameters(
             self.args)
         self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(self.args)
@@ -1602,7 +1682,7 @@ class DevicePartitionCrypt(DevicePartition):
         self.setup_crypt()
         self.dev = _dmcrypt_map(
             rawdev=self.rawdev,
-            keypath=self.osd_dm_keypath,
+            key=self.osd_dm_key,
             _uuid=self.get_uuid(),
             cryptsetup_parameters=self.cryptsetup_parameters,
             luks=self.luks(),
@@ -1617,7 +1697,6 @@ class DevicePartitionCrypt(DevicePartition):
     def format(self):
         self.setup_crypt()
         self.map()
-        self.unmap()
 
 
 class DevicePartitionCryptPlain(DevicePartitionCrypt):
@@ -1626,14 +1705,14 @@ class DevicePartitionCryptPlain(DevicePartitionCrypt):
         return False
 
     def setup_crypt(self):
-        if self.osd_dm_keypath is not None:
+        if self.osd_dm_key is not None:
             return
 
         self.cryptsetup_parameters += ['--key-size', str(self.dmcrypt_keysize)]
 
-        self.osd_dm_keypath = get_or_create_dmcrypt_key(
+        self.osd_dm_key = get_dmcrypt_key(
             self.get_uuid(), self.args.dmcrypt_key_dir,
-            self.dmcrypt_keysize, False)
+            False)
 
     def set_variables_ptype(self):
         self.ptype_map = PTYPE['plain']
@@ -1645,7 +1724,7 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
         return True
 
     def setup_crypt(self):
-        if self.osd_dm_keypath is not None:
+        if self.osd_dm_key is not None:
             return
 
         if self.dmcrypt_keysize == 1024:
@@ -1657,9 +1736,9 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
             self.cryptsetup_parameters += ['--key-size',
                                            str(self.dmcrypt_keysize)]
 
-        self.osd_dm_keypath = get_or_create_dmcrypt_key(
+        self.osd_dm_key = get_dmcrypt_key(
             self.get_uuid(), self.args.dmcrypt_key_dir,
-            self.dmcrypt_keysize, True)
+            True)
 
     def set_variables_ptype(self):
         self.ptype_map = PTYPE['luks']
@@ -1704,6 +1783,7 @@ class Prepare(object):
         parents = [
             Prepare.parser(),
             PrepareData.parser(),
+            Lockbox.parser(),
         ]
         parents.extend(PrepareFilestore.parent_parsers())
         parents.extend(PrepareBluestore.parent_parsers())
@@ -1718,9 +1798,8 @@ class Prepare(object):
         return parser
 
     def prepare(self):
-        prepare_lock.acquire()
-        self.prepare_locked()
-        prepare_lock.release()
+        with prepare_lock:
+            self.prepare_locked()
 
     @staticmethod
     def factory(args):
@@ -1737,6 +1816,8 @@ class Prepare(object):
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
+        if args.dmcrypt:
+            self.lockbox = Lockbox(args)
         self.data = PrepareFilestoreData(args)
         self.journal = PrepareJournal(args)
 
@@ -1747,14 +1828,20 @@ class PrepareFilestore(Prepare):
         ]
 
     def prepare_locked(self):
+        if self.data.args.dmcrypt:
+            self.lockbox.prepare()
         self.data.prepare(self.journal)
 
 
 class PrepareBluestore(Prepare):
 
     def __init__(self, args):
+        if args.dmcrypt:
+            self.lockbox = Lockbox(args)
         self.data = PrepareBluestoreData(args)
         self.block = PrepareBluestoreBlock(args)
+        self.blockdb = PrepareBluestoreBlockDB(args)
+        self.blockwal = PrepareBluestoreBlockWAL(args)
 
     @staticmethod
     def parser():
@@ -1771,15 +1858,19 @@ class PrepareBluestore(Prepare):
         return [
             PrepareBluestore.parser(),
             PrepareBluestoreBlock.parser(),
+            PrepareBluestoreBlockDB.parser(),
+            PrepareBluestoreBlockWAL.parser(),
         ]
 
     def prepare_locked(self):
-        self.data.prepare(self.block)
+        if self.data.args.dmcrypt:
+            self.lockbox.prepare()
+        self.data.prepare(self.blockdb, self.blockwal, self.block)
 
 
 class Space(object):
 
-    NAMES = ('block', 'journal')
+    NAMES = ('block', 'journal', 'block.db', 'block.wal')
 
 
 class PrepareSpace(object):
@@ -1792,8 +1883,7 @@ class PrepareSpace(object):
         self.args = args
         self.set_type()
         self.space_size = self.get_space_size()
-        if (getattr(self.args, self.name) and
-                getattr(self.args, self.name + '_uuid') is None):
+        if getattr(self.args, self.name + '_uuid') is None:
             setattr(self.args, self.name + '_uuid', str(uuid.uuid4()))
         self.space_symlink = None
         self.space_dmcrypt = None
@@ -1829,18 +1919,19 @@ class PrepareSpace(object):
         if stat.S_ISBLK(mode):
             if getattr(args, name + '_file'):
                 raise Error('%s is not a regular file' % name.capitalize,
-                            geattr(args, name))
+                            getattr(args, name))
             self.type = self.DEVICE
             return
 
         if stat.S_ISREG(mode):
             if getattr(args, name + '_dev'):
                 raise Error('%s is not a block device' % name.capitalize,
-                            geattr(args, name))
+                            getattr(args, name))
             self.type = self.FILE
+            return
 
         raise Error('%s %s is neither a block device nor regular file' %
-                    (name.capitalize, geattr(args, name)))
+                    (name.capitalize, getattr(args, name)))
 
     def is_none(self):
         return self.type == self.NONE
@@ -1852,7 +1943,7 @@ class PrepareSpace(object):
         return self.type == self.DEVICE
 
     @staticmethod
-    def parser(name):
+    def parser(name, positional=True):
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument(
             '--%s-uuid' % name,
@@ -1869,13 +1960,15 @@ class PrepareSpace(object):
             action='store_true', default=None,
             help='verify that %s is a block device' % name.upper(),
         )
-        parser.add_argument(
-            name,
-            metavar=name.upper(),
-            nargs='?',
-            help=('path to OSD %s disk block device;' % name +
-                  ' leave out to store %s in file' % name),
-        )
+
+        if positional:
+            parser.add_argument(
+                name,
+                metavar=name.upper(),
+                nargs='?',
+                help=('path to OSD %s disk block device;' % name +
+                      ' leave out to store %s in file' % name),
+            )
         return parser
 
     def wants_space(self):
@@ -1896,12 +1989,12 @@ class PrepareSpace(object):
         if getattr(self.args, space_uuid) is not None:
             write_one_line(path, space_uuid,
                            getattr(self.args, space_uuid))
-
-    def populate_data_path_device(self, path):
-        self.populate_data_path_file(path)
         if self.space_symlink is not None:
             adjust_symlink(self.space_symlink,
                            os.path.join(path, self.name))
+
+    def populate_data_path_device(self, path):
+        self.populate_data_path_file(path)
 
         if self.space_dmcrypt is not None:
             adjust_symlink(self.space_dmcrypt,
@@ -1923,21 +2016,23 @@ class PrepareSpace(object):
             raise Error('unexpected type ', self.type)
 
     def prepare_file(self):
-        if not os.path.exists(getattr(self.args, self.name)):
+        space_filename = getattr(self.args, self.name)
+        if not os.path.exists(space_filename):
             LOG.debug('Creating %s file %s with size 0'
                       ' (ceph-osd will resize and allocate)',
                       self.name,
-                      getattr(self.args, self.name))
-            with file(getattr(self.args, self.name), 'wb') as space_file:
-                pass
+                      space_filename)
+            space_file = open(space_filename, 'wb')
+            space_file.close()
+            path_set_context(space_filename)
 
         LOG.debug('%s is file %s',
                   self.name.capitalize(),
-                  getattr(self.args, self.name))
+                  space_filename)
         LOG.warning('OSD will not be hot-swappable if %s is '
                     'not the same device as the osd data' %
                     self.name)
-        self.space_symlink = space_file
+        self.space_symlink = space_filename
 
     def prepare_device(self):
         reusing_partition = False
@@ -2014,18 +2109,20 @@ class PrepareSpace(object):
 
         if isinstance(partition, DevicePartitionCrypt):
             partition.format()
+            partition.map()
 
-            command_check_call(
-                [
-                    'sgdisk',
-                    '--typecode={num}:{uuid}'.format(
-                        num=num,
-                        uuid=partition.ptype_for_name(self.name),
-                    ),
-                    '--',
-                    getattr(self.args, self.name),
-                ],
-            )
+        command_check_call(
+            [
+                'sgdisk',
+                '--typecode={num}:{uuid}'.format(
+                    num=num,
+                    uuid=partition.ptype_for_name(self.name),
+                ),
+                '--',
+                getattr(self.args, self.name),
+            ],
+        )
+        update_partition(getattr(self.args, self.name), 'prepared')
 
         LOG.debug('%s is GPT partition %s',
                   self.name.capitalize(),
@@ -2075,7 +2172,15 @@ class PrepareBluestoreBlock(PrepareSpace):
         super(PrepareBluestoreBlock, self).__init__(args)
 
     def get_space_size(self):
-        return 0  # get as much space as possible
+        block_size = get_conf(
+            cluster=self.args.cluster,
+            variable='bluestore_block_size',
+        )
+
+        if block_size is None:
+            return 0  # get as much space as possible
+        else:
+            return int(block_size) / 1048576  # MB
 
     def desired_partition_number(self):
         if self.args.block == self.args.data:
@@ -2087,6 +2192,76 @@ class PrepareBluestoreBlock(PrepareSpace):
     @staticmethod
     def parser():
         return PrepareSpace.parser('block')
+
+
+class PrepareBluestoreBlockDB(PrepareSpace):
+
+    def __init__(self, args):
+        self.name = 'block.db'
+        super(PrepareBluestoreBlockDB, self).__init__(args)
+
+    def get_space_size(self):
+        block_size = get_conf(
+            cluster=self.args.cluster,
+            variable='bluestore_block_db_size',
+        )
+
+        if block_size is None:
+            return 64  # MB, default value
+        else:
+            return int(block_size) / 1048576  # MB
+
+    def desired_partition_number(self):
+        if getattr(self.args, 'block.db') == self.args.data:
+            num = 3
+        else:
+            num = 0
+        return num
+
+    @staticmethod
+    def parser():
+        parser = PrepareSpace.parser('block.db', positional=False)
+        parser.add_argument(
+            '--block.db',
+            metavar='BLOCKDB',
+            help='path to the device or file for bluestore block.db',
+        )
+        return parser
+
+
+class PrepareBluestoreBlockWAL(PrepareSpace):
+
+    def __init__(self, args):
+        self.name = 'block.wal'
+        super(PrepareBluestoreBlockWAL, self).__init__(args)
+
+    def get_space_size(self):
+        block_size = get_conf(
+            cluster=self.args.cluster,
+            variable='bluestore_block_wal_size',
+        )
+
+        if block_size is None:
+            return 128  # MB, default value
+        else:
+            return int(block_size) / 1048576  # MB
+
+    def desired_partition_number(self):
+        if getattr(self.args, 'block.wal') == self.args.data:
+            num = 4
+        else:
+            num = 0
+        return num
+
+    @staticmethod
+    def parser():
+        parser = PrepareSpace.parser('block.wal', positional=False)
+        parser.add_argument(
+            '--block.wal',
+            metavar='BLOCKWAL',
+            help='path to the device or file for bluestore block.wal',
+        )
+        return parser
 
 
 class CryptHelpers(object):
@@ -2134,7 +2309,7 @@ class CryptHelpers(object):
 
     @staticmethod
     def get_dmcrypt_type(args):
-        if args.dmcrypt:
+        if hasattr(args, 'dmcrypt') and args.dmcrypt:
             dmcrypt_type = get_conf(
                 cluster=args.cluster,
                 variable='osd_dmcrypt_type',
@@ -2149,6 +2324,167 @@ class CryptHelpers(object):
                             '(must be luks or plain): ', dmcrypt_type)
         else:
             return None
+
+
+class Lockbox(object):
+
+    def __init__(self, args):
+        self.args = args
+        self.partition = None
+        self.device = None
+
+        if hasattr(self.args, 'lockbox') and self.args.lockbox is None:
+            self.args.lockbox = self.args.data
+
+    def set_partition(self, partition):
+        self.partition = partition
+
+    @staticmethod
+    def parser():
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument(
+            '--lockbox',
+            help='path to the device to store the lockbox',
+        )
+        parser.add_argument(
+            '--lockbox-uuid',
+            metavar='UUID',
+            help='unique lockbox uuid',
+        )
+        return parser
+
+    def create_partition(self):
+        self.device = Device.factory(self.args.lockbox, argparse.Namespace())
+        partition_number = 3
+        self.device.create_partition(uuid=self.args.lockbox_uuid,
+                                     name='lockbox',
+                                     num=partition_number,
+                                     size=10)  # MB
+        return self.device.get_partition(partition_number)
+
+    def set_or_create_partition(self):
+        if is_partition(self.args.lockbox):
+            LOG.debug('OSD lockbox device %s is a partition',
+                      self.args.lockbox)
+            self.partition = DevicePartition.factory(
+                path=None, dev=self.args.lockbox, args=self.args)
+            ptype = self.partition.get_ptype()
+            ready = Ptype.get_ready_by_name('lockbox')
+            if ptype not in ready:
+                LOG.warning('incorrect partition UUID: %s, expected %s'
+                            % (ptype, str(ready)))
+        else:
+            LOG.debug('Creating osd partition on %s',
+                      self.args.lockbox)
+            self.partition = self.create_partition()
+
+    def create_key(self):
+        key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
+        key = open('/dev/urandom', 'rb').read(key_size / 8)
+        base64_key = base64.b64encode(key)
+        command_check_call(
+            [
+                'ceph',
+                'config-key',
+                'put',
+                'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
+                base64_key,
+            ],
+        )
+        keyring, stderr, ret = command(
+            [
+                'ceph',
+                'auth',
+                'get-or-create',
+                'client.osd-lockbox.' + self.args.osd_uuid,
+                'mon',
+                ('allow command "config-key get" with key="dm-crypt/osd/' +
+                 self.args.osd_uuid + '/luks"'),
+            ],
+        )
+        LOG.debug("stderr " + stderr)
+        assert ret == 0
+        path = self.get_mount_point()
+        open(os.path.join(path, 'keyring'), 'w').write(keyring)
+        write_one_line(path, 'key-management-mode', KEY_MANAGEMENT_MODE_V1)
+
+    def symlink_spaces(self, path):
+        target = self.get_mount_point()
+        for name in Space.NAMES:
+            if (hasattr(self.args, name + '_uuid') and
+                    getattr(self.args, name + '_uuid')):
+                uuid = getattr(self.args, name + '_uuid')
+                symlink = os.path.join(STATEDIR, 'osd-lockbox', uuid)
+                adjust_symlink(target, symlink)
+                write_one_line(path, name + '-uuid', uuid)
+
+    def populate(self):
+        maybe_mkdir(os.path.join(STATEDIR, 'osd-lockbox'))
+        args = ['mkfs', '-t', 'ext4', self.partition.get_dev()]
+        LOG.debug('Creating lockbox fs on %s: ' + str(" ".join(args)))
+        command_check_call(args)
+        path = self.get_mount_point()
+        maybe_mkdir(path)
+        args = ['mount', '-t', 'ext4', self.partition.get_dev(), path]
+        LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+        command_check_call(args)
+        write_one_line(path, 'osd-uuid', self.args.osd_uuid)
+        self.create_key()
+        self.symlink_spaces(path)
+        write_one_line(path, 'magic', CEPH_LOCKBOX_ONDISK_MAGIC)
+        if self.device is not None:
+            command_check_call(
+                [
+                    'sgdisk',
+                    '--typecode={num}:{uuid}'.format(
+                        num=self.partition.get_partition_number(),
+                        uuid=self.partition.ptype_for_name('lockbox'),
+                    ),
+                    '--',
+                    get_partition_base(self.partition.get_dev()),
+                ],
+            )
+
+    def get_mount_point(self):
+        return os.path.join(STATEDIR, 'osd-lockbox', self.args.osd_uuid)
+
+    def get_osd_uuid(self):
+        return self.args.osd_uuid
+
+    def activate(self):
+        path = is_mounted(self.partition.get_dev())
+        if path:
+            LOG.info("Lockbox already mounted at " + path)
+            return
+
+        path = tempfile.mkdtemp(
+            prefix='mnt.',
+            dir=STATEDIR + '/tmp',
+        )
+        args = ['mount', '-t', 'ext4', '-o', 'ro',
+                self.partition.get_dev(),
+                path]
+        LOG.debug('Mounting lockbox temporarily ' + str(" ".join(args)))
+        command_check_call(args)
+        self.args.osd_uuid = get_oneliner(path, 'osd-uuid')
+        command_check_call(['umount', path])
+        LOG.debug('Mounting lockbox readonly ' + str(" ".join(args)))
+        args = ['mount', '-t', 'ext4', '-o', 'ro',
+                self.partition.get_dev(),
+                self.get_mount_point()]
+        command_check_call(args)
+        for name in Space.NAMES + ('osd',):
+            uuid_path = os.path.join(self.get_mount_point(), name + '-uuid')
+            if os.path.exists(uuid_path):
+                uuid = get_oneliner(self.get_mount_point(), name + '-uuid')
+                dev = os.path.join('/dev/disk/by-partuuid/', uuid.lower())
+                args = ['ceph-disk', 'trigger', dev]
+                command_check_call(args)
+
+    def prepare(self):
+        verify_not_in_use(self.args.lockbox, check_partitions=True)
+        self.set_or_create_partition()
+        self.populate()
 
 
 class PrepareData(object):
@@ -2175,7 +2511,7 @@ class PrepareData(object):
         elif stat.S_ISBLK(dmode):
             self.type = self.DEVICE
         else:
-            raise Error('not a dir or block device', args.data)
+            raise Error('not a dir or block device', self.args.data)
 
     def is_file(self):
         return self.type == self.FILE
@@ -2258,7 +2594,8 @@ class PrepareData(object):
         if not os.path.exists(self.args.data):
             raise Error('data path for device does not exist',
                         self.args.data)
-        verify_not_in_use(self.args.data, True)
+        verify_not_in_use(self.args.data,
+                          check_partitions=not self.args.dmcrypt)
 
     def set_variables(self):
         if self.args.fs_type is None:
@@ -2329,10 +2666,11 @@ class PrepareData(object):
                       self.args.data)
             self.partition = DevicePartition.factory(
                 path=None, dev=self.args.data, args=self.args)
-            ptype = partition.get_ptype()
-            if ptype != ptype_osd:
+            ptype = self.partition.get_ptype()
+            ready = Ptype.get_ready_by_name('osd')
+            if ptype not in ready:
                 LOG.warning('incorrect partition UUID: %s, expected %s'
-                            % (ptype, ptype_osd))
+                            % (ptype, str(ready)))
         else:
             LOG.debug('Creating osd partition on %s',
                       self.args.data)
@@ -2431,6 +2769,36 @@ class PrepareBluestoreData(PrepareData):
         write_one_line(path, 'type', 'bluestore')
 
 
+#
+# Temporary workaround: if ceph-osd --mkfs does not
+# complete within 5 minutes, assume it is blocked
+# because of http://tracker.ceph.com/issues/13522
+# and retry a few times.
+#
+# Remove this function calls with command_check_call
+# when http://tracker.ceph.com/issues/13522 is fixed
+#
+def ceph_osd_mkfs(arguments):
+    timeout = _get_command_executable(['timeout'])
+    mkfs_ok = False
+    error = 'unknown error'
+    for delay in os.environ.get('CEPH_OSD_MKFS_DELAYS',
+                                '300 300 300 300 300').split():
+        try:
+            _check_output(timeout + [delay] + arguments)
+            mkfs_ok = True
+            break
+        except subprocess.CalledProcessError as e:
+            error = e.output
+            if e.returncode == 124:  # timeout fired, retry
+                LOG.debug('%s timed out : %s (retry)'
+                          % (str(arguments), error))
+            else:
+                break
+    if not mkfs_ok:
+        raise Error('%s failed : %s' % (str(arguments), error))
+
+
 def mkfs(
     path,
     cluster,
@@ -2452,7 +2820,7 @@ def mkfs(
     osd_type = read_one_line(path, 'type')
 
     if osd_type == 'bluestore':
-        command_check_call(
+        ceph_osd_mkfs(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -2468,7 +2836,7 @@ def mkfs(
             ],
         )
     else:
-        command_check_call(
+        ceph_osd_mkfs(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -2633,6 +3001,20 @@ def start_daemon(
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'openrc')):
+            base_script = '/etc/init.d/ceph-osd'
+            osd_script = '{base}.{osd_id}'.format(
+                base=base_script,
+                osd_id=osd_id
+            )
+            if not os.path.exists(osd_script):
+                os.symlink(base_script, osd_script)
+            command_check_call(
+                [
+                    osd_script,
+                    'start',
+                ],
+            )
         else:
             raise Error('{cluster} osd.{osd_id} is not tagged '
                         'with an init system'.format(
@@ -2690,6 +3072,13 @@ def stop_daemon(
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'openrc')):
+            command_check_call(
+                [
+                    '/etc/init.d/ceph-osd.{osd_id}'.format(osd_id=osd_id),
+                    'stop',
+                ],
+            )
         else:
             raise Error('{cluster} osd.{osd_id} is not tagged with an init '
                         ' system'.format(cluster=cluster, osd_id=osd_id))
@@ -2715,6 +3104,14 @@ def detect_fstype(
     return fstype
 
 
+def dmcrypt_is_mapped(uuid):
+    path = os.path.join('/dev/mapper', uuid)
+    if os.path.exists(path):
+        return path
+    else:
+        return None
+
+
 def dmcrypt_map(dev, dmcrypt_key_dir):
     ptype = get_partition_type(dev)
     if ptype in Ptype.get_ready_by_type('plain'):
@@ -2727,10 +3124,10 @@ def dmcrypt_map(dev, dmcrypt_key_dir):
         raise Error('--dmcrypt called for dev %s with invalid ptype %s'
                     % (dev, ptype))
     part_uuid = get_partition_uuid(dev)
-    dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
+    dmcrypt_key = get_dmcrypt_key(part_uuid, dmcrypt_key_dir, luks)
     return _dmcrypt_map(
         rawdev=dev,
-        keypath=dmcrypt_key_path,
+        key=dmcrypt_key,
         _uuid=part_uuid,
         cryptsetup_parameters=cryptsetup_parameters,
         luks=luks,
@@ -2852,7 +3249,7 @@ def mount_activate(
                 fstype=fstype,
                 mount_options=mount_options,
             )
-        return (cluster, osd_id)
+        return cluster, osd_id
 
     except:
         LOG.error('Failed to activate')
@@ -2902,7 +3299,7 @@ def activate_dir(
                     raise Error('unable to create symlink %s -> %s'
                                 % (canonical, path))
 
-    return (cluster, osd_id)
+    return cluster, osd_id
 
 
 def find_cluster_by_uuid(_uuid):
@@ -2921,7 +3318,7 @@ def find_cluster_by_uuid(_uuid):
         try:
             fsid = get_fsid(cluster)
         except Error as e:
-            if e.message != 'getting cluster uuid from configuration failed':
+            if 'getting cluster uuid from configuration failed' not in str(e):
                 raise e
             no_fsid.append(cluster)
         else:
@@ -2995,8 +3392,9 @@ def activate(
                 init = init_get()
 
         LOG.debug('Marking with init system %s', init)
-        with file(os.path.join(path, init), 'w'):
-            pass
+        init_path = os.path.join(path, init)
+        with open(init_path, 'w'):
+            path_set_context(init_path)
 
     # remove markers for others, just in case.
     for other in INIT_SYSTEMS:
@@ -3023,6 +3421,7 @@ def main_activate(args):
     cluster = None
     osd_id = None
 
+    LOG.info('path = ' + str(args.path))
     if not os.path.exists(args.path):
         raise Error('%s does not exist' % args.path)
 
@@ -3030,8 +3429,7 @@ def main_activate(args):
         LOG.info('suppressed activate request on %s', args.path)
         return
 
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         mode = os.stat(args.path).st_mode
         if stat.S_ISBLK(mode):
             if (is_partition(args.path) and
@@ -3061,6 +3459,13 @@ def main_activate(args):
         else:
             raise Error('%s is not a directory or block device' % args.path)
 
+        # exit with 0 if the journal device is not up, yet
+        # journal device will do the activation
+        osd_journal = '{path}/journal'.format(path=osd_data)
+        if os.path.islink(osd_journal) and not os.access(osd_journal, os.F_OK):
+            LOG.info("activate: Journal not present, not starting, yet")
+            return
+
         if (not args.no_start_daemon and args.mark_init == 'none'):
             command_check_call(
                 [
@@ -3068,7 +3473,7 @@ def main_activate(args):
                     '--cluster={cluster}'.format(cluster=cluster),
                     '--id={osd_id}'.format(osd_id=osd_id),
                     '--osd-data={path}'.format(path=osd_data),
-                    '--osd-journal={path}/journal'.format(path=osd_data),
+                    '--osd-journal={journal}'.format(journal=osd_journal),
                 ],
             )
 
@@ -3080,8 +3485,19 @@ def main_activate(args):
                 osd_id=osd_id,
             )
 
-    finally:
-        activate_lock.release()  # noqa
+
+def main_activate_lockbox(args):
+    with activate_lock:
+        main_activate_lockbox_protected(args)
+
+
+def main_activate_lockbox_protected(args):
+    partition = DevicePartition.factory(
+        path=None, dev=args.path, args=args)
+
+    lockbox = Lockbox(args)
+    lockbox.set_partition(partition)
+    lockbox.activate()
 
 
 ###########################
@@ -3161,11 +3577,8 @@ def _remove_osd_directory_files(mounted_path, cluster):
 
 
 def main_deactivate(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_deactivate_locked(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_deactivate_locked(args):
@@ -3214,17 +3627,21 @@ def main_deactivate_locked(args):
         LOG.info("OSD already out/down. Do not do anything now.")
         return
 
-    # remove 'ready', 'active', and INIT-specific files.
-    _remove_osd_directory_files(mounted_path, args.cluster)
+    if not args.once:
+        # remove 'ready', 'active', and INIT-specific files.
+        _remove_osd_directory_files(mounted_path, args.cluster)
 
-    # Write deactivate to osd directory!
-    with open(os.path.join(mounted_path, 'deactive'), 'w'):
-        path_set_context(os.path.join(mounted_path, 'deactive'))
+        # Write deactivate to osd directory!
+        with open(os.path.join(mounted_path, 'deactive'), 'w'):
+            path_set_context(os.path.join(mounted_path, 'deactive'))
 
     unmount(mounted_path)
     LOG.info("Umount `%s` successfully.", mounted_path)
 
     if dmcrypt:
+        lockbox = os.path.join(STATEDIR, 'osd-lockbox')
+        command(['umount', os.path.join(lockbox, target_dev['uuid'])])
+
         dmcrypt_unmap(target_dev['uuid'])
         for name in Space.NAMES:
             if name + '_uuid' in target_dev:
@@ -3264,24 +3681,68 @@ def _deallocate_osd_id(cluster, osd_id):
     ])
 
 
+def _remove_lockbox(uuid):
+    command([
+        'ceph',
+        'auth',
+        'del',
+        'client.osd-lockbox.' + uuid,
+    ])
+    command([
+        'ceph',
+        'config-key',
+        'del',
+        'dm-crypt/osd/' + uuid + '/luks',
+    ])
+    lockbox = os.path.join(STATEDIR, 'osd-lockbox')
+    if not os.path.exists(lockbox):
+        return
+    canonical = os.path.join(lockbox, uuid)
+    command(['umount', canonical])
+    for name in os.listdir(lockbox):
+        path = os.path.join(lockbox, name)
+        if os.path.islink(path) and os.readlink(path) == canonical:
+            os.unlink(path)
+
+
 def destroy_lookup_device(args, predicate, description):
     devices = list_devices()
     for device in devices:
         for partition in device.get('partitions', []):
+            if partition['type'] == 'lockbox':
+                if not is_mounted(partition['path']):
+                    main_activate_lockbox_protected(
+                        argparse.Namespace(verbose=args.verbose,
+                                           path=partition['path']))
+    for device in devices:
+        for partition in device.get('partitions', []):
             if partition['dmcrypt']:
-                dmcrypt_path = dmcrypt_map(partition['path'],
-                                           args.dmcrypt_key_dir)
+                dmcrypt_path = dmcrypt_is_mapped(partition['uuid'])
+                if dmcrypt_path:
+                    unmap = False
+                else:
+                    dmcrypt_path = dmcrypt_map(partition['path'],
+                                               args.dmcrypt_key_dir)
+                    unmap = True
                 list_dev_osd(dmcrypt_path, {}, partition)
-                dmcrypt_unmap(partition['uuid'])
+                if unmap:
+                    dmcrypt_unmap(partition['uuid'])
+                dmcrypt = True
+            else:
+                dmcrypt = False
             if predicate(partition):
-                return partition
+                return dmcrypt, partition
     raise Error('found no device matching ', description)
 
 
 def main_destroy(args):
+    with activate_lock:
+        main_destroy_locked(args)
+
+
+def main_destroy_locked(args):
     osd_id = args.destroy_by_id
     path = args.path
-    dmcrypt = False
     target_dev = None
 
     if path:
@@ -3290,11 +3751,11 @@ def main_destroy(args):
         path = os.path.realpath(path)
 
     if path:
-        target_dev = destroy_lookup_device(
+        (dmcrypt, target_dev) = destroy_lookup_device(
             args, lambda x: x.get('path') == path,
             path)
     elif osd_id:
-        target_dev = destroy_lookup_device(
+        (dmcrypt, target_dev) = destroy_lookup_device(
             args, lambda x: x.get('whoami') == osd_id,
             'osd id ' + str(osd_id))
 
@@ -3326,6 +3787,7 @@ def main_destroy(args):
         for name in Space.NAMES:
             if target_dev.get(name + '_uuid'):
                 dmcrypt_unmap(target_dev[name + '_uuid'])
+        _remove_lockbox(target_dev['uuid'])
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
@@ -3377,8 +3839,7 @@ def main_activate_space(name, args):
     osd_id = None
     osd_uuid = None
     dev = None
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         if args.dmcrypt:
             dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
         else:
@@ -3394,6 +3855,12 @@ def main_activate_space(name, args):
             LOG.info('suppressed activate request on %s', path)
             return
 
+        # warn and exit with 0 if the data device is not up, yet
+        # data device will do the activation
+        if not os.access(path, os.F_OK):
+            LOG.info("activate: OSD device not present, not starting, yet")
+            return
+
         (cluster, osd_id) = mount_activate(
             dev=path,
             activate_key_template=args.activate_key_template,
@@ -3407,9 +3874,6 @@ def main_activate_space(name, args):
             cluster=cluster,
             osd_id=osd_id,
         )
-
-    finally:
-        activate_lock.release()  # noqa
 
 
 ###########################
@@ -3438,30 +3902,29 @@ def main_activate_all(args):
                 continue
 
             LOG.info('Activating %s', path)
-            activate_lock.acquire()  # noqa
-            try:
-                # never map dmcrypt cyphertext devices
-                (cluster, osd_id) = mount_activate(
-                    dev=path,
-                    activate_key_template=args.activate_key_template,
-                    init=args.mark_init,
-                    dmcrypt=False,
-                    dmcrypt_key_dir='',
-                )
-                start_daemon(
-                    cluster=cluster,
-                    osd_id=osd_id,
-                )
+            with activate_lock:
+                try:
+                    # never map dmcrypt cyphertext devices
+                    (cluster, osd_id) = mount_activate(
+                        dev=path,
+                        activate_key_template=args.activate_key_template,
+                        init=args.mark_init,
+                        dmcrypt=False,
+                        dmcrypt_key_dir='',
+                    )
+                    start_daemon(
+                        cluster=cluster,
+                        osd_id=osd_id,
+                    )
 
-            except Exception as e:
-                print >> sys.stderr, '{prog}: {msg}'.format(
-                    prog=args.prog,
-                    msg=e,
-                )
-                err = True
+                except Exception as e:
+                    print(
+                        '{prog}: {msg}'.format(prog=args.prog, msg=e),
+                        file=sys.stderr
+                    )
 
-            finally:
-                activate_lock.release()  # noqa
+                    err = True
+
     if err:
         raise Error('One or more partitions failed to activate')
 
@@ -3470,13 +3933,13 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with file('/proc/swaps', 'rb') as proc_swaps:
+    with open('/proc/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:
                 continue
             swaps_dev = fields[0]
-            if swaps_dev.startswith('/') and os.path.exists(swaps_dev):
+            if os.path.isabs(swaps_dev) and os.path.exists(swaps_dev):
                 swaps_dev = os.path.realpath(swaps_dev)
                 if swaps_dev == dev:
                     return True
@@ -3486,8 +3949,8 @@ def is_swap(dev):
 def get_oneliner(base, name):
     path = os.path.join(base, name)
     if os.path.isfile(path):
-        with open(path, 'r') as _file:
-            return _file.readline().rstrip()
+        with open(path, 'rb') as _file:
+            return _bytes2str(_file.readline().rstrip())
     return None
 
 
@@ -3515,7 +3978,7 @@ def split_dev_base_partnum(dev):
         b = block_path(dev)
         partnum = open(os.path.join(b, 'partition')).read().strip()
         base = get_partition_base(dev)
-    return (base, partnum)
+    return base, partnum
 
 
 def get_partition_type(part):
@@ -3582,6 +4045,40 @@ def list_dev_osd(dev, uuid_map, desc):
             pass
 
 
+def list_dev_lockbox(dev, uuid_map, desc):
+    desc['mount'] = is_mounted(dev)
+    desc['fs_type'] = get_dev_fs(dev)
+    desc['state'] = 'unprepared'
+    if desc['mount']:
+        desc['state'] = 'active'
+        desc['osd_uuid'] = get_oneliner(desc['mount'], 'osd-uuid')
+    elif desc['fs_type']:
+        try:
+            tpath = tempfile.mkdtemp(prefix='mnt.', dir=STATEDIR + '/tmp')
+            args = ['mount', '-t', 'ext4', dev, tpath]
+            LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+            command_check_call(args)
+            magic = get_oneliner(tpath, 'magic')
+            if magic is not None:
+                desc['magic'] = magic
+                desc['state'] = 'prepared'
+                desc['osd_uuid'] = get_oneliner(tpath, 'osd-uuid')
+            unmount(tpath)
+        except subprocess.CalledProcessError:
+            pass
+    if desc.get('osd_uuid') in uuid_map:
+        desc['lockbox_for'] = uuid_map[desc['osd_uuid']]
+
+
+def list_format_lockbox_plain(dev):
+    desc = []
+    if dev.get('lockbox_for'):
+        desc.append('for ' + dev['lockbox_for'])
+    elif dev.get('osd_uuid'):
+        desc.append('for osd ' + dev['osd_uuid'])
+    return desc
+
+
 def list_format_more_osd_info_plain(dev):
     desc = []
     if dev.get('ceph_fsid'):
@@ -3602,6 +4099,10 @@ def list_format_dev_plain(dev, prefix=''):
     if dev['ptype'] == PTYPE['regular']['osd']['ready']:
         desc = (['ceph data', dev['state']] +
                 list_format_more_osd_info_plain(dev))
+    elif dev['ptype'] in (PTYPE['regular']['lockbox']['ready'],
+                          PTYPE['mpath']['lockbox']['ready']):
+        desc = (['ceph lockbox', dev['state']] +
+                list_format_lockbox_plain(dev))
     elif Ptype.is_dmcrypt(dev['ptype'], 'osd'):
         dmcrypt = dev['dmcrypt']
         if not dmcrypt['holders']:
@@ -3647,7 +4148,7 @@ def list_format_plain(devices):
     for device in devices:
         if device.get('partitions'):
             lines.append('%s :' % device['path'])
-            for p in sorted(device['partitions']):
+            for p in sorted(device['partitions'], key=lambda x: x['path']):
                 lines.append(list_format_dev_plain(dev=p,
                                                    prefix=' '))
         else:
@@ -3676,6 +4177,12 @@ def list_dev(dev, uuid_map, space_map):
         if ptype == PTYPE['mpath']['osd']['ready']:
             info['multipath'] = True
         list_dev_osd(dev, uuid_map, info)
+    elif ptype in (PTYPE['regular']['lockbox']['ready'],
+                   PTYPE['mpath']['lockbox']['ready']):
+        info['type'] = 'lockbox'
+        if ptype == PTYPE['mpath']['osd']['ready']:
+            info['multipath'] = True
+        list_dev_lockbox(dev, uuid_map, info)
     elif ptype == PTYPE['plain']['osd']['ready']:
         holders = is_held(dev)
         info['type'] = 'data'
@@ -3733,7 +4240,7 @@ def list_devices():
 
     uuid_map = {}
     space_map = {}
-    for base, parts in sorted(partmap.iteritems()):
+    for base, parts in sorted(partmap.items()):
         for p in parts:
             dev = get_dev_path(p)
             part_uuid = get_partition_uuid(dev)
@@ -3772,7 +4279,7 @@ def list_devices():
               str(uuid_map) + ", space_map = " + str(space_map))
 
     devices = []
-    for base, parts in sorted(partmap.iteritems()):
+    for base, parts in sorted(partmap.items()):
         if parts:
             disk = {'path': get_dev_path(base)}
             partitions = []
@@ -3791,6 +4298,11 @@ def list_devices():
 
 
 def main_list(args):
+    with activate_lock:
+        main_list_protected(args)
+
+
+def main_list_protected(args):
     devices = list_devices()
     if args.path:
         paths = []
@@ -3807,11 +4319,11 @@ def main_list(args):
     else:
         selected_devices = devices
     if args.format == 'json':
-        print json.dumps(selected_devices)
+        print(json.dumps(selected_devices))
     else:
         output = list_format_plain(selected_devices)
         if output:
-            print output
+            print(output)
 
 
 ###########################
@@ -3849,7 +4361,7 @@ def set_suppress(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
-    with file(SUPPRESS_PREFIX + base, 'w') as f:  # noqa
+    with open(SUPPRESS_PREFIX + base, 'w') as f:  # noqa
         pass
     LOG.info('set suppress flag on %s', base)
 
@@ -3925,219 +4437,101 @@ def main_trigger(args):
         partid=partid,
     ))
 
+    ceph_disk = ['ceph-disk']
+    if args.verbose:
+        ceph_disk.append('--verbose')
+
     if parttype in (PTYPE['regular']['osd']['ready'],
                     PTYPE['mpath']['osd']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate',
                 args.dev,
             ]
         )
+
+    elif parttype in (PTYPE['plain']['osd']['ready'],
+                      PTYPE['luks']['osd']['ready']):
+        out, err, ret = command(
+            ceph_disk +
+            [
+                'activate',
+                '--dmcrypt',
+                args.dev,
+            ]
+        )
+
     elif parttype in (PTYPE['regular']['journal']['ready'],
                       PTYPE['mpath']['journal']['ready']):
-        command(
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate-journal',
                 args.dev,
             ]
         )
 
-        # journals are easy: map, chown, activate-journal
-    elif parttype == PTYPE['plain']['journal']['ready']:
-        command(
+    elif parttype in (PTYPE['plain']['journal']['ready'],
+                      PTYPE['luks']['journal']['ready']):
+        out, err, ret = command(
+            ceph_disk +
             [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
-                '--key-size',
-                '256',
-                'create',
-                partid,
-                args.dev,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/bin/chown',
-                'ceph:ceph',
-                newdev,
-            ]
-        )
-        command(
-            [
-                '/usr/sbin/ceph-disk',
                 'activate-journal',
-                newdev,
-            ]
-        )
-    elif parttype == PTYPE['luks']['journal']['ready']:
-        command(
-            [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
-                    partid=partid),
-                'luksOpen',
+                '--dmcrypt',
                 args.dev,
-                partid,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/bin/chown',
-                'ceph:ceph',
-                newdev,
-            ]
-        )
-        command(
-            [
-                '/usr/sbin/ceph-disk',
-                'activate-journal',
-                newdev,
             ]
         )
 
     elif parttype in (PTYPE['regular']['block']['ready'],
-                      PTYPE['mpath']['block']['ready']):
-        command(
+                      PTYPE['regular']['block.db']['ready'],
+                      PTYPE['regular']['block.wal']['ready'],
+                      PTYPE['mpath']['block']['ready'],
+                      PTYPE['mpath']['block.db']['ready'],
+                      PTYPE['mpath']['block.wal']['ready']):
+        out, err, ret = command(
+            ceph_disk +
             [
-                'ceph-disk',
                 'activate-block',
                 args.dev,
             ]
         )
 
-        # blocks are easy: map, chown, activate-block
-    elif parttype == PTYPE['plain']['block']['ready']:
-        command(
+    elif parttype in (PTYPE['plain']['block']['ready'],
+                      PTYPE['plain']['block.db']['ready'],
+                      PTYPE['plain']['block.wal']['ready'],
+                      PTYPE['luks']['block']['ready'],
+                      PTYPE['luks']['block.db']['ready'],
+                      PTYPE['luks']['block.wal']['ready']):
+        out, err, ret = command(
+            ceph_disk +
             [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
-                '--key-size',
-                '256',
-                'create',
-                partid,
-                args.dev,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/bin/chown',
-                'ceph:ceph',
-                newdev,
-            ]
-        )
-        command(
-            [
-                '/usr/sbin/ceph-disk',
                 'activate-block',
-                newdev,
-            ]
-        )
-    elif parttype == PTYPE['luks']['block']['ready']:
-        command(
-            [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
-                    partid=partid),
-                'luksOpen',
+                '--dmcrypt',
                 args.dev,
-                partid,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/bin/chown',
-                'ceph:ceph',
-                newdev,
-            ]
-        )
-        command(
-            [
-                '/usr/sbin/ceph-disk',
-                'activate-block',
-                newdev,
             ]
         )
 
-        # osd data: map, activate
-    elif parttype == PTYPE['plain']['osd']['ready']:
-        command(
+    elif parttype in (PTYPE['regular']['lockbox']['ready'],
+                      PTYPE['mpath']['lockbox']['ready']):
+        out, err, ret = command(
+            ceph_disk +
             [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
-                '--key-size',
-                '256',
-                'create',
-                partid,
+                'activate-lockbox',
                 args.dev,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/usr/sbin/ceph-disk',
-                'activate',
-                newdev,
-            ]
-        )
-
-    elif parttype == PTYPE['luks']['osd']['ready']:
-        command(
-            [
-                '/sbin/cryptsetup',
-                '--key-file',
-                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
-                    partid=partid),
-                'luksOpen',
-                args.dev,
-                partid,
-            ]
-        )
-        newdev = '/dev/mapper/' + partid
-        count = 0
-        while not os.path.exists(newdev) and count <= 10:
-            time.sleep(1)
-            count += 1
-        command(
-            [
-                '/usr/sbin/ceph-disk',
-                'activate',
-                newdev,
             ]
         )
 
     else:
         raise Error('unrecognized partition type %s' % parttype)
+
+    if ret != 0:
+        LOG.info(out)
+        LOG.error(err)
+        raise Error('return code ' + str(ret))
+    else:
+        LOG.debug(out)
+        LOG.debug(err)
 
 
 def setup_statedir(dir):
@@ -4153,10 +4547,10 @@ def setup_statedir(dir):
         os.mkdir(STATEDIR + "/tmp")
 
     global prepare_lock
-    prepare_lock = filelock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
+    prepare_lock = FileLock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
 
     global activate_lock
-    activate_lock = filelock(STATEDIR + '/tmp/ceph-disk.activate.lock')
+    activate_lock = FileLock(STATEDIR + '/tmp/ceph-disk.activate.lock')
 
     global SUPPRESS_PREFIX
     SUPPRESS_PREFIX = STATEDIR + '/tmp/suppress-activate.'
@@ -4227,6 +4621,7 @@ def parse_args(argv):
 
     Prepare.set_subparser(subparsers)
     make_activate_parser(subparsers)
+    make_activate_lockbox_parser(subparsers)
     make_activate_block_parser(subparsers)
     make_activate_journal_parser(subparsers)
     make_activate_all_parser(subparsers)
@@ -4244,15 +4639,40 @@ def parse_args(argv):
 def make_trigger_parser(subparsers):
     trigger_parser = subparsers.add_parser(
         'trigger',
-        help='Trigger an event (caled by udev)')
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        The partition given in argument is activated. The type of the
+        partition (data, lockbox, journal etc.) is detected by its
+        type. If the init system is upstart or systemd, the activation is
+        delegated to it and runs asynchronously, which
+        helps reduce the execution time of udev actions.
+        """)),
+        help='activate any device (called by udev)')
     trigger_parser.add_argument(
         'dev',
         help=('device'),
     )
     trigger_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+    )
+    trigger_parser.add_argument(
+        '--dmcrypt',
+        action='store_true', default=None,
+        help='map devices with dm-crypt',
+    )
+    trigger_parser.add_argument(
+        '--dmcrypt-key-dir',
+        metavar='KEYDIR',
+        default='/etc/ceph/dmcrypt-keys',
+        help='directory where dm-crypt keys are stored',
+    )
+    trigger_parser.add_argument(
         '--sync',
         action='store_true', default=None,
-        help=('do operation synchronously; do not trigger systemd'),
+        help='do operation synchronously; do not trigger systemd',
     )
     trigger_parser.set_defaults(
         func=main_trigger,
@@ -4263,6 +4683,21 @@ def make_trigger_parser(subparsers):
 def make_activate_parser(subparsers):
     activate_parser = subparsers.add_parser(
         'activate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Activate the OSD found at PATH (can be a directory
+        or a device partition, possibly encrypted). When
+        activated for the first time, a unique OSD id is obtained
+        from the cluster. If PATH is a directory, a symbolic
+        link is added in {statedir}/osd/ceph-$id. If PATH is
+        a partition, it is mounted on {statedir}/osd/ceph-$id.
+        Finally, the OSD daemon is run.
+
+        If the OSD depends on auxiliary partitions (journal, block, ...)
+        they need to be available otherwise activation will fail. It
+        may happen if a journal is encrypted and cryptsetup was not
+        run yet.
+        """.format(statedir=STATEDIR))),
         help='Activate a Ceph OSD')
     activate_parser.add_argument(
         '--mount',
@@ -4315,6 +4750,47 @@ def make_activate_parser(subparsers):
     return activate_parser
 
 
+def make_activate_lockbox_parser(subparsers):
+    parser = subparsers.add_parser(
+        'activate-lockbox',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Mount the partition found at PATH on {statedir}/osd-lockbox/$uuid
+        where $uuid uniquely identifies the OSD that needs this lockbox
+        to retrieve keys from the monitor and unlock its partitions.
+
+        If the OSD has one or more auxiliary devices (journal, block, ...)
+        symbolic links are created at {statedir}/osd-lockbox/$other_uuid
+        and point to {statedir}/osd-lockbox/$uuid. This will, for instance,
+        allow a journal encrypted in a partition identified by $other_uuid to
+        fetch the keys it needs from the monitor.
+
+        Finally the OSD is activated, as it would be with ceph-disk activate.
+        """.format(statedir=STATEDIR))),
+        help='Activate a Ceph lockbox')
+    parser.add_argument(
+        '--activate-key',
+        help='bootstrap-osd keyring path template (%(default)s)',
+        dest='activate_key_template',
+    )
+    parser.add_argument(
+        '--dmcrypt-key-dir',
+        metavar='KEYDIR',
+        default='/etc/ceph/dmcrypt-keys',
+        help='directory where dm-crypt keys are stored',
+    )
+    parser.add_argument(
+        'path',
+        metavar='PATH',
+        help='path to block device',
+    )
+    parser.set_defaults(
+        activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
+        func=main_activate_lockbox,
+    )
+    return parser
+
+
 def make_activate_block_parser(subparsers):
     return make_activate_space_parser('block', subparsers)
 
@@ -4326,6 +4802,15 @@ def make_activate_journal_parser(subparsers):
 def make_activate_space_parser(name, subparsers):
     activate_space_parser = subparsers.add_parser(
         'activate-%s' % name,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Activating a {name} partition is only meaningfull
+        if it is encrypted and it will map it using
+        cryptsetup.
+
+        Finally the corresponding OSD is activated,
+        as it would be with ceph-disk activate.
+        """.format(name=name))),
         help='Activate an OSD via its %s device' % name)
     activate_space_parser.add_argument(
         'dev',
@@ -4372,6 +4857,12 @@ def make_activate_space_parser(name, subparsers):
 def make_activate_all_parser(subparsers):
     activate_all_parser = subparsers.add_parser(
         'activate-all',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Activate all OSD partitions found in /dev/disk/by-parttypeuuid.
+        The partitions containing auxiliary devices (journal, block, ...)
+        are not activated.
+        """)),
         help='Activate all tagged OSD partitions')
     activate_all_parser.add_argument(
         '--activate-key',
@@ -4396,6 +4887,11 @@ def make_activate_all_parser(subparsers):
 def make_list_parser(subparsers):
     list_parser = subparsers.add_parser(
         'list',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Display all partitions on the system and their
+        associated Ceph information, if any.
+        """)),
         help='List disks, partitions, and Ceph OSDs')
     list_parser.add_argument(
         '--format',
@@ -4418,6 +4914,11 @@ def make_list_parser(subparsers):
 def make_suppress_parser(subparsers):
     suppress_parser = subparsers.add_parser(
         'suppress-activate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Add a prefix to the list of suppressed device names
+        so that they are ignored by all activate* subcommands.
+        """)),
         help='Suppress activate on a device (prefix)')
     suppress_parser.add_argument(
         'path',
@@ -4430,6 +4931,12 @@ def make_suppress_parser(subparsers):
 
     unsuppress_parser = subparsers.add_parser(
         'unsuppress-activate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Remove a prefix from the list of suppressed device names
+        so that they are no longer ignored by all
+        activate* subcommands.
+        """)),
         help='Stop suppressing activate on a device (prefix)')
     unsuppress_parser.add_argument(
         'path',
@@ -4445,6 +4952,25 @@ def make_suppress_parser(subparsers):
 def make_deactivate_parser(subparsers):
     deactivate_parser = subparsers.add_parser(
         'deactivate',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Deactivate the OSD located at PATH. It stops the OSD daemon
+        and optionally marks it out (with --mark-out). The content of
+        the OSD is left untouched.
+
+        By default, the, ready, active, INIT-specific files are
+        removed (so that it is not automatically re-activated by the
+        udev rules or ceph-disk trigger) and the file deactive is
+        created to remember the OSD is deactivated.
+
+        If the --once option is given, the ready, active, INIT-specific
+        files are not removed and the OSD will reactivate whenever
+        ceph-disk trigger is run on one of the devices (journal, data,
+        block, lockbox, ...).
+
+        If the OSD is dmcrypt, remove the data dmcrypt map. When
+        deactivate finishes, the OSD is down.
+        """)),
         help='Deactivate a Ceph OSD')
     deactivate_parser.add_argument(
         '--cluster',
@@ -4468,6 +4994,11 @@ def make_deactivate_parser(subparsers):
         action='store_true', default=False,
         help='option to mark the osd out',
     )
+    deactivate_parser.add_argument(
+        '--once',
+        action='store_true', default=False,
+        help='does not need --reactivate to activate again',
+    )
     deactivate_parser.set_defaults(
         func=main_deactivate,
     )
@@ -4476,6 +5007,13 @@ def make_deactivate_parser(subparsers):
 def make_destroy_parser(subparsers):
     destroy_parser = subparsers.add_parser(
         'destroy',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Destroy the OSD located at PATH.
+        It removes the OSD from the cluster, the crushmap and
+        deallocates the OSD id. An OSD must be down before it
+        can be destroyed.
+        """)),
         help='Destroy a Ceph OSD')
     destroy_parser.add_argument(
         '--cluster',
@@ -4515,6 +5053,13 @@ def make_destroy_parser(subparsers):
 def make_zap_parser(subparsers):
     zap_parser = subparsers.add_parser(
         'zap',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        Zap/erase/destroy a device's partition table and contents. It
+        actually uses sgdisk and it's option --zap-all to
+        destroy both GPT and MBR data structures so that the disk
+        becomes suitable for repartitioning.
+        """)),
         help='Zap/erase/destroy a device\'s partition table (and contents)')
     zap_parser.add_argument(
         'dev',
@@ -4559,13 +5104,14 @@ def setup_logging(verbose, log_stdout):
     if log_stdout:
         ch = logging.StreamHandler(stream=sys.stdout)
         ch.setLevel(loglevel)
-        formatter = logging.Formatter('%(filename)s: %(message)s')
+        formatter = logging.Formatter('%(funcName)s: %(message)s')
         ch.setFormatter(formatter)
         LOG.addHandler(ch)
         LOG.setLevel(loglevel)
     else:
         logging.basicConfig(
             level=loglevel,
+            format='%(funcName)s: %(message)s',
         )
 
 
@@ -4595,6 +5141,7 @@ def main_catch(func, args):
 
 def run():
     main(sys.argv[1:])
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])

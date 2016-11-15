@@ -74,8 +74,9 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   assert(imgname);
 
   uint64_t order;
-  r = opts.get(RBD_IMAGE_OPTION_ORDER, &order);
-  assert(r == 0);
+  if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
+    order = g_conf->rbd_default_order;
+  }
 
   // try to fill whole imgblklen blocks for sparsification
   uint64_t image_pos = 0;
@@ -126,32 +127,12 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       assert(bdev_size >= 0);
       size = (uint64_t) bdev_size;
     }
-
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
-  uint64_t format;
-  r = opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
-  assert(r == 0);
-  if (format == 1) {
-    uint64_t stripe_unit, stripe_count;
-    r = opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    assert(r == 0);
-    r = opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
-    assert(r == 0);
-
-    // weird striping not allowed with format 1!
-    if ((stripe_unit || stripe_count) &&
-        (stripe_unit != (1ull << order) && stripe_count != 1)) {
-      std::cerr << "non-default striping not allowed with format 1; "
-                << "use --image-format 2" << std::endl;
-      return -EINVAL;
-    }
-    int order_ = order;
-    r = rbd.create(io_ctx, imgname, size, &order_);
-  } else {
-    r = rbd.create4(io_ctx, imgname, size, opts);
-  }
+  r = rbd.create4(io_ctx, imgname, size, opts);
   if (r < 0) {
     std::cerr << "rbd: image creation failed" << std::endl;
     goto done;
@@ -265,7 +246,8 @@ int execute(const po::variables_map &vm) {
   std::string deprecated_image_name;
   if (vm.count(at::IMAGE_NAME)) {
     utils::extract_spec(vm[at::IMAGE_NAME].as<std::string>(),
-                        &deprecated_pool_name, &deprecated_image_name, nullptr);
+                        &deprecated_pool_name, &deprecated_image_name, nullptr,
+                        utils::SPEC_VALIDATION_FULL);
     std::cerr << "rbd: --image is deprecated for import, use --dest"
               << std::endl;
   } else {
@@ -278,7 +260,8 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, false);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL,
+    false);
   if (r < 0) {
     return r;
   }

@@ -77,8 +77,8 @@ protected:
   /// Type of returned paths
   typedef ceph::shared_ptr<Path> IndexedPath;
 
-  static IndexedPath get_testing_path(string path, const coll_t& collection) {
-    return IndexedPath(new Path(path, collection));
+  static IndexedPath get_testing_path(string path, coll_t collection) {
+    return std::make_shared<Path>(path, collection);
   }
 
   static const uint32_t FLAT_INDEX_TAG = 0;
@@ -189,6 +189,8 @@ protected:
       uint32_t pg_num,            ///< [in] pg number of the pool this collection belongs to
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
       ) { assert(0); return 0; }
+
+  virtual int apply_layout_settings() { assert(0); return 0; }
 
   /// Virtual destructor
   virtual ~CollectionIndex() {}

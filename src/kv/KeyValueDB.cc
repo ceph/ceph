@@ -2,7 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "KeyValueDB.h"
+#ifdef WITH_LEVELDB
 #include "LevelDBStore.h"
+#endif
+#include "MemDB.h"
 #ifdef HAVE_LIBROCKSDB
 #include "RocksDBStore.h"
 #endif
@@ -14,9 +17,11 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 			       const string& dir,
 			       void *p)
 {
+#ifdef WITH_LEVELDB
   if (type == "leveldb") {
     return new LevelDBStore(cct, dir);
   }
+#endif
 #ifdef HAVE_KINETIC
   if (type == "kinetic" &&
       cct->check_experimental_feature_enabled("kinetic")) {
@@ -24,19 +29,25 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb" &&
-      cct->check_experimental_feature_enabled("rocksdb")) {
+  if (type == "rocksdb") {
     return new RocksDBStore(cct, dir, p);
   }
 #endif
+
+  if ((type == "memdb") && 
+    cct->check_experimental_feature_enabled("memdb")) {
+    return new MemDB(cct, dir, p);
+  }
   return NULL;
 }
 
 int KeyValueDB::test_init(const string& type, const string& dir)
 {
+#ifdef WITH_LEVELDB
   if (type == "leveldb") {
     return LevelDBStore::_test_init(dir);
   }
+#endif
 #ifdef HAVE_KINETIC
   if (type == "kinetic") {
     return KineticStore::_test_init(g_ceph_context);
@@ -47,5 +58,9 @@ int KeyValueDB::test_init(const string& type, const string& dir)
     return RocksDBStore::_test_init(dir);
   }
 #endif
+
+  if (type == "memdb") {
+    return MemDB::_test_init(dir);
+  }
   return -EINVAL;
 }

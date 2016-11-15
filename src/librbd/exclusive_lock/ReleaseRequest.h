@@ -4,7 +4,6 @@
 #ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_RELEASE_REQUEST_H
 #define CEPH_LIBRBD_EXCLUSIVE_LOCK_RELEASE_REQUEST_H
 
-#include "include/int_types.h"
 #include "librbd/ImageCtx.h"
 #include <string>
 
@@ -21,7 +20,8 @@ template <typename ImageCtxT = ImageCtx>
 class ReleaseRequest {
 public:
   static ReleaseRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_releasing, Context *on_finish);
+                                Context *on_releasing, Context *on_finish,
+                                bool shutting_down);
 
   ~ReleaseRequest();
   void send();
@@ -33,10 +33,13 @@ private:
    * <start>
    *    |
    *    v
-   * BLOCK_WRITES
+   * PREPARE_LOCK
    *    |
    *    v
    * CANCEL_OP_REQUESTS
+   *    |
+   *    v
+   * BLOCK_WRITES
    *    |
    *    v
    * FLUSH_NOTIFIES . . . . . . . . . . . . . .
@@ -57,21 +60,26 @@ private:
    */
 
   ReleaseRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_releasing, Context *on_finish);
+                 Context *on_releasing, Context *on_finish,
+                 bool shutting_down);
 
   ImageCtxT &m_image_ctx;
   std::string m_cookie;
   Context *m_on_releasing;
   Context *m_on_finish;
+  bool m_shutting_down;
 
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
-  void send_block_writes();
-  Context *handle_block_writes(int *ret_val);
+  void send_prepare_lock();
+  Context *handle_prepare_lock(int *ret_val);
 
   void send_cancel_op_requests();
   Context *handle_cancel_op_requests(int *ret_val);
+
+  void send_block_writes();
+  Context *handle_block_writes(int *ret_val);
 
   void send_flush_notifies();
   Context *handle_flush_notifies(int *ret_val);

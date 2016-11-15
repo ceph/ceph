@@ -9,6 +9,7 @@
     user enable                re-enable user after suspension
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
+    user list                  list users
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
@@ -22,10 +23,13 @@
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
     bucket check               check bucket index
+    bucket reshard             reshard bucket
+    bi get                     retrieve bucket index object entries
+    bi put                     store bucket index object entries
+    bi list                    list raw bucket index entries
     object rm                  remove object
     object unlink              unlink object from bucket index
     objects expire             run expired objects cleanup
-    period prepare             prepare a new period
     period delete              delete a period
     period get                 get period info
     period get-current         get current period info
@@ -53,17 +57,20 @@
     zonegroup default          set default zone group
     zonegroup delete           delete a zone group info
     zonegroup get              show zone group info
-    zonegroup modify           set/clear zonegroup master status
+    zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
+    zonegroup remove           remove a zone from a zonegroup
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup-map get          show zonegroup-map
     zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
+    zone delete                delete a zone
     zone get                   show zone cluster params
-    zone modify                set/clear zone master status
+    zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
+    zone rename                rename a zone
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -76,11 +83,11 @@
     log rm                     remove log object
     usage show                 show usage (by user, date range)
     usage trim                 trim usage (by user, date range)
-    temp remove                remove temporary objects that were created up to
-                               specified date (and optional time)
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
     gc process                 manually process garbage
+    lc list                    list all bucket lifecycle progress
+    lc process                 manually process lifecycle
     metadata get               get metadata info
     metadata put               put metadata info
     metadata rm                remove metadata info
@@ -102,8 +109,9 @@
     replicalog get             get replica metadata log entry
     replicalog update          update replica metadata log entry
     replicalog delete          delete replica metadata log entry
-    orphans find               init and run search for leaked rados objects
+    orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
+    orphans list-jobs          list the current job-ids for orphans search
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -120,6 +128,7 @@
                                of read, write, readwrite, full
      --display-name=<name>
      --max_buckets             max number of buckets for a user
+     --admin                   set the admin flag on the user
      --system                  set the system flag on the user
      --bucket=<bucket>
      --pool=<pool>
@@ -134,23 +143,38 @@
                                  replica mdlog get/delete
                                  replica datalog get/delete
      --metadata-key=<key>      key to retrieve metadata from with metadata get
-     --remote=<remote>         remote to pull period
-     --parent=<id>             parent period id
+     --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
+     --staging                 get staging period info
      --master                  set as master
      --master-url              master url
      --master-zonegroup=<id>   master zonegroup id
      --master-zone=<id>        master zone id
-     --rgw-realm=<realm>       realm name
-     --realm-id=<realm id>     realm id
-     --realm-new-name=<realm new name> realm new name
-     --rgw-zonegroup=<zonegroup>   zonegroup name
-     --rgw-zone=<zone>         zone in which radosgw is running
-     --zone-new-name=<zone>    zone new name
+     --rgw-realm=<name>        realm name
+     --realm-id=<id>           realm id
+     --realm-new-name=<name>   realm new name
+     --rgw-zonegroup=<name>    zonegroup name
+     --zonegroup-id=<id>       zonegroup id
+     --rgw-zone=<name>         name of zone in which radosgw is running
+     --zone-id=<id>            zone id
+     --zone-new-name=<name>    zone new name
+     --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
+     --read-only               set zone as read-only (when adding to zonegroup)
      --endpoints=<list>        zone endpoints
+     --tier-type=<type>        zone tier type
+     --tier-config=<k>=<v>[,...]
+                               set zone tier config keys, values
+     --tier-config-rm=<k>[,...]
+                               unset zone tier config keys
+     --tier_type=<type>        zone tier type
+     --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers
+     --sync-from=[zone-name][,...]
+                               set list of zones to sync from
+     --sync-from-rm=[zone-name][,...]
+                               remove zones from list of zones to sync from
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
@@ -173,21 +197,31 @@
      --replica-log-type        replica log type (metadata, data, bucket), required for
                                replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
-     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
+     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
      --reset-regions           reset regionmap when regionmap update
+     --bypass-gc               when specified with bucket deletion, triggers
+                               object deletions by not involving GC
+     --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
+                               ignores bucket index consistency
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
      --bucket                  specified bucket for quota command
      --max-objects             specify max objects (negative value to disable)
-     --max-size                specify max size (in bytes, negative value to disable)
+     --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
+     --job-id                  set the job id (for orphans find)
+     --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
+  
+  Orphans list-jobs options:
+     --extra-info              provide extra info in job list
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
@@ -198,3 +232,5 @@
     --version         show version and quit
   
   [1]
+
+

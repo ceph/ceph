@@ -220,6 +220,10 @@ threshold it will use that percentage instead. ::
 
 	ceph osd reweight-by-utilization [threshold]
 
+Describes what reweight-by-utilization would do. ::
+
+    ceph osd test-reweight-by-utilization
+
 Adds/removes the address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
 it will default to 1 hour. A blacklisted address is prevented from
@@ -302,7 +306,7 @@ Enables debug messages. ::
 
 	ceph mds stat
 
-Displays the status of all metadata servers.
+Displays the status of all metadata servers. ::
 
 	ceph mds fail 0
 
@@ -325,7 +329,7 @@ The ``quorum`` list at the end lists monitor nodes that are part of the current 
 
 This is also available more directly::
 
-	$ ./ceph quorum_status
+	ceph quorum_status
 	
 	2011-12-14 10:44:20.417705 mon {- [quorum_status]
 	2011-12-14 10:44:20.431890 mon.0 -} 

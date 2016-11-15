@@ -30,12 +30,23 @@
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
+#include "common/perf_counters.h"
 #include "os/fs/FS.h"
 #include "kv/KeyValueDB.h"
 
 #include "kstore_types.h"
 
 #include "boost/intrusive/list.hpp"
+
+enum {  
+  l_kstore_first = 832430,
+  l_kstore_state_prepare_lat,
+  l_kstore_state_kv_queued_lat,
+  l_kstore_state_kv_done_lat,
+  l_kstore_state_finishing_lat,
+  l_kstore_state_done_lat,
+  l_kstore_last
+};
 
 class KStore : public ObjectStore {
   // -----------------------------------------------------
@@ -115,7 +126,7 @@ public:
     int trim(int max=-1);
   };
 
-  struct Collection {
+  struct Collection : public CollectionImpl {
     KStore *store;
     coll_t cid;
     kstore_cnode_t cnode;
@@ -126,6 +137,10 @@ public:
     OnodeHashLRU onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
+
+    const coll_t &get_cid() override {
+      return cid;
+    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -140,7 +155,7 @@ public:
 
     Collection(KStore *ns, coll_t c);
   };
-  typedef ceph::shared_ptr<Collection> CollectionRef;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
@@ -192,6 +207,13 @@ public:
       return "???";
     }
 
+    void log_state_latency(PerfCounters *logger, int state) {      
+        utime_t lat, now = ceph_clock_now(g_ceph_context);
+        lat = now - start;
+        logger->tinc(state, lat);
+        start = now;
+    }
+
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
@@ -206,7 +228,7 @@ public:
     list<CollectionRef> removed_collections; ///< colls we removed
 
     CollectionRef first_collection;  ///< first referenced collection
-
+    utime_t start;
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -214,7 +236,8 @@ public:
 	bytes(0),
 	oncommit(NULL),
 	onreadable(NULL),
-	onreadable_sync(NULL) {
+	onreadable_sync(NULL),
+        start(ceph_clock_now(g_ceph_context)){
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
@@ -241,7 +264,7 @@ public:
     Sequencer *parent;
 
     OpSequencer()
-	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
+	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL) {
     }
     ~OpSequencer() {
@@ -310,8 +333,8 @@ private:
   bool kv_stop;
   deque<TransContext*> kv_queue, kv_committing;
 
-  Logger *logger;
-
+  //Logger *logger;
+  PerfCounters *logger;
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
@@ -346,8 +369,8 @@ private:
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_release(TransContext *txc, uint64_t offset, uint64_t length);
-  int _txc_add_transaction(TransContext *txc, Transaction *t);
-  int _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_add_transaction(TransContext *txc, Transaction *t);
+  void _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
@@ -370,6 +393,9 @@ private:
 			uint64_t offset, bufferlist& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
 
+  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+    bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
+
 public:
   KStore(CephContext *cct, const string& path);
   ~KStore();
@@ -390,10 +416,11 @@ public:
   int umount();
   void _sync();
 
-  int fsck();
+  int fsck(bool deep) override;
 
-  unsigned get_max_object_name_length() {
-    return 4096;
+
+  int validate_hobject_key(const hobject_t &obj) const override {
+    return 0;
   }
   unsigned get_max_attr_name_length() {
     return 256;  // arbitrary; there is no real limit internally
@@ -404,7 +431,7 @@ public:
     return 0;
   }
 
-  int statfs(struct statfs *buf);
+  int statfs(struct store_statfs_t *buf) override;
 
   using ObjectStore::exists;
   bool exists(const coll_t& cid, const ghobject_t& oid);
@@ -414,6 +441,9 @@ public:
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false); // struct stat?
+  int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts);
   using ObjectStore::read;
   int read(
     const coll_t& cid,
@@ -439,12 +469,14 @@ public:
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
-  using ObjectStore::collection_list;
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
-		      bool sort_bitwise, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next);
+	      bool sort_bitwise, int max,
+	      vector<ghobject_t> *ls, ghobject_t *next) override;
+  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
+	      bool sort_bitwise, int max,
+	      vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(
@@ -500,6 +532,10 @@ public:
   }
   uuid_d get_fsid() {
     return fsid;
+  }
+
+  uint64_t estimate_objects_overhead(uint64_t num_objects) override {
+    return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
   objectstore_perf_stat_t get_cur_stats() {
@@ -590,7 +626,8 @@ private:
 		    CollectionRef& c,
 		    OnodeRef& o,
 		    uint64_t expected_object_size,
-		    uint64_t expected_write_size);
+		    uint64_t expected_write_size,
+		    uint32_t flags);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& oldo,

@@ -70,12 +70,20 @@ int do_add_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-int do_remove_snap(librbd::Image& image, const char *snapname)
+int do_remove_snap(librbd::Image& image, const char *snapname, bool force,
+		   bool no_progress)
 {
-  int r = image.snap_remove(snapname);
-  if (r < 0)
+  uint32_t flags = force? RBD_SNAP_REMOVE_FORCE : 0;
+  int r = 0;
+  utils::ProgressContext pc("Removing snap", no_progress);
+  
+  r = image.snap_remove2(snapname, flags, pc);
+  if (r < 0) {
+    pc.fail();
     return r;
+  }
 
+  pc.finish();
   return 0;
 }
 
@@ -148,6 +156,16 @@ int do_unprotect_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
+int do_set_limit(librbd::Image& image, uint64_t limit)
+{
+  return image.snap_set_limit(limit);
+}
+
+int do_clear_limit(librbd::Image& image)
+{
+  return image.snap_set_limit(UINT64_MAX);
+}
+
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -161,7 +179,7 @@ int execute_list(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -175,7 +193,7 @@ int execute_list(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+  r = utils::init_and_open_image(pool_name, image_name, "", true, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -202,7 +220,7 @@ int execute_create(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_SNAP);
   if (r < 0) {
     return r;
   }
@@ -228,6 +246,10 @@ int execute_create(const po::variables_map &vm) {
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_no_progress_option(options);
+  
+  options->add_options()
+    ("force", po::bool_switch(), "flatten children and unprotect snapshot if needed.");
 }
 
 int execute_remove(const po::variables_map &vm) {
@@ -235,9 +257,10 @@ int execute_remove(const po::variables_map &vm) {
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
+  bool force = vm["force"].as<bool>();
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -251,7 +274,7 @@ int execute_remove(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_remove_snap(image, snap_name.c_str());
+  r = do_remove_snap(image, snap_name.c_str(), force, vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     if (r == -EBUSY) {
       std::cerr << "rbd: snapshot '" << snap_name << "' "
@@ -278,7 +301,7 @@ int execute_purge(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -316,7 +339,7 @@ int execute_rollback(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -351,7 +374,7 @@ int execute_protect(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -363,6 +386,17 @@ int execute_protect(const po::variables_map &vm) {
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
+  }
+
+  bool is_protected = false;
+  r = image.snap_is_protected(snap_name.c_str(), &is_protected);
+  if (r < 0) {
+    std::cerr << "rbd: protecting snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  } else if (is_protected) {
+    std::cerr << "rbd: snap is already protected" << std::endl;
+    return -EBUSY;
   }
 
   r = do_protect_snap(image, snap_name.c_str());
@@ -386,7 +420,7 @@ int execute_unprotect(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -399,11 +433,96 @@ int execute_unprotect(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  
+  bool is_protected = false;
+  r = image.snap_is_protected(snap_name.c_str(), &is_protected);
+  if (r < 0) {
+    std::cerr << "rbd: unprotecting snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  } else if (!is_protected) {
+    std::cerr << "rbd: snap is already unprotected" << std::endl;
+    return -EINVAL;
+  }
 
   r = do_unprotect_snap(image, snap_name.c_str());
   if (r < 0) {
     std::cerr << "rbd: unprotecting snap failed: " << cpp_strerror(r)
               << std::endl;
+    return r;
+  }
+  return 0;
+}
+
+void get_set_limit_arguments(po::options_description *pos,
+			     po::options_description *opt) {
+  at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+  at::add_limit_option(opt);
+}
+
+int execute_set_limit(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string snap_name;
+  uint64_t limit;
+
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+
+  if (vm.count(at::LIMIT)) {
+    limit = vm[at::LIMIT].as<uint64_t>();
+  } else {
+    return -ERANGE;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+				 &io_ctx, &image);
+  if (r < 0) {
+      return r;
+  }
+
+  r = do_set_limit(image, limit);
+  if (r < 0) {
+    std::cerr << "rbd: setting snapshot limit failed: " << cpp_strerror(r)
+	      << std::endl;
+    return r;
+  }
+  return 0;
+}
+
+void get_clear_limit_arguments(po::options_description *pos,
+			       po::options_description *opt) {
+  at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+}
+
+int execute_clear_limit(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+				 &io_ctx, &image);
+  if (r < 0) {
+      return r;
+  }
+
+  r = do_clear_limit(image);
+  if (r < 0) {
+    std::cerr << "rbd: clearing snapshot limit failed: " << cpp_strerror(r)
+	      << std::endl;
     return r;
   }
   return 0;
@@ -422,7 +541,8 @@ int execute_rename(const po::variables_map &vm) {
   std::string src_snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &src_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &src_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return -r;
   }
@@ -432,7 +552,8 @@ int execute_rename(const po::variables_map &vm) {
   std::string dest_snap_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dest_pool_name,
-    &dest_image_name, &dest_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &dest_image_name, &dest_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_SNAP);
   if (r < 0) {
     return -r;
   }
@@ -486,6 +607,12 @@ Shell::Action action_protect(
 Shell::Action action_unprotect(
   {"snap", "unprotect"}, {}, "Allow a snapshot to be deleted.", "",
   &get_unprotect_arguments, &execute_unprotect);
+Shell::Action action_set_limit(
+  {"snap", "limit", "set"}, {}, "Limit the number of snapshots.", "",
+  &get_set_limit_arguments, &execute_set_limit);
+Shell::Action action_clear_limit(
+  {"snap", "limit", "clear"}, {}, "Remove snapshot limit.", "",
+  &get_clear_limit_arguments, &execute_clear_limit);
 Shell::Action action_rename(
   {"snap", "rename"}, {}, "Rename a snapshot.", "",
   &get_rename_arguments, &execute_rename);

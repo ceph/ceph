@@ -14,8 +14,10 @@
  *
  */
 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
@@ -34,11 +36,11 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
   int s, on = 1;
 
   if ((s = ::socket(domain, SOCK_STREAM, 0)) == -1) {
-    lderr(cct) << __func__ << " couldn't created socket " << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(errno) << dendl;
     return -errno;
   }
 
-  /* Make sure connection-intensive things like the benckmark
+  /* Make sure connection-intensive things like the benchmark
    * will be able to close/open sockets a zillion of times */
   if (reuse_addr) {
     if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
@@ -71,20 +73,36 @@ int NetHandler::set_nonblock(int sd)
   return 0;
 }
 
-void NetHandler::set_socket_options(int sd)
+void NetHandler::set_close_on_exec(int sd)
 {
+  int flags = fcntl(sd, F_GETFD, 0);
+  if (flags < 0) {
+    int r = errno;
+    lderr(cct) << __func__ << " fcntl(F_GETFD): "
+	       << cpp_strerror(r) << dendl;
+    return;
+  }
+  if (fcntl(sd, F_SETFD, flags | FD_CLOEXEC)) {
+    int r = errno;
+    lderr(cct) << __func__ << " fcntl(F_SETFD): "
+	       << cpp_strerror(r) << dendl;
+  }
+}
+
+int NetHandler::set_socket_options(int sd, bool nodelay, int size)
+{
+  int r = 0;
   // disable Nagle algorithm?
-  if (cct->_conf->ms_tcp_nodelay) {
+  if (nodelay) {
     int flag = 1;
-    int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+    r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
       r = -errno;
       ldout(cct, 0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
     }
   }
-  if (cct->_conf->ms_tcp_rcvbuf) {
-    int size = cct->_conf->ms_tcp_rcvbuf;
-    int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
+  if (size) {
+    r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
       ldout(cct, 0) << "couldn't set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
@@ -94,12 +112,40 @@ void NetHandler::set_socket_options(int sd)
   // block ESIGPIPE
 #ifdef SO_NOSIGPIPE
   int val = 1;
-  int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
+  r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
     r = -errno;
     ldout(cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
   }
 #endif
+  return r;
+}
+
+void NetHandler::set_priority(int sd, int prio)
+{
+  if (prio >= 0) {
+    int r = -1;
+#ifdef IPTOS_CLASS_CS6
+    int iptos = IPTOS_CLASS_CS6;
+    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " couldn't set IP_TOS to " << iptos
+                    << ": " << cpp_strerror(errno) << dendl;
+    }
+#endif
+#if defined(SO_PRIORITY) 
+    // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
+    // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
+    // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
+    r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+#endif
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " couldn't set SO_PRIORITY to " << prio
+                    << ": " << cpp_strerror(errno) << dendl;
+    }
+#endif
+  }
 }
 
 int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
@@ -117,9 +163,10 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
     }
   }
 
-  set_socket_options(s);
+  set_socket_options(s, cct->_conf->ms_tcp_nodelay, cct->_conf->ms_tcp_rcvbuf);
 
-  ret = ::connect(s, (sockaddr*)&addr.addr, addr.addr_size());
+
+  ret = ::connect(s, addr.get_sockaddr(), addr.get_sockaddr_len());
   if (ret < 0) {
     if (errno == EINPROGRESS && nonblock)
       return s;
@@ -134,7 +181,7 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
 int NetHandler::reconnect(const entity_addr_t &addr, int sd)
 {
-  int ret = ::connect(sd, (sockaddr*)&addr.addr, addr.addr_size());
+  int ret = ::connect(sd, addr.get_sockaddr(), addr.get_sockaddr_len());
 
   if (ret < 0 && errno != EISCONN) {
     ldout(cct, 10) << __func__ << " reconnect: " << strerror(errno) << dendl;

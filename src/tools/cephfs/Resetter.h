@@ -36,8 +36,8 @@ public:
    * For use when no journal header/pointer was present: write one
    * out from scratch.
    */
-  int reset_hard(int rank);
-  int reset(int rank);
+  int reset_hard(mds_role_t role);
+  int reset(mds_role_t role);
 };
 
 #endif /* JOURNAL_RESETTER_H_ */

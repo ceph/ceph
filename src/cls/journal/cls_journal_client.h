@@ -18,6 +18,8 @@ namespace cls {
 namespace journal {
 namespace client {
 
+void create(librados::ObjectWriteOperation *op,
+            uint8_t order, uint8_t splay, int64_t pool_id);
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
            uint8_t splay, int64_t pool_id);
 
@@ -45,19 +47,28 @@ int client_register(librados::IoCtx &ioctx, const std::string &oid,
 void client_register(librados::ObjectWriteOperation *op,
                      const std::string &id, const bufferlist &data);
 
-int client_update(librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &id, const bufferlist &data);
-void client_update(librados::ObjectWriteOperation *op,
-                   const std::string &id, const bufferlist &data);
+int client_update_data(librados::IoCtx &ioctx, const std::string &oid,
+                       const std::string &id, const bufferlist &data);
+void client_update_data(librados::ObjectWriteOperation *op,
+                        const std::string &id, const bufferlist &data);
+int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
+                        const std::string &id, cls::journal::ClientState state);
+void client_update_state(librados::ObjectWriteOperation *op,
+                         const std::string &id,
+                         cls::journal::ClientState state);
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                       const std::string &id);
+void client_unregister(librados::ObjectWriteOperation *op,
+		       const std::string &id);
 
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
                    const cls::journal::ObjectSetPosition &commit_position);
 
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
                 std::set<cls::journal::Client> *clients);
+void client_list(librados::IoCtx &ioctx, const std::string &oid,
+                 std::set<cls::journal::Client> *clients, Context *on_finish);
 
 // journal tag helpers
 int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,

@@ -25,10 +25,12 @@
 
 class RGWCoroutinesStack;
 class RGWCoroutinesManager;
+class RGWAioCompletionNotifier;
 
-class RGWCompletionManager {
+class RGWCompletionManager : public RefCountedObject {
   CephContext *cct;
   list<void *> complete_reqs;
+  set<RGWAioCompletionNotifier *> cns;
 
   Mutex lock;
   Cond cond;
@@ -39,26 +41,16 @@ class RGWCompletionManager {
 
   map<void *, void *> waiters;
 
-  class WaitContext : public Context {
-    RGWCompletionManager *manager;
-    void *opaque;
-  public:
-    WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
-    void finish(int r) {
-      manager->_wakeup(opaque);
-    }
-  };
-
-  friend class WaitContext;
+  class WaitContext;
 
 protected:
   void _wakeup(void *opaque);
-  void _complete(void *user_info);
+  void _complete(RGWAioCompletionNotifier *cn, void *user_info);
 public:
   RGWCompletionManager(CephContext *_cct);
   ~RGWCompletionManager();
 
-  void complete(void *user_info);
+  void complete(RGWAioCompletionNotifier *cn, void *user_info);
   int get_next(void **user_info);
   bool try_get_next(void **user_info);
 
@@ -69,6 +61,9 @@ public:
    */
   void wait_interval(void *opaque, const utime_t& interval, void *user_info);
   void wakeup(void *opaque);
+
+  void register_completion_notifier(RGWAioCompletionNotifier *cn);
+  void unregister_completion_notifier(RGWAioCompletionNotifier *cn);
 };
 
 /* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
@@ -76,19 +71,50 @@ class RGWAioCompletionNotifier : public RefCountedObject {
   librados::AioCompletion *c;
   RGWCompletionManager *completion_mgr;
   void *user_data;
+  Mutex lock;
+  bool registered;
 
 public:
   RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data);
   ~RGWAioCompletionNotifier() {
     c->release();
+    lock.Lock();
+    bool need_unregister = registered;
+    if (registered) {
+      completion_mgr->get();
+    }
+    registered = false;
+    lock.Unlock();
+    if (need_unregister) {
+      completion_mgr->unregister_completion_notifier(this);
+      completion_mgr->put();
+    }
   }
 
   librados::AioCompletion *completion() {
     return c;
   }
 
+  void unregister() {
+    Mutex::Locker l(lock);
+    if (!registered) {
+      return;
+    }
+    registered = false;
+  }
+
   void cb() {
-    completion_mgr->complete(user_data);
+    lock.Lock();
+    if (!registered) {
+      lock.Unlock();
+      put();
+      return;
+    }
+    completion_mgr->get();
+    registered = false;
+    lock.Unlock();
+    completion_mgr->complete(this, user_data);
+    completion_mgr->put();
     put();
   }
 };
@@ -229,11 +255,11 @@ public:
 
   void call(RGWCoroutine *op); /* call at the same stack we're in */
   RGWCoroutinesStack *spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
-  bool collect(int *ret); /* returns true if needs to be called again */
+  bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
   int wait(const utime_t& interval);
-  bool drain_children(int num_cr_left); /* returns true if needed to be called again */
+  bool drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack = NULL); /* returns true if needed to be called again */
   void wakeup();
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
@@ -269,6 +295,10 @@ do {                            \
 #define drain_all_but(n) \
   drain_cr = boost::asio::coroutine(); \
   yield_until_true(drain_children(n))
+
+#define drain_all_but_stack(stack) \
+  drain_cr = boost::asio::coroutine(); \
+  yield_until_true(drain_children(1, stack))
 
 template <class T>
 class RGWConsumerCR : public RGWCoroutine {
@@ -335,7 +365,7 @@ protected:
   RGWCoroutinesStack *parent;
 
   RGWCoroutinesStack *spawn(RGWCoroutine *source_op, RGWCoroutine *next_op, bool wait);
-  bool collect(RGWCoroutine *op, int *ret); /* returns true if needs to be called again */
+  bool collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
@@ -406,7 +436,7 @@ public:
   int wait(const utime_t& interval);
   void wakeup();
 
-  bool collect(int *ret); /* returns true if needs to be called again */
+  bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
 
   RGWAioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();
@@ -483,7 +513,7 @@ class RGWCoroutinesManager {
 
   void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
-  RGWCompletionManager completion_mgr;
+  RGWCompletionManager *completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
 
   int ops_window;
@@ -493,12 +523,15 @@ protected:
   void put_completion_notifier(RGWAioCompletionNotifier *cn);
 public:
   RGWCoroutinesManager(CephContext *_cct, RGWCoroutinesManagerRegistry *_cr_registry) : cct(_cct), lock("RGWCoroutinesManager::lock"),
-                                                                                        completion_mgr(cct), cr_registry(_cr_registry), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {
+                                                                                        cr_registry(_cr_registry), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {
+    completion_mgr = new RGWCompletionManager(cct);
     if (cr_registry) {
       cr_registry->add(this);
     }
   }
   virtual ~RGWCoroutinesManager() {
+    stop();
+    completion_mgr->put();
     if (cr_registry) {
       cr_registry->remove(this);
     }
@@ -507,14 +540,15 @@ public:
   int run(list<RGWCoroutinesStack *>& ops);
   int run(RGWCoroutine *op);
   void stop() {
-    going_down.set(1);
-    completion_mgr.go_down();
+    if (going_down.inc() == 1) {
+      completion_mgr->go_down();
+    }
   }
 
   virtual void report_error(RGWCoroutinesStack *op);
 
   RGWAioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack);
-  RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
+  RGWCompletionManager *get_completion_mgr() { return completion_mgr; }
 
   void schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
   RGWCoroutinesStack *allocate_stack();
@@ -524,6 +558,8 @@ public:
 };
 
 class RGWSimpleCoroutine : public RGWCoroutine {
+  bool called_cleanup;
+
   int operate();
 
   int state_init();
@@ -531,14 +567,17 @@ class RGWSimpleCoroutine : public RGWCoroutine {
   int state_request_complete();
   int state_all_complete();
 
+  void call_cleanup();
+
 public:
-  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct) {}
+  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false) {}
+  ~RGWSimpleCoroutine();
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
-
+  virtual void request_cleanup() {}
 };
 
 #endif

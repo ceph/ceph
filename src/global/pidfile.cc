@@ -162,7 +162,12 @@ int pidfh::open(const md_config_t *conf)
   pf_dev = st.st_dev;
   pf_ino = st.st_ino;
 
-  struct flock l = { F_WRLCK, SEEK_SET, 0, 0, 0 };
+  struct flock l = {
+    .l_type = F_WRLCK,
+    .l_whence = SEEK_SET,
+    .l_start = 0,
+    .l_len = 0
+  };
   int r = ::fcntl(pf_fd, F_SETLK, &l);
   if (r < 0) {
     derr << __func__ << ": failed to lock pidfile "
@@ -185,7 +190,7 @@ int pidfh::write()
     int err = errno;
     derr << __func__ << ": failed to ftruncate the pid file '"
 	 << pf_path << "': " << cpp_strerror(err) << dendl;
-    return err;
+    return -err;
   }
   ssize_t res = safe_write(pf_fd, buf, len);
   if (res < 0) {

@@ -16,7 +16,8 @@
 # GNU Library Public License for more details.
 #
 
-source ../qa/workunits/ceph-helpers.sh
+source $(dirname $0)/../detect-build-env-vars.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -38,16 +39,15 @@ function run() {
 function markdown_N_impl() {
   markdown_times=$1
   total_time=$2
-  interval=$(($total_time / markdown_times))
-  sleep 10
+  sleeptime=$3
   for i in `seq 1 $markdown_times`
   do
     # check the OSD is UP
-    ./ceph osd tree
-    ./ceph osd tree | grep osd.0 |grep up || return 1
+    ceph osd tree
+    ceph osd tree | grep osd.0 |grep up || return 1
     # mark the OSD down.
-    ./ceph osd down 0
-    sleep $interval
+    ceph osd down 0
+    sleep $sleeptime
   done
 }
 
@@ -59,14 +59,16 @@ function TEST_markdown_exceed_maxdown_count() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
-    local count=5
-    local period=40
+    # 3+1 times within 300s, osd should stay dead on the 4th time
+    local count=3
+    local sleeptime=10
+    local period=300
     ceph tell osd.0 injectargs '--osd_max_markdown_count '$count'' || return 1
     ceph tell osd.0 injectargs '--osd_max_markdown_period '$period'' || return 1
 
-    markdown_N_impl $(($count+1)) $period
+    markdown_N_impl $(($count+1)) $period $sleeptime
     # down N+1 times ,the osd.0 shoud die
-    ./ceph osd tree | grep down | grep osd.0 || return 1
+    ceph osd tree | grep down | grep osd.0 || return 1
 }
 
 function TEST_markdown_boot() {
@@ -77,14 +79,17 @@ function TEST_markdown_boot() {
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
 
-    local count=5
-    local period=40
+    # 3 times within 120s, should stay up
+    local count=3
+    local sleeptime=10
+    local period=120
     ceph tell osd.0 injectargs '--osd_max_markdown_count '$count'' || return 1
     ceph tell osd.0 injectargs '--osd_max_markdown_period '$period'' || return 1
 
-    markdown_N_impl $count $period
+    markdown_N_impl $count $period $sleeptime
     #down N times, osd.0 should be up
-    ./ceph osd tree | grep up | grep osd.0 || return 1
+    sleep 15  # give osd plenty of time to notice and come back up
+    ceph osd tree | grep up | grep osd.0 || return 1
 }
 
 function TEST_markdown_boot_exceed_time() {
@@ -95,14 +100,17 @@ function TEST_markdown_boot_exceed_time() {
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
 
-    local count=5
-    local period=40
+    
+    # 3+1 times, but over 40s, > 20s, so should stay up
+    local count=3
+    local period=20
+    local sleeptime=10
     ceph tell osd.0 injectargs '--osd_max_markdown_count '$count'' || return 1
     ceph tell osd.0 injectargs '--osd_max_markdown_period '$period'' || return 1
 
-    #actually we will down 6 times in 60s, so the 5th down will be in 50s > period
-    markdown_N_impl $(($count+1)) $(($period + 20))
-    ./ceph osd tree | grep up | grep osd.0 || return 1
+    markdown_N_impl $(($count+1)) $period $sleeptime
+    sleep 15  # give osd plenty of time to notice and come back up
+    ceph osd tree | grep up | grep osd.0 || return 1
 }
 
 main osd-markdown "$@"

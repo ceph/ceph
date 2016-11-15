@@ -32,11 +32,11 @@ public:
   MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
 
   const char *get_type_name() const {
-    return "mon_check_map_ack";
+    return "mon_get_version_reply";
   }
 
   void print(ostream& o) const {
-    o << "mon_check_map_ack(handle=" << handle << " version=" << version << ")";
+    o << "mon_get_version_reply(handle=" << handle << " version=" << version << ")";
   }
 
   void encode_payload(uint64_t features) {

@@ -2,13 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/object_map/Request.h"
-#include "include/rados/librados.hpp"
-#include "include/rbd/librbd.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/RWLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/object_map/InvalidateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -20,7 +17,7 @@ namespace object_map {
 
 bool Request::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << &m_image_ctx << " should_complete: r=" << r << dendl;
+  ldout(cct, 20) << this << " should_complete: r=" << r << dendl;
 
   switch (m_state)
   {

@@ -74,6 +74,10 @@
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
 
+#define RBD_GROUP_HEADER_PREFIX "rbd_group_header."
+
+#define RBD_GROUP_DIRECTORY "rbd_group_directory"
+
 struct rbd_info {
 	__le64 max_id;
 } __attribute__ ((packed));
@@ -101,6 +105,5 @@ struct rbd_obj_header_ondisk {
 	__le64 snap_names_len;
 	struct rbd_obj_snap_ondisk snaps[0];
 } __attribute__((packed));
-
 
 #endif

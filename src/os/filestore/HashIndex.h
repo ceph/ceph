@@ -160,6 +160,9 @@ public:
     CollectionIndex* dest
     );
 
+  /// @see CollectionIndex
+  virtual int apply_layout_settings();
+
 protected:
   int _init();
 
@@ -198,6 +201,11 @@ protected:
     ghobject_t *next
     );
 private:
+  /// Internal recursively remove path and its subdirs
+  int _recursive_remove(
+    const vector<string> &path, ///< [in] path to remove
+    bool top			///< [in] internal tracking of first caller
+    ); /// @return Error Code, 0 on success
   /// Recursively remove path and its subdirs
   int recursive_remove(
     const vector<string> &path ///< [in] path to remove
@@ -427,6 +435,9 @@ private:
   /// Create the given levels of sub directories from the given root.
   /// The contents of *path* is not changed after calling this function.
   int recursive_create_path(vector<string>& path, int level);
+
+  /// split each dir below the given path
+  int split_dirs(const vector<string> &path);
 };
 
 #endif

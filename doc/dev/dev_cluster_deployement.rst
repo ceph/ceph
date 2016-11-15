@@ -47,7 +47,7 @@ Options
 
 .. option:: -r
 
-    Start radosgw (ceph needs to be compiled with --radosgw), create an apache2 configuration file, and start apache2 with it (needs apache2 with mod_fastcgi) on port starting from 8000.
+    Start radosgw on port starting from 8000.
 
 .. option:: --nodaemon
 
@@ -100,3 +100,30 @@ Theses environment variables will contains the number of instances of the desire
 Example: ::
 
 	OSD=3 MON=3 RGW=1 vstart.sh
+
+
+============================================================
+ Deploying multiple development clusters on the same machine
+============================================================
+
+In order to bring up multiple ceph clusters on the same machine, *mstart.sh* a
+small wrapper around the above *vstart* can help.
+
+Usage
+=====
+
+To start multiple clusters, you would run mstart for each cluster you would want
+to deploy, and it will start monitors, rgws for each cluster on different ports
+allowing you to run multiple mons, rgws etc. on the same cluster. Invoke it in
+the following way::
+
+  mstart.sh <cluster-name> <vstart options>
+
+For eg::
+
+  ./mstart.sh cluster1 -n -r
+
+
+For stopping the cluster, you do::
+
+  ./mstop.sh <cluster-name>

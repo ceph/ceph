@@ -24,6 +24,7 @@ using std::map;
 
 #include "include/types.h"
 #include "common/Clock.h"
+#include "common/Cond.h"
 #include "CInode.h"
 
 
@@ -44,6 +45,8 @@ class MDBalancer {
 
   int last_epoch_under;  
   int last_epoch_over; 
+  string bal_code;
+  string bal_version;
 
   utime_t last_heartbeat;
   utime_t last_fragment;
@@ -55,7 +58,7 @@ class MDBalancer {
 
   // per-epoch scatter/gathered info
   map<mds_rank_t, mds_load_t>  mds_load;
-  map<mds_rank_t, float>       mds_meta_load;
+  map<mds_rank_t, double>       mds_meta_load;
   map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
 
   // per-epoch state
@@ -88,6 +91,7 @@ public:
 
   int proc_message(Message *m);
   
+  int localize_balancer();
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
 
@@ -99,6 +103,7 @@ public:
   //set up the rebalancing targets for export and do one if the
   //MDSMap is up to date
   void prep_rebalance(int beat);
+  int mantle_prep_rebalance();
   /*check if the monitor has recorded the current export targets;
     if it has then do the actual export. Otherwise send off our
     export targets message again*/

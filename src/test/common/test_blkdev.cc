@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include "include/types.h"
 #include "common/blkdev.h"
@@ -12,25 +13,25 @@
 
 TEST(blkdev, get_block_device_base) {
   char buf[PATH_MAX*2];
-  char buf2[PATH_MAX*2];
   char buf3[PATH_MAX*2];
-  struct dirent *de, *de2;
 
   ASSERT_EQ(-EINVAL, get_block_device_base("/etc/notindev", buf, 100));
 
   for (int i=0; i<2; ++i) {
-    const char *root = "";
-    if (i == 0)
-      root = "test/common/test_blkdev_sys_block";
-    set_block_device_sandbox_dir(root);
+    string root;
+    if (i == 0) {
+      const char* env = getenv("CEPH_ROOT");
+      ASSERT_NE(env, nullptr) << "Environment Variable CEPH_ROOT not found!";
+      root = string(env) + "/src/test/common/test_blkdev_sys_block";
+    }
+    set_block_device_sandbox_dir(root.c_str());
 
     // work backwards
-    sprintf(buf, "%s/sys/block", root);
+    sprintf(buf, "%s/sys/block", root.c_str());
     DIR *dir = opendir(buf);
-    ASSERT_TRUE(dir);
-    while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-      if (!de)
-	break;
+    ASSERT_NE(dir, nullptr);
+    struct dirent *de = nullptr;
+    while ((de = ::readdir(dir))) {
       if (de->d_name[0] == '.')
 	continue;
 
@@ -50,12 +51,11 @@ TEST(blkdev, get_block_device_base) {
 	     (int)block_device_support_discard(base));
 
       char subdirfn[PATH_MAX];
-      sprintf(subdirfn, "%s/sys/block/%s", root, de->d_name);
+      sprintf(subdirfn, "%s/sys/block/%s", root.c_str(), de->d_name);
       DIR *subdir = opendir(subdirfn);
       ASSERT_TRUE(subdir);
-      while (!::readdir_r(subdir, reinterpret_cast<struct dirent*>(buf2), &de2)) {
-	if (!de2)
-	  break;
+      struct dirent *de2 = nullptr;
+      while ((de2 = ::readdir(subdir))) {
 	if (de2->d_name[0] == '.')
 	  continue;
 	// partiions will be prefixed with the base name

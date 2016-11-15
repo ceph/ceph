@@ -27,23 +27,20 @@ enum {
 
 struct ObjectMetaInfo {
   uint64_t size;
-  time_t mtime;
+  real_time mtime;
 
-  ObjectMetaInfo() : size(0), mtime(0) {}
+  ObjectMetaInfo() : size(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(size, bl);
-    utime_t t(mtime, 0);
-    ::encode(t, bl);
+    ::encode(mtime, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(size, bl);
-    utime_t t;
-    ::decode(t, bl);
-    mtime = t.sec();
+    ::decode(mtime, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -231,11 +228,11 @@ public:
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist>* rmattrs,
                 RGWObjVersionTracker *objv_tracker);
-  int put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
+  int put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mtime,
               map<std::string, bufferlist>& attrs, int flags,
               bufferlist& data,
               RGWObjVersionTracker *objv_tracker,
-              time_t set_mtime);
+              real_time set_mtime);
   int put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl, off_t ofs, bool exclusive);
 
   int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
@@ -244,7 +241,7 @@ public:
                      map<string, bufferlist> *attrs,
                      rgw_cache_entry_info *cache_info);
 
-  int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
+  int raw_obj_stat(rgw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
                    bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
 
   int delete_system_obj(rgw_obj& obj, RGWObjVersionTracker *objv_tracker);
@@ -380,18 +377,18 @@ int RGWCache<T>::system_obj_set_attrs(void *ctx, rgw_obj& obj,
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-   cache.remove(name);
+    cache.remove(name);
   }
 
   return ret;
 }
 
 template <class T>
-int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
+int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mtime,
               map<std::string, bufferlist>& attrs, int flags,
               bufferlist& data,
               RGWObjVersionTracker *objv_tracker,
-              time_t set_mtime)
+              real_time set_mtime)
 {
   rgw_bucket bucket;
   string oid;
@@ -399,15 +396,20 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
   ObjectCacheInfo info;
   info.xattrs = attrs;
   info.status = 0;
-  info.flags = CACHE_FLAG_XATTRS;
   info.data = data;
-  info.flags |= CACHE_FLAG_DATA;
+  info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
   if (objv_tracker) {
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
   }
-  int ret = T::put_system_obj_impl(obj, size, mtime, attrs, flags, data,
-                                   objv_tracker, set_mtime);
+  ceph::real_time result_mtime;
+  int ret = T::put_system_obj_impl(obj, size, &result_mtime, attrs, flags, data,
+				   objv_tracker, set_mtime);
+  if (mtime) {
+    *mtime = result_mtime;
+  }
+  info.meta.mtime = result_mtime;
+  info.meta.size = size;
   string name = normal_name(bucket, oid);
   if (ret >= 0) {
     cache.put(name, info, NULL);
@@ -415,7 +417,7 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-   cache.remove(name);
+    cache.remove(name);
   }
 
   return ret;
@@ -445,7 +447,7 @@ int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, 
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
-     cache.remove(name);
+      cache.remove(name);
     }
   }
 
@@ -453,7 +455,7 @@ int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, 
 }
 
 template <class T>
-int RGWCache<T>::raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime,
+int RGWCache<T>::raw_obj_stat(rgw_obj& obj, uint64_t *psize, real_time *pmtime,
                           uint64_t *pepoch, map<string, bufferlist> *attrs,
                           bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker)
 {
@@ -464,7 +466,7 @@ int RGWCache<T>::raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   string name = normal_name(bucket, oid);
 
   uint64_t size;
-  time_t mtime;
+  real_time mtime;
   uint64_t epoch;
 
   ObjectCacheInfo info;
@@ -524,8 +526,7 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_obj& obj, Objec
   info.obj = obj;
   bufferlist bl;
   ::encode(info, bl);
-  int ret = T::distribute(normal_name, bl);
-  return ret;
+  return T::distribute(normal_name, bl);
 }
 
 template <class T>

@@ -26,7 +26,7 @@
                            compile with unsafe tunables
      --build --num_osds N layer1 ...
                            build a new map, where each 'layer' is
-                           'name (uniform|straw|list|tree) size'
+                           'name (uniform|straw2|straw|list|tree) size'
   
   Options for the tunables adjustments stage
   
@@ -69,6 +69,7 @@
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]
         [--num-rep n]
+        [--pool-id n]      specifies pool id
         [--batches b]      split the CRUSH mapping into b > 1 rounds
         [--weight|-w devno weight]
                            where weight is 0 to 1.0

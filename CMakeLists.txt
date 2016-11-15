@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 2.8.11)
 
-project(Ceph)
-set(VERSION "0.90")
+project(ceph)
+set(VERSION 11.0.2)
 
-if (NOT (CMAKE_MAJOR_VERSION LESS 3))
+if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
   cmake_policy(SET CMP0046 OLD)
-endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
+endif()
 # we use LINK_PRIVATE keyword instead of PRIVATE, but do not specify the LINK_PUBLIC
 # for target_link_libraries() command when PUBLIC should be used instead, it's just
 # for backward compatibility with cmake 2.8.11.
@@ -16,8 +16,26 @@ endif (POLICY CMP0022)
 if (POLICY CMP0023)
 cmake_policy(SET CMP0023 OLD)
 endif (POLICY CMP0023)
+if(POLICY CMP0056)
+  cmake_policy(SET CMP0056 NEW)
+endif()
+if(POLICY CMP0065)
+  cmake_policy(SET CMP0065 NEW)
+endif()
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  set(LINUX ON)
+  FIND_PACKAGE(Threads)
+elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+  set(FREEBSD ON)
+  FIND_PACKAGE(Threads)
+elseif(APPLE)
+  set(OperatingSystem "Mac OS X")
+else()
+  message(STATUS "No systemtype selected for building")
+endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
@@ -25,28 +43,54 @@ if(WITH_CCACHE)
   if(CCACHE_FOUND)
     message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    # ccache does not accelerate link (ld), but let it handle it. by passing it
+    # along with cc to python's distutils, we are able to workaround
+    # https://bugs.python.org/issue8027.
     set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
   else(CCACHE_FOUND)
     message(FATAL_ERROR "Can't find ccache. Is it installed?")
   endif(CCACHE_FOUND)
 endif(WITH_CCACHE)
 
+option(WITH_MANPAGE "Build man pages." ON)
+if(WITH_MANPAGE)
+  find_program(SPHINX_BUILD
+    sphinx-build)
+  if(NOT SPHINX_BUILD)
+    message(FATAL_ERROR "Can't find sphinx-build.")
+  endif(NOT SPHINX_BUILD)
+endif(WITH_MANPAGE)
+
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
-  ${OFED_PREFIX}/include
-  ${LEVELDB_PREFIX}/include
-  ${PROJECT_SOURCE_DIR}/src
-)
+  ${PROJECT_SOURCE_DIR}/src)
 
-link_directories(
-  ${OFED_PREFIX}/lib
-  ${LEVELDB_PREFIX}/lib
-)
+if(OFED_PREFIX)
+  include_directories(${OFED_PREFIX}/include)
+  link_directories(${OFED_PREFIX}/lib)
+endif()
+
+if(FREEBSD)
+  include_directories(/usr/local/include)
+  link_directories(/usr/local/lib)
+  list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
+endif(FREEBSD)
+
+#put all the libs and binaries in one place
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 #Check Includes
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
+
+#put all the libs and binaries in one place
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 
 CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
 CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
@@ -55,59 +99,58 @@ CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
 CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
-CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
-CHECK_INCLUDE_FILES("boost/random/discrete_distribution.hpp" HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION)
-CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
-CHECK_INCLUDE_FILES("dirent.h" HAVE_DIRENT_H)
-CHECK_INCLUDE_FILES("dlfcn.h" HAVE_DLFCN_H)
+CHECK_FUNCTION_EXISTS(splice CEPH_HAVE_SPLICE)
+CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
+CHECK_FUNCTION_EXISTS(fdatasync HAVE_FDATASYNC)
+CHECK_FUNCTION_EXISTS(strerror_r HAVE_STRERROR_R)
+CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
+CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
+set(CMAKE_REQUIRED_LIBRARIES pthread)
+CHECK_FUNCTION_EXISTS(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
+CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
+CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
+
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
-CHECK_INCLUDE_FILES("memory.h" HAVE_MEMORY_H)
-CHECK_INCLUDE_FILES("ndir.h" HAVE_NDIR_H)
-CHECK_INCLUDE_FILES("netdb.h" HAVE_NETDB_H)
-CHECK_INCLUDE_FILES("netinet/in.h" HAVE_NETINET_IN_H)
+CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
 CHECK_INCLUDE_FILES("stdint.h" HAVE_STDINT_H)
-CHECK_INCLUDE_FILES("stdlib.h" HAVE_STDLIB_H)
-CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
-CHECK_INCLUDE_FILES("strings.h" HAVE_STRINGS_H)
-CHECK_INCLUDE_FILES("string.h" HAVE_STRING_H)
-CHECK_INCLUDE_FILES("syslog.h" HAVE_SYSLOG_H)
-CHECK_INCLUDE_FILES("sys/dir.h" HAVE_SYS_DIR_H)
-CHECK_INCLUDE_FILES("sys/file.h" HAVE_SYS_FILE_H)
-CHECK_INCLUDE_FILES("sys/ioctl.h" HAVE_SYS_IOCTL_H)
+CHECK_INCLUDE_FILES("arpa/nameser_compat.h" HAVE_ARPA_NAMESER_COMPAT_H)
 CHECK_INCLUDE_FILES("sys/mount.h" HAVE_SYS_MOUNT_H)
-CHECK_INCLUDE_FILES("sys/ndir.h" HAVE_SYS_NDIR_H)
 CHECK_INCLUDE_FILES("sys/param.h" HAVE_SYS_PARAM_H)
-CHECK_INCLUDE_FILES("sys/socket.h" HAVE_SYS_SOCKET_H)
-CHECK_INCLUDE_FILES("sys/statvfs.h" HAVE_SYS_STATVFS_H)
-CHECK_INCLUDE_FILES("sys/stat.h" HAVE_SYS_STAT_H)
-CHECK_INCLUDE_FILES("sys/time.h" HAVE_SYS_TIME_H)
 CHECK_INCLUDE_FILES("sys/types.h" HAVE_SYS_TYPES_H)
 CHECK_INCLUDE_FILES("sys/vfs.h" HAVE_SYS_VFS_H)
-CHECK_INCLUDE_FILES("sys/wait.h" HAVE_SYS_WAIT_H)
-CHECK_INCLUDE_FILES("sys/xattr.h" HAVE_SYS_XATTR_H)
-CHECK_INCLUDE_FILES("unistd.h" HAVE_UNISTD_H)
-CHECK_INCLUDE_FILES("utime.h" HAVE_UTIME_H)
-CHECK_INCLUDE_FILES("${CMAKE_SOURCE_DIR}/src/include/fiemap.h" HAVE_FIEMAP_H)
-CHECK_INCLUDE_FILES("fuse/fuse_lowlevel.h" HAVE_FUSE_LOWLEVEL_H)
-CHECK_INCLUDE_FILES("fuse/fuse.h" HAVE_FUSE_H)
-CHECK_INCLUDE_FILES("fcgi_config.h"  HAVE_FASTCGI_CONFIG_H)
-CHECK_INCLUDE_FILES("fastcgi.h" HAVE_FASTCGI_H)
-CHECK_INCLUDE_FILES("fcgiapp.h" FASTCGI_FASTCGI_APP_DIR)
-CHECK_INCLUDE_FILES("fcgimisc.h" HAVE_FASTCGI_MISC_H)
-CHECK_INCLUDE_FILES("fcgio.h" HAVE_FASTCGIO_H)
-CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
-CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
-CHECK_INCLUDE_FILES("openssl/ssl.h" HAVE_SSL_H)
-CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
+CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
 CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
+if(LINUX)
+  CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
+endif(LINUX)
+CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
+
+include(CheckTypeSize)
+set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h")
+CHECK_TYPE_SIZE(__be16 __BE16) 
+CHECK_TYPE_SIZE(__be32 __BE32) 
+CHECK_TYPE_SIZE(__be64 __BE64) 
+CHECK_TYPE_SIZE(__le16 __LE16) 
+CHECK_TYPE_SIZE(__le32 __LE32) 
+CHECK_TYPE_SIZE(__le64 __LE64) 
+CHECK_TYPE_SIZE(__u8 __U8) 
+CHECK_TYPE_SIZE(__u16 __U16) 
+CHECK_TYPE_SIZE(__u32 __U32) 
+CHECK_TYPE_SIZE(__u64 __U64) 
+CHECK_TYPE_SIZE(__s8 __S8) 
+CHECK_TYPE_SIZE(__s16 __S16) 
+CHECK_TYPE_SIZE(__s32 __S32) 
+CHECK_TYPE_SIZE(__s64 __S64) 
+unset(CMAKE_EXTRA_INCLUDE_FILES)
 
 include(CheckSymbolExists)
-CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
-CHECK_SYMBOL_EXISTS(__u64 "sys/types.h;linux/types.h" HAVE___U64)
-CHECK_SYMBOL_EXISTS(__s64 "sys/types.h;linux/types.h" HAVE___S64)
-
 CHECK_SYMBOL_EXISTS(res_nquery "resolv.h" HAVE_RES_NQUERY)
+CHECK_SYMBOL_EXISTS(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
+CHECK_SYMBOL_EXISTS(__func__ "" HAVE_FUNC)
+CHECK_SYMBOL_EXISTS(__PRETTY_FUNCTION__ "" HAVE_PRETTY_FUNC)
 
 include(CheckCXXSourceCompiles)
 CHECK_CXX_SOURCE_COMPILES("
@@ -115,38 +158,64 @@ CHECK_CXX_SOURCE_COMPILES("
   int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
   " STRERROR_R_CHAR_P)
 
+include(CheckStructHasMember)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
+
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
 option(ENABLE_SHARED "build shared libraries" ON)
-if(${ENABLE_SHARED})
- set(CEPH_SHARED SHARED)
-else(${ENABLE_SHARED})
- set(CEPH_SHARED STATIC)
-endif(${ENABLE_SHARED})
+if(ENABLE_SHARED)
+  set(CEPH_SHARED SHARED)
+else(ENABLE_SHARED)
+  set(CEPH_SHARED STATIC)
+endif(ENABLE_SHARED)
+set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
-find_package(execinfo)
+option(WITH_RDMA "Enable RDMA in async messenger" OFF)
+if(WITH_RDMA)
+  find_package(rdma REQUIRED)
+  set(HAVE_RDMA ${RDMA_FOUND})
+endif(WITH_RDMA)
 
-find_package(udev REQUIRED)
-set(HAVE_UDEV ${UDEV_FOUND})
+find_package(Backtrace)
 
-option(WITH_AIO "AIO is here ON" ON)
-if(${WITH_AIO})
-find_package(aio REQUIRED)
-set(HAVE_LIBAIO ${AIO_FOUND})
-message(STATUS "${AIO_LIBS}")
-endif(${WITH_AIO})
+if(LINUX)
+  find_package(udev REQUIRED)
+  set(HAVE_UDEV ${UDEV_FOUND})
+
+  find_package(aio REQUIRED)
+  set(HAVE_LIBAIO ${AIO_FOUND})
+
+  find_package(blkid REQUIRED)
+  set(HAVE_BLKID ${BLKID_FOUND})
+else()
+  set(HAVE_UDEV OFF)
+  message(STATUS "Not using udev")
+  set(HAVE_LIBAIO OFF)
+  message(STATUS "Not using AIO")
+  set(HAVE_BLKID OFF)
+  message(STATUS "Not using BLKID")
+endif(LINUX)
+
+option(WITH_OPENLDAP "OPENLDAP is here" ON)
+if(${WITH_OPENLDAP})
+find_package(OpenLdap REQUIRED)
+set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
+endif(${WITH_OPENLDAP})
 
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
 find_package(fuse)
 set(HAVE_LIBFUSE ${FUSE_FOUND})
-CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
 option(WITH_XFS "XFS is here" ON)
 if(${WITH_XFS})
 find_package(xfs)
-set(HAVE_XFS ${XFS_FOUND})
+set(HAVE_LIBXFS ${XFS_FOUND})
 endif(${WITH_XFS})
 
 option(WITH_SPDK "Enable SPDK" OFF)
@@ -156,14 +225,7 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
-find_package(blkid REQUIRED)
-set(HAVE_LIBBLKID ${BLKID_FOUND})
-
-# probably fuse etc need this -- how to check? XXX
-option(WITH_MDS "MDS is here" ON)
-
 # needs mds and? XXX
-option(WITH_CLIENT "Client is here" ON)
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
 # key-value store
@@ -173,96 +235,116 @@ option(WITH_KVS "Key value store is here" ON)
 option(WITH_RBD "Remote block storage is here" ON)
 
 option(WITH_LEVELDB "LevelDB is here" ON)
-if(${WITH_LEVELDB})
-find_package(leveldb REQUIRED)
-set(HAVE_LIBLEVELDB ${LEVELDB_FOUND})
-find_file(HAVE_LEVELDB_FILTER_POLICY filter_policy.h PATHS /usr/include/leveldb)
-endif(${WITH_LEVELDB})
-
-option(WITH_EXPAT "EXPAT is here" ON)
-if(${WITH_EXPAT})
-find_package(expat REQUIRED)
-set(HAVE_EXPAT ${EXPAT_FOUND})
-endif(${WITH_EXPAT})
-
-find_package(Cython REQUIRED)
-find_package(fcgi REQUIRED)
+if(WITH_LEVELDB)
+  if(LEVELDB_PREFIX)
+    include_directories(${LEVELDB_PREFIX}/include)
+    link_directories(${LEVELDB_PREFIX}/lib)
+  endif()
+  find_package(leveldb REQUIRED)
+  find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
+endif(WITH_LEVELDB)
 
 find_package(atomic_ops REQUIRED)
-set(HAVE_ATOMIC_OPS ${ATOMIC_OPS_FOUND})
 message(STATUS "${ATOMIC_OPS_LIBRARIES}")
-
-option(WITH_GPERFTOOLS "gperftools is here" ON)
-if(${WITH_GPERFTOOLS})
-	find_package(gperftools)
-	set(HAVE_GPERFTOOLS ${GPERFTOOLS_FOUND})
-	if(${HAVE_GPERFTOOLS})
-		find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h PATHS /usr/include/gperftools)
-	endif(${HAVE_GPERFTOOLS})
-endif(${WITH_GPERFTOOLS})
+if(NOT ${ATOMIC_OPS_FOUND})
+  set(NO_ATOMIC_OPS 1)
+endif(NOT ${ATOMIC_OPS_FOUND})
 
 find_package(snappy REQUIRED)
 
 #if allocator is set on command line make sure it matches below strings
 if(ALLOCATOR)
-  if(${ALLOCATOR} STREQUAL "tcmalloc")
-    find_package(tcmalloc REQUIRED)
-    set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
+    find_package(gperftools REQUIRED)
+    set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
+    set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
   endif()
 else(ALLOCATOR)
-  find_package(tcmalloc)
-  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-  find_package(JeMalloc)
-  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+  find_package(gperftools)
+  set(HAVE_LIBTCMALLOC ${GPERFTOOLS_FOUND})
+  if(NOT GPERFTOOLS_FOUND)
+    find_package(JeMalloc)
+    set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
+  endif(NOT GPERFTOOLS_FOUND)
+  if(GPERFTOOLS_FOUND)
+    set(ALLOCATOR tcmalloc)
+  elseif(JEMALLOC_FOUND)
+    set(ALLOCATOR jemalloc)
+  else()
     message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
     set(ALLOCATOR "libc")
-  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+  endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-find_package(keyutils REQUIRED)
+if(NOT FREEBSD)
+  # XXX keyutils is available, but not yet recognised
+  find_package(keyutils REQUIRED)
+endif(NOT FREEBSD)
 
-find_package(libuuid REQUIRED)
+find_package(CURL REQUIRED)
+set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
+CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
-find_package(libcurl REQUIRED)
+# nss or cryptopp?
+option(WITH_NSS "Use NSS crypto and SSL implementations" ON)
+if (${WITH_NSS})
+  find_package(NSS REQUIRED)
+    set(USE_NSS 1)
+    find_package(NSPR REQUIRED)
+    set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
+else ()
+  find_package(cryptopp REQUIRED)
+    set(CRYPTO_LIBS ${CRYPTOPP_LIBRARIES})
+    set(USE_CRYPTOPP 1)
+endif (${WITH_NSS})
 
-find_package(libcurl REQUIRED)
-
-option(USE_CRYPTOPP "Cryptopp is ON" ON)
-find_package(cryptopp)
-if(CRYPTOPP_FOUND)
-        MESSAGE(STATUS "${CRYPTOPP_LIBRARIES}")
-        set(CRYPTO_LIBS ${CRYPTOPP_LIBRARIES})
-	set(USE_NSS 0)
-else()
-        MESSAGE(STATUS "Cryptopp not found using NSS instead")
-	find_package(NSS REQUIRED)
-        if(NSS_FOUND)
-		set(USE_NSS 1)
-		set(USE_CRYPTOPP 0)
-		find_package(NSPR)
-		if(NSPR_FOUND)
-			set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
-			#MESSAGE(STATUS "${CRYPTO_LIBS}")
-			#MESSAGE(STATUS "${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}")
-		endif(NSPR_FOUND)
-	endif(NSS_FOUND)
-endif(CRYPTOPP_FOUND)
+option(WITH_SSL "SSL build selected" ON)
+if(USE_NSS)
+  #nss
+  set(SSL_LIBRARIES ${NSS_LIBRARIES})
+  message(STATUS "SSL with NSS selected (Libs: ${SSL_LIBRARIES})")
+else(USE_NSS)
+  #openssl
+  find_package(OpenSSL REQUIRED)
+  set(HAVE_OPENSSL ON)
+  set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
+  message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
+endif(USE_NSS)
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
   find_package(xio REQUIRED)
-set(HAVE_XIO ${Xio_FOUND})
+set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
+
+option(WITH_DPDK "Enable DPDK messaging" OFF)
+if(WITH_DPDK)
+find_package(dpdk)
+set(HAVE_DPDK ${DPDK_FOUND})
+endif(WITH_DPDK)
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
+if(WITH_RADOSGW)
+  find_package(EXPAT REQUIRED)
+  find_package(fcgi REQUIRED)
+endif(WITH_RADOSGW)
+
+option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" OFF)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
+
+#option for Mgr
+option(WITH_MGR "ceph-mgr is enabled" ON)
+if(WITH_MGR)
+    set(Python_ADDITIONAL_VERSIONS 2.7)
+    find_package(PythonLibs 2.7 REQUIRED)
+    # Boost dependency check deferred to Boost section
+endif(WITH_MGR)
 
 option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
 if(WITH_THREAD_SAFE_RES_QUERY)
@@ -282,8 +364,12 @@ find_package(ZLIB REQUIRED)
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
-  find_package(lttng-ust)
-  set(WITH_LTTNG ${LTTNG_FOUND})
+  find_package(LTTngUST REQUIRED)
+  find_program(LTTNG_GEN_TP
+    lttng-gen-tp)
+  if(NOT LTTNG_GEN_TP)
+    message(FATAL_ERROR "Can't find lttng-gen-tp.")
+  endif()
 endif(${WITH_LTTNG})
 
 #option for Babeltrace
@@ -293,47 +379,127 @@ if(${HAVE_BABELTRACE})
   set(WITH_BABELTRACE ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_CTF_ITERATOR_H ${BABELTRACE_FOUND})
 endif(${HAVE_BABELTRACE})
 
-# Now create a useable config.h
-configure_file(
-  ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake
-  ${PROJECT_BINARY_DIR}/include/acconfig.h
-)
-include_directories(${PROJECT_BINARY_DIR}/include)
+option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
+option(HAVE_LIBZFS "LibZFS is enabled" OFF)
+option(ENABLE_COVERAGE "Coverage is enabled" OFF)
+option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
-add_definitions(-D__linux__)
+option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 
-if(${ENABLE_SHARED})
-  set(Boost_USE_STATIC_LIBS   OFF)
-else(${ENABLE_SHARED})
-  set(Boost_USE_STATIC_LIBS   ON)
-endif(${ENABLE_SHARED})
+option(WITH_FIO "Support for fio engines" OFF)
+if(WITH_FIO)
+  find_package(fio REQUIRED)
+endif(WITH_FIO)
+
+if(LINUX)
+  add_definitions(-D__linux__)
+endif(LINUX)
+
+# Boost
+option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
+
+if (WITH_SYSTEM_BOOST)
+  if(ENABLE_SHARED)
+    set(Boost_USE_STATIC_LIBS OFF)
+  else()
+    set(Boost_USE_STATIC_LIBS ON)
+  endif()
+else()
+  set(BOOST_CFLAGS "-fPIC") # check on arm, etc <---XXX
+  set(BOOST_J 1 CACHE STRING
+    "max jobs for Boost build") # override w/-DBOOST_J=<n>
+  message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
+  # 1. prep w/required components
+  set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
+  set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
+  set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
+  set(Boost_USE_STATIC_LIBS ON)
+  execute_process(COMMAND "./bootstrap.sh"
+    "--prefix=${BOOST_PREFIX}"
+    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,python,random,regex,system,thread"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 2. install headers
+  set(BOOST_ROOT "${BOOST_PREFIX}")
+  execute_process(COMMAND "./b2"
+    #"--buildid=ceph" # changes lib names--can omit for static
+    "--variant=release" # could override
+    "--link=static" # avoid library versioning issues
+    "--threading=multi"
+    "--build-dir=${BOOST_BUILD}"
+    "-j${BOOST_J}"
+    "cxxflags=${BOOST_CFLAGS}"
+    "headers"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 3. build and install libs
+  execute_process(COMMAND "./b2"
+    #"--buildid=ceph" # changes lib names--can omit for static
+    "--variant=release" # could override
+    "--link=static" # avoid library versioning issues
+    "--threading=multi"
+    "--build-dir=${BOOST_BUILD}"
+    "-j${BOOST_J}"
+    "cxxflags=${BOOST_CFLAGS}"
+    "install"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 4. set hints for FindBoost.cmake
+  set(Boost_NO_SYSTEM_PATHS ON)
+  include_directories(BEFORE ${BOOST_PREFIX}/include)
+  # fixup for CheckIncludeFileCXX
+  set(HAVE_BOOST_ASIO_COROUTINE ON)
+endif()
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
+
+set(BOOST_COMPONENTS
+	thread system regex random program_options date_time iostreams)
+if(WITH_MGR)
+	list(APPEND BOOST_COMPONENTS python)
+endif()
+
+# require minimally the bundled version
+find_package(Boost 1.61 COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
+include_directories(${PROJECT_BINARY_DIR}/include)
+
+if (NOT WITH_SYSTEM_BOOST)
+  LIST(APPEND Boost_LIBRARIES "-lz")
+endif()
+
+CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 
 find_package(Threads REQUIRED)
 
-# find out which platform we are building on
-if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  set(LINUX ON)
-  set(UNIX ON)
-  FIND_PACKAGE(Threads)
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-
-# find out which platform we are building on
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-set(OperatingSystem "Mac OS X")
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+option(WITH_SELINUX "build SELinux policy" OFF)
+if(WITH_SELINUX)
+  find_file(SELINUX_MAKEFILE selinux/devel/Makefile
+    PATH /usr/share)
+  if(NOT SELINUX_MAKEFILE)
+    message(FATAL_ERROR "Can't find selinux's Makefile")
+  endif()
+  add_subdirectory(selinux)
+endif(WITH_SELINUX)
 
 # enables testing and creates Make check command
+add_custom_target(tests
+  COMMENT "Building tests")
 enable_testing()
-set(CMAKE_CTEST_COMMAND ctest -V)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+set(CMAKE_CTEST_COMMAND ctest)
+add_custom_target(check
+  COMMAND ${CMAKE_CTEST_COMMAND}
+  DEPENDS tests)
 
 add_subdirectory(src)
 
-# man pages must be preprocessed, not supported yet
-#add_subdirectory(man)
+add_subdirectory(doc)
+if(WITH_MANPAGE)
+  add_subdirectory(man)
+endif(WITH_MANPAGE)
+
+option(WITH_SYSTEMD "install systemd target and service files" OFF)
+if(WITH_SYSTEMD)
+  add_subdirectory(systemd)
+endif()
+

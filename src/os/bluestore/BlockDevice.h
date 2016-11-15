@@ -52,9 +52,8 @@ struct IOContext {
   IOContext(const IOContext& other);
   IOContext &operator=(const IOContext& other);
 
-  bool has_aios() {
-    std::lock_guard<std::mutex> l(lock);
-    return num_pending.load() || num_running.load();
+  bool has_pending_aios() {
+    return num_pending.load();
   }
 
   void aio_wait();
@@ -73,6 +72,9 @@ class BlockDevice {
   vector<IOContext*> ioc_reap_queue;
   std::atomic_int ioc_reap_count = {0};
 
+protected:
+  bool rotational;
+
 public:
   BlockDevice() = default;
   virtual ~BlockDevice() = default;
@@ -81,6 +83,7 @@ public:
   static BlockDevice *create(
       const string& path, aio_callback_t cb, void *cbpriv);
   virtual bool supported_bdev_label() { return true; }
+  virtual bool is_rotational() { return rotational; }
 
   virtual void aio_submit(IOContext *ioc) = 0;
 
@@ -89,11 +92,11 @@ public:
 
   virtual int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc, bool buffered) = 0;
-  virtual int read_buffered(uint64_t off, uint64_t len, char *buf) = 0;
+  virtual int read_random(uint64_t off, uint64_t len, char *buf,
+           bool buffered) = 0;
 
   virtual int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc, bool buffered) = 0;
-  virtual int aio_zero(uint64_t off, uint64_t len, IOContext *ioc) = 0;
   virtual int flush() = 0;
 
   void queue_reap_ioc(IOContext *ioc);

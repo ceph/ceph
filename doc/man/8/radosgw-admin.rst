@@ -107,7 +107,7 @@ which are as follows:
 :command:`region get`
   Show region info.
 
-:command:`regions list`
+:command:`region list`
   List all regions set on this cluster.
 
 :command:`region set`
@@ -158,10 +158,6 @@ which are as follows:
 
 :command:`usage trim`
   Trim usage information (with optional user and date range).
-
-:command:`temp remove`
-  Remove temporary objects that were created up to specified date
-  (and optional time).
 
 :command:`gc list`
   Dump expired garbage collection objects (specify --include-all to list all
@@ -417,6 +413,20 @@ Orphans Search Options
 .. option:: --num-shards
 
 	Number of shards to use for keeping the temporary scan info
+
+.. option:: --orphan-stale-secs
+
+        Number of seconds to wait before declaring an object to be an orphan.
+        Default is 86400 (24 hours).
+
+.. option:: --job-id
+
+        Set the job id (for orphans find)
+
+.. option:: --max-concurrent-ios
+
+        Maximum concurrent ios for orphans find.
+        Default is 32.
 
 
 Examples

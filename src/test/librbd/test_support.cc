@@ -1,6 +1,7 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_support.h"
+#include "include/rbd_types.h"
 #include <sstream>
 
 bool get_features(uint64_t *features) {
@@ -37,3 +38,13 @@ int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
     return rbd.create2(ioctx, name.c_str(), size, features, &order);
   }
 }
+
+int get_image_id(librbd::Image &image, std::string *image_id)
+{
+  int r = image.get_id(image_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+

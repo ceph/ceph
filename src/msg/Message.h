@@ -20,7 +20,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
-// Because intusive_ptr clobbers our assert...
+// Because intrusive_ptr clobbers our assert...
 #include "include/assert.h"
 
 #include "include/types.h"
@@ -47,18 +47,11 @@
 #define MSG_MON_COMMAND_ACK        51
 #define MSG_LOG                    52
 #define MSG_LOGACK                 53
-//#define MSG_MON_OBSERVE            54
-//#define MSG_MON_OBSERVE_NOTIFY     55
-#define MSG_CLASS                  56
-#define MSG_CLASS_ACK              57
 
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
 
 #define MSG_MON_GLOBAL_ID          60
-
-// #define MSG_POOLOP                 49
-// #define MSG_POOLOPREPLY            48
 
 #define MSG_ROUTE                  47
 #define MSG_FORWARD                46
@@ -80,7 +73,6 @@
 
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
-#define MSG_OSD_PG_SUMMARY     82
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
@@ -116,6 +108,8 @@
 
 #define MSG_OSD_REPOP         112
 #define MSG_OSD_REPOPREPLY    113
+#define MSG_OSD_PG_UPDATE_LOG_MISSING  114
+#define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
 
 
 // *** MDS ***
@@ -182,6 +176,20 @@
 // Special
 #define MSG_NOP                   0x607
 
+// *** ceph-mgr <-> OSD/MDS daemons ***
+#define MSG_MGR_OPEN              0x700
+#define MSG_MGR_CONFIGURE         0x701
+#define MSG_MGR_REPORT            0x702
+
+// *** ceph-mgr <-> ceph-mon ***
+#define MSG_MGR_BEACON            0x703
+
+// *** ceph-mon(MgrMonitor) -> OSD/MDS daemons ***
+#define MSG_MGR_MAP               0x704
+
+// *** ceph-mon(MgrMonitor) -> ceph-mgr
+#define MSG_MGR_DIGEST               0x705
+
 // ======================================================
 
 // abstract Message class
@@ -221,7 +229,7 @@ protected:
 
   ConnectionRef connection;
 
-  uint32_t magic;
+  uint32_t magic = 0;
 
   bi::list_member_hook<> dispatch_q;
 
@@ -241,42 +249,30 @@ public:
 				     &Message::dispatch_q > > Queue;
 
 protected:
-  CompletionHook* completion_hook; // owned by Messenger
+  CompletionHook* completion_hook = nullptr; // owned by Messenger
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *byte_throttler;
+  Throttle *byte_throttler = nullptr;
 
   // release a count back to this throttler when we are destroyed
-  Throttle *msg_throttler;
+  Throttle *msg_throttler = nullptr;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
   // later.  this is necessary because messages can enter the dispatch
   // queue locally (not via read_message()), and those are not
   // currently throttled.
-  uint64_t dispatch_throttle_size;
+  uint64_t dispatch_throttle_size = 0;
 
   friend class Messenger;
 
 public:
-  Message()
-    : connection(NULL),
-      magic(0),
-      completion_hook(NULL),
-      byte_throttler(NULL),
-      msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+  Message() {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   }
-  Message(int t, int version=1, int compat_version=0)
-    : connection(NULL),
-      magic(0),
-      completion_hook(NULL),
-      byte_throttler(NULL),
-      msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+  Message(int t, int version=1, int compat_version=0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = version;
@@ -333,8 +329,9 @@ public:
    */
 
   void clear_payload() {
-    if (byte_throttler)
+    if (byte_throttler) {
       byte_throttler->put(payload.length() + middle.length());
+    }
     payload.clear();
     middle.clear();
   }
@@ -364,10 +361,10 @@ public:
 
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
-      byte_throttler->put(payload.length());
+      byte_throttler->put(middle.length());
     middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
-      byte_throttler->take(payload.length());
+      byte_throttler->take(middle.length());
   }
   bufferlist& get_middle() { return middle; }
 
@@ -386,7 +383,7 @@ public:
       byte_throttler->put(data.length());
     bl.claim(data, flags);
   }
-  off_t get_data_len() { return data.length(); }
+  off_t get_data_len() const { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   const utime_t& get_recv_stamp() const { return recv_stamp; }
@@ -420,8 +417,8 @@ public:
   uint64_t get_tid() const { return header.tid; }
   void set_tid(uint64_t t) { header.tid = t; }
 
-  unsigned get_seq() const { return header.seq; }
-  void set_seq(unsigned s) { header.seq = s; }
+  uint64_t get_seq() const { return header.seq; }
+  void set_seq(uint64_t s) { header.seq = s; }
 
   unsigned get_priority() const { return header.priority; }
   void set_priority(__s16 p) { header.priority = p; }
@@ -444,10 +441,10 @@ public:
     return get_source_inst();
   }
   entity_name_t get_orig_source() const {
-    return get_orig_source_inst().name;
+    return get_source();
   }
   entity_addr_t get_orig_source_addr() const {
-    return get_orig_source_inst().addr;
+    return get_source_addr();
   }
 
   // virtual bits
@@ -468,7 +465,7 @@ extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
 			       bufferlist& middle, bufferlist& data);
-inline ostream& operator<<(ostream& out, Message& m) {
+inline ostream& operator<<(ostream &out, const Message &m) {
   m.print(out);
   if (m.get_header().version)
     out << " v" << m.get_header().version;
