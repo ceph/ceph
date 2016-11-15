@@ -2,6 +2,7 @@ from cStringIO import StringIO
 import logging
 import json
 import requests
+from requests.packages.urllib3.util import Retry
 from urlparse import urlparse
 
 from teuthology.orchestra.connection import split_user
@@ -138,13 +139,21 @@ def radosgw_data_log_window(ctx, client):
 
 def radosgw_agent_sync_data(ctx, agent_host, agent_port, full=False):
     log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
+    # use retry with backoff to tolerate slow startup of radosgw-agent
+    s = requests.Session()
+    s.mount('http://{addr}:{port}/'.format(addr = agent_host, port = agent_port),
+            requests.adapters.HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1)))
     method = "full" if full else "incremental"
-    return requests.post('http://{addr}:{port}/data/{method}'.format(addr = agent_host, port = agent_port, method = method))
+    return s.post('http://{addr}:{port}/data/{method}'.format(addr = agent_host, port = agent_port, method = method))
 
 def radosgw_agent_sync_metadata(ctx, agent_host, agent_port, full=False):
     log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
+    # use retry with backoff to tolerate slow startup of radosgw-agent
+    s = requests.Session()
+    s.mount('http://{addr}:{port}/'.format(addr = agent_host, port = agent_port),
+            requests.adapters.HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1)))
     method = "full" if full else "incremental"
-    return requests.post('http://{addr}:{port}/metadata/{method}'.format(addr = agent_host, port = agent_port, method = method))
+    return s.post('http://{addr}:{port}/metadata/{method}'.format(addr = agent_host, port = agent_port, method = method))
 
 def radosgw_agent_sync_all(ctx, full=False, data=False):
     if ctx.radosgw_agent.procs:
