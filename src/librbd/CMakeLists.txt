@@ -24,7 +24,6 @@ set(librbd_internal_srcs
   LibrbdWriteback.cc
   MirroringWatcher.cc
   ObjectMap.cc
-  ObjectWatcher.cc
   Operations.cc
   Utils.cc
   cache/ImageWriteback.cc

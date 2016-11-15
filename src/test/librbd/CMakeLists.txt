@@ -31,7 +31,6 @@ set(unittest_librbd_srcs
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
   test_mock_ObjectMap.cc
-  test_mock_ObjectWatcher.cc
   exclusive_lock/test_mock_AcquireRequest.cc
   exclusive_lock/test_mock_BreakRequest.cc
   exclusive_lock/test_mock_GetLockerRequest.cc
