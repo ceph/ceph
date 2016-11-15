@@ -1169,7 +1169,6 @@ public:
       STATE_AIO_WAIT,
       STATE_IO_DONE,
       STATE_KV_QUEUED,
-      STATE_KV_COMMITTING,
       STATE_KV_DONE,
       STATE_WAL_QUEUED,
       STATE_WAL_APPLYING,
@@ -1188,7 +1187,6 @@ public:
       case STATE_AIO_WAIT: return "aio_wait";
       case STATE_IO_DONE: return "io_done";
       case STATE_KV_QUEUED: return "kv_queued";
-      case STATE_KV_COMMITTING: return "kv_committing";
       case STATE_KV_DONE: return "kv_done";
       case STATE_WAL_QUEUED: return "wal_queued";
       case STATE_WAL_APPLYING: return "wal_applying";
