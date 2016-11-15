@@ -536,8 +536,9 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	break;
       }
     } else {
-      if (q->second.bystanders.count(who)) {
-	q->second.bystanders.erase(who);
+      auto bystanders_entry = q->second.bystanders.find(who);
+      if (bystanders_entry != q->second.bystanders.end()) {
+	q->second.bystanders.erase(bystanders_entry);
 	if (q->second.state == IMPORT_ABORTING) {
 	  assert(dir);
 	  dout(10) << "faking export_notify_ack from mds." << who
@@ -1745,8 +1746,9 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
   assert(dir);
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
-  if (export_state.count(dir)) {
-    export_state_t& stat = export_state[dir];
+  auto export_state_entry = export_state.find(dir);
+  if (export_state_entry != export_state.end()) {
+    export_state_t& stat = export_state_entry->second;
     if (stat.state == EXPORT_WARNING) {
       // exporting. process warning.
       dout(7) << "handle_export_notify_ack from " << m->get_source()
@@ -1765,16 +1767,19 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
 	export_finish(dir);
     }
   }
-  else if (import_state.count(dir->dirfrag())) {
-    import_state_t& stat = import_state[dir->dirfrag()];
-    if (stat.state == IMPORT_ABORTING) {
-      // reversing import
-      dout(7) << "handle_export_notify_ack from " << m->get_source()
-	      << ": aborting import on " << *dir << dendl;
-      assert(stat.bystanders.count(from));
-      stat.bystanders.erase(from);
-      if (stat.bystanders.empty())
-	import_reverse_unfreeze(dir);
+  else {
+    auto import_state_entry = import_state.find(dir->dirfrag());
+    if (import_state_entry != import_state.end()) {
+      import_state_t& stat = import_state_entry->second;
+      if (stat.state == IMPORT_ABORTING) {
+	// reversing import
+	dout(7) << "handle_export_notify_ack from " << m->get_source()
+	  << ": aborting import on " << *dir << dendl;
+	assert(stat.bystanders.count(from));
+	stat.bystanders.erase(from);
+	if (stat.bystanders.empty())
+	  import_reverse_unfreeze(dir);
+      }
     }
   }
 
