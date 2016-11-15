@@ -7,6 +7,7 @@
 
 #include "librbd/ImageCtx.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/ImageWatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -35,3 +36,6 @@ void C_NotifyAck::finish(int r) {
 
 template struct librbd::watcher::HandlePayloadVisitor<
     librbd::MirroringWatcher<librbd::ImageCtx>>;
+
+template struct librbd::watcher::HandlePayloadVisitor<
+    librbd::ImageWatcher<librbd::ImageCtx>>;
