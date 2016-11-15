@@ -1,12 +1,12 @@
 upgrade-sequence:
    sequential:
    - ceph.restart:
-       daemons: [mon.a]
+       daemons: [osd.0, osd.1]
        wait-for-healthy: true
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [osd.0, osd.1]
+       daemons: [mon.a]
        wait-for-healthy: true
    - sleep:
        duration: 60
@@ -20,12 +20,11 @@ upgrade-sequence:
         - sudo ceph osd crush tunables hammer
    - print: "**** done ceph osd crush tunables hammer"
    - ceph.restart:
-       daemons: [mon.b, mon.c]
-       wait-for-healthy: true
+       daemons: [osd.2, osd.3]
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [osd.2, osd.3]
+       daemons: [mon.b, mon.c]
        wait-for-healthy: false
    - exec:
        osd.0:

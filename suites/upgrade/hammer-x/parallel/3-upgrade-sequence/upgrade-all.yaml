@@ -1,7 +1,11 @@
 upgrade-sequence:
    sequential:
    - ceph.restart:
-       daemons: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
+       daemons: [osd.0, osd.1, osd.2, osd.3]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - ceph.restart:
+       daemons: [mon.a, mon.b, mon.c]
        wait-for-healthy: false
        wait-for-osds-up: true
    - print: "**** done ceph.restart do not wait for healthy"
