@@ -1406,6 +1406,10 @@ public:
   }
   uint64_t required_alignment() const { return stripe_width; }
 
+  bool is_hacky_ecoverwrites() const {
+    return has_flag(FLAG_EC_OVERWRITES);
+  }
+
   bool can_shift_osds() const {
     switch (get_type()) {
     case TYPE_REPLICATED:
