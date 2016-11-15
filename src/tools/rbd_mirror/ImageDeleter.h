@@ -119,8 +119,7 @@ private:
   ImageDeleterThread m_image_deleter_thread;
 
   std::deque<std::unique_ptr<DeleteInfo>> m_failed_queue;
-  // TODO: make interval value configurable
-  double m_failed_interval = 30;
+  double m_failed_interval;
   SafeTimer *m_failed_timer;
   Mutex *m_failed_timer_lock;
 
