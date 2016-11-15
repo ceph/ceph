@@ -6816,7 +6816,6 @@ bluestore_wal_op_t *BlueStore::_get_wal_op(TransContext *txc, OnodeRef o)
     txc->wal_txn = new bluestore_wal_transaction_t;
   }
   txc->wal_txn->ops.push_back(bluestore_wal_op_t());
-  txc->wal_op_onodes.push_back(o);
   return &txc->wal_txn->ops.back();
 }
 
@@ -6838,10 +6837,9 @@ int BlueStore::_wal_apply(TransContext *txc)
   }
 
   assert(txc->ioc.pending_aios.empty());
-  vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
   for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
        p != wt.ops.end();
-       ++p, ++q) {
+       ++p) {
     int r = _do_wal_op(txc, *p);
     assert(r == 0);
   }
