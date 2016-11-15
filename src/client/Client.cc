@@ -8808,20 +8808,15 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // copy into fresh buffer (since our write may be resub, async)
   bufferlist bl;
-  bufferptr *bparr = NULL;
   if (buf) {
-      bufferptr bp;
-      if (size > 0) bp = buffer::copy(buf, size);
-      bl.push_back( bp );
+    if (size > 0)
+      bl.append(buf, size);
   } else if (iov){
-      //iov case 
-      bparr = new bufferptr[iovcnt];
-      for (int i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_len > 0) {
-            bparr[i] = buffer::copy((char*)iov[i].iov_base, iov[i].iov_len);
-        }
-        bl.push_back( bparr[i] );
+    for (int i = 0; i < iovcnt; i++) {
+      if (iov[i].iov_len > 0) {
+        bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
       }
+    }
   }
 
   utime_t lat;
@@ -8829,7 +8824,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0) {
-    delete[] bparr;
     return r;
   }
 
@@ -8978,7 +8972,6 @@ done:
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
-  delete[] bparr; 
   return r;
 }
 
