@@ -103,6 +103,7 @@ def get_key(cluster, mon_id):
 
                 args_prefix = [
                         "ceph",
+                        '--connect-timeout=20',
                         '--cluster={cluster}'.format(cluster=cluster),
                         '--name=mon.',
                         '--keyring=/var/lib/ceph/mon/{cluster}-{mon_id}/keyring'.format(
@@ -175,6 +176,7 @@ def bootstrap_key(cluster, type_):
 
     args = [
         'ceph',
+        '--connect-timeout=20',
         '--cluster={cluster}'.format(cluster=cluster),
         'auth',
         'get-or-create',
