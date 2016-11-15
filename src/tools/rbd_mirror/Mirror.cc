@@ -16,7 +16,6 @@
 #define dout_prefix *_dout << "rbd::mirror::Mirror: " << this << " " \
                            << __func__ << ": "
 
-using std::chrono::seconds;
 using std::list;
 using std::map;
 using std::set;
@@ -215,7 +214,6 @@ int Mirror::init()
     return r;
   }
 
-  // TODO: make interval configurable
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
   m_image_deleter.reset(new ImageDeleter(m_threads->work_queue,
@@ -236,8 +234,8 @@ void Mirror::run()
     if (!m_manual_stop) {
       update_replayers(m_local_cluster_watcher->get_pool_peers());
     }
-    // TODO: make interval configurable
-    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
+    m_cond.WaitInterval(g_ceph_context, m_lock,
+	utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
   }
 
   // stop all replayers in parallel
