@@ -1944,7 +1944,7 @@ TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
 
   t.setup();
   t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
-  t.set_auth_bounds(mk_evt(10, 160), mk_evt(9, 77));
+  t.set_auth_bounds(mk_evt(15, 160), mk_evt(9, 77));
   t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
   run_test_case(t);
 }
