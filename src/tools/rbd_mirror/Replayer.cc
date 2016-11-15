@@ -13,7 +13,7 @@
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "global/global_context.h"
-#include "librbd/ObjectWatcher.h"
+#include "librbd/Watcher.h"
 #include "librbd/internal.h"
 #include "Replayer.h"
 #include "Threads.h"
@@ -208,10 +208,10 @@ public:
   }
 
 private:
-  class Watcher : public librbd::ObjectWatcher<> {
+  class Watcher : public librbd::Watcher {
   public:
     Watcher(librados::IoCtx &ioctx, ContextWQ *work_queue) :
-      ObjectWatcher<>(ioctx, work_queue) {
+      librbd::Watcher(ioctx, work_queue, RBD_MIRRORING) {
     }
 
     virtual std::string get_oid() const {
@@ -219,7 +219,7 @@ private:
     }
 
     virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-			       bufferlist &bl) {
+                               bufferlist &bl) {
       bufferlist out;
       acknowledge_notify(notify_id, handle, out);
     }
