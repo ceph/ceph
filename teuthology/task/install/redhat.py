@@ -95,75 +95,37 @@ def uninstall(ctx, config):
             p.spawn(uninstall_pkgs, ctx, remote)
 
 
-def install_pkgs(ctx, remote, installed_version):
+def rh_install_pkgs(ctx, remote, version, downstream_config):
     """
     Installs RH build using ceph-deploy.
 
     :param ctx: the argparse.Namespace object
     :param remote: the teuthology.orchestra.remote.Remote object
+    :param downstream_config the dict object that has downstream pkg info
     """
-    pkgs = ['ceph-deploy']
-    # install ceph-selinux for 1.3.2 as its not dependency of any core packages
-    if (installed_version == '1.3.2'):
-        pkgs.append('ceph-selinux')
-    # install ceph-fuse for 2.0 as its not dependency of any core packages
-    if (installed_version == '2.0'):
-        pkgs.append('ceph-fuse')
-    rh_version_check = {'0.94.1': '1.3.0', '0.94.3': '1.3.1',
-                        '0.94.5': '1.3.2', '10.1.0': '2.0'}
+    rh_version_check = downstream_config.get('versions').get('rpm').get('mapped')
+    rh_rpm_pkgs = downstream_config.get('pkgs').get('rpm')
+    pkgs = str.join(' ', rh_rpm_pkgs)
     log.info("Remove any epel packages installed on node %s", remote.shortname)
     remote.run(
-        args=['sudo', 'yum', 'remove',
-              run.Raw("leveldb xmlstarlet fcgi"), '-y'],
-        check_status=False
-    )
-    for pkg in pkgs:
-        log.info("Check if %s is already installed on node %s",
-                 pkg, remote.shortname)
-        remote.run(args=['sudo', 'yum', 'clean', 'metadata'])
-        r = remote.run(
-            args=['yum', 'list', 'installed', run.Raw(pkg)],
-            stdout=StringIO(),
-            check_status=False,
-        )
-        if r.stdout.getvalue().find(pkg) == -1:
-            log.info("Installing %s " % pkg)
-            remote.run(args=['sudo', 'yum', 'install', pkg, '-y'])
-        else:
-            log.info("Removing and reinstalling %s on %s",
-                     pkg, remote.shortname)
-            remote.run(args=['sudo', 'yum', 'remove', pkg, '-y'])
-            remote.run(args=['sudo', 'yum', 'install', pkg, '-y'])
-
-    log.info("Check if ceph is already installed on %s", remote.shortname)
-    r = remote.run(
-        args=['yum', 'list', 'installed', 'ceph'],
-        stdout=StringIO(),
-        check_status=False,
-    )
-    host = r.hostname
-    if r.stdout.getvalue().find('ceph') == -1:
-        log.info("Install ceph using ceph-deploy on %s", remote.shortname)
-        remote.run(args=[
-            'sudo', 'ceph-deploy', 'install',
-            run.Raw('--no-adjust-repos'), host]
-        )
-        remote.run(args=['sudo', 'yum', 'install', 'ceph-test', '-y'])
-    else:
-        log.info("Removing and reinstalling Ceph on %s", remote.shortname)
-        remote.run(args=['sudo', 'ceph-deploy', 'uninstall', host])
-        remote.run(args=['sudo', 'ceph-deploy', 'purgedata', host])
-        remote.run(args=['sudo', 'ceph-deploy', 'install', host])
-        remote.run(args=['sudo', 'yum', 'remove', 'ceph-test', '-y'])
-        remote.run(args=['sudo', 'yum', 'install', 'ceph-test', '-y'])
-
+        args=[
+            'sudo',
+            'yum',
+            'remove',
+            run.Raw("leveldb xmlstarlet fcgi"),
+            '-y'],
+        check_status=False)
+    log.info("Installing redhat ceph packages")
+    remote.run(args=['sudo', 'yum', '-y', 'install',
+                     run.Raw(pkgs)])
     # check package version
-    version = packaging.get_package_version(remote, 'ceph-common')
+    installed_version = packaging.get_package_version(remote, 'ceph-common')
     log.info(
         "Node: {n} Ceph version installed is {v}".format(
-            n=remote.shortname, v=version)
-    )
-    if rh_version_check[version] == installed_version:
+            n=remote.shortname,
+            v=version))
+    req_ver = rh_version_check[version]
+    if installed_version.startswith(req_ver):
         log.info("Installed version matches on %s", remote.shortname)
     else:
         raise RuntimeError("Version check failed on node %s", remote.shortname)
