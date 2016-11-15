@@ -1020,16 +1020,15 @@ def get_latest_image_version_deb(remote, ostype):
 
 def get_sha1_from_pkg_name(path):
     """
-    Get commit hash (min 7 max 40 chars) from (rpm or deb) package name.
-    Sample basenames of "make deb-pkg" and "make rpm-pkg" packages
-        linux-image-3.10.0-ceph-rhdeb-00050-g687d1a5f0083_3.10.0-ceph-rhdeb-00050-g687d1a5f0083-6_amd64.deb
-        kernel-3.10.0_ceph_rhrpm_00050_g687d1a5f0083-8.x86_64.rpm
-    Make sure kernel was built with CONFIG_LOCALVERSION_AUTO=y.
+    Get commit hash (min 12 max 40 chars) from (rpm or deb) package name.
+    Example package names ("make bindeb-pkg" and "make binrpm-pkg"):
+        linux-image-4.9.0-rc4-ceph-g156db39ecfbd_4.9.0-rc4-ceph-g156db39ecfbd-1_amd64.deb
+        kernel-4.9.0_rc4_ceph_g156db39ecfbd-2.x86_64.rpm
 
     :param path: (rpm or deb) package path (only basename is used)
     """
     basename = os.path.basename(path)
-    match = re.search('\d+[-_]g([0-9a-f]{7,40})', basename)
+    match = re.search('[-_]ceph[-_]g([0-9a-f]{12,40})', basename)
     sha1 = match.group(1) if match else None
     log.debug("get_sha1_from_pkg_name: %s -> %s -> %s", path, basename, sha1)
     return sha1
