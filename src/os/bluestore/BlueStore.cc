@@ -6237,7 +6237,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 		   << dendl;
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
-	  txc->kv_submitted = true;
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
@@ -6246,13 +6246,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
-	if (!txc->kv_submitted) {
+	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
 	}
       }
       return;
-    case TransContext::STATE_KV_QUEUED:
+    case TransContext::STATE_KV_SUBMITTED:
       txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
@@ -6638,13 +6638,13 @@ void BlueStore::_kv_sync_thread()
 	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
       }
       for (auto txc : kv_submitting) {
-	assert(!txc->kv_submitted);
+	assert(txc->state == TransContext::STATE_KV_QUEUED);
 	_txc_finalize_kv(txc, txc->t);
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	int r = db->submit_transaction(txc->t);
 	assert(r == 0);
 	--txc->osr->kv_committing_serially;
-	txc->kv_submitted = true;
+	txc->state = TransContext::STATE_KV_SUBMITTED;
       }
       for (auto txc : kv_committing) {
 	_txc_release_alloc(txc);
@@ -6699,7 +6699,7 @@ void BlueStore::_kv_sync_thread()
 	       << " in " << dur << dendl;
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
-	assert(txc->kv_submitted);
+	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
