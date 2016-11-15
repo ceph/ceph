@@ -509,8 +509,7 @@ static int clslua_map_set_vals(lua_State *L)
 
   map<string, bufferlist> kvpairs;
 
-  lua_pushnil(L);
-  while (lua_next(L, 1) != 0) {
+  for (lua_pushnil(L); lua_next(L, 1); lua_pop(L, 1)) {
     /*
      * In the case of a numeric key a copy is made on the stack because
      * converting to a string would otherwise manipulate the original key and
@@ -553,8 +552,6 @@ static int clslua_map_set_vals(lua_State *L)
     }
 
     kvpairs[key] = val;
-
-    lua_pop(L, 1);
   }
 
   int ret = cls_cxx_map_set_vals(hctx, &kvpairs);
