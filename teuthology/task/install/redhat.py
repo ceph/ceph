@@ -71,8 +71,10 @@ def install(ctx, config):
                 log.info("Installing on RHEL node: %s", remote.shortname)
                 p.spawn(rh_install_pkgs, ctx, remote, version, downstream_config)
             else:
-                log.info("Node %s is not RHEL", remote.shortname)
-                raise RuntimeError("Test requires RHEL nodes")
+                log.info("Install on Ubuntu node: %s", remote.shortname)
+                p.spawn(rh_install_deb_pkgs, ctx, remote, version,
+                        downstream_config, config['deb-repo'],
+                        config['deb-gpg-key'])
     try:
         yield
     finally:
@@ -162,6 +164,42 @@ def set_rh_deb_repo(remote, deb_repo, deb_gpg_key=None):
         remote.run(args=['sudo', run.Raw(wget_cmd),
                          run.Raw('|'), 'sudo', 'apt-key', 'add', run.Raw('-')])
     remote.run(args=['sudo', 'apt-get', 'update'])
+
+
+def rh_install_deb_pkgs(
+        ctx,
+        remote,
+        version,
+        downstream_config,
+        deb_repo,
+        deb_gpg_key):
+    """
+    Setup debian repo, Install gpg key
+    and Install on debian packages
+    : param ctx
+    : param remote
+    : param downstream_config the dict object that has downstream pkg info
+    : deb_repo - http path of downstream ubuntu repo
+    : deb_gpg_key - gpg key for the ubuntu pkg
+    """
+    set_rh_deb_repo(remote, deb_repo, deb_gpg_key)
+    rh_version_check = downstream_config.get('versions').get('deb').get('mapped')
+    rh_deb_pkgs = downstream_config.get('pkgs').get('deb')
+    pkgs = str.join(' ', rh_deb_pkgs)
+    log.info("Installing redhat ceph packages")
+    remote.run(args=['sudo', 'apt-get', '-y', 'install',
+                     run.Raw(pkgs)])
+    # check package version
+    installed_version = packaging.get_package_version(remote, 'ceph-common')
+    log.info(
+        "Node: {n} Ceph version installed is {v}".format(
+            n=remote.shortname,
+            v=version))
+    req_ver = rh_version_check[version]
+    if installed_version.startswith(req_ver):
+        log.info("Installed version matches on %s", remote.shortname)
+    else:
+        raise RuntimeError("Version check failed on node %s", remote.shortname)
 
 
 def uninstall_pkgs(ctx, remote):
