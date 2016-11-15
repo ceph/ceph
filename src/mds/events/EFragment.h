@@ -49,8 +49,7 @@ public:
     OP_PREPARE = 1,
     OP_COMMIT = 2,
     OP_ROLLBACK = 3,
-    OP_FINISH = 4, // finish deleting orphan dirfrags
-    OP_ONESHOT = 5,  // (legacy) PREPARE+COMMIT
+    OP_FINISH = 4 // finish deleting orphan dirfrags
   };
   static const char *op_name(int o) {
     switch (o) {
