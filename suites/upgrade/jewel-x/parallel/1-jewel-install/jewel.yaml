@@ -6,7 +6,7 @@ meta:
 tasks:
 - install:
     branch: jewel
-    exclude_packages: ['ceph-mgr','libcephfs2']
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "**** done installing jewel"
 - ceph:
 - print: "**** done ceph"
