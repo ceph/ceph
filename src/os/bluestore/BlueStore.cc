@@ -1724,6 +1724,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
       dout(30) << " extent " << e << dendl;
       while (e.logical_offset >= shard_end) {
 	shard_start = shard_end;
+	assert(sp != esp);
 	++sp;
 	if (sp == esp) {
 	  shard_end = OBJECT_MAX_SIZE;
@@ -1733,8 +1734,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 	dout(30) << __func__ << "  shard 0x" << std::hex << shard_start
 		 << " to 0x" << shard_end << std::dec << dendl;
       }
-      if (e.blob->id < 0 &&
-	  e.blob_escapes_range(shard_start, shard_end - shard_start)) {
+      if (!e.blob->is_spanning() &&
+	   e.blob_escapes_range(shard_start, shard_end - shard_start)) {
 	// We have two options: (1) split the blob into pieces at the
 	// shard boundaries (and adjust extents accordingly), or (2)
 	// mark it spanning.  We prefer to cut the blob if we can.  Note that
@@ -1743,8 +1744,8 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 	bool must_span = false;
 	BlobRef b = e.blob;
 	if (b->can_split()) {
-	  uint32_t bstart = e.logical_offset - e.blob_offset;
-	  uint32_t bend = bstart + b->get_blob().get_logical_length();
+	  uint32_t bstart = e.blob_start();
+	  uint32_t bend = e.blob_end();
 	  for (const auto& sh : shards) {
 	    if (bstart < sh.offset && bend > sh.offset) {
 	      uint32_t blob_offset = sh.offset - bstart;
@@ -1793,7 +1794,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
        ++p, ++n) {
     assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
-    if (p->blob->id < 0 && p->blob_escapes_range(offset, length)) {
+    if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       return true;
@@ -1820,7 +1821,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
 	 ++p, ++n) {
       unsigned blobid;
       bool include_blob = false;
-      if (p->blob->id >= 0) {
+      if (p->blob->is_spanning()) {
 	blobid = p->blob->id << BLOBID_SHIFT_BITS;
 	blobid |= BLOBID_FLAG_SPANNING;
       } else if (p->blob->last_encoded_id < 0) {
@@ -4213,12 +4214,12 @@ int BlueStore::umount()
   return 0;
 }
 
-void apply(uint64_t off,
-           uint64_t len,
-           uint64_t granularity,
-           boost::dynamic_bitset<> &bitset,
-	   const char *what,
-          std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
+static void apply(uint64_t off,
+                  uint64_t len,
+                  uint64_t granularity,
+                  boost::dynamic_bitset<> &bitset,
+	          const char *what,
+                  std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
   while (off < end) {
     uint64_t pos = off / granularity;
@@ -4374,7 +4375,6 @@ int BlueStore::fsck(bool deep)
     list<string> expecting_shards;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       dout(30) << " key " << pretty_binary_string(it->key()) << dendl;
-      ghobject_t oid;
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
@@ -4395,7 +4395,7 @@ int BlueStore::fsck(bool deep)
         string okey;
         get_key_extent_shard(it->key(), &okey, &offset);
         derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
-                         << dendl;
+             << dendl;
         if (expecting_shards.empty()) {
           derr << __func__ << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
@@ -4415,6 +4415,8 @@ int BlueStore::fsck(bool deep)
 	}
 	continue;
       }
+
+      ghobject_t oid;
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
         derr << __func__ << "  bad object key "
@@ -4531,7 +4533,12 @@ int BlueStore::fsck(bool deep)
 		 << " sbid " << blob.sbid << " > blobid_max "
 		 << blobid_max << dendl;
 	    ++errors;
-	  }
+	  } else if (blob.sbid == 0) {
+            derr << __func__ << " " << oid << " blob " << blob
+                 << " marked as shared but has uninitialized sbid"
+                 << dendl;
+            ++errors;
+          }
 	  sb_info_t& sbi = sb_info[blob.sbid];
 	  sbi.sb = i.first->shared_blob;
 	  sbi.oids.push_back(oid);
@@ -5770,11 +5777,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 bool BlueStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head && it->valid() && it->raw_key().second <= tail) {
-    return true;
-  } else {
-    return false;
-  }
+  return o->onode.omap_head && it->valid() && it->raw_key().second <= tail;
 }
 
 int BlueStore::OmapIteratorImpl::next(bool validate)
