@@ -1657,6 +1657,8 @@ public:
 
     std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
 
+    std::atomic_int txc_with_unsubmitted_completions = {0};
+
     std::atomic_int kv_committing_serially = {0};
 
     std::atomic_int kv_submitted_waiters = {0};
