@@ -93,8 +93,9 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
-	      0, "mds_data");
+  auto cct = global_init(NULL, args,
+			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
+			 0, "mds_data");
   ceph_heap_profiler_init();
 
   std::string val, action;
@@ -229,8 +230,6 @@ int main(int argc, const char **argv)
     delete mds;
     delete msgr;
   }
-
-  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

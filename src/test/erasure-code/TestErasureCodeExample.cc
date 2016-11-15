@@ -16,11 +16,11 @@
 #include <stdlib.h>
 
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "ErasureCodeExample.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
+#include "test/unit.h"
 
 TEST(ErasureCodeExample, chunk_size)
 {
@@ -232,21 +232,6 @@ TEST(ErasureCodeExample, create_ruleset)
   stringstream ss;
   ErasureCodeExample example;
   EXPECT_EQ(0, example.create_ruleset("myrule", *c, &ss));
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : "lib");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

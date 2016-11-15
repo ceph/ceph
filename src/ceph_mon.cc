@@ -257,8 +257,9 @@ int main(int argc, const char **argv)
     }
   }
 
-  global_init(&def_args, args,
-              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags, "mon_data");
+  auto cct = global_init(&def_args, args,
+			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
+			 flags, "mon_data");
   ceph_heap_profiler_init();
 
   uuid_d fsid;
@@ -781,7 +782,6 @@ int main(int argc, const char **argv)
   delete msgr;
   delete client_throttler;
   delete daemon_throttler;
-  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

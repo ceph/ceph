@@ -16,12 +16,11 @@
 
 #include <errno.h>
 #include <string.h>
-#include <gtest/gtest.h>
-#include "global/global_init.h"
 #include "compressor/snappy/SnappyCompressor.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
+#include "test/unit.h"
 
 TEST(SnappyCompressor, compress_decompress)
 {
@@ -68,21 +67,6 @@ TEST(SnappyCompressor, sharded_input_decompress)
   bufferlist after;
   res = sp.decompress(out2, after);
   EXPECT_EQ(res, 0);
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : "lib");
-  g_conf->set_val("plugin_dir", directory, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

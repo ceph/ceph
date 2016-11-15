@@ -11,10 +11,10 @@
 using namespace std;
 
 int main(int argc, char **argv) {
-  std::vector<const char *> preargs;
   std::vector<const char*> args(argv, argv+argc);
-  global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-              CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   // make sure we have 3 copies, or some tests won't work
   g_ceph_context->_conf->set_val("osd_pool_default_size", "3", false);

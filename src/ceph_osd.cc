@@ -118,8 +118,9 @@ int main(int argc, const char **argv)
   // option, therefore we will pass it as a default argument to global_init().
   def_args.push_back("--leveldb-log=");
 
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON,
-	      0, "osd_data");
+  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_DAEMON,
+			 0, "osd_data");
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -646,7 +647,6 @@ flushjournal_out:
 
   client_byte_throttler.reset();
   client_msg_throttler.reset();
-  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
