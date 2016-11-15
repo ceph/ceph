@@ -129,6 +129,8 @@ void Watcher::unregister_watch(Context *on_finish) {
     int r = m_ioctx.aio_unwatch(m_watch_handle, aio_comp);
     assert(r == 0);
     aio_comp->release();
+  } else {
+    on_finish->complete(0);
   }
 }
 
