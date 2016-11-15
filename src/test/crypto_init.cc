@@ -23,8 +23,9 @@ void *init_crypto(void *p) {
 // multiple times simultaneously from different threads.
 TEST(CRYPTO_INIT, NSS_RACE) {
   std::vector<const char*> args;
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   // Most reliably reproduced with more threads than cores.
   long n_thread = sysconf(_SC_NPROCESSORS_ONLN) * 2;
   pthread_t *ts = (pthread_t*)malloc(n_thread * sizeof(pthread_t));

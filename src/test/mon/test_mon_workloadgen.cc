@@ -1003,9 +1003,9 @@ int main(int argc, const char *argv[])
   our_name = argv[0];
   argv_to_vec(argc, argv, args);
 
-  global_init(&def_args, args,
-	      CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
-	      0);
+  auto cct = global_init(&def_args, args,
+			 CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
+			 0);
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
