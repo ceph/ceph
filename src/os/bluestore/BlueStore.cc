@@ -7023,7 +7023,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     cvec[j] = _get_collection(*p);
 
     // note first collection we reference
-    if (!j && !txc->first_collection)
+    if (!txc->first_collection)
       txc->first_collection = cvec[j];
   }
   vector<OnodeRef> ovec(i.objects.size());
