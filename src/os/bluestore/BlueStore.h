@@ -1281,6 +1281,7 @@ public:
 
 
     IOContext ioc;
+    bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
     CollectionRef first_collection;  ///< first referenced collection
 
@@ -1341,6 +1342,8 @@ public:
     std::mutex wal_apply_mutex;
 
     uint64_t last_seq = 0;
+
+    std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
 
     std::atomic_int kv_committing_serially = {0};
 

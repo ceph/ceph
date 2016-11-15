@@ -6198,6 +6198,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
+	txc->had_ios = true;
 	_txc_aio_submit(txc);
 	return;
       }
@@ -6210,6 +6211,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_IO_DONE:
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      if (txc->had_ios) {
+	++txc->osr->txc_with_unstable_io;
+      }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       for (auto& sb : txc->shared_blobs_written) {
@@ -6648,6 +6652,9 @@ void BlueStore::_kv_sync_thread()
       }
       for (auto txc : kv_committing) {
 	_txc_release_alloc(txc);
+	if (txc->had_ios) {
+	  --txc->osr->txc_with_unstable_io;
+	}
       }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
