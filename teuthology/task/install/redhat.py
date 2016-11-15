@@ -1,10 +1,7 @@
 import contextlib
 import logging
-import time
 import yaml
 import os
-
-from cStringIO import StringIO
 
 from teuthology import packaging
 from teuthology.orchestra import run
@@ -81,20 +78,9 @@ def install(ctx, config):
         if config.get('skip_uninstall'):
             log.info("Skipping uninstall of Ceph")
         else:
-            uninstall(ctx=ctx, config=config)
-
-
-def uninstall(ctx, config):
-    """
-     Uninstalls rh ceph on all hosts.
-     It actually spawns uninstall_pkgs() on the remotes for uninstall.
-
-    :param ctx: the argparse.Namespace object
-    :param config: the config dict
-    """
-    with parallel() as p:
-        for remote in ctx.cluster.remotes.iterkeys():
-            p.spawn(uninstall_pkgs, ctx, remote)
+            with parallel() as p:
+                for remote in ctx.cluster.remotes.iterkeys():
+                    p.spawn(rh_uninstall_pkgs, ctx, remote, downstream_config)
 
 
 def rh_install_pkgs(ctx, remote, version, downstream_config):
@@ -202,28 +188,22 @@ def rh_install_deb_pkgs(
         raise RuntimeError("Version check failed on node %s", remote.shortname)
 
 
-def uninstall_pkgs(ctx, remote):
+def rh_uninstall_pkgs(ctx, remote, downstream_config):
     """
     Removes Ceph from all RH hosts
 
     :param ctx: the argparse.Namespace object
     :param remote: the teuthology.orchestra.remote.Remote object
+    :param downstream_config the dict object that has downstream pkg info
     """
-    log.info(
-        "uninstalling packages using ceph-deploy on node %s",
-        remote.shortname
-    )
-    r = remote.run(args=['date'], check_status=False)
-    host = r.hostname
-    remote.run(args=['sudo', 'ceph-deploy', 'uninstall', host])
-    time.sleep(4)
-    remote.run(args=['sudo', 'ceph-deploy', 'purgedata', host])
-    log.info("Uninstalling ceph-deploy")
-    remote.run(
-        args=['sudo', 'yum', 'remove', 'ceph-deploy', '-y'],
-        check_status=False
-    )
-    remote.run(
-        args=['sudo', 'yum', 'remove', 'ceph-test', '-y'],
-        check_status=False
-    )
+    rh_rpm_pkgs = downstream_config.get('pkgs').get('rpm')
+    rpm_pkgs = str.join(' ', rh_rpm_pkgs)
+
+    rh_deb_pkgs = downstream_config.get('pkgs').get('deb')
+    deb_pkgs = str.join(' ', rh_deb_pkgs)
+
+    if remote.os.name == 'rhel':
+        remote.run(args=['sudo', 'yum', 'remove', run.Raw(rpm_pkgs), '-y'])
+    else:
+        remote.run(args=['sudo', 'apt-get', 'remove', run.Raw(deb_pkgs), '-y'])
+    remote.run(args=['sudo', 'rm', '-rf', '/var/lib/ceph'])
