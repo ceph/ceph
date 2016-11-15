@@ -5,6 +5,9 @@
 #include "librbd/Watcher.h"
 #include "common/dout.h"
 
+#include "librbd/ImageCtx.h"
+#include "librbd/MirroringWatcher.h"
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::Watcher: "
@@ -29,3 +32,6 @@ void C_NotifyAck::finish(int r) {
 
 } // namespace watcher
 } // namespace librbd
+
+template struct librbd::watcher::HandlePayloadVisitor<
+    librbd::MirroringWatcher<librbd::ImageCtx>>;
