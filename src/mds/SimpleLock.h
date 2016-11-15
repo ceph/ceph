@@ -101,6 +101,7 @@ public:
     case LOCK_PREXLOCK: return "prexlock";
     case LOCK_XLOCK: return "xlock";
     case LOCK_XLOCKDONE: return "xlockdone";
+    case LOCK_XLOCKSNAP: return "xlocksnap";
     case LOCK_LOCK_XLOCK: return "lock->xlock";
 
     case LOCK_SYNC_LOCK: return "sync->lock";
@@ -493,7 +494,8 @@ public:
     more()->xlock_by.reset();
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock() ||
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
+	   state == LOCK_XLOCKSNAP || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a master of a slave */);
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
