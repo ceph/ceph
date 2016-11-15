@@ -6559,6 +6559,11 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     fm->release(p.get_start(), p.get_len(), t);
   }
 
+  _txc_update_store_statfs(txc);
+}
+
+void BlueStore::_txc_release_alloc(TransContext *txc)
+{
   // update allocator with full released set
   if (!g_conf->bluestore_debug_no_reuse_blocks) {
     for (interval_set<uint64_t>::iterator p = txc->released.begin();
@@ -6570,7 +6575,6 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 
   txc->allocated.clear();
   txc->released.clear();
-  _txc_update_store_statfs(txc);
 }
 
 void BlueStore::_kv_sync_thread()
@@ -6641,6 +6645,9 @@ void BlueStore::_kv_sync_thread()
 	assert(r == 0);
 	--txc->osr->kv_committing_serially;
 	txc->kv_submitted = true;
+      }
+      for (auto txc : kv_committing) {
+	_txc_release_alloc(txc);
       }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
