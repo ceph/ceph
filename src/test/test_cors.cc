@@ -904,6 +904,8 @@ int main(int argc, char *argv[]){
   }
 #endif
   finisher->stop();
+  delete g_test;
+  delete finisher;
   return 0;
 }
 
