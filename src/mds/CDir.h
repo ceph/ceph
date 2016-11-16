@@ -444,7 +444,9 @@ protected:
     return num_dirty;
   }
 
-  int64_t get_frag_size() { return get_projected_fnode()->fragstat.size(); }
+  int64_t get_frag_size() const {
+    return get_projected_fnode()->fragstat.size();
+  }
 
   // -- dentries and inodes --
  public:
@@ -488,10 +490,11 @@ public:
   void split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
   void merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
 
-  bool should_split() {
+  bool should_split() const {
     return (int)get_frag_size() > g_conf->mds_bal_split_size;
   }
-  bool should_merge() {
+  bool should_split_fast() const;
+  bool should_merge() const {
     return (int)get_frag_size() < g_conf->mds_bal_merge_size;
   }
 
