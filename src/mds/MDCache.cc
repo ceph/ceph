@@ -11303,7 +11303,8 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
 
 void MDCache::_fragment_finish(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
 {
-  dout(10) << "fragment_finish " << basedirfrag << dendl;
+  dout(10) << "fragment_finish " << basedirfrag << "resultfrags.size="
+           << resultfrags.size() << dendl;
   map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
   assert(it != uncommitted_fragments.end());
   ufragment &uf = it->second;
@@ -11312,6 +11313,14 @@ void MDCache::_fragment_finish(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
   for (list<CDir*>::iterator p = resultfrags.begin(); p != resultfrags.end(); ++p) {
     (*p)->state_clear(CDir::STATE_FRAGMENTING);
     (*p)->auth_unpin(this);
+  }
+
+  if (mds->logger) {
+    if (resultfrags.size() > 1) {
+      mds->logger->inc(l_mds_dir_split);
+    } else {
+      mds->logger->inc(l_mds_dir_merge);
+    }
   }
 
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_FINISH, basedirfrag, uf.bits);
