@@ -8,11 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <thread>
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "include/stringify.h"
-#include "common/errno.h"
-#include <gtest/gtest.h>
+#include "test/ceph_test.h"
 
 #include "os/bluestore/BlueFS.h"
 
@@ -568,23 +564,13 @@ TEST(BlueFS, test_replay) {
   rm_temp_bdev(fn);
 }
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
-  vector<const char *> def_args;
-  def_args.push_back("--debug-bluefs=1/20");
-  def_args.push_back("--debug-bdev=1/20");
-
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      0);
-  common_init_finish(g_ceph_context);
+WRITE_CEPH_UNITTEST_MAIN(
+{
+  g_ceph_context->_conf->set_val("debug_bluefs", "1/20");
+  g_ceph_context->_conf->set_val("debug_bdev", "1/20");
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
     "*");
   g_ceph_context->_conf->apply_changes(NULL);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+});

@@ -26,7 +26,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include <gtest/gtest.h>
-
+#include "test/ceph_test.h"
 #if GTEST_HAS_PARAM_TEST
 
 class KVTest : public ::testing::TestWithParam<const char*> {
@@ -273,18 +273,9 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->set_val(
-    "enable_experimental_unrecoverable_data_corrupting_features",
-    "rocksdb, memdb");
-  g_ceph_context->_conf->apply_changes(NULL);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+WRITE_CEPH_UNITTEST_MAIN({
+    g_ceph_context->_conf->set_val(
+      "enable_experimental_unrecoverable_data_corrupting_features",
+      "rocksdb, memdb");
+    g_ceph_context->_conf->apply_changes(NULL);
+  });
