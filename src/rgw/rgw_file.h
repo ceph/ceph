@@ -997,9 +997,9 @@ namespace rgw {
 	goto retry; /* !LATCHED */
       }
       /* LATCHED */
+      fh->mtx.unlock(); /* !LOCKED */
     out:
       lat.lock->unlock(); /* !LATCHED */
-      fh->mtx.unlock(); /* !LOCKED */
       return fh;
     }
 
