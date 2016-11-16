@@ -33,6 +33,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
+#include "rgw_role.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -5568,4 +5569,186 @@ int RGWOp::error_handler(int err_no, string *error_content) {
 int RGWHandler::error_handler(int err_no, string *error_content) {
   // This is the do-nothing error handler
   return err_no;
+}
+
+int RGWCreateRole::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWCreateRole::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWCreateRole::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+  RGWRole role(s->cct, store, role_name, role_path, trust_policy);
+  op_ret = role.create(true);
+
+  if (op_ret == -EEXIST) {
+    op_ret = -ERR_ROLE_EXISTS;
+  }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("role");
+    role.dump(s->formatter);
+    s->formatter->close_section();
+  }
+}
+
+int RGWDeleteRole::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWDeleteRole::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDeleteRole::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+  RGWRole role(s->cct, store, role_name);
+  op_ret = role.delete_obj();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+}
+
+int RGWGetRole::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetRole::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetRole::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+  RGWRole role(s->cct, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("role");
+    role.dump(s->formatter);
+    s->formatter->close_section();
+  }
+}
+
+int RGWModifyRole::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWModifyRole::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWModifyRole::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+  RGWRole role(s->cct, store, role_name);
+  op_ret = role.get();
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    role.update_trust_policy(trust_policy);
+    op_ret = role.update();
+  }
+}
+
+int RGWListRoles::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWListRoles::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWListRoles::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+  vector<RGWRole> result;
+  op_ret = RGWRole::get_roles_by_path_prefix(store, s->cct, path_prefix, result);
+
+  if (op_ret == 0) {
+    s->formatter->open_array_section("Roles");
+    for (const auto& it : result) {
+      s->formatter->open_object_section("role");
+      it.dump(s->formatter);
+      s->formatter->close_section();
+    }
+    s->formatter->close_section();
+  }
 }
