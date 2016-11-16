@@ -6343,9 +6343,16 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   string index_tag;
   uint64_t epoch;
   int64_t poolid;
-
-  bool orig_exists = state->exists;
-  uint64_t orig_size = state->accounted_size;
+  bool orig_exists;
+  uint64_t orig_size;
+  
+  if (!reset_obj) {    //Multipart upload, it has immutable head. 
+    orig_exists = false;
+    orig_size = 0;
+  } else {
+    orig_exists = state->exists;
+    orig_size = state->accounted_size;
+  }
 
   bool versioned_target = (meta.olh_epoch > 0 || !obj.get_instance().empty());
 
