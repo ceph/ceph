@@ -8689,10 +8689,14 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // ok, we didn't have the PG.  let's see if it's our fault or the client's.
+  // ok, we didn't have the PG.
+  if (!g_conf->osd_debug_misdirected_ops) {
+    return;
+  }
+  // let's see if it's our fault or the client's.  note that this might
+  // involve loading an old OSDmap off disk, so it can be slow.
 
   OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
-  // check send epoch
   if (!send_map) {
     dout(7) << "don't have sender's osdmap; assuming it was valid and that"
 	    << " client will resend" << dendl;
