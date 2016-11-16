@@ -1081,6 +1081,8 @@ function test_mon_osd()
   ceph osd set sortbitwise  # new backends cant handle nibblewise
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+  ceph osd set require_jewel_osds
+  expect_false ceph osd unset require_jewel_osds
 
   ceph osd set noup
   ceph osd down 0
