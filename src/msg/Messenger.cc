@@ -14,9 +14,10 @@
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 {
+  std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
-  return Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(),
+  return Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(),
 			   std::move(lname), nonce, 0);
 }
 
@@ -36,8 +37,8 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
   }
   if (r == 0 || type == "simple")
     return new SimpleMessenger(cct, name, std::move(lname), nonce);
-  else if (r == 1 || type == "async")
-    return new AsyncMessenger(cct, name, std::move(lname), nonce);
+  else if (r == 1 || type.find("async") != std::string::npos)
+    return new AsyncMessenger(cct, name, type, std::move(lname), nonce);
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
 	   cct->check_experimental_feature_enabled("ms-type-xio"))

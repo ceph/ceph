@@ -99,14 +99,14 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-int EventCenter::init(int n, unsigned i)
+int EventCenter::init(int n, unsigned i, std::string &t)
 {
   // can't init multi times
   assert(nevent == 0);
 
   idx = i;
 
-  if (cct->_conf->ms_async_transport_type == "dpdk") {
+  if (t == "dpdk") {
 #ifdef HAVE_DPDK
     driver = new DPDKDriver(cct);
 #endif
