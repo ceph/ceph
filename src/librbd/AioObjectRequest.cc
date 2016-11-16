@@ -288,7 +288,7 @@ void AioObjectRead<I>::send() {
   librados::AioCompletion *rados_completion =
     util::create_rados_ack_callback(this);
   int r = image_ctx->data_ctx.aio_operate(this->m_oid, rados_completion, &op,
-                                          flags, nullptr, (this->m_trace) ? this->m_trace.get_info() : nullptr);
+                                          flags, nullptr, this->m_trace ? this->m_trace.get_info() : nullptr);
   assert(r == 0);
 
   rados_completion->release();
@@ -559,7 +559,7 @@ void AbstractAioObjectWrite::send_write_op(bool write_guard)
   librados::AioCompletion *rados_completion =
     util::create_rados_safe_callback(this);
   int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-           m_snap_seq, m_snaps, (m_trace) ? m_trace.get_info() : nullptr);
+                                       m_snap_seq, m_snaps, m_trace ? m_trace.get_info() : nullptr);
   assert(r == 0);
   rados_completion->release();
 }
