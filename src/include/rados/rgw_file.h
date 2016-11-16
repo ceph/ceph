@@ -24,6 +24,12 @@
 extern "C" {
 #endif
 
+#define LIBRGW_FILE_VER_MAJOR 1
+#define LIBRGW_FILE_VER_MINOR 1
+#define LIBRGW_FILE_VER_EXTRA 0
+
+#define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
+#define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
 
 /*
  * object types
