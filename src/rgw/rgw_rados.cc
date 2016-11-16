@@ -5402,6 +5402,12 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
     if (ret == -EEXIST) {
+      librados::IoCtx index_ctx;
+      map<int, string> bucket_objs;
+      int r = open_bucket_index(info, index_ctx, bucket_objs);
+      if (r < 0)
+        return r;
+
        /* we need to reread the info and return it, caller will have a use for it */
       RGWObjVersionTracker instance_ver = info.objv_tracker;
       info.objv_tracker.clear();
@@ -5417,13 +5423,6 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
       /* only remove it if it's a different bucket instance */
       if (info.bucket.bucket_id != bucket.bucket_id) {
-        /* remove bucket index */
-        librados::IoCtx index_ctx; // context for new bucket
-        map<int, string> bucket_objs;
-        int r = open_bucket_index(info, index_ctx, bucket_objs);
-        if (r < 0)
-          return r;
-
         /* remove bucket meta instance */
         string entry = bucket.get_key();
         r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
