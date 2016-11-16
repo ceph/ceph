@@ -2688,7 +2688,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     pgmon()->pg_map.print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
-    mdsmon()->fsmap.print_summary(f, NULL);
+    mdsmon()->get_fsmap().print_summary(f, NULL);
     f->close_section();
 
     f->open_object_section("mgrmap");
@@ -2702,8 +2702,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "     monmap " << *monmap << "\n";
     ss << "            election epoch " << get_epoch()
        << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
-    if (mdsmon()->fsmap.filesystem_count() > 0) {
-      ss << "      fsmap " << mdsmon()->fsmap << "\n";
+    if (mdsmon()->get_fsmap().filesystem_count() > 0) {
+      ss << "      fsmap " << mdsmon()->get_fsmap() << "\n";
     }
     if (mgrmon()->in_use()) {
       ss << "        mgr ";
