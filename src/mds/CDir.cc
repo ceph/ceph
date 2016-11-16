@@ -914,8 +914,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_split);
-
   assert(replay || is_complete() || !is_auth());
 
   list<frag_t> frags;
@@ -1005,8 +1003,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
 void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
-
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_merge);
 
   set_dir_auth(subs.front()->get_dir_auth());
   prepare_new_fragment(replay);
