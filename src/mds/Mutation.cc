@@ -315,10 +315,10 @@ void MDRequestImpl::print(ostream &out) const
 
 void MDRequestImpl::dump(Formatter *f) const
 {
-  _dump(ceph_clock_now(g_ceph_context), f);
+  _dump(f);
 }
 
-void MDRequestImpl::_dump(utime_t now, Formatter *f) const
+void MDRequestImpl::_dump(Formatter *f) const
 {
   f->dump_string("flag_point", state_string());
   f->dump_stream("reqid") << reqid;
