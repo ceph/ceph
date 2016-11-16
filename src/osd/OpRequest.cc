@@ -46,7 +46,7 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
 }
 
-void OpRequest::_dump(utime_t now, Formatter *f) const
+void OpRequest::_dump(Formatter *f) const
 {
   Message *m = request;
   f->dump_string("flag_point", state_string());
