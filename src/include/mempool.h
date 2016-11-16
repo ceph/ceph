@@ -418,10 +418,9 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 //
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
-  void *operator new[](size_t size) {					\
+  void *operator new[](size_t size) noexcept {				\
     assert(0 == "no array new");					\
-    return (void*)1;							\
-  }									\
+    return nullptr; }							\
   void  operator delete(void *);					\
   void  operator delete[](void *) { assert(0 == "no array delete"); }
 
