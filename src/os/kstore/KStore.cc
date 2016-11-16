@@ -29,6 +29,7 @@
 #include "common/Formatter.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_kstore
 
 /*

@@ -31,6 +31,8 @@
 
 #include "TestObjectStoreState.h"
 
+#define dout_context g_ceph_context
+
 static const char *our_name = NULL;
 void usage();
 

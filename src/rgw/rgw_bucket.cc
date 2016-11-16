@@ -25,6 +25,7 @@
 
 #include "cls/user/cls_user_types.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define BUCKET_TAG_TIMEOUT 30

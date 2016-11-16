@@ -42,6 +42,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonJoin.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix *_dout << "test-mon-msg "

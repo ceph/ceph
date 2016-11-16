@@ -19,6 +19,7 @@
 #include "msg/Message.h"
 #include "include/assert.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -223,10 +224,10 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
       if (oldest_op_tmp < oldest_op) {
         oldest_op = oldest_op_tmp;
       }
-    } 
+    }
     total_ops_in_flight += sdata->ops_in_flight_sharded.size();
   }
-      
+
   if (0 == total_ops_in_flight)
     return false;
 

@@ -4,6 +4,8 @@
 #include "common/config.h"
 #include "common/debug.h"
 
+#define dout_context g_ceph_context
+
 #define AES_KEY_LEN	16
 
 int main(int argc, const char **argv)

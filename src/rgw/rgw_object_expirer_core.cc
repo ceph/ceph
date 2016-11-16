@@ -35,6 +35,7 @@ using namespace std;
 
 #include "cls/lock/cls_lock_client.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 static string objexp_lock_name = "gc_process";

@@ -26,6 +26,7 @@
 #include "common/blkdev.h"
 #include "common/align.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << path << ") "

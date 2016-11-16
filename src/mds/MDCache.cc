@@ -103,6 +103,7 @@ using namespace std;
 #include "common/config.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
@@ -245,7 +246,7 @@ void MDCache::log_stat()
 }
 
 
-// 
+//
 
 bool MDCache::shutdown()
 {

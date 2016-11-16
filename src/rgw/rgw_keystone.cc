@@ -15,6 +15,7 @@
 #include "common/armor.h"
 #include "common/Cond.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 int rgw_open_cms_envelope(CephContext * const cct,
