@@ -5541,7 +5541,7 @@ next:
     cout << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
     cout << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
 
-    ret = store->init_bucket_index(new_bucket_info.bucket, new_bucket_info.num_shards);
+    ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
     if (ret < 0) {
       cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
       return -ret;
