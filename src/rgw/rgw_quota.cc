@@ -26,6 +26,7 @@
 #include "rgw_bucket.h"
 #include "rgw_user.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 

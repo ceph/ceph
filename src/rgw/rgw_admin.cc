@@ -42,6 +42,7 @@
 
 using namespace std;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define SECRET_KEY_LEN 40

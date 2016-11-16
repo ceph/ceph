@@ -12,6 +12,8 @@
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 
+#define dout_context g_ceph_context
+
 // --
 
 void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const

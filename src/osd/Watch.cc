@@ -16,6 +16,7 @@ struct CancelableContext : public Context {
   virtual void cancel() = 0;
 };
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)

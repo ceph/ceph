@@ -20,6 +20,7 @@
 #include <sys/mount.h>
 #endif
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_fuse
 #include "common/debug.h"
 #undef dout_prefix

@@ -31,6 +31,7 @@
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_bluestore
 
 // bluestore_meta_onode

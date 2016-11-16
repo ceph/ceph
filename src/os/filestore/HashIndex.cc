@@ -21,6 +21,7 @@
 
 #include "common/errno.h"
 #include "common/debug.h"
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 
 const string HashIndex::SUBDIR_ATTR = "contents";

@@ -23,6 +23,7 @@
 #include "global/global_context.h"
 #include "rbd_replay_debug.hpp"
 
+#define dout_context g_ceph_context
 
 using namespace std;
 using namespace rbd_replay;

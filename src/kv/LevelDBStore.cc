@@ -11,6 +11,7 @@ using std::string;
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_leveldb
 #undef dout_prefix
 #define dout_prefix *_dout << "leveldb: "

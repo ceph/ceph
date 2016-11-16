@@ -66,6 +66,7 @@ using namespace std;
 
 #include "common/config.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
@@ -144,7 +145,7 @@ void Server::dispatch(Message *m)
   }
 
   // active?
-  if (!mds->is_active() && 
+  if (!mds->is_active() &&
       !(mds->is_stopping() && m->get_source().is_mds())) {
     if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {

@@ -36,6 +36,7 @@
 // logging is not functional when it is called. cerr output is lost
 // when the caller is daemonized but it will show if not (-f)
 //
+#define dout_context g_ceph_context
 #define dout_prefix *_dout
 #define dout_subsys ceph_subsys_
 

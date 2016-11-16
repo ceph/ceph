@@ -31,6 +31,9 @@ using std::deque;
 # include <libaio.h>
 #endif
 
+#define dout_context g_ceph_context
+
+
 /**
  * Implements journaling on top of block device or file.
  *
@@ -536,4 +539,5 @@ private:
 
 WRITE_CLASS_ENCODER(FileJournal::header_t)
 
+#undef dout_context
 #endif

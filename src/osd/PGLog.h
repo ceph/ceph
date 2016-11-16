@@ -29,6 +29,8 @@ using namespace std;
 #define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
 #define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | PGLOG_INDEXED_CALLER_OPS | PGLOG_INDEXED_EXTRA_CALLER_OPS)
 
+#define dout_context g_ceph_context
+
 class CephContext;
 
 struct PGLog : DoutPrefixProvider {
@@ -558,8 +560,8 @@ public:
   PGLog(CephContext *cct, DoutPrefixProvider *dpp = 0) :
     prefix_provider(dpp),
     dirty_from(eversion_t::max()),
-    writeout_from(eversion_t::max()), 
-    cct(cct), 
+    writeout_from(eversion_t::max()),
+    cct(cct),
     pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
     touched_log(false),
     clear_divergent_priors(false) {}
@@ -1308,5 +1310,7 @@ public:
     ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
   }
 };
-  
+
+#undef dout_context
+
 #endif // CEPH_PG_LOG_H

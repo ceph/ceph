@@ -9,6 +9,8 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 
+#define dout_context g_ceph_context
+
 struct T : public Thread {
   int num;
   set<int> myset;

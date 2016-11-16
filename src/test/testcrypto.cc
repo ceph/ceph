@@ -8,6 +8,8 @@
 
 #define AES_KEY_LEN	16
 
+#define dout_context g_ceph_context
+
 int main(int argc, char *argv[])
 {
   char aes_key[AES_KEY_LEN];

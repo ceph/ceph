@@ -37,6 +37,8 @@
 #include <set>
 #include <map>
 
+#define dout_context g_ceph_context
+
 class Context;
 class CDentry;
 class CDir;
@@ -1161,4 +1163,5 @@ private:
 
 ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si);
 
+#undef dout_context
 #endif

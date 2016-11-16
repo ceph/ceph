@@ -39,6 +39,7 @@ using namespace std;
 #include "include/assert.h"
 #include "include/cephfs/ceph_statx.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_client
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << (whoami >= 0 ? whoami:client->get_nodeid()) << " "

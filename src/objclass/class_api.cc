@@ -15,6 +15,7 @@
 
 static ClassHandler *ch;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_objclass
 
 void cls_initialize(ClassHandler *h)

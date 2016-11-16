@@ -28,6 +28,7 @@
 
 #include "Dumper.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 #define HEADER_LEN 4096

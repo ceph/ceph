@@ -4,6 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_request.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 /* XXX */
