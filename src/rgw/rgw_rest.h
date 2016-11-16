@@ -385,6 +385,36 @@ public:
     ~RGWInfo_ObjStore() = default;
 };
 
+class RGWCreateRole_ObjStore : public RGWCreateRole {
+public:
+  RGWCreateRole_ObjStore() = default;
+  ~RGWCreateRole_ObjStore() = default;
+};
+
+class RGWDeleteRole_ObjStore : public RGWDeleteRole {
+public:
+  RGWDeleteRole_ObjStore() = default;
+  ~RGWDeleteRole_ObjStore() = default;
+};
+
+class RGWGetRole_ObjStore : public RGWGetRole {
+public:
+  RGWGetRole_ObjStore() = default;
+  ~RGWGetRole_ObjStore() = default;
+};
+
+class RGWModifyRole_ObjStore : public RGWModifyRole {
+public:
+  RGWModifyRole_ObjStore() = default;
+  ~RGWModifyRole_ObjStore() = default;
+};
+
+class RGWListRoles_ObjStore : public RGWListRoles {
+public:
+  RGWListRoles_ObjStore() = default;
+  ~RGWListRoles_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;

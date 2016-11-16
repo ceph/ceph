@@ -1303,6 +1303,119 @@ int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
   return ret;
 }
 
+int RGWCreateRole_ObjStore_S3::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+  role_path = s->info.args.get("Path");
+  trust_policy = s->info.args.get("AssumeRolePolicyDocument");
+
+  if (role_name.empty() || trust_policy.empty()) {
+    ldout(s->cct, 20) << "ERROR: one of role name or assume role policy document is empty"
+    << dendl;
+    return -EINVAL;
+  }
+  JSONParser p;
+  if (!p.parse(trust_policy.c_str(), trust_policy.length())) {
+    ldout(s->cct, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
+    return -ERR_MALFORMED_DOC;
+  }
+  return 0;
+}
+
+void RGWCreateRole_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWDeleteRole_ObjStore_S3::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+
+  if (role_name.empty()) {
+    ldout(s->cct, 20) << "ERROR: Role name is empty"<< dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWDeleteRole_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWGetRole_ObjStore_S3::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+
+  if (role_name.empty()) {
+    ldout(s->cct, 20) << "ERROR: Role name is empty"<< dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWGetRole_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWModifyRole_ObjStore_S3::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+  trust_policy = s->info.args.get("PolicyDocument");
+
+  if (role_name.empty() || trust_policy.empty()) {
+    ldout(s->cct, 20) << "ERROR: One of role name or trust policy is empty"<< dendl;
+    return -EINVAL;
+  }
+  JSONParser p;
+  if (!p.parse(trust_policy.c_str(), trust_policy.length())) {
+    ldout(s->cct, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
+    return -ERR_MALFORMED_DOC;
+  }
+
+  return 0;
+}
+
+void RGWModifyRole_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWListRoles_ObjStore_S3::get_params()
+{
+  path_prefix = s->info.args.get("PathPrefix");
+
+  return 0;
+}
+
+void RGWListRoles_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
 static int get_success_retcode(int code)
 {
   switch (code) {
@@ -2911,6 +3024,24 @@ RGWOp *RGWHandler_REST_Service_S3::op_get()
 RGWOp *RGWHandler_REST_Service_S3::op_head()
 {
   return new RGWListBuckets_ObjStore_S3;
+}
+
+RGWOp *RGWHandler_REST_Service_S3::op_post()
+{
+  if (s->info.args.exists("Action")) {
+    string action = s->info.args.get("Action");
+    if (action.compare("CreateRole") == 0)
+      return new RGWCreateRole_ObjStore_S3;
+    if (action.compare("DeleteRole") == 0)
+      return new RGWDeleteRole_ObjStore_S3;
+    if (action.compare("GetRole") == 0)
+      return new RGWGetRole_ObjStore_S3;
+    if (action.compare("UpdateAssumeRolePolicy") == 0)
+      return new RGWModifyRole_ObjStore_S3;
+    if (action.compare("ListRoles") == 0)
+      return new RGWListRoles_ObjStore_S3;
+  }
+  return NULL;
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)

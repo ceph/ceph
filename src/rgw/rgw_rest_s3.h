@@ -178,6 +178,51 @@ public:
                                                       bufferlist& bl_out);
 };
 
+class RGWCreateRole_ObjStore_S3 : public RGWCreateRole_ObjStore {
+public:
+  RGWCreateRole_ObjStore_S3() = default;
+  ~RGWCreateRole_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWDeleteRole_ObjStore_S3 : public RGWDeleteRole_ObjStore {
+public:
+  RGWDeleteRole_ObjStore_S3() = default;
+  ~RGWDeleteRole_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWGetRole_ObjStore_S3 : public RGWGetRole_ObjStore {
+public:
+  RGWGetRole_ObjStore_S3() = default;
+  ~RGWGetRole_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWModifyRole_ObjStore_S3 : public RGWModifyRole_ObjStore {
+public:
+  RGWModifyRole_ObjStore_S3() = default;
+  ~RGWModifyRole_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWListRoles_ObjStore_S3 : public RGWListRoles_ObjStore {
+public:
+  RGWListRoles_ObjStore_S3() = default;
+  ~RGWListRoles_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
 struct post_part_field {
   string val;
   map<string, string> params;
@@ -503,6 +548,7 @@ protected:
   }
   RGWOp *op_get();
   RGWOp *op_head();
+  RGWOp *op_post();
 public:
   RGWHandler_REST_Service_S3() {}
   virtual ~RGWHandler_REST_Service_S3() {}

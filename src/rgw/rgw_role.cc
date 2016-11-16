@@ -152,6 +152,10 @@ int RGWRole::delete_obj()
     return ret;
   }
 
+  if (! perm_policy_map.empty()) {
+    return -ERR_DELETE_CONFLICT;
+  }
+
   // Delete id
   string oid = get_info_oid_prefix() + id;
   ret = rgw_delete_system_obj(store, pool, oid, NULL);
