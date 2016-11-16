@@ -208,13 +208,21 @@ namespace rgw {
     return rc;
   }
 
-  int RGWLibFS::unlink(RGWFileHandle* parent, const char *name)
+  int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, uint32_t flags)
   {
     int rc = 0;
+    RGWFileHandle* parent = nullptr;
 
-    /* atomicity */
-    LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_LOCK);
-    RGWFileHandle* rgw_fh = get<0>(fhr);
+    if (unlikely(flags & RGWFileHandle::FLAG_UNLINK_THIS)) {
+      /* LOCKED */
+      parent = rgw_fh->get_parent();
+    } else {
+      /* atomicity */
+      parent = rgw_fh;
+      LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_LOCK);
+      rgw_fh = get<0>(fhr);
+      /* LOCKED */
+    }
 
     if (parent->is_root()) {
       /* XXXX remove uri and deal with bucket and object names */
@@ -293,13 +301,11 @@ namespace rgw {
       break;
       case 1:
       {
-	RGWDeleteObjRequest req(cct, get_user(), src_fh->bucket_name(),
-				src_name);
-	rc = rgwlib.get_fe()->execute_req(&req);
-	if (! rc) {
-	  rc = req.get_ret();
+	rc = this->unlink(rgw_fh /* LOCKED */, _src_name,
+			  RGWFileHandle::FLAG_UNLINK_THIS);
+	/* !LOCKED, -ref */
+	if (! rc)
 	  goto out;
-	}
       }
       break;
       default:
@@ -307,12 +313,6 @@ namespace rgw {
       } /* switch */
     } /* ix */
   out:
-    if (rgw_fh) {
-      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-      fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
-      rgw_fh->mtx.unlock();
-      unref(rgw_fh);
-    }
     return rc;
   } /* RGWLibFS::rename */
 
