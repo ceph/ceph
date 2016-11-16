@@ -1319,7 +1319,7 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
    open file
 */
 int rgw_open(struct rgw_fs *rgw_fs,
-	     struct rgw_file_handle *fh, uint32_t flags)
+	     struct rgw_file_handle *fh, uint32_t posix_flags, uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
@@ -1334,9 +1334,7 @@ int rgw_open(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EISDIR;
 
-  // convert flags
-  uint32_t oflags = 0;
-  return rgw_fh->open(oflags);
+  return rgw_fh->open(flags);
 }
 
 /*

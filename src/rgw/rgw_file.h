@@ -234,6 +234,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_DELETED = 0x0080;
     static constexpr uint32_t FLAG_UNLINK_THIS = 0x0100;
     static constexpr uint32_t FLAG_LOCKED = 0x0200;
+    static constexpr uint32_t FLAG_STATELESS_OPEN = 0x0400;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -495,6 +496,9 @@ namespace rgw {
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
       if (! (flags & FLAG_OPEN)) {
+	if (gsh_flags & RGW_OPEN_FLAG_V3) {
+	  flags |= FLAG_STATELESS_OPEN;
+	}
 	flags |= FLAG_OPEN;
 	return 0;
       }
