@@ -285,7 +285,7 @@ void AioImageRead<I>::send_request() {
   auto &image_extents = this->m_image_extents;
   if (image_ctx.object_cacher && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), image_extents, &this->m_trace);
+    readahead(get_image_ctx(&image_ctx), image_extents);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
