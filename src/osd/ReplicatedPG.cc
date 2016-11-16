@@ -4520,12 +4520,28 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       if (pool.info.ec_pool()) {
 	// translate sparse read to a normal one if not supported
-	ctx->pending_async_reads.push_back(
-	  make_pair(
-	    boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-	    make_pair(&osd_op.outdata, new ToSparseReadResult(osd_op.outdata, op.extent.offset,
-							      op.extent.length))));
-	dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
+	uint64_t offset = op.extent.offset;
+	uint64_t length = op.extent.length;
+	if (offset > oi.size) {
+	  length = 0;
+	} else if (offset + length > oi.size) {
+	  length = oi.size - offset;
+	}
+	if (length > 0) {
+	  ctx->pending_async_reads.push_back(
+	    make_pair(
+	      boost::make_tuple(offset, length, op.flags),
+	      make_pair(
+		&osd_op.outdata,
+		new ToSparseReadResult(
+		  osd_op.outdata, offset,
+		  op.extent.length /* updated by the callback */))));
+	  dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
+	} else {
+	  dout(10) << " sparse read ended up empty for " << soid << dendl;
+	  map<uint64_t, uint64_t> extents;
+	  ::encode(extents, osd_op.outdata);
+	}
       } else {
 	// read into a buffer
 	bufferlist bl;
