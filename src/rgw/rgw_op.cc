@@ -9,7 +9,6 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
-#include <boost/utility/in_place_factory.hpp>
 
 #include "common/Clock.h"
 #include "common/armor.h"
@@ -831,7 +830,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
           ", actual read size=" << ent.size << dendl;
       return -EIO;
     }
-    decompress = boost::in_place(s->cct, &cs_info, partial_content, filter);
+    decompress.emplace(s->cct, &cs_info, partial_content, filter);
     filter = &*decompress;
   }
   else
@@ -1400,7 +1399,7 @@ void RGWGetObj::execute()
   }
   if (need_decompress) {
     s->obj_size = cs_info.orig_size;
-    decompress = boost::in_place(s->cct, &cs_info, partial_content, filter);
+    decompress.emplace(s->cct, &cs_info, partial_content, filter);
     filter = &*decompress;
   }
 
@@ -2939,7 +2938,7 @@ void RGWPutObj::execute()
       ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
           << s->cct->_conf->rgw_compression_type << dendl;
     } else {
-      compressor = boost::in_place(s->cct, plugin, filter);
+      compressor.emplace(s->cct, plugin, filter);
       filter = &*compressor;
     }
   }
@@ -3022,7 +3021,7 @@ void RGWPutObj::execute()
       }
 
       if (compressor) {
-        compressor = boost::in_place(s->cct, plugin, filter);
+        compressor.emplace(s->cct, plugin, filter);
         filter = &*compressor;
       }
 
@@ -3248,7 +3247,7 @@ void RGWPostObj::execute()
       ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
           << compression_type << dendl;
     } else {
-      compressor = boost::in_place(s->cct, plugin, filter);
+      compressor.emplace(s->cct, plugin, filter);
       filter = &*compressor;
     }
   }
