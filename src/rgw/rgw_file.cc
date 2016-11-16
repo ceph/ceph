@@ -1400,7 +1400,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     return -EINVAL;
   }
   int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
-  return -rc;
+  return rc;
 }
 
 /*
