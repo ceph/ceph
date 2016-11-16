@@ -418,13 +418,12 @@ public:
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
 
-    /// refs from this shard.  ephemeral if id<0, persisted if spanning.
-    bluestore_extent_ref_map_t ref_map;
-
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
     mutable bool dirty = true;      ///< true if blob is newer than blob_bl
     mutable bufferlist blob_bl;     ///< cached encoded blob
+    /// refs from this shard.  ephemeral if id<0, persisted if spanning.
+    bluestore_extent_ref_map_t ref_map;
 
   public:
     Blob() {}
@@ -436,6 +435,9 @@ public:
 
     friend ostream& operator<<(ostream& out, const Blob &b);
 
+    const bluestore_extent_ref_map_t& get_ref_map() const {
+      return ref_map;
+    }
     bool is_spanning() const {
       return id >= 0;
     }
@@ -479,6 +481,8 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
 		 vector<bluestore_pextent_t> *r);
+    /// pass references for specific range to other blob
+    void pass_ref(Blob* other, uint64_t src_offset, uint64_t length, uint64_t dest_offset);
 
     /// split the blob
     void split(size_t blob_offset, Blob *o);
@@ -503,31 +507,49 @@ public:
 	assert(blob_bl.length());
       }
     }
-    void bound_encode(size_t& p) const {
+    void bound_encode(size_t& p, bool include_ref_map) const {
       _encode();
       p += blob_bl.length();
+      if (include_ref_map) {
+        ref_map.bound_encode(p);
+      }
     }
-    void encode(bufferlist::contiguous_appender& p) const {
+    void encode(bufferlist::contiguous_appender& p, bool include_ref_map) const {
       _encode();
       p.append(blob_bl);
+      if (include_ref_map) {
+        ref_map.encode(p);
+      }
     }
-    void decode(bufferptr::iterator& p) {
+    void decode(bufferptr::iterator& p, bool include_ref_map) {
       const char *start = p.get_pos();
       denc(blob, p);
       const char *end = p.get_pos();
       blob_bl.clear();
       blob_bl.append(start, end - start);
       dirty = false;
+      if (include_ref_map) {
+        ref_map.decode(p);
+      }
     }
 #else
-    void bound_encode(size_t& p) const {
+    void bound_encode(size_t& p, bool include_ref_map) const {
       denc(blob, p);
+      if (include_ref_map) {
+        ref_map.bound_encode(p);
+      }
     }
-    void encode(bufferlist::contiguous_appender& p) const {
+    void encode(bufferlist::contiguous_appender& p, bool include_ref_map) const {
       denc(blob, p);
+      if (include_ref_map) {
+        ref_map.encode(p);
+      }
     }
-    void decode(bufferptr::iterator& p) {
+    void decode(bufferptr::iterator& p, bool include_ref_map) {
       denc(blob, p);
+      if (include_ref_map) {
+        ref_map.decode(p);
+      }
     }
 #endif
   };
@@ -535,23 +557,25 @@ public:
   typedef mempool::bluestore_meta_other::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
-  struct Extent : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>> {
+  typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
+  struct Extent : public ExtentBase {
     MEMPOOL_CLASS_HELPERS();
 
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
     uint8_t  blob_depth = 0;          ///< blob overlapping count
-    BlobRef blob;                     ///< the blob with our data
+    BlobRef  blob;                    ///< the blob with our data
 
     /// ctor for lookup only
-    explicit Extent(uint32_t lo) : logical_offset(lo) { }
+    explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
     /// ctor for delayed initialization (see decode_some())
-    explicit Extent() {
+    explicit Extent() : ExtentBase() {
     }
     /// ctor for general usage
     Extent(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b)
-      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd) {
+      : ExtentBase(),
+        logical_offset(lo), blob_offset(o), length(l), blob_depth(bd) {
       assign_blob(b);
     }
     ~Extent() {
@@ -577,19 +601,22 @@ public:
       return a.logical_offset == b.logical_offset;
     }
 
+    uint32_t blob_start() {
+      return logical_offset - blob_offset;
+    }
+
     uint32_t blob_end() {
-      return logical_offset + blob->get_blob().get_logical_length() -
-	blob_offset;
+      return blob_start() + blob->get_blob().get_logical_length();
     }
 
     uint32_t end() const {
       return logical_offset + length;
     }
 
+    // return true if any piece of the blob is out of
+    // the given range [o, o + l].
     bool blob_escapes_range(uint32_t o, uint32_t l) {
-      uint32_t bstart = logical_offset - blob_offset;
-      return (bstart < o ||
-	      bstart + blob->get_blob().get_logical_length() > o + l);
+      return blob_start() < o || blob_end() > o + l;
     }
   };
   typedef boost::intrusive::set<Extent> extent_map_t;
@@ -618,14 +645,17 @@ public:
 
     bool needs_reshard = false;   ///< true if we must reshard
 
+    struct DeleteDisposer {
+      void operator()(Extent *e) { delete e; }
+    };
+
     ExtentMap(Onode *o);
     ~ExtentMap() {
-      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+      extent_map.clear_and_dispose(DeleteDisposer());
     }
 
     void clear() {
-      extent_map.clear();
-      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+      extent_map.clear_and_dispose(DeleteDisposer());
       shards.clear();
       inline_bl.clear();
       needs_reshard = false;
@@ -714,9 +744,7 @@ public:
 
     /// remove (and delete) an Extent
     void rm(extent_map_t::iterator p) {
-      Extent *e = &*p;
-      extent_map.erase(p);
-      delete e;
+      extent_map.erase_and_dispose(p, DeleteDisposer());
     }
 
     bool has_any_lextents(uint64_t offset, uint64_t length);
@@ -955,10 +983,10 @@ public:
 
     onode_lru_list_t onode_lru;
 
-    buffer_list_t buffer_hot;      //< "Am" hot buffers
-    buffer_list_t buffer_warm_in;  //< "A1in" newly warm buffers
-    buffer_list_t buffer_warm_out; //< "A1out" empty buffers we've evicted
-    uint64_t buffer_bytes = 0;     //< bytes
+    buffer_list_t buffer_hot;      ///< "Am" hot buffers
+    buffer_list_t buffer_warm_in;  ///< "A1in" newly warm buffers
+    buffer_list_t buffer_warm_out; ///< "A1out" empty buffers we've evicted
+    uint64_t buffer_bytes = 0;     ///< bytes
 
     enum {
       BUFFER_NEW = 0,
@@ -1201,7 +1229,6 @@ public:
 
     boost::intrusive::list_member_hook<> wal_queue_item;
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
-    vector<OnodeRef> wal_op_onodes;
 
     bool kv_submitted = false; ///< true when we've been submitted to kv db
 
@@ -1351,7 +1378,6 @@ public:
       if (txc->state >= TransContext::STATE_KV_DONE) {
 	return true;
       }
-      assert(txc->state < TransContext::STATE_KV_DONE);
       txc->oncommits.push_back(c);
       return false;
     }
@@ -1999,6 +2025,14 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+
+  void _do_garbage_collection(TransContext *txc,
+                              CollectionRef& c,
+                              OnodeRef o,
+                              uint64_t& offset,
+                              uint64_t& length,
+                              bufferlist& bl,
+                              WriteContext *wctx);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,

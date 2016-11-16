@@ -2060,6 +2060,76 @@ CEPH_RADOS_API int rados_aio_cancel(rados_ioctx_t io,
 /** @} Asynchronous I/O */
 
 /**
+ * @name Asynchronous Xattrs
+ * Extended attributes are stored as extended attributes on the files
+ * representing an object on the OSDs. Thus, they have the same
+ * limitations as the underlying filesystem. On ext4, this means that
+ * the total data stored in xattrs cannot exceed 4KB.
+ *
+ * @{
+ */
+
+/**
+ * Asynchronously get the value of an extended attribute on an object.
+ *
+ * @param io the context in which the attribute is read
+ * @param o name of the object
+ * @param completion what to do when the getxattr completes
+ * @param name which extended attribute to read
+ * @param buf where to store the result
+ * @param len size of buf in bytes
+ * @returns length of xattr value on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_getxattr(rados_ioctx_t io, const char *o,
+				      rados_completion_t completion,
+				      const char *name, char *buf, size_t len);
+
+/**
+ * Asynchronously set an extended attribute on an object.
+ *
+ * @param io the context in which xattr is set
+ * @param o name of the object
+ * @param completion what to do when the setxattr completes
+ * @param name which extended attribute to set
+ * @param buf what to store in the xattr
+ * @param len the number of bytes in buf
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_setxattr(rados_ioctx_t io, const char *o,
+				      rados_completion_t completion,
+				      const char *name, const char *buf,
+				      size_t len);
+
+/**
+ * Asynchronously delete an extended attribute from an object.
+ *
+ * @param io the context in which to delete the xattr
+ * @param o the name of the object
+ * @param completion what to do when the rmxattr completes
+ * @param name which xattr to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_rmxattr(rados_ioctx_t io, const char *o,
+				     rados_completion_t completion,
+				     const char *name);
+
+/**
+ * Asynchronously start iterating over xattrs on an object.
+ *
+ * @post iter is a valid iterator
+ *
+ * @param io the context in which to list xattrs
+ * @param oid name of the object
+ * @param iter where to store the iterator
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_getxattrs(rados_ioctx_t io, const char *oid,
+				       rados_completion_t completion,
+				       rados_xattrs_iter_t *iter);
+
+/** @} Asynchronous Xattrs */
+
+/**
  * @name Watch/Notify
  *
  * Watch/notify is a protocol to help communicate among clients. It
@@ -2137,7 +2207,6 @@ typedef void (*rados_watchcb2_t)(void *arg,
  * after 30 seconds. Watches are automatically reestablished when a new
  * connection is made, or a placement group switches OSDs.
  *
- * @note BUG: watch timeout should be configurable
  * @note BUG: librados should provide a way for watchers to notice connection resets
  * @note BUG: the ver parameter does not work, and -ERANGE will never be returned
  *            (See URL tracker.ceph.com/issues/2592)
@@ -2163,12 +2232,11 @@ CEPH_RADOS_API int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
  * A watch operation registers the client as being interested in
  * notifications on an object. OSDs keep track of watches on
  * persistent storage, so they are preserved across cluster changes by
- * the normal recovery process. If the client loses its connection to
- * the primary OSD for a watched object, the watch will be removed
- * after 30 seconds. Watches are automatically reestablished when a new
+ * the normal recovery process. If the client loses its connection to the
+ * primary OSD for a watched object, the watch will be removed after
+ * a timeout configured with osd_client_watch_timeout.
+ * Watches are automatically reestablished when a new
  * connection is made, or a placement group switches OSDs.
- *
- * @note BUG: watch timeout should be configurable
  *
  * @param io the pool the object is in
  * @param o the object to watch
@@ -2184,6 +2252,30 @@ CEPH_RADOS_API int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *cooki
 				void *arg);
 
 /**
+ * Register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param cookie where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param timeout how many seconds the connection will keep after disconnection
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_watch3(rados_ioctx_t io, const char *o, uint64_t *cookie,
+        rados_watchcb2_t watchcb,
+        rados_watcherrcb_t watcherrcb,
+        uint32_t timeout,
+        void *arg);
+
+/**
  * Asynchronous register an interest in an object
  *
  * A watch operation registers the client as being interested in
@@ -2193,8 +2285,6 @@ CEPH_RADOS_API int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *cooki
  * the primary OSD for a watched object, the watch will be removed
  * after 30 seconds. Watches are automatically reestablished when a new
  * connection is made, or a placement group switches OSDs.
- *
- * @note BUG: watch timeout should be configurable
  *
  * @param io the pool the object is in
  * @param o the object to watch
@@ -2210,6 +2300,35 @@ CEPH_RADOS_API int rados_aio_watch(rados_ioctx_t io, const char *o,
 				   rados_watchcb2_t watchcb,
 				   rados_watcherrcb_t watcherrcb,
 				   void *arg);
+
+/**
+ * Asynchronous register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after the number of seconds that configured in timeout parameter.
+ * Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param completion what to do when operation has been attempted
+ * @param handle where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param timeout how many seconds the connection will keep after disconnection
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_watch2(rados_ioctx_t io, const char *o,
+           rados_completion_t completion, uint64_t *handle,
+           rados_watchcb2_t watchcb,
+           rados_watcherrcb_t watcherrcb,
+           uint32_t timeout,
+           void *arg);
 
 /**
  * Check on the status of a watch
@@ -3085,6 +3204,20 @@ CEPH_RADOS_API int rados_lock_shared(rados_ioctx_t io, const char * o,
  */
 CEPH_RADOS_API int rados_unlock(rados_ioctx_t io, const char *o,
                                 const char *name, const char *cookie);
+
+/**
+ * Asynchronous release a shared or exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @param completion what to do when operation has been attempted
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_unlock(rados_ioctx_t io, const char *o,
+                                    const char *name, const char *cookie,
+			            rados_completion_t completion);
 
 /**
  * List clients that have locked the named object lock and information about

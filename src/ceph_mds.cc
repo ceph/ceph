@@ -50,13 +50,11 @@ using namespace std;
 
 void usage()
 {
-  cout << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
+  cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --journal-check rank\n"
-       << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
        << "        start up as a hot standby for rank\n"
        << std::endl;

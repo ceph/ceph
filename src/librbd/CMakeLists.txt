@@ -82,41 +82,32 @@ set(librbd_internal_srcs
   operation/SnapshotRollbackRequest.cc
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
-  operation/TrimRequest.cc)
+  operation/TrimRequest.cc
+  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
-  add_dependencies(rbd_api librbd-tp)
+  add_dependencies(rbd_internal librbd-tp)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
-  $<TARGET_OBJECTS:osdc_rbd_objs>
-  $<TARGET_OBJECTS:common_util_obj>
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
-if(LINUX)
-  list(APPEND librbd 
-    $<TARGET_OBJECTS:parse_secret_objs>  
-    $<TARGET_OBJECTS:krbd_objs>
-    )
-endif(LINUX)
 
 target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types
   journal
   librados 
-  common 
   osdc
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
+  common
   pthread
   udev
-  keyutils
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(ENABLE_SHARED)

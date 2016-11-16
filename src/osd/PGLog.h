@@ -18,7 +18,7 @@
 #define CEPH_PG_LOG_H
 
 // re-include our assert to clobber boost's
-#include "include/assert.h" 
+#include "include/assert.h"
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>
@@ -656,10 +656,10 @@ public:
 
 protected:
   static void split_by_object(
-    list<pg_log_entry_t> &entries,
-    map<hobject_t, list<pg_log_entry_t>, hobject_t::BitwiseComparator> *out_entries) {
+    mempool::osd::list<pg_log_entry_t> &entries,
+    map<hobject_t, mempool::osd::list<pg_log_entry_t>, hobject_t::BitwiseComparator> *out_entries) {
     while (!entries.empty()) {
-      list<pg_log_entry_t> &out_list = (*out_entries)[entries.front().soid];
+      mempool::osd::list<pg_log_entry_t> &out_list = (*out_entries)[entries.front().soid];
       out_list.splice(out_list.end(), entries, entries.begin());
     }
   }
@@ -688,7 +688,7 @@ protected:
   static void _merge_object_divergent_entries(
     const IndexedLog &log,               ///< [in] log to merge against
     const hobject_t &hoid,               ///< [in] object we are merging
-    const list<pg_log_entry_t> &entries, ///< [in] entries for hoid to merge
+    const mempool::osd::list<pg_log_entry_t> &entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
     missing_type &missing,              ///< [in,out] missing to adjust, use
@@ -851,16 +851,16 @@ protected:
   template <typename missing_type>
   static void _merge_divergent_entries(
     const IndexedLog &log,               ///< [in] log to merge against
-    list<pg_log_entry_t> &entries,       ///< [in] entries to merge
+    mempool::osd::list<pg_log_entry_t> &entries,       ///< [in] entries to merge
     const pg_info_t &oinfo,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
-    map<hobject_t, list<pg_log_entry_t>, hobject_t::BitwiseComparator > split;
+    map<hobject_t, mempool::osd::list<pg_log_entry_t>, hobject_t::BitwiseComparator > split;
     split_by_object(entries, &split);
-    for (map<hobject_t, list<pg_log_entry_t>, hobject_t::BitwiseComparator>::iterator i = split.begin();
+    for (map<hobject_t, mempool::osd::list<pg_log_entry_t>, hobject_t::BitwiseComparator>::iterator i = split.begin();
 	 i != split.end();
 	 ++i) {
       _merge_object_divergent_entries(
@@ -884,7 +884,7 @@ protected:
     const pg_log_entry_t& oe,
     const pg_info_t& info,
     LogEntryHandler *rollbacker) {
-    list<pg_log_entry_t> entries;
+    mempool::osd::list<pg_log_entry_t> entries;
     entries.push_back(oe);
     _merge_object_divergent_entries(
       log,
@@ -910,7 +910,7 @@ public:
   static bool append_log_entries_update_missing(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
-    const list<pg_log_entry_t> &entries,
+    const mempool::osd::list<pg_log_entry_t> &entries,
     IndexedLog *log,
     missing_type &missing,
     LogEntryHandler *rollbacker,
@@ -950,7 +950,7 @@ public:
   bool append_new_log_entries(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
-    const list<pg_log_entry_t> &entries,
+    const mempool::osd::list<pg_log_entry_t> &entries,
     LogEntryHandler *rollbacker) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,

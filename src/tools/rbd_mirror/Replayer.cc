@@ -303,8 +303,9 @@ int Replayer::init()
   // Bootstrap existing mirroring images
   init_local_mirroring_images();
 
-  // TODO: make interval configurable
-  m_pool_watcher.reset(new PoolWatcher(m_remote_io_ctx, 30, m_lock, m_cond));
+  m_pool_watcher.reset(new PoolWatcher(m_remote_io_ctx,
+		       g_ceph_context->_conf->rbd_mirror_image_directory_refresh_interval,
+		       m_lock, m_cond));
   m_pool_watcher->refresh_images();
 
   m_replayer_thread.create("replayer");
@@ -456,7 +457,8 @@ void Replayer::run()
     if (m_blacklisted) {
       break;
     }
-    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
+    m_cond.WaitInterval(g_ceph_context, m_lock,
+	utime_t(g_ceph_context->_conf->rbd_mirror_image_state_check_interval, 0));
   }
 
   ImageIds empty_sources;

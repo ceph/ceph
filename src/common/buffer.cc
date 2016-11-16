@@ -12,7 +12,7 @@
  * 
  */
 
-
+#include "include/mempool.h"
 #include "armor.h"
 #include "common/environment.h"
 #include "common/errno.h"
@@ -21,6 +21,7 @@
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
+#include "common/deleter.h"
 #include "include/atomic.h"
 #include "common/RWLock.h"
 #include "include/types.h"
@@ -37,7 +38,6 @@
 #include <limits.h>
 
 #include <ostream>
-namespace ceph {
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
@@ -238,6 +238,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
+  MEMPOOL_DEFINE_FACTORY(char, char, buffer_data);
+
   /*
    * raw_combined is always placed within a single allocation along
    * with the data buffer.  the data goes at the beginning, and
@@ -266,14 +268,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 				  alignof(buffer::raw_combined));
       size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
 
-#ifdef DARWIN
-      char *ptr = (char *) valloc(rawlen + datalen);
-#else
-      char *ptr = 0;
-      int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
-      if (r)
-	throw bad_alloc();
-#endif /* DARWIN */
+      char *ptr = mempool::buffer_data::alloc_char.allocate_aligned(
+	rawlen + datalen, align);
       if (!ptr)
 	throw bad_alloc();
 
@@ -284,12 +280,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     static void operator delete(void *ptr) {
       raw_combined *raw = (raw_combined *)ptr;
-      ::free((void *)raw->data);
+      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
+				  alignof(buffer::raw_combined));
+      size_t datalen = ROUND_UP_TO(raw->len, alignof(buffer::raw_combined));
+      mempool::buffer_data::alloc_char.deallocate_aligned(
+	raw->data, rawlen + datalen);
     }
   };
 
   class buffer::raw_malloc : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_malloc(unsigned l) : raw(l) {
       if (len) {
 	data = (char *)malloc(len);
@@ -319,6 +321,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #ifndef __CYGWIN__
   class buffer::raw_mmap_pages : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_mmap_pages(unsigned l) : raw(l) {
       data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
       if (!data)
@@ -340,6 +344,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   class buffer::raw_posix_aligned : public buffer::raw {
     unsigned align;
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
@@ -401,6 +407,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #ifdef CEPH_HAVE_SPLICE
   class buffer::raw_pipe : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_pipe(unsigned len) : raw(len), source_consumed(false) {
       size_t max = get_max_pipe_size();
       if (len > max) {
@@ -581,9 +589,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
    */
   class buffer::raw_char : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_char(unsigned l) : raw(l) {
       if (len)
-	data = new char[len];
+	data = mempool::buffer_data::alloc_char.allocate(len);
       else
 	data = 0;
       inc_total_alloc(len);
@@ -595,7 +605,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_char() {
-      delete[] data;
+      if (data)
+	mempool::buffer_data::alloc_char.deallocate(data, len);
       dec_total_alloc(len);
       bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
@@ -606,6 +617,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   class buffer::raw_unshareable : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_unshareable(unsigned l) : raw(l) {
       if (len)
 	data = new char[len];
@@ -627,8 +640,21 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   class buffer::raw_static : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
     ~raw_static() {}
+    raw* clone_empty() {
+      return new buffer::raw_char(len);
+    }
+  };
+
+  class buffer::raw_claim_buffer : public buffer::raw {
+    deleter del;
+   public:
+    raw_claim_buffer(const char *b, unsigned l, deleter d)
+        : raw((char*)b, l), del(std::move(d)) { }
+    ~raw_claim_buffer() {}
     raw* clone_empty() {
       return new buffer::raw_char(len);
     }
@@ -707,6 +733,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
+  }
+  buffer::raw* buffer::claim_buffer(unsigned len, char *buf, deleter del) {
+    return new raw_claim_buffer(buf, len, std::move(del));
   }
 
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
@@ -2516,4 +2545,19 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::error& e)
 {
   return out << e.what();
 }
-}
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
+			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_mmap_pages, buffer_raw_mmap_pagse,
+			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
+			      buffer_raw_posix_aligned, buffer_meta);
+#ifdef CEPH_HAVE_SPLICE
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_pipe, buffer_raw_pipe, buffer_meta);
+#endif
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_char, buffer_raw_char, buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_unshareable, buffer_raw_unshareable,
+			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
+			      buffer_meta);
+

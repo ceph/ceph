@@ -21,6 +21,7 @@ from ceph_detect_init import fedora
 from ceph_detect_init import rhel
 from ceph_detect_init import suse
 from ceph_detect_init import gentoo
+from ceph_detect_init import freebsd
 import logging
 import platform
 
@@ -65,6 +66,7 @@ def _get_distro(distro, use_rhceph=False):
         'gentoo': gentoo,
         'funtoo': gentoo,
         'exherbo': gentoo,
+        'freebsd': freebsd,
     }
 
     if distro == 'redhat' and use_rhceph:
@@ -90,11 +92,22 @@ def _normalized_distro_name(distro):
 
 def platform_information():
     """detect platform information from remote host."""
-    linux_distro = platform.linux_distribution(
-        supported_dists=platform._supported_dists + ('alpine',))
-    logging.debug('platform_information: linux_distribution = ' +
-                  str(linux_distro))
-    distro, release, codename = linux_distro
+    if platform.system() == 'Linux':
+        linux_distro = platform.linux_distribution(
+            supported_dists=platform._supported_dists + ('alpine',))
+        logging.debug('platform_information: linux_distribution = ' +
+                      str(linux_distro))
+        distro, release, codename = linux_distro
+    elif platform.system() == 'FreeBSD':
+        distro = 'freebsd'
+        release = platform.release()
+        codename = platform.version().split(' ')[3].split(':')[0]
+        logging.debug(
+            'platform_information: release = {}, version = {}'.format(
+                platform.release(), platform.version()))
+    else:
+        raise exc.UnsupportedPlatform(platform.system(), '', '')
+
     # this could be an empty string in Debian
     if not codename and 'debian' in distro.lower():
         debian_codenames = {

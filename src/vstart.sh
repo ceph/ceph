@@ -71,7 +71,7 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
 
-if (( $CEPH_NUM_OSD > 3 )); then
+if [ $CEPH_NUM_OSD -gt 3 ]; then
     OSD_POOL_DEFAULT_SIZE=3
 else
     OSD_POOL_DEFAULT_SIZE=$CEPH_NUM_OSD
@@ -598,6 +598,7 @@ $extra_conf
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool
+        mon allow pool delete = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -667,7 +668,9 @@ if [ "$start_osd" -eq 1 ]; then
 EOF
 
 	    rm -rf $CEPH_DEV_DIR/osd$osd || true
-	    for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
+            if command -v btrfs > /dev/null; then
+	        for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
+            fi
 	    mkdir -p $CEPH_DEV_DIR/osd$osd
 
 	    uuid=`uuidgen`

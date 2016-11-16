@@ -247,7 +247,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(mc->get_global_id()),
-    cap_epoch_barrier(0), fsmap(nullptr), fsmap_user(nullptr),
+    cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
@@ -283,7 +283,7 @@ Client::Client(Messenger *m, MonClient *mc)
   messenger = m;
 
   // osd interfaces
-  mdsmap = new MDSMap;
+  mdsmap.reset(new MDSMap);
   objecter = new Objecter(cct, messenger, monclient, NULL,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
@@ -314,8 +314,6 @@ Client::~Client()
 
   delete filer;
   delete objecter;
-  delete mdsmap;
-  delete fsmap;
 
   delete logger;
 }
@@ -2513,9 +2511,7 @@ bool Client::ms_dispatch(Message *m)
 
 void Client::handle_fs_map(MFSMap *m)
 {
-  delete fsmap;
-  fsmap = new FSMap;
-  *fsmap = m->get_fsmap();
+  fsmap.reset(new FSMap(m->get_fsmap()));
   m->put();
 
   signal_cond_list(waiting_for_fsmap);
@@ -2525,8 +2521,7 @@ void Client::handle_fs_map(MFSMap *m)
 
 void Client::handle_fs_map_user(MFSMapUser *m)
 {
-  delete fsmap_user;
-  fsmap_user = new FSMapUser;
+  fsmap_user.reset(new FSMapUser);
   *fsmap_user = m->get_fsmap();
   m->put();
 
@@ -2546,8 +2541,9 @@ void Client::handle_mds_map(MMDSMap* m)
 
   ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
 
-  MDSMap *oldmap = mdsmap;
-  mdsmap = new MDSMap;
+  std::unique_ptr<MDSMap> oldmap(new MDSMap);
+  oldmap.swap(mdsmap);
+
   mdsmap->decode(m->get_encoded());
 
   // Cancel any commands for missing or laggy GIDs
@@ -2619,7 +2615,6 @@ void Client::handle_mds_map(MMDSMap* m)
   // kick any waiting threads
   signal_cond_list(waiting_for_mdsmap);
 
-  delete oldmap;
   m->put();
 
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
@@ -3054,7 +3049,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       ++put_nref;
     }
     if (drop)
-      check_caps(in, false);
+      check_caps(in, 0);
     if (put_nref)
       put_inode(in, put_nref);
   }
@@ -3088,7 +3083,7 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 	  endoff > (loff_t)in->wanted_max_size) {
 	ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
 	in->wanted_max_size = endoff;
-	check_caps(in, false);
+	check_caps(in, 0);
       }
 
       if (endoff >= 0 && endoff > (loff_t)in->max_size) {
@@ -3175,8 +3170,8 @@ void Client::cap_delay_requeue(Inode *in)
 }
 
 void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
-		      int used, int want, int retain, int flush,
-		      ceph_tid_t flush_tid)
+		      bool sync, int used, int want, int retain,
+		      int flush, ceph_tid_t flush_tid)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -3186,6 +3181,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 
   ldout(cct, 10) << "send_cap " << *in
 	   << " mds." << session->mds_num << " seq " << cap->seq
+	   << (sync ? " sync " : " async ")
 	   << " used " << ccap_string(used)
 	   << " want " << ccap_string(want)
 	   << " flush " << ccap_string(flush)
@@ -3250,7 +3246,6 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     m->head.xattr_version = in->xattr_version;
   }
   
-  m->layout = in->layout;
   m->size = in->size;
   m->max_size = in->max_size;
   m->truncate_seq = in->truncate_seq;
@@ -3261,6 +3256,8 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->btime = in->btime;
   m->time_warp_seq = in->time_warp_seq;
   m->change_attr = in->change_attr;
+  if (sync)
+    m->flags |= CLIENT_CAPS_SYNC;
     
   if (flush & CEPH_CAP_FILE_WR) {
     m->inline_version = in->inline_version;
@@ -3283,7 +3280,16 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 }
 
 
-void Client::check_caps(Inode *in, bool is_delayed)
+/**
+ * check_caps
+ *
+ * Examine currently used and wanted versus held caps. Release, flush or ack
+ * revoked caps to the MDS as appropriate.
+ *
+ * @param in the inode to check
+ * @param flags flags to apply to cap check
+ */
+void Client::check_caps(Inode *in, unsigned flags)
 {
   unsigned wanted = in->caps_wanted();
   unsigned used = get_caps_used(in);
@@ -3313,7 +3319,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	   << " used " << ccap_string(used)
 	   << " issued " << ccap_string(issued)
 	   << " revoking " << ccap_string(revoking)
-	   << " is_delayed=" << is_delayed
+	   << " flags=" << flags
 	   << dendl;
 
   if (in->snapid != CEPH_NOSNAP)
@@ -3329,10 +3335,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
   if (!in->cap_snaps.empty())
     flush_snaps(in);
 
-  if (!is_delayed)
-    cap_delay_requeue(in);
-  else
+  if (flags & CHECK_CAPS_NODELAY)
     in->hold_caps_until = utime_t();
+  else
+    cap_delay_requeue(in);
 
   utime_t now = ceph_clock_now(cct);
 
@@ -3405,7 +3411,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
       if (in->cap_snaps.size())
 	flush_snaps(in, true);
       if (in->flushing_caps)
-	flush_caps(in, session);
+	flush_caps(in, session, flags & CHECK_CAPS_SYNCHRONOUS);
     }
 
     int flushing;
@@ -3417,7 +3423,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
       flush_tid = 0;
     }
 
-    send_cap(in, session, cap, cap_used, wanted, retain, flushing, flush_tid);
+    send_cap(in, session, cap, flags & CHECK_CAPS_SYNCHRONOUS, cap_used, wanted,
+	     retain, flushing, flush_tid);
   }
 }
 
@@ -3847,7 +3854,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
       if (it->second == cap)
 	continue;
       if (it->second->implemented & ~it->second->issued & issued) {
-	check_caps(in, true);
+	check_caps(in, CHECK_CAPS_NODELAY);
 	break;
       }
     }
@@ -4100,27 +4107,40 @@ void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSe
   new_s->flushing_caps.push_back(&in->flushing_cap_item);
 }
 
-void Client::flush_caps()
+/*
+ * Flush all caps back to the MDS. Because the callers generally wait on the
+ * result of this function (syncfs and umount cases), we set
+ * CHECK_CAPS_SYNCHRONOUS on the last check_caps call.
+ */
+void Client::flush_caps_sync()
 {
-  ldout(cct, 10) << "flush_caps" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   xlist<Inode*>::iterator p = delayed_caps.begin();
   while (!p.end()) {
+    unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
+
     ++p;
     delayed_caps.pop_front();
-    check_caps(in, true);
+    if (p.end() && cap_list.empty())
+      flags |= CHECK_CAPS_SYNCHRONOUS;
+    check_caps(in, flags);
   }
 
   // other caps, too
   p = cap_list.begin();
   while (!p.end()) {
+    unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
+
     ++p;
-    check_caps(in, true);
+    if (p.end())
+      flags |= CHECK_CAPS_SYNCHRONOUS;
+    check_caps(in, flags);
   }
 }
 
-void Client::flush_caps(Inode *in, MetaSession *session)
+void Client::flush_caps(Inode *in, MetaSession *session, bool sync)
 {
   ldout(cct, 10) << "flush_caps " << in << " mds." << session->mds_num << dendl;
   Cap *cap = in->auth_cap;
@@ -4129,7 +4149,14 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
        p != in->flushing_cap_tids.end();
        ++p) {
-    send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
+    bool req_sync = false;
+
+    /* If this is a synchronous request, then flush the journal on last one */
+    if (sync && (p->first == in->flushing_cap_tids.rbegin()->first))
+      req_sync = true;
+
+    send_cap(in, session, cap, req_sync,
+	     (get_caps_used(in) | in->caps_dirty()),
 	     in->caps_wanted(), (cap->issued | cap->implemented),
 	     p->second, p->first);
   }
@@ -4985,7 +5012,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   }
 
   if (check)
-    check_caps(in, false);
+    check_caps(in, 0);
 
   // wake up waiters
   if (new_caps)
@@ -5306,7 +5333,7 @@ int Client::resolve_mds(
     const std::string &mds_spec,
     std::vector<mds_gid_t> *targets)
 {
-  assert(fsmap != nullptr);
+  assert(fsmap);
   assert(targets != nullptr);
 
   mds_role_t role;
@@ -5414,20 +5441,20 @@ int Client::fetch_fsmap(bool user)
   ldout(cct, 10) << __func__ << " learned FSMap version " << fsmap_latest << dendl;
 
   if (user) {
-    if (fsmap_user == nullptr || fsmap_user->get_epoch() < fsmap_latest) {
+    if (!fsmap_user || fsmap_user->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap.user", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
       wait_on_list(waiting_for_fsmap);
     }
-    assert(fsmap_user != nullptr);
+    assert(fsmap_user);
     assert(fsmap_user->get_epoch() >= fsmap_latest);
   } else {
-    if (fsmap == nullptr || fsmap->get_epoch() < fsmap_latest) {
+    if (!fsmap || fsmap->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
       wait_on_list(waiting_for_fsmap);
     }
-    assert(fsmap != nullptr);
+    assert(fsmap);
     assert(fsmap->get_epoch() >= fsmap_latest);
   }
   ldout(cct, 10) << __func__ << " finished waiting for FSMap version "
@@ -5745,7 +5772,7 @@ void Client::unmount()
     }
   }
 
-  flush_caps();
+  flush_caps_sync();
   wait_sync_caps(last_flush_tid);
 
   // empty lru cache
@@ -5860,7 +5887,7 @@ void Client::tick()
       break;
     delayed_caps.pop_front();
     cap_list.push_back(&in->cap_item);
-    check_caps(in, true);
+    check_caps(in, CHECK_CAPS_NODELAY);
   }
 
   trim_cache(true);
@@ -8035,7 +8062,7 @@ int Client::_release_fh(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
-      check_caps(in, false);
+      check_caps(in, 0);
     }
   } else {
     assert(in->snap_cap_refs > 0);
@@ -8084,7 +8111,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
   if ((flags & O_TRUNC) == 0 &&
       in->caps_issued_mask(want)) {
     // update wanted?
-    check_caps(in, true);
+    check_caps(in, CHECK_CAPS_NODELAY);
   } else {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
@@ -8120,7 +8147,7 @@ int Client::_renew_caps(Inode *in)
   int wanted = in->caps_file_wanted();
   if (in->is_any_caps() &&
       ((wanted & CEPH_CAP_ANY_WR) == 0 || in->auth_cap)) {
-    check_caps(in, true);
+    check_caps(in, CHECK_CAPS_NODELAY);
     return 0;
   }
 
@@ -8453,7 +8480,7 @@ done:
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
-      check_caps(in, false);
+      check_caps(in, 0);
     } else
       r = uninline_ret;
   }
@@ -8781,20 +8808,15 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // copy into fresh buffer (since our write may be resub, async)
   bufferlist bl;
-  bufferptr *bparr = NULL;
   if (buf) {
-      bufferptr bp;
-      if (size > 0) bp = buffer::copy(buf, size);
-      bl.push_back( bp );
+    if (size > 0)
+      bl.append(buf, size);
   } else if (iov){
-      //iov case 
-      bparr = new bufferptr[iovcnt];
-      for (int i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_len > 0) {
-            bparr[i] = buffer::copy((char*)iov[i].iov_base, iov[i].iov_len);
-        }
-        bl.push_back( bparr[i] );
+    for (int i = 0; i < iovcnt; i++) {
+      if (iov[i].iov_len > 0) {
+        bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
       }
+    }
   }
 
   utime_t lat;
@@ -8802,7 +8824,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0) {
-    delete[] bparr;
     return r;
   }
 
@@ -8914,11 +8935,11 @@ success:
     mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
     if (is_quota_bytes_approaching(in, f->actor_perms)) {
-      check_caps(in, true);
+      check_caps(in, CHECK_CAPS_NODELAY);
     } else {
       if ((in->size << 1) >= in->max_size &&
           (in->reported_size << 1) < in->max_size)
-        check_caps(in, false);
+        check_caps(in, 0);
     }
 
     ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
@@ -8945,13 +8966,12 @@ done:
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
-      check_caps(in, false);
+      check_caps(in, 0);
     } else
       r = uninline_ret;
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
-  delete[] bparr; 
   return r;
 }
 
@@ -9033,8 +9053,8 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
   
-  if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
-    check_caps(in, true);
+  if (!syncdataonly && in->dirty_caps) {
+    check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
     if (in->flushing_caps)
       flush_tid = last_flush_tid;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
@@ -9642,7 +9662,7 @@ int Client::_sync_fs()
     flush_done = true;
 
   // flush caps
-  flush_caps();
+  flush_caps_sync();
   ceph_tid_t flush_tid = last_flush_tid;
 
   // wait for unsafe mds requests
@@ -9705,7 +9725,7 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   
   _fsync(f, true);
   if (_release(in))
-    check_caps(in, false);
+    check_caps(in, 0);
   return 0;
 }
 
@@ -12262,11 +12282,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
       if (is_quota_bytes_approaching(in, fh->actor_perms)) {
-        check_caps(in, true);
+        check_caps(in, CHECK_CAPS_NODELAY);
       } else {
         if ((in->size << 1) >= in->max_size &&
             (in->reported_size << 1) < in->max_size)
-          check_caps(in, false);
+          check_caps(in, 0);
       }
     }
   }
@@ -12283,7 +12303,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
-      check_caps(in, false);
+      check_caps(in, 0);
     } else
       r = uninline_ret;
   }

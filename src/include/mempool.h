@@ -31,6 +31,7 @@
 
 #include <common/Formatter.h>
 
+
 /*
 
 Memory Pools
@@ -140,8 +141,13 @@ namespace mempool {
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
   f(unittest_1)			      \
   f(unittest_2)			      \
+  f(buffer_meta)		      \
+  f(buffer_data)		      \
+  f(osd)			      \
   f(bluestore_meta_onode)	      \
-  f(bluestore_meta_other)
+  f(bluestore_meta_other)	      \
+  f(bluestore_alloc)		      \
+  f(bluefs)
 
 // give them integer ids
 #define P(x) mempool_##x,
@@ -167,10 +173,14 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
+// align shard to a cacheline
 struct shard_t {
   std::atomic<size_t> bytes = {0};
   std::atomic<size_t> items = {0};
-};
+  char __padding[128 - sizeof(std::atomic<size_t>)*2];
+} __attribute__ ((aligned (128)));
+
+static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
 
 struct stats_t {
   ssize_t items = 0;
@@ -283,7 +293,7 @@ public:
     shard_t *shard = pool->pick_a_shard();
     shard->bytes += total;
     shard->items += n;
-    if (debug_mode) {
+    if (type) {
       type->items += n;
     }
     T* r = reinterpret_cast<T*>(new char[total]);
@@ -299,6 +309,33 @@ public:
       type->items -= n;
     }
     delete[] reinterpret_cast<char*>(p);
+  }
+
+  T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = pool->pick_a_shard();
+    shard->bytes += total;
+    shard->items += n;
+    if (type) {
+      type->items += n;
+    }
+    char *ptr;
+    int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
+    if (rc)
+      throw std::bad_alloc();
+    T* r = reinterpret_cast<T*>(ptr);
+    return r;
+  }
+
+  void deallocate_aligned(T* p, size_t n) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = pool->pick_a_shard();
+    shard->bytes -= total;
+    shard->items -= n;
+    if (type) {
+      type->items -= n;
+    }
+    ::free(p);
   }
 
   void destroy(T* p) {
@@ -323,24 +360,6 @@ public:
 };
 
 
-// There is one factory associated with every type that lives in a
-// mempool.
-
-template<pool_index_t pool_ix,typename o>
-class factory {
-public:
-  typedef pool_allocator<pool_ix,o> allocator_type;
-  static allocator_type alloc;
-
-  static void *allocate() {
-    return (void *)alloc.allocate(1);
-  }
-  static void free(void *p) {
-    alloc.deallocate((o *)p, 1);
-  }
-};
-
-
 // Namespace mempool
 
 #define P(x)								\
@@ -355,7 +374,7 @@ public:
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<k,v>>>;	\
     template<typename k, typename cmp = std::less<k> >			\
-    using set = std::set<k,cmp,pool_allocator<k>>; \
+    using set = std::set<k,cmp,pool_allocator<k>>;			\
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
     template<typename v>						\
@@ -365,8 +384,6 @@ public:
 	     typename eq = std::equal_to<k>>				\
     using unordered_map =						\
       std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
-    template<typename v>						\
-    using factory = mempool::factory<id,v>;				\
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\
     }									\
@@ -386,8 +403,11 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
-  mempool::pool::pool_allocator<obj>					\
-  _factory_##pool##factoryname##_alloc = {true};
+  namespace mempool {							\
+    namespace pool {							\
+      pool_allocator<obj> alloc_##factoryname = {true};			\
+    }									\
+  }
 
 // Use this for each class that belongs to a mempool.  For example,
 //
@@ -407,10 +427,10 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 #define MEMPOOL_DEFINE_OBJECT_FACTORY(obj,factoryname,pool)		\
   MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
   void *obj::operator new(size_t size) {				\
-    return _factory_##pool##factoryname##_alloc.allocate(1);		\
+    return mempool::pool::alloc_##factoryname.allocate(1); \
   }									\
   void obj::operator delete(void *p)  {					\
-    return _factory_##pool##factoryname##_alloc.deallocate((obj*)p, 1); \
+    return mempool::pool::alloc_##factoryname.deallocate((obj*)p, 1);	\
   }
 
 #endif

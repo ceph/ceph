@@ -315,6 +315,11 @@ void MDRequestImpl::print(ostream &out) const
 
 void MDRequestImpl::dump(Formatter *f) const
 {
+  _dump(f);
+}
+
+void MDRequestImpl::_dump(Formatter *f) const
+{
   f->dump_string("flag_point", state_string());
   f->dump_stream("reqid") << reqid;
   {

@@ -17,6 +17,10 @@
 #include "common/errno.h"
 #include "Event.h"
 
+#ifdef HAVE_DPDK
+#include "dpdk/EventDPDK.h"
+#endif
+
 #ifdef HAVE_EPOLL
 #include "EventEpoll.h"
 #else
@@ -53,6 +57,42 @@ class C_handle_notify : public EventCallback {
 #undef dout_prefix
 #define dout_prefix _event_prefix(_dout)
 
+/**
+ * Construct a Poller.
+ *
+ * \param center
+ *      EventCenter object through which the poller will be invoked (defaults
+ *      to the global #RAMCloud::center object).
+ * \param pollerName
+ *      Human readable name that can be printed out in debugging messages
+ *      about the poller. The name of the superclass is probably sufficient
+ *      for most cases.
+ */
+EventCenter::Poller::Poller(EventCenter* center, const string& name)
+    : owner(center), poller_name(name), slot(owner->pollers.size())
+{
+  owner->pollers.push_back(this);
+}
+
+/**
+ * Destroy a Poller.
+ */
+EventCenter::Poller::~Poller()
+{
+  // Erase this Poller from the vector by overwriting it with the
+  // poller that used to be the last one in the vector.
+  //
+  // Note: this approach is reentrant (it is safe to delete a
+  // poller from a poller callback, which means that the poll
+  // method is in the middle of scanning the list of all pollers;
+  // the worst that will happen is that the poller that got moved
+  // may not be invoked in the current scan).
+  owner->pollers[slot] = owner->pollers.back();
+  owner->pollers[slot]->slot = slot;
+  owner->pollers.pop_back();
+  slot = -1;
+}
+
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " nevent=" << nevent
@@ -66,6 +106,11 @@ int EventCenter::init(int n, unsigned i)
 
   idx = i;
 
+  if (cct->_conf->ms_async_transport_type == "dpdk") {
+#ifdef HAVE_DPDK
+    driver = new DPDKDriver(cct);
+#endif
+  } else {
 #ifdef HAVE_EPOLL
   driver = new EpollDriver(cct);
 #else
@@ -75,17 +120,24 @@ int EventCenter::init(int n, unsigned i)
   driver = new SelectDriver(cct);
 #endif
 #endif
+  }
 
   if (!driver) {
     lderr(cct) << __func__ << " failed to create event driver " << dendl;
     return -1;
   }
 
-  int r = driver->init(n);
+  int r = driver->init(this, n);
   if (r < 0) {
     lderr(cct) << __func__ << " failed to init event driver." << dendl;
     return r;
   }
+
+  file_events.resize(n);
+  nevent = n;
+
+  if (!driver->need_wakeup())
+    return 0;
 
   int fds[2];
   if (pipe(fds) < 0) {
@@ -104,9 +156,7 @@ int EventCenter::init(int n, unsigned i)
     return r;
   }
 
-  file_events.resize(n);
-  nevent = n;
-  return 0;
+  return r;
 }
 
 EventCenter::~EventCenter()
@@ -142,9 +192,11 @@ void EventCenter::set_owner()
         global_centers, "AsyncMessenger::EventCenter::global_center");
     assert(global_centers);
     global_centers->centers[idx] = this;
-    notify_handler = new C_handle_notify(this, cct);
-    int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-    assert(r == 0);
+    if (driver->need_wakeup()) {
+      notify_handler = new C_handle_notify(this, cct);
+      int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+      assert(r == 0);
+    }
   }
 }
 
@@ -261,8 +313,11 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  ldout(cct, 2) << __func__ << dendl;
+  // No need to wake up since we never sleep
+  if (!pollers.empty() || !driver->need_wakeup())
+    return ;
 
+  ldout(cct, 2) << __func__ << dendl;
   char buf = 'c';
   // wake up "event_wait"
   int n = write(notify_send_fd, &buf, sizeof(buf));
@@ -304,15 +359,18 @@ int EventCenter::process_events(int timeout_microseconds)
   bool trigger_time = false;
   auto now = clock_type::now();
 
-  // If exists external events, don't block
-  if (external_num_events.load()) {
+  auto it = time_events.begin();
+  bool blocking = pollers.empty() && !external_num_events.load();
+  // If exists external events or poller, don't block
+  if (!blocking) {
+    if (it != time_events.end() && now >= it->first)
+      trigger_time = true;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
   } else {
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
 
-    auto it = time_events.begin();
     if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
@@ -374,6 +432,12 @@ int EventCenter::process_events(int timeout_microseconds)
       numevents++;
     }
   }
+
+  if (!numevents && !blocking) {
+    for (uint32_t i = 0; i < pollers.size(); i++)
+      numevents += pollers[i]->poll();
+  }
+
   return numevents;
 }
 

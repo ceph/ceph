@@ -69,6 +69,8 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
 
 #include <errno.h>
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(ReplicatedPG, replicatedpg, osd);
+
 PGLSFilter::PGLSFilter()
 {
 }
@@ -2309,7 +2311,7 @@ void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
   assert(op->may_write());
   const osd_reqid_t &reqid = static_cast<MOSDOp*>(op->get_req())->get_reqid();
   ObjectContextRef obc;
-  list<pg_log_entry_t> entries;
+  mempool::osd::list<pg_log_entry_t> entries;
   entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
 				   get_next_version(), eversion_t(), 0,
 				   reqid, utime_t(), r));
@@ -5504,7 +5506,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	dout(10) << "watch: peer_addr="
 	  << ctx->op->get_req()->get_connection()->get_peer_addr() << dendl;
 
-	watch_info_t w(cookie, cct->_conf->osd_client_watch_timeout,
+	uint32_t timeout = cct->_conf->osd_client_watch_timeout;
+	if (op.watch.timeout != 0) {
+	  timeout = op.watch.timeout;
+	}
+
+	watch_info_t w(cookie, timeout,
 	  ctx->op->get_req()->get_connection()->get_peer_addr());
 	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH ||
 	    op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
@@ -8837,7 +8844,7 @@ void ReplicatedPG::simple_opc_submit(OpContextUPtr ctx)
 
 
 void ReplicatedPG::submit_log_entries(
-  const list<pg_log_entry_t> &entries,
+  const mempool::osd::list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&on_complete,
   OpRequestRef op)
@@ -9838,7 +9845,14 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
 
 void ReplicatedPG::failed_push(const list<pg_shard_t> &from, const hobject_t &soid)
 {
+  dout(20) << __func__ << ": " << soid << dendl;
   assert(recovering.count(soid));
+  auto obc = recovering[soid];
+  if (obc) {
+    list<OpRequestRef> blocked_ops;
+    obc->drop_recovery_read(&blocked_ops);
+    requeue_ops(blocked_ops);
+  }
   recovering.erase(soid);
   for (auto&& i : from)
     missing_loc.remove_location(soid, i);
@@ -9976,7 +9990,7 @@ void ReplicatedPG::mark_all_unfound_lost(
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  list<pg_log_entry_t> log_entries;
+  mempool::osd::list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now(cct);
   map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator m =

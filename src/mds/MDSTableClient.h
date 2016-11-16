@@ -73,7 +73,7 @@ public:
   void got_journaled_agree(version_t tid, LogSegment *ls);
   void got_journaled_ack(version_t tid);
 
-  bool has_committed(version_t tid) {
+  bool has_committed(version_t tid) const {
     return pending_commit.count(tid) == 0;
   }
   void wait_for_ack(version_t tid, MDSInternalContextBase *c) {

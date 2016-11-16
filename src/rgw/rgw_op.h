@@ -346,6 +346,7 @@ public:
     buckets_objcount = 0;
     buckets_size = 0;
     buckets_size_rounded = 0;
+    is_truncated = false;
   }
 
   int verify_permission();
@@ -667,7 +668,7 @@ struct RGWSLOInfo {
   char *raw_data;
   int raw_data_len;
 
-  RGWSLOInfo() : raw_data(NULL), raw_data_len(0) {}
+  RGWSLOInfo() : total_size(0), raw_data(NULL), raw_data_len(0) {}
   ~RGWSLOInfo() {
     free(raw_data);
   }

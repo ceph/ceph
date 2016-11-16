@@ -165,6 +165,7 @@ SUBSYS(kinetic, 1, 5)
 SUBSYS(fuse, 1, 5)
 SUBSYS(mgr, 1, 5)
 SUBSYS(mgrc, 1, 5)
+SUBSYS(dpdk, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -222,6 +223,21 @@ OPTION(ms_async_rdma_send_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_receive_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_port_num, OPT_U32, 1)
 
+OPTION(ms_dpdk_port_id, OPT_INT, 0)
+OPTION(ms_dpdk_coremask, OPT_STR, "1")
+OPTION(ms_dpdk_memory_channel, OPT_STR, "4")
+OPTION(ms_dpdk_hugepages, OPT_STR, "")
+OPTION(ms_dpdk_pmd, OPT_STR, "")
+OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
+OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "")
+OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "")
+OPTION(ms_dpdk_lro, OPT_BOOL, true)
+OPTION(ms_dpdk_hw_flow_control, OPT_BOOL, true)
+// Weighing of a hardware network queue relative to a software queue (0=no work, 1=     equal share)")
+OPTION(ms_dpdk_hw_queue_weight, OPT_FLOAT, 1)
+OPTION(ms_dpdk_debug_allow_loopback, OPT_BOOL, false)
+OPTION(ms_dpdk_rx_buffer_count_per_core, OPT_INT, 8192)
+
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
@@ -278,7 +294,7 @@ OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT, .5) // threshold of down osds
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
-OPTION(mon_allow_pool_delete, OPT_BOOL, true) // allow pool deletion
+OPTION(mon_allow_pool_delete, OPT_BOOL, false) // allow pool deletion
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
@@ -771,6 +787,7 @@ OPTION(osd_max_push_cost, OPT_U64, 8<<20)  // max size of push message
 OPTION(osd_max_push_objects, OPT_U64, 10)  // max objects in single push op
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
 OPTION(osd_max_scrubs, OPT_INT, 1)
+OPTION(osd_scrub_during_recovery, OPT_BOOL, true) // Allow new scrubs to start while recovery is active on the OSD
 OPTION(osd_scrub_begin_hour, OPT_INT, 0)
 OPTION(osd_scrub_end_hour, OPT_INT, 24)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
@@ -937,6 +954,8 @@ OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
 OPTION(bdev_block_size, OPT_INT, 4096)
+OPTION(bdev_debug_aio, OPT_BOOL, false)
+OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT, 60.0)
 
 // if yes, osd will unbind all NVMe devices from kernel driver and bind them
 // to the uio_pci_generic driver. The purpose is to prevent the case where
@@ -980,7 +999,7 @@ OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL, false)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate space if block/db_path/wal_path is file rather that block device.
-OPTION(bluestore_precondition_bluefs, OPT_U64, 128*1024*1024)  // write this much data at mkfs
+OPTION(bluestore_precondition_bluefs, OPT_U64, 512*1024*1024)  // write this much data at mkfs
 OPTION(bluestore_precondition_bluefs_block, OPT_U64, 1048576)
 OPTION(bluestore_csum_type, OPT_STR, "crc32c") // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
 OPTION(bluestore_csum_min_block, OPT_U32, 4096)
@@ -1012,7 +1031,7 @@ OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
 OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
-OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .1)
+OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .5)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
@@ -1301,6 +1320,10 @@ OPTION(rbd_mirror_journal_poll_age, OPT_DOUBLE, 5) // maximum age (in seconds) b
 OPTION(rbd_mirror_journal_max_fetch_bytes, OPT_U32, 32768) // maximum bytes to read from each journal data object per fetch
 OPTION(rbd_mirror_sync_point_update_age, OPT_DOUBLE, 30) // number of seconds between each update of the image sync point object number
 OPTION(rbd_mirror_concurrent_image_syncs, OPT_U32, 5) // maximum number of image syncs in parallel
+OPTION(rbd_mirror_pool_replayers_refresh_interval, OPT_INT, 30) // interval to refresh peers in rbd-mirror daemon
+OPTION(rbd_mirror_delete_retry_interval, OPT_DOUBLE, 30) // interval to check and retry the failed requests in deleter
+OPTION(rbd_mirror_image_directory_refresh_interval, OPT_INT, 30) // interval to refresh images in pool watcher
+OPTION(rbd_mirror_image_state_check_interval, OPT_INT, 30) // interval to get images from pool watcher and set sources in replayer
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 

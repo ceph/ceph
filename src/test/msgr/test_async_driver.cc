@@ -76,7 +76,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
 #endif
     if (strcmp(GetParam(), "select"))
       driver = new SelectDriver(g_ceph_context);
-    driver->init(100);
+    driver->init(NULL, 100);
   }
   virtual void TearDown() {
     delete driver;
@@ -115,7 +115,7 @@ TEST_P(EventDriverTest, PipeTest) {
   r = driver->event_wait(fired_events, &tv);
   ASSERT_EQ(r, 0);
 
-  char c;
+  char c = 'A';
   r = write(fds[1], &c, sizeof(c));
   ASSERT_EQ(r, 1);
   r = driver->event_wait(fired_events, &tv);

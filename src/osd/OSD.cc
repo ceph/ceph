@@ -1668,6 +1668,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   hbclient_messenger(hb_clientm),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
+  daily_loadavg(0.0),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
@@ -6576,6 +6577,11 @@ void OSD::sched_scrub()
 	break;
       }
 
+      if (!cct->_conf->osd_scrub_during_recovery && service.is_recovery_active()) {
+        dout(10) << __func__ << "not scheduling scrub of " << scrub.pgid << " due to active recovery ops" << dendl;
+        break;
+      }
+
       PG *pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
@@ -7738,13 +7744,17 @@ PG::RecoveryCtx OSD::create_context()
 struct C_OpenPGs : public Context {
   set<PGRef> pgs;
   ObjectStore *store;
-  C_OpenPGs(set<PGRef>& p, ObjectStore *s) : store(s) {
+  OSD *osd;
+  C_OpenPGs(set<PGRef>& p, ObjectStore *s, OSD* o) : store(s), osd(o) {
     pgs.swap(p);
   }
   void finish(int r) {
+    RWLock::RLocker l(osd->pg_map_lock);
     for (auto p : pgs) {
-      p->ch = store->open_collection(p->coll);
-      assert(p->ch);
+      if (osd->pg_map.count(p->info.pgid)) {
+        p->ch = store->open_collection(p->coll);
+        assert(p->ch);
+      }
     }
   }
 };
@@ -7754,7 +7764,7 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
 {
   if (!ctx.transaction->empty()) {
     if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store));
+      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
     }
     int tr = store->queue_transaction(
       pg->osr.get(),
@@ -7790,7 +7800,7 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     assert(ctx.created_pgs.empty());
   } else {
     if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store));
+      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
     }
     int tr = store->queue_transaction(
       pg->osr.get(),
@@ -8550,6 +8560,14 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 #endif
 
   _maybe_queue_recovery();
+}
+
+bool OSDService::is_recovery_active()
+{
+  if (recovery_ops_active > 0)
+    return true;
+
+  return false;
 }
 
 // =========================================================

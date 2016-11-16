@@ -102,6 +102,9 @@
 /* SPDK conditional compilation */
 #cmakedefine HAVE_SPDK
 
+/* DPDK conditional compilation */
+#cmakedefine HAVE_DPDK
+
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
 
@@ -128,6 +131,9 @@
 
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
+
+/* define if leveldb is enabled */
+#cmakedefine WITH_LEVELDB
 
 /* define if radosgw's asio frontend enabled */
 #cmakedefine WITH_RADOSGW_ASIO_FRONTEND

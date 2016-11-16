@@ -1,8 +1,12 @@
 set(kv_srcs
   KeyValueDB.cc
-  LevelDBStore.cc
   MemDB.cc
   RocksDBStore.cc)
+
+if (WITH_LEVELDB)
+  list(APPEND kv_srcs LevelDBStore.cc)
+endif (WITH_LEVELDB)
+
 add_library(kv_objs OBJECT ${kv_srcs})
 add_library(kv STATIC $<TARGET_OBJECTS:kv_objs>)
 target_include_directories(kv_objs BEFORE PUBLIC ${ROCKSDB_INCLUDE_DIR})

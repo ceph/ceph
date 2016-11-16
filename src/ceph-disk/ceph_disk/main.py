@@ -204,6 +204,7 @@ class Ptype(object):
                 return True
         return False
 
+
 DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
@@ -5140,6 +5141,7 @@ def main_catch(func, args):
 
 def run():
     main(sys.argv[1:])
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])

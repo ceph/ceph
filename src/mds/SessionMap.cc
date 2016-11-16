@@ -228,9 +228,11 @@ void SessionMap::_load_finish(
     for (ceph::unordered_map<entity_name_t, Session*>::iterator i = session_map.begin();
          i != session_map.end(); ++i) {
       Session *s = i->second;
-      if (by_state.count(s->get_state()) == 0)
-        by_state[s->get_state()] = new xlist<Session*>;
-      by_state[s->get_state()]->push_back(&s->item_session_list);
+      auto by_state_entry = by_state.find(s->get_state());
+      if (by_state_entry == by_state.end())
+	by_state_entry = by_state.emplace(s->get_state(),
+					  new xlist<Session*>).first;
+      by_state_entry->second->push_back(&s->item_session_list);
     }
 
     // Population is complete.  Trigger load waiters.
@@ -449,18 +451,21 @@ void SessionMap::decode_legacy(bufferlist::iterator &p)
   for (ceph::unordered_map<entity_name_t, Session*>::iterator i = session_map.begin();
        i != session_map.end(); ++i) {
     Session *s = i->second;
-    if (by_state.count(s->get_state()) == 0)
-      by_state[s->get_state()] = new xlist<Session*>;
-    by_state[s->get_state()]->push_back(&s->item_session_list);
+    auto by_state_entry = by_state.find(s->get_state());
+    if (by_state_entry == by_state.end())
+      by_state_entry = by_state.emplace(s->get_state(),
+					new xlist<Session*>).first;
+    by_state_entry->second->push_back(&s->item_session_list);
   }
 }
 
 uint64_t SessionMap::set_state(Session *session, int s) {
   if (session->state != s) {
     session->set_state(s);
-    if (by_state.count(s) == 0)
-      by_state[s] = new xlist<Session*>;
-    by_state[s]->push_back(&session->item_session_list);
+    auto by_state_entry = by_state.find(s);
+    if (by_state_entry == by_state.end())
+      by_state_entry = by_state.emplace(s, new xlist<Session*>).first;
+    by_state_entry->second->push_back(&session->item_session_list);
   }
   return session->get_state_seq();
 }
@@ -572,9 +577,10 @@ void SessionMap::add_session(Session *s)
 
   assert(session_map.count(s->info.inst.name) == 0);
   session_map[s->info.inst.name] = s;
-  if (by_state.count(s->state) == 0)
-    by_state[s->state] = new xlist<Session*>;
-  by_state[s->state]->push_back(&s->item_session_list);
+  auto by_state_entry = by_state.find(s->state);
+  if (by_state_entry == by_state.end())
+    by_state_entry = by_state.emplace(s->state, new xlist<Session*>).first;
+  by_state_entry->second->push_back(&s->item_session_list);
   s->get();
 
   logger->set(l_mdssm_session_count, session_map.size());
@@ -588,9 +594,7 @@ void SessionMap::remove_session(Session *s)
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
   session_map.erase(s->info.inst.name);
-  if (dirty_sessions.count(s->info.inst.name)) {
-    dirty_sessions.erase(s->info.inst.name);
-  }
+  dirty_sessions.erase(s->info.inst.name);
   null_sessions.insert(s->info.inst.name);
   s->put();
 
@@ -605,9 +609,11 @@ void SessionMap::touch_session(Session *session)
   // Move to the back of the session list for this state (should
   // already be on a list courtesy of add_session and set_state)
   assert(session->item_session_list.is_on_list());
-  if (by_state.count(session->state) == 0)
-    by_state[session->state] = new xlist<Session*>;
-  by_state[session->state]->push_back(&session->item_session_list);
+  auto by_state_entry = by_state.find(session->state);
+  if (by_state_entry == by_state.end())
+    by_state_entry = by_state.emplace(session->state,
+				      new xlist<Session*>).first;
+  by_state_entry->second->push_back(&session->item_session_list);
 
   session->last_cap_renew = ceph_clock_now(g_ceph_context);
 }
@@ -847,9 +853,10 @@ void Session::set_client_metadata(map<string, string> const &meta)
  */
 void Session::_update_human_name()
 {
-  if (info.client_metadata.count("hostname")) {
+  auto info_client_metadata_entry = info.client_metadata.find("hostname");
+  if (info_client_metadata_entry != info.client_metadata.end()) {
     // Happy path, refer to clients by hostname
-    human_name = info.client_metadata["hostname"];
+    human_name = info_client_metadata_entry->second;
     if (!info.auth_name.has_default_id()) {
       // When a non-default entity ID is set by the user, assume they
       // would like to see it in references to the client, if it's

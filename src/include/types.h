@@ -98,7 +98,7 @@ inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
   out << "[";
-  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); ++p) {
+  for (auto p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
     out << *p;
   }
@@ -108,7 +108,7 @@ inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   out << "<";
-  for (typename deque<A>::const_iterator p = v.begin(); p != v.end(); ++p) {
+  for (auto p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
     out << *p;
   }
@@ -124,7 +124,7 @@ inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
 
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist) {
-  for (typename list<A>::const_iterator it = ilist.begin();
+  for (auto it = ilist.begin();
        it != ilist.end();
        ++it) {
     if (it != ilist.begin()) out << ",";
@@ -135,7 +135,7 @@ inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist) {
 
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
-  for (typename set<A, Comp>::const_iterator it = iset.begin();
+  for (auto it = iset.begin();
        it != iset.end();
        ++it) {
     if (it != iset.begin()) out << ",";
@@ -146,7 +146,7 @@ inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
 
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset) {
-  for (typename multiset<A,Comp>::const_iterator it = iset.begin();
+  for (auto it = iset.begin();
        it != iset.end();
        ++it) {
     if (it != iset.begin()) out << ",";
@@ -159,7 +159,7 @@ template<class A, class B, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m)
 {
   out << "{";
-  for (typename map<A,B,Comp>::const_iterator it = m.begin();
+  for (auto it = m.begin();
        it != m.end();
        ++it) {
     if (it != m.begin()) out << ",";
@@ -173,7 +173,7 @@ template<class A, class B, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m)
 {
   out << "{{";
-  for (typename multimap<A,B,Comp>::const_iterator it = m.begin();
+  for (auto it = m.begin();
        it != m.end();
        ++it) {
     if (it != m.begin()) out << ",";
@@ -460,7 +460,7 @@ __s32  ceph_to_host_errno(__s32 e);
 struct errorcode32_t {
   int32_t code;
 
-  errorcode32_t() {}
+  errorcode32_t() : code(0) {}
   // cppcheck-suppress noExplicitConstructor
   errorcode32_t(int32_t i) : code(i) {}
 
