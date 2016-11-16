@@ -103,7 +103,7 @@ private:
     }
   }
 
-  void _dump(utime_t now, Formatter *f) const {
+  void _dump(Formatter *f) const {
     {
       f->open_array_section("events");
       Mutex::Locker l(lock);
