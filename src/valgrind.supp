@@ -223,3 +223,20 @@
    fun:pthread_create@*
    ...
 }
+
+# very strange leak of std::string memory from md_config_t,
+# only seen in radosgw under teuthology -cbodley
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znwm
+   fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+   fun:_ZNSs12_S_constructIPKcEEPcT_S3_RKSaIcESt20forward_iterator_tag
+   fun:_ZNSsC1EPKcRKSaIcE
+   fun:_ZN11md_config_tC1Ev
+   fun:_ZN11CephContextC1Eji
+   fun:_Z14common_preinitRK18CephInitParameters18code_environment_tiPKc
+   fun:_Z15global_pre_initPSt6vectorIPKcSaIS1_EERS3_j18code_environment_tiS1_
+   fun:main
+}
