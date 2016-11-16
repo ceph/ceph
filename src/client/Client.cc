@@ -279,9 +279,6 @@ Client::Client(Messenger *m, MonClient *mc)
   // file handles
   free_fd_set.insert(10, 1<<30);
 
-  // set up messengers
-  messenger = m;
-
   // osd interfaces
   mdsmap.reset(new MDSMap);
   objecter = new Objecter(cct, messenger, monclient, NULL,
