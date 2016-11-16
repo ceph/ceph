@@ -444,14 +444,14 @@ public:
   }
 
   void print(ostream& out) const;
-  void print_summary(Formatter *f, ostream *out);
+  void print_summary(Formatter *f, ostream *out) const;
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<FSMap*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
-inline ostream& operator<<(ostream& out, FSMap& m) {
+inline ostream& operator<<(ostream& out, const FSMap& m) {
   m.print_summary(NULL, &out);
   return out;
 }
