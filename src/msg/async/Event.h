@@ -190,7 +190,7 @@ class EventCenter {
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
-  int init(int nevent, unsigned idx);
+  int init(int nevent, unsigned idx, std::string &t);
   void set_owner();
   pthread_t get_owner() const { return owner; }
   unsigned get_id() const { return idx; }
