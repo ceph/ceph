@@ -66,10 +66,10 @@ def install(ctx, config):
         for remote in ctx.cluster.remotes.iterkeys():
             if remote.os.name == 'rhel':
                 log.info("Installing on RHEL node: %s", remote.shortname)
-                p.spawn(rh_install_pkgs, ctx, remote, version, downstream_config)
+                p.spawn(install_pkgs, ctx, remote, version, downstream_config)
             else:
                 log.info("Install on Ubuntu node: %s", remote.shortname)
-                p.spawn(rh_install_deb_pkgs, ctx, remote, version,
+                p.spawn(install_deb_pkgs, ctx, remote, version,
                         downstream_config, config['deb-repo'],
                         config['deb-gpg-key'])
     try:
@@ -80,10 +80,10 @@ def install(ctx, config):
         else:
             with parallel() as p:
                 for remote in ctx.cluster.remotes.iterkeys():
-                    p.spawn(rh_uninstall_pkgs, ctx, remote, downstream_config)
+                    p.spawn(uninstall_pkgs, ctx, remote, downstream_config)
 
 
-def rh_install_pkgs(ctx, remote, version, downstream_config):
+def install_pkgs(ctx, remote, version, downstream_config):
     """
     Installs RH build using ceph-deploy.
 
@@ -95,6 +95,7 @@ def rh_install_pkgs(ctx, remote, version, downstream_config):
     rh_rpm_pkgs = downstream_config.get('pkgs').get('rpm')
     pkgs = str.join(' ', rh_rpm_pkgs)
     log.info("Remove any epel packages installed on node %s", remote.shortname)
+    # below packages can come from epel and still work, ensure we use cdn pkgs
     remote.run(
         args=[
             'sudo',
@@ -119,7 +120,7 @@ def rh_install_pkgs(ctx, remote, version, downstream_config):
         raise RuntimeError("Version check failed on node %s", remote.shortname)
 
 
-def set_rh_deb_repo(remote, deb_repo, deb_gpg_key=None):
+def set_deb_repo(remote, deb_repo, deb_gpg_key=None):
     """
     Sets up debian repo and gpg key for package verification
     :param remote - remote node object
@@ -152,7 +153,7 @@ def set_rh_deb_repo(remote, deb_repo, deb_gpg_key=None):
     remote.run(args=['sudo', 'apt-get', 'update'])
 
 
-def rh_install_deb_pkgs(
+def install_deb_pkgs(
         ctx,
         remote,
         version,
@@ -168,7 +169,7 @@ def rh_install_deb_pkgs(
     : deb_repo - http path of downstream ubuntu repo
     : deb_gpg_key - gpg key for the ubuntu pkg
     """
-    set_rh_deb_repo(remote, deb_repo, deb_gpg_key)
+    set_deb_repo(remote, deb_repo, deb_gpg_key)
     rh_version_check = downstream_config.get('versions').get('deb').get('mapped')
     rh_deb_pkgs = downstream_config.get('pkgs').get('deb')
     pkgs = str.join(' ', rh_deb_pkgs)
@@ -188,7 +189,7 @@ def rh_install_deb_pkgs(
         raise RuntimeError("Version check failed on node %s", remote.shortname)
 
 
-def rh_uninstall_pkgs(ctx, remote, downstream_config):
+def uninstall_pkgs(ctx, remote, downstream_config):
     """
     Removes Ceph from all RH hosts
 
