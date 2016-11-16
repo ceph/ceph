@@ -271,8 +271,19 @@ function TEST_crush_repair_faulty_crushmap() {
     ceph osd setcrushmap -i $empty_map.map || return 1
 
     # should be an empty crush map without any buckets
-    ! test $(ceph osd crush dump --format=xml | \
-           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) || return 1
+    success=false
+    for delay in 1 2 4 8 16 32 64 128 256 ; do
+        if ! test $(ceph osd crush dump --format=xml | \
+                           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) ; then
+            success=true
+            break
+        fi
+        sleep $delay
+    done
+    if ! $success ; then
+        ceph osd crush dump --format=xml
+        return 1
+    fi
     # bring them down, the "ceph" commands will try to hunt for other monitor in
     # vain, after mon.a is offline
     kill_daemons $dir || return 1
