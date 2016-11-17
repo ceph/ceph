@@ -205,9 +205,10 @@ void SnapshotRemoveRequest<I>::send_release_snap_id() {
                 << "snap_id=" << m_snap_id << dendl;
   m_state = STATE_RELEASE_SNAP_ID;
 
-  // TODO add async version of selfmanaged_snap_remove
-  int r = image_ctx.md_ctx.selfmanaged_snap_remove(m_snap_id);
-  this->async_complete(r);
+  librados::AioCompletion *rados_completion =
+    this->create_callback_completion();
+  image_ctx.md_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);
+  rados_completion->release();
 }
 
 template <typename I>
