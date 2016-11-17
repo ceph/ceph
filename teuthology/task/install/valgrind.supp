@@ -370,3 +370,14 @@
 	fun:_dl_init
 	...
 }
+{
+	strange leak of std::string memory from md_config_t seen in radosgw
+	Memcheck:Leak
+	...
+	fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+	fun:_ZNSs12_S_constructIPKcEEPcT_S3_RKSaIcESt20forward_iterator_tag
+	...
+	fun:_ZN11md_config_tC1Ev
+	fun:_ZN11CephContextC1Eji
+	...
+}
