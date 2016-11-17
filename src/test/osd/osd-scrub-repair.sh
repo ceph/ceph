@@ -363,13 +363,12 @@ function TEST_list_missing_erasure_coded() {
 
     # Repair the PG, which triggers the recovering,
     # and should mark the object as unfound
-    ceph pg repair $pg
+    repair $pg
     
     for i in $(seq 0 120) ; do
         [ $i -lt 60 ] || return 1
         matches=$(ceph pg $pg list_missing | egrep "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
-        sleep 1
     done
 
     teardown $dir || return 1
