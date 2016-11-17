@@ -3285,6 +3285,11 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   journal_and_reply(mdr, in, dn, le, fin);
+
+  // We hit_dir (via hit_inode) in our finish callback, but by then we might
+  // have overshot the split size (multiple opencs in flight), so here is
+  // an early chance to split the dir if this openc makes it oversized.
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 
