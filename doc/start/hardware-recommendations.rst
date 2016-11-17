@@ -226,7 +226,7 @@ deployment tools  (e.g., Dell's Crowbar) deploy with five different networks,
 but employ VLANs to make hardware and network cabling more manageable. VLANs
 using 802.1q protocol require VLAN-capable NICs and Switches. The added hardware
 expense may be offset by the operational cost savings for network setup and
-maintenance. When using VLANs to handle VM traffic between between the cluster
+maintenance. When using VLANs to handle VM traffic between the cluster
 and compute stacks (e.g., OpenStack, CloudStack, etc.), it is also worth
 considering using 10G Ethernet. Top-of-rack routers for each network also need
 to be able to communicate with spine routers that have even faster
