@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "epoch": {
+      "description": "Scrub epoch",
+      "type": "integer"
+    },
+    "inconsistents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "description": "Identify a Ceph object",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "nspace": {
+                "type": "string"
+              },
+              "locator": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "snap": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": [ "head", "snapdir" ]
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "nspace",
+              "locator",
+              "version",
+              "snap"
+            ]
+          },
+          "selected_object_info": {
+              "type": "string"
+          },
+          "union_shard_errors": {
+            "description": "Union of all shard errors",
+            "type": "array",
+            "items": {
+              "enum": [
+                "missing",
+                "stat_error",
+                "read_error",
+                "data_digest_mismatch_oi",
+                "omap_digest_mismatch_oi",
+                "size_mismatch_oi",
+                "ec_hash_error",
+                "ec_size_error",
+                "oi_attr_missing",
+                "oi_attr_corrupted"
+              ]
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "errors": {
+            "description": "Errors related to the analysis of this object",
+            "type": "array",
+            "items": {
+              "enum": [
+                "object_info_inconsistency",
+                "data_digest_mismatch",
+                "omap_digest_mismatch",
+                "size_mismatch",
+                "attr_value_mismatch",
+                "attr_name_mismatch"
+              ]
+            },
+            "minItems": 0,
+            "uniqueItems": true
+          },
+          "shards": {
+            "description": "All found or expected shards",
+            "type": "array",
+            "items": {
+              "description": "Information about a particular shard of object",
+              "type": "object",
+              "properties": {
+                "object_info": {
+                  "type": "string"
+                },
+                "shard": {
+                  "type": "integer"
+                },
+                "osd": {
+                  "type": "integer"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "omap_digest": {
+                  "description": "Hex representation (e.g. 0x1abd1234)",
+                  "type": "string"
+                },
+                "data_digest": {
+                  "description": "Hex representation (e.g. 0x1abd1234)",
+                  "type": "string"
+                },
+                "errors": {
+                  "description": "Errors with this shard",
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "missing",
+                      "stat_error",
+                      "read_error",
+                      "data_digest_mismatch_oi",
+                      "omap_digest_mismatch_oi",
+                      "size_mismatch_oi",
+                      "ec_hash_error",
+                      "ec_size_error",
+                      "oi_attr_missing",
+                      "oi_attr_corrupted"
+                    ]
+                  },
+                  "minItems": 0,
+                  "uniqueItems": true
+                },
+                "attrs": {
+                  "description": "If any shard's attr error is set then all attrs are here",
+                  "type": "array",
+                  "items": {
+                    "description": "Information about a particular shard of object",
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "Base64": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "value",
+                      "Base64"
+                    ],
+                    "additionalProperties": false,
+                    "minItems": 1
+                  }
+                }
+              },
+              "required": [
+                "osd",
+                "errors"
+              ]
+            }
+          }
+        },
+        "required": [
+          "object",
+          "union_shard_errors",
+          "errors",
+          "shards"
+        ]
+      }
+    }
+  },
+  "required": [
+    "epoch",
+    "inconsistents"
+  ]
+}

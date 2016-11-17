@@ -51,24 +51,24 @@ struct object_id_t {
 };
 
 struct err_t {
-  enum {
-    ATTR_UNEXPECTED      = 1 << 0,
+  enum : uint64_t {
     SHARD_MISSING        = 1 << 1,
     SHARD_STAT_ERR       = 1 << 2,
     SHARD_READ_ERR       = 1 << 3,
-    DATA_DIGEST_MISMATCH = 1 << 4,
-    OMAP_DIGEST_MISMATCH = 1 << 5,
-    SIZE_MISMATCH        = 1 << 6,
-    ATTR_MISMATCH        = 1 << 7,
-    ATTR_MISSING         = 1 << 8,
     DATA_DIGEST_MISMATCH_OI = 1 << 9,
     OMAP_DIGEST_MISMATCH_OI = 1 << 10,
     SIZE_MISMATCH_OI        = 1 << 11,
+    SHARD_EC_HASH_MISMATCH  = 1 << 12,
+    SHARD_EC_SIZE_MISMATCH  = 1 << 13,
+    OI_ATTR_MISSING         = 1 << 14,
+    OI_ATTR_CORRUPTED       = 1 << 15,
+    SS_ATTR_MISSING         = 1 << 16,
+    SS_ATTR_CORRUPTED       = 1 << 17
+    // When adding more here add to either SHALLOW_ERRORS or DEEP_ERRORS
   };
   uint64_t errors = 0;
-  bool has_attr_unexpected() const {
-    return errors & ATTR_UNEXPECTED;
-  }
+  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_OI|OI_ATTR_MISSING|OI_ATTR_CORRUPTED|SS_ATTR_MISSING|SS_ATTR_CORRUPTED;
+  static constexpr uint64_t DEEP_ERRORS = SHARD_READ_ERR|DATA_DIGEST_MISMATCH_OI|OMAP_DIGEST_MISMATCH_OI|SHARD_EC_HASH_MISMATCH|SHARD_EC_SIZE_MISMATCH;
   bool has_shard_missing() const {
     return errors & SHARD_MISSING;
   }
@@ -78,31 +78,38 @@ struct err_t {
   bool has_read_error() const {
     return errors & SHARD_READ_ERR;
   }
-  bool has_data_digest_mismatch() const {
-    return errors & DATA_DIGEST_MISMATCH;
-  }
-  bool has_omap_digest_mismatch() const {
-    return errors & OMAP_DIGEST_MISMATCH;
-  }
-  // deep error
   bool has_data_digest_mismatch_oi() const {
     return errors & DATA_DIGEST_MISMATCH_OI;
   }
-  // deep error
   bool has_omap_digest_mismatch_oi() const {
     return errors & OMAP_DIGEST_MISMATCH_OI;
-  }
-  bool has_size_mismatch() const {
-    return errors & SIZE_MISMATCH;
   }
   bool has_size_mismatch_oi() const {
     return errors & SIZE_MISMATCH_OI;
   }
-  bool has_attr_mismatch() const {
-    return errors & ATTR_MISMATCH;
+  bool has_ec_hash_error() const {
+    return errors & SHARD_EC_HASH_MISMATCH;
   }
-  bool has_attr_missing() const {
-    return errors & ATTR_MISSING;
+  bool has_ec_size_error() const {
+    return errors & SHARD_EC_SIZE_MISMATCH;
+  }
+  bool has_oi_attr_missing() const {
+    return errors & OI_ATTR_MISSING;
+  }
+  bool has_oi_attr_corrupted() const {
+    return errors & OI_ATTR_CORRUPTED;
+  }
+  bool has_ss_attr_missing() const {
+    return errors & SS_ATTR_MISSING;
+  }
+  bool has_ss_attr_corrupted() const {
+    return errors & SS_ATTR_CORRUPTED;
+  }
+  bool has_shallow_errors() const {
+    return errors & SHALLOW_ERRORS;
+  }
+  bool has_deep_errors() const {
+    return errors & DEEP_ERRORS;
   }
 };
 
@@ -113,16 +120,72 @@ struct shard_info_t : err_t {
   uint32_t omap_digest = 0;
   bool data_digest_present = false;
   uint32_t data_digest = 0;
+  bool selected_oi = false;
 };
 
-struct inconsistent_obj_t : err_t {
+struct osd_shard_t {
+  int32_t osd;
+  int8_t shard;
+};
+
+inline bool operator<(const osd_shard_t &lhs, const osd_shard_t &rhs) {
+  if (lhs.osd < rhs.osd)
+    return true;
+  else if (lhs.osd > rhs.osd)
+    return false;
+  else
+    return lhs.shard < rhs.shard;
+}
+
+struct obj_err_t {
+  enum : uint64_t {
+    OBJECT_INFO_INCONSISTENCY   = 1 << 1,
+    // XXX: Can an older rados binary work if these bits stay the same?
+    DATA_DIGEST_MISMATCH = 1 << 4,
+    OMAP_DIGEST_MISMATCH = 1 << 5,
+    SIZE_MISMATCH        = 1 << 6,
+    ATTR_VALUE_MISMATCH  = 1 << 7,
+    ATTR_NAME_MISMATCH    = 1 << 8,
+    // When adding more here add to either SHALLOW_ERRORS or DEEP_ERRORS
+  };
+  uint64_t errors = 0;
+  static constexpr uint64_t SHALLOW_ERRORS = OBJECT_INFO_INCONSISTENCY|SIZE_MISMATCH|ATTR_VALUE_MISMATCH|ATTR_NAME_MISMATCH;
+  static constexpr uint64_t DEEP_ERRORS = DATA_DIGEST_MISMATCH|OMAP_DIGEST_MISMATCH;
+  bool has_object_info_inconsistency() const {
+    return errors & OBJECT_INFO_INCONSISTENCY;
+  }
+  bool has_data_digest_mismatch() const {
+    return errors & DATA_DIGEST_MISMATCH;
+  }
+  bool has_omap_digest_mismatch() const {
+    return errors & OMAP_DIGEST_MISMATCH;
+  }
+  bool has_size_mismatch() const {
+    return errors & SIZE_MISMATCH;
+  }
+  bool has_attr_value_mismatch() const {
+    return errors & ATTR_VALUE_MISMATCH;
+  }
+  bool has_attr_name_mismatch() const {
+    return errors & ATTR_NAME_MISMATCH;
+  }
+  bool has_shallow_errors() const {
+    return errors & SHALLOW_ERRORS;
+  }
+  bool has_deep_errors() const {
+    return errors & DEEP_ERRORS;
+  }
+};
+
+struct inconsistent_obj_t : obj_err_t {
   inconsistent_obj_t() = default;
   inconsistent_obj_t(const object_id_t& object)
-    : object{object}
+    : object{object}, version(0)
   {}
   object_id_t object;
-  // osd => shard_info
-  std::map<int32_t, shard_info_t> shards;
+  uint64_t version;  // XXX: Redundant with object info attr
+  std::map<osd_shard_t, shard_info_t> shards;
+  err_t union_shards;
 };
 
 struct inconsistent_snapset_t {

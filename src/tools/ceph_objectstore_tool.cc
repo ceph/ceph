@@ -42,6 +42,7 @@
 #include "rebuild_mondb.h"
 #include "ceph_objectstore_tool.h"
 #include "include/compat.h"
+#include "include/util.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -297,29 +298,6 @@ int file_fd = fd_none;
 bool debug = false;
 super_header sh;
 uint64_t testalign;
-
-// Convert non-printable characters to '\###'
-static void cleanbin(string &str)
-{
-  bool cleaned = false;
-  string clean;
-
-  for (string::iterator it = str.begin(); it != str.end(); ++it) {
-    if (!isprint(*it)) {
-      clean.push_back('\\');
-      clean.push_back('0' + ((*it >> 6) & 7));
-      clean.push_back('0' + ((*it >> 3) & 7));
-      clean.push_back('0' + (*it & 7));
-      cleaned = true;
-    } else {
-      clean.push_back(*it);
-    }
-  }
-
-  if (cleaned)
-    str = clean;
-  return;
-}
 
 static int get_fd_data(int fd, bufferlist &bl)
 {
@@ -1544,7 +1522,7 @@ int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
   for (map<string,bufferptr>::iterator i = aset.begin();i != aset.end(); ++i) {
     string key(i->first);
     if (outistty)
-      cleanbin(key);
+      key = cleanbin(key);
     cout << key << std::endl;
   }
   return 0;
@@ -1565,7 +1543,7 @@ int do_list_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
     for (map<string,bufferlist>::iterator i = oset.begin();i != oset.end(); ++i) {
       string key(i->first);
       if (outistty)
-        cleanbin(key);
+        key = cleanbin(key);
       cout << key << std::endl;
     }
   }
@@ -1671,7 +1649,7 @@ int do_get_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
 
   string value(bp.c_str(), bp.length());
   if (outistty) {
-    cleanbin(value);
+    value = cleanbin(value);
     value.push_back('\n');
   }
   cout << value;
@@ -1747,7 +1725,7 @@ int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
   bufferlist bl = out.begin()->second;
   string value(bl.c_str(), bl.length());
   if (outistty) {
-    cleanbin(value);
+    value = cleanbin(value);
     value.push_back('\n');
   }
   cout << value;
@@ -1818,7 +1796,7 @@ int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 
   string header(hdrbl.c_str(), hdrbl.length());
   if (outistty) {
-    cleanbin(header);
+    header = cleanbin(header);
     header.push_back('\n');
   }
   cout << header;
