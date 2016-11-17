@@ -43,7 +43,7 @@ tasks:
 - print: "****  v10.2.0 about to install"
 - install:
     tag: v10.2.0
-    exclude_packages: ['ceph-mgr']
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "**** done v10.2.0 install"
 - ceph:
    fs: xfs
@@ -52,12 +52,11 @@ tasks:
    - workload
 - print: "**** done workload v10.2.0"
 - install.upgrade:
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
     mon.a:
       branch: jewel
-      exclude_packages: ['ceph-mgr']
     mon.b:
       branch: jewel
-      exclude_packages: ['ceph-mgr']
     # Note that client.a IS NOT upgraded at this point
     #client.1:
       #branch: jewel
@@ -66,9 +65,9 @@ tasks:
    - upgrade-sequence_jewel
 - print: "**** done parallel jewel branch"
 - install.upgrade:
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
     client.1:
       branch: jewel
-      exclude_packages: ['ceph-mgr']
 - print: "**** done branch: jewel install.upgrade on client.1"
 - install.upgrade:
     mon.a:
