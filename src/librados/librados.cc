@@ -1583,9 +1583,21 @@ int librados::IoCtx::selfmanaged_snap_create(uint64_t *snapid)
   return io_ctx_impl->selfmanaged_snap_create(snapid);
 }
 
+void librados::IoCtx::aio_selfmanaged_snap_create(uint64_t *snapid,
+                                                  AioCompletion *c)
+{
+  io_ctx_impl->aio_selfmanaged_snap_create(snapid, c->pc);
+}
+
 int librados::IoCtx::selfmanaged_snap_remove(uint64_t snapid)
 {
   return io_ctx_impl->selfmanaged_snap_remove(snapid);
+}
+
+void librados::IoCtx::aio_selfmanaged_snap_remove(uint64_t snapid,
+                                                  AioCompletion *c)
+{
+  io_ctx_impl->aio_selfmanaged_snap_remove(snapid, c->pc);
 }
 
 int librados::IoCtx::selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid)
@@ -3782,6 +3794,18 @@ extern "C" int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
   return retval;
 }
 
+extern "C" void
+rados_aio_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
+                                        rados_snap_t *snapid,
+                                        rados_completion_t completion)
+{
+  tracepoint(librados, rados_ioctx_selfmanaged_snap_create_enter, io);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  ctx->aio_selfmanaged_snap_create(snapid, c);
+  tracepoint(librados, rados_ioctx_selfmanaged_snap_create_exit, 0, 0);
+}
+
 extern "C" int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
 					     uint64_t snapid)
 {
@@ -3790,6 +3814,18 @@ extern "C" int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
   int retval = ctx->selfmanaged_snap_remove(snapid);
   tracepoint(librados, rados_ioctx_selfmanaged_snap_remove_exit, retval);
   return retval;
+}
+
+extern "C" void
+rados_aio_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
+                                        rados_snap_t snapid,
+                                        rados_completion_t completion)
+{
+  tracepoint(librados, rados_ioctx_selfmanaged_snap_remove_enter, io, snapid);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  ctx->aio_selfmanaged_snap_remove(snapid, c);
+  tracepoint(librados, rados_ioctx_selfmanaged_snap_remove_exit, 0);
 }
 
 extern "C" int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io,

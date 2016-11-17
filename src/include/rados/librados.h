@@ -332,6 +332,14 @@ typedef void *rados_write_op_t;
 typedef void *rados_read_op_t;
 
 /**
+ * @typedef rados_completion_t
+ * Represents the state of an asynchronous operation - it contains the
+ * return value once the operation completes, and can be used to block
+ * until the operation is complete or safe.
+ */
+typedef void *rados_completion_t;
+
+/**
  * Get the version of librados.
  *
  * The version number is major.minor.extra. Note that this is
@@ -1199,6 +1207,10 @@ CEPH_RADOS_API void rados_ioctx_snap_set_read(rados_ioctx_t io,
  */
 CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
                                                        rados_snap_t *snapid);
+CEPH_RADOS_API void
+rados_aio_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
+                                        rados_snap_t *snapid,
+                                        rados_completion_t completion);
 
 /**
  * Remove a self-managed snapshot
@@ -1212,6 +1224,10 @@ CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
  */
 CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
                                                        rados_snap_t snapid);
+CEPH_RADOS_API void
+rados_aio_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
+                                        rados_snap_t snapid,
+                                        rados_completion_t completion);
 
 /**
  * Rollback an object to a self-managed snapshot
@@ -1710,14 +1726,6 @@ CEPH_RADOS_API int rados_exec(rados_ioctx_t io, const char *oid,
  *
  * @{
  */
-
-/**
- * @typedef rados_completion_t
- * Represents the state of an asynchronous operation - it contains the
- * return value once the operation completes, and can be used to block
- * until the operation is complete or safe.
- */
-typedef void *rados_completion_t;
 
 /**
  * @typedef rados_callback_t
