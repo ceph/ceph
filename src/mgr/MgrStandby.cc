@@ -129,6 +129,7 @@ void MgrStandby::handle_signal(int signum)
 {
   Mutex::Locker l(lock);
   assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
 
