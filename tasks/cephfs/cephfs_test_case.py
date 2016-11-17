@@ -58,6 +58,8 @@ class CephFSTestCase(CephTestCase):
     LOAD_SETTINGS = []
 
     def setUp(self):
+        super(CephFSTestCase, self).setUp()
+
         if len(self.mds_cluster.mds_ids) < self.MDSS_REQUIRED:
             raise case.SkipTest("Only have {0} MDSs, require {1}".format(
                 len(self.mds_cluster.mds_ids), self.MDSS_REQUIRED
@@ -177,6 +179,8 @@ class CephFSTestCase(CephTestCase):
         self.configs_set = set()
 
     def tearDown(self):
+        super(CephFSTestCase, self).tearDown()
+
         self.mds_cluster.clear_firewall()
         for m in self.mounts:
             m.teardown()
