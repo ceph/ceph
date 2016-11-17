@@ -415,6 +415,30 @@ public:
   ~RGWListRoles_ObjStore() = default;
 };
 
+class RGWPutRolePolicy_ObjStore : public RGWPutRolePolicy {
+public:
+  RGWPutRolePolicy_ObjStore() = default;
+  ~RGWPutRolePolicy_ObjStore() = default;
+};
+
+class RGWGetRolePolicy_ObjStore : public RGWGetRolePolicy {
+public:
+  RGWGetRolePolicy_ObjStore() = default;
+  ~RGWGetRolePolicy_ObjStore() = default;
+};
+
+class RGWListRolePolicies_ObjStore : public RGWListRolePolicies {
+public:
+  RGWListRolePolicies_ObjStore() = default;
+  ~RGWListRolePolicies_ObjStore() = default;
+};
+
+class RGWDeleteRolePolicy_ObjStore : public RGWDeleteRolePolicy {
+public:
+  RGWDeleteRolePolicy_ObjStore() = default;
+  ~RGWDeleteRolePolicy_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;

@@ -5752,3 +5752,168 @@ void RGWListRoles::execute()
     s->formatter->close_section();
   }
 }
+
+int RGWPutRolePolicy::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWPutRolePolicy::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutRolePolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(s->cct, store, role_name);
+  op_ret = role.get();
+  if (op_ret == 0) {
+    role.set_perm_policy(policy_name, perm_policy);
+    op_ret = role.update();
+  }
+}
+
+int RGWGetRolePolicy::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetRolePolicy::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetRolePolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(g_ceph_context, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    string perm_policy;
+    op_ret = role.get_role_policy(policy_name, perm_policy);
+
+    if (op_ret == 0) {
+      s->formatter->open_object_section("GetRolePolicyResult");
+      s->formatter->dump_string("PolicyName", policy_name);
+      s->formatter->dump_string("RoleName", role_name);
+      s->formatter->dump_string("Permission policy", perm_policy);
+      s->formatter->close_section();
+    }
+  }
+}
+
+int RGWListRolePolicies::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWListRolePolicies::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWListRolePolicies::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(g_ceph_context, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    std::vector<string> policy_names = role.get_role_policy_names();
+    s->formatter->open_array_section("PolicyNames");
+    for (const auto& it : policy_names) {
+      s->formatter->dump_string("member", it);
+    }
+    s->formatter->close_section();
+  }
+}
+
+int RGWDeleteRolePolicy::verify_permission()
+{
+  if (s->auth_identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWDeleteRolePolicy::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDeleteRolePolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(g_ceph_context, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    op_ret = role.delete_policy(policy_name);
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_ROLE_FOUND;
+    }
+
+    if (op_ret == 0) {
+      op_ret = role.update();
+    }
+  }
+}

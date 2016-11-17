@@ -244,7 +244,7 @@ int RGWRole::delete_policy(const string& policy_name)
   const auto& it = perm_policy_map.find(policy_name);
   if (it == perm_policy_map.end()) {
     ldout(cct, 0) << "ERROR: Policy name: " << policy_name << " not found" << dendl;
-    return -EINVAL;
+    return -ENOENT;
   } else {
     perm_policy_map.erase(it);
   }

@@ -731,6 +731,86 @@ public:
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
+class RGWPutRolePolicy : public RGWOp {
+protected:
+  string role_name;
+  string policy_name;
+  string perm_policy;
+
+public:
+  RGWPutRolePolicy() = default;
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+  }
+  virtual int get_params() { return 0; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "put_role_policy"; }
+  virtual RGWOpType get_type() override { return RGW_OP_PUT_ROLE_POLICY; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetRolePolicy : public RGWOp {
+protected:
+  string role_name;
+  string policy_name;
+
+public:
+  RGWGetRolePolicy() = default;
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+  }
+  virtual int get_params() { return 0; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "get_role_policy"; }
+  virtual RGWOpType get_type() override { return RGW_OP_GET_ROLE_POLICY; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWListRolePolicies : public RGWOp {
+protected:
+  string role_name;
+
+public:
+  RGWListRolePolicies() = default;
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+  }
+  virtual int get_params() { return 0; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "list_role_policies"; }
+  virtual RGWOpType get_type() override { return RGW_OP_LIST_ROLE_POLICIES; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWDeleteRolePolicy : public RGWOp {
+protected:
+  string role_name;
+  string policy_name;
+
+public:
+  RGWDeleteRolePolicy() = default;
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+  }
+  virtual int get_params() { return 0; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "delete_role_policy"; }
+  virtual RGWOpType get_type() override { return RGW_OP_DELETE_ROLE_POLICY; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
 struct rgw_slo_entry {
   string path;
   string etag;
