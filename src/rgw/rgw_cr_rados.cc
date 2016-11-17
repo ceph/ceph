@@ -479,8 +479,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
   string op_id = store->unique_id(store->get_new_req_id());
   map<string, bufferlist> attrs;
 
-  rgw_obj src_obj(bucket_info.bucket, key.name);
-  src_obj.set_instance(key.instance);
+  rgw_obj src_obj(bucket_info.bucket, key);
 
   rgw_obj dest_obj(src_obj);
 
@@ -531,8 +530,7 @@ int RGWAsyncStatRemoteObj::_send_request()
   string client_id = store->zone_id() + buf;
   string op_id = store->unique_id(store->get_new_req_id());
 
-  rgw_obj src_obj(bucket_info.bucket, key.name);
-  src_obj.set_instance(key.instance);
+  rgw_obj src_obj(bucket_info.bucket, key);
 
   rgw_obj dest_obj(src_obj);
 
@@ -566,8 +564,7 @@ int RGWAsyncRemoveObj::_send_request()
 {
   RGWObjectCtx obj_ctx(store);
 
-  rgw_obj obj(bucket_info.bucket, key.name);
-  obj.set_instance(key.instance);
+  rgw_obj obj(bucket_info.bucket, key);
 
   ldout(store->ctx(), 0) << __func__ << "(): deleting obj=" << obj << dendl;
 

@@ -239,6 +239,10 @@ struct cls_rgw_obj_key {
   cls_rgw_obj_key(const string &_name) : name(_name) {}
   cls_rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
 
+  void set(const string& _name) {
+    name = _name;
+  }
+
   bool operator==(const cls_rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0);
@@ -249,6 +253,12 @@ struct cls_rgw_obj_key {
       r = instance.compare(k.instance);
     }
     return (r < 0);
+  }
+  bool operator<=(const cls_rgw_obj_key& k) const {
+    return !(k < *this);
+  }
+  bool empty() {
+    return name.empty();
   }
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);

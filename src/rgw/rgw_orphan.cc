@@ -503,7 +503,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   int count = 0;
 
   do {
-    vector<RGWObjEnt> result;
+    vector<rgw_bucket_dir_entry> result;
 
 #define MAX_LIST_OBJS_ENTRIES 100
     ret = list_op.list_objects(MAX_LIST_OBJS_ENTRIES, &result, NULL, &truncated);
@@ -512,17 +512,16 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
       return -ret;
     }
 
-    for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-      RGWObjEnt& entry = *iter;
+    for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+      rgw_bucket_dir_entry& entry = *iter;
       if (entry.key.instance.empty()) {
         ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << dendl;
       } else {
         ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << " [" << entry.key.instance << "]" << dendl;
       }
 
-      ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << " entry.ns=" << entry.ns << dendl;
+      ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << dendl;
       rgw_obj obj(bucket_info.bucket, entry.key);
-      obj.set_ns(entry.ns);
 
       RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
 

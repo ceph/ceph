@@ -346,8 +346,7 @@ static int read_obj_policy(RGWRados *store,
     obj.init_ns(bucket, oid, mp_ns);
     obj.set_in_extra_data(true);
   } else {
-    obj = rgw_obj(bucket, object.name);
-    obj.set_instance(object.instance);
+    obj = rgw_obj(bucket, object);
   }
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
@@ -537,8 +536,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     }
     s->object_acl = new RGWAccessControlPolicy(s->cct);
 
-    rgw_obj obj(s->bucket, s->object.name);
-    obj.set_instance(s->object.instance);
+    rgw_obj obj(s->bucket, s->object);
       
     store->set_atomic(s->obj_ctx, obj);
     if (prefetch_data) {
@@ -560,8 +558,7 @@ static void rgw_bucket_object_pre_exec(struct req_state *s)
 
 int RGWGetObj::verify_permission()
 {
-  obj = rgw_obj(s->bucket, s->object.name);
-  obj.set_instance(s->object.instance);
+  obj = rgw_obj(s->bucket, s->object);
   store->set_atomic(s->obj_ctx, obj);
   if (get_data) {
     store->set_prefetch_data(s->obj_ctx, obj);
@@ -806,7 +803,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 }
 
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
-                                       const RGWObjEnt& ent,
+                                       const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy * const bucket_policy,
                                        const off_t start_ofs,
                                        const off_t end_ofs)
@@ -835,7 +832,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, part);
   RGWRados::Object::Read read_op(&op_target);
 
-  read_op.conds.if_match = ent.etag.c_str();
+  read_op.conds.if_match = ent.meta.etag.c_str();
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = &s->err;
@@ -855,10 +852,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
   if (need_decompress)
   {
-    if (cs_info.orig_size != ent.size) {
+    if (cs_info.orig_size != ent.meta.size) {
       // hmm.. something wrong, object not as expected, abort!
       ldout(s->cct, 0) << "ERROR: expected cs_info.orig_size=" << cs_info.orig_size <<
-          ", actual read size=" << ent.size << dendl;
+          ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
     }
     decompress.emplace(s->cct, &cs_info, partial_content, filter);
@@ -866,9 +863,9 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   }
   else
   {
-    if (obj_size != ent.size) {
+    if (obj_size != ent.meta.size) {
       // hmm.. something wrong, object not as expected, abort!
-      ldout(s->cct, 0) << "ERROR: expected obj_size=" << obj_size << ", actual read size=" << ent.size << dendl;
+      ldout(s->cct, 0) << "ERROR: expected obj_size=" << obj_size << ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
 	  }
   }
@@ -884,7 +881,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
     return -EPERM;
   }
 
-  if (ent.size == 0) {
+  if (ent.meta.size == 0) {
     return 0;
   }
 
@@ -907,7 +904,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        uint64_t * const pobj_size,
                                        string * const pobj_sum,
                                        int (*cb)(rgw_bucket& bucket,
-                                                 const RGWObjEnt& ent,
+                                                 const rgw_bucket_dir_entry& ent,
                                                  RGWAccessControlPolicy * const bucket_policy,
                                                  off_t start_ofs,
                                                  off_t end_ofs,
@@ -919,7 +916,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   bool found_start = false, found_end = false, handled_end = false;
   string delim;
   bool is_truncated;
-  vector<RGWObjEnt> objs;
+  vector<rgw_bucket_dir_entry> objs;
 
   utime_t start_time = ceph_clock_now();
 
@@ -937,19 +934,19 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       return r;
     }
 
-    for (RGWObjEnt& ent : objs) {
+    for (rgw_bucket_dir_entry& ent : objs) {
       uint64_t cur_total_len = obj_ofs;
-      uint64_t start_ofs = 0, end_ofs = ent.size;
+      uint64_t start_ofs = 0, end_ofs = ent.meta.size;
 
-      if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
+      if (!found_start && cur_total_len + ent.meta.size > (uint64_t)ofs) {
 	start_ofs = ofs - obj_ofs;
 	found_start = true;
       }
 
-      obj_ofs += ent.size;
+      obj_ofs += ent.meta.size;
       if (pobj_sum) {
-        etag_sum.Update((const byte *)ent.etag.c_str(),
-                        ent.etag.length());
+        etag_sum.Update((const byte *)ent.meta.etag.c_str(),
+                        ent.meta.etag.length());
       }
 
       if (!found_end && obj_ofs > (uint64_t)end) {
@@ -1005,7 +1002,7 @@ static int iterate_slo_parts(CephContext *cct,
                              off_t end,
                              map<uint64_t, rgw_slo_part>& slo_parts,
                              int (*cb)(rgw_bucket& bucket,
-                                       const RGWObjEnt& ent,
+                                       const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy *bucket_policy,
                                        off_t start_ofs,
                                        off_t end_ofs,
@@ -1029,21 +1026,21 @@ static int iterate_slo_parts(CephContext *cct,
 
   for (; iter != slo_parts.end() && !found_end; ++iter) {
     rgw_slo_part& part = iter->second;
-    RGWObjEnt ent;
+    rgw_bucket_dir_entry ent;
 
     ent.key.name = part.obj_name;
-    ent.size = part.size;
-    ent.etag = part.etag;
+    ent.meta.size = part.size;
+    ent.meta.etag = part.etag;
 
     uint64_t cur_total_len = obj_ofs;
-    uint64_t start_ofs = 0, end_ofs = ent.size;
+    uint64_t start_ofs = 0, end_ofs = ent.meta.size;
 
-    if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
+    if (!found_start && cur_total_len + ent.meta.size > (uint64_t)ofs) {
       start_ofs = ofs - obj_ofs;
       found_start = true;
     }
 
-    obj_ofs += ent.size;
+    obj_ofs += ent.meta.size;
 
     if (!found_end && obj_ofs > (uint64_t)end) {
       end_ofs = end - cur_total_len + 1;
@@ -1068,7 +1065,7 @@ static int iterate_slo_parts(CephContext *cct,
 }
 
 static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
-                                            const RGWObjEnt& ent,
+                                            const rgw_bucket_dir_entry& ent,
                                             RGWAccessControlPolicy * const bucket_policy,
                                             const off_t start_ofs,
                                             const off_t end_ofs,
@@ -2571,8 +2568,7 @@ int RGWPutObj::verify_permission()
     rgw_bucket cs_bucket(copy_source_bucket_info.bucket);
     rgw_obj_key cs_object(copy_source_object_name, copy_source_version_id);
 
-    rgw_obj obj(cs_bucket, cs_object.name);
-    obj.set_instance(cs_object.instance);
+    rgw_obj obj(cs_bucket, cs_object);
     store->set_atomic(s->obj_ctx, obj);
     store->set_prefetch_data(s->obj_ctx, obj);
 
@@ -2823,8 +2819,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   new_end = lst;
 
   rgw_obj_key obj_key(copy_source_object_name, copy_source_version_id);
-  rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
-  obj.set_instance(obj_key.instance);
+  rgw_obj obj(copy_source_bucket_info.bucket, obj_key);
 
   RGWRados::Object op_target(store, copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -3716,8 +3711,7 @@ void RGWDeleteObj::execute()
     return;
   }
 
-  rgw_obj obj(s->bucket, s->object.name);
-  obj.set_instance(s->object.instance);
+  rgw_obj obj(s->bucket, s->object);
   map<string, bufferlist> attrs;
 
 
@@ -4846,7 +4840,7 @@ void RGWCompleteMultipart::execute()
 
   uint64_t min_part_size = s->cct->_conf->rgw_multipart_min_part_size;
 
-  list<rgw_obj_key> remove_objs; /* objects to be removed from index listing */
+  list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
   bool versioned_object = s->bucket_info.versioning_enabled();
 
@@ -4950,7 +4944,7 @@ void RGWCompleteMultipart::execute()
         compressed = true;
       }
 
-      rgw_obj_key remove_key;
+      rgw_obj_index_key remove_key;
       src_obj.get_index_key(&remove_key);
 
       remove_objs.push_back(remove_key);
@@ -5055,7 +5049,7 @@ void RGWAbortMultipart::execute()
   meta_obj.index_hash_source = s->object.name;
 
   cls_rgw_obj_chain chain;
-  list<rgw_obj_key> remove_objs;
+  list<rgw_obj_index_key> remove_objs;
 
   do {
     op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
@@ -5083,7 +5077,7 @@ void RGWAbortMultipart::execute()
           rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store);
           rgw_raw_obj_to_obj(s->bucket, raw_head, &head);
 
-          rgw_obj_key key;
+          rgw_obj_index_key key;
           head.get_index_key(&key);
           remove_objs.push_back(key);
         }
@@ -5163,7 +5157,7 @@ void RGWListBucketMultiparts::pre_exec()
 
 void RGWListBucketMultiparts::execute()
 {
-  vector<RGWObjEnt> objs;
+  vector<rgw_bucket_dir_entry> objs;
   string marker_meta;
 
   op_ret = get_params();
@@ -5196,10 +5190,10 @@ void RGWListBucketMultiparts::execute()
   op_ret = list_op.list_objects(max_uploads, &objs, &common_prefixes,
 				&is_truncated);
   if (!objs.empty()) {
-    vector<RGWObjEnt>::iterator iter;
+    vector<rgw_bucket_dir_entry>::iterator iter;
     RGWMultipartUploadEntry entry;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      rgw_obj_key& key = iter->key;
+      rgw_obj_key key(iter->key);
       if (!entry.mp.from_meta(key.name))
         continue;
       entry.obj = *iter;

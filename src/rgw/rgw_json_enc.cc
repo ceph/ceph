@@ -763,22 +763,6 @@ void rgw_obj_key::dump(Formatter *f) const
   encode_json("instance", instance, f);
 }
 
-void RGWObjEnt::dump(Formatter *f) const
-{
-  encode_json("name", key.name, f);
-  encode_json("instance", key.instance, f);
-  encode_json("namespace", ns, f);
-  encode_json("owner", owner.to_str(), f);
-  encode_json("owner_display_name", owner_display_name, f);
-  encode_json("size", size, f);
-  utime_t ut(mtime);
-  encode_json("mtime", ut, f);
-  encode_json("etag", etag, f);
-  encode_json("content_type", content_type, f);
-  encode_json("tag", tag, f);
-  encode_json("flags", flags, f);
-}
-
 void RGWBucketEnt::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
