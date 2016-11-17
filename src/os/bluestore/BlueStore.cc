@@ -78,8 +78,7 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 #define BLOBID_FLAG_ZEROOFFSET 0x2  // blob_offset is 0
 #define BLOBID_FLAG_SAMELENGTH 0x4  // length matches previous extent
 #define BLOBID_FLAG_SPANNING   0x8  // has spanning blob id
-#define BLOBID_FLAG_DEPTH     0x10  // has depth != 1
-#define BLOBID_SHIFT_BITS        5
+#define BLOBID_SHIFT_BITS        4
 
 /*
  * object name key structure
@@ -1562,7 +1561,6 @@ ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 {
   return out << std::hex << "0x" << e.logical_offset << "~" << e.length
 	     << ": 0x" << e.blob_offset << "~" << e.length << std::dec
-	     << " depth " << (int)e.blob_depth
 	     << " " << *e.blob;
 }
 
@@ -1841,9 +1839,6 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       } else {
 	prev_len = p->length;
       }
-      if (p->blob_depth != 1) {
-	blobid |= BLOBID_FLAG_DEPTH;
-      }
       denc_varint(blobid, app);
       if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
 	denc_varint_lowz(p->logical_offset - pos, app);
@@ -1853,9 +1848,6 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       }
       if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
 	denc_varint_lowz(p->length, app);
-      }
-      if (blobid & BLOBID_FLAG_DEPTH) {
-	denc(p->blob_depth, app);
       }
       pos = p->logical_offset + p->length;
       if (include_blob) {
@@ -1907,11 +1899,6 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
     }
     le->length = prev_len;
 
-    if (blobid & BLOBID_FLAG_DEPTH) {
-      denc(le->blob_depth, p);
-    } else {
-      le->blob_depth = 1;
-    }
     if (blobid & BLOBID_FLAG_SPANNING) {
       le->assign_blob(get_spanning_blob(blobid >> BLOBID_SHIFT_BITS));
     } else {
@@ -2178,10 +2165,10 @@ void BlueStore::ExtentMap::punch_hole(
 	// split and deref middle
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
-	  *new Extent(offset, p->blob_offset + front, length, p->blob_depth, p->blob));
+	  *new Extent(offset, p->blob_offset + front, length, p->blob));
 	add(end,
 	    p->blob_offset + front + length,
-	    p->length - front - length, p->blob_depth,
+	    p->length - front - length,
 	    p->blob);
 	p->length = front;
 	break;
@@ -2190,7 +2177,7 @@ void BlueStore::ExtentMap::punch_hole(
 	assert(p->logical_offset + p->length > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
 	old_extents->insert(*new Extent(offset, p->blob_offset + keep,
-					p->length - keep, p->blob_depth,  p->blob));
+					p->length - keep,  p->blob));
 	p->length = keep;
 	++p;
 	continue;
@@ -2199,15 +2186,15 @@ void BlueStore::ExtentMap::punch_hole(
     if (p->logical_offset + p->length <= end) {
       // deref whole lextent
       old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
-				      p->length, p->blob_depth, p->blob));
+				      p->length, p->blob));
       rm(p++);
       continue;
     }
     // deref head
     uint64_t keep = (p->logical_offset + p->length) - end;
     old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
-				    p->length - keep, p->blob_depth, p->blob));
-    add(end, p->blob_offset + p->length - keep, keep, p->blob_depth, p->blob);
+				    p->length - keep, p->blob));
+    add(end, p->blob_offset + p->length - keep, keep, p->blob);
     rm(p);
     break;
   }
@@ -2215,12 +2202,12 @@ void BlueStore::ExtentMap::punch_hole(
 
 BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   uint64_t logical_offset,
-  uint64_t blob_offset, uint64_t length, uint8_t blob_depth, BlobRef b,
+  uint64_t blob_offset, uint64_t length, BlobRef b,
   extent_map_t *old_extents)
 {
   punch_hole(logical_offset, length, old_extents);
   b->get_ref(blob_offset, length);
-  Extent *le = new Extent(logical_offset, blob_offset, length, blob_depth, b);
+  Extent *le = new Extent(logical_offset, blob_offset, length, b);
   extent_map.insert(*le);
   if (!needs_reshard && spans_shard(logical_offset, length)) {
     needs_reshard = true;
@@ -2249,7 +2236,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     if (ep->logical_offset < pos) {
       // split extent
       size_t left = pos - ep->logical_offset;
-      Extent *ne = new Extent(pos, 0, ep->length - left, ep->blob_depth, rb);
+      Extent *ne = new Extent(pos, 0, ep->length - left, rb);
       extent_map.insert(*ne);
       lb->pass_ref(rb.get(), ep->blob_offset + left, ne->length, ne->blob_offset);
       ep->length = left;
@@ -2265,86 +2252,6 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     }
   }
   return rb;
-}
-
-bool BlueStore::ExtentMap::do_write_check_depth(
-  uint64_t onode_size,
-  uint64_t start_offset,
-  uint64_t end_offset,
-  uint8_t  *blob_depth,
-  uint64_t *gc_start_offset,
-  uint64_t *gc_end_offset)
-{
-  uint8_t depth = 0;
-  bool head_overlap = false;
-  bool tail_overlap = false;
-
-  *gc_start_offset = start_offset;
-  *gc_end_offset = end_offset;
-  *blob_depth = 1;
-
-  auto hp = seek_lextent(start_offset);
-  if (hp != extent_map.end() &&
-    hp->logical_offset < start_offset &&
-    start_offset < (hp->logical_offset + hp->length) &&
-    hp->blob->get_blob().is_compressed()) {
-      depth = hp->blob_depth;
-      head_overlap = true;
-  }
-
-  auto tp = seek_lextent(end_offset);
-  if (tp != extent_map.end() &&
-    tp->logical_offset < end_offset &&
-    end_offset < (tp->logical_offset + tp->length) &&
-    tp->blob->get_blob().is_compressed()) {
-      tail_overlap = true;
-      if (depth < tp->blob_depth) {
-        depth = tp->blob_depth;
-    }
-  }
-
-  if (depth >= g_conf->bluestore_gc_max_blob_depth) {
-    if (head_overlap) {
-      auto hp_next = hp;
-      while (hp != extent_map.begin() && hp->blob_depth > 1) {
-	hp_next = hp;
-	--hp;
-	if (hp->logical_offset + hp->length != hp_next->logical_offset) {
-	  hp = hp_next;
-	  break;
-	}
-      }
-      *gc_start_offset = hp->logical_offset;
-    }
-    if (tail_overlap) {
-      auto tp_prev = tp;
-
-      while (tp->blob_depth > 1) {
-	tp_prev = tp;
-	tp++;
-	if (tp == extent_map.end() ||
-	  (tp_prev->logical_offset + tp_prev->length) != tp->logical_offset) {
-	  break;
-	}
-      }
-      *gc_end_offset = tp_prev->logical_offset + tp_prev->length;
-    }
-  }
-  if (*gc_end_offset > onode_size) {
-    *gc_end_offset = onode_size;
-  }
-
-  bool do_collect = true;
-  if (depth < g_conf->bluestore_gc_max_blob_depth) {
-    *blob_depth = 1 + depth;
-    do_collect = false;
-  }
-  dout(20) << __func__ << " GC depth " << (int)*blob_depth
-           << ", gc 0x" << std::hex << *gc_start_offset << "~"
-           << (*gc_end_offset - *gc_start_offset)
-           << (do_collect ? " collect" : "")
-           << std::dec << dendl;
-  return do_collect;
 }
 
 // Onode
@@ -7607,7 +7514,7 @@ void BlueStore::_do_write_small(
       b->dirty_blob().calc_csum(b_off, padded);
       dout(20) << __func__ << "  lex old " << *ep << dendl;
       Extent *le = o->extent_map.set_lextent(offset, b_off + head_pad, length,
-					     wctx->blob_depth, b,
+					     b,
 					     &wctx->old_extents);
       b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
@@ -7682,7 +7589,7 @@ void BlueStore::_do_write_small(
 	       << b_len << std::dec << " of mutable " << *b
 	       << " at " << op->extents << dendl;
       Extent *le = o->extent_map.set_lextent(offset, offset - bstart, length,
-                                     wctx->blob_depth, b, &wctx->old_extents);
+                                     b, &wctx->old_extents);
       b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
       dout(20) << __func__ << "  lex " << *le << dendl;
@@ -7701,7 +7608,7 @@ void BlueStore::_do_write_small(
 		      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
   Extent *le = o->extent_map.set_lextent(offset, P2PHASE(offset, alloc_len),
-			 length, wctx->blob_depth, b, &wctx->old_extents);
+			 length, b, &wctx->old_extents);
   txc->statfs_delta.stored() += le->length;
   dout(20) << __func__ << "  lex " << *le << dendl;
   wctx->write(b, alloc_len, b_off, bl, true);
@@ -7730,7 +7637,7 @@ void BlueStore::_do_write_big(
     blp.copy(l, t);
     _buffer_cache_write(txc, b, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     wctx->write(b, l, 0, t, false);
-    Extent *le = o->extent_map.set_lextent(offset, 0, l, wctx->blob_depth,
+    Extent *le = o->extent_map.set_lextent(offset, 0, l,
                                            b, &wctx->old_extents);
     txc->statfs_delta.stored() += l;
     dout(20) << __func__ << "  lex " << *le << dendl;
@@ -8044,60 +7951,6 @@ void BlueStore::_do_write_data(
   }
 }
 
-void BlueStore::_do_garbage_collection(
-  TransContext *txc,
-  CollectionRef& c,
-  OnodeRef o,
-  uint64_t& offset,
-  uint64_t& length,
-  bufferlist& bl,
-  WriteContext *wctx)
-{
-  uint64_t gc_start_offset, gc_end_offset;
-  uint64_t end = offset + length;
-  bool do_collect =
-    o->extent_map.do_write_check_depth(o->onode.size,
-                                       offset, end, &wctx->blob_depth,
-                                       &gc_start_offset,
-		         	       &gc_end_offset);
-  if (do_collect) {
-    // we need garbage collection of blobs.
-    if (offset > gc_start_offset) {
-      bufferlist head_bl;
-      size_t read_len = offset - gc_start_offset;
-      int r = _do_read(c.get(), o, gc_start_offset, read_len, head_bl, 0);
-      assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data) {
-        head_bl.claim_append(bl);
-        bl.swap(head_bl);
-        offset = gc_start_offset;
-	length = end - offset;
-      } else {
-        o->extent_map.fault_range(db, gc_start_offset, read_len);
-        _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, wctx);
-      }
-      logger->inc(l_bluestore_gc);
-      logger->inc(l_bluestore_gc_bytes, read_len);
-    }
-
-    if (end < gc_end_offset) {
-      bufferlist tail_bl;
-      size_t read_len = gc_end_offset - end;
-      int r = _do_read(c.get(), o, end, read_len, tail_bl, 0);
-      assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data) {
-        bl.claim_append(tail_bl);
-        length += read_len;
-      } else {
-        o->extent_map.fault_range(db, end, read_len);
-        _do_write_data(txc, c, o, end, read_len, tail_bl, wctx);
-      }
-      logger->inc(l_bluestore_gc);
-      logger->inc(l_bluestore_gc_bytes, read_len);
-    }
-  }
-}
-
 int BlueStore::_do_write(
   TransContext *txc,
   CollectionRef& c,
@@ -8211,7 +8064,6 @@ int BlueStore::_do_write(
 	   << " target_blob_size 0x" << std::hex << wctx.target_blob_size
 	   << std::dec << dendl;
 
-  _do_garbage_collection(txc, c, o, offset, length, bl, &wctx);
   o->extent_map.fault_range(db, offset, length);
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
 
@@ -8800,7 +8652,7 @@ int BlueStore::_do_clone_range(
     }
     Extent *ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
 			    e.blob_offset + skip_front,
-			    e.length - skip_front - skip_back, e.blob_depth, cb);
+			    e.length - skip_front - skip_back, cb);
     newo->extent_map.extent_map.insert(*ne);
     ne->blob->get_ref(ne->blob_offset, ne->length);
     // fixme: we may leave parts of new blob unreferenced that could
