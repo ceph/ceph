@@ -6,7 +6,6 @@ import contextlib
 import json
 import logging
 import os
-import time
 import errno
 import util.rgw as rgw_utils
 
