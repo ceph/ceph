@@ -78,6 +78,12 @@ restricts access to the CephFS data pool(s):
         caps: [mon] allow r
         caps: [osd] allow rw pool=data1, allow rw pool=data2
 
+.. note::
+
+    Without a corresponding MDS path restriction, the OSD capabilities above do
+    **not** restrict file deletions outside of the ``data1`` and ``data2``
+    pools.
+
 You may also restrict clients from writing data by using 'r' instead of
 'rw' in OSD capabilities.  This does not affect the ability of the client
 to update filesystem metadata for these files, but it will prevent them
