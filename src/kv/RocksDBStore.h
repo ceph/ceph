@@ -115,7 +115,6 @@ public:
   void compact_range_async(const string& prefix, const string& start, const string& end) {
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
-  int get_info_log_level(string info_log_level);
 
   RocksDBStore(CephContext *c, const string &path, void *p) :
     cct(c),
