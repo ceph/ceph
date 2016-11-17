@@ -7523,19 +7523,16 @@ void BlueStore::_do_write_small(
   blp.copy(length, bl);
 
   // look for an existing mutable blob we can use
-  BlobRef b = 0;
-  boost::intrusive::set<Extent>::iterator ep =
-    o->extent_map.seek_lextent(offset);
+  auto ep = o->extent_map.seek_lextent(offset);
   if (ep != o->extent_map.extent_map.begin()) {
     --ep;
-    b = ep->blob;
-    if (ep->logical_offset - ep->blob_offset +
-      b->get_blob().get_ondisk_length() <= offset) {
+    if (ep->blob_end() <= offset) {
       ++ep;
     }
   }
+  BlobRef b;
   while (ep != o->extent_map.extent_map.end()) {
-    if (ep->logical_offset >= ep->blob_offset + end) {
+    if (ep->blob_start() >= end) {
       break;
     }
     b = ep->blob;
@@ -7550,7 +7547,7 @@ void BlueStore::_do_write_small(
       ++ep;
       continue;
     }
-    uint64_t bstart = ep->logical_offset - ep->blob_offset;
+    uint64_t bstart = ep->blob_start();
     dout(20) << __func__ << " considering " << *b
 	     << " bstart 0x" << std::hex << bstart << std::dec << dendl;
 
@@ -7905,7 +7902,7 @@ int BlueStore::_do_alloc_write(
 	     << " csum_length 0x" << std::hex << csum_length << std::dec
 	     << dendl;
 
-    if (csum) {
+    if (csum != Checksummer::CSUM_NONE) {
       dblob.init_csum(csum, csum_order, csum_length);
       dblob.calc_csum(b_off, *l);
     }
@@ -7991,7 +7988,7 @@ void BlueStore::_wctx_finish(
       }
     }
     delete &lo;
-    if (b->id >= 0 && b->get_ref_map().empty()) {
+    if (b->is_spanning() && b->get_ref_map().empty()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
       auto it = o->extent_map.spanning_blob_map.find(b->id);
