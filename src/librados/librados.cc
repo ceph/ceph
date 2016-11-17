@@ -5228,7 +5228,6 @@ extern "C" void rados_write_op_rmxattr(rados_write_op_t write_op,
                                        const char *name)
 {
   tracepoint(librados, rados_write_op_rmxattr_enter, write_op, name);
-  bufferlist bl;
   ((::ObjectOperation *)write_op)->rmxattr(name);
   tracepoint(librados, rados_write_op_rmxattr_exit);
 }
