@@ -333,8 +333,7 @@ RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados,
                                                 pool(_pool), oid(_oid),
                                                 req(NULL)
 {
-  stringstream s;
-  s << "rados lock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
+  set_description() << "rados lock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
 }
 
 void RGWSimpleRadosLockCR::request_cleanup()
