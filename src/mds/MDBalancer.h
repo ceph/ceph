@@ -122,9 +122,6 @@ public:
   void hit_dir(utime_t now, class CDir *dir, int type, int who=-1, double amount=1.0);
   void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
 
-
-  void show_imports(bool external=false);
-
   void queue_split(CDir *dir);
   void queue_merge(CDir *dir);
 
