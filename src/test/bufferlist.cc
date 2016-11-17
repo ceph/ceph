@@ -282,9 +282,58 @@ protected:
 };
 int TestRawPipe::fd = 0;
 
+ssize_t safe_copy_to_fd(const bufferptr& ptr, int fd, off_t ofs_from, ssize_t req_size, off_t dst_offset = -1) {
+  ssize_t r;
+  ssize_t count = 0;
+  while (req_size > 0) {
+    r = ptr.copy_to_fd(fd, ofs_from + count, req_size, dst_offset);
+    if (r == -EAGAIN) continue;
+    if (r > 0) {
+      count += r;
+      //ofs_from += r;
+      req_size -= r;
+      if (dst_offset != -1)
+	dst_offset += r;
+    } else {
+      if (count != 0)
+	return count;
+      else
+	return r;
+    }
+  }
+  return count;
+}
+
+//        buffer::raw* zero_copy = buffer::create_zero_copy(size/10);
+ssize_t safe_insert_from_fd(buffer::raw* buffer_raw, size_t position, size_t req_size, int fd, off_t src_offset = -1) {
+  ssize_t r;
+  ssize_t count = 0;
+  while (req_size > 0) {
+    r = buffer::insert_from_fd(buffer_raw, position, req_size, fd, src_offset);
+    if (r == -EAGAIN) continue;
+    if (r > 0) {
+      count += r;
+      position += r;
+      req_size -= r;
+      if (src_offset != -1)
+	src_offset += r;
+    } else {
+      if (count != 0)
+	return count;
+      else
+	return r;
+    }
+  }
+  return count;  
+}
+
+//  ssize_t buffer::insert_from_fd(buffer::raw* _raw, size_t position, size_t count, int fd, off_t src_offset) {
+
+
+
 TEST_F(TestRawPipe, create_zero_copy) {
   bufferptr ptr(buffer::create_zero_copy(100000));
-  EXPECT_EQ(0, ptr.length());
+  EXPECT_EQ(100000, ptr.length());
 }
 
 TEST_F(TestRawPipe, create_normal) {
@@ -350,7 +399,7 @@ TEST_F(TestRawPipe, create_empty_and_fill) {
       size_t cnt = i * 7/6 + 1;
       if (i + cnt > size)
         cnt = size - i;
-      EXPECT_EQ(cnt, buffer::insert_from_fd(zero_copy, i, cnt, fd));
+      EXPECT_EQ(cnt, safe_insert_from_fd(zero_copy, i, cnt, fd));
       i += cnt;
     }
     bufferptr ptr = bufferptr(zero_copy);
@@ -379,7 +428,7 @@ TEST_F(TestRawPipe, copy_to_fd) {
 
   int fd1;
   fd1 = ::open(FILENAME ".stream_to", O_RDWR|O_CREAT|O_TRUNC, 0666);
-  EXPECT_EQ((int)file_len, ptr.copy_to_fd(fd1, 0, file_len));
+  EXPECT_EQ((int)file_len, safe_copy_to_fd(ptr, fd1, 0, file_len));
   bufferptr ptr1 = bufferptr(buffer::create_zero_copy(file_len, fd1, 0));
   bufferlist bl1;
   bl1.append(ptr1);
@@ -403,7 +452,7 @@ TEST_F(TestRawPipe, copy_to_fd_ranges) {
 
       int fd1;
       fd1 = ::open(FILENAME ".stream_to", O_RDWR|O_CREAT|O_TRUNC, 0666);
-      EXPECT_EQ((int)size, ptr.copy_to_fd(fd1, pos, size));
+      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, fd1, pos, size));
       bufferptr ptr1 = bufferptr(buffer::create_zero_copy(size, fd1, 0));
       bufferlist bl1;
       bl1.append(ptr1);
@@ -431,7 +480,7 @@ TEST_F(TestRawPipe, copy_to_fd_ranges_extracted) {
     for (off_t pos = 400000 ; pos + size < file_len ; pos += 800000) {
       int fd1;
       fd1 = ::open(FILENAME ".stream_to", O_RDWR|O_CREAT|O_TRUNC, 0666);
-      EXPECT_EQ((int)size, ptr.copy_to_fd(fd1, pos, size));
+      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, fd1, pos, size));
       bufferptr ptr1 = bufferptr(buffer::create_zero_copy(size, fd1, 0));
       bufferlist bl1;
       bl1.append(ptr1);
@@ -453,12 +502,12 @@ TEST_F(TestRawPipe, patchwork) {
     bufferlist bl;
     for (size_t i = 0; i < 5; i++) {
       buffer::raw* zero_copy = buffer::create_zero_copy(size/10);
-      EXPECT_EQ(size/10, buffer::insert_from_fd(zero_copy, 0, size/10, fd));
+      EXPECT_EQ(size/10, safe_insert_from_fd(zero_copy, 0, size/10, fd));
       bufferptr ptr = bufferptr(zero_copy);
       bl.append(ptr);
 
       buffer::raw* memory = buffer::create(size/10);
-      EXPECT_EQ(size/10, buffer::insert_from_fd(memory, 0, size/10, fd));
+      EXPECT_EQ(size/10, safe_insert_from_fd(memory, 0, size/10, fd));
       bufferptr ptr1 = bufferptr(memory);
       bl.append(ptr1);
     }
@@ -477,7 +526,7 @@ TEST_F(TestRawPipe, multiple_streaming) {
     size_t size = pos * 3/8 + 1;
     if (size + pos > file_len)
       size = file_len - pos;
-    EXPECT_EQ((int)size, ptr_test.copy_to_fd(fd_test, pos, size, pos));
+    EXPECT_EQ((int)size, safe_copy_to_fd(ptr_test, fd_test, pos, size, pos));
   }
   bufferlist bl;
   bl.append(ptr_ref);
@@ -530,17 +579,15 @@ TEST_F(TestRawPipe, unix_socket) {
   EXPECT_GE(connection, 0);
 
   int size = 1024*1024;
-  EXPECT_EQ(setsockopt(client, SOL_SOCKET,SO_SNDBUF, &size, sizeof(size)), 0);
-  EXPECT_EQ(setsockopt(connection, SOL_SOCKET,SO_RCVBUF, &size, sizeof(size)), 0);
-  EXPECT_EQ(fcntl(client, F_SETFL, fcntl(client, F_GETFL,0) &~ O_NONBLOCK), 0);
-
+  EXPECT_EQ(setsockopt(client, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size)), 0);
+  EXPECT_EQ(setsockopt(connection, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)), 0);
+  EXPECT_EQ(fcntl(client, F_SETFL, fcntl(client, F_GETFL, 0) &~ O_NONBLOCK), 0);
   bufferptr ptr = bufferptr(buffer::create_zero_copy(file_len, fd));
   for (size_t size = 10; size < 100000 ; size = size * 15/14 + 1 )
   {
-    EXPECT_EQ(ptr.copy_to_fd(client, 0, size), size);
+    EXPECT_EQ(safe_copy_to_fd(ptr, client, 0, size), size);
     bufferptr ptr_in = bufferptr(buffer::create_zero_copy(size, connection));
     EXPECT_EQ(size, ptr_in.length());
-
     EXPECT_EQ(std::string(ptr.c_str(), size) == std::string(ptr_in.c_str(), size), true);
   }
   EXPECT_EQ(unlink(socket_name), 0);
@@ -565,12 +612,12 @@ TEST_F(TestRawPipe, no_files_left_on_creation) {
       bufferlist bl;
       for (size_t i = 0; i < 5; i++) {
         buffer::raw* zero_copy = buffer::create_zero_copy(size/10);
-        EXPECT_EQ(size/10, buffer::insert_from_fd(zero_copy, 0, size/10, fd));
+        EXPECT_EQ(size/10, safe_insert_from_fd(zero_copy, 0, size/10, fd));
         bufferptr ptr = bufferptr(zero_copy);
         bl.append(ptr);
 
         buffer::raw* memory = buffer::create(size/10);
-        EXPECT_EQ(size/10, buffer::insert_from_fd(memory, 0, size/10, fd));
+        EXPECT_EQ(size/10, safe_insert_from_fd(memory, 0, size/10, fd));
         bufferptr ptr1 = bufferptr(memory);
         bl.append(ptr1);
       }
@@ -594,12 +641,12 @@ TEST_F(TestRawPipe, no_files_left_on_extraction) {
       bufferlist bl;
       for (size_t i = 0; i < 5; i++) {
         buffer::raw* zero_copy = buffer::create_zero_copy(size/10);
-        EXPECT_EQ(size/10, buffer::insert_from_fd(zero_copy, 0, size/10, fd));
+        EXPECT_EQ(size/10, safe_insert_from_fd(zero_copy, 0, size/10, fd));
         bufferptr ptr = bufferptr(zero_copy);
         bl.append(ptr);
 
         buffer::raw* memory = buffer::create(size/10);
-        EXPECT_EQ(size/10, buffer::insert_from_fd(memory, 0, size/10, fd));
+        EXPECT_EQ(size/10, safe_insert_from_fd(memory, 0, size/10, fd));
         bufferptr ptr1 = bufferptr(memory);
         bl.append(ptr1);
       }
@@ -612,10 +659,9 @@ TEST_F(TestRawPipe, no_files_left_on_extraction) {
         files.pop_back();
       }
       EXPECT_EQ(true, check(bl, 0));
-
-      for (int f : files)
-        close(f);
     }
+    for (int f : files)
+      close(f);
   }
 }
 
@@ -724,12 +770,12 @@ TEST_F(TestRawPipePerformance, drain_input) {
     utime_t end;
     int64_t total_moved = 0;
     //write initial data to socket
-    EXPECT_EQ((int)size, bufferptr(buffer::create(size)).copy_to_fd(sink_fd, 0, size));
+    EXPECT_EQ((int)size, safe_copy_to_fd(bufferptr(buffer::create(size)), sink_fd, 0, size));
 
     do {
       bufferptr ptr(buffer::create_zero_copy(size, source_fd));
       EXPECT_EQ(size, ptr.length());
-      EXPECT_EQ((int)size, ptr.copy_to_fd(sink_fd, 0, size));
+      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, sink_fd, 0, size));
       total_moved += size;
       end = ceph_clock_now();
     } while (end-start < 0.5);
@@ -760,12 +806,12 @@ TEST_F(TestRawPipePerformance, splice_Nagle_conflict) {
     utime_t end;
     int64_t total_moved = 0;
     //write initial data to socket
-    EXPECT_EQ((int)size, bufferptr(buffer::create(size)).copy_to_fd(sink_fd, 0, size));
+    EXPECT_EQ((int)size, safe_copy_to_fd(bufferptr(buffer::create(size)), sink_fd, 0, size));
 
     do {
       bufferptr ptr(buffer::create_zero_copy(size, source_fd));
       EXPECT_EQ(size, ptr.length());
-      EXPECT_EQ((int)size - 1, ptr.copy_to_fd(sink_fd, 0, size - 1));
+      EXPECT_EQ((int)size - 1, safe_copy_to_fd(ptr, sink_fd, 0, size - 1));
       EXPECT_EQ(1, write(sink_fd,"a",1));
       total_moved += size;
       end = ceph_clock_now();
@@ -803,7 +849,7 @@ TEST_F(TestRawPipePerformance, input_full) {
     do {
       bufferptr ptr(buffer::create_zero_copy(size, source_fd));
       EXPECT_EQ(size, ptr.length());
-      EXPECT_EQ((int)size, ptr.copy_to_fd(sink_fd, 0, size));
+      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, sink_fd, 0, size));
       total_moved += size;
       end = ceph_clock_now();
     } while (end-start < 0.5);
@@ -832,7 +878,7 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
     do {
       bufferptr ptr(buffer::create_zero_copy(size, source_fd));
       EXPECT_EQ(size, ptr.length());
-      EXPECT_EQ((int)size, ptr.copy_to_fd(sink_fd, 0, size));
+      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, sink_fd, 0, size));
       total_moved += size;
       end = ceph_clock_now();
     } while (end-start < 0.5);
@@ -850,10 +896,10 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
     int64_t total_moved = 0;
     do {
       buffer::raw* x = buffer::create(size);
-      buffer::insert_from_fd(x, 0, size, source_fd);
+      safe_insert_from_fd(x, 0, size, source_fd);
       bufferptr ptr(x);
       EXPECT_EQ(size, ptr.length());
-      EXPECT_EQ((int)size, ptr.copy_to_fd(sink_fd, 0, size));
+      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, sink_fd, 0, size));
       total_moved += size;
       end = ceph_clock_now();
     } while (end-start < 0.5);
@@ -893,7 +939,7 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
         else
           workers[i] = thread(test_read, source_fd[i], sink_fd[i], size, &total_time, &total_bytes);
       }
-      usleep(100000);
+      usleep(500000);
       for (int i=0; i<numcpu; i++) {
         workers[i].join();
       }

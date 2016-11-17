@@ -75,7 +75,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       buffer_history_alloc_num.inc();
     }
   }
-    
+    int lclose(int fd) {
+      return TEMP_FAILURE_RETRY(::close(fd));
+    }
   }
 
   int buffer::get_total_alloc() {
@@ -116,6 +118,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   int update_max_pipe_size() {
 #ifdef CEPH_HAVE_SETPIPE_SZ
     char buf[32];
+    char* end_ptr;
     int r;
     struct stat stat_result;
     if (::stat("/proc/sys/fs/pipe-max-size", &stat_result) == -1)
@@ -125,9 +128,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (r < 0)
       return r;
     buf[r] = '\0';
-    errno = 0;
-    size_t size = strtoul(buf, nullptr, 10);
-    if (errno == 0)
+    size_t size = strtoul(buf, &end_ptr, 10);
+    if (end_ptr - buf > 0 && size > 4096)
       buffer_max_pipe_size.set(size);
     else
       buffer_max_pipe_size.set(4096); //set something non-zero
@@ -163,8 +165,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
   class buffer::raw {
-  public:
+  protected:
     char *data;
+  public:
     unsigned len;
     atomic_t nref;
 
@@ -482,8 +485,7 @@ private:
   };
   std::vector<pipe_elem> pipe_read_elements;
   int pipe_curr_write_fd; //this changes as writing progresses to next pipes
-  size_t total_content_size;
-  unsigned expected_len;
+  size_t actual_content_size;
 
   int close(int fd) {
     return TEMP_FAILURE_RETRY(::close(fd));
@@ -491,20 +493,17 @@ private:
 
 public:
   MEMPOOL_CLASS_HELPERS();
-  explicit raw_splice_kcrypt(unsigned expected_len) : raw(0),
+  explicit raw_splice_kcrypt(unsigned len) : raw(len),
       pipe_curr_write_fd(-1),
-      total_content_size(0),
-      expected_len(expected_len) {
+      actual_content_size(0) {
     update_max_pipe_size();
     if (get_max_pipe_size()<min_pipe_size) {
-      data = new char[expected_len];
-      len = expected_len;
+      data = new char[len];
       return;
     }
-    int no_pipes = expected_len / get_max_pipe_size() + 1; //this is estimated #pipes to be needed
+    int no_pipes = len / get_max_pipe_size() + 1; //this is estimated #pipes to be needed
     pipe_read_elements.reserve(no_pipes);
     //we will have as much data as we read
-    len = 0;
   }
 
   ~raw_splice_kcrypt() {
@@ -512,10 +511,10 @@ public:
       delete[] data;
 
     if (pipe_curr_write_fd != -1) {
-      close(pipe_curr_write_fd);
+      lclose(pipe_curr_write_fd);
     }
     for (auto& elem : pipe_read_elements) {
-      close(elem.fd);
+      lclose(elem.fd);
     }
   }
 /*
@@ -531,7 +530,7 @@ public:
 
   bool append_pipe() {
     if (pipe_curr_write_fd != -1) {
-      close(pipe_curr_write_fd);
+      lclose(pipe_curr_write_fd);
       pipe_curr_write_fd = -1;
     }
     int r;
@@ -543,8 +542,8 @@ public:
     if (r != -1)
       r = ::fcntl(fds[read_end], F_SETFL, O_NONBLOCK);
     if (r < 0) {
-      close(fds[write_end]);
-      close(fds[read_end]);
+      lclose(fds[write_end]);
+      lclose(fds[read_end]);
       return false;
     }
     pipe_curr_write_fd = fds[write_end];
@@ -630,9 +629,9 @@ public:
       ssize_t s;
       s = ::tee(pipe_read_elements[i].fd, fds[write_end],
                 pipe_read_elements[i].size, SPLICE_F_MOVE);
-      close(fds[write_end]);
+      lclose(fds[write_end]);
       if (s < (ssize_t)pipe_read_elements[i].size) {
-        close(fds[read_end]);
+        lclose(fds[read_end]);
         get_data();
         return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
       }
@@ -640,7 +639,7 @@ public:
       ssize_t tomove_size = pipe_read_elements[i].size;
       if (ofs > 0) {
         if (consume_pipe(fds[read_end], ofs) != ofs) {
-          close(fds[read_end]);
+          lclose(fds[read_end]);
           get_data();
           return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
         }
@@ -657,7 +656,7 @@ public:
                   fd, dst_offset == -1 ? nullptr : &off_out,
                   tomove_size, SPLICE_F_NONBLOCK | SPLICE_F_MORE | SPLICE_F_MOVE);
       if (moved_cnt < 0) {
-        close(fds[read_end]);
+        lclose(fds[read_end]);
         get_data();
         return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
       }
@@ -667,7 +666,7 @@ public:
       total_moved += moved_cnt;
       ofs_from += moved_cnt; //fix it in case we have to continue after error
 
-      close(fds[read_end]);
+      lclose(fds[read_end]);
       if (moved_cnt != tomove_size) {
         //there is something left not moved. it means we were blocked.
         break;
@@ -693,9 +692,8 @@ public:
     if (data != nullptr) {
       return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
     }
-    if (dst_pos != total_content_size) {
+    if (dst_pos != actual_content_size) {
       //convert and do anyway
-      len = expected_len;
       get_data();
       return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
     }
@@ -704,8 +702,8 @@ public:
     {
       if (pipe_curr_write_fd == -1) {
         if(!append_pipe()) {
-          len = expected_len;
           get_data();
+	  if (total_moved != 0) return total_moved ;
           return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
         }
       }
@@ -722,8 +720,7 @@ public:
         pipe_read_elements.back().size += r;
         total_moved += r;
         dst_pos += r;
-        total_content_size += r;
-        len += r;
+        actual_content_size += r;
         if (src_offset != -1)
           src_offset += r;
         count -= r;
@@ -735,7 +732,7 @@ public:
         //if you started from offset that was unaligned, last page cannot be filled
         if (is_pipe_full(pipe_curr_write_fd)) {
           //it is just pipe blocked
-          close(pipe_curr_write_fd);
+          lclose(pipe_curr_write_fd);
           pipe_curr_write_fd = -1;
         } else {
           int e = -errno;
@@ -745,10 +742,11 @@ public:
             else
               break;
           } else {
-            close(pipe_curr_write_fd);
+            lclose(pipe_curr_write_fd);
             pipe_curr_write_fd = -1;
-            len = expected_len;
             get_data();
+	    if (total_moved!=0)
+	      return total_moved;
             return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
           }
         }
@@ -768,18 +766,17 @@ public:
       return data;
 
     if (pipe_curr_write_fd != -1) {
-      close(pipe_curr_write_fd);
+      lclose(pipe_curr_write_fd);
       pipe_curr_write_fd = -1;
     }
     data = new char[len];
     //not checking data, it will throw std::bad_alloc
-
     size_t pos = 0;
     for (auto& elem : pipe_read_elements) {
       assert(elem.fd >= 0 && "expected proper file descriptors");
       if (elem.fd < 0) continue;
       ssize_t r = safe_read(elem.fd, data + pos, len - pos);
-      close(elem.fd);
+      lclose(elem.fd);
       if (r >=0) {
         pos += r;
       } else {
@@ -790,7 +787,6 @@ public:
       }
     }
     pipe_read_elements.resize(0);
-
     return data;
   }
 
@@ -969,7 +965,7 @@ private:
 
   buffer::raw* buffer::copy(const char *c, unsigned len) {
     raw* r = buffer::create_aligned(len, sizeof(size_t));
-    memcpy(r->data, c, len);
+    memcpy(r->get_data(), c, len);
     return r;
   }
 
@@ -1026,6 +1022,7 @@ private:
    * \param capacity size of buffer
    */
   buffer::raw* buffer::create_zero_copy(size_t capacity) {
+    //return create_page_aligned(capacity);
 #ifdef CEPH_HAVE_SPLICE
     return new raw_splice_kcrypt(capacity);
 #else
@@ -1057,10 +1054,10 @@ private:
       if (r>0) {
         dst_ofs += r;
       }
+      if (r==-EAGAIN) continue;
       if (r<=0)
         throw error_code(-EINVAL);
     }
-    buf->len = count;
     return buf;
   }
 
@@ -1235,7 +1232,7 @@ private:
     return _raw->get_data()[_off + n];
   }
 
-  const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
+  const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->get_data(); }
   unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
   int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
 
@@ -1247,7 +1244,7 @@ private:
     assert(_raw);
     if (o+l > _len)
         throw end_of_buffer();
-    char* src =  _raw->data + _off + o;
+    char* src =  _raw->get_data() + _off + o;
     maybe_inline_memcpy(dest, src, l, 8);
   }
 
@@ -1281,7 +1278,7 @@ private:
   {
     assert(_raw);
     assert(1 <= unused_tail_length());
-    char* ptr = _raw->data + _off + _len;
+    char* ptr = _raw->get_data() + _off + _len;
     *ptr = c;
     _len++;
     return _len + _off;
@@ -1291,7 +1288,7 @@ private:
   {
     assert(_raw);
     assert(l <= unused_tail_length());
-    char* c = _raw->data + _off + _len;
+    char* c = _raw->get_data() + _off + _len;
     maybe_inline_memcpy(c, p, l, 32);
     _len += l;
     return _len + _off;
@@ -1307,7 +1304,7 @@ private:
     assert(_raw);
     assert(o <= _len);
     assert(o+l <= _len);
-    char* dest = _raw->data + _off + o;
+    char* dest = _raw->get_data() + _off + o;
     if (crc_reset)
         _raw->invalidate_crc();
     maybe_inline_memcpy(dest, src, l, 64);
@@ -2500,17 +2497,32 @@ int buffer::list::read_file(const char *fn, std::string *error)
 
 ssize_t buffer::list::read_fd(int fd, size_t len)
 {
+  if (fd < 0) 
+    return -EBADF;
   // try zero copy first
   if (len >= CEPH_PAGE_SIZE * 4)
   {
     try {
-        append(buffer::create_zero_copy(len, fd));
-      } catch (buffer::error_code &e) {
-        return e.code;
-      } catch (buffer::malformed_input &e) {
-        return -EIO;
-      }
-      return 0;
+      buffer::raw* x = buffer::create_zero_copy(len);
+      size_t res = 0;
+      int r;
+      do {
+	r = x->insert_from_fd(res, len-res, fd);
+	if (r == -EAGAIN) { continue; }
+	if (r <= 0) break;
+	if (r >= 0) 
+	  res += r;
+      } while (res < len);
+      buffer::ptr p(x);
+      p.set_length(res);
+      append(p);
+      return res;
+    } catch (buffer::error_code &e) {
+      return e.code;
+    } catch (buffer::malformed_input &e) {
+      return -EIO;
+    }
+    return 0;
   }
   bufferptr bp = buffer::create(len);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
@@ -2830,7 +2842,10 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
+  const char* rd = const_cast<buffer::raw&>(r).get_data();
+  return out << "buffer::raw(" << (void*)rd << 
+    " len " << r.len << " nref " << r.nref.read() << ")";
+  
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
