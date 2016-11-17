@@ -223,6 +223,42 @@ public:
   void send_response() override;
 };
 
+class RGWPutRolePolicy_ObjStore_S3 : public RGWPutRolePolicy_ObjStore {
+public:
+  RGWPutRolePolicy_ObjStore_S3() = default;
+  ~RGWPutRolePolicy_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWGetRolePolicy_ObjStore_S3 : public RGWGetRolePolicy_ObjStore {
+public:
+  RGWGetRolePolicy_ObjStore_S3() = default;
+  ~RGWGetRolePolicy_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWListRolePolicies_ObjStore_S3 : public RGWListRolePolicies_ObjStore {
+public:
+  RGWListRolePolicies_ObjStore_S3() = default;
+  ~RGWListRolePolicies_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWDeleteRolePolicy_ObjStore_S3 : public RGWDeleteRolePolicy_ObjStore {
+public:
+  RGWDeleteRolePolicy_ObjStore_S3() = default;
+  ~RGWDeleteRolePolicy_ObjStore_S3() = default;
+
+  int get_params() override;
+  void send_response() override;
+};
+
 struct post_part_field {
   string val;
   map<string, string> params;
