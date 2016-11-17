@@ -552,11 +552,6 @@ MemDB::MDBWholeSpaceIteratorImpl::~MDBWholeSpaceIteratorImpl()
   free_last();
 }
 
-KeyValueDB::WholeSpaceIterator MemDB::_get_snapshot_iterator()
-{
-  assert(0);
-}
-
 int MemDB::MDBWholeSpaceIteratorImpl::upper_bound(const std::string &prefix,
     const std::string &after) {
 
