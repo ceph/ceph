@@ -67,7 +67,7 @@ class KernelDevice : public BlockDevice {
   // stalled aio debugging
   FS::aio_list_t debug_queue;
   std::mutex debug_queue_lock;
-  FS::aio_t *debug_oldest;
+  FS::aio_t *debug_oldest = nullptr;
   utime_t debug_stall_since;
   void debug_aio_link(FS::aio_t& aio);
   void debug_aio_unlink(FS::aio_t& aio);

@@ -418,9 +418,13 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 //
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
-  void *operator new[](size_t size) { assert(0 == "no array new"); }	\
+  void *operator new[](size_t size) {					\
+    assert(0 == "no array new");					\
+    return (void*)1;							\
+  }									\
   void  operator delete(void *);					\
   void  operator delete[](void *) { assert(0 == "no array delete"); }
+
 
 // Use this in some particular .cc file to match each class with a
 // MEMPOOL_CLASS_HELPERS().
