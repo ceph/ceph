@@ -31,7 +31,7 @@ import re
 import logging
 import json
 import tempfile
-import io
+import platform
 
 try:
     from subprocess import DEVNULL
@@ -1967,7 +1967,7 @@ def main(argv):
 
 def remove_btrfs_subvolumes(path):
     if platform.system() == "FreeBSD":
-        return 
+        return
     result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
     for line in result.stdout:
         filesystem = decode(line).rstrip('\n')
