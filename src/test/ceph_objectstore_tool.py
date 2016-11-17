@@ -395,7 +395,7 @@ if not CEPH_BUILD_DIR:
     CEPH_LIB=os.path.join(CEPH_BIN, '.libs')
     os.putenv('CEPH_LIB', CEPH_LIB)
 
-CEPH_DIR = CEPH_BUILD_DIR + "/ceph_objectstore_tool_dir"
+CEPH_DIR = CEPH_BUILD_DIR + "/cot_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 def kill_daemons():
