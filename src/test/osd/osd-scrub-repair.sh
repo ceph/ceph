@@ -355,6 +355,7 @@ function TEST_list_missing_erasure_coded() {
         [ $i -lt 60 ] || return 1
         matches=$(ceph pg $pg list_missing | egrep "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
+        sleep 1
     done
 
     teardown $dir || return 1
