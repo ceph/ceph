@@ -1,6 +1,20 @@
 overrides:
   ceph:
-    log-whitelist: ['candidate had a stat error', 'candidate had a read error', 'deep-scrub 0 missing, 1 inconsistent objects', 'deep-scrub 0 missing, 4 inconsistent objects', 'deep-scrub 1 errors', 'deep-scrub 4 errors', '!= known omap_digest', '!= known data_digest', 'repair 0 missing, 1 inconsistent objects', 'repair 0 missing, 4 inconsistent objects', 'repair 1 errors, 1 fixed', 'repair 4 errors, 4 fixed', 'scrub 0 missing, 1 inconsistent', 'scrub 1 errors', 'size 1 != known size', '!= best guess']
+    log-whitelist:
+      - candidate had a stat error
+      - candidate had a read error
+      - deep-scrub 0 missing, 1 inconsistent objects
+      - deep-scrub 0 missing, 4 inconsistent objects
+      - deep-scrub [0-9]+ errors
+      - '!= omap_digest'
+      - '!= data_digest'
+      - repair 0 missing, 1 inconsistent objects
+      - repair 0 missing, 4 inconsistent objects
+      - repair [0-9]+ errors, [0-9]+ fixed
+      - scrub 0 missing, 1 inconsistent objects
+      - scrub [0-9]+ errors
+      - 'size 1 != size'
+      - attr name mismatch
     conf:
       osd:
         filestore debug inject read err: true
