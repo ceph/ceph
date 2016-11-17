@@ -520,11 +520,13 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
     frag_t fg = dir->get_frag();
-    if (mdsmap->allows_dirfrags() &&
-	(fg == frag_t() || (rand() % (1 << fg.bits()) == 0)))
-      mdcache->split_dir(dir, 1);
-    else
-      balancer->queue_merge(dir);
+    if (mdsmap->allows_dirfrags()) {
+      if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
+        mdcache->split_dir(dir, 1);
+      } else {
+        balancer->queue_merge(dir);
+      }
+    }
   }
 
   // hack: force hash root?
