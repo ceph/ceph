@@ -291,24 +291,6 @@
 :Default: ``50``
 
 
-``mds bal merge rd``
-
-:Description: The minimum read temperature before Ceph merges 
-              adjacent directory fragments.
-
-:Type:  Float
-:Default: ``1000``
-
-
-``mds bal merge wr``
-
-:Description: The minimum write temperature before Ceph merges 
-              adjacent directory fragments.
-              
-:Type:  Float
-:Default: ``1000``
-
-
 ``mds bal interval``
 
 :Description: The frequency (in seconds) of workload exchanges between MDSs.
@@ -318,10 +300,25 @@
 
 ``mds bal fragment interval``
 
-:Description: The frequency (in seconds) of adjusting directory fragmentation.
+:Description: The delay (in seconds) between a fragment being elegible for split
+              or merge and executing the fragmentation change.
 :Type:  32-bit Integer
 :Default: ``5``
 
+
+``mds bal fragment fast factor``
+
+:Description: The ratio by which frags may exceed the split size before
+              a split is executed immediately (skipping the fragment interval)
+:Type:  Float
+:Default: ``1.5``
+
+``mds bal fragment size max``
+
+:Description: The maximum size of a fragment before any new entries
+              are rejected with ENOSPC.
+:Type:  32-bit Integer
+:Default: ``100000``
 
 ``mds bal idle threshold``
 
