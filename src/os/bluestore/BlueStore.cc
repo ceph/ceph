@@ -1140,6 +1140,7 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
 	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq, 0, right),
 		      0, p->second.get());
       }
+      cache->_adjust_buffer_size(p->second.get(), -right);
       p->second->truncate(left);
       break;
     }
