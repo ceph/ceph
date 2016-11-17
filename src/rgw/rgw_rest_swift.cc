@@ -146,7 +146,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     set_req_state_err(s, op_ret);
   }
 
-  if (!g_conf->rgw_swift_enforce_content_length) {
+  if (! s->cct->_conf->rgw_swift_enforce_content_length) {
     /* Adding account stats in the header to keep align with Swift API */
     dump_account_metadata(s,
             buckets_count,
@@ -192,7 +192,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
       s->formatter->dump_int("bytes", obj.size);
     }
     s->formatter->close_section();
-    if (! g_conf->rgw_swift_enforce_content_length) {
+    if (! s->cct->_conf->rgw_swift_enforce_content_length) {
       rgw_flush_formatter(s, s->formatter);
     }
   }
@@ -204,7 +204,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
     s->formatter->close_section();
   }
 
-  if (g_conf->rgw_swift_enforce_content_length) {
+  if (s->cct->_conf->rgw_swift_enforce_content_length) {
     /* Adding account stats in the header to keep align with Swift API */
     dump_account_metadata(s,
             buckets_count,
@@ -218,7 +218,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
     end_header(s, NULL, NULL, s->formatter->get_len(), true);
   }
 
-  if (sent_data || g_conf->rgw_swift_enforce_content_length) {
+  if (sent_data || s->cct->_conf->rgw_swift_enforce_content_length) {
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
 }
