@@ -45,6 +45,7 @@ function(distutils_add_cython_module name src)
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    CEPH_BUILD_TOP=${CMAKE_BINARY_DIR}
     CFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"
     ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
     build --verbose --build-base ${CYTHON_MODULE_DIR}
@@ -67,6 +68,7 @@ function(distutils_install_cython_module name)
     execute_process(
        COMMAND env
            CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+	   CEPH_BUILD_TOP=${CMAKE_BINARY_DIR}
            CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
            CC=${CMAKE_C_COMPILER}
            CPPFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"

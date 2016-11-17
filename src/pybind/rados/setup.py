@@ -26,15 +26,30 @@ from distutils.sysconfig import customize_compiler
 __version__ = '2.0.0'
 
 
-def get_ceph_version():
+def get_version():
+  where = []
+  top = os.getenv("CEPH_BUILD_TOP")
+  if top:
+    where.append(top)
+    where.append(os.path.join(top, "src", "include"))
+  else:
+    where.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+  for dir in where:
     try:
-        for line in open(os.path.join(os.path.dirname(__file__), "..", "..", "ceph_ver.h")):
+        for line in open(os.path.join(dir, "ceph_ver.h")):
             if "CEPH_GIT_NICE_VER" in line:
-                return line.split()[2].strip('"')
-        else:
-            return "0"
+                l=line.split()[2].strip('"')
+                if len(l) > 1 and l[0] == 'v': l = l[1:]
+                a=l.split("-",2)
+                if len(a) > 2:
+                    return "{}.post{}+{}".format( a[0], a[1], a[2] )
+                elif len(a) > 1:
+                    return "{}+{}".format( a[0], a[1] )
+                else:
+                    return l
     except IOError:
-        return "0"
+        pass
+  return "0"
 
 
 def get_python_flags():
