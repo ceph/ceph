@@ -6,6 +6,7 @@ overrides:
     - log bound mismatch
     - soft lockup
     - detected stalls on CPUs
+    - failed to encode map e
 tasks:
 - thrashosds:
     timeout: 1200
