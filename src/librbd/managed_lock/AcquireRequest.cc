@@ -59,18 +59,21 @@ AcquireRequest<I>* AcquireRequest<I>::create(librados::IoCtx& ioctx,
                                              ContextWQ *work_queue,
                                              const string& oid,
                                              const string& cookie,
+                                             bool exclusive,
                                              Context *on_finish) {
     return new AcquireRequest(ioctx, watcher, work_queue, oid, cookie,
-                              on_finish);
+                              exclusive, on_finish);
 }
 
 template <typename I>
 AcquireRequest<I>::AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                                   ContextWQ *work_queue, const string& oid,
-                                  const string& cookie, Context *on_finish)
+                                  const string& cookie, bool exclusive,
+                                  Context *on_finish)
   : m_ioctx(ioctx), m_watcher(watcher),
     m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_work_queue(work_queue), m_oid(oid), m_cookie(cookie),
+    m_exclusive(exclusive),
     m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)),
     m_error_result(0) {
 }
@@ -89,7 +92,8 @@ void AcquireRequest<I>::send_lock() {
   ldout(m_cct, 10) << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
-  rados::cls::lock::lock(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_cookie,
+  rados::cls::lock::lock(&op, RBD_LOCK_NAME,
+                         m_exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED, m_cookie,
                          ManagedLock<I>::WATCHER_LOCK_TAG, "", utime_t(), 0);
 
   using klass = AcquireRequest;

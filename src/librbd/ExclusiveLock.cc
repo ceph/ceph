@@ -37,7 +37,7 @@ bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
   Mutex::Locker locker(ML<I>::m_lock);
 
   bool accept_requests = (!ML<I>::is_shutdown_locked() &&
-                          ML<I>::m_state == ML<I>::STATE_LOCKED &&
+                          ML<I>::m_state == ML<I>::STATE_EXCLUSIVE_LOCKED &&
                           m_request_blocked_count == 0);
   *ret_val = m_request_blocked_ret_val;
 
@@ -98,6 +98,16 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
 }
 
 template <typename I>
+void ExclusiveLock<I>::try_acquire_lock(Context *on_tried_lock) {
+  ML<I>::try_acquire_exclusive_lock(on_tried_lock);
+}
+
+template <typename I>
+void ExclusiveLock<I>::acquire_lock(Context *on_locked) {
+  ML<I>::acquire_exclusive_lock(on_locked);
+}
+
+template <typename I>
 void ExclusiveLock<I>::handle_peer_notification() {
   Mutex::Locker locker(ML<I>::m_lock);
   if (ML<I>::m_state != ML<I>::STATE_WAITING_FOR_LOCK) {
@@ -105,7 +115,7 @@ void ExclusiveLock<I>::handle_peer_notification() {
   }
 
   ldout(m_image_ctx.cct, 10) << dendl;
-  assert(ML<I>::get_active_action() == ML<I>::ACTION_ACQUIRE_LOCK);
+  assert(ML<I>::get_active_action() == ML<I>::ACTION_ACQUIRE_EXCLUSIVE_LOCK);
   ML<I>::execute_next_action();
 }
 
@@ -137,7 +147,7 @@ void ExclusiveLock<I>::shutdown_handler(int r, Context *on_finish) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::pre_acquire_lock_handler(Context *on_finish) {
+void ExclusiveLock<I>::pre_acquire_exclusive_lock_handler(Context *on_finish) {
   PreAcquireRequest<I> *req = PreAcquireRequest<I>::create(m_image_ctx,
                                                            on_finish);
   m_image_ctx.op_work_queue->queue(new FunctionContext([req](int r) {
@@ -146,19 +156,20 @@ void ExclusiveLock<I>::pre_acquire_lock_handler(Context *on_finish) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::post_acquire_lock_handler(int r, Context *on_finish) {
+void ExclusiveLock<I>::post_acquire_exclusive_lock_handler(int r, Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << ": r=" << r << dendl;
 
 
   if (r < 0) {
     ML<I>::m_lock.Lock();
-    assert(ML<I>::m_state == ML<I>::STATE_ACQUIRING);
+    assert(ML<I>::m_state == ML<I>::STATE_EXCLUSIVE_ACQUIRING);
 
     // PostAcquire state machine will not run, so we need complete prepare
     m_image_ctx.state->handle_prepare_lock_complete();
 
     typename ML<I>::Action action = ML<I>::get_active_action();
-    if (action == ML<I>::ACTION_ACQUIRE_LOCK && r < 0 && r != -EBLACKLISTED) {
+    if (action == ML<I>::ACTION_ACQUIRE_EXCLUSIVE_LOCK && r < 0 &&
+        r != -EBLACKLISTED) {
       ML<I>::m_state = ML<I>::STATE_WAITING_FOR_LOCK;
       ML<I>::m_lock.Unlock();
 
@@ -196,7 +207,7 @@ void ExclusiveLock<I>::handle_post_acquiring_lock(int r) {
   Mutex::Locker locker(ML<I>::m_lock);
 
   assert(r == 0);
-  assert(ML<I>::m_state == ML<I>::STATE_ACQUIRING);
+  assert(ML<I>::m_state == ML<I>::STATE_EXCLUSIVE_ACQUIRING);
 
   // lock is owned at this point
   ML<I>::m_state = ML<I>::STATE_POST_ACQUIRING;
@@ -209,7 +220,7 @@ void ExclusiveLock<I>::handle_post_acquired_lock(int r) {
   Context *on_finish = nullptr;
   {
     Mutex::Locker locker(ML<I>::m_lock);
-    assert(ML<I>::m_state == ML<I>::STATE_ACQUIRING ||
+    assert(ML<I>::m_state == ML<I>::STATE_EXCLUSIVE_ACQUIRING ||
            ML<I>::m_state == ML<I>::STATE_POST_ACQUIRING);
 
     assert (m_pre_post_callback != nullptr);
@@ -280,7 +291,7 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
       if (m_image_ctx.aio_work_queue->is_lock_request_needed()) {
         // if we have blocked IO -- re-request the lock
         RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-        ML<I>::acquire_lock(nullptr);
+        acquire_lock(nullptr);
       }
     }
   } else {

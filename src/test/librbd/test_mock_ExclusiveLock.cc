@@ -96,7 +96,8 @@ struct BaseRequest {
 
   static T* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
                    ContextWQ *work_queue, const std::string& oid,
-                   const std::string& cookie, Context *on_finish) {
+                   const std::string& cookie, bool exclusive,
+                   Context *on_finish) {
     assert(!s_requests.empty());
     T* req = s_requests.front();
     req->on_finish = on_finish;
@@ -121,8 +122,9 @@ template <>
 struct ReacquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<ReacquireRequest<MockExclusiveLockImageCtx> > {
   static ReacquireRequest* create(librados::IoCtx &ioctx, const std::string& oid,
                                 const string& old_cookie, const std::string& new_cookie,
-                                Context *on_finish) {
-    return BaseRequest::create(ioctx, nullptr, nullptr, oid, new_cookie, on_finish);
+                                bool exclusive, Context *on_finish) {
+    return BaseRequest::create(ioctx, nullptr, nullptr, oid, new_cookie,
+                               exclusive, on_finish);
   }
 
   MOCK_METHOD0(send, void());
@@ -130,6 +132,13 @@ struct ReacquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<Reacquir
 
 template <>
 struct ReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<ReleaseRequest<MockExclusiveLockImageCtx> > {
+  static ReleaseRequest* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
+                                ContextWQ *work_queue, const std::string& oid,
+                                const std::string& cookie, Context *on_finish) {
+    return BaseRequest::create(ioctx, watcher, work_queue, oid, cookie, true,
+                               on_finish);
+  }
+
   MOCK_METHOD0(send, void());
 };
 

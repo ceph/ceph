@@ -36,11 +36,22 @@ public:
               const std::string& oid, Watcher *watcher);
   virtual ~ManagedLock();
 
-  bool is_lock_owner() const;
+  bool is_lock_owner(bool exclusive) const;
+
+  inline bool is_exclusive_lock_owner() const {
+    return is_lock_owner(true);
+  }
+
+  inline bool is_shared_lock_owner() const {
+    return is_lock_owner(false);
+  }
 
   void shut_down(Context *on_shutdown);
-  void acquire_lock(Context *on_acquired);
-  void try_acquire_lock(Context *on_acquired);
+
+  void acquire_exclusive_lock(Context *on_acquired);
+  void try_acquire_exclusive_lock(Context *on_acquired);
+  void acquire_shared_lock(Context *on_acquired);
+  void try_acquire_shared_lock(Context *on_acquired);
   void release_lock(Context *on_released);
   void reacquire_lock(Context *on_reacquired = nullptr);
 
@@ -49,10 +60,6 @@ public:
   bool is_shutdown() const {
     Mutex::Locker l(m_lock);
     return is_shutdown_locked();
-  }
-
-  bool is_locked_state() const {
-    return m_state == STATE_LOCKED;
   }
 
   static bool decode_lock_cookie(const std::string &tag, uint64_t *handle);
@@ -95,8 +102,10 @@ protected:
     STATE_UNINITIALIZED,
     STATE_INITIALIZING,
     STATE_UNLOCKED,
-    STATE_LOCKED,
-    STATE_ACQUIRING,
+    STATE_EXCLUSIVE_LOCKED,
+    STATE_SHARED_LOCKED,
+    STATE_EXCLUSIVE_ACQUIRING,
+    STATE_SHARED_ACQUIRING,
     STATE_POST_ACQUIRING,
     STATE_WAITING_FOR_REGISTER,
     STATE_WAITING_FOR_LOCK,
@@ -109,8 +118,10 @@ protected:
   };
 
   enum Action {
-    ACTION_TRY_LOCK,
-    ACTION_ACQUIRE_LOCK,
+    ACTION_TRY_EXCLUSIVE_LOCK,
+    ACTION_ACQUIRE_EXCLUSIVE_LOCK,
+    ACTION_TRY_SHARED_LOCK,
+    ACTION_ACQUIRE_SHARED_LOCK,
     ACTION_REACQUIRE_LOCK,
     ACTION_RELEASE_LOCK,
     ACTION_SHUT_DOWN
@@ -120,8 +131,10 @@ protected:
   State m_state;
 
   virtual void shutdown_handler(int r, Context *on_finish);
-  virtual void pre_acquire_lock_handler(Context *on_finish);
-  virtual void post_acquire_lock_handler(int r, Context *on_finish);
+  virtual void pre_acquire_exclusive_lock_handler(Context *on_finish);
+  virtual void post_acquire_exclusive_lock_handler(int r, Context *on_finish);
+  virtual void pre_acquire_shared_lock_handler(Context *on_finish);
+  virtual void post_acquire_shared_lock_handler(int r, Context *on_finish);
   virtual void pre_release_lock_handler(bool shutting_down,
                                         Context *on_finish);
   virtual void post_release_lock_handler(bool shutting_down, int r,
@@ -154,6 +167,7 @@ private:
 
   std::string m_cookie;
   std::string m_new_cookie;
+  bool m_last_lock_type_exclusive;
 
   State m_post_next_state;
 

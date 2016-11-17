@@ -25,15 +25,21 @@ public:
 
   void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
+  void try_acquire_lock(Context *on_tried_lock);
+  void acquire_lock(Context *on_locked);
 
   void handle_peer_notification();
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
 
+  inline bool is_lock_owner() const {
+    return ManagedLock<ImageCtxT>::is_exclusive_lock_owner();
+  }
+
 protected:
   virtual void shutdown_handler(int r, Context *on_finish);
-  virtual void pre_acquire_lock_handler(Context *on_finish);
-  virtual void post_acquire_lock_handler(int r, Context *on_finish);
+  virtual void pre_acquire_exclusive_lock_handler(Context *on_finish);
+  virtual void post_acquire_exclusive_lock_handler(int r, Context *on_finish);
   virtual void pre_release_lock_handler(bool shutting_down,
                                         Context *on_finish);
   virtual void post_release_lock_handler(bool shutting_down, int r,
@@ -101,6 +107,7 @@ private:
   int m_request_blocked_ret_val = 0;
 
   void handle_init_complete();
+
   void handle_post_acquiring_lock(int r);
   void handle_post_acquired_lock(int r);
   void handle_pre_releasing_lock(int r);

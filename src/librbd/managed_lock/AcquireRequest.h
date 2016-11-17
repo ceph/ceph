@@ -29,7 +29,8 @@ private:
 public:
   static AcquireRequest* create(librados::IoCtx& ioctx, Watcher *watcher,
                                 ContextWQ *work_queue, const std::string& oid,
-                                const std::string& cookie, Context *on_finish);
+                                const std::string& cookie, bool exclusive,
+                                Context *on_finish);
 
   ~AcquireRequest();
   void send();
@@ -69,7 +70,8 @@ private:
 
   AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                  ContextWQ *work_queue, const std::string& oid,
-                 const std::string& cookie, Context *on_finish);
+                 const std::string& cookie, bool exclusive,
+                 Context *on_finish);
 
   librados::IoCtx& m_ioctx;
   Watcher *m_watcher;
@@ -77,6 +79,7 @@ private:
   ContextWQ *m_work_queue;
   std::string m_oid;
   std::string m_cookie;
+  bool m_exclusive;
   Context *m_on_finish;
 
   bufferlist m_out_bl;

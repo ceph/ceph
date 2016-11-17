@@ -52,7 +52,7 @@ TEST_F(TestMockManagedLockReacquireRequest, Success) {
   C_SaferCond ctx;
   MockReacquireRequest *req = MockReacquireRequest::create(
       mock_image_ctx.md_ctx, mock_image_ctx.header_oid, "old_cookie",
-      "new_cookie", &ctx);
+      "new_cookie", true, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -69,7 +69,7 @@ TEST_F(TestMockManagedLockReacquireRequest, NotSupported) {
   C_SaferCond ctx;
   MockReacquireRequest *req = MockReacquireRequest::create(
       mock_image_ctx.md_ctx, mock_image_ctx.header_oid, "old_cookie",
-      "new_cookie", &ctx);
+      "new_cookie", true, &ctx);
   req->send();
   ASSERT_EQ(-EOPNOTSUPP, ctx.wait());
 }
@@ -86,7 +86,7 @@ TEST_F(TestMockManagedLockReacquireRequest, Error) {
   C_SaferCond ctx;
   MockReacquireRequest *req = MockReacquireRequest::create(
       mock_image_ctx.md_ctx, mock_image_ctx.header_oid, "old_cookie",
-      "new_cookie", &ctx);
+      "new_cookie", true, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }

@@ -60,18 +60,24 @@ ManagedLock<I>::~ManagedLock() {
 }
 
 template <typename I>
-bool ManagedLock<I>::is_lock_owner() const {
+bool ManagedLock<I>::is_lock_owner(bool exclusive) const {
   Mutex::Locker locker(m_lock);
 
   bool lock_owner;
 
   switch (m_state) {
-  case STATE_LOCKED:
+  case STATE_SHARED_LOCKED:
+    lock_owner = !exclusive;
+    break;
+  case STATE_EXCLUSIVE_LOCKED:
+    lock_owner = exclusive;
+    break;
   case STATE_REACQUIRING:
   case STATE_PRE_SHUTTING_DOWN:
   case STATE_POST_ACQUIRING:
   case STATE_PRE_RELEASING:
-    lock_owner = true;
+    lock_owner = exclusive ? m_last_lock_type_exclusive :
+                             !m_last_lock_type_exclusive;
     break;
   default:
     lock_owner = false;
@@ -92,15 +98,19 @@ void ManagedLock<I>::shut_down(Context *on_shut_down) {
 }
 
 template <typename I>
-void ManagedLock<I>::acquire_lock(Context *on_acquired) {
+void ManagedLock<I>::acquire_exclusive_lock(Context *on_acquired) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
     if (is_shutdown_locked()) {
       r = -ESHUTDOWN;
-    } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
+    } else if (m_state == STATE_SHARED_LOCKED) {
+      // no upgrade of shared to exclusive lock
+      r = -EPERM;
+    } else if (m_state != STATE_EXCLUSIVE_LOCKED ||
+               !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
-      execute_action(ACTION_ACQUIRE_LOCK, on_acquired);
+      execute_action(ACTION_ACQUIRE_EXCLUSIVE_LOCK, on_acquired);
       return;
     }
   }
@@ -109,15 +119,39 @@ void ManagedLock<I>::acquire_lock(Context *on_acquired) {
 }
 
 template <typename I>
-void ManagedLock<I>::try_acquire_lock(Context *on_acquired) {
+void ManagedLock<I>::try_acquire_exclusive_lock(Context *on_acquired) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
     if (is_shutdown_locked()) {
       r = -ESHUTDOWN;
-    } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
+    } else if (m_state == STATE_SHARED_LOCKED) {
+      // no upgrade of shared to exclusive lock
+      r = -EPERM;
+    } else if (m_state != STATE_EXCLUSIVE_LOCKED ||
+               !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
-      execute_action(ACTION_TRY_LOCK, on_acquired);
+      execute_action(ACTION_TRY_EXCLUSIVE_LOCK, on_acquired);
+      return;
+    }
+  }
+
+  on_acquired->complete(r);
+}
+
+template <typename I>
+void ManagedLock<I>::acquire_shared_lock(Context *on_acquired) {
+  int r = 0;
+  {
+    Mutex::Locker locker(m_lock);
+    if (is_shutdown_locked()) {
+      r = -ESHUTDOWN;
+    } if (m_state == STATE_EXCLUSIVE_LOCKED) {
+      // no downgrade of exclusive to shared lock
+      r = -EPERM;
+    } else if (m_state != STATE_SHARED_LOCKED || !m_actions_contexts.empty()) {
+      ldout(m_cct, 10) << dendl;
+      execute_action(ACTION_ACQUIRE_SHARED_LOCK, on_acquired);
       return;
     }
   }
@@ -151,12 +185,16 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
       // restart the acquire lock process now that watch is valid
       ldout(m_cct, 10) << ": " << "woke up waiting acquire" << dendl;
       Action active_action = get_active_action();
-      assert(active_action == ACTION_TRY_LOCK ||
-             active_action == ACTION_ACQUIRE_LOCK);
+      assert(active_action == ACTION_TRY_EXCLUSIVE_LOCK ||
+             active_action == ACTION_ACQUIRE_EXCLUSIVE_LOCK ||
+             active_action == ACTION_TRY_SHARED_LOCK ||
+             active_action == ACTION_ACQUIRE_SHARED_LOCK);
       execute_next_action();
     } else if (!is_shutdown_locked() &&
-               (m_state == STATE_LOCKED ||
-                m_state == STATE_ACQUIRING ||
+               (m_state == STATE_EXCLUSIVE_LOCKED ||
+                m_state == STATE_SHARED_LOCKED ||
+                m_state == STATE_EXCLUSIVE_ACQUIRING ||
+                m_state == STATE_SHARED_ACQUIRING ||
                 m_state == STATE_POST_ACQUIRING ||
                 m_state == STATE_WAITING_FOR_LOCK)) {
       // interlock the lock operation with other state ops
@@ -178,12 +216,22 @@ void ManagedLock<I>::shutdown_handler(int r, Context *on_finish) {
 }
 
 template <typename I>
-void ManagedLock<I>::pre_acquire_lock_handler(Context *on_finish) {
+void ManagedLock<I>::pre_acquire_exclusive_lock_handler(Context *on_finish) {
   on_finish->complete(0);
 }
 
 template <typename I>
-void  ManagedLock<I>::post_acquire_lock_handler(int r, Context *on_finish) {
+void  ManagedLock<I>::post_acquire_exclusive_lock_handler(int r, Context *on_finish) {
+  on_finish->complete(r);
+}
+
+template <typename I>
+void ManagedLock<I>::pre_acquire_shared_lock_handler(Context *on_finish) {
+  on_finish->complete(0);
+}
+
+template <typename I>
+void  ManagedLock<I>::post_acquire_shared_lock_handler(int r, Context *on_finish) {
   on_finish->complete(r);
 }
 
@@ -233,7 +281,8 @@ string ManagedLock<I>::encode_lock_cookie(uint64_t watch_handle) {
 template <typename I>
 bool ManagedLock<I>::is_transition_state() const {
   switch (m_state) {
-  case STATE_ACQUIRING:
+  case STATE_EXCLUSIVE_ACQUIRING:
+  case STATE_SHARED_ACQUIRING:
   case STATE_WAITING_FOR_REGISTER:
   case STATE_REACQUIRING:
   case STATE_RELEASING:
@@ -245,7 +294,8 @@ bool ManagedLock<I>::is_transition_state() const {
   case STATE_PRE_RELEASING:
     return true;
   case STATE_UNLOCKED:
-  case STATE_LOCKED:
+  case STATE_EXCLUSIVE_LOCKED:
+  case STATE_SHARED_LOCKED:
   case STATE_SHUTDOWN:
   case STATE_UNINITIALIZED:
     break;
@@ -288,8 +338,10 @@ void ManagedLock<I>::execute_next_action() {
   assert(m_lock.is_locked());
   assert(!m_actions_contexts.empty());
   switch (get_active_action()) {
-  case ACTION_ACQUIRE_LOCK:
-  case ACTION_TRY_LOCK:
+  case ACTION_ACQUIRE_EXCLUSIVE_LOCK:
+  case ACTION_TRY_EXCLUSIVE_LOCK:
+  case ACTION_ACQUIRE_SHARED_LOCK:
+  case ACTION_TRY_SHARED_LOCK:
     send_acquire_lock();
     break;
   case ACTION_REACQUIRE_LOCK:
@@ -346,13 +398,28 @@ bool ManagedLock<I>::is_shutdown_locked() const {
 template <typename I>
 void ManagedLock<I>::send_acquire_lock() {
   assert(m_lock.is_locked());
-  if (m_state == STATE_LOCKED) {
-    complete_active_action(STATE_LOCKED, 0);
+
+  Action action = get_active_action();
+  bool acq_exclusive = action == ACTION_ACQUIRE_EXCLUSIVE_LOCK ||
+                       action == ACTION_TRY_EXCLUSIVE_LOCK;
+
+  if (m_state == STATE_EXCLUSIVE_LOCKED && acq_exclusive) {
+    complete_active_action(STATE_EXCLUSIVE_LOCKED, 0);
+    return;
+  } else if (m_state == STATE_EXCLUSIVE_LOCKED && !acq_exclusive) {
+    complete_active_action(STATE_EXCLUSIVE_LOCKED, -EPERM);
+    return;
+  } else if (m_state == STATE_SHARED_LOCKED && !acq_exclusive) {
+    complete_active_action(STATE_SHARED_LOCKED, 0);
+    return;
+  } else if (m_state == STATE_SHARED_LOCKED && acq_exclusive) {
+    complete_active_action(STATE_SHARED_LOCKED, -EPERM);
     return;
   }
 
   ldout(m_cct, 10) << dendl;
-  m_state = STATE_ACQUIRING;
+  m_state = acq_exclusive ? STATE_EXCLUSIVE_ACQUIRING : STATE_SHARED_ACQUIRING;
+  m_last_lock_type_exclusive = acq_exclusive;
 
   uint64_t watch_handle = m_watcher->get_watch_handle();
   if (watch_handle == 0) {
@@ -362,9 +429,14 @@ void ManagedLock<I>::send_acquire_lock() {
   }
   m_cookie = ManagedLock<I>::encode_lock_cookie(watch_handle);
 
-  m_work_queue->queue(new FunctionContext([this](int r) {
-    pre_acquire_lock_handler(util::create_context_callback<
-        ManagedLock<I>, &ManagedLock<I>::handle_pre_acquire_lock>(this));
+  m_work_queue->queue(new FunctionContext([this, acq_exclusive](int r) {
+    if (acq_exclusive) {
+      pre_acquire_exclusive_lock_handler(util::create_context_callback<
+          ManagedLock<I>, &ManagedLock<I>::handle_pre_acquire_lock>(this));
+    } else {
+      pre_acquire_shared_lock_handler(util::create_context_callback<
+          ManagedLock<I>, &ManagedLock<I>::handle_pre_acquire_lock>(this));
+    }
   }));
 }
 
@@ -377,9 +449,17 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
     return;
   }
 
+  bool acq_exclusive;
+  {
+    Mutex::Locker locker(m_lock);
+    Action action = get_active_action();
+    acq_exclusive = action == ACTION_ACQUIRE_EXCLUSIVE_LOCK ||
+                    action == ACTION_TRY_EXCLUSIVE_LOCK;
+  }
+
   using managed_lock::AcquireRequest;
   AcquireRequest<I>* req = AcquireRequest<I>::create(m_ioctx, m_watcher,
-      m_work_queue, m_oid, m_cookie,
+      m_work_queue, m_oid, m_cookie, acq_exclusive,
       util::create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<AcquireRequest<I>>(req), 0);
@@ -390,19 +470,31 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
   ldout(m_cct, 10) << ": r=" << r << dendl;
 
   if (r == -EBUSY || r == -EAGAIN) {
-    ldout(m_cct, 5) << ": unable to acquire exclusive lock" << dendl;
+    ldout(m_cct, 5) << ": unable to acquire lock" << dendl;
   } else if (r < 0) {
-    lderr(m_cct) << ": failed to acquire exclusive lock:" << cpp_strerror(r)
+    lderr(m_cct) << ": failed to acquire lock:" << cpp_strerror(r)
                << dendl;
   } else {
-    ldout(m_cct, 5) << ": successfully acquired exclusive lock" << dendl;
+    ldout(m_cct, 5) << ": successfully acquired lock" << dendl;
   }
 
-  m_post_next_state = (r < 0 ? STATE_UNLOCKED : STATE_LOCKED);
+  Mutex::Locker locker(m_lock);
 
-  m_work_queue->queue(new FunctionContext([this, r](int ret) {
-    post_acquire_lock_handler(r, util::create_context_callback<
-        ManagedLock<I>, &ManagedLock<I>::handle_post_acquire_lock>(this));
+  Action action = get_active_action();
+  bool exclusive = action == ACTION_ACQUIRE_EXCLUSIVE_LOCK ||
+                   action == ACTION_TRY_EXCLUSIVE_LOCK;
+
+  m_post_next_state = r < 0 ? STATE_UNLOCKED : (exclusive ?
+      STATE_EXCLUSIVE_LOCKED : STATE_SHARED_LOCKED);
+
+  m_work_queue->queue(new FunctionContext([this, exclusive, r](int ret) {
+    if (exclusive) {
+      post_acquire_exclusive_lock_handler(r, util::create_context_callback<
+          ManagedLock<I>, &ManagedLock<I>::handle_post_acquire_lock>(this));
+    } else {
+      post_acquire_shared_lock_handler(r, util::create_context_callback<
+          ManagedLock<I>, &ManagedLock<I>::handle_post_acquire_lock>(this));
+    }
   }));
 }
 
@@ -412,7 +504,8 @@ void ManagedLock<I>::handle_post_acquire_lock(int r) {
 
   Mutex::Locker locker(m_lock);
 
-  if (r < 0 && m_post_next_state == STATE_LOCKED) {
+  if (r < 0 && (m_post_next_state == STATE_EXCLUSIVE_LOCKED ||
+      m_post_next_state == STATE_SHARED_LOCKED)) {
     // release_lock without calling pre and post handlers
     revert_to_unlock_state(r);
   } else {
@@ -439,7 +532,9 @@ template <typename I>
 void ManagedLock<I>::send_reacquire_lock() {
   assert(m_lock.is_locked());
 
-  if (m_state != STATE_LOCKED) {
+  if (m_state != STATE_EXCLUSIVE_LOCKED && m_state != STATE_SHARED_LOCKED) {
+    assert(m_state == STATE_EXCLUSIVE_ACQUIRING ||
+           m_state == STATE_SHARED_ACQUIRING);
     complete_active_action(m_state, 0);
     return;
   }
@@ -449,7 +544,7 @@ void ManagedLock<I>::send_reacquire_lock() {
      // watch (re)failed while recovering
      lderr(m_cct) << ": aborting reacquire due to invalid watch handle"
                   << dendl;
-     complete_active_action(STATE_LOCKED, 0);
+     complete_active_action(m_state, 0);
      return;
   }
 
@@ -457,16 +552,17 @@ void ManagedLock<I>::send_reacquire_lock() {
   if (m_cookie == m_new_cookie) {
     ldout(m_cct, 10) << ": skipping reacquire since cookie still valid"
                      << dendl;
-    complete_active_action(STATE_LOCKED, 0);
+    complete_active_action(m_state, 0);
     return;
   }
 
   ldout(m_cct, 10) << dendl;
+  m_last_lock_type_exclusive = m_state == STATE_EXCLUSIVE_LOCKED;
   m_state = STATE_REACQUIRING;
 
   using managed_lock::ReacquireRequest;
   ReacquireRequest<I>* req = ReacquireRequest<I>::create(m_ioctx, m_oid,
-      m_cookie, m_new_cookie,
+      m_cookie, m_new_cookie, m_last_lock_type_exclusive,
       util::create_context_callback<
         ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<ReacquireRequest<I>>(req));
@@ -499,7 +595,9 @@ void ManagedLock<I>::handle_reacquire_lock(int r) {
       Contexts contexts;
       std::swap(contexts, action_contexts.second);
       if (contexts.empty()) {
-        execute_action(ACTION_ACQUIRE_LOCK, nullptr);
+        execute_action(m_last_lock_type_exclusive ?
+            ACTION_ACQUIRE_EXCLUSIVE_LOCK : ACTION_ACQUIRE_SHARED_LOCK,
+            nullptr);
       } else {
         for (auto ctx : contexts) {
           ctx = new FunctionContext([ctx, r](int acquire_ret_val) {
@@ -508,7 +606,8 @@ void ManagedLock<I>::handle_reacquire_lock(int r) {
               }
               ctx->complete(acquire_ret_val);
             });
-          execute_action(ACTION_ACQUIRE_LOCK, ctx);
+          execute_action(m_last_lock_type_exclusive ?
+              ACTION_ACQUIRE_EXCLUSIVE_LOCK : ACTION_ACQUIRE_SHARED_LOCK, ctx);
         }
       }
     }
@@ -516,7 +615,8 @@ void ManagedLock<I>::handle_reacquire_lock(int r) {
     m_cookie = m_new_cookie;
   }
 
-  complete_active_action(STATE_LOCKED, r);
+  complete_active_action(m_last_lock_type_exclusive ?
+      STATE_EXCLUSIVE_LOCKED : STATE_SHARED_LOCKED, 0);
 }
 
 template <typename I>
@@ -528,6 +628,7 @@ void ManagedLock<I>::send_release_lock() {
   }
 
   ldout(m_cct, 10) << dendl;
+  m_last_lock_type_exclusive = m_state == STATE_EXCLUSIVE_LOCKED;
   m_state = STATE_PRE_RELEASING;
 
   m_work_queue->queue(new FunctionContext([this](int r) {
@@ -564,7 +665,8 @@ void ManagedLock<I>::handle_release_lock(int r) {
     m_cookie = "";
   }
 
-  m_post_next_state = r < 0 ? STATE_LOCKED : STATE_UNLOCKED;
+  m_post_next_state = r >= 0 ? STATE_UNLOCKED : m_last_lock_type_exclusive ?
+    STATE_EXCLUSIVE_LOCKED : STATE_SHARED_LOCKED;
 
   m_work_queue->queue(new FunctionContext([this, r](int ret) {
     post_release_lock_handler(false, r, util::create_context_callback<
@@ -594,7 +696,9 @@ void ManagedLock<I>::send_shutdown() {
   }
 
   ldout(m_cct, 10) << dendl;
-  assert(m_state == STATE_LOCKED);
+  assert(m_state == STATE_EXCLUSIVE_LOCKED ||
+         m_state == STATE_SHARED_LOCKED);
+  m_last_lock_type_exclusive = m_state == STATE_EXCLUSIVE_LOCKED;
   m_state = STATE_PRE_SHUTTING_DOWN;
 
   m_lock.Unlock();
@@ -654,8 +758,7 @@ void ManagedLock<I>::complete_shutdown(int r) {
   ldout(m_cct, 10) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to shut down lock: " << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to shut down lock: " << cpp_strerror(r) << dendl;
   }
 
   ActionContexts action_contexts;
