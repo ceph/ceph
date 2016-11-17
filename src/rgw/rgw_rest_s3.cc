@@ -519,7 +519,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       s->formatter->open_array_section("Entries");
     }
 
-    vector<RGWObjEnt>::iterator iter;
+    vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker"
 				  : "Version");
@@ -527,14 +527,15 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (objs_container) {
         s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
       }
+      rgw_obj_key key(iter->key);
       if (encode_key) {
 	string key_name;
-	url_encode(iter->key.name, key_name);
+	url_encode(key.name, key_name);
 	s->formatter->dump_string("Key", key_name);
       } else {
-	s->formatter->dump_string("Key", iter->key.name);
+	s->formatter->dump_string("Key", key.name);
       }
-      string version_id = iter->key.instance;
+      string version_id = key.instance;
       if (version_id.empty()) {
 	version_id = "null";
       }
@@ -543,18 +544,18 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
           s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
         }
         s->formatter->dump_string("RgwxTag", iter->tag);
-        utime_t ut(iter->mtime);
+        utime_t ut(iter->meta.mtime);
         ut.gmtime_nsec(s->formatter->dump_stream("RgwxMtime"));
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
-      dump_time(s, "LastModified", &iter->mtime);
+      dump_time(s, "LastModified", &iter->meta.mtime);
       if (!iter->is_delete_marker()) {
-	s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
-	s->formatter->dump_int("Size", iter->accounted_size);
+	s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
+	s->formatter->dump_int("Size", iter->meta.accounted_size);
 	s->formatter->dump_string("StorageClass", "STANDARD");
       }
-      dump_owner(s, iter->owner, iter->owner_display_name);
+      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       s->formatter->close_section();
     }
     if (objs_container) {
@@ -613,21 +614,22 @@ void RGWListBucket_ObjStore_S3::send_response()
   }
 
   if (op_ret >= 0) {
-    vector<RGWObjEnt>::iterator iter;
+    vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      rgw_obj_key key(iter->key);
       s->formatter->open_array_section("Contents");
       if (encode_key) {
 	string key_name;
-	url_encode(iter->key.name, key_name);
+	url_encode(key.name, key_name);
 	s->formatter->dump_string("Key", key_name);
       } else {
-	s->formatter->dump_string("Key", iter->key.name);
+	s->formatter->dump_string("Key", key.name);
       }
-      dump_time(s, "LastModified", &iter->mtime);
-      s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
-      s->formatter->dump_int("Size", iter->accounted_size);
+      dump_time(s, "LastModified", &iter->meta.mtime);
+      s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
+      s->formatter->dump_int("Size", iter->meta.accounted_size);
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_owner(s, iter->owner, iter->owner_display_name);
+      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
       }
@@ -2800,7 +2802,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       dump_owner(s, s->user->user_id, s->user->display_name, "Initiator");
       dump_owner(s, s->user->user_id, s->user->display_name);
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", &iter->obj.mtime);
+      dump_time(s, "Initiated", &iter->obj.meta.mtime);
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {

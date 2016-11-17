@@ -176,7 +176,7 @@ class RGWCache  : public T
   int list_objects_raw_init(rgw_pool& pool, RGWAccessHandle *handle) {
     return T::list_objects_raw_init(pool, handle);
   }
-  int list_objects_raw_next(RGWObjEnt& obj, RGWAccessHandle *handle) {
+  int list_objects_raw_next(rgw_bucket_dir_entry& obj, RGWAccessHandle *handle) {
     return T::list_objects_raw_next(obj, handle);
   }
 

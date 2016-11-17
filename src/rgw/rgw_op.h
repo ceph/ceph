@@ -182,7 +182,7 @@ public:
   void pre_exec();
   void execute();
   int read_user_manifest_part(rgw_bucket& bucket,
-                              const RGWObjEnt& ent,
+                              const rgw_bucket_dir_entry& ent,
                               RGWAccessControlPolicy *bucket_policy,
                               off_t start_ofs,
                               off_t end_ofs);
@@ -429,7 +429,7 @@ protected:
   string encoding_type;
   bool list_versions;
   int max;
-  vector<RGWObjEnt> objs;
+  vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
 
   int default_max;
@@ -1429,7 +1429,7 @@ public:
 };
 
 struct RGWMultipartUploadEntry {
-  RGWObjEnt obj;
+  rgw_bucket_dir_entry obj;
   RGWMPObj mp;
 };
 

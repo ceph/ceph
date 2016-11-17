@@ -2467,7 +2467,7 @@ public:
    * get the next bucket in the listing. obj is filled in,
    * handle is updated.
    */
-  int list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle);
+  int list_buckets_next(rgw_bucket_dir_entry& obj, RGWAccessHandle *handle);
 
   /// list logs
   int log_list_init(const string& prefix, RGWAccessHandle *handle);
@@ -2693,7 +2693,7 @@ public:
         const bufferlist *data;
         RGWObjManifest *manifest;
         const string *ptag;
-        list<rgw_obj_key> *remove_objs;
+        list<rgw_obj_index_key> *remove_objs;
         ceph::real_time set_mtime;
         rgw_user owner;
         RGWObjCategory category;
@@ -2730,7 +2730,7 @@ public:
         uint64_t olh_epoch;
         string marker_version_id;
         uint32_t bilog_flags;
-        list<rgw_obj_key> *remove_objs;
+        list<rgw_obj_index_key> *remove_objs;
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time mtime; /* for setting delete marker mtime */
@@ -2839,10 +2839,10 @@ public:
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
                    bufferlist *acl_bl, RGWObjCategory category,
-		   list<rgw_obj_key> *remove_objs);
+		   list<rgw_obj_index_key> *remove_objs);
       int complete_del(int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
-                       list<rgw_obj_key> *remove_objs);
+                       list<rgw_obj_index_key> *remove_objs);
       int cancel();
 
       const string *get_optag() { return &optag; }
@@ -2870,7 +2870,7 @@ public:
     public:
       explicit List(RGWRados::Bucket *_target) : target(_target) {}
 
-      int list_objects(int max, vector<RGWObjEnt> *result, map<string, bool> *common_prefixes, bool *is_truncated);
+      int list_objects(int max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
       rgw_obj_key& get_next_marker() {
         return next_marker;
       }
@@ -2906,7 +2906,7 @@ public:
   int on_last_entry_in_listing(RGWBucketInfo& bucket_info,
                                const std::string& obj_prefix,
                                const std::string& obj_delim,
-                               std::function<int(const RGWObjEnt&)> handler);
+                               std::function<int(const rgw_bucket_dir_entry&)> handler);
 
   bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const {
     return bucket_info.has_swift_versioning() &&
@@ -3267,16 +3267,16 @@ public:
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags);
   int cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs, uint16_t bilog_flags);
-  int cls_obj_complete_add(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent,
-                           RGWObjCategory category, list<rgw_obj_key> *remove_objs, uint16_t bilog_flags);
+                          rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
+  int cls_obj_complete_add(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+                           RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
   int cls_obj_complete_del(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
-                           ceph::real_time& removed_mtime, list<rgw_obj_key> *remove_objs, uint16_t bilog_flags);
+                           ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
   int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
-  int cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_key& start, const string& prefix,
-                      uint32_t num_entries, bool list_versions, map<string, RGWObjEnt>& m,
-                      bool *is_truncated, rgw_obj_key *last_entry,
+  int cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_index_key& start, const string& prefix,
+                      uint32_t num_entries, bool list_versions, map<string, rgw_bucket_dir_entry>& m,
+                      bool *is_truncated, rgw_obj_index_key *last_entry,
                       bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, map<string, struct rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
@@ -3320,14 +3320,14 @@ public:
                     librados::AioCompletion *completion = nullptr);
 
   string objexp_hint_get_shardname(int shard_num);
-  int objexp_key_shard(const rgw_obj_key& key);
+  int objexp_key_shard(const rgw_obj_index_key& key);
   void objexp_get_shard(int shard_num,
                         string& shard);                       /* out */
   int objexp_hint_add(const ceph::real_time& delete_at,
                       const string& tenant_name,
                       const string& bucket_name,
                       const string& bucket_id,
-                      const rgw_obj_key& obj_key);
+                      const rgw_obj_index_key& obj_key);
   int objexp_hint_list(const string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
@@ -3365,7 +3365,7 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(RGWBucketInfo& bucket_info);
-  int remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_key>& oid_list);
+  int remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(librados::IoCtx& src_ioctx,
 		     const string& src_oid, const string& src_locator,
 	             librados::IoCtx& dst_ioctx,
@@ -3497,7 +3497,7 @@ public:
   int check_disk_state(librados::IoCtx io_ctx,
                        rgw_bucket& bucket,
                        rgw_bucket_dir_entry& list_state,
-                       RGWObjEnt& object,
+                       rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates);
 
   /**
@@ -3516,7 +3516,7 @@ public:
    * filter: if not NULL, will be used to filter returned objects
    * Returns: 0 on success, -ERR# otherwise.
    */
-  int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
+  int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   uint64_t next_bucket_id();

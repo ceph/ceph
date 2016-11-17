@@ -421,11 +421,11 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
   return rgw_bucket_instance_store_info(store, key, bl, false, &attrs, objv_tracker, real_time());
 }
 
-static void dump_mulipart_index_results(list<rgw_obj_key>& objs_to_unlink,
+static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
         Formatter *f)
 {
   // make sure that an appropiately titled header has been opened previously
-  list<rgw_obj_key>::iterator oiter = objs_to_unlink.begin();
+  auto oiter = objs_to_unlink.begin();
 
   f->open_array_section("invalid_multipart_entries");
 
@@ -521,7 +521,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
-  std::vector<RGWObjEnt> objs;
+  std::vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
   RGWObjectCtx obj_ctx(store);
@@ -552,9 +552,10 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
       if (ret < 0)
         return ret;
 
-      std::vector<RGWObjEnt>::iterator it = objs.begin();
+      std::vector<rgw_bucket_dir_entry>::iterator it = objs.begin();
       for (; it != objs.end(); ++it) {
-        ret = rgw_remove_object(store, info, bucket, (*it).key);
+        rgw_obj_key key(it->key);
+        ret = rgw_remove_object(store, info, bucket, key);
         if (ret < 0)
           return ret;
       }
@@ -612,7 +613,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
-  std::vector<RGWObjEnt> objs;
+  std::vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
   RGWObjectCtx obj_ctx(store);
@@ -642,11 +643,10 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
     return ret;
 
   while (!objs.empty()) {
-    std::vector<RGWObjEnt>::iterator it = objs.begin();
+    std::vector<rgw_bucket_dir_entry>::iterator it = objs.begin();
     for (; it != objs.end(); ++it) {
       RGWObjState *astate = NULL;
-      rgw_obj obj(bucket, (*it).key.name);
-      obj.set_instance((*it).key.instance);
+      rgw_obj obj(bucket, (*it).key);
 
       ret = store->get_obj_state(&obj_ctx, obj, &astate, false);
       if (ret == -ENOENT) {
@@ -953,9 +953,9 @@ int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_m
   return 0;
 }
 
-static void dump_bucket_index(map<string, RGWObjEnt> result,  Formatter *f)
+static void dump_bucket_index(map<string, rgw_bucket_dir_entry> result,  Formatter *f)
 {
-  map<string, RGWObjEnt>::iterator iter;
+  map<string, rgw_bucket_dir_entry>::iterator iter;
   for (iter = result.begin(); iter != result.end(); ++iter) {
     f->dump_string("object", iter->first);
    }
@@ -991,7 +991,7 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
 }
 
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-        list<rgw_obj_key>& objs_to_unlink, std::string *err_msg)
+        list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg)
 {
   bool fix_index = op_state.will_fix_index();
   rgw_bucket bucket = op_state.get_bucket();
@@ -1003,7 +1003,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   bool is_truncated;
   map<string, bool> meta_objs;
-  map<rgw_obj_key, string> all_objs;
+  map<rgw_obj_index_key, string> all_objs;
 
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
@@ -1019,7 +1019,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   list_op.params.list_versions = true;
 
   do {
-    vector<RGWObjEnt> result;
+    vector<rgw_bucket_dir_entry> result;
     int r = list_op.list_objects(max, &result, &common_prefixes, &is_truncated);
     if (r < 0) {
       set_err_msg(err_msg, "failed to list objects in bucket=" + bucket.name +
@@ -1028,14 +1028,14 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
       return r;
     }
 
-    vector<RGWObjEnt>::iterator iter;
+    vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = result.begin(); iter != result.end(); ++iter) {
-      RGWObjEnt& ent = *iter;
+      rgw_bucket_dir_entry& ent = *iter;
 
       rgw_obj obj(bucket, ent.key);
       obj.set_ns(ns);
 
-      rgw_obj_key key;
+      rgw_obj_index_key key;
       obj.get_index_key(&key);
 
       string oid = key.name;
@@ -1059,9 +1059,10 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   } while (is_truncated);
 
-  map<rgw_obj_key, string>::iterator aiter;
-  for (aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
+  for (auto aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
     string& name = aiter->second;
+
+    rgw_obj_index_key index_key(aiter->first);
 
     if (meta_objs.find(name) == meta_objs.end()) {
       objs_to_unlink.push_back(aiter->first);
@@ -1101,13 +1102,13 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   store->cls_obj_set_bucket_tag_timeout(bucket_info, BUCKET_TAG_TIMEOUT);
 
   string prefix;
-  rgw_obj_key marker;
+  rgw_obj_index_key marker;
   bool is_truncated = true;
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
   while (is_truncated) {
-    map<string, RGWObjEnt> result;
+    map<string, rgw_bucket_dir_entry> result;
 
     int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
                                    result, &is_truncated, &marker,
@@ -1302,10 +1303,10 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
                   RGWFormatterFlusher& flusher)
 {
   int ret;
-  map<string, RGWObjEnt> result;
+  map<string, rgw_bucket_dir_entry> result;
   map<RGWObjCategory, RGWStorageStats> existing_stats;
   map<RGWObjCategory, RGWStorageStats> calculated_stats;
-  list<rgw_obj_key> objs_to_unlink;
+  list<rgw_obj_index_key> objs_to_unlink;
 
   RGWBucket bucket;
 
@@ -1463,7 +1464,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
     formatter->open_array_section("buckets");
     if (store->list_buckets_init(&handle) >= 0) {
-      RGWObjEnt obj;
+      rgw_bucket_dir_entry obj;
       while (store->list_buckets_next(obj, &handle) >= 0) {
         if (show_stats)
           bucket_stats(store, user_id.tenant, obj.key.name, formatter);

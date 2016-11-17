@@ -1340,42 +1340,74 @@ struct req_info {
   void init_meta_info(bool *found_bad_meta);
 };
 
+typedef cls_rgw_obj_key rgw_obj_index_key;
+
 struct rgw_obj_key {
   string name;
   string instance;
+  string ns;
 
   rgw_obj_key() {}
   // cppcheck-suppress noExplicitConstructor
-  rgw_obj_key(const string& n) {
-    set(n);
-  }
-  rgw_obj_key(const string& n, const string& i) {
-    set(n, i);
-  }
+  rgw_obj_key(const string& n) : name(n) {}
+  rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
 
-  // cppcheck-suppress noExplicitConstructor
-  rgw_obj_key(const cls_rgw_obj_key& k) {
-    set(k);
-  }
-
-  void set(const cls_rgw_obj_key& k) {
-    name = k.name;
+  rgw_obj_key(const rgw_obj_index_key& k) {
+    parse_index_key(k.name, &name, &ns);
     instance = k.instance;
   }
 
-  void transform(cls_rgw_obj_key *k) {
-    k->name = name;
-    k->instance = instance;
+  static void parse_index_key(const string& key, string *name, string *ns) {
+    if (key[0] != '_') {
+      *name = key;
+      ns->clear();
+      return;
+    }
+    if (key[1] == '_') {
+      *name = key.substr(1);
+      ns->clear();
+      return;
+    }
+    ssize_t pos = key.find('_', 1);
+    if (pos < 0) {
+      /* shouldn't happen, just use key */
+      *name = key;
+      ns->clear();
+      return;
+    }
+
+    *name = key.substr(pos + 1);
+    *ns = key.substr(1, pos -1);
   }
 
   void set(const string& n) {
     name = n;
     instance.clear();
+    ns.clear();
+  }
+
+  string get_index_key_name() const {
+    if (ns.empty()) {
+      if (name.size() < 1 || name[0] != '_') {
+        return name;
+      }
+      return string("_") + name;
+    };
+
+    char buf[ns.size() + 16];
+    snprintf(buf, sizeof(buf), "_%s_", ns.c_str());
+    return string(buf) + name;
+  };
+
+  void get_index_key(rgw_obj_index_key *key) const {
+    key->name = get_index_key_name();
+    key->instance = instance;
   }
 
   void set(const string& n, const string& i) {
     name = n;
     instance = i;
+    ns.clear();
   }
 
   bool empty() const {
@@ -1396,15 +1428,19 @@ struct rgw_obj_key {
     return !(k < *this);
   }
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(instance, bl);
+    ::encode(ns, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(name, bl);
     ::decode(instance, bl);
+    if (struct_v >= 2) {
+      ::decode(ns, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1412,6 +1448,14 @@ struct rgw_obj_key {
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
 inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
+  if (o.instance.empty()) {
+    return out << o.name;
+  } else {
+    return out << o.name << "[" << o.instance << "]";
+  }
+}
+
+inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
   if (o.instance.empty()) {
     return out << o.name;
   } else {
@@ -1551,36 +1595,6 @@ struct req_state {
   ~req_state();
 };
 
-/** Store basic data on an object */
-struct RGWObjEnt {
-  rgw_obj_key key;
-  std::string ns;
-  rgw_user owner;
-  std::string owner_display_name;
-  uint64_t size{0};
-  uint64_t accounted_size{0};
-  ceph::real_time mtime;
-  string etag;
-  string content_type;
-  string tag;
-  uint32_t flags;
-  uint64_t versioned_epoch;
-
-  RGWObjEnt() : flags(0), versioned_epoch(0) {}
-
-  void dump(Formatter *f) const;
-
-  bool is_current() {
-    uint32_t test_flags = RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT;
-    return (flags & RGW_BUCKET_DIRENT_FLAG_VER) == 0 ||
-           (flags & test_flags) == test_flags;
-  }
-  bool is_delete_marker() { return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0; }
-  bool is_visible() {
-    return is_current() && !is_delete_marker();
-  }
-};
-
 /** Store basic data on bucket */
 struct RGWBucketEnt {
   rgw_bucket bucket;
@@ -1669,8 +1683,13 @@ struct rgw_obj {
   rgw_obj(const rgw_bucket& b, const std::string& name) {
     init(b, name);
   }
-  rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
-    from_index_key(b, k);
+  rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) {
+    init(b, k.name);
+    instance = k.instance;
+  }
+  rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b) {
+    rgw_obj_key::parse_index_key(k.name, &name, &ns);
+    set_instance(k.instance);
   }
   void init(const rgw_bucket& b, const std::string& name) {
     bucket = b;
@@ -1726,6 +1745,11 @@ struct rgw_obj {
     name = n;
   }
 
+  void set_key(const rgw_obj_key& k) {
+    set_name(k.name);
+    set_instance(k.instance);
+  }
+
   string get_oid() const {
     if (ns.empty() && !need_to_encode_instance()) {
       if (name.size() < 1 || name[0] != '_') {
@@ -1760,30 +1784,7 @@ struct rgw_obj {
     return string(buf) + name;
   };
 
-  void from_index_key(const rgw_bucket& b, const rgw_obj_key& key) {
-    if (key.name[0] != '_') {
-      init(b, key.name);
-      set_instance(key.instance);
-      return;
-    }
-    if (key.name[1] == '_') {
-      init(b, key.name.substr(1));
-      set_instance(key.instance);
-      return;
-    }
-    ssize_t pos = key.name.find('_', 1);
-    if (pos < 0) {
-      /* shouldn't happen, just use key */
-      init(b, key.name);
-      set_instance(key.instance);
-      return;
-    }
-
-    init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
-    set_instance(key.instance);
-  }
-
-  void get_index_key(rgw_obj_key *key) const {
+  void get_index_key(rgw_obj_index_key *key) const {
     key->name = get_index_key_name();
     key->instance = instance;
   }

@@ -274,7 +274,7 @@ public:
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-          list<rgw_obj_key>& objs_to_unlink, std::string *err_msg = NULL);
+          list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
                          RGWFormatterFlusher& flusher,

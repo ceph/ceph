@@ -272,7 +272,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   map<string, bufferlist> bucket_attrs;
   string next_marker, no_ns, list_versions;
   bool is_truncated;
-  vector<RGWObjEnt> objs;
+  vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   vector<std::string> result;
   result = split(shard_id, ':');
@@ -329,21 +329,27 @@ int RGWLC::bucket_lc_process(string& shard_id)
         utime_t now = ceph_clock_now();
 
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
-          if (obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->mtime), prefix_iter->second.expiration)) {
+          rgw_obj_key key(obj_iter->key);
+
+          if (!key.ns.empty()) {
+            continue;
+          }
+
+          if (obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->meta.mtime), prefix_iter->second.expiration)) {
             RGWObjectCtx rctx(store);
-            rgw_obj obj(bucket_info.bucket, obj_iter->key.name);
+            rgw_obj obj(bucket_info.bucket, key);
             RGWObjState *state;
             int ret = store->get_obj_state(&rctx, obj, &state, false);
             if (ret < 0) {
               return ret;
             }
-            if (state->mtime != obj_iter->mtime)//Check mtime again to avoid delete a recently update object as much as possible
+            if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
               continue;
             ret = remove_expired_obj(bucket_info, obj_iter->key, true);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key.name << dendl;
+              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << key << dendl;
             }
           }
         }
@@ -363,7 +369,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
         pre_marker = list_op.get_next_marker();
       }
       list_op.params.prefix = prefix_iter->first;
-      RGWObjEnt pre_obj;
+      rgw_bucket_dir_entry pre_obj;
       do {
         if (!objs.empty()) {
           pre_obj = objs.back();
@@ -402,34 +408,33 @@ int RGWLC::bucket_lc_process(string& shard_id)
             } else {
               remove_indeed = false;
             }
-            mtime = obj_iter->mtime;
+            mtime = obj_iter->meta.mtime;
             expiration = prefix_iter->second.expiration;
           } else {
             if (prefix_iter->second.noncur_expiration <=0) {
               continue;
             }
             remove_indeed = true;
-            mtime = (obj_iter == objs.begin())?pre_obj.mtime:(obj_iter - 1)->mtime;
+            mtime = (obj_iter == objs.begin())?pre_obj.meta.mtime:(obj_iter - 1)->meta.mtime;
             expiration = prefix_iter->second.noncur_expiration;
           }
           if (obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration)) {
             if (obj_iter->is_visible()) {
               RGWObjectCtx rctx(store);
-              rgw_obj obj(bucket_info.bucket, obj_iter->key.name);
-              obj.set_instance(obj_iter->key.instance);
+              rgw_obj obj(bucket_info.bucket, obj_iter->key);
               RGWObjState *state;
               int ret = store->get_obj_state(&rctx, obj, &state, false);
               if (ret < 0) {
                 return ret;
               }
-              if (state->mtime != obj_iter->mtime)//Check mtime again to avoid delete a recently update object as much as possible
+              if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
                 continue;
             }
             ret = remove_expired_obj(bucket_info, obj_iter->key, remove_indeed);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key.name << dendl;
+              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
             }
           }
         }
