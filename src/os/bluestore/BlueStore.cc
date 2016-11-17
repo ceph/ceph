@@ -57,6 +57,18 @@ const string PREFIX_WAL = "L";     // id -> wal_transaction_t
 const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 
+const std::vector<KeyValueDB::ColumnFamily> cfs = {
+  KeyValueDB::ColumnFamily(PREFIX_SUPER, ""),
+  KeyValueDB::ColumnFamily(PREFIX_STAT, ""),
+  KeyValueDB::ColumnFamily(PREFIX_COLL, ""),
+  KeyValueDB::ColumnFamily(PREFIX_OBJ, ""),
+  KeyValueDB::ColumnFamily(PREFIX_OMAP, ""),
+  KeyValueDB::ColumnFamily(PREFIX_WAL, ""),
+  KeyValueDB::ColumnFamily(PREFIX_ALLOC, ""),
+  KeyValueDB::ColumnFamily(PREFIX_SHARED_BLOB, "")
+};
+
+
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
 // superblock (always the second block of the device).
@@ -3416,10 +3428,11 @@ int BlueStore::_open_db(bool create)
   if (kv_backend == "rocksdb")
     options = g_conf->bluestore_rocksdb_options;
   db->init(options);
+
   if (create)
-    r = db->create_and_open(err);
+    r = db->create_and_open(err, cfs);
   else
-    r = db->open(err);
+    r = db->open(err, cfs);
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     if (bluefs) {
