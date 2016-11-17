@@ -245,9 +245,3 @@ public:
   }
 };
 
-KeyValueDB::WholeSpaceIterator KeyValueDBMemory::_get_snapshot_iterator() {
-  KeyValueDBMemory *snap_db = new KeyValueDBMemory(this);
-  return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-    new WholeSpaceSnapshotMemIterator(snap_db)
-  );
-}

@@ -149,12 +149,6 @@ protected:
   WholeSpaceIterator _get_iterator() {
     return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
-
-  // TODO: remove snapshots from interface
-  WholeSpaceIterator _get_snapshot_iterator() {
-    return _get_iterator();
-  }
-
 };
 
 #endif

@@ -813,19 +813,3 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
         db->NewIterator(rocksdb::ReadOptions()));
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::_get_snapshot_iterator()
-{
-  const rocksdb::Snapshot *snapshot;
-  rocksdb::ReadOptions options;
-
-  snapshot = db->GetSnapshot();
-  options.snapshot = snapshot;
-
-  return std::make_shared<RocksDBSnapshotIteratorImpl>(
-          db, snapshot, db->NewIterator(options));
-}
-
-RocksDBStore::RocksDBSnapshotIteratorImpl::~RocksDBSnapshotIteratorImpl()
-{
-  db->ReleaseSnapshot(snapshot);
-}
