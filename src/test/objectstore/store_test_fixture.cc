@@ -12,8 +12,14 @@ static void rm_r(const string& path) {
   cout << "==> " << cmd << std::endl;
   int r = ::system(cmd.c_str());
   if (r) {
-    cerr << "failed with exit code " << r
-         << ", continuing anyway" << std::endl;
+    if (r == -1) {
+      r = errno;
+      cerr << "system() failed to fork() " << cpp_strerror(r)
+           << ", continuing anyway" << std::endl;
+    } else {
+      cerr << "failed with exit code " << r
+           << ", continuing anyway" << std::endl;
+    }
   }
 }
 
