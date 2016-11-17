@@ -1595,6 +1595,8 @@ public:
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
+  bool is_missing_have_old_object(const hobject_t& soid);
+
   void block_write_on_full_cache(
     const hobject_t& oid, OpRequestRef op);
   void block_write_on_snap_rollback(
