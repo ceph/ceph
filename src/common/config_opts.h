@@ -514,8 +514,6 @@ OPTION(mds_bal_split_rd, OPT_FLOAT, 25000)
 OPTION(mds_bal_split_wr, OPT_FLOAT, 10000)
 OPTION(mds_bal_split_bits, OPT_INT, 3)
 OPTION(mds_bal_merge_size, OPT_INT, 50)
-OPTION(mds_bal_merge_rd, OPT_FLOAT, 1000)
-OPTION(mds_bal_merge_wr, OPT_FLOAT, 1000)
 OPTION(mds_bal_interval, OPT_INT, 10)           // seconds
 OPTION(mds_bal_fragment_interval, OPT_INT, 5)      // seconds
 OPTION(mds_bal_fragment_size_max, OPT_INT, 10000*10) // order of magnitude higher than split size
