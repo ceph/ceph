@@ -151,7 +151,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
     return;
 
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWBucketEnt obj = iter->second;
+    const RGWBucketEnt& obj = iter->second;
     s->formatter->open_object_section("container");
     s->formatter->dump_string("name", obj.bucket.name);
     if (need_stats) {
