@@ -240,37 +240,46 @@ void SnapMapper::add_oid(
   backend.set_keys(to_add, t);
 }
 
-int SnapMapper::get_next_object_to_trim(
+int SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
-  hobject_t *hoid)
+  unsigned max,
+  vector<hobject_t> *out)
 {
+  assert(out);
+  assert(out->empty());
+  int r = 0;
   for (set<string>::iterator i = prefixes.begin();
-       i != prefixes.end();
+       i != prefixes.end() && out->size() < max && r == 0;
        ++i) {
-    string list_after(get_prefix(snap) + *i);
+    string prefix(get_prefix(snap) + *i);
+    string pos = prefix;
+    while (out->size() < max) {
+      pair<string, bufferlist> next;
+      r = backend.get_next(pos, &next);
+      if (r != 0) {
+	break; // Done
+      }
 
-    pair<string, bufferlist> next;
-    int r = backend.get_next(list_after, &next);
-    if (r < 0) {
-      break; // Done
+      if (next.first.substr(0, prefix.size()) !=
+	  prefix) {
+	break; // Done with this prefix
+      }
+
+      assert(is_mapping(next.first));
+
+      pair<snapid_t, hobject_t> next_decoded(from_raw(next));
+      assert(next_decoded.first == snap);
+      assert(check(next_decoded.second));
+
+      out->push_back(next_decoded.second);
+      pos = next.first;
     }
-
-    if (next.first.substr(0, list_after.size()) !=
-	list_after) {
-      continue; // Done with this prefix
-    }
-
-    assert(is_mapping(next.first));
-
-    pair<snapid_t, hobject_t> next_decoded(from_raw(next));
-    assert(next_decoded.first == snap);
-    assert(check(next_decoded.second));
-
-    if (hoid)
-      *hoid = next_decoded.second;
+  }
+  if (out->size() == 0) {
+    return -ENOENT;
+  } else {
     return 0;
   }
-  return -ENOENT;
 }
 
 

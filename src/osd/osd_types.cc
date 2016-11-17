@@ -3258,7 +3258,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
   bufferlist::iterator bp = bl.begin();
   try {
     while (!bp.end()) {
-      DECODE_START(1, bp);
+      DECODE_START(max_required_version, bp);
       uint8_t code;
       ::decode(code, bp);
       switch (code) {
@@ -3296,6 +3296,14 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	visitor->try_rmobject(old_version);
 	break;
       }
+      case ROLLBACK_EXTENTS: {
+	vector<pair<uint64_t, uint64_t> > extents;
+	version_t gen;
+	::decode(gen, bp);
+	::decode(extents, bp);
+	visitor->rollback_extents(gen,extents);
+	break;
+      }
       default:
 	assert(0 == "Invalid rollback code");
       }
@@ -3309,13 +3317,13 @@ void ObjectModDesc::visit(Visitor *visitor) const
 struct DumpVisitor : public ObjectModDesc::Visitor {
   Formatter *f;
   explicit DumpVisitor(Formatter *f) : f(f) {}
-  void append(uint64_t old_size) {
+  void append(uint64_t old_size) override {
     f->open_object_section("op");
     f->dump_string("code", "APPEND");
     f->dump_unsigned("old_size", old_size);
     f->close_section();
   }
-  void setattrs(map<string, boost::optional<bufferlist> > &attrs) {
+  void setattrs(map<string, boost::optional<bufferlist> > &attrs) override {
     f->open_object_section("op");
     f->dump_string("code", "SETATTRS");
     f->open_array_section("attrs");
@@ -3327,21 +3335,36 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->close_section();
     f->close_section();
   }
-  void rmobject(version_t old_version) {
+  void rmobject(version_t old_version) override {
     f->open_object_section("op");
     f->dump_string("code", "RMOBJECT");
     f->dump_unsigned("old_version", old_version);
     f->close_section();
   }
-  void create() {
+  void try_rmobject(version_t old_version) override {
+    f->open_object_section("op");
+    f->dump_string("code", "TRY_RMOBJECT");
+    f->dump_unsigned("old_version", old_version);
+    f->close_section();
+  }
+  void create() override {
     f->open_object_section("op");
     f->dump_string("code", "CREATE");
     f->close_section();
   }
-  void update_snaps(set<snapid_t> &snaps) {
+  void update_snaps(const set<snapid_t> &snaps) override {
     f->open_object_section("op");
     f->dump_string("code", "UPDATE_SNAPS");
     f->dump_stream("snaps") << snaps;
+    f->close_section();
+  }
+  void rollback_extents(
+    version_t gen,
+    const vector<pair<uint64_t, uint64_t> > &extents) override {
+    f->open_object_section("op");
+    f->dump_string("code", "ROLLBACK_EXTENTS");
+    f->dump_unsigned("gen", gen);
+    f->dump_stream("snaps") << extents;
     f->close_section();
   }
 };
@@ -3383,7 +3406,7 @@ void ObjectModDesc::generate_test_instances(list<ObjectModDesc*>& o)
 
 void ObjectModDesc::encode(bufferlist &_bl) const
 {
-  ENCODE_START(1, 1, _bl);
+  ENCODE_START(max_required_version, max_required_version, _bl);
   ::encode(can_local_rollback, _bl);
   ::encode(rollback_info_completed, _bl);
   ::encode(bl, _bl);
@@ -3391,7 +3414,8 @@ void ObjectModDesc::encode(bufferlist &_bl) const
 }
 void ObjectModDesc::decode(bufferlist::iterator &_bl)
 {
-  DECODE_START(1, _bl);
+  DECODE_START(2, _bl);
+  max_required_version = struct_v;
   ::decode(can_local_rollback, _bl);
   ::decode(rollback_info_completed, _bl);
   ::decode(bl, _bl);
