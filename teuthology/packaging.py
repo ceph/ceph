@@ -927,6 +927,11 @@ class ShamanProject(GitbuilderProject):
         return self._result.json()[0]['extra']['package_manager_version']
 
     @property
+    def scm_version(self):
+        self.assert_result()
+        return self._result.json()[0]['extra']['version']
+
+    @property
     def repo_url(self):
         self.assert_result()
         return urlparse.urljoin(
