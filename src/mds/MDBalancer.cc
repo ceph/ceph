@@ -301,7 +301,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     beat_epoch = m->get_beat();
     send_heartbeat();
 
-    show_imports();
+    mds->mdcache->show_subtrees();
   }
 
   {
@@ -545,7 +545,7 @@ void MDBalancer::prep_rebalance(int beat)
     if (my_load < target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
       dout(5) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
       last_epoch_under = beat_epoch;
-      show_imports();
+      mds->mdcache->show_subtrees();
       return;
     }
 
@@ -762,7 +762,7 @@ void MDBalancer::try_rebalance()
     double have = 0.0;
 
 
-    show_imports();
+    mds->mdcache->show_subtrees();
 
     // search imports from target
     if (import_from_map.count(target)) {
@@ -854,7 +854,7 @@ void MDBalancer::try_rebalance()
   }
 
   dout(5) << "rebalance done" << dendl;
-  show_imports();
+  mds->mdcache->show_subtrees();
 }
 
 
@@ -1193,12 +1193,3 @@ void MDBalancer::add_import(CDir *dir, utime_t now)
   }
 }
 
-
-
-
-
-
-void MDBalancer::show_imports(bool external)
-{
-  mds->mdcache->show_subtrees();
-}
