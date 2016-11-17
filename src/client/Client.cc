@@ -9500,6 +9500,7 @@ int Client::ll_walk(const char* name, Inode **out, struct stat *attr)
   } else {
     assert(in);
     fill_stat(in, attr);
+    _ll_get(in.get());
     *out = in.get();
     return 0;
   }
