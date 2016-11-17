@@ -831,7 +831,7 @@ TEST(ExtentMap, find_lextent)
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(100));
 
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, 1, br));
+  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, br));
   auto a = em.find(100);
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(99));
@@ -840,7 +840,7 @@ TEST(ExtentMap, find_lextent)
   ASSERT_EQ(a, em.find_lextent(199));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(200));
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, 1, br));
+  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, br));
   auto b = em.find(200);
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(99));
@@ -851,7 +851,7 @@ TEST(ExtentMap, find_lextent)
   ASSERT_EQ(b, em.find_lextent(299));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(300));
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, 1, br));
+  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, br));
   auto d = em.find(400);
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(99));
@@ -877,7 +877,7 @@ TEST(ExtentMap, seek_lextent)
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(100));
 
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, 1, br));
+  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, br));
   auto a = em.find(100);
   ASSERT_EQ(a, em.seek_lextent(0));
   ASSERT_EQ(a, em.seek_lextent(99));
@@ -886,7 +886,7 @@ TEST(ExtentMap, seek_lextent)
   ASSERT_EQ(a, em.seek_lextent(199));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(200));
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, 1, br));
+  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, br));
   auto b = em.find(200);
   ASSERT_EQ(a, em.seek_lextent(0));
   ASSERT_EQ(a, em.seek_lextent(99));
@@ -897,7 +897,7 @@ TEST(ExtentMap, seek_lextent)
   ASSERT_EQ(b, em.seek_lextent(299));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(300));
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, 1, br));
+  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, br));
   auto d = em.find(400);
   ASSERT_EQ(a, em.seek_lextent(0));
   ASSERT_EQ(a, em.seek_lextent(99));
@@ -924,7 +924,7 @@ TEST(ExtentMap, has_any_lextents)
   ASSERT_FALSE(em.has_any_lextents(0, 1000));
   ASSERT_FALSE(em.has_any_lextents(1000, 1000));
 
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, 1, b));
+  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, b));
   ASSERT_FALSE(em.has_any_lextents(0, 50));
   ASSERT_FALSE(em.has_any_lextents(0, 100));
   ASSERT_FALSE(em.has_any_lextents(50, 50));
@@ -936,7 +936,7 @@ TEST(ExtentMap, has_any_lextents)
   ASSERT_TRUE(em.has_any_lextents(199, 2));
   ASSERT_FALSE(em.has_any_lextents(200, 2));
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, 1, b));
+  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, b));
   ASSERT_TRUE(em.has_any_lextents(199, 1));
   ASSERT_TRUE(em.has_any_lextents(199, 2));
   ASSERT_TRUE(em.has_any_lextents(200, 2));
@@ -944,7 +944,7 @@ TEST(ExtentMap, has_any_lextents)
   ASSERT_TRUE(em.has_any_lextents(299, 1));
   ASSERT_FALSE(em.has_any_lextents(300, 1));
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, 1, b));
+  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, b));
   ASSERT_TRUE(em.has_any_lextents(0, 10000));
   ASSERT_TRUE(em.has_any_lextents(199, 1));
   ASSERT_FALSE(em.has_any_lextents(300, 1));
@@ -968,31 +968,31 @@ TEST(ExtentMap, compress_extent_map)
   b2->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
   b3->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
 
-  em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, 1, b1));
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, 1, b2));
+  em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, b1));
+  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, b2));
   ASSERT_EQ(0, em.compress_extent_map(0, 10000));
   ASSERT_EQ(2u, em.extent_map.size());
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 100, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(300, 200, 100, 1, b2));
+  em.extent_map.insert(*new BlueStore::Extent(200, 100, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(300, 200, 100, b2));
   ASSERT_EQ(0, em.compress_extent_map(0, 0));
   ASSERT_EQ(0, em.compress_extent_map(100000, 1000));
   ASSERT_EQ(2, em.compress_extent_map(0, 100000));
   ASSERT_EQ(2u, em.extent_map.size());
 
   em.extent_map.erase(em.find(100));
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(200, 100, 100, 1, b3));
-  em.extent_map.insert(*new BlueStore::Extent(300, 200, 100, 1, b2));
+  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(200, 100, 100, b3));
+  em.extent_map.insert(*new BlueStore::Extent(300, 200, 100, b2));
   ASSERT_EQ(0, em.compress_extent_map(0, 1));
   ASSERT_EQ(0, em.compress_extent_map(0, 100000));
   ASSERT_EQ(4u, em.extent_map.size());
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 300, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(500, 500, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(600, 600, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(700, 0, 100, 1, b1));
-  em.extent_map.insert(*new BlueStore::Extent(800, 0, 100, 1, b3));
+  em.extent_map.insert(*new BlueStore::Extent(400, 300, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(500, 500, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(600, 600, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(700, 0, 100, b1));
+  em.extent_map.insert(*new BlueStore::Extent(800, 0, 100, b3));
   ASSERT_EQ(0, em.compress_extent_map(0, 99));
   ASSERT_EQ(0, em.compress_extent_map(800, 1000));
   ASSERT_EQ(2, em.compress_extent_map(100, 500));
@@ -1000,108 +1000,12 @@ TEST(ExtentMap, compress_extent_map)
   em.extent_map.erase(em.find(300));
   em.extent_map.erase(em.find(500));  
   em.extent_map.erase(em.find(700));
-  em.extent_map.insert(*new BlueStore::Extent(400, 300, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(500, 400, 100, 1, b2));
-  em.extent_map.insert(*new BlueStore::Extent(700, 500, 100, 1, b2));
+  em.extent_map.insert(*new BlueStore::Extent(400, 300, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(500, 400, 100, b2));
+  em.extent_map.insert(*new BlueStore::Extent(700, 500, 100, b2));
   ASSERT_EQ(1, em.compress_extent_map(0, 1000));
   ASSERT_EQ(6u, em.extent_map.size());
 }
-
-TEST(ExtentMap, GarbageCollectorTest)
-{
-  BlueStore::LRUCache cache;
-  BlueStore::ExtentMap em(nullptr);
-  uint8_t  blob_depth = 0;
-  uint64_t gc_start_offset = 0;
-  uint64_t gc_end_offset = 0;
-
-  bool b;
-  b = em.do_write_check_depth(0, //onode_size
-                              0, //start_offset
-                              100, //end_offset
-                              &blob_depth,
-                              &gc_start_offset,
-                              &gc_end_offset);
-  ASSERT_TRUE(!b);
-  ASSERT_EQ(blob_depth, 1ul);
-  ASSERT_EQ(gc_start_offset, 0ul);
-  ASSERT_EQ(gc_end_offset, 0ul);
-
-  BlueStore::BlobRef b1(new BlueStore::Blob);
-  BlueStore::BlobRef b2(new BlueStore::Blob);
-  BlueStore::BlobRef b3(new BlueStore::Blob);
-  b1->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
-  b2->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
-  b3->shared_blob = new BlueStore::SharedBlob(1, string(), &cache);
-  b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
-  b2->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
-  b3->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
-
-  em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, 3, b1));
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 50, 3, b2));
-  em.extent_map.insert(*new BlueStore::Extent(150, 0, 150, 1, b3));
-
-  b = em.do_write_check_depth(300, //onode_size
-                              10, //start_offset
-                              80, //end_offset
-                              &blob_depth,
-                              &gc_start_offset,
-                              &gc_end_offset);
-  ASSERT_TRUE(b);
-  ASSERT_EQ(blob_depth, 1ul);
-  ASSERT_EQ(gc_start_offset, 0ul);
-  ASSERT_EQ(gc_end_offset, 150ul);
-
-  b = em.do_write_check_depth(300, //onode_size
-                              70, //start_offset
-                              310, //end_offset
-                              &blob_depth,
-                              &gc_start_offset,
-                              &gc_end_offset);
-  ASSERT_TRUE(b);
-  ASSERT_EQ(blob_depth, 1ul);
-  ASSERT_EQ(gc_start_offset, 0ul);
-  ASSERT_EQ(gc_end_offset, 300ul);
-
-  b = em.do_write_check_depth(300, //onode_size
-                              70, //start_offset
-                              290, //end_offset
-                              &blob_depth,
-                              &gc_start_offset,
-                              &gc_end_offset);
-  ASSERT_TRUE(b);
-  ASSERT_EQ(blob_depth, 1ul);
-  ASSERT_EQ(gc_start_offset, 0ul);
-  ASSERT_EQ(gc_end_offset, 300ul);
-
-  b = em.do_write_check_depth(300, //onode_size
-                              180, //start_offset
-                              290, //end_offset
-                              &blob_depth,
-                              &gc_start_offset,
-                              &gc_end_offset);
-  ASSERT_TRUE(!b);
-  ASSERT_EQ(blob_depth, 2ul);
-
-  em.extent_map.clear();
-  em.extent_map.insert(*new BlueStore::Extent(0x17c00, 0xc000, 0x400, 3, b1));
-  em.extent_map.insert(*new BlueStore::Extent(0x18000, 0, 0xf000, 3, b1));
-  em.extent_map.insert(*new BlueStore::Extent(0x27000, 0, 0x400, 3, b1));
-  em.extent_map.insert(*new BlueStore::Extent(0x27400, 0x400, 0x7c00, 2, b2));
-  em.extent_map.insert(*new BlueStore::Extent(0x2f000, 0, 0xe00, 1, b3));
-
-  b = em.do_write_check_depth(0x3f000, //onode_size
-                              0x1ac00, //start_offset
-                              0x1ac00 + 0x6600, //end_offset
-                              &blob_depth,
-                              &gc_start_offset,
-                              &gc_end_offset);
-  ASSERT_TRUE(b);
-  ASSERT_EQ(blob_depth, 1ul);
-  ASSERT_EQ(gc_start_offset, 0x17c00ul);
-  ASSERT_EQ(gc_end_offset, 0x2f000ul);
-}
-
 
 int main(int argc, char **argv) {
   vector<const char*> args;
