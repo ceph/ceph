@@ -41,7 +41,7 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
     rgw_obj new_obj(b, obj_name);
     new_obj.set_ns(force_ns);
     new_obj.set_instance(obj_instance);
-    s = obj_marker + "_" + new_obj.get_object();
+    s = obj_marker + "_" + new_obj.get_oid();
   }
 
   /* cut out suffix */
@@ -424,7 +424,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
   set<string> obj_oids;
   rgw_bucket& bucket = result.obj.bucket;
   if (!result.has_manifest) { /* a very very old object, or part of a multipart upload during upload */
-    const string loc = bucket.bucket_id + "_" + result.obj.get_object();
+    const string loc = bucket.bucket_id + "_" + result.obj.get_oid();
     obj_oids.insert(obj_fingerprint(loc));
 
     /*

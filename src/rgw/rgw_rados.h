@@ -67,7 +67,7 @@ static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string&
 static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
 {
   const rgw_bucket& bucket = obj.bucket;
-  prepend_bucket_marker(bucket, obj.get_object(), oid);
+  prepend_bucket_marker(bucket, obj.get_oid(), oid);
   const string& loc = obj.get_loc();
   if (!loc.empty()) {
     prepend_bucket_marker(bucket, loc, locator);
@@ -498,7 +498,7 @@ public:
        * when the explicit objs manifest was around, and it got copied.
        */
       rgw_obj& obj_0 = objs[0].loc;
-      if (!obj_0.get_object().empty() && obj_0.ns.empty()) {
+      if (!obj_0.get_oid().empty() && obj_0.ns.empty()) {
         objs[0].loc = obj;
         objs[0].size = head_size;
       }
