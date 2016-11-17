@@ -22,42 +22,6 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 using util::create_rados_safe_callback;
 
-namespace {
-
-template <typename ImageCtxT>
-struct C_CreateSnapId: public Context {
-  ImageCtxT &image_ctx;
-  uint64_t *snap_id;
-  Context *on_finish;
-
-  C_CreateSnapId(ImageCtxT &image_ctx, uint64_t *snap_id, Context *on_finish)
-    : image_ctx(image_ctx), snap_id(snap_id), on_finish(on_finish) {
-  }
-
-  virtual void finish(int r) {
-    r = image_ctx.md_ctx.selfmanaged_snap_create(snap_id);
-    on_finish->complete(r);
-  }
-};
-
-template <typename ImageCtxT>
-struct C_RemoveSnapId: public Context {
-  ImageCtxT &image_ctx;
-  uint64_t snap_id;
-  Context *on_finish;
-
-  C_RemoveSnapId(ImageCtxT &image_ctx, uint64_t snap_id, Context *on_finish)
-    : image_ctx(image_ctx), snap_id(snap_id), on_finish(on_finish) {
-  }
-
-  virtual void finish(int r) {
-    r = image_ctx.md_ctx.selfmanaged_snap_remove(snap_id);
-    on_finish->complete(r);
-  }
-};
-
-} // anonymous namespace
-
 template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
                                                 Context *on_finish,
@@ -162,11 +126,11 @@ void SnapshotCreateRequest<I>::send_allocate_snap_id() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  // TODO create an async version of selfmanaged_snap_create
-  image_ctx.op_work_queue->queue(new C_CreateSnapId<I>(
-    image_ctx, &m_snap_id, create_context_callback<
-      SnapshotCreateRequest<I>,
-      &SnapshotCreateRequest<I>::handle_allocate_snap_id>(this)), 0);
+  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+    SnapshotCreateRequest<I>,
+    &SnapshotCreateRequest<I>::handle_allocate_snap_id>(this);
+  image_ctx.md_ctx.aio_selfmanaged_snap_create(&m_snap_id, rados_completion);
+  rados_completion->release();
 }
 
 template <typename I>
@@ -291,11 +255,11 @@ void SnapshotCreateRequest<I>::send_release_snap_id() {
 
   assert(m_snap_id != CEPH_NOSNAP);
 
-  // TODO create an async version of selfmanaged_snap_remove
-  image_ctx.op_work_queue->queue(new C_RemoveSnapId<I>(
-    image_ctx, m_snap_id, create_context_callback<
-      SnapshotCreateRequest<I>,
-      &SnapshotCreateRequest<I>::handle_release_snap_id>(this)), 0);
+  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+    SnapshotCreateRequest<I>,
+    &SnapshotCreateRequest<I>::handle_release_snap_id>(this);
+  image_ctx.md_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);
+  rados_completion->release();
 }
 
 template <typename I>
