@@ -162,7 +162,6 @@ public:
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) override;
   int create_and_open(ostream &out, const vector<ColumnFamily>& cfs);
-  int drop_column_family(const string &cf_name);
 
   void close() override;
 

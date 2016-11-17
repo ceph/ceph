@@ -514,24 +514,6 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
   return 0;
 }
 
-int RocksDBStore::drop_column_family(const string &cf_name)
-{
-  rocksdb::Status status;
-  rocksdb::ColumnFamilyHandle* cf_handle;
-  cf_handle = static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(cf_name));
-  if (cf_handle == nullptr)
-    return -EINVAL;
-
-  status = db->DropColumnFamily(cf_handle);
-  if (!status.ok()) {
-    derr << __func__ << "Failed to delete rocksdb column family: "
-	 << cf_name << dendl;
-    return -EINVAL;
-  } else {
-    return 0;
-  }
-}
-
 int RocksDBStore::_test_init(const string& dir)
 {
   rocksdb::Options options;

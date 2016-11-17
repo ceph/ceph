@@ -163,9 +163,6 @@ public:
   // vector cfs contains column families to be created when db is created.
   virtual int create_and_open(std::ostream &out, const vector<ColumnFamily>& cfs) {
     assert(0 == "Not implemented"); }
-  virtual int drop_column_family(
-    const string &cf_name         ///< [in] name of CF to delete
-  ) { assert(0 == "Not implemented"); }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
