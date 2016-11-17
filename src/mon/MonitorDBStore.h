@@ -501,13 +501,6 @@ class MonitorDBStore
     return iter;
   }
 
-  KeyValueDB::WholeSpaceIterator get_iterator() {
-    KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_iterator();
-    iter->seek_to_first();
-    return iter;
-  }
-
   int get(const string& prefix, const string& key, bufferlist& bl) {
     assert(bl.length() == 0);
     return db->get(prefix, key, &bl);
