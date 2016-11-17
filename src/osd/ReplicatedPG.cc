@@ -5822,6 +5822,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, "???", 0);
 	  goto fail;
 	}
+	if (max_return > g_conf->osd_max_omap_entries_per_request) {
+	  max_return = g_conf->osd_max_omap_entries_per_request;
+	}
 	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
 	set<string> out_set;
 
@@ -5858,6 +5861,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, "???", 0, "???");
 	  goto fail;
+	}
+	if (max_return > g_conf->osd_max_omap_entries_per_request) {
+	  max_return = g_conf->osd_max_omap_entries_per_request;
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
 	map<string, bufferlist> out_set;
