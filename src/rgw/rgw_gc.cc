@@ -197,18 +197,18 @@ int RGWGC::process(int index, int max_secs)
 
         ctx->locator_set_key(obj.loc);
         rgw_obj key_obj;
-        key_obj.set_obj(obj.key.name);
+        key_obj.set_name(obj.key.name);
         key_obj.set_instance(obj.key.instance);
 
-	dout(0) << "gc::process: removing " << obj.pool << ":" << key_obj.get_object() << dendl;
+	dout(0) << "gc::process: removing " << obj.pool << ":" << key_obj.get_oid() << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
-        ret = ctx->operate(key_obj.get_object(), &op);
+        ret = ctx->operate(key_obj.get_oid(), &op);
 	if (ret == -ENOENT)
 	  ret = 0;
         if (ret < 0) {
           remove_tag = false;
-          dout(0) << "failed to remove " << obj.pool << ":" << key_obj.get_object() << "@" << obj.loc << dendl;
+          dout(0) << "failed to remove " << obj.pool << ":" << key_obj.get_oid() << "@" << obj.loc << dendl;
         }
 
         if (going_down()) // leave early, even if tag isn't removed, it's ok

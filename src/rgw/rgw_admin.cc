@@ -1293,9 +1293,9 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 static bool bucket_object_check_filter(const string& name)
 {
   string ns;
-  string obj = name;
+  string obj;
   string instance;
-  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, instance, ns);
+  return rgw_obj::translate_oid_to_obj_in_ns(name, obj, instance, ns);
 }
 
 int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)

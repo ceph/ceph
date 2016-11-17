@@ -496,12 +496,12 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
   } while (!done);
 }
 
-static bool bucket_object_check_filter(const string& name)
+static bool bucket_object_check_filter(const string& oid)
 {
   string ns;
   string ver;
-  string obj = name;
-  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns, ver);
+  string name;
+  return rgw_obj::translate_oid_to_obj_in_ns(oid, name, ns, ver);
 }
 
 int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key)
@@ -650,7 +650,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
 
       ret = store->get_obj_state(&obj_ctx, obj, &astate, false);
       if (ret == -ENOENT) {
-        dout(1) << "WARNING: cannot find obj state for obj " << obj.get_object() << dendl;
+        dout(1) << "WARNING: cannot find obj state for obj " << obj.get_oid() << dendl;
         continue;
       }
       if (ret < 0) {
