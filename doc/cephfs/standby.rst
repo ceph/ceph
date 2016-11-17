@@ -24,7 +24,7 @@ how many ranks will be created.  The actual number of ranks
 in the filesystem will only be increased if a spare daemon is
 available to take on the new rank.
 
-An daemon has a *name* that is set statically by the administrator
+A daemon has a *name* that is set statically by the administrator
 when the daemon is first configured.  Typical configurations
 use the hostname where the daemon runs as the daemon name.
 
@@ -95,7 +95,7 @@ mds_standby_replay
 ~~~~~~~~~~~~~~~~~~
 
 If this is set to true, then the standby daemon will continuously read
-the metadata journal an up rank.  This will give it
+the metadata journal of an up rank.  This will give it
 a warm metadata cache, and speed up the process of failing over
 if the daemon serving the rank fails.
 
