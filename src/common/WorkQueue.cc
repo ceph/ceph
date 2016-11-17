@@ -124,6 +124,7 @@ void ThreadPool::worker(WorkThread *wt)
 	void *item = wq->_void_dequeue();
 	if (item) {
 	  processing++;
+          _wq_processing[wq]++;
 	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item
 			<< " (" << processing << " active)" << dendl;
 	  TPHandle tp_handle(cct, hb, wq->timeout_interval, wq->suicide_interval);
@@ -133,6 +134,7 @@ void ThreadPool::worker(WorkThread *wt)
 	  _lock.Lock();
 	  wq->_void_process_finish(item);
 	  processing--;
+          _wq_processing[wq]--;
 	  ldout(cct,15) << "worker wq " << wq->name << " done processing " << item
 			<< " (" << processing << " active)" << dendl;
 	  if (_pause || _draining)
@@ -267,6 +269,21 @@ void ThreadPool::drain(WorkQueue_* wq)
   _lock.Lock();
   _draining++;
   while (processing || (wq != NULL && !wq->_empty()))
+    _wait_cond.Wait(_lock);
+  _draining--;
+  _lock.Unlock();
+}
+
+void ThreadPool::drain2(WorkQueue_* wq)
+{
+  ldout(cct,10) << "drain2" << dendl;
+  if (!wq)
+    return drain();
+  auto ret = _wq_processing.find(wq);
+  assert(ret != _wq_processing.end());
+  _lock.Lock();
+  _draining++;
+  while (ret->second || !wq->_empty())
     _wait_cond.Wait(_lock);
   _draining--;
   _lock.Unlock();
