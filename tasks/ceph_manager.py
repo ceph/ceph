@@ -151,7 +151,9 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
-        if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
+        if (self.config.get('powercycle') or
+            not self.cmd_exists_on_osds("ceph-objectstore-tool") or
+            self.config.get('disable_objectstore_tool_tests', False)):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
             if self.config.get('powercycle'):
@@ -1307,7 +1309,8 @@ class CephManager:
 
     def create_pool_with_unique_name(self, pg_num=16,
                                      erasure_code_profile_name=None,
-                                     min_size=None):
+                                     min_size=None,
+                                     erasure_code_use_hacky_overwrites=False):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -1319,7 +1322,8 @@ class CephManager:
                 name,
                 pg_num,
                 erasure_code_profile_name=erasure_code_profile_name,
-                min_size=min_size)
+                min_size=min_size,
+                erasure_code_use_hacky_overwrites=erasure_code_use_hacky_overwrites)
         return name
 
     @contextlib.contextmanager
@@ -1330,13 +1334,16 @@ class CephManager:
 
     def create_pool(self, pool_name, pg_num=16,
                     erasure_code_profile_name=None,
-                    min_size=None):
+                    min_size=None,
+                    erasure_code_use_hacky_overwrites=False):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
         :param pg_num: initial number of pgs.
         :param erasure_code_profile_name: if set and !None create an
                                           erasure coded pool using the profile
+        :param erasure_code_use_hacky_overwrites: if true, use the hacky
+                                                  overwrites mode
         """
         with self.lock:
             assert isinstance(pool_name, basestring)
@@ -1355,6 +1362,11 @@ class CephManager:
                     'osd', 'pool', 'set', pool_name,
                     'min_size',
                     str(min_size))
+            if erasure_code_use_hacky_overwrites:
+                self.raw_cluster_cmd(
+                    'osd', 'pool', 'set', pool_name,
+                    'debug_white_box_testing_ec_overwrites',
+                    'true')
             self.pools[pool_name] = pg_num
         time.sleep(1)
 
