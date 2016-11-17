@@ -29,6 +29,7 @@ namespace Scrub {
   class Store;
 }
 struct shard_info_wrapper;
+struct inconsistent_obj_wrapper;
 
 //forward declaration
 class OSDMap;
@@ -586,17 +587,20 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
-   enum scrub_error_type be_compare_scrub_objects(
+   bool be_compare_scrub_objects(
      pg_shard_t auth_shard,
      const ScrubMap::object &auth,
      const object_info_t& auth_oi,
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
+     inconsistent_obj_wrapper &result,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
-     object_info_t *auth_oi);
+     object_info_t *auth_oi,
+     map<pg_shard_t, shard_info_wrapper> &shard_map,
+     inconsistent_obj_wrapper &object_error);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      bool repair,
