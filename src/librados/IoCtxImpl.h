@@ -101,9 +101,11 @@ struct librados::IoCtxImpl {
   int snap_get_stamp(uint64_t snapid, time_t *t);
   int snap_create(const char* snapname);
   int selfmanaged_snap_create(uint64_t *snapid);
+  void aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletionImpl *c);
   int snap_remove(const char* snapname);
   int rollback(const object_t& oid, const char *snapName);
   int selfmanaged_snap_remove(uint64_t snapid);
+  void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletionImpl *c);
   int selfmanaged_snap_rollback_object(const object_t& oid,
                                        ::SnapContext& snapc, uint64_t snapid);
 
