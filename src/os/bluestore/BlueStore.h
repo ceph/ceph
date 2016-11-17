@@ -564,7 +564,6 @@ public:
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
-    uint8_t  blob_depth = 0;          ///< blob overlapping count
     BlobRef  blob;                    ///< the blob with our data
 
     /// ctor for lookup only
@@ -573,9 +572,9 @@ public:
     explicit Extent() : ExtentBase() {
     }
     /// ctor for general usage
-    Extent(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b)
+    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
       : ExtentBase(),
-        logical_offset(lo), blob_offset(o), length(l), blob_depth(bd) {
+        logical_offset(lo), blob_offset(o), length(l) {
       assign_blob(b);
     }
     ~Extent() {
@@ -738,8 +737,8 @@ public:
     extent_map_t::iterator seek_lextent(uint64_t offset);
 
     /// add a new Extent
-    void add(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b) {
-      extent_map.insert(*new Extent(lo, o, l, bd, b));
+    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
+      extent_map.insert(*new Extent(lo, o, l, b));
     }
 
     /// remove (and delete) an Extent
@@ -759,7 +758,7 @@ public:
     /// put new lextent into lextent_map overwriting existing ones if
     /// any and update references accordingly
     Extent *set_lextent(uint64_t logical_offset,
-			uint64_t offset, uint64_t length, uint8_t blob_depth,
+			uint64_t offset, uint64_t length,
                         BlobRef b, extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
@@ -1967,7 +1966,6 @@ private:
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
     uint64_t target_blob_size = 0;  ///< target (max) blob size
-    uint8_t blob_depth = 0;         ///< depth of the logical extent
     unsigned csum_order = 0;        ///< target checksum chunk order
 
     extent_map_t old_extents;       ///< must deref these blobs
@@ -2025,14 +2023,6 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
-
-  void _do_garbage_collection(TransContext *txc,
-                              CollectionRef& c,
-                              OnodeRef o,
-                              uint64_t& offset,
-                              uint64_t& length,
-                              bufferlist& bl,
-                              WriteContext *wctx);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,
