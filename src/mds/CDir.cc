@@ -3155,7 +3155,7 @@ bool CDir::scrub_local()
 std::string CDir::get_path() const
 {
   std::string path;
-  get_inode()->make_path_string_projected(path);
+  get_inode()->make_path_string(path, true);
   return path;
 }
 
