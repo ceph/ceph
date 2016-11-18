@@ -2286,12 +2286,16 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
     c->wait_for_complete();
     c->release();
 
-    //std::cout << "bl len is " << bl.length() << "\n";
-    //bl.hexdump(std::cout);
-    //std::cout << std::endl;
-
-    bufferlist::iterator p = bl.begin();
-    ::decode(hitsets[i], p);
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(hitsets[i], p);
+    }
+    catch (buffer::error& e) {
+      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
+      bl.hexdump(std::cout);
+      std::cout << std::endl;
+      throw e;
+    }
 
     // cope with racing splits by refreshing pg_num
     if (i == num_pg - 1)
