@@ -185,6 +185,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_bool("enabled", enabled);
   f->dump_string("fs_name", fs_name);
   f->dump_string("balancer", balancer);
+  f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
 }
 
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
@@ -228,6 +229,7 @@ void MDSMap::print(ostream& out) const
   out << "metadata_pool\t" << metadata_pool << "\n";
   out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
   out << "balancer\t" << balancer << "\n";
+  out << "standby_count_wanted\t" << std::max(0, standby_count_wanted) << "\n";
 
   multimap< pair<mds_rank_t, unsigned>, mds_gid_t > foo;
   for (const auto &p : mds_info) {
@@ -556,7 +558,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 11;
+  __u16 ev = 12;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -576,6 +578,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(fs_name, bl);
   ::encode(damaged, bl);
   ::encode(balancer, bl);
+  ::encode(standby_count_wanted, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -682,8 +685,13 @@ void MDSMap::decode(bufferlist::iterator& p)
   }
 
   if (ev >= 11) {
-  ::decode(balancer, p);
+    ::decode(balancer, p);
   }
+
+  if (ev >= 12) {
+    ::decode(standby_count_wanted, p);
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -757,4 +765,25 @@ bool MDSMap::state_transition_valid(DaemonState prev, DaemonState next)
   }
 
   return state_valid;
+}
+
+bool MDSMap::check_health(mds_rank_t standby_daemon_count)
+{
+  std::set<mds_rank_t> standbys;
+  get_standby_replay_mds_set(standbys);
+  std::set<mds_rank_t> actives;
+  get_active_mds_set(actives);
+  mds_rank_t standbys_avail = (mds_rank_t)standbys.size()+standby_daemon_count;
+
+  /* If there are standby daemons available/replaying and
+   * standby_count_wanted is unset (default), then we set it to 1. This will
+   * happen during health checks by the mons. Also, during initial creation
+   * of the FS we will have no actives so we don't want to change the default
+   * yet.
+   */
+  if (standby_count_wanted == -1 && actives.size() > 0 && standbys_avail > 0) {
+    set_standby_count_wanted(1);
+    return true;
+  }
+  return false;
 }

@@ -468,6 +468,8 @@ public:
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
 
+  bool check_health(void);
+
   /**
    * Assert that the FSMap, Filesystem, MDSMap, mds_info_t relations are
    * all self-consistent.

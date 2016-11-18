@@ -291,6 +291,7 @@ void FSMap::reset_filesystem(fs_cluster_id_t fscid)
   new_fs->mds_map.modified = ceph_clock_now();
   new_fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   new_fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
+  new_fs->mds_map.standby_count_wanted = fs->mds_map.standby_count_wanted;
   new_fs->mds_map.enabled = true;
 
   // Persist the new FSMap
@@ -300,13 +301,31 @@ void FSMap::reset_filesystem(fs_cluster_id_t fscid)
 void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 			list<pair<health_status_t,string> > *detail) const
 {
-  for (auto i : filesystems) {
-    auto fs = i.second;
+  mds_rank_t standby_count_wanted = 0;
+  for (const auto &i : filesystems) {
+    const auto &fs = i.second;
 
     // TODO: move get_health up into here so that we can qualify
     // all the messages with what filesystem they're talking about
     fs->mds_map.get_health(summary, detail);
+
+    standby_count_wanted = std::max(standby_count_wanted, fs->mds_map.get_standby_count_wanted((mds_rank_t)standby_daemons.size()));
   }
+
+  if (standby_count_wanted) {
+    std::ostringstream oss;
+    oss << "insufficient standby daemons available: have " << standby_daemons.size() << "; want " << standby_count_wanted << " more";
+    summary.push_back(make_pair(HEALTH_WARN, oss.str()));
+  }
+}
+
+bool FSMap::check_health(void)
+{
+  bool changed = false;
+  for (auto &i : filesystems) {
+    changed |= i.second->mds_map.check_health((mds_rank_t)standby_daemons.size());
+  }
+  return changed;
 }
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
