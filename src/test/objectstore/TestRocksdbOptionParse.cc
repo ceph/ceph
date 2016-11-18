@@ -9,7 +9,7 @@
 #include <iostream>
 using namespace std;
 
-const string dir("store_test_temp_dir");
+const string dir("rocksdb.test_temp_dir");
 
 TEST(RocksDBOption, simple) {
   rocksdb::Options options;
