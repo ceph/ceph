@@ -1435,9 +1435,20 @@ void MDLog::standby_trim_segments()
   bool removed_segment = false;
   while (have_any_segments()) {
     LogSegment *seg = get_oldest_segment();
-    if (seg->end > expire_pos)
+    dout(10) << " segment seq=" << seg->seq << " " << seg->offset <<
+      "~" << seg->end - seg->offset << dendl;
+
+    if (seg->end > expire_pos) {
+      dout(10) << " won't remove, not expired!" << dendl;
       break;
-    dout(10) << " removing segment " << seg->seq << "/" << seg->offset << dendl;
+    }
+
+    if (segments.size() == 1) {
+      dout(10) << " won't remove, last segment!" << dendl;
+      break;
+    }
+
+    dout(10) << " removing segment" << dendl;
     mds->mdcache->standby_trim_segment(seg);
     remove_oldest_segment();
     removed_segment = true;
@@ -1446,8 +1457,9 @@ void MDLog::standby_trim_segments()
   if (removed_segment) {
     dout(20) << " calling mdcache->trim!" << dendl;
     mds->mdcache->trim(-1);
-  } else
+  } else {
     dout(20) << " removed no segments!" << dendl;
+  }
 }
 
 void MDLog::dump_replay_status(Formatter *f) const
