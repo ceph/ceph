@@ -374,14 +374,12 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
-  map<mds_rank_t, mds_gid_t>::const_iterator u = up.begin();
-  map<mds_rank_t, mds_gid_t>::const_iterator u_end = up.end();
   map<mds_gid_t, mds_info_t>::const_iterator m_end = mds_info.end();
   set<string> laggy;
-  for (; u != u_end; ++u) {
-    map<mds_gid_t, mds_info_t>::const_iterator m = mds_info.find(u->second);
+  for (const auto &u : up) {
+    map<mds_gid_t, mds_info_t>::const_iterator m = mds_info.find(u.second);
     if (m == m_end) {
-      std::cerr << "Up rank " << u->first << " GID " << u->second << " not found!" << std::endl;
+      std::cerr << "Up rank " << u.first << " GID " << u.second << " not found!" << std::endl;
     }
     assert(m != m_end);
     const mds_info_t &mds_info(m->second);
