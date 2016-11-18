@@ -408,7 +408,7 @@ if (WITH_SYSTEM_BOOST)
     set(Boost_USE_STATIC_LIBS ON)
   endif()
 else()
-  set(BOOST_CFLAGS "-fPIC") # check on arm, etc <---XXX
+  set(BOOST_CFLAGS "-fPIC -w") # check on arm, etc <---XXX
   set(BOOST_J 1 CACHE STRING
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
   message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
@@ -461,8 +461,8 @@ endif()
 
 # require minimally the bundled version
 find_package(Boost 1.61 COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
-include_directories(${PROJECT_BINARY_DIR}/include)
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 if (NOT WITH_SYSTEM_BOOST)
   LIST(APPEND Boost_LIBRARIES "-lz")

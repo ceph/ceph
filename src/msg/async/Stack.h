@@ -281,7 +281,7 @@ class NetworkStack : public CephContext::ForkWatcher {
   Spinlock pool_spin;
   bool started = false;
 
-  void add_thread(unsigned i, std::function<void ()> &ts);
+  std::function<void ()> add_thread(unsigned i);
 
  protected:
   CephContext *cct;

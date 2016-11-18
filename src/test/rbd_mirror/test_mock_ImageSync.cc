@@ -39,8 +39,8 @@ struct TypeTraits<librbd::MockTestImageCtx> {
 } // namespace librbd
 
 // template definitions
-#include "tools/rbd_mirror/ImageSync.cc"
 template class rbd::mirror::ImageSync<librbd::MockTestImageCtx>;
+#include "tools/rbd_mirror/ImageSync.cc"
 
 namespace rbd {
 namespace mirror {
