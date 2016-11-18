@@ -350,6 +350,10 @@ public:
   typedef ceph::shared_ptr< IteratorImpl > Iterator;
 
   WholeSpaceIterator get_iterator() {
+    // a whole-space iterator cannot be used in combination with
+    // column families because it is not smart enough to traverse
+    // across all of them.
+    assert(cf_handles.empty());
     return _get_iterator();
   }
 
@@ -377,7 +381,7 @@ public:
   Iterator get_iterator(const std::string &prefix) {
     return is_column_family(prefix) ?
              std::make_shared<IteratorImpl>(prefix, get_cf_iterator(prefix)) :
-             std::make_shared<IteratorImpl>(prefix, get_iterator());
+             std::make_shared<IteratorImpl>(prefix, _get_iterator());
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
