@@ -1612,6 +1612,12 @@ const string& RGWZoneParams::get_predefined_name(CephContext *cct) {
   return cct->_conf->rgw_zone;
 }
 
+const string& RGWZoneParams::get_compression_type() const
+{
+  static const std::string NONE{"none"};
+  return !compression_type.empty() ? compression_type : NONE;
+}
+
 int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool old_format)
 {
   if (name.empty()) {

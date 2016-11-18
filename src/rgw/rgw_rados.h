@@ -992,6 +992,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   string realm_id;
 
   map<string, string> tier_config;
+  std::string compression_type{"none"};
 
   RGWZoneParams() : RGWSystemMetaObj() {}
   RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
@@ -1004,6 +1005,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);
+  const string& get_compression_type() const;
 
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
 	   bool old_format = false);
@@ -1015,7 +1017,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int fix_pool_names();
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(8, 1, bl);
+    ENCODE_START(9, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -1033,11 +1035,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(realm_id, bl);
     ::encode(lc_pool, bl);
     ::encode(tier_config, bl);
+    ::encode(compression_type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(8, bl);
+    DECODE_START(9, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -1070,6 +1073,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
     }
     if (struct_v >= 8) {
       ::decode(tier_config, bl);
+    }
+    if (struct_v >= 9) {
+      ::decode(compression_type, bl);
     }
     DECODE_FINISH(bl);
   }
