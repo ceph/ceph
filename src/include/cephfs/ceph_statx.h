@@ -62,10 +62,18 @@ struct ceph_statx {
 #define CEPH_STATX_VERSION	0x00001000U     /* Want/got stx_version */
 #define CEPH_STATX_ALL_STATS	0x00001fffU     /* All supported stats */
 
-/* statx request flags. Callers can set these in the "flags" field */
+/*
+ * Compatability macros until these defines make their way into glibc
+ */
 #ifndef AT_NO_ATTR_SYNC
 #define AT_NO_ATTR_SYNC		0x4000 /* Don't sync attributes with the server */
 #endif
+
+/*
+ * The statx interfaces only allow these flags. In order to allow us to add
+ * others in the future, we disallow setting any that aren't recognized.
+ */
+#define CEPH_REQ_FLAG_MASK		(AT_SYMLINK_NOFOLLOW|AT_NO_ATTR_SYNC)
 
 #ifdef __cplusplus
 }
