@@ -271,6 +271,11 @@ int main(int argc, const char **argv)
     }
   }
 
+  // for region -> zonegroup conversion (must happen before common_init_finish())
+  if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
+    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
+  }
+
   check_curl();
 
   if (g_conf->daemonize) {
