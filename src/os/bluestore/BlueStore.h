@@ -606,7 +606,7 @@ public:
       return blob_start() + blob->get_blob().get_logical_length();
     }
 
-    uint32_t end() const {
+    uint32_t logical_end() const {
       return logical_offset + length;
     }
 
