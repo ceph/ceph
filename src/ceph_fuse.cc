@@ -220,7 +220,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     r = messenger->start();
     if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: ceph messenger failed with " << cpp_strerror(-r) << std::endl;
       goto out_messenger_start_failed;
     }
 
@@ -230,7 +230,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     // start client
     r = client->init();
     if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: ceph client failed with " << cpp_strerror(-r) << std::endl;
       goto out_init_failed;
     }
     
