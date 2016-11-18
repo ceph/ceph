@@ -27,7 +27,7 @@ from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
 from .orchestra import run
 from .config import config
 from .contextutil import safe_while
-from .packaging import DEFAULT_OS_VERSION
+from .orchestra.opsys import DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
 
