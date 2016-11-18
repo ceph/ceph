@@ -14,6 +14,7 @@ from .config import config
 from .contextutil import safe_while
 from .exceptions import (VersionNotFoundError, CommitNotFoundError,
                          NoRemoteError)
+from .misc import sudo_write_file
 from .orchestra.opsys import OS, DEFAULT_OS_VERSION
 from .orchestra.run import Raw
 
@@ -939,23 +940,26 @@ class ShamanProject(GitbuilderProject):
             'repo',
         )
 
+    def _get_repo(self):
+        resp = requests.get(self.repo_url)
+        resp.raise_for_status()
+        return resp.text
+
     def _install_rpm_repo(self):
-        self.remote.run(
-            args=[
-                'sudo', 'curl', '-s', '-o',
-                '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
-                self.repo_url,
-            ]
+        repo = self._get_repo()
+        sudo_write_file(
+            self.remote,
+            '/etc/yum.repos.d/{proj}.repo'.format(proj=self.project),
+            repo,
         )
 
     def _install_deb_repo(self):
-        self.remote.run(
-            args=[
-                'sudo', 'curl', '-s', '-o',
-                '/etc/apt/sources.list.d/{proj}.list'.format(
-                    proj=self.project),
-                self.repo_url,
-            ]
+        repo = self._get_repo()
+        sudo_write_file(
+            self.remote,
+            '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=self.project),
+            repo,
         )
 
     def _remove_rpm_repo(self):
