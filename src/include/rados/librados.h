@@ -2057,6 +2057,31 @@ CEPH_RADOS_API int rados_aio_stat(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_aio_cancel(rados_ioctx_t io,
                                     rados_completion_t completion);
 
+/**
+ * Asynchronously execute an OSD class method on an object
+ *
+ * The OSD has a plugin mechanism for performing complicated
+ * operations on an object atomically. These plugins are called
+ * classes. This function allows librados users to call the custom
+ * methods. The input and output formats are defined by the class.
+ * Classes in ceph.git can be found in src/cls subdirectories
+ *
+ * @param io the context in which to call the method
+ * @param oid the object to call the method on
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param buf where to store output
+ * @param out_len length of buf in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_exec(rados_ioctx_t io, const char *o,
+				  rados_completion_t completion,
+				  const char *cls, const char *method,
+				  const char *in_buf, size_t in_len,
+				  char *buf, size_t out_len);
+
 /** @} Asynchronous I/O */
 
 /**
