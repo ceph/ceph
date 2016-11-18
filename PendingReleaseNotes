@@ -48,6 +48,14 @@
   mon automatically marked and OSD out and then in, but not when an
   admin did so explicitly.
 
+* The 'ceph osd perf' command will display 'commit_latency(ms)' and 
+  'apply_latency(ms)'. Previously, the names of these two columns are 
+  'fs_commit_latency(ms)' and 'fs_apply_latency(ms)'. We remove the prefix 
+  'fs_', because they are not filestore specific. 
+
+OSD: change the prefix from fs_* to os_*, because commit_latency and …
+…apply_latency will be used not only for filestore.
+
 11.0.0
 ------
 
