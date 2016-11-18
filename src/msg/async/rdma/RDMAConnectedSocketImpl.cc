@@ -124,7 +124,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
   infiniband->net.set_priority(tcp_fd, opts.priority);
   my_msg.peer_qpn = 0;
-  r = infiniband->send_msg(tcp_fd, my_msg);
+  r = infiniband->send_msg(cct, tcp_fd, my_msg);
   if (r < 0)
     return r;
 
@@ -134,7 +134,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
 void RDMAConnectedSocketImpl::handle_connection() {
   ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " fd: " << notify_fd << dendl;
-  int r = infiniband->recv_msg(tcp_fd, peer_msg);
+  int r = infiniband->recv_msg(cct, tcp_fd, peer_msg);
   if (r < 0) {
     if (r != -EAGAIN)
       fault();
@@ -150,7 +150,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       assert(!r);
     }
     notify();
-    r = infiniband->send_msg(tcp_fd, my_msg);
+    r = infiniband->send_msg(cct, tcp_fd, my_msg);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send client ack failed." << dendl;
       fault();
@@ -161,7 +161,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
         ldout(cct, 10) << __func__ << " server is already active." << dendl;
         return ;
       }
-      r = infiniband->send_msg(tcp_fd, my_msg);
+      r = infiniband->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
         fault();
