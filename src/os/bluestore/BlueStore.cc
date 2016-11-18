@@ -2711,10 +2711,6 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_gc, "bluestore_gc",
-            "Sum for garbage collection reads");
-  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes",
-            "garbage collected bytes");
   b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
             "Sum for blob splitting due to resharding");
   logger = b.create_perf_counters();
