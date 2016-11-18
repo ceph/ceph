@@ -129,8 +129,8 @@ public:
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.filestore_commit_latency = os_commit_latency.avg();
-      ret.filestore_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency = os_commit_latency.avg();
+      ret.os_apply_latency = os_apply_latency.avg();
       return ret;
     }
 

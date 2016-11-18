@@ -814,24 +814,24 @@ inline ostream& operator<<(ostream& out, const eversion_t& e) {
  */
 struct objectstore_perf_stat_t {
   // cur_op_latency is in ms since double add/sub are not associative
-  uint32_t filestore_commit_latency;
-  uint32_t filestore_apply_latency;
+  uint32_t os_commit_latency;
+  uint32_t os_apply_latency;
 
   objectstore_perf_stat_t() :
-    filestore_commit_latency(0), filestore_apply_latency(0) {}
+    os_commit_latency(0), os_apply_latency(0) {}
 
   bool operator==(const objectstore_perf_stat_t &r) const {
-    return filestore_commit_latency == r.filestore_commit_latency &&
-      filestore_apply_latency == r.filestore_apply_latency;
+    return os_commit_latency == r.os_commit_latency &&
+      os_apply_latency == r.os_apply_latency;
   }
 
   void add(const objectstore_perf_stat_t &o) {
-    filestore_commit_latency += o.filestore_commit_latency;
-    filestore_apply_latency += o.filestore_apply_latency;
+    os_commit_latency += o.os_commit_latency;
+    os_apply_latency += o.os_apply_latency;
   }
   void sub(const objectstore_perf_stat_t &o) {
-    filestore_commit_latency -= o.filestore_commit_latency;
-    filestore_apply_latency -= o.filestore_apply_latency;
+    os_commit_latency -= o.os_commit_latency;
+    os_apply_latency -= o.os_apply_latency;
   }
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
@@ -850,7 +850,7 @@ struct osd_stat_t {
 
   pow2_hist_t op_queue_age_hist;
 
-  objectstore_perf_stat_t fs_perf_stat;
+  objectstore_perf_stat_t os_perf_stat;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
@@ -862,7 +862,7 @@ struct osd_stat_t {
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
-    fs_perf_stat.add(o.fs_perf_stat);
+    os_perf_stat.add(o.os_perf_stat);
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -871,7 +871,7 @@ struct osd_stat_t {
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
     op_queue_age_hist.sub(o.op_queue_age_hist);
-    fs_perf_stat.sub(o.fs_perf_stat);
+    os_perf_stat.sub(o.os_perf_stat);
   }
 
   void dump(Formatter *f) const;
@@ -890,7 +890,7 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.hb_in == r.hb_in &&
     l.hb_out == r.hb_out &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.fs_perf_stat == r.fs_perf_stat;
+    l.os_perf_stat == r.os_perf_stat;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
