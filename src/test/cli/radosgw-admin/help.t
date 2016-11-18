@@ -175,6 +175,7 @@
                                set list of zones to sync from
      --sync-from-rm=[zone-name][,...]
                                remove zones from list of zones to sync from
+     --compression=<type>      zone compression type ('none' or plugin name)
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
