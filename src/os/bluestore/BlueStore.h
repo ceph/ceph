@@ -94,6 +94,7 @@ enum {
   l_bluestore_txc,
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
+  l_bluestore_extent_compress,
   l_bluestore_last
 };
 
@@ -1542,7 +1543,7 @@ private:
   size_t block_size_order; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  uint64_t min_min_alloc_size = 0; /// < minimum seen min_alloc_size
+  uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
   uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
