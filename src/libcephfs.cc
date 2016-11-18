@@ -33,7 +33,6 @@
 
 #include "include/cephfs/libcephfs.h"
 
-
 struct ceph_mount_info
 {
 public:
@@ -522,6 +521,8 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags, out);
 }
 
@@ -629,6 +630,8 @@ extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return cmount->get_client()->statx(path, stx, cmount->default_perms,
 				     want, flags);
 }
@@ -646,6 +649,8 @@ extern "C" int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return cmount->get_client()->setattrx(relpath, stx, mask,
 					cmount->default_perms, flags);
 }
@@ -898,6 +903,8 @@ extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_s
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return cmount->get_client()->fstatx(fd, stx, cmount->default_perms,
 				      want, flags);
 }
@@ -1408,6 +1415,8 @@ extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
 			      struct ceph_statx *stx, unsigned want,
 			      unsigned flags, const UserPerm *perms)
 {
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return (cmount->get_client())->ll_lookupx(parent, name, out, stx, want,
 					    flags, *perms);
 }
@@ -1427,6 +1436,8 @@ int ceph_ll_walk(struct ceph_mount_info *cmount, const char* name, Inode **i,
 		 struct ceph_statx *stx, unsigned int want, unsigned int flags,
 		 const UserPerm *perms)
 {
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return(cmount->get_client()->ll_walk(name, i, stx, want, flags, *perms));
 }
 
@@ -1435,6 +1446,8 @@ extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
 			       unsigned int want, unsigned int flags,
 			       const UserPerm *perms)
 {
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return (cmount->get_client()->ll_getattrx(in, stx, want, flags, *perms));
 }
 
@@ -1544,6 +1557,8 @@ extern "C" int ceph_ll_create(class ceph_mount_info *cmount,
 			      struct ceph_statx *stx, unsigned want,
 			      unsigned lflags, const UserPerm *perms)
 {
+  if (lflags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return (cmount->get_client())->ll_createx(parent, name, mode, oflags, outp,
 					    fhp, stx, want, lflags, *perms);
 }
@@ -1554,6 +1569,8 @@ extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount, Inode *parent,
 			     unsigned want, unsigned flags,
 			     const UserPerm *perms)
 {
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return (cmount->get_client())->ll_mknodx(parent, name, mode, rdev,
 					   out, stx, want, flags, *perms);
 }
@@ -1563,6 +1580,8 @@ extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount, Inode *parent,
 			     struct ceph_statx *stx, unsigned want,
 			     unsigned flags, const UserPerm *perms)
 {
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return cmount->get_client()->ll_mkdirx(parent, name, mode, out, stx, want,
 					 flags, *perms);
 }
@@ -1624,6 +1643,8 @@ extern "C" int ceph_ll_symlink(class ceph_mount_info *cmount,
 			       struct ceph_statx *stx, unsigned want,
 			       unsigned flags, const UserPerm *perms)
 {
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
   return (cmount->get_client()->ll_symlinkx(in, name, value, out, stx, want,
 					    flags, *perms));
 }
