@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_pool_default_size: 2
+        osd_pool_default_min_size: 1

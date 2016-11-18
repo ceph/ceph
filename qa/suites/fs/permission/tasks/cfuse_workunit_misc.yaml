@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - fs/misc/acl.sh
+        - fs/misc/chmod.sh

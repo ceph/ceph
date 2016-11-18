@@ -1,0 +1,8 @@
+roles:
+- [mon.a, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+- workunit:
+    clients:
+      all:
+        - post-file.sh

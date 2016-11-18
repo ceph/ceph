@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - Scrub error on inode
+    conf:
+      mds:
+        mds log max segments: 1
+        mds cache max size: 1000
+tasks:
+- ceph-fuse:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephfs.test_scrub_checks

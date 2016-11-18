@@ -1,0 +1,22 @@
+tasks:
+- install:
+- ceph:
+    conf:
+      osd:
+        osd max backfills: 1
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        journal throttle high multiple: 2
+        journal throttle max multiple: 10
+        filestore queue throttle high multiple: 2
+        filestore queue throttle max multiple: 10
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 3
+    chance_pgpnum_fix: 1
+openstack:
+- volumes:
+    size: 50

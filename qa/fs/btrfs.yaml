@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    fs: btrfs
+    conf:
+      osd:
+        osd sloppy crc: true
+        osd op thread timeout: 60

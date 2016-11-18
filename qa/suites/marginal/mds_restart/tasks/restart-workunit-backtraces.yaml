@@ -1,0 +1,11 @@
+tasks:
+- install:
+- ceph:
+    conf:
+      mds:
+        mds log segment size: 16384
+        mds log max segments: 1
+- restart:
+    exec:
+     client.0:
+       - test-backtraces.py
