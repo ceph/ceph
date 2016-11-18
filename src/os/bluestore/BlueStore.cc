@@ -2640,6 +2640,8 @@ void BlueStore::_init_logger()
     "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
+  b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
+    "Average commit latency");
   b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
     "Average compress latency");
   b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
@@ -6427,6 +6429,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
   }
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->oncommit) {
+    logger->tinc(l_bluestore_commit_lat, ceph_clock_now(g_ceph_context) - txc->start);
     finishers[n]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
@@ -6442,6 +6445,17 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
 
   throttle_ops.put(txc->ops);
   throttle_bytes.put(txc->bytes);
+}
+
+void BlueStore::BSPerfTracker::update_from_perfcounters(
+  PerfCounters &logger)
+{
+  os_commit_latency.consume_next(
+    logger.get_tavg_ms(
+      l_bluestore_commit_lat));
+  os_apply_latency.consume_next(
+    logger.get_tavg_ms(
+      l_bluestore_commit_lat));
 }
 
 void BlueStore::_txc_finish(TransContext *txc)

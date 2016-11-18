@@ -2208,7 +2208,7 @@ int OSD::init()
       
       utime_t had_for = ceph_clock_now(cct) - had_map_since;
       osd_stat_t cur_stat = service.get_osd_stat();
-      cur_stat.fs_perf_stat = store->get_cur_stats();
+      cur_stat.os_perf_stat = store->get_cur_stats();
 
       MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
       m->osd_stat = cur_stat;
@@ -5202,7 +5202,7 @@ void OSD::send_pg_stats(const utime_t &now)
 
   osd_stat_t cur_stat = service.get_osd_stat();
 
-  cur_stat.fs_perf_stat = store->get_cur_stats();
+  cur_stat.os_perf_stat = store->get_cur_stats();
 
   pg_stat_queue_lock.Lock();
 

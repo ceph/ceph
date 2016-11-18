@@ -1120,7 +1120,7 @@ void PGMap::dump_osd_perf_stats(Formatter *f) const
     f->dump_int("id", i->first);
     {
       f->open_object_section("perf_stats");
-      i->second.fs_perf_stat.dump(f);
+      i->second.os_perf_stat.dump(f);
       f->close_section();
     }
     f->close_section();
@@ -1131,14 +1131,14 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
 {
   TextTable tab;
   tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("fs_commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("fs_apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
   for (ceph::unordered_map<int32_t, osd_stat_t>::const_iterator i = osd_stat.begin();
        i != osd_stat.end();
        ++i) {
     tab << i->first;
-    tab << i->second.fs_perf_stat.filestore_commit_latency;
-    tab << i->second.fs_perf_stat.filestore_apply_latency;
+    tab << i->second.os_perf_stat.os_commit_latency;
+    tab << i->second.os_perf_stat.os_apply_latency;
     tab << TextTable::endrow;
   }
   (*ss) << tab;

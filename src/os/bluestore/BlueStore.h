@@ -59,6 +59,7 @@ enum {
   l_bluestore_state_wal_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_commit_lat,
   l_bluestore_compress_lat,
   l_bluestore_decompress_lat,
   l_bluestore_csum_lat,
@@ -1203,9 +1204,10 @@ public:
 
     void log_state_latency(PerfCounters *logger, int state) {
       utime_t lat, now = ceph_clock_now(g_ceph_context);
-      lat = now - start;
+      lat = now - last_stamp;
       logger->tinc(state, lat);
       start = now;
+      last_stamp = now;
     }
 
     OpSequencerRef osr;
@@ -1288,6 +1290,7 @@ public:
 
     uint64_t seq = 0;
     utime_t start;
+    utime_t last_stamp;
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
@@ -1303,6 +1306,7 @@ public:
 	wal_txn(NULL),
 	ioc(this),
 	start(ceph_clock_now(g_ceph_context)) {
+        last_stamp = start;
     }
     ~TransContext() {
       delete wal_txn;
@@ -1904,8 +1908,23 @@ public:
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
+  struct BSPerfTracker {
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+
+    objectstore_perf_stat_t get_cur_stats() const {
+      objectstore_perf_stat_t ret;
+      ret.os_commit_latency = os_commit_latency.avg();
+      ret.os_apply_latency = os_apply_latency.avg();
+      return ret;
+    }
+
+    void update_from_perfcounters(PerfCounters &logger);
+  } perf_tracker;
+
   objectstore_perf_stat_t get_cur_stats() override {
-    return objectstore_perf_stat_t();
+    perf_tracker.update_from_perfcounters(*logger);
+    return perf_tracker.get_cur_stats();
   }
 
   int queue_transactions(
