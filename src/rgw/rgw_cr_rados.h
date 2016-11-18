@@ -591,7 +591,7 @@ class RGWWaitCR : public RGWSimpleCoroutine {
 public:
   RGWWaitCR(RGWAsyncRadosProcessor *_async_rados, CephContext *_cct,
 	    Mutex *_lock, Cond *_cond,
-            int _secs) : RGWSimpleCoroutine(cct), cct(_cct),
+            int _secs) : RGWSimpleCoroutine(_cct), cct(_cct),
                          async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs), req(NULL) {
   }
   ~RGWWaitCR() {

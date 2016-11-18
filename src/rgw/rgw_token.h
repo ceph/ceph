@@ -144,7 +144,7 @@ namespace rgw {
       encode_json(f);
       std::ostringstream os;
       f->flush(os);
-      return std::move(to_base64(std::move(os.str())));
+      return to_base64(std::move(os.str()));
     }
 
     friend inline ostream& operator<<(ostream& os, const RGWToken& token);

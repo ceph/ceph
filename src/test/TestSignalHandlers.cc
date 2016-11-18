@@ -44,10 +44,18 @@ static void simple_segv_test()
   std::cout << "i = " << i << std::endl;
 }
 
+// Given the name of the function, we can be pretty sure this is intentional.
+
+#pragma clang diagnostic push
+
+#pragma clang diagnostic ignored "-Winfinite-recursion"
+
 static void infinite_recursion_test_impl()
 {
   infinite_recursion_test_impl();
 }
+
+#pragma clang diagnostic pop
 
 static void infinite_recursion_test()
 {

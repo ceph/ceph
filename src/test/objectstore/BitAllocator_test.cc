@@ -158,7 +158,7 @@ TEST(BitAllocator, test_bmap_iter)
   for (i = 0; i < num_items; i++)
     delete children[i];
 
-  delete children;
+  delete[] children;
   delete area_list;
 }
 

@@ -1277,7 +1277,7 @@ TEST_F(TestMockJournal, ResyncRequested) {
   InSequence seq;
 
   journal::TagData tag_data;
-  tag_data.mirror_uuid == Journal<>::LOCAL_MIRROR_UUID;
+  tag_data.mirror_uuid = Journal<>::LOCAL_MIRROR_UUID;
 
   bufferlist tag_data_bl;
   ::encode(tag_data, tag_data_bl);
@@ -1329,7 +1329,7 @@ TEST_F(TestMockJournal, ForcePromoted) {
   InSequence seq;
 
   journal::TagData tag_data;
-  tag_data.mirror_uuid == Journal<>::LOCAL_MIRROR_UUID;
+  tag_data.mirror_uuid = Journal<>::LOCAL_MIRROR_UUID;
 
   bufferlist tag_data_bl;
   ::encode(tag_data, tag_data_bl);

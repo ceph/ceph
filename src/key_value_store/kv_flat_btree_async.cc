@@ -1120,7 +1120,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
     //all changes were created except for updating the index and possibly
     //deleting the objects. roll forward.
     vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > ops;
-    librados::ObjectWriteOperation owos[idata.to_delete.size() + 1];
+    vector<librados::ObjectWriteOperation> owos(idata.to_delete.size() + 1);
     for (int i = 0; i <= (int)idata.to_delete.size(); ++i) {
       ops.push_back(make_pair(pair<int, string>(0, ""), &owos[i]));
     }
@@ -1883,7 +1883,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
 	                         .omap.rbegin()->first);
 
       to_create.push_back(object_data(
-    	to_string(client_name, client_index++)));
+	to_string(client_name, client_index++)));
       to_create[to_create.size() - 1].min_kdata =
 	  to_create[to_create.size() - 2].max_kdata;
     }
@@ -1893,8 +1893,8 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
   to_create[to_create.size() - 1].max_kdata =
       to_delete[to_delete.size() - 1].max_kdata;
 
-  librados::ObjectWriteOperation owos[2 + 2 * to_delete.size()
-                                      + to_create.size()];
+  vector<librados::ObjectWriteOperation> owos(2 + 2 * to_delete.size()
+					      + to_create.size());
   vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > ops;
 
 
