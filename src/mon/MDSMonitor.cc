@@ -2065,6 +2065,8 @@ void MDSMonitor::tick()
 
   if (!mon->is_leader()) return;
 
+  do_propose |= pending_fsmap.check_health();
+
   // expand mds cluster (add new nodes to @in)?
   for (auto i : pending_fsmap.filesystems) {
     do_propose |= maybe_expand_cluster(i.second);

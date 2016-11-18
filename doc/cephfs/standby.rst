@@ -64,6 +64,20 @@ If an MDS daemon stops communicating with the monitor, the monitor will
 wait ``mds_beacon_grace`` seconds (default 15 seconds) before marking
 the daemon as *laggy*.
 
+Each file system may specify a number of standby daemons to be considered
+healthy. This number includes daemons in standby-replay waiting for a rank to
+fail (remember that a standby-replay daemon will not be assigned to take over a
+failure for another rank or a failure in a another CephFS file system). The
+pool of standby daemons not in replay count towards any file system count.
+Each file system may set the number of standby daemons wanted using:
+
+::
+
+    ceph fs set <fs name> standby_count_wanted <count>
+
+Setting ``count`` to 0 will disable the health check.
+
+
 Configuring standby daemons
 ---------------------------
 
