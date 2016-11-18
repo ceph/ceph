@@ -387,7 +387,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   // Inform the cluster log if we found an error
   if (!result.passed_validation) {
     std::string path;
-    in->make_path_string_projected(path);
+    in->make_path_string(path, true);
     clog->warn() << "Scrub error on inode " << *in
                  << " (" << path << ") see " << g_conf->name
                  << " log for details";
