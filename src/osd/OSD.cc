@@ -6617,6 +6617,7 @@ void OSD::note_down_osd(int peer)
 void OSD::note_up_osd(int peer)
 {
   service.forget_peer_epoch(peer, osdmap->get_epoch() - 1);
+  heartbeat_set_peers_need_update();
 }
 
 struct C_OnMapCommit : public Context {
@@ -6936,6 +6937,10 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
           waited_for_reservations = true;
         }
 	note_down_osd(*p);
+      } else if (*p != whoami &&
+                !osdmap->have_inst(*p) &&
+                newmap->is_up(*p)) {
+        note_up_osd(*p);
       }
     }
 
