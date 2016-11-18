@@ -247,7 +247,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(mc->get_global_id()),
-    cap_epoch_barrier(0), fsmap(nullptr), fsmap_user(nullptr),
+    cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
@@ -279,11 +279,8 @@ Client::Client(Messenger *m, MonClient *mc)
   // file handles
   free_fd_set.insert(10, 1<<30);
 
-  // set up messengers
-  messenger = m;
-
   // osd interfaces
-  mdsmap = new MDSMap;
+  mdsmap.reset(new MDSMap);
   objecter = new Objecter(cct, messenger, monclient, NULL,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
@@ -314,8 +311,6 @@ Client::~Client()
 
   delete filer;
   delete objecter;
-  delete mdsmap;
-  delete fsmap;
 
   delete logger;
 }
@@ -2513,9 +2508,7 @@ bool Client::ms_dispatch(Message *m)
 
 void Client::handle_fs_map(MFSMap *m)
 {
-  delete fsmap;
-  fsmap = new FSMap;
-  *fsmap = m->get_fsmap();
+  fsmap.reset(new FSMap(m->get_fsmap()));
   m->put();
 
   signal_cond_list(waiting_for_fsmap);
@@ -2525,8 +2518,7 @@ void Client::handle_fs_map(MFSMap *m)
 
 void Client::handle_fs_map_user(MFSMapUser *m)
 {
-  delete fsmap_user;
-  fsmap_user = new FSMapUser;
+  fsmap_user.reset(new FSMapUser);
   *fsmap_user = m->get_fsmap();
   m->put();
 
@@ -2546,8 +2538,9 @@ void Client::handle_mds_map(MMDSMap* m)
 
   ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
 
-  MDSMap *oldmap = mdsmap;
-  mdsmap = new MDSMap;
+  std::unique_ptr<MDSMap> oldmap(new MDSMap);
+  oldmap.swap(mdsmap);
+
   mdsmap->decode(m->get_encoded());
 
   // Cancel any commands for missing or laggy GIDs
@@ -2619,7 +2612,6 @@ void Client::handle_mds_map(MMDSMap* m)
   // kick any waiting threads
   signal_cond_list(waiting_for_mdsmap);
 
-  delete oldmap;
   m->put();
 
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
@@ -5338,7 +5330,7 @@ int Client::resolve_mds(
     const std::string &mds_spec,
     std::vector<mds_gid_t> *targets)
 {
-  assert(fsmap != nullptr);
+  assert(fsmap);
   assert(targets != nullptr);
 
   mds_role_t role;
@@ -5446,20 +5438,20 @@ int Client::fetch_fsmap(bool user)
   ldout(cct, 10) << __func__ << " learned FSMap version " << fsmap_latest << dendl;
 
   if (user) {
-    if (fsmap_user == nullptr || fsmap_user->get_epoch() < fsmap_latest) {
+    if (!fsmap_user || fsmap_user->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap.user", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
       wait_on_list(waiting_for_fsmap);
     }
-    assert(fsmap_user != nullptr);
+    assert(fsmap_user);
     assert(fsmap_user->get_epoch() >= fsmap_latest);
   } else {
-    if (fsmap == nullptr || fsmap->get_epoch() < fsmap_latest) {
+    if (!fsmap || fsmap->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
       wait_on_list(waiting_for_fsmap);
     }
-    assert(fsmap != nullptr);
+    assert(fsmap);
     assert(fsmap->get_epoch() >= fsmap_latest);
   }
   ldout(cct, 10) << __func__ << " finished waiting for FSMap version "
@@ -8813,20 +8805,15 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // copy into fresh buffer (since our write may be resub, async)
   bufferlist bl;
-  bufferptr *bparr = NULL;
   if (buf) {
-      bufferptr bp;
-      if (size > 0) bp = buffer::copy(buf, size);
-      bl.push_back( bp );
+    if (size > 0)
+      bl.append(buf, size);
   } else if (iov){
-      //iov case 
-      bparr = new bufferptr[iovcnt];
-      for (int i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_len > 0) {
-            bparr[i] = buffer::copy((char*)iov[i].iov_base, iov[i].iov_len);
-        }
-        bl.push_back( bparr[i] );
+    for (int i = 0; i < iovcnt; i++) {
+      if (iov[i].iov_len > 0) {
+        bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
       }
+    }
   }
 
   utime_t lat;
@@ -8834,7 +8821,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0) {
-    delete[] bparr;
     return r;
   }
 
@@ -8983,7 +8969,6 @@ done:
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
-  delete[] bparr; 
   return r;
 }
 

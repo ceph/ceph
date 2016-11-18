@@ -934,179 +934,6 @@ TEST_P(StoreTest, CompressionTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
-TEST_P(StoreTest, garbageCollection) {
-  ObjectStore::Sequencer osr("test");
-  int r;
-  int64_t waste1, waste2;
-  coll_t cid;
-  int buf_len = 256 * 1024;
-  int overlap_offset = 64 * 1024;
-  int write_offset = buf_len;
-  if (string(GetParam()) != "bluestore")
-    return;
-
-#define WRITE_AT(offset, length) {\
-      ObjectStore::Transaction t;\
-      t.write(cid, hoid, offset, length, bl);\
-      r = apply_transaction(store, &osr, std::move(t));\
-      ASSERT_EQ(r, 0);\
-  }
-  g_conf->set_val("bluestore_compression_mode", "none");
-  //g_conf->set_val("bluestore_compression_mode", "force");
-  g_conf->set_val("bluestore_merge_gc_data", "true"); 
-  g_ceph_context->_conf->apply_changes(NULL);
-
-  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
-  {
-    bufferlist in;
-    r = store->read(cid, hoid, 0, 5, in);
-    ASSERT_EQ(-ENOENT, r);
-  }
-  {
-    ObjectStore::Transaction t;
-    t.create_collection(cid, 0);
-    cerr << "Creating collection " << cid << std::endl;
-    r = apply_transaction(store, &osr, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-
-  std::string data;
-  data.resize(buf_len);
-
-  {
-    { 
-      bool exists = store->exists(cid, hoid);
-      ASSERT_TRUE(!exists);
-
-      ObjectStore::Transaction t;
-      t.touch(cid, hoid);
-      cerr << "Creating object " << hoid << std::endl;
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-
-      exists = store->exists(cid, hoid);
-      ASSERT_EQ(true, exists);
-    } 
-    bufferlist bl;
-
-    for(size_t i = 0; i < data.size(); i++)
-      data[i] = 'R';
-
-    bl.append(data);
-
-    WRITE_AT(0, buf_len);
-    WRITE_AT(write_offset - 3 * overlap_offset, buf_len);
-    WRITE_AT(write_offset - 2 * overlap_offset, buf_len);
-    {
-      struct store_statfs_t statfs;
-      int r = store->statfs(&statfs);
-      ASSERT_EQ(r, 0);
-      waste1 = statfs.allocated - statfs.stored;
-    }
-    WRITE_AT(write_offset - overlap_offset, buf_len);
-    {
-      struct store_statfs_t statfs;
-      int r = store->statfs(&statfs);
-      ASSERT_EQ(r, 0);
-      waste2 = statfs.allocated - statfs.stored;
-      ASSERT_GE(waste1, waste2);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.remove(cid, hoid);
-      cerr << "Cleaning" << std::endl;
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-  }
-  {
-    {
-      bool exists = store->exists(cid, hoid);
-      ASSERT_TRUE(!exists);
-
-      ObjectStore::Transaction t;
-      t.touch(cid, hoid);
-      cerr << "Creating object " << hoid << std::endl;
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-
-      exists = store->exists(cid, hoid);
-      ASSERT_EQ(true, exists);
-    } 
-    bufferlist bl;
-
-    for(size_t i = 0; i < data.size(); i++)
-      data[i] = i  % 256;
-    bl.append(data);
-
-    WRITE_AT(write_offset - overlap_offset, buf_len);
-    WRITE_AT(write_offset - 2 * overlap_offset, buf_len);
-    WRITE_AT(write_offset - 3 * overlap_offset, buf_len);
-    {
-      struct store_statfs_t statfs;
-      int r = store->statfs(&statfs);
-      ASSERT_EQ(r, 0);
-      waste1 = statfs.allocated - statfs.stored;
-    }
-    WRITE_AT(0, buf_len);
-    {
-      struct store_statfs_t statfs;
-      int r = store->statfs(&statfs);
-      ASSERT_EQ(r, 0);
-      waste2 = statfs.allocated - statfs.stored;
-      ASSERT_GE(waste1, waste2);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.remove(cid, hoid);
-      cerr << "Cleaning" << std::endl;
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-     }
-  }
-  {
-    {
-      bool exists = store->exists(cid, hoid);
-      ASSERT_TRUE(!exists);
-
-      ObjectStore::Transaction t;
-      t.touch(cid, hoid);
-      cerr << "Creating object " << hoid << std::endl;
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-
-      exists = store->exists(cid, hoid);
-      ASSERT_EQ(true, exists);
-    } 
-    bufferlist bl;
-    for(size_t i = 0; i < data.size(); i++)
-      data[i] = i  % 256;
-    bl.append(data);
-
-    WRITE_AT(2 * write_offset - 5 * overlap_offset, buf_len);
-    WRITE_AT(2 * write_offset - 4 * overlap_offset, buf_len);
-    WRITE_AT(2 * write_offset - 3 * overlap_offset, buf_len);
-    WRITE_AT(2 * overlap_offset, buf_len);
-    {
-      struct store_statfs_t statfs;
-      int r = store->statfs(&statfs);
-      ASSERT_EQ(r, 0);
-      waste2 = statfs.allocated - statfs.stored;
-      ASSERT_GE(waste1, waste2);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.remove(cid, hoid);
-      t.remove_collection(cid);
-      cerr << "Cleaning" << std::endl;
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-     }
-  }
-  g_conf->set_val("bluestore_compression_mode", "none");
-  g_ceph_context->_conf->apply_changes(NULL);
-}
-
 TEST_P(StoreTest, SimpleObjectTest) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -5043,6 +4870,11 @@ void colsplittest(
 		       52, ""));
 	t.clone(cid, a, b);
       }
+      if (i % 100) {
+	r = apply_transaction(store, &osr, std::move(t));
+	ASSERT_EQ(r, 0);
+	t = ObjectStore::Transaction();
+      }
     }
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -5061,11 +4893,18 @@ void colsplittest(
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
+  unsigned size = 0;
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
     ASSERT_EQ(!!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
     t.remove(cid, *i);
+    if (++size > 100) {
+      size = 0;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+      t = ObjectStore::Transaction();
+    }
   }
 
   objects.clear();
@@ -5078,6 +4917,12 @@ void colsplittest(
        ++i) {
     ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
     t.remove(tid, *i);
+    if (++size > 100) {
+      size = 0;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+      t = ObjectStore::Transaction();
+    }
   }
 
   t.remove_collection(cid);

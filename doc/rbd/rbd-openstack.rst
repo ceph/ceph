@@ -218,8 +218,9 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
 .. important:: Glance has not completely moved to 'store' yet.
     So we still need to configure the store in the DEFAULT section until Kilo.
 
-Kilo
-~~~~
+Kilo and after
+~~~~~~~~~~~~~~
+
 Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
 
     [glance_store]
@@ -232,15 +233,29 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
 
 For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
 
-Any OpenStack version
-~~~~~~~~~~~~~~~~~~~~~
+Enable copy-on-write cloning of images
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Note that this exposes the back end location via Glance's API, so the endpoint
+with this option enabled should not be publicly accessible.
+
+Any OpenStack version except Mitaka
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
 
     show_image_direct_url = True
 
-Note that this exposes the back end location via Glance's API, so the endpoint
-with this option enabled should not be publicly accessible.
+For Mitaka only
+^^^^^^^^^^^^^^^
+
+To enable image locations and take advantage of copy-on-write cloning for images, add under the ``[DEFAULT]`` section::
+
+    show_multiple_locations = True
+    show_image_direct_url = True
+
+Disable cache management (any OpenStack version)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Disable the Glance cache management to avoid images getting cached under ``/var/lib/glance/image-cache/``,
 assuming your configuration file has ``flavor = keystone+cachemanagement``::

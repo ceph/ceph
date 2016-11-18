@@ -610,8 +610,6 @@ function activate_osd() {
 
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
 
-    ceph osd crush create-or-move "$id" 1 root=default host=localhost
-
     wait_for_osd up $id || return 1
 }
 
@@ -1028,8 +1026,9 @@ function test_get_num_pgs() {
 #
 function get_last_scrub_stamp() {
     local pgid=$1
+    local sname=${2:-last_scrub_stamp}
     ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/last_scrub_stamp" -v .
+        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/$sname" -v .
 }
 
 function test_get_last_scrub_stamp() {
@@ -1085,8 +1084,14 @@ function wait_for_clean() {
     local num_active_clean=-1
     local cur_active_clean
     local -i timer=0
+    local -i loops=0
+    local -i phase=0
     local num_pgs=$(get_num_pgs)
     test $num_pgs != 0 || return 1
+    local TENTH_TIMEOUT=($TIMEOUT * 10)
+    # The first phase 10 times (1 second) second phase an additional 15 times (15 seconds)
+    local backoff_phases=( 10 15 -1 )
+    local sleep_backoff=( .1    1   10)
 
     while true ; do
         # Comparing get_num_active_clean & get_num_pgs is used to determine
@@ -1095,16 +1100,21 @@ function wait_for_clean() {
         cur_active_clean=$(get_num_active_clean)
         test $cur_active_clean = $num_pgs && break
         if test $cur_active_clean != $num_active_clean ; then
-            timer=0
+            timer=0 ; loops=0 ; phase=0
             num_active_clean=$cur_active_clean
         elif get_is_making_recovery_progress ; then
-            timer=0
-        elif (( timer >= $(($TIMEOUT * 10)))) ; then
+            timer=0 ; loops=0 ; phase=0
+        elif (( timer >= $TENTH_TIMEOUT)) ; then
             ceph report
             return 1
         fi
-        sleep .1
-        timer=$(expr $timer + 1)
+        sleep ${sleep_backoff[$phase]}
+        timer="$(echo $timer + ${sleep_backoff[$phase]} \* 10 | bc | cut -d. -f1)"
+        loops=$(expr $loops + 1)
+        if (( $loops == ${backoff_phases[$phase]} )); then
+          phase=$(expr $phase + 1)
+          loop=0
+        fi
     done
     return 0
 }
@@ -1166,6 +1176,13 @@ function pg_scrub() {
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph pg scrub $pgid
     wait_for_scrub $pgid "$last_scrub"
+}
+
+function pg_deep_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
+    ceph pg deep-scrub $pgid
+    wait_for_scrub $pgid "$last_scrub" last_deep_scrub_stamp
 }
 
 function test_pg_scrub() {
@@ -1247,9 +1264,10 @@ function test_expect_failure() {
 function wait_for_scrub() {
     local pgid=$1
     local last_scrub="$2"
+    local sname=${3:-last_scrub_stamp}
 
     for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
+        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid $sname)" ; then
             return 0
         fi
         sleep 1

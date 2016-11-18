@@ -23,7 +23,7 @@ add_ceph_test(osd-config.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-config.sh)
 add_ceph_test(osd-markdown.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-markdown.sh) 
 add_ceph_test(osd-reactivate.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reactivate.sh) 
 add_ceph_test(osd-reuse-id.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reuse-id.sh)
-add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh) 
+#add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh) 
 add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
 add_ceph_test(osd-copy-from.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh)
 add_ceph_test(osd-fast-mark-down.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-fast-mark-down.sh)
@@ -77,3 +77,16 @@ add_executable(unittest_osd_osdcap
 add_ceph_unittest(unittest_osd_osdcap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osd_osdcap)
 target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
 
+# unittest ExtentCache
+add_executable(unittest_extent_cache
+  test_extent_cache.cc
+)
+add_ceph_unittest(unittest_extent_cache ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_extent_cache)
+target_link_libraries(unittest_extent_cache osd global ${BLKID_LIBRARIES})
+
+# unittest PGTransaction
+add_executable(unittest_pg_transaction
+  test_pg_transaction.cc
+)
+add_ceph_unittest(unittest_pg_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pg_transaction)
+target_link_libraries(unittest_pg_transaction osd global ${BLKID_LIBRARIES})

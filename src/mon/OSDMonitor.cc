@@ -77,6 +77,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap)
 
 OSDMonitor::OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name)
  : PaxosService(mn, p, service_name),
+   cct(cct),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    thrash_map(0), thrash_last_up_osd(-1),
@@ -2119,7 +2120,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   if (osdmap.exists(from) &&
-      osdmap.get_info(from).up_from > m->version) {
+      osdmap.get_info(from).up_from > m->version &&
+      osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(op, m->sb.current_epoch+1);
     return true;
@@ -3686,15 +3688,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
     const choices_set_t ONLY_TIER_CHOICES = {
-      {HIT_SET_TYPE}, {HIT_SET_PERIOD}, {HIT_SET_COUNT}, {HIT_SET_FPP},
-      {TARGET_MAX_OBJECTS}, {TARGET_MAX_BYTES}, {CACHE_TARGET_FULL_RATIO},
-      {CACHE_TARGET_DIRTY_RATIO}, {CACHE_TARGET_DIRTY_HIGH_RATIO},
-      {CACHE_MIN_FLUSH_AGE}, {CACHE_MIN_EVICT_AGE},
-      {MIN_READ_RECENCY_FOR_PROMOTE},
-      {HIT_SET_GRADE_DECAY_RATE}, {HIT_SET_SEARCH_LAST_N}
+      HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
+      TARGET_MAX_OBJECTS, TARGET_MAX_BYTES, CACHE_TARGET_FULL_RATIO,
+      CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
+      CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
+      MIN_READ_RECENCY_FOR_PROMOTE,
+      HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      {ERASURE_CODE_PROFILE}
+      ERASURE_CODE_PROFILE
     };
 
     choices_set_t selected_choices;
@@ -4950,10 +4952,15 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   _get_pending_crush(newcrush);
   ostringstream err;
   CrushTester tester(newcrush, err);
-  r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
+  // use the internal crush tester if crushtool config is empty
+  if (g_conf->crushtool.empty()) {
+    r = tester.test();
+  } else {
+    r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
 				 g_conf->mon_lease,
 				 crush_ruleset);
+  }
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r
 	     << ": " << err.str() << dendl;
@@ -5387,11 +5394,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "expecting value 'true' or '1'";
       return -EINVAL;
     }
-  } else if (var == "debug_fake_ec_pool") {
+  } else if (var == "debug_white_box_testing_ec_overwrites") {
     if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
+      if (cct->check_experimental_feature_enabled(
+	    "debug_white_box_testing_ec_overwrites")) {
+	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
+      } else {
+	ss << "debug_white_box_testing_ec_overwrites is an experimental feature "
+	   << "and must be enabled.  Note, this feature does not yet actually "
+	   << "work.  This flag merely enables some of the preliminary support "
+	   << "for testing purposes.";
+	return -ENOTSUP;
+      }
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags &= ~pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
+      ss << "ec overwrites cannot be disabled once enabled";
+      return -EINVAL;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
@@ -8210,7 +8227,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
   const string& poolstr = osdmap.get_pool_name(pool);
 
   // If the Pool is in use by CephFS, refuse to delete it
-  FSMap const &pending_fsmap = mon->mdsmon()->pending_fsmap;
+  FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
   if (pending_fsmap.pool_in_use(pool)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
@@ -8259,7 +8276,7 @@ bool OSDMonitor::_check_become_tier(
   const std::string &tier_pool_name = osdmap.get_pool_name(tier_pool_id);
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
-  const FSMap &pending_fsmap = mon->mdsmon()->pending_fsmap;
+  const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
   if (pending_fsmap.pool_in_use(tier_pool_id)) {
     *ss << "pool '" << tier_pool_name << "' is in use by CephFS";
     *err = -EBUSY;
@@ -8319,7 +8336,7 @@ bool OSDMonitor::_check_remove_tier(
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
   // Apply CephFS-specific checks
-  const FSMap &pending_fsmap = mon->mdsmon()->pending_fsmap;
+  const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
   if (pending_fsmap.pool_in_use(base_pool_id)) {
     if (base_pool->type != pg_pool_t::TYPE_REPLICATED) {
       // If the underlying pool is erasure coded, we can't permit the

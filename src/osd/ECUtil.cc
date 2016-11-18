@@ -139,16 +139,18 @@ int ECUtil::encode(
 
 void ECUtil::HashInfo::append(uint64_t old_size,
 			      map<int, bufferlist> &to_append) {
-  assert(to_append.size() == cumulative_shard_hashes.size());
   assert(old_size == total_chunk_size);
   uint64_t size_to_append = to_append.begin()->second.length();
-  for (map<int, bufferlist>::iterator i = to_append.begin();
-       i != to_append.end();
-       ++i) {
-    assert(size_to_append == i->second.length());
-    assert((unsigned)i->first < cumulative_shard_hashes.size());
-    uint32_t new_hash = i->second.crc32c(cumulative_shard_hashes[i->first]);
-    cumulative_shard_hashes[i->first] = new_hash;
+  if (has_chunk_hash()) {
+    assert(to_append.size() == cumulative_shard_hashes.size());
+    for (map<int, bufferlist>::iterator i = to_append.begin();
+	 i != to_append.end();
+	 ++i) {
+      assert(size_to_append == i->second.length());
+      assert((unsigned)i->first < cumulative_shard_hashes.size());
+      uint32_t new_hash = i->second.crc32c(cumulative_shard_hashes[i->first]);
+      cumulative_shard_hashes[i->first] = new_hash;
+    }
   }
   total_chunk_size += size_to_append;
 }
@@ -166,6 +168,7 @@ void ECUtil::HashInfo::decode(bufferlist::iterator &bl)
   DECODE_START(1, bl);
   ::decode(total_chunk_size, bl);
   ::decode(cumulative_shard_hashes, bl);
+  projected_total_chunk_size = total_chunk_size;
   DECODE_FINISH(bl);
 }
 

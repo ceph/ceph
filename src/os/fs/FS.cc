@@ -215,7 +215,12 @@ int FS::aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
     timeout_ms / 1000,
     (timeout_ms % 1000) * 1000 * 1000
   };
-  int r = io_getevents(ctx, 1, max, event, &t);
+
+  int r = 0;
+  do {
+    r = io_getevents(ctx, 1, max, event, &t);
+  } while (r == -EINTR);
+  
   if (r <= 0) {
     return r;
   }

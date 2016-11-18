@@ -3728,7 +3728,12 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     }
   }
 
-  assert(pos == end);
+  if (r < 0 && replaying) {
+    assert(r == -ERANGE);
+    derr << "Filestore: short source tolerated because we are replaying" << dendl;
+    r = pos - from;;
+  }
+  assert(replaying || pos == end);
   if (r >= 0 && !skip_sloppycrc && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
     assert(rc >= 0);

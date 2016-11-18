@@ -4732,6 +4732,23 @@ extern "C" int rados_aio_cancel(rados_ioctx_t io, rados_completion_t completion)
   return ctx->aio_cancel((librados::AioCompletionImpl*)completion);
 }
 
+extern "C" int rados_aio_exec(rados_ioctx_t io, const char *o,
+			      rados_completion_t completion,
+			      const char *cls, const char *method,
+			      const char *inbuf, size_t in_len,
+			      char *buf, size_t out_len)
+{
+  tracepoint(librados, rados_aio_exec_enter, io, o, completion);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist inbl;
+  inbl.append(inbuf, in_len);
+  int retval = ctx->aio_exec(oid, (librados::AioCompletionImpl*)completion,
+		       cls, method, inbl, buf, out_len);
+  tracepoint(librados, rados_aio_exec_exit, retval);
+  return retval;
+}
+
 struct C_WatchCB : public librados::WatchCtx {
   rados_watchcb_t wcb;
   void *arg;
@@ -5228,7 +5245,6 @@ extern "C" void rados_write_op_rmxattr(rados_write_op_t write_op,
                                        const char *name)
 {
   tracepoint(librados, rados_write_op_rmxattr_enter, write_op, name);
-  bufferlist bl;
   ((::ObjectOperation *)write_op)->rmxattr(name);
   tracepoint(librados, rados_write_op_rmxattr_exit);
 }

@@ -120,7 +120,9 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
 template <typename I>
 void OpenLocalImageRequest<I>::send_lock_image() {
   // deduce the class type for the journal to support unit tests
-  typedef typename std::decay<decltype(*I::journal)>::type Journal;
+  using Journal = typename std::decay<
+    typename std::remove_pointer<decltype(std::declval<I>().journal)>
+    ::type>::type;
 
   dout(20) << dendl;
 

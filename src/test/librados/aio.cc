@@ -1982,6 +1982,73 @@ TEST(LibRadosAio, StatRemovePP) {
   delete my_completion4;
 }
 
+TEST(LibRadosAio, ExecuteClass) {
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, buf, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  rados_completion_t my_completion2;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+  char out[128];
+  ASSERT_EQ(0, rados_aio_exec(test_data.m_ioctx, "foo", my_completion2,
+			      "hello", "say_hello", NULL, 0, out, sizeof(out)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(13, rados_aio_get_return_value(my_completion2));
+  ASSERT_EQ(0, strncmp("Hello, world!", out, 13));
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
+}
+
+TEST(LibRadosAio, ExecuteClassPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion2, my_completion_null);
+  bufferlist in, out;
+  ASSERT_EQ(0, test_data.m_ioctx.aio_exec("foo", my_completion2,
+					  "hello", "say_hello", in, &out));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
+  delete my_completion;
+  delete my_completion2;
+}
+
 using std::string;
 using std::map;
 using std::set;
@@ -3697,6 +3764,73 @@ TEST(LibRadosAioEC, StatRemovePP) {
   delete my_completion2;
   delete my_completion3;
   delete my_completion4;
+}
+
+TEST(LibRadosAioEC, ExecuteClass) {
+  AioTestDataEC test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_completeEC, set_completion_safeEC, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, buf, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  rados_completion_t my_completion2;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_completeEC, set_completion_safeEC, &my_completion2));
+  char out[128];
+  ASSERT_EQ(0, rados_aio_exec(test_data.m_ioctx, "foo", my_completion2,
+			      "hello", "say_hello", NULL, 0, out, sizeof(out)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(13, rados_aio_get_return_value(my_completion2));
+  ASSERT_EQ(0, strncmp("Hello, world!", out, 13));
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
+}
+
+TEST(LibRadosAioEC, ExecuteClassPP) {
+  AioTestDataECPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_completeEC, set_completion_safeEC);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_completeEC, set_completion_safeEC);
+  ASSERT_NE(my_completion2, my_completion_null);
+  bufferlist in, out;
+  ASSERT_EQ(0, test_data.m_ioctx.aio_exec("foo", my_completion2,
+					  "hello", "say_hello", in, &out));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
+  delete my_completion;
+  delete my_completion2;
 }
 
 TEST(LibRadosAioEC, OmapPP) {

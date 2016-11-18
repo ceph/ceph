@@ -264,7 +264,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   CommandHook m_command_hook;
 
   // cluster descriptors
-  MDSMap *mdsmap;
+  std::unique_ptr<MDSMap> mdsmap;
 
   SafeTimer timer;
 
@@ -320,8 +320,8 @@ protected:
 
   // FSMap, for when using mds_command
   list<Cond*> waiting_for_fsmap;
-  FSMap *fsmap;
-  FSMapUser *fsmap_user;
+  std::unique_ptr<FSMap> fsmap;
+  std::unique_ptr<FSMapUser> fsmap_user;
 
   // MDS command state
   CommandTable<MDSCommandOp> command_table;

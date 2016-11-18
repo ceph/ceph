@@ -32,6 +32,17 @@
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
 
+class Beacon::C_MDS_BeaconSender : public Context {
+  Beacon *beacon;
+public:
+  explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
+  void finish(int r) {
+    assert(beacon->lock.is_locked_by_me());
+    beacon->sender = NULL;
+    beacon->_send();
+  }
+};
+
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
   name(name_), standby_for_rank(MDS_RANK_NONE),

@@ -1454,6 +1454,19 @@ void OSDService::queue_for_peering(PG *pg)
   peering_wq.queue(pg);
 }
 
+void OSDService::queue_for_snap_trim(PG *pg) {
+  dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
+  op_wq.queue(
+    make_pair(
+      pg,
+      PGQueueable(
+	PGSnapTrim(pg->get_osdmap()->get_epoch()),
+	cct->_conf->osd_snap_trim_cost,
+	cct->_conf->osd_snap_trim_priority,
+	ceph_clock_now(cct),
+	entity_inst_t())));
+}
+
 
 // ====================================================================
 // OSD
@@ -7744,13 +7757,17 @@ PG::RecoveryCtx OSD::create_context()
 struct C_OpenPGs : public Context {
   set<PGRef> pgs;
   ObjectStore *store;
-  C_OpenPGs(set<PGRef>& p, ObjectStore *s) : store(s) {
+  OSD *osd;
+  C_OpenPGs(set<PGRef>& p, ObjectStore *s, OSD* o) : store(s), osd(o) {
     pgs.swap(p);
   }
   void finish(int r) {
+    RWLock::RLocker l(osd->pg_map_lock);
     for (auto p : pgs) {
-      p->ch = store->open_collection(p->coll);
-      assert(p->ch);
+      if (osd->pg_map.count(p->info.pgid)) {
+        p->ch = store->open_collection(p->coll);
+        assert(p->ch);
+      }
     }
   }
 };
@@ -7760,7 +7777,7 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
 {
   if (!ctx.transaction->empty()) {
     if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store));
+      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
     }
     int tr = store->queue_transaction(
       pg->osr.get(),
@@ -7796,7 +7813,7 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     assert(ctx.created_pgs.empty());
   } else {
     if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store));
+      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
     }
     int tr = store->queue_transaction(
       pg->osr.get(),
@@ -8059,9 +8076,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
   } else {
     // primary is instructing us to trim
     ObjectStore::Transaction t;
-    PG::PGLogEntryHandler handler;
-    pg->pg_log.trim(&handler, m->trim_to, pg->info);
-    handler.apply(pg, &t);
+    pg->pg_log.trim(m->trim_to, pg->info);
     pg->dirty_info = true;
     pg->write_if_dirty(t);
     int tr = store->queue_transaction(pg->osr.get(), std::move(t), NULL);

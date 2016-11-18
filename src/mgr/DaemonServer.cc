@@ -48,8 +48,10 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
   msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 			   entity_name_t::MGR(gid), "server", getpid(), 0);
   int r = msgr->bind(g_conf->public_addr);
-  if (r < 0)
+  if (r < 0) {
+    derr << "unable to bind mgr to " << g_conf->public_addr << dendl;
     return r;
+  }
 
   msgr->set_myname(entity_name_t::MGR(gid));
   msgr->set_addr_unknowns(client_addr);

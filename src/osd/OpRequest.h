@@ -99,7 +99,7 @@ struct OpRequest : public TrackedOp {
     return classes_;
   }
 
-  void _dump(utime_t now, Formatter *f) const;
+  void _dump(Formatter *f) const;
 
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);

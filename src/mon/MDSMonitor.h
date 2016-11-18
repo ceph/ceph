@@ -38,15 +38,7 @@ class FileSystemCommandHandler;
 
 class MDSMonitor : public PaxosService {
  public:
-  // mds maps
-  FSMap fsmap;           // current
-  FSMap pending_fsmap;  // current + pending updates
-
-  // my helpers
-  void print_map(FSMap &m, int dbl=7);
-  void create_new_fs(FSMap &m, const std::string &name, int metadata_pool, int data_pool);
-
-  version_t get_trim_to();
+  MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 
   // service methods
   void create_initial();
@@ -56,16 +48,34 @@ class MDSMonitor : public PaxosService {
   void encode_pending(MonitorDBStore::TransactionRef t);
   // we don't require full versions; don't encode any.
   virtual void encode_full(MonitorDBStore::TransactionRef t) { }
+  version_t get_trim_to();
 
-  void update_logger();
-
-  void _updated(MonOpRequestRef op);
- 
   bool preprocess_query(MonOpRequestRef op);  // true if processed.
   bool prepare_update(MonOpRequestRef op);
   bool should_propose(double& delay);
 
   void on_active();
+  void on_restart();
+
+  void check_subs();
+  void check_sub(Subscription *sub);
+
+  const FSMap &get_pending() const { return pending_fsmap; }
+  const FSMap &get_fsmap() const { return fsmap; }
+  void dump_info(Formatter *f);
+  int print_nodes(Formatter *f);
+
+ protected:
+  // mds maps
+  FSMap fsmap;           // current
+  FSMap pending_fsmap;  // current + pending updates
+
+  // my helpers
+  void print_map(FSMap &m, int dbl=7);
+  void create_new_fs(FSMap &m, const std::string &name, int metadata_pool, int data_pool);
+  void update_logger();
+
+  void _updated(MonOpRequestRef op);
 
   void _note_beacon(class MMDSBeacon *m);
   bool preprocess_beacon(MonOpRequestRef op);
@@ -123,23 +133,14 @@ class MDSMonitor : public PaxosService {
 
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
-public:
-  MDSMonitor(Monitor *mn, Paxos *p, string service_name);
-
   bool maybe_promote_standby(std::shared_ptr<Filesystem> fs);
   bool maybe_expand_cluster(std::shared_ptr<Filesystem> fs);
   void maybe_replace_gid(mds_gid_t gid, const beacon_info_t &beacon,
       bool *mds_propose, bool *osd_propose);
   void tick();     // check state, take actions
 
-  void dump_info(Formatter *f);
   int dump_metadata(const string& who, Formatter *f, ostream& err);
-  int print_nodes(Formatter *f);
 
-  void check_subs();
-  void check_sub(Subscription *sub);
-
-private:
   MDSMap *generate_mds_map(fs_cluster_id_t fscid);
   void update_metadata(mds_gid_t gid, const Metadata& metadata);
   void remove_from_metadata(MonitorDBStore::TransactionRef t);
@@ -153,6 +154,11 @@ private:
 
   int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
   mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
+
+  // When did the mon last call into our tick() method?  Used for detecting
+  // when the mon was not updating us for some period (e.g. during slow
+  // election) to reset last_beacon timeouts
+  utime_t last_tick;
 };
 
 #endif

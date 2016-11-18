@@ -401,6 +401,11 @@ EOF
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
     diff -y $dir/checkcsjson $dir/csjson || return 1
 
+    if which jsonschema > /dev/null;
+    then
+      jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-snap.json || return 1
+    fi
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
