@@ -655,6 +655,8 @@ public:
   void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
 
+  virtual int apply_layout_settings(const coll_t &cid);
+
 private:
   void _inject_failure();
 

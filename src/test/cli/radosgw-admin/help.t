@@ -69,7 +69,7 @@
     replicalog get             get replica metadata log entry
     replicalog update          update replica metadata log entry
     replicalog delete          delete replica metadata log entry
-    orphans find               init and run search for leaked rados objects
+    orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
   options:
      --uid=<id>                user id
@@ -142,6 +142,9 @@
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
+     --job-id                  set the job id (for orphans find)
+     --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
