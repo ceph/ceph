@@ -1850,7 +1850,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
 	denc_varint_lowz(p->length, app);
       }
-      pos = p->logical_offset + p->length;
+      pos = p->logical_end();
       if (include_blob) {
 	p->blob->encode(app, false);
       }
@@ -2076,7 +2076,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
     --fp;
-    if (fp->logical_offset + fp->length <= offset) {
+    if (fp->logical_end() <= offset) {
       ++fp;
     }
   }
@@ -2123,7 +2123,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       break;  // stop after end
     }
     while (n != extent_map.end() &&
-	   p->logical_offset + p->length == n->logical_offset &&
+	   p->logical_end() == n->logical_offset &&
 	   p->blob == n->blob &&
 	   p->blob_offset + p->length == n->blob_offset &&
 	   n->logical_offset < shard_end) {
@@ -2162,7 +2162,7 @@ void BlueStore::ExtentMap::punch_hole(
       break;
     }
     if (p->logical_offset < offset) {
-      if (p->logical_offset + p->length > end) {
+      if (p->logical_end() > end) {
 	// split and deref middle
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
@@ -2175,7 +2175,7 @@ void BlueStore::ExtentMap::punch_hole(
 	break;
       } else {
 	// deref tail
-	assert(p->logical_offset + p->length > offset); // else seek_lextent bug
+	assert(p->logical_end() > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
 	old_extents->insert(*new Extent(offset, p->blob_offset + keep,
 					p->length - keep,  p->blob));
@@ -2192,7 +2192,7 @@ void BlueStore::ExtentMap::punch_hole(
       continue;
     }
     // deref head
-    uint64_t keep = (p->logical_offset + p->length) - end;
+    uint64_t keep = p->logical_end() - end;
     old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				    p->length - keep, p->blob));
     add(end, p->blob_offset + p->length - keep, keep, p->blob);
