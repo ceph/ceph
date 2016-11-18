@@ -49,7 +49,7 @@ using namespace std;
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-void usage()
+static void usage()
 {
   cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
@@ -86,7 +86,11 @@ static void handle_mds_signal(int signum)
     mds->handle_signal(signum);
 }
 
-int main(int argc, const char **argv) 
+#ifdef BUILDING_FOR_EMBEDDED
+extern "C" int cephd_mds(int argc, const char **argv)
+#else
+int main(int argc, const char **argv)
+#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
