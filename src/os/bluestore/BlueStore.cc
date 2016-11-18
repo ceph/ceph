@@ -2147,6 +2147,9 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       }
     }
   }
+  if (removed && onode) {
+    onode->c->store->logger->inc(l_bluestore_extent_compress, removed);
+  }
   return removed;
 }
 
@@ -2713,6 +2716,8 @@ void BlueStore::_init_logger()
 	    "Onode extent map reshard events");
   b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
             "Sum for blob splitting due to resharding");
+  b.add_u64(l_bluestore_extent_compress, "bluestore_extent_compress",
+            "Sum for extents that have been removed due to compression");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
