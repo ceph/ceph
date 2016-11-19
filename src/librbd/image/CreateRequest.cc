@@ -317,7 +317,7 @@ Context* CreateRequest<I>::handle_validate_pool(int *result) {
 
   r = m_ioctx.selfmanaged_snap_remove(snap_id);
   if (r < 0) {
-    // we've already switced to self-managed snapshots -- no need to
+    // we've already switched to self-managed snapshots -- no need to
     // error out in case of failure here.
     ldout(m_cct, 10) << "failed to release self-managed snapshot " << snap_id
                      << ": " << cpp_strerror(r) << dendl;
@@ -749,7 +749,7 @@ void CreateRequest<I>::send_watcher_notification() {
       handle_watcher_notify(r);
     });
 
-    m_op_work_queue->queue(ctx, 0);
+  m_op_work_queue->queue(ctx, 0);
 }
 
 template<typename I>
