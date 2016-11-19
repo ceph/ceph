@@ -117,7 +117,7 @@ namespace ECTransaction {
 	    sinfo.logical_to_next_stripe_offset(
 	      extent.get_off() + extent.get_len());
 	  if (tail_start != tail_finish &&
-	      tail_start != head_start &&
+	      (head_start == head_finish || tail_start != head_start) &&
 	      tail_start < projected_size) {
 	    assert(tail_finish <= projected_size);
 	    assert(tail_finish - tail_start == sinfo.get_stripe_width());
