@@ -1280,11 +1280,12 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   return out << ")";
 }
 
-BlueStore::SharedBlob::SharedBlob(uint64_t i, const string& k, Cache *c)
+BlueStore::SharedBlob::SharedBlob(uint64_t i, Cache *c)
   : sbid(i),
-    key(k),
     bc(c)
 {
+  assert(sbid > 0);
+  get_shared_blob_key(sbid, &key);
 }
 
 BlueStore::SharedBlob::~SharedBlob()
@@ -2294,7 +2295,7 @@ void BlueStore::Collection::open_shared_blob(BlobRef b)
   assert(!b->shared_blob);
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
-    b->shared_blob = new SharedBlob(0, string(), cache);
+    b->shared_blob = new SharedBlob(cache);
     return;
   }
 
@@ -2303,8 +2304,7 @@ void BlueStore::Collection::open_shared_blob(BlobRef b)
     dout(10) << __func__ << " sbid 0x" << std::hex << blob.sbid << std::dec
 	     << " had " << *b->shared_blob << dendl;
   } else {
-    b->shared_blob = new SharedBlob(blob.sbid, string(), cache);
-    get_shared_blob_key(blob.sbid, &b->shared_blob->key);
+    b->shared_blob = new SharedBlob(blob.sbid, cache);
     shared_blob_set.add(b->shared_blob.get());
     dout(10) << __func__ << " sbid 0x" << std::hex << blob.sbid << std::dec
 	     << " opened " << *b->shared_blob << dendl;

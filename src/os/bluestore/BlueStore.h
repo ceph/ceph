@@ -338,7 +338,8 @@ public:
 
     BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(uint64_t i, const string& k, Cache *c);
+    SharedBlob(Cache *c) : bc(c) {}
+    SharedBlob(uint64_t i, Cache *c);
     ~SharedBlob();
 
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
@@ -1117,7 +1118,7 @@ public:
 
     BlobRef new_blob() {
       BlobRef b = new Blob;
-      b->shared_blob = new SharedBlob(0, string(), cache);
+      b->shared_blob = new SharedBlob(cache);
       return b;
     }
 
