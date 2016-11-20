@@ -309,20 +309,26 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
 }
 
 void set_req_state_err(struct rgw_err& err,     /* out */
-                       int err_no,              /* in  */
+                       rgw_ret err_no,          /* in  */
                        const int prot_flags)    /* in  */
 {
   const struct rgw_http_errors *r;
+  const auto custom_msg = err_no.get_err_msg();
 
   if (err_no < 0)
     err_no = -err_no;
   err.ret = -err_no;
+
   if (prot_flags & RGW_REST_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS,
 		   ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
       err.http_ret = r->http_ret;
-      err.s3_code = r->s3_code;
+      if (custom_msg) {
+        err.s3_code = *custom_msg;
+      } else {
+        err.s3_code = r->s3_code;
+      }
       return;
     }
   }
@@ -331,6 +337,9 @@ void set_req_state_err(struct rgw_err& err,     /* out */
   if (r) {
     err.http_ret = r->http_ret;
     err.s3_code = r->s3_code;
+    if (custom_msg) {
+      err.message = *custom_msg;
+    }
     return;
   }
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no
@@ -340,7 +349,7 @@ void set_req_state_err(struct rgw_err& err,     /* out */
   err.s3_code = "UnknownError";
 }
 
-void set_req_state_err(struct req_state * const s, const int err_no)
+void set_req_state_err(struct req_state * const s, const rgw_ret err_no)
 {
   if (s) {
     set_req_state_err(s->err, err_no, s->prot_flags);
@@ -734,8 +743,10 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, RGWOp *op, int err_no,
-		 RGWHandler* handler)
+void abort_early(struct req_state* const s,
+                 RGWOp* const op,
+                 rgw_ret err_no,
+                 RGWHandler* const handler)
 {
   string error_content("");
   if (!s->formatter) {

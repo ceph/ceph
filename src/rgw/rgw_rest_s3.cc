@@ -156,8 +156,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     set_req_state_err(s, 0);
     dump_errno(s, custom_http_ret);
   } else {
-    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
-          	  : op_ret);
+    if (partial_content && !op_ret) {
+      set_req_state_err(s, STATUS_PARTIAL_CONTENT);
+    } else {
+      set_req_state_err(s, op_ret);
+    }
     dump_errno(s);
   }
 
