@@ -229,6 +229,7 @@ TEST(mempool, set)
   set_obj.insert(obj(1, 2));
 }
 
+#if !defined(__FreeBSD__)
 TEST(mempool, map)
 {
   {
@@ -243,6 +244,7 @@ TEST(mempool, map)
     v[3] = obj(2, 3);
   }
 }
+#endif
 
 TEST(mempool, list)
 {
@@ -258,12 +260,14 @@ TEST(mempool, list)
   }
 }
 
+#if !defined(__FreeBSD__)
 TEST(mempool, unordered_map)
 {
   mempool::unittest_2::unordered_map<int,obj> h;
   h[1] = obj();
   h[2] = obj(1);
 }
+#endif
 
 int main(int argc, char **argv)
 {
