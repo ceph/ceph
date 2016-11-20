@@ -134,6 +134,7 @@ int rgw_read_user_buckets(RGWRados * store,
 
     for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
       RGWBucketEnt e(*q);
+      e.bucket.tenant = user_id.tenant;
       buckets.add(e);
       total++;
     }
