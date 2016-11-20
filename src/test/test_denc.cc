@@ -404,6 +404,7 @@ TEST(denc, pair)
 
 TEST(denc, map)
 {
+#if !defined(__FreeBSD__)
   {
     cout << "map<string,foo_t>" << std::endl;
     std::map<string,foo_t> s;
@@ -412,6 +413,7 @@ TEST(denc, map)
     s["baz"] = foo_t();
     test_denc(s);
   }
+#endif
   {
     cout << "map<string,bar_t>" << std::endl;
     std::map<string,bar_t> s;
