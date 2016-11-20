@@ -1639,7 +1639,7 @@ void RGWGetObj::execute()
   if (torrent.get_flag())
   {
     torrent.init(s, store);
-    torrent.get_torrent_file(op_ret, read_op, total_len, bl, obj);
+    op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
     if (op_ret < 0)
     {
       ldout(s->cct, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret

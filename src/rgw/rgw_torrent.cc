@@ -37,8 +37,10 @@ void seed::init(struct req_state *p_req, RGWRados *p_store)
   store = p_store;
 }
 
-void seed::get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, uint64_t &total_len, 
-  bufferlist &bl_data, rgw_obj &obj)
+int seed::get_torrent_file(RGWRados::Object::Read &read_op,
+                           uint64_t &total_len,
+                           ceph::bufferlist &bl_data,
+                           rgw_obj &obj)
 {
   /* add other field if config is set */
   dencode.bencode_dict(bl);
@@ -63,11 +65,12 @@ void seed::get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, uint64
   ldout(s->cct, 0) << "NOTICE: head obj oid= " << oid << dendl;
 
   obj_key.insert(RGW_OBJ_TORRENT);
-  op_ret = read_op.state.io_ctx.omap_get_vals_by_keys(oid, obj_key, &m);
+  const int op_ret = read_op.state.io_ctx.omap_get_vals_by_keys(oid, obj_key, &m);
   if (op_ret < 0)
   {
-    ldout(s->cct, 0) << "ERROR: failed to omap_get_vals_by_keys op_ret = " << op_ret << dendl;
-    return;
+    ldout(s->cct, 0) << "ERROR: failed to omap_get_vals_by_keys op_ret = "
+                     << op_ret << dendl;
+    return op_ret;
   }
 
   map<string, bufferlist>::iterator iter;
@@ -81,7 +84,7 @@ void seed::get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, uint64
 
   bl_data = bl;
   total_len = bl.length();
-  return;
+  return 0;
 }
 
 bool seed::get_flag()

@@ -115,8 +115,10 @@ public:
 
   int get_params();
   void init(struct req_state *p_req, RGWRados *p_store);
-  void get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, 
-    uint64_t &total_len, bufferlist &bl_data, rgw_obj &obj);
+  int get_torrent_file(RGWRados::Object::Read &read_op,
+                       uint64_t &total_len,
+                       ceph::bufferlist &bl_data,
+                       rgw_obj &obj);
   
   off_t get_data_len();
   bool get_flag();
