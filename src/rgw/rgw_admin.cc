@@ -1292,10 +1292,9 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 
 static bool bucket_object_check_filter(const string& name)
 {
-  string ns;
-  string obj;
-  string instance;
-  return rgw_obj::translate_oid_to_obj_in_ns(name, obj, instance, ns);
+  rgw_obj_key k;
+  string ns; /* empty namespace */
+  return rgw_obj_key::oid_to_key_in_ns(name, &k, ns);
 }
 
 int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
@@ -5194,7 +5193,7 @@ next:
     }
     rgw_obj obj(bucket, object);
     if (!object_version.empty()) {
-      obj.set_instance(object_version);
+      obj.key.set_instance(object_version);
     }
 
     rgw_cls_bi_entry entry;
@@ -5367,7 +5366,7 @@ next:
     }
 
     rgw_obj obj(bucket, object);
-    obj.set_instance(object_version);
+    obj.key.set_instance(object_version);
     bool need_rewrite = true;
     if (min_rewrite_stripe_size > 0) {
       ret = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
@@ -5674,7 +5673,7 @@ next:
       return -ret;
     }
     rgw_obj obj(bucket, object);
-    obj.set_instance(object_version);
+    obj.key.set_instance(object_version);
 
     uint64_t obj_size;
     map<string, bufferlist> attrs;

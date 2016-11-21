@@ -4945,7 +4945,7 @@ void RGWCompleteMultipart::execute()
       }
 
       rgw_obj_index_key remove_key;
-      src_obj.get_index_key(&remove_key);
+      src_obj.key.get_index_key(&remove_key);
 
       remove_objs.push_back(remove_key);
 
@@ -5078,7 +5078,7 @@ void RGWAbortMultipart::execute()
           rgw_raw_obj_to_obj(s->bucket, raw_head, &head);
 
           rgw_obj_index_key key;
-          head.get_index_key(&key);
+          head.key.get_index_key(&key);
           remove_objs.push_back(key);
         }
       }
