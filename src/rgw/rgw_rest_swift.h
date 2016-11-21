@@ -201,6 +201,15 @@ public:
   void send_response() override;
 };
 
+class RGWBulkUploadOp_ObjStore_SWIFT : public RGWBulkUploadOp_ObjStore {
+public:
+  RGWBulkUploadOp_ObjStore_SWIFT() = default;
+  ~RGWBulkUploadOp_ObjStore_SWIFT() = default;
+
+  std::unique_ptr<StreamGetter> create_stream() override;
+  void send_response() override;
+};
+
 class RGWInfo_ObjStore_SWIFT : public RGWInfo_ObjStore {
 protected:
   struct info
@@ -286,6 +295,7 @@ class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   RGWOp *op_get() override;
   RGWOp *op_head() override;
+  RGWOp *op_put() override;
   RGWOp *op_post() override;
   RGWOp *op_delete() override;
 public:
