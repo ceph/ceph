@@ -391,6 +391,8 @@ err:
     return total_size;
   }
 
+  int get_statfs(struct store_statfs_t *buf);
+
 
 protected:
   WholeSpaceIterator _get_iterator();
