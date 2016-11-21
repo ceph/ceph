@@ -22,6 +22,8 @@
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
 
+#include "common/mClockCommon.h"
+#include "messages/MOSDOp.h"
 
 class OSD;
 
@@ -67,6 +69,7 @@ class PGQueueable {
   utime_t start_time;
   entity_inst_t owner;
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
+  dmc::ReqParams qos_params;
 
   struct RunVis : public boost::static_visitor<> {
     OSD *osd;
@@ -110,7 +113,12 @@ public:
       start_time(op->get_req()->get_recv_stamp()),
       owner(op->get_req()->get_source_inst()),
       map_epoch(e)
-    {}
+  {
+    if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+      MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+      qos_params = m->get_qos_params();
+    }
+  }
   PGQueueable(
     const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
     const entity_inst_t &owner, epoch_t e)
@@ -145,4 +153,5 @@ public:
   entity_inst_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
   const QVariant& get_variant() const { return qvariant; }
+  dmc::ReqParams get_qos_params() const { return qos_params; }
 }; // struct PGQueueable

@@ -34,7 +34,7 @@ namespace ceph {
 
   namespace dmc = crimson::dmclock;
 
-  template <typename T, typename K>
+  template <typename T, typename K, typename ReqPm = dmc::ReqParams, typename RespPm = dmc::PhaseType>
   class mClockQueue : public OpQueue <T, K> {
 
     using priority_t = unsigned;
@@ -299,6 +299,12 @@ namespace ceph {
     void enqueue(K cl, unsigned priority, unsigned cost, T item) override final {
       // priority is ignored
       queue.add_request(std::move(item), cl, cost);
+    }
+
+    void enqueue(K cl, unsigned priority, unsigned cost, T item,
+		 const ReqPm& req_params) {
+      // priority is ignored
+      queue.add_request(std::move(item), cl, req_params, cost);
     }
 
     void enqueue_front(K cl,
