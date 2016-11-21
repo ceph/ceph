@@ -3,6 +3,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
+#include "test/rbd_mirror/test_fixture.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "include/rbd_types.h"
@@ -35,7 +36,7 @@ using std::string;
 void register_test_pool_watcher() {
 }
 
-class TestPoolWatcher : public ::testing::Test {
+class TestPoolWatcher : public ::rbd::mirror::TestFixture {
 public:
 
 TestPoolWatcher() : m_lock("TestPoolWatcherLock"),

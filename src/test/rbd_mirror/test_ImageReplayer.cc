@@ -17,6 +17,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
+#include "test/rbd_mirror/test_fixture.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -48,7 +49,7 @@ void register_test_rbd_mirror() {
 #define TEST_IO_SIZE 512
 #define TEST_IO_COUNT 11
 
-class TestImageReplayer : public ::testing::Test {
+class TestImageReplayer : public ::rbd::mirror::TestFixture {
 public:
   struct C_WatchCtx : public librados::WatchCtx2 {
     TestImageReplayer *test;

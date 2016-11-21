@@ -41,7 +41,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenCorrupt) {
   std::string oid = librbd::ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP);
   bufferlist bl;
   bl.append("corrupt");
-  ASSERT_EQ(0, ictx->data_ctx.write_full(oid, bl));
+  ASSERT_EQ(0, ictx->md_ctx.write_full(oid, bl));
 
   ASSERT_EQ(0, when_open_object_map(ictx));
   ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
@@ -65,7 +65,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenTooSmall) {
   librbd::cls_client::object_map_resize(&op, 0, OBJECT_NONEXISTENT);
 
   std::string oid = librbd::ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP);
-  ASSERT_EQ(0, ictx->data_ctx.operate(oid, &op));
+  ASSERT_EQ(0, ictx->md_ctx.operate(oid, &op));
 
   ASSERT_EQ(0, when_open_object_map(ictx));
   ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
@@ -88,7 +88,7 @@ TEST_F(TestObjectMap, InvalidateFlagOnDisk) {
   std::string oid = librbd::ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP);
   bufferlist bl;
   bl.append("corrupt");
-  ASSERT_EQ(0, ictx->data_ctx.write_full(oid, bl));
+  ASSERT_EQ(0, ictx->md_ctx.write_full(oid, bl));
 
   ASSERT_EQ(0, when_open_object_map(ictx));
   ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
@@ -106,16 +106,16 @@ TEST_F(TestObjectMap, InvalidateFlagInMemoryOnly) {
 
   std::string oid = librbd::ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP);
   bufferlist valid_bl;
-  ASSERT_LT(0, ictx->data_ctx.read(oid, valid_bl, 0, 0));
+  ASSERT_LT(0, ictx->md_ctx.read(oid, valid_bl, 0, 0));
 
   bufferlist corrupt_bl;
   corrupt_bl.append("corrupt");
-  ASSERT_EQ(0, ictx->data_ctx.write_full(oid, corrupt_bl));
+  ASSERT_EQ(0, ictx->md_ctx.write_full(oid, corrupt_bl));
 
   ASSERT_EQ(0, when_open_object_map(ictx));
   ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
 
-  ASSERT_EQ(0, ictx->data_ctx.write_full(oid, valid_bl));
+  ASSERT_EQ(0, ictx->md_ctx.write_full(oid, valid_bl));
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_FALSE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
 }
