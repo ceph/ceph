@@ -1898,18 +1898,19 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5"
   };
-  map<string, string>::iterator iter;
-  for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
-    const string &name(iter->first);
-    string &xattr(iter->second);
+
+  for (auto& kv : info.x_meta_map) {
+    const std::string& name = kv.first;
+    std::string& xattr = kv.second;
+
     if (blacklisted_headers.count(name) == 1) {
       lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
       continue;
-    }
-    if (allow_empty_attrs || !xattr.empty()) {
+    } else if (allow_empty_attrs || !xattr.empty()) {
       lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);
-      string attr_name(RGW_ATTR_PREFIX);
+
+      std::string attr_name(RGW_ATTR_PREFIX);
       attr_name.append(name);
 
       /* Check early whether we aren't going behind the limit on attribute
@@ -1921,10 +1922,11 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
         return -ENAMETOOLONG;
       }
 
-      map<string, bufferlist>::value_type v(attr_name, bufferlist());
-      std::pair < map<string, bufferlist>::iterator, bool >
-	rval(attrs.insert(v));
-      bufferlist& bl(rval.first->second);
+      auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());
+      /* At the moment the value of the freshly created attribute key-value
+       * pair is an empty bufferlist. */
+
+      ceph::bufferlist& bl = rval.first->second;
       bl.append(xattr.c_str(), xattr.size() + 1);
     }
   }
