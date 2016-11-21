@@ -645,7 +645,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
 
   bucket = _b;
   manifest->set_tail_bucket(_b);
-  manifest->set_head(_h);
+  manifest->set_head(_h, 0);
   last_ofs = 0;
 
   if (manifest->get_prefix().empty()) {
@@ -4243,8 +4243,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       goto done_ret;
     }
 
-    pmanifest->set_head(dest_obj);
-    pmanifest->set_head_size(first_chunk.length());
+    pmanifest->set_head(dest_obj, first_chunk.length());
+  } else {
+    pmanifest->set_head(dest_obj, 0);
   }
 
   write_op.meta.data = &first_chunk;
@@ -5048,6 +5049,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
     try {
       ::decode(s->manifest, miter);
       s->has_manifest = true;
+      s->manifest.set_head(obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
+                                             broken due to old bugs */
       s->size = s->manifest.get_obj_size();
     } catch (buffer::error& err) {
       ldout(cct, 20) << "ERROR: couldn't decode manifest" << dendl;
