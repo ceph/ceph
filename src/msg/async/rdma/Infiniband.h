@@ -397,7 +397,6 @@ class Infiniband {
   void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
 
  public:
-  NetHandler net;
   explicit Infiniband(CephContext *c, const std::string &device_name, uint8_t p);
 
   /**

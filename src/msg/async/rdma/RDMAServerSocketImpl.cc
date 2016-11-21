@@ -24,7 +24,7 @@
 int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
 {
   int rc = 0;
-  server_setup_socket = infiniband->net.create_socket(sa.get_family(), true);
+  server_setup_socket = net.create_socket(sa.get_family(), true);
   if (server_setup_socket < 0) {
     rc = -errno;
     lderr(cct) << __func__ << " failed to create server socket: "
@@ -80,19 +80,19 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
   }
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
 
-  infiniband->net.set_close_on_exec(sd);
-  int r = infiniband->net.set_nonblock(sd);
+  net.set_close_on_exec(sd);
+  int r = net.set_nonblock(sd);
   if (r < 0) {
     ::close(sd);
     return -errno;
   }
 
-  r = infiniband->net.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
+  r = net.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(sd);
     return -errno;
   }
-  infiniband->net.set_priority(sd, opt.priority);
+  net.set_priority(sd, opt.priority);
 
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();

@@ -108,21 +108,22 @@ int RDMAConnectedSocketImpl::activate()
 int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const SocketOptions &opts) {
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
-  tcp_fd = infiniband->net.connect(peer_addr);
+  NetHandler net(cct);
+  tcp_fd = net.connect(peer_addr);
 
   if (tcp_fd < 0) {
     return -errno;
   }
-  infiniband->net.set_close_on_exec(tcp_fd);
+  net.set_close_on_exec(tcp_fd);
 
-  int r = infiniband->net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
+  int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
   if (r < 0) {
     ::close(tcp_fd);
     return -errno;
   }
 
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
-  infiniband->net.set_priority(tcp_fd, opts.priority);
+  net.set_priority(tcp_fd, opts.priority);
   my_msg.peer_qpn = 0;
   r = infiniband->send_msg(cct, tcp_fd, my_msg);
   if (r < 0)
