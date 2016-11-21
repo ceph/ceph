@@ -81,13 +81,17 @@ int FileJournal::_open(bool forwrite, bool create)
 
   if (S_ISBLK(st.st_mode)) {
     ret = _open_block_device();
-  } else {
+  } else if (S_ISREG(st.st_mode)) {
     if (aio && !force_aio) {
       derr << "FileJournal::_open: disabling aio for non-block journal.  Use "
 	   << "journal_force_aio to force use of aio anyway" << dendl;
       aio = false;
     }
     ret = _open_file(st.st_size, st.st_blksize, create);
+  } else {
+    derr << "FileJournal::_open: wrong journal file type: " << st.st_mode
+	 << dendl;
+    ret = -EINVAL;
   }
 
   if (ret)
@@ -119,6 +123,7 @@ int FileJournal::_open(bool forwrite, bool create)
 
  out_fd:
   VOID_TEMP_FAILURE_RETRY(::close(fd));
+  fd = -1;
   return ret;
 }
 
