@@ -724,7 +724,6 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 
     off_t len = bl.length();
     cur_ofs += len;
-    ofs += len;
     ret = 0;
     perfcounter->tinc(l_rgw_get_lat,
                       (ceph_clock_now(s->cct) - start_time));
@@ -739,11 +738,12 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
                                        rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
                                        uint64_t *ptotal_len,
+                                       uint64_t *pobj_size,
                                        int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
                                                  off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
 {
   uint64_t obj_ofs = 0, len_count = 0;
-  bool found_start = false, found_end = false;
+  bool found_start = false, found_end = false, handled_end = false;
   string delim;
   bool is_truncated;
   vector<RGWObjEnt> objs;
@@ -764,7 +764,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 
     vector<RGWObjEnt>::iterator viter;
 
-    for (viter = objs.begin(); viter != objs.end() && !found_end; ++viter) {
+    for (viter = objs.begin(); viter != objs.end(); ++viter) {
       RGWObjEnt& ent = *viter;
       uint64_t cur_total_len = obj_ofs;
       uint64_t start_ofs = 0, end_ofs = ent.size;
@@ -784,7 +784,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
       perfcounter->tinc(l_rgw_get_lat,
                        (ceph_clock_now(cct) - start_time));
 
-      if (found_start) {
+      if (found_start && !handled_end) {
         len_count += end_ofs - start_ofs;
 
         if (cb) {
@@ -794,12 +794,16 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
         }
       }
 
+      handled_end = found_end;
       start_time = ceph_clock_now(cct);
     }
-  } while (is_truncated && !found_end);
+  } while (is_truncated);
 
   if (ptotal_len)
     *ptotal_len = len_count;
+  if (pobj_size) {
+    *pobj_size = obj_ofs;
+  }
 
   return 0;
 }
@@ -856,11 +860,9 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   /* dry run to find out total length */
-  int r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, &total_len, NULL, NULL);
+  int r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, &total_len, &s->obj_size, NULL, NULL);
   if (r < 0)
     return r;
-
-  s->obj_size = total_len;
 
   if (!get_data) {
     bufferlist bl;
@@ -868,7 +870,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     return 0;
   }
 
-  r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
+  r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0)
     return r;
 
