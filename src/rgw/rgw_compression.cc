@@ -19,39 +19,26 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
     if ((ofs > 0 && compressed) ||                                // if previous part was compressed
         (ofs == 0)) {                                             // or it's the first part
       ldout(cct, 10) << "Compression for rgw is enabled, compress part " << bl.length() << dendl;
-      CompressorRef compressor = Compressor::create(cct, cct->_conf->rgw_compression_type);
-      if (!compressor.get()) {
-        if (ofs > 0 && compressed) {
-          lderr(cct) << "Cannot load compressor of type " << cct->_conf->rgw_compression_type
-                              << " for next part, compression process failed" << dendl;
+      int cr = compressor->compress(bl, in_bl);
+      if (cr < 0) {
+        if (ofs > 0) {
+          lderr(cct) << "Compression failed with exit code " << cr
+              << " for next part, compression process failed" << dendl;
           return -EIO;
         }
-        // if compressor isn't available - just do not use it with log warning?
-        ldout(cct, 5) << "Cannot load compressor of type " << cct->_conf->rgw_compression_type 
-                      << " for rgw, check rgw_compression_type config option" << dendl;
         compressed = false;
+        ldout(cct, 5) << "Compression failed with exit code " << cr
+            << " for first part, storing uncompressed" << dendl;
         in_bl.claim(bl);
       } else {
-        int cr = compressor->compress(bl, in_bl);
-        if (cr < 0) {
-          if (ofs > 0 && compressed) {
-            lderr(cct) << "Compression failed with exit code " << cr
-                       << " for next part, compression process failed" << dendl;
-            return -EIO;
-          }
-          ldout(cct, 5) << "Compression failed with exit code " << cr << dendl;
-          compressed = false;
-          in_bl.claim(bl);
-        } else {
-          compressed = true;
+        compressed = true;
     
-          compression_block newbl;
-          int bs = blocks.size();
-          newbl.old_ofs = ofs;
-          newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
-          newbl.len = in_bl.length();
-          blocks.push_back(newbl);
-        }
+        compression_block newbl;
+        int bs = blocks.size();
+        newbl.old_ofs = ofs;
+        newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
+        newbl.len = in_bl.length();
+        blocks.push_back(newbl);
       }
     } else {
       compressed = false;
