@@ -1589,7 +1589,7 @@ public:
 
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
-  virtual int postauth_init() = 0;
+  virtual rgw_ret postauth_init() = 0;
   virtual int error_handler(int err_no, string *error_content);
 };
 

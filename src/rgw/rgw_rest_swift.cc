@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
@@ -2137,7 +2138,7 @@ int RGWHandler_REST_SWIFT::authorize()
   return -EPERM;
 }
 
-int RGWHandler_REST_SWIFT::postauth_init()
+rgw_ret RGWHandler_REST_SWIFT::postauth_init()
 {
   struct req_init_state* t = &s->init_state;
 
@@ -2151,7 +2152,7 @@ int RGWHandler_REST_SWIFT::postauth_init()
 	   << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name)
 	   << dendl;
 
-  int ret;
+  rgw_ret ret;
   ret = validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
@@ -2183,13 +2184,23 @@ int RGWHandler_REST_SWIFT::postauth_init()
   return 0;
 }
 
-int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
+rgw_ret RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 {
-  int ret = RGWHandler_REST::validate_bucket_name(bucket);
-  if (ret < 0)
-    return ret;
+  const size_t len = bucket.size();
 
-  int len = bucket.size();
+  if (len > MAX_BUCKET_NAME_LEN) {
+    /* Bucket Name too long. Generate custom error message and bind it
+     * to an R-value reference. */
+    auto&& msg = boost::str(
+      boost::format("Container name length of %lld longer than %lld")
+        % len % int(MAX_BUCKET_NAME_LEN));
+    return rgw_ret::make_custom(-ERR_INVALID_BUCKET_NAME, msg);
+  }
+
+  const auto ret = RGWHandler_REST::validate_bucket_name(bucket);
+  if (ret < 0) {
+    return ret;
+  }
 
   if (len == 0)
     return 0;
@@ -2202,7 +2213,7 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 
   const char *s = bucket.c_str();
 
-  for (int i = 0; i < len; ++i, ++s) {
+  for (size_t i = 0; i < len; ++i, ++s) {
     if (*(unsigned char *)s == 0xff)
       return -ERR_INVALID_BUCKET_NAME;
   }

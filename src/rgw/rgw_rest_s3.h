@@ -473,7 +473,7 @@ public:
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
-  int postauth_init() { return 0; }
+  rgw_ret postauth_init() override { return 0; }
 };
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
@@ -490,7 +490,7 @@ public:
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
-  int postauth_init();
+  rgw_ret postauth_init() override;
 };
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {

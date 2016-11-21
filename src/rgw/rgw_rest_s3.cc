@@ -3153,7 +3153,7 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
   return 0;
 }
 
-int RGWHandler_REST_S3::postauth_init()
+rgw_ret RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;

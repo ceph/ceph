@@ -1630,7 +1630,7 @@ int RGWHandler_REST::validate_tenant_name(string const& t)
 
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-int RGWHandler_REST::validate_bucket_name(const string& bucket)
+rgw_ret RGWHandler_REST::validate_bucket_name(const string& bucket)
 {
   int len = bucket.size();
   if (len < 3) {
