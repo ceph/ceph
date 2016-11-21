@@ -12,6 +12,7 @@
  *
  */
 
+#include <random>
 #include "Compressor.h"
 #include "CompressionPlugin.h"
 #include "common/dout.h"
