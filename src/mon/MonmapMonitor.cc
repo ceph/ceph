@@ -373,6 +373,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     pending_map.remove(name);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
     ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
+    err = 0;
     getline(ss, rs);
     // send reply immediately in case we get removed
     mon->reply_command(m, 0, rs, get_last_committed());
