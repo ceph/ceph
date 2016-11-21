@@ -270,18 +270,22 @@ class MDSCluster(CephCluster):
         pool_id_name = {}
         for pool in pools:
             pool_id_name[pool['pool']] = pool['pool_name']
+
+        # mark cluster down for each fs to prevent churn during deletion
+        status = self.status()
+        for fs in status.get_filesystems():
+            self.mon_manager.raw_cluster_cmd("fs", "set", fs['mdsmap']['fs_name'], "cluster_down", "true")
+
+        # get a new copy as actives may have since changed
         status = self.status()
         for fs in status.get_filesystems():
             mdsmap = fs['mdsmap']
-            name = mdsmap['fs_name']
             metadata_pool = pool_id_name[mdsmap['metadata_pool']]
-
-            self.mon_manager.raw_cluster_cmd("fs", "set", name, "cluster_down", "true")
 
             for gid in mdsmap['up'].values():
                 self.mon_manager.raw_cluster_cmd('mds', 'fail', gid.__str__())
 
-            self.mon_manager.raw_cluster_cmd('fs', 'rm', name, '--yes-i-really-mean-it')
+            self.mon_manager.raw_cluster_cmd('fs', 'rm', mdsmap['fs_name'], '--yes-i-really-mean-it')
             self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
                                              metadata_pool, metadata_pool,
                                              '--yes-i-really-really-mean-it')
