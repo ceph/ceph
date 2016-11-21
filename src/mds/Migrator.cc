@@ -244,8 +244,7 @@ void Migrator::find_stale_export_freeze()
     CDir* dir = p->first;
     export_state_t& stat = p->second;
     ++p;
-    if (p->second.state != EXPORT_DISCOVERING &&
-	p->second.state != EXPORT_FREEZING)
+    if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
     if (stat.last_cum_auth_pins != dir->get_cum_auth_pins()) {
       stat.last_cum_auth_pins = dir->get_cum_auth_pins();
