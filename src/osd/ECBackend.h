@@ -379,6 +379,30 @@ public:
     void dump(Formatter *f) const;
 
     set<pg_shard_t> in_progress;
+
+    ReadOp(
+      int priority,
+      ceph_tid_t tid,
+      bool do_redundant_reads,
+      bool for_recovery,
+      OpRequestRef op,
+      map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &&_to_read)
+      : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
+	for_recovery(for_recovery), to_read(std::move(_to_read)) {
+      for (auto &&hpair: to_read) {
+	auto &returned = complete[hpair.first].returned;
+	for (auto &&extent: hpair.second.to_read) {
+	  returned.push_back(
+	    boost::make_tuple(
+	      extent.get<0>(),
+	      extent.get<1>(),
+	      map<pg_shard_t, bufferlist>()));
+	}
+      }
+    }
+    ReadOp() = delete;
+    ReadOp(const ReadOp &) = default;
+    ReadOp(ReadOp &&) = default;
   };
   friend struct FinishReadOp;
   void filter_read_op(
