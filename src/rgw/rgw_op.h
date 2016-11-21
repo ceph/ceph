@@ -295,12 +295,10 @@ public:
   static const size_t MAX_CHUNK_ENTRIES = 1024;
 
 protected:
-  std::unique_ptr<Deleter> deleter;
+  boost::optional<Deleter> deleter;
 
 public:
-  RGWBulkDelete()
-    : deleter(nullptr) {
-  }
+  RGWBulkDelete() = default;
 
   int verify_permission();
   void pre_exec();
@@ -939,14 +937,13 @@ protected:
   string version_id;
   ceph::real_time unmod_since; /* if unmodified since */
   bool no_precondition_error;
-  std::unique_ptr<RGWBulkDelete::Deleter> deleter;
+  boost::optional<RGWBulkDelete::Deleter> deleter;
 
 public:
   RGWDeleteObj()
     : delete_marker(false),
       multipart_delete(false),
-      no_precondition_error(false),
-      deleter(nullptr) {
+      no_precondition_error(false) {
   }
 
   int verify_permission();

@@ -3586,12 +3586,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
     return -EIO;
   }
 
-  try {
-    deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
-          new RGWBulkDelete::Deleter(store, s));
-  } catch (std::bad_alloc) {
-    return -ENOMEM;
-  }
+  deleter = boost::in_place(RGWBulkDelete::Deleter(store, s));
 
   list<RGWBulkDelete::acct_path_t> items;
   for (const auto& iter : slo_info.entries) {
@@ -3622,10 +3617,8 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
   path.obj_key = s->object;
   items.push_back(path);
 
-  int ret = deleter->delete_chunk(items);
-  if (ret < 0) {
-    return ret;
-  }
+  /* Errors are stored internally for the dedicated response printer. */
+  deleter->delete_chunk(items);
 
   return 0;
 }
@@ -5430,18 +5423,19 @@ void RGWBulkDelete::pre_exec()
 
 void RGWBulkDelete::execute()
 {
-  deleter = std::unique_ptr<Deleter>(new Deleter(store, s));
+  deleter = boost::in_place(RGWBulkDelete::Deleter(store, s));
 
   bool is_truncated = false;
   do {
     list<RGWBulkDelete::acct_path_t> items;
 
-    int ret = get_data(items, &is_truncated);
-    if (ret < 0) {
+    op_ret = get_data(items, &is_truncated);
+    if (op_ret < 0) {
       return;
     }
 
-    ret = deleter->delete_chunk(items);
+    /* Errors are stored internally for the dedicated response printer. */
+    deleter->delete_chunk(items);
   } while (!op_ret && is_truncated);
 
   return;
