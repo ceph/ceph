@@ -24,13 +24,11 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 
   string obj_marker = oid.substr(0, pos);
 
-  string obj_name;
-  string obj_instance;
-  string obj_ns;
+  rgw_obj_key key;
 
-  rgw_obj::parse_raw_oid(oid.substr(pos + 1), &obj_name, &obj_instance, &obj_ns);
+  rgw_obj_key::parse_raw_oid(oid.substr(pos + 1), &key);
 
-  if (obj_ns.empty()) {
+  if (key.ns.empty()) {
     return oid;
   }
 
@@ -38,9 +36,7 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 
   if (force_ns) {
     rgw_bucket b;
-    rgw_obj new_obj(b, obj_name);
-    new_obj.set_ns(force_ns);
-    new_obj.set_instance(obj_instance);
+    rgw_obj new_obj(b, key);
     s = obj_marker + "_" + new_obj.get_oid();
   }
 
@@ -319,13 +315,13 @@ int RGWOrphanSearch::build_all_oids_index()
       continue;
     }
     string stripped_oid = oid.substr(pos + 1);
-    string name, instance, ns;
-    if (!rgw_obj::parse_raw_oid(stripped_oid, &name, &instance, &ns)) {
+    rgw_obj_key key;
+    if (!rgw_obj_key::parse_raw_oid(stripped_oid, &key)) {
       cout << "cannot parse oid: " << oid << ", skipping" << std::endl;
       continue;
     }
 
-    if (ns.empty()) {
+    if (key.ns.empty()) {
       /* skipping head objects, we don't want to remove these as they are mutable and
        * cleaning them up is racy (can race with object removal and a later recreation)
        */

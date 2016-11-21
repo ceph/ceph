@@ -2025,7 +2025,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
 
   // Normal object which not generated through copy operation 
-  manifest->set_tail_instance(_obj.get_instance());
+  manifest->set_tail_instance(_obj.key.instance);
 
   manifest->update_iterators();
 
@@ -2503,7 +2503,7 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
   }
 
   if (!version_id.empty()) {
-    head_obj.set_instance(version_id);
+    head_obj.key.set_instance(version_id);
   } else if (versioned_object) {
     store->gen_rand_obj_instance_name(&head_obj);
   }
@@ -5138,13 +5138,12 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
 
   result->clear();
 
-  rgw_bucket b;
-  rgw_obj marker_obj(b, params.marker);
-  rgw_obj end_marker_obj(b, params.end_marker);
-  rgw_obj prefix_obj;
+  rgw_obj_key marker_obj(params.marker.name, params.marker.instance, params.ns);
+
+  rgw_obj_key end_marker_obj;
   rgw_obj_index_key cur_end_marker;
   if (!params.ns.empty()) {
-    marker_obj.set_ns(params.ns);
+    end_marker_obj = rgw_obj_key(params.end_marker.name, params.end_marker.instance, params.ns);
     end_marker_obj.set_ns(params.ns);
     end_marker_obj.get_index_key(&cur_end_marker);
   }
@@ -5153,8 +5152,8 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
 
   const bool cur_end_marker_valid = !params.end_marker.empty();
 
-  prefix_obj.set_ns(params.ns);
-  prefix_obj.set_name(params.prefix);
+  rgw_obj_key prefix_obj(params.prefix);
+  prefix_obj.ns = params.ns;
   string cur_prefix = prefix_obj.get_index_key_name();
 
   string bigger_than_delim;
@@ -5200,7 +5199,11 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
 
       rgw_obj_key obj(index_key);
 
-      bool valid = rgw_obj::parse_raw_oid(index_key.name, &obj.name, &obj.instance, &obj.ns);
+      /* note that parse_raw_oid() here will not set the correct object's instance, as
+       * rgw_obj_index_key encodes that separately. We don't need to set the instance because it's
+       * not needed for the checks here and we end up using the raw entry for the return vector
+       */
+      bool valid = rgw_obj_key::parse_raw_oid(index_key.name, &obj);
       if (!valid) {
         ldout(cct, 0) << "ERROR: could not parse object name: " << obj.name << dendl;
         continue;
@@ -5989,7 +5992,7 @@ int RGWRados::fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fi
 
       rgw_raw_obj_to_obj(manifest.get_tail_bucket(), raw_loc, &loc);
 
-      if (loc.ns.empty()) {
+      if (loc.key.ns.empty()) {
 	/* continue, we're only interested in tail objects */
 	continue;
       }
@@ -6005,7 +6008,7 @@ int RGWRados::fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fi
       }
 
       string bad_loc;
-      prepend_bucket_marker(bucket, loc.get_name(), bad_loc);
+      prepend_bucket_marker(bucket, loc.key.name, bad_loc);
 
       /* create a new ioctx with the bad locator */
       librados::IoCtx src_ioctx;
@@ -6446,7 +6449,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   bool orig_exists = state->exists;
   uint64_t orig_size = state->accounted_size;
 
-  bool versioned_target = (meta.olh_epoch > 0 || !obj.get_instance().empty());
+  bool versioned_target = (meta.olh_epoch > 0 || !obj.key.instance.empty());
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
@@ -6502,7 +6505,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   if (!real_clock::is_zero(meta.delete_at)) {
     rgw_obj_index_key obj_key;
-    obj.get_index_key(&obj_key);
+    obj.key.get_index_key(&obj_key);
 
     r = store->objexp_hint_add(meta.delete_at,
             obj.bucket.tenant, obj.bucket.name, obj.bucket.bucket_id, obj_key);
@@ -7128,11 +7131,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   set_mtime_weight.high_precision = high_precision_time;
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.get_name(),
+                                      dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  const string& instance = dest_obj.get_instance();
+  const string& instance = dest_obj.key.instance;
   if (instance != "null") {
-    processor.set_version_id(dest_obj.get_instance());
+    processor.set_version_id(dest_obj.key.instance);
   }
   processor.set_olh_epoch(olh_epoch);
   int ret = processor.prepare(this, NULL);
@@ -7578,7 +7581,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (version_id && !version_id->empty()) {
     versioned_dest = true;
-    dest_obj.set_instance(*version_id);
+    dest_obj.key.set_instance(*version_id);
   } else if (versioned_dest) {
     gen_rand_obj_instance_name(&dest_obj);
   }
@@ -7834,14 +7837,10 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
 
     string ns;
     std::map<string, rgw_bucket_dir_entry>::iterator eiter;
-    rgw_obj_index_key obj;
-    string instance;
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-      obj = eiter->second.key;
+      rgw_obj_key obj;
 
-      /* obj.name actually contains index key that is formatted similar to oid */
-
-      if (rgw_obj::translate_oid_to_obj_in_ns(obj.name, obj.name, instance, ns))
+      if (rgw_obj_key::oid_to_key_in_ns(eiter->second.key.name, &obj, ns))
         return -ENOTEMPTY;
     }
   } while (is_truncated);
@@ -8194,11 +8193,11 @@ int RGWRados::Object::Delete::delete_obj()
 {
   RGWRados *store = target->get_store();
   rgw_obj& src_obj = target->get_obj();
-  const string& instance = src_obj.get_instance();
+  const string& instance = src_obj.key.instance;
   rgw_obj obj = src_obj;
 
   if (instance == "null") {
-    obj.clear_instance();
+    obj.key.instance.clear();
   }
 
   bool explicit_marker_version = (!params.marker_version_id.empty());
@@ -8209,13 +8208,13 @@ int RGWRados::Object::Delete::delete_obj()
 
       if (!params.marker_version_id.empty()) {
         if (params.marker_version_id != "null") {
-          marker.set_instance(params.marker_version_id);
+          marker.key.set_instance(params.marker_version_id);
         }
       } else if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
         store->gen_rand_obj_instance_name(&marker);
       }
 
-      result.version_id = marker.get_instance();
+      result.version_id = marker.key.instance;
       result.delete_marker = true;
 
       struct rgw_bucket_dir_entry_meta meta;
@@ -8577,7 +8576,7 @@ int RGWRados::get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawO
 
 int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent)
 {
-  bool need_follow_olh = follow_olh && !obj.have_instance();
+  bool need_follow_olh = follow_olh && obj.key.instance.empty();
 
   RGWObjState *s = rctx->obj.get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
@@ -9110,7 +9109,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
         ::decode(ts, bl);
 
         rgw_obj_index_key obj_key;
-        obj.get_index_key(&obj_key);
+        obj.key.get_index_key(&obj_key);
 
         objexp_hint_add(ts, bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
       } catch (buffer::error& err) {
@@ -9421,7 +9420,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   }
 
   rgw_bucket_dir_entry ent;
-  obj.get_index_key(&ent.key);
+  obj.key.get_index_key(&ent.key);
   ent.meta.size = size;
   ent.meta.accounted_size = accounted_size;
   ent.meta.mtime = ut;
@@ -10173,7 +10172,7 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, const rgw_obj& olh_
 {
   ObjectWriteOperation op;
 
-  assert(olh_obj.get_instance().empty());
+  assert(olh_obj.key.instance.empty());
 
   bool has_tag = (state.exists && has_olh_tag(state.attrset));
 
@@ -10299,7 +10298,7 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, const rgw_obj& obj_i
     return ret;
   }
 
-  cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance);
   ret = cls_rgw_bucket_link_olh(bs.index_ctx, bs.bucket_obj, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch,
                                 unmod_since, high_precision_time,
                                 get_zone().log_data);
@@ -10331,7 +10330,7 @@ int RGWRados::bucket_index_unlink_instance(const rgw_obj& obj_instance, const st
     return ret;
   }
 
-  cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance);
   ret = cls_rgw_bucket_unlink_instance(bs.index_ctx, bs.bucket_obj, key, op_tag, olh_tag, olh_epoch, get_zone().log_data);
   if (ret < 0) {
     return ret;
@@ -10359,7 +10358,7 @@ int RGWRados::bucket_index_read_olh_log(RGWObjState& state, const rgw_obj& obj_i
 
   string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
 
-  cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), string());
 
   ObjectReadOperation op;
 
@@ -10387,7 +10386,7 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, const rgw_obj& obj_i
 
   string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
 
-  cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), string());
 
   ObjectWriteOperation op;
 
@@ -10417,7 +10416,7 @@ int RGWRados::bucket_index_clear_olh(RGWObjState& state, const rgw_obj& obj_inst
 
   string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
 
-  cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), string());
 
   ret = cls_rgw_clear_olh(bs.index_ctx, bs.bucket_obj, key, olh_tag);
   if (ret < 0) {
@@ -10585,7 +10584,7 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const r
   string op_tag;
 
   rgw_obj olh_obj = target_obj;
-  olh_obj.clear_instance();
+  olh_obj.key.instance.clear();
 
   RGWObjState *state = NULL;
 
@@ -10645,7 +10644,7 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
   string op_tag;
 
   rgw_obj olh_obj = target_obj;
-  olh_obj.clear_instance();
+  olh_obj.key.instance.clear();
 
   RGWObjState *state = NULL;
 
@@ -10708,7 +10707,7 @@ void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
   gen_rand_alphanumeric_no_underscore(cct, buf, OBJ_INSTANCE_LEN); /* don't want it to get url escaped,
                                                                       no underscore for instance name due to the way we encode the raw keys */
 
-  target_obj->set_instance(buf);
+  target_obj->key.set_instance(buf);
 }
 
 static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
@@ -11781,7 +11780,7 @@ int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, r
     return ret;
   }
 
-  cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
+  cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   
   ret = cls_rgw_bi_get(bs.index_ctx, bs.bucket_obj, index_type, key, entry);
   if (ret < 0)
@@ -11923,8 +11922,8 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
                                  rgw_obj& obj, uint16_t bilog_flags)
 {
   ObjectWriteOperation o;
-  cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
-  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.get_loc(), get_zone().log_data, bilog_flags);
+  cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), get_zone().log_data, bilog_flags);
   return bs.index_ctx.operate(bs.bucket_obj, &o);
 }
 
@@ -11978,14 +11977,14 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
 {
   rgw_bucket_dir_entry ent;
   ent.meta.mtime = removed_mtime;
-  obj.get_index_key(&ent.key);
+  obj.key.get_index_key(&ent.key);
   return cls_obj_complete_op(bs, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, remove_objs, bilog_flags);
 }
 
 int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags)
 {
   rgw_bucket_dir_entry ent;
-  obj.get_index_key(&ent.key);
+  obj.key.get_index_key(&ent.key);
   return cls_obj_complete_op(bs, CLS_RGW_OP_CANCEL, tag, -1 /* pool id */, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL, bilog_flags);
 }
 
@@ -12196,11 +12195,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 {
   uint8_t suggest_flag = (get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
 
-  std::string name, instance, loc, ns;
-  if (!rgw_obj::strip_namespace_from_name(list_state.key.name, ns, instance)) {
-    ldout(cct, 0) << "ERROR: got bad object name off backend: name=" << name << dendl;
-    return -EIO;
-  }
+  std::string loc;
 
   rgw_obj obj(bucket, list_state.key);
 
@@ -12267,7 +12262,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
       rgw_obj loc;
       rgw_raw_obj_to_obj(manifest.get_obj().bucket, raw_loc, &loc);
 
-      if (loc.ns == RGW_OBJ_NS_MULTIPART) {
+      if (loc.key.ns == RGW_OBJ_NS_MULTIPART) {
 	dout(10) << "check_disk_state(): removing manifest part from index: " << loc << dendl;
 	r = delete_obj_index(loc);
 	if (r < 0) {

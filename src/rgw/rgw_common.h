@@ -1351,6 +1351,7 @@ struct rgw_obj_key {
   // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const string& n) : name(n) {}
   rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
+  rgw_obj_key(const string& n, const string& i, const string& _ns) : name(n), instance(i), ns(_ns) {}
 
   rgw_obj_key(const rgw_obj_index_key& k) {
     parse_index_key(k.name, &name, &ns);
@@ -1386,6 +1387,30 @@ struct rgw_obj_key {
     ns.clear();
   }
 
+  void set(const string& n, const string& i) {
+    name = n;
+    instance = i;
+    ns.clear();
+  }
+
+  void set(const string& n, const string& i, const string& _ns) {
+    name = n;
+    instance = i;
+    ns = _ns;
+  }
+
+  bool set(const rgw_obj_index_key& index_key) {
+    if (!parse_raw_oid(index_key.name, this)) {
+      return false;
+    }
+    instance = index_key.instance;
+    return true;
+  }
+
+  void set_instance(const string& i) {
+    instance = i;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
@@ -1404,19 +1429,59 @@ struct rgw_obj_key {
     key->instance = instance;
   }
 
-  void set(const string& n, const string& i) {
-    name = n;
-    instance = i;
-    ns.clear();
+  string get_loc() const {
+    /*
+     * For backward compatibility. Older versions used to have object locator on all objects,
+     * however, the name was the effective object locator. This had the same effect as not
+     * having object locator at all for most objects but the ones that started with underscore as
+     * these were escaped.
+     */
+    if (name[0] == '_' && ns.empty()) {
+      return name;
+    }
+
+    return string();
   }
 
   bool empty() const {
     return name.empty();
   }
+
+  bool have_null_instance() const {
+    return instance == "null";
+  }
+
+  bool have_instance() const {
+    return !instance.empty();
+  }
+
+  bool need_to_encode_instance() const {
+    return have_instance() && !have_null_instance();
+  }
+
+  string get_oid() const {
+    if (ns.empty() && !need_to_encode_instance()) {
+      if (name.size() < 1 || name[0] != '_') {
+        return name;
+      }
+      return string("_") + name;
+    }
+
+    string oid = "_";
+    oid.append(ns);
+    if (need_to_encode_instance()) {
+      oid.append(string(":") + instance);
+    }
+    oid.append("_");
+    oid.append(name);
+    return oid;
+  }
+
   bool operator==(const rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0);
   }
+
   bool operator<(const rgw_obj_key& k) const {
     int r = name.compare(k.name);
     if (r == 0) {
@@ -1424,9 +1489,103 @@ struct rgw_obj_key {
     }
     return (r < 0);
   }
+
   bool operator<=(const rgw_obj_key& k) const {
     return !(k < *this);
   }
+
+  static void parse_ns_field(string& ns, string& instance) {
+    int pos = ns.find(':');
+    if (pos >= 0) {
+      instance = ns.substr(pos + 1);
+      ns = ns.substr(0, pos);
+    } else {
+      instance.clear();
+    }
+  }
+
+  static bool parse_raw_oid(const string& oid, rgw_obj_key *key) {
+    key->instance.clear();
+    key->ns.clear();
+    if (oid[0] != '_') {
+      key->name = oid;
+      return true;
+    }
+
+    if (oid.size() >= 2 && oid[1] == '_') {
+      key->name = oid.substr(1);
+      return true;
+    }
+
+    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
+      return false;
+
+    int pos = oid.find('_', 1);
+    if (pos <= 1) // if it starts with __, it's not in our namespace
+      return false;
+
+    key->ns = oid.substr(1, pos - 1);
+    parse_ns_field(key->ns, key->instance);
+
+    key->name = oid.substr(pos + 1);
+    return true;
+  }
+
+  /**
+   * Translate a namespace-mangled object name to the user-facing name
+   * existing in the given namespace.
+   *
+   * If the object is part of the given namespace, it returns true
+   * and cuts down the name to the unmangled version. If it is not
+   * part of the given namespace, it returns false.
+   */
+  static bool oid_to_key_in_ns(const string& oid, rgw_obj_key *key, const string& ns) {
+    string obj_ns;
+    bool ret = parse_raw_oid(oid, key);
+    if (!ret) {
+      return ret;
+    }
+
+    return (ns == key->ns);
+  }
+
+  /**
+   * Given a mangled object name and an empty namespace string, this
+   * function extracts the namespace into the string and sets the object
+   * name to be the unmangled version.
+   *
+   * It returns true after successfully doing so, or
+   * false if it fails.
+   */
+  static bool strip_namespace_from_name(string& name, string& ns, string& instance) {
+    ns.clear();
+    instance.clear();
+    if (name[0] != '_') {
+      return true;
+    }
+
+    size_t pos = name.find('_', 1);
+    if (pos == string::npos) {
+      return false;
+    }
+
+    if (name[1] == '_') {
+      name = name.substr(1);
+      return true;
+    }
+
+    size_t period_pos = name.find('.');
+    if (period_pos < pos) {
+      return false;
+    }
+
+    ns = name.substr(1, pos-1);
+    name = name.substr(pos+1, string::npos);
+
+    parse_ns_field(ns, instance);
+    return true;
+  }
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
     ::encode(name, bl);
@@ -1666,229 +1825,48 @@ WRITE_CLASS_ENCODER(RGWBucketEnt)
 
 struct rgw_obj {
   rgw_bucket bucket;
-  std::string ns;
-  std::string name;
-  std::string instance;
+  rgw_obj_key key;
   std::string placement_id;
 
   bool in_extra_data{false}; /* in-memory only member, does not serialize */
-
-  const std::string& get_name() const { return name; }
-  const std::string& get_instance() const { return instance; }
 
   // Represents the hash index source for this object once it is set (non-empty)
   std::string index_hash_source;
 
   rgw_obj() {}
-  rgw_obj(const rgw_bucket& b, const std::string& name) {
-    init(b, name);
-  }
-  rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) {
-    init(b, k.name);
-    instance = k.instance;
-  }
-  rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b) {
-    rgw_obj_key::parse_index_key(k.name, &name, &ns);
-    set_instance(k.instance);
-  }
+  rgw_obj(const rgw_bucket& b, const std::string& name) : bucket(b), key(name) {}
+  rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : bucket(b), key(k) {}
+  rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b), key(k) {}
+
   void init(const rgw_bucket& b, const std::string& name) {
     bucket = b;
-    set_name(name);
+    key.set(name);
   }
-  void init_ns(const rgw_bucket& b, const std::string& name, const std::string& n) {
+  void init(const rgw_bucket& b, const std::string& name, const string& i, const string& n) {
     bucket = b;
-    set_ns(n);
-    set_name(name);
+    key.set(name, i, n);
   }
-  void set_ns(const string& n) {
-    ns = n;
-  }
-  void set_instance(const string& i) {
-    instance = i;
-  }
-
-  void clear_instance() {
-    instance.clear();
-  }
-
-  string get_loc() const {
-    /*
-     * For backward compatibility. Older versions used to have object locator on all objects,
-     * however, the name was the effective object locator. This had the same effect as not
-     * having object locator at all for most objects but the ones that started with underscore as
-     * these were escaped.
-     */
-    if (name[0] == '_' && ns.empty()) {
-      return name;
-    }
-
-    return string();
+  void init_ns(const rgw_bucket& b, const std::string& name, const string& n) {
+    bucket = b;
+    key.name = name;
+    key.instance.clear();
+    key.ns = n;
   }
 
   bool empty() const {
-    return name.empty();
-  }
-
-  bool have_null_instance() const {
-    return instance == "null";
-  }
-
-  bool have_instance() const {
-    return !instance.empty();
-  }
-
-  bool need_to_encode_instance() const {
-    return have_instance() && !have_null_instance();
-  }
-
-  void set_name(const string& n) {
-    name = n;
+    return key.empty();
   }
 
   void set_key(const rgw_obj_key& k) {
-    set_name(k.name);
-    set_instance(k.instance);
+    key = k;
   }
 
   string get_oid() const {
-    if (ns.empty() && !need_to_encode_instance()) {
-      if (name.size() < 1 || name[0] != '_') {
-        return name;
-      }
-      return string("_") + name;
-    }
-
-    string oid = "_";
-    oid.append(ns);
-    if (need_to_encode_instance()) {
-      oid.append(string(":") + instance);
-    }
-    oid.append("_");
-    oid.append(name);
-    return oid;
-  }
-
-  /*
-   * get the object's key name as being referred to by the bucket index.
-   */
-  string get_index_key_name() const {
-    if (ns.empty()) {
-      if (name.size() < 1 || name[0] != '_') {
-        return name;
-      }
-      return string("_") + name;
-    };
-
-    char buf[ns.size() + 16];
-    snprintf(buf, sizeof(buf), "_%s_", ns.c_str());
-    return string(buf) + name;
-  };
-
-  void get_index_key(rgw_obj_index_key *key) const {
-    key->name = get_index_key_name();
-    key->instance = instance;
-  }
-
-  static void parse_ns_field(string& ns, string& instance) {
-    int pos = ns.find(':');
-    if (pos >= 0) {
-      instance = ns.substr(pos + 1);
-      ns = ns.substr(0, pos);
-    } else {
-      instance.clear();
-    }
+    return key.get_oid();
   }
 
   const string& get_hash_object() const {
-    return index_hash_source.empty() ? name : index_hash_source;
-  }
-  /**
-   * Translate a namespace-mangled object name to the user-facing name
-   * existing in the given namespace.
-   *
-   * If the object is part of the given namespace, it returns true
-   * and cuts down the name to the unmangled version. If it is not
-   * part of the given namespace, it returns false.
-   */
-  static bool translate_oid_to_obj_in_ns(const string& oid, string& name, string& instance, string& ns) {
-    if (oid[0] != '_') {
-      if (ns.empty()) {
-        return true;
-      }
-      return false;
-    }
-
-    string obj_ns;
-    bool ret = parse_raw_oid(oid, &name, &instance, &obj_ns);
-    if (!ret) {
-      return ret;
-    }
-
-    return (ns == obj_ns);
-  }
-
-  static bool parse_raw_oid(const string& oid, string *obj_name, string *obj_instance, string *obj_ns) {
-    obj_instance->clear();
-    obj_ns->clear();
-    if (oid[0] != '_') {
-      *obj_name = oid;
-      return true;
-    }
-
-    if (oid.size() >= 2 && oid[1] == '_') {
-      *obj_name = oid.substr(1);
-      return true;
-    }
-
-    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
-      return false;
-
-    int pos = oid.find('_', 1);
-    if (pos <= 1) // if it starts with __, it's not in our namespace
-      return false;
-
-    *obj_ns = oid.substr(1, pos - 1);
-    parse_ns_field(*obj_ns, *obj_instance);
-
-    *obj_name = oid.substr(pos + 1);
-    return true;
-  }
-
-  /**
-   * Given a mangled object name and an empty namespace string, this
-   * function extracts the namespace into the string and sets the object
-   * name to be the unmangled version.
-   *
-   * It returns true after successfully doing so, or
-   * false if it fails.
-   */
-  static bool strip_namespace_from_name(string& name, string& ns, string& instance) {
-    ns.clear();
-    instance.clear();
-    if (name[0] != '_') {
-      return true;
-    }
-
-    size_t pos = name.find('_', 1);
-    if (pos == string::npos) {
-      return false;
-    }
-
-    if (name[1] == '_') {
-      name = name.substr(1);
-      return true;
-    }
-
-    size_t period_pos = name.find('.');
-    if (period_pos < pos) {
-      return false;
-    }
-
-    ns = name.substr(1, pos-1);
-    name = name.substr(pos+1, string::npos);
-
-    parse_ns_field(ns, instance);
-    return true;
+    return index_hash_source.empty() ? key.name : index_hash_source;
   }
 
   void set_in_extra_data(bool val) {
@@ -1902,9 +1880,9 @@ struct rgw_obj {
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 6, bl);
     ::encode(bucket, bl);
-    ::encode(ns, bl);
-    ::encode(name, bl);
-    ::encode(instance, bl);
+    ::encode(key.ns, bl);
+    ::encode(key.name, bl);
+    ::encode(key.instance, bl);
     ::encode(placement_id, bl);
     ENCODE_FINISH(bl);
   }
@@ -1914,32 +1892,32 @@ struct rgw_obj {
       string s;
       ::decode(bucket.name, bl); /* bucket.name */
       ::decode(s, bl); /* loc */
-      ::decode(ns, bl);
-      ::decode(name, bl);
+      ::decode(key.ns, bl);
+      ::decode(key.name, bl);
       if (struct_v >= 2)
         ::decode(bucket, bl);
       if (struct_v >= 4)
-        ::decode(instance, bl);
-      if (ns.empty() && instance.empty()) {
-        if (name[0] == '_') {
-          name = name.substr(1);
+        ::decode(key.instance, bl);
+      if (key.ns.empty() && key.instance.empty()) {
+        if (key.name[0] == '_') {
+          key.name = key.name.substr(1);
         }
       } else {
         if (struct_v >= 5) {
-          ::decode(name, bl);
+          ::decode(key.name, bl);
         } else {
-          ssize_t pos = name.find('_', 1);
+          ssize_t pos = key.name.find('_', 1);
           if (pos < 0) {
             throw buffer::error();
           }
-          name = name.substr(pos);
+          key.name = key.name.substr(pos);
         }
       }
     } else {
       ::decode(bucket, bl);
-      ::decode(ns, bl);
-      ::decode(name, bl);
-      ::decode(instance, bl);
+      ::decode(key.ns, bl);
+      ::decode(key.name, bl);
+      ::decode(key.instance, bl);
       ::decode(placement_id, bl);
     }
     DECODE_FINISH(bl);
@@ -1948,19 +1926,17 @@ struct rgw_obj {
   static void generate_test_instances(list<rgw_obj*>& o);
 
   bool operator==(const rgw_obj& o) const {
-    return (name.compare(o.name) == 0) &&
-           (bucket == o.bucket) &&
-           (ns.compare(o.ns) == 0) &&
-           (instance.compare(o.instance) == 0); /* should not compare placement_id */
+    return (key == o.key) &&
+           (bucket == o.bucket);
   }
   bool operator<(const rgw_obj& o) const {
-    int r = name.compare(o.name);
+    int r = key.name.compare(o.key.name);
     if (r == 0) {
       r = bucket.bucket_id.compare(o.bucket.bucket_id); /* not comparing bucket.name, if bucket_id is equal so will be bucket.name */
       if (r == 0) {
-        r = ns.compare(o.ns);
+        r = key.ns.compare(o.key.ns);
         if (r == 0) {
-          r = instance.compare(o.instance);
+          r = key.instance.compare(o.key.instance);
         }
       }
     }

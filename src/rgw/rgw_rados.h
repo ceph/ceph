@@ -68,7 +68,7 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, s
 {
   const rgw_bucket& bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.get_oid(), oid);
-  const string& loc = obj.get_loc();
+  const string& loc = obj.key.get_loc();
   if (!loc.empty()) {
     prepend_bucket_marker(bucket, loc, locator);
   } else {
@@ -80,21 +80,15 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
 
 static inline bool rgw_raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_obj& raw_obj, rgw_obj *obj)
 {
-  string name;
-  string instance;
-  string ns;
-
   ssize_t pos = raw_obj.oid.find('_');
   if (pos < 0) {
     return false;
   }
 
-  if (!rgw_obj::parse_raw_oid(raw_obj.oid.substr(pos + 1), &name, &instance, &ns)) {
+  if (!rgw_obj_key::parse_raw_oid(raw_obj.oid.substr(pos + 1), &obj->key)) {
     return false;
   }
-
-  obj->init_ns(bucket, name, ns);
-  obj->set_instance(instance);
+  obj->bucket = bucket;
 
   return true;
 }
@@ -462,7 +456,7 @@ public:
     if (encode_tail_bucket) {
       ::encode(tail_bucket, bl);
     }
-    bool encode_tail_instance = (tail_instance != obj.get_instance());
+    bool encode_tail_instance = (tail_instance != obj.key.instance);
     ::encode(encode_tail_instance, bl);
     if (encode_tail_instance) {
       ::encode(tail_instance, bl);
@@ -498,7 +492,7 @@ public:
        * when the explicit objs manifest was around, and it got copied.
        */
       rgw_obj& obj_0 = objs[0].loc;
-      if (!obj_0.get_oid().empty() && obj_0.ns.empty()) {
+      if (!obj_0.get_oid().empty() && obj_0.key.ns.empty()) {
         objs[0].loc = obj;
         objs[0].size = head_size;
       }
@@ -527,11 +521,11 @@ public:
         if (need_to_decode) {
           ::decode(tail_instance, bl);
         } else {
-          tail_instance = obj.get_instance();
+          tail_instance = obj.key.instance;
         }
       }
     } else { // old object created before 'tail_instance' field added to manifest
-      tail_instance = obj.get_instance();
+      tail_instance = obj.key.instance;
     }
 
     update_iterators();

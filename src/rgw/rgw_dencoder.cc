@@ -159,13 +159,16 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
 
 void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location)
 {
-  string oid;
+  rgw_obj loc;
+
+  string& oid = loc.key.name;
+  string& ns = loc.key.ns;
+
   if (!override_prefix || override_prefix->empty()) {
     oid = prefix;
   } else {
     oid = *override_prefix;
   }
-  string ns;
 
   if (!cur_part_id) {
     if (ofs < max_head_size) {
@@ -190,21 +193,15 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
     }
   }
 
-  rgw_bucket *bucket;
-
-  rgw_obj loc;
-
   if (!tail_bucket.name.empty()) {
-    bucket = &tail_bucket;
+    loc.bucket = tail_bucket;
   } else {
-    bucket = &obj.bucket;
+    loc.bucket = obj.bucket;
   }
 
-  loc.init_ns(*bucket, oid, ns);
-  
   // Always overwrite instance with tail_instance
   // to get the right shadow object location
-  loc.set_instance(tail_instance);
+  loc.key.set_instance(tail_instance);
 
   *location = loc;
 }

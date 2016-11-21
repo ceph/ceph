@@ -2453,10 +2453,6 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   bool updated_status{false};
   const string& status_oid;
 
-  string name;
-  string instance;
-  string ns;
-
   string cur_id;
 
   RGWDataSyncDebugLogger logger;
@@ -2527,23 +2523,22 @@ int RGWBucketShardIncrementalSyncCR::operate()
         }
         inc_marker.position = cur_id;
 
-        if (!rgw_obj::parse_raw_oid(entries_iter->object, &name, &instance, &ns)) {
+        if (!key.set(rgw_obj_index_key(entries_iter->object))) {
           set_status() << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry";
           ldout(sync_env->cct, 20) << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry" << dendl;
           marker_tracker.try_update_high_marker(cur_id, 0, entries_iter->timestamp);
           continue;
         }
 
-        ldout(sync_env->cct, 20) << "parsed entry: id=" << cur_id << " iter->object=" << entry->object << " iter->instance=" << entry->instance << " name=" << name << " instance=" << instance << " ns=" << ns << dendl;
+        ldout(sync_env->cct, 20) << "parsed entry: id=" << cur_id << " iter->object=" << entry->object << " iter->instance=" << entry->instance << " name=" << key.name << " instance=" << key.instance << " ns=" << key.ns << dendl;
 
-        if (!ns.empty()) {
+        if (!key.ns.empty()) {
           set_status() << "skipping entry in namespace: " << entry->object;
           ldout(sync_env->cct, 20) << "skipping entry in namespace: " << entry->object << dendl;
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
 
-        key = rgw_obj_key(name, entry->instance);
         set_status() << "got entry.id=" << cur_id << " key=" << key << " op=" << (int)entry->op;
         if (entry->op == CLS_RGW_OP_CANCEL) {
           set_status() << "canceled operation, skipping";
