@@ -199,8 +199,6 @@ protected:
     return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new MDBWholeSpaceIteratorImpl(&m_map, &m_lock, &iterator_seq_no, m_using_btree));
   }
-
-  WholeSpaceIterator _get_snapshot_iterator();
 };
 
 #endif
