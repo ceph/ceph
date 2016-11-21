@@ -7115,11 +7115,12 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWPutObjDataProcessor *filter = &processor;
 
-  const auto& compression_type = cct->_conf->rgw_compression_type;
+  const auto& compression_type = zone_params.get_compression_type(
+      dest_bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(cct, compression_type);
     if (!plugin) {
-      ldout(cct, 1) << "Cannot load plugin for rgw_compression_type "
+      ldout(cct, 1) << "Cannot load plugin for compression type "
           << compression_type << dendl;
     } else {
       compressor = boost::in_place(cct, plugin, filter);
