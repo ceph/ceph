@@ -161,6 +161,8 @@ public:
     _image_number = 0;
     ASSERT_EQ("", connect_cluster(&_cluster));
     ASSERT_EQ("", connect_cluster_pp(_rados));
+
+    create_optional_data_pool();
   }
 
   static void TearDownTestCase() {
@@ -195,6 +197,18 @@ public:
   std::string get_temp_image_name() {
     ++_image_number;
     return "image" + stringify(_image_number);
+  }
+
+  static void create_optional_data_pool() {
+    bool created = false;
+    std::string data_pool;
+    ASSERT_EQ(0, create_image_data_pool(_rados, data_pool, &created));
+    if (!data_pool.empty()) {
+      printf("using image data pool: %s\n", data_pool.c_str());
+      if (created) {
+        _unique_pool_names.push_back(data_pool);
+      }
+    }
   }
 
   std::string create_pool(bool unique = false) {
@@ -2146,7 +2160,12 @@ TEST_F(TestLibRBD, TestCoR)
 
   // find out what objects the parent image has generated
   ASSERT_EQ(0, rbd_stat(parent, &p_info, sizeof(p_info)));
-  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &list_ctx));
+
+  int64_t data_pool_id = rbd_get_data_pool_id(parent);
+  rados_ioctx_t d_ioctx;
+  rados_ioctx_create2(_cluster, data_pool_id, &d_ioctx);
+
+  ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
     if (strstr(entry, p_info.block_name_prefix)) {
       const char *block_name_suffix = entry + strlen(p_info.block_name_prefix) + 1;
@@ -2197,7 +2216,7 @@ TEST_F(TestLibRBD, TestCoR)
   printf("check whether child image has the same set of objects as parent\n");
   ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
   ASSERT_EQ(0, rbd_stat(child, &c_info, sizeof(c_info)));
-  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &list_ctx));
+  ASSERT_EQ(0, rados_nobjects_list_open(d_ioctx, &list_ctx));
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
     if (strstr(entry, c_info.block_name_prefix)) {
       const char *block_name_suffix = entry + strlen(c_info.block_name_prefix) + 1;
@@ -2212,6 +2231,7 @@ TEST_F(TestLibRBD, TestCoR)
   ASSERT_EQ(0, rbd_close(child));
 
   rados_ioctx_destroy(ioctx);
+  rados_ioctx_destroy(d_ioctx);
 }
 
 static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
