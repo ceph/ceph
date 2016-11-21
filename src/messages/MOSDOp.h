@@ -33,7 +33,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -332,13 +332,22 @@ struct ceph_osd_request_head {
 	::encode(osd_reqid_t(), payload);
       }
     } else {
-      // new, reordered, v7 message encoding
-      header.version = HEAD_VERSION;
+      // new, reordered message encoding
+      // v8 for dmclock use, otherwise v7
+      if ((features & CEPH_FEATURE_QOS_DMC) != 0) {
+        header.version = HEAD_VERSION;
+      } else {
+        header.version = 7;
+      }
+
       ::encode(pgid, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(reassert_version, payload);
       ::encode(reqid, payload);
+      if ((features & CEPH_FEATURE_QOS_DMC) != 0) {
+        ::encode(qos_params, payload);
+      }
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
       ::encode(oloc, payload);
@@ -369,6 +378,8 @@ struct ceph_osd_request_head {
 	  ::decode(flags, p);
 	  ::decode(reassert_version, p);
 	  ::decode(reqid, p);
+	  // QoS dmClock
+          ::decode(qos_params, p);
     } else if (header.version < 2) {
       // old decode
       ::decode(client_inc, p);
@@ -471,6 +482,12 @@ struct ceph_osd_request_head {
       // put client_inc in reqid.inc for get_reqid()'s benefit
       if (reqid.name == entity_name_t() && reqid.tid == 0)
 	reqid.inc = client_inc;
+    } else if (header.version < 8) {
+      ::decode(pgid, p);
+      ::decode(osdmap_epoch, p);
+      ::decode(flags, p);
+      ::decode(reassert_version, p);
+      ::decode(reqid, p);
     }
 
     partial_decode_needed = false;

@@ -88,6 +88,7 @@
 #define CEPH_FEATURE_FS_CHANGE_ATTR          (1ULL<<59) /* change_attr */
 
 #define CEPH_FEATURE_MSG_ADDR2 (1ULL<<59)  /* ADDR2 feature */
+#define CEPH_FEATURE_QOS_DMC          (1ULL<<60) /* dmclock QoS */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -187,6 +188,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_FS_BTIME |			 \
 	 CEPH_FEATURE_FS_CHANGE_ATTR |			 \
 	 CEPH_FEATURE_MSG_ADDR2 | \
+	 CEPH_FEATURE_QOS_DMC |			 \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL

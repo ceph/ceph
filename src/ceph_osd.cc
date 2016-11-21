@@ -487,7 +487,8 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH |
-    CEPH_FEATURE_OSD_ERASURE_CODES;
+    CEPH_FEATURE_OSD_ERASURE_CODES |
+    CEPH_FEATURE_QOS_DMC;
 
   // All feature bits 0 - 34 should be present from dumpling v0.67 forward
   uint64_t osd_required =
