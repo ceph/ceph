@@ -85,6 +85,24 @@ CEPH_LIBCEPHD_API int cephd_run_osd(int argc, const char **argv);
  */
 CEPH_LIBCEPHD_API int cephd_run_mds(int argc, const char **argv);
 
+/**
+ * Runs ceph-rgw passing in command line args
+ *
+ * @param argc number of parameters
+ * @param argv array of string arguments
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_LIBCEPHD_API int cephd_run_rgw(int argc, const char **argv);
+
+/**
+ * Runs radosgw-admin passing in command line args
+ *
+ * @param argc number of parameters
+ * @param argv array of string arguments
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_LIBCEPHD_API int cephd_run_rgw_admin(int argc, const char **argv);
+
 #ifdef __cplusplus
 }
 #endif

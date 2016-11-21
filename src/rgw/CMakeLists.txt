@@ -121,8 +121,7 @@ set(radosgw_srcs
   rgw_loadgen_process.cc
   rgw_civetweb.cc
   rgw_civetweb_frontend.cc
-  rgw_civetweb_log.cc
-  rgw_main.cc)
+  rgw_civetweb_log.cc)
 
 if (WITH_RADOSGW_ASIO_FRONTEND)
   list(APPEND radosgw_srcs
@@ -130,8 +129,12 @@ if (WITH_RADOSGW_ASIO_FRONTEND)
     rgw_asio_frontend.cc)
 endif (WITH_RADOSGW_ASIO_FRONTEND)
 
-add_executable(radosgw ${radosgw_srcs}  $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw rgw_a librados
+add_library(radosgw_a STATIC ${radosgw_srcs}
+  $<TARGET_OBJECTS:civetweb_common_objs>)
+target_link_libraries(radosgw_a rgw_a)
+
+add_executable(radosgw rgw_main.cc)
+target_link_libraries(radosgw radosgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
@@ -197,3 +200,11 @@ target_link_libraries(rgw LINK_PRIVATE
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(WITH_EMBEDDED)
+  include(MergeStaticLibraries)
+  add_library(cephd_rgw_base STATIC rgw_main.cc ${radosgw_admin_srcs})
+  set_target_properties(cephd_rgw_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
+  merge_static_libraries(cephd_rgw cephd_rgw_base rgw_a radosgw_a)
+  target_link_libraries(cephd_rgw fcgi)
+endif()

@@ -2238,7 +2238,11 @@ public:
   }
 };
 
-int main(int argc, char **argv)
+#ifdef BUILDING_FOR_EMBEDDED
+extern "C" int cephd_rgw_admin(int argc, const char **argv)
+#else
+int main(int argc, const char **argv)
+#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
