@@ -2377,7 +2377,8 @@ extern "C" int rbd_snap_remove(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_remove_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-  int r = ictx->operations->snap_remove(snap_name);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::snap_remove(ictx, snap_name, 0, prog_ctx);
   tracepoint(librbd, snap_remove_exit, r);
   return r;
 }
