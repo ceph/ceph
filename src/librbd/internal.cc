@@ -2596,6 +2596,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EROFS;
     }
 
+    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
+      C_SaferCond lock_ctx;
+      ictx->exclusive_lock->release_lock(&lock_ctx);
+      lock_ctx.wait();
+    };
+
     RWLock::RLocker snap_locker(ictx->snap_lock);
     if (ictx->journal == nullptr) {
       lderr(cct) << "journal is not active" << dendl;
