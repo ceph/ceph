@@ -2808,10 +2808,10 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   return ret;
 }
 
-// special handling for rgw_compression_type = "random" with multipart uploads
-static CompressorRef get_compressor_plugin(const req_state *s)
+// special handling for compression type = "random" with multipart uploads
+static CompressorRef get_compressor_plugin(const req_state *s,
+                                           const std::string& compression_type)
 {
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
   if (compression_type != "random") {
     return Compressor::create(s->cct, compression_type);
   }
@@ -2847,6 +2847,7 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
+  const auto& compression_type = store->get_zone_params().get_compression_type();
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -2933,11 +2934,11 @@ void RGWPutObj::execute()
 
   fst = copy_source_range_fst;
   lst = copy_source_range_lst;
-  if (s->cct->_conf->rgw_compression_type != "none") {
-    plugin = get_compressor_plugin(s);
+  if (compression_type != "none") {
+    plugin = get_compressor_plugin(s, compression_type);
     if (!plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-          << s->cct->_conf->rgw_compression_type << dendl;
+      ldout(s->cct, 1) << "Cannot load plugin for compression type "
+          << compression_type << dendl;
     } else {
       compressor = boost::in_place(s->cct, plugin, filter);
       filter = &*compressor;
@@ -3240,12 +3241,12 @@ void RGWPostObj::execute()
   if (op_ret < 0)
     return;
 
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
+  const auto& compression_type = store->get_zone_params().get_compression_type();
   CompressorRef plugin;
   if (compression_type != "none") {
     plugin = Compressor::create(s->cct, compression_type);
     if (!plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+      ldout(s->cct, 1) << "Cannot load plugin for compression type "
           << compression_type << dendl;
     } else {
       compressor = boost::in_place(s->cct, plugin, filter);
