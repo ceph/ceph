@@ -1685,9 +1685,20 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     store->sync_and_flush();
   } else if (command == "dump_ops_in_flight" ||
 	     command == "ops") {
-    op_tracker.dump_ops_in_flight(f);
+    if (!op_tracker.dump_ops_in_flight(f)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
+  } else if (command == "dump_blocked_ops") {
+    if (!op_tracker.dump_ops_in_flight(f, true)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
   } else if (command == "dump_historic_ops") {
-    op_tracker.dump_historic_ops(f);
+    if (!op_tracker.dump_historic_ops(f)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
   } else if (command == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
@@ -2008,6 +2019,10 @@ void OSD::final_init()
 				     "ops", asok_hook,
 				     "show the ops currently in flight");
   assert(r == 0);
+  r = admin_socket->register_command("dump_blocked_ops",
+				     "dump_blocked_ops", asok_hook,
+				     "show the blocked ops currently in flight");
+  assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
@@ -2327,6 +2342,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("flush_journal");
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("ops");
+  cct->get_admin_socket()->unregister_command("dump_blocked_ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
@@ -5524,7 +5540,7 @@ void OSD::ms_fast_dispatch(Message *m)
     m->put();
     return;
   }
-  OpRequestRef op = op_tracker.create_request<OpRequest>(m);
+  OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
@@ -8651,6 +8667,7 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_min_recovery_priority",
     "osd_op_complaint_time", "osd_op_log_threshold",
     "osd_op_history_size", "osd_op_history_duration",
+    "osd_enable_op_tracker",
     "osd_map_cache_size",
     "osd_map_max_advance",
     "osd_pg_epoch_persisted_max_stale",
@@ -8686,6 +8703,9 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("osd_op_history_duration")) {
     op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                              cct->_conf->osd_op_history_duration);
+  }
+  if (changed.count("osd_enable_op_tracker")) {
+      op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);
   }
   if (changed.count("osd_disk_thread_ioprio_class") ||
       changed.count("osd_disk_thread_ioprio_priority")) {
