@@ -218,9 +218,9 @@ void ReplicatedPG::on_local_recover(
     if (pg_log.get_missing().is_missing(recovery_info.soid) &&
             pg_log.get_missing().missing.find(recovery_info.soid)->second.need > recovery_info.version)
     {
-    //¸Õ²ÅÄÇ¸öÎÊÌâ(Ò²¾ÍÊÇÔÚÕâÀïassert)ºÜ¿ÉÄÜÊÇÕâÑùµ¼ÖÂµÄ£¬Ê×ÏÈ×÷ÎªpgÖ÷±¾µÄosd½ÚµãÔÚÆäpglogÖĞÓĞÒ»¸ö°æ±¾£¬±ÈÈçËµ11£¬
-    //ÔÚ¸±±¾Ò²¼ÇÂ¼ÓĞ°æ±¾£¬±ÈÈçÊÇ10.ÔÚ»Ö¸´µÄÊ±ºòÖ÷±¾¸ø¸±±¾Í¬²½¶ÔÏó£¬¸±±¾ÈÏÎªÊÜµ½µÄ°æ±¾Ó¦¸ÃÊÇ> 10µÄ¡£
-    //µ«ÊÇÊµ¼ÊÉÏÖ÷±¾µÄ×îĞÂÊı¾İ¶ªÁË£¬¶ÔÏó³Ö¾Ã»¯µÄ°æ±¾Êµ¼ÊÉÏÊÇ9
+    //ï¿½Õ²ï¿½ï¿½Ç¸ï¿½ï¿½ï¿½ï¿½ï¿½(Ò²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½assert)ï¿½Ü¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÂµÄ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªpgï¿½ï¿½ï¿½ï¿½ï¿½ï¿½osdï¿½Úµï¿½ï¿½ï¿½ï¿½ï¿½pglogï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½æ±¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ëµ11ï¿½ï¿½
+    //ï¿½Ú¸ï¿½ï¿½ï¿½Ò²ï¿½ï¿½Â¼ï¿½Ğ°æ±¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½10.ï¿½Ú»Ö¸ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ó£¬¸ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½Üµï¿½ï¿½Ä°æ±¾Ó¦ï¿½ï¿½ï¿½ï¿½> 10ï¿½Ä¡ï¿½
+    //ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½İ¶ï¿½ï¿½Ë£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾Ã»ï¿½ï¿½Ä°æ±¾Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½9
         assert(is_primary());
         const pg_log_entry_t *latest = pg_log.get_log().objects.find(recovery_info.soid)->second;
         if (latest->op == pg_log_entry_t::LOST_REVERT &&
@@ -267,7 +267,7 @@ void ReplicatedPG::on_local_recover(
 
         publish_stats_to_osd();
         assert(missing_loc.needs_recovery(hoid));
-		//»Ö¸´ÁË¾Í¼ÓÒ»¸öÂ·¾¶£¬»½ĞÑµÈ´ı¸Ã¶ÔÏóµÄop
+		//ï¿½Ö¸ï¿½ï¿½Ë¾Í¼ï¿½Ò»ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÑµÈ´ï¿½ï¿½Ã¶ï¿½ï¿½ï¿½ï¿½ï¿½op
         missing_loc.add_location(hoid, pg_whoami);
         if (!is_unreadable_object(hoid) &&
                 waiting_for_unreadable_object.count(hoid))
@@ -429,7 +429,7 @@ void ReplicatedPG::maybe_kick_recovery(
         {
             prep_object_replica_pushes(soid, v, h);
         }
-		//Ïàµ±ÓÚ×ßÁË¿ìËÙÍ¨µÀ£¬Á¢¼´´¥·¢»Ö¸´
+		//ï¿½àµ±ï¿½ï¿½ï¿½ï¿½ï¿½Ë¿ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½
         pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
     }
 }
@@ -1473,7 +1473,7 @@ void ReplicatedPG::calc_trim_to()
         pg_trim_to = new_trim_to;
         assert(pg_trim_to <= pg_log.get_head());
         assert(pg_trim_to <= min_last_complete_ondisk);
-		//°´ÕâÑùËã£¬ÔõÃ´»á³öÏÖĞèÒªbackfillµÄÇé¿ö£¬¶àÓàµÄpglogÒ²ÎŞ·¨Çå³ı
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ã£¬ï¿½ï¿½Ã´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªbackfillï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½pglogÒ²ï¿½Ş·ï¿½ï¿½ï¿½ï¿½ï¿½
     }
 }
 
@@ -1703,7 +1703,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
         return;
     }
 
-    //IsReadablePredicate,Èç¹ûÖ÷±¾Ã»ÓĞÊÇ²»ÄÜ¶ÁµÄ
+    //IsReadablePredicate,ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½Ç²ï¿½ï¿½Ü¶ï¿½ï¿½ï¿½
     // missing object?
     if (is_unreadable_object(head))
     {
@@ -3315,7 +3315,7 @@ void ReplicatedPG::do_scan(
         bi.begin = m->begin;
         // No need to flush, there won't be any in progress writes occuring
         // past m->begin
-        //É¨ÃèµÃµ½backfill¶ÔÏóµÄĞÅÏ¢£¬primaryÍ¨¹ı¶Ô±È¿ÉÒÔ¼õÉÙÊµ¼ÊĞèÒªbackfillµÄ¶ÔÏó
+        //É¨ï¿½ï¿½ï¿½Ãµï¿½backfillï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½primaryÍ¨ï¿½ï¿½ï¿½Ô±È¿ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½Òªbackfillï¿½Ä¶ï¿½ï¿½ï¿½
         scan_range(
             cct->_conf->osd_backfill_scan_min,
             cct->_conf->osd_backfill_scan_max,
@@ -6621,8 +6621,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
 
     // use newer snapc?
-    //new snapsetÕâÊ±·ÅµÄ»¹ÊÇ¾ÉµÄsnapset
-    //snapcÖĞ·ÅµÄÊÇĞèÒª·ÃÎÊµÄsnap
+    // snapc å°±æ˜¯å®¢æˆ·ç«¯/osdmap ä¸­æœ€æ–°çš„snapä¿¡æ¯ã€‚
+    // è¿™é‡Œåº”è¯¥æ˜¯é¿å…å®¢æˆ·ç«¯æ²¡æœ‰æ›´æ–°snapä¿¡æ¯çš„æƒ…å†µã€‚
     if (ctx->new_snapset.seq > snapc.seq)
     {
         snapc.seq = ctx->new_snapset.seq;
@@ -6643,9 +6643,13 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
         coid.snap = snapc.seq;
 
         unsigned l;
+        //å­˜åœ¨è¿™ç§æƒ…å†µï¼Œç”¨æˆ·å·²ç»æ‰“äº†å¤šä¸ªsnapï¼Œä½†æ˜¯å¯¹è±¡ä¸Šçš„è¿˜æ˜¯å¾ˆè€çš„snap(å› ä¸ºä¸€ç›´æ²¡æ›´æ–°)
+        //è¿™æ—¶åˆ›å»ºçš„cloneå®é™…ä¸ŠåŒ…å«äº†å¾ˆå¤šç‰ˆæœ¬ã€‚è¿™äº›ç‰ˆæœ¬çš„snapå…¬ç”¨åŒä¸€ä¸ªcloneå¯¹è±¡
+
+        //å› ä¸ºsnapsæ˜¯é€†åºæ’åˆ—çš„ï¼Œé€šè¿‡è¿™ä¸ªå¾ªç¯æ‰¾åˆ°ç¬¬ä¸€ä¸ªå¤§äºctx->new_snapset.seqçš„snap seqã€‚
         for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > ctx->new_snapset.seq; l++) ;
-        //´æÔÚÕâÖÖÇé¿ö£¬ÓÃ»§ÒÑ¾­´òÁË¶à¸ösnap£¬µ«ÊÇ¶ÔÏóÉÏµÄ»¹ÊÇºÜÀÏµÄsnap(ÒòÎªÒ»Ö±Ã»¸üĞÂ)
-        //ÕâÊ±´´½¨µÄcloneÊµ¼ÊÉÏ°üº¬ÁËºÜ¶à°æ±¾¡£ÕâĞ©°æ±¾µÄsnap¹«ÓÃÍ¬Ò»¸öclone¶ÔÏó
+
+        //è¿™é‡Œå°±æ˜¯æŠŠå¤§äºå½“å‰object seqçš„æ‰€æœ‰seqéƒ½è®°å½•ä¸‹æ¥
         vector<snapid_t> snaps(l);
         for (unsigned i=0; i<l; i++)
             snaps[i] = snapc.snaps[i];
@@ -6672,12 +6676,15 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
         {
             snap_oi = &static_snap_oi;
         }
+        //snapå¯¹è±¡çš„oiï¼Œsnapå¯¹è±¡æ˜¯æ²¡æœ‰snapsetçš„ã€‚
         snap_oi->version = ctx->at_version;
         snap_oi->prior_version = ctx->obs->oi.version;
         snap_oi->copy_user_bits(ctx->obs->oi);
+        //oiä¸­è®°å½•äº†cloneå¯¹è±¡æ‰€å¯¹åº”çš„å¿«ç…§ç‰ˆæœ¬é›†åˆ
         snap_oi->snaps = snaps;
 
         // prepend transaction to op_t
+        //å…ˆcloneï¼Œå†ä¿®æ”¹head
         PGBackend::PGTransaction *t = pgbackend->get_transaction();
         _make_clone(ctx, t, ctx->clone_obc, soid, coid, snap_oi);
         t->append(ctx->op_t);
@@ -6694,6 +6701,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
             ctx->delta_stats.num_objects_omap++;
         ctx->delta_stats.num_object_clones++;
         ctx->new_snapset.clones.push_back(coid.snap);
+        //cloneçš„æ˜¯æ•´ä¸ªå¯¹è±¡ï¼Œå› è€Œåªéœ€è¦è®°å½•ä¸€ä¸ªsizeå³å¯ï¼Œè€Œä¸éœ€è¦è®°å½•ä¸€ä¸ªæ®µ
         ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
 
         // clone_overlap should contain an entry for each clone
@@ -6717,12 +6725,15 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
 
     // update most recent clone_overlap and usage stats
+    // clone_overlapè®°å½•cloneå¯¹è±¡ ä¸ next/headå¯¹è±¡ä¹‹é—´çš„å·®è·ã€‚
+    // é€šè¿‡è¿™ä¸ªå·®è·å¯ä»¥ç”¨æ¥ä¼˜åŒ–æ¢å¤ï¼Œå®ç°clonesä»¥åŠheadä¹‹é—´çš„æœ¬åœ°æ‹·è´
     if (ctx->new_snapset.clones.size() > 0)
     {
         /* we need to check whether the most recent clone exists, if it's been evicted,
          * it's not included in the stats */
         hobject_t last_clone_oid = soid;
         last_clone_oid.snap = ctx->new_snapset.clone_overlap.rbegin()->first;
+        //æ”¯æŒoverlay
         if (is_present_clone(last_clone_oid))
         {
             interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
@@ -6734,7 +6745,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
 
     // update snapset with latest snap context
-    //¸üĞÂhead¶ÔÏóÉÏµÄsnapset
+    // headå¯¹è±¡çš„æ–°snapset
     ctx->new_snapset.seq = snapc.seq;
     ctx->new_snapset.snaps = snapc.snaps;
     ctx->new_snapset.head_exists = ctx->new_obs.exists;
@@ -10891,14 +10902,14 @@ bool ReplicatedPG::start_recovery_ops(
     {
         info.last_complete = info.last_update;
     }
-    //Èç¹ûËùÓĞmissing¶¼unfound,Ö÷±¾¾Í²»¼±×Å»Ö¸´ÁË£¬·´ÕıunfoundÒ²»Ö¸´²»ÁË
+    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½missingï¿½ï¿½unfound,ï¿½ï¿½ï¿½ï¿½ï¿½Í²ï¿½ï¿½ï¿½ï¿½Å»Ö¸ï¿½ï¿½Ë£ï¿½ï¿½ï¿½ï¿½ï¿½unfoundÒ²ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½
     if (num_missing == num_unfound) 
     {
         // All of the missing objects we have are unfound.
         // Recover the replicas.
         started = recover_replicas(max, handle);
     }
-	//Ã¿´ÎÖ»»Ö¸´replica»òÕßprimary,²»Í¬Ê±»Ö¸´
+	//Ã¿ï¿½ï¿½Ö»ï¿½Ö¸ï¿½replicaï¿½ï¿½ï¿½ï¿½primary,ï¿½ï¿½Í¬Ê±ï¿½Ö¸ï¿½
     if (!started)
     {
         // We still have missing objects that we should grab from replicas.
@@ -10910,7 +10921,7 @@ bool ReplicatedPG::start_recovery_ops(
         started = recover_replicas(max, handle);
     }
 
-    //ËµÃ÷Ã»ÓĞ¶ÔÏóĞèÒª»Ö¸´ÁË
+    //Ëµï¿½ï¿½Ã»ï¿½Ğ¶ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½Ö¸ï¿½ï¿½ï¿½
     if (started)
         work_in_progress = true;
 
@@ -10918,7 +10929,7 @@ bool ReplicatedPG::start_recovery_ops(
     if (recovering.empty() &&
             state_test(PG_STATE_BACKFILL) &&
             !backfill_targets.empty() && started < max &&
-            missing.num_missing() == 0 && //×öbackfillµÄÊ±ºò,±¾µØµÄmissingÒÑ¾­ÊÇ¿ÕµÄÁË
+            missing.num_missing() == 0 && //ï¿½ï¿½backfillï¿½ï¿½Ê±ï¿½ï¿½,ï¿½ï¿½ï¿½Øµï¿½missingï¿½Ñ¾ï¿½ï¿½Ç¿Õµï¿½ï¿½ï¿½
             waiting_on_backfill.empty())
     {
         if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL))
@@ -11053,7 +11064,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
     int skipped = 0;
 
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-	//Èç¹ûÓĞĞ©ÒÑ¾­»Ö¸´£¬ÄÇÃ´¾Í¿ÉÒÔÌø¹ı
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ğ©ï¿½Ñ¾ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½Ã´ï¿½Í¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     map<version_t, hobject_t>::const_iterator p =
         missing.rmissing.lower_bound(pg_log.get_log().last_requested);
     while (p != missing.rmissing.end())
@@ -11559,7 +11570,7 @@ int ReplicatedPG::recover_backfill(
                 sent_scan = true;
             }
         }
-        //»ñÈ¡replicaµÄ¶ÔÏóĞÅÏ¢£¬ËõĞ¡·¶Î§?
+        //ï¿½ï¿½È¡replicaï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½Ğ¡ï¿½ï¿½Î§?
         // Count simultaneous scans as a single op and let those complete
         if (sent_scan)
         {
@@ -11624,7 +11635,7 @@ int ReplicatedPG::recover_backfill(
                 pg_shard_t bt = *i;
                 BackfillInterval& pbi = peer_backfill_info[bt];
                 // Find all check peers that have the wrong version
-                //¶Ô±ÈÒ»°Ñ£¬¿ÉÒÔ²»»Ö¸´µÄ¾Í²»»Ö¸´
+                //ï¿½Ô±ï¿½Ò»ï¿½Ñ£ï¿½ï¿½ï¿½ï¿½Ô²ï¿½ï¿½Ö¸ï¿½ï¿½Ä¾Í²ï¿½ï¿½Ö¸ï¿½
                 if (check == backfill_info.begin && check == pbi.begin)
                 {
                     if (pbi.objects.begin()->second != obj_v)
@@ -13815,7 +13826,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
             return discard_event();
         }
         assert(repop);
-		//Íê³Éosd_pg_max_concurrent_snap_trimsÖ¸¶¨ÊıÁ¿µÄopsÖ®ºó£¬¼ÌĞøÏÂÒ»ÂÖ
+		//ï¿½ï¿½ï¿½ï¿½osd_pg_max_concurrent_snap_trimsÖ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½opsÖ®ï¿½ó£¬¼ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½
         repop->queue_snap_trimmer = true;
 
         pg->apply_ctx_stats(repop->ctx);
