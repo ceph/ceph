@@ -385,6 +385,43 @@ inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
   return out << o.bucket_name << "/" << o.obj_key;
 }
 
+
+class RGWBulkUploadOp : public RGWOp {
+protected:
+  class StreamGetter;
+
+  virtual std::unique_ptr<StreamGetter> create_stream() = 0;
+  virtual void send_response() = 0;
+
+public:
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+
+  const std::string name() override {
+    return "bulk_upload";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_BULK_UPLOAD;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_WRITE;
+  }
+}; /* RGWBulkUploadOp */
+
+
+class RGWBulkUploadOp::StreamGetter {
+public:
+  StreamGetter() = default;
+  virtual ~StreamGetter() = default;
+
+  virtual ssize_t get_at_most(size_t want, ceph::bufferlist& dst) = 0;
+  virtual ssize_t get_exactly(size_t want, ceph::bufferlist& dst) = 0;
+}; /* End of nested subclass StreamGetter */
+
+
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
 
 class RGWListBuckets : public RGWOp {

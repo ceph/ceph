@@ -5496,6 +5496,23 @@ void RGWBulkDelete::execute()
   return;
 }
 
+
+int RGWBulkUploadOp::verify_permission()
+{
+  return 0;
+}
+
+void RGWBulkUploadOp::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWBulkUploadOp::execute()
+{
+  return;
+}
+
+
 int RGWSetAttrs::verify_permission()
 {
   bool perm;
