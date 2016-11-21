@@ -22,6 +22,8 @@
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
 
+#include "common/mClockCommon.h"
+#include "messages/MOSDOp.h"
 
 class OSD;
 
@@ -66,6 +68,7 @@ class PGQueueable {
   unsigned priority;
   utime_t start_time;
   entity_inst_t owner;
+  dmc::ReqParams qos_params;
 
   struct RunVis : public boost::static_visitor<> {
     OSD *osd;
@@ -96,7 +99,12 @@ public:
       priority(op->get_req()->get_priority()),
       start_time(op->get_req()->get_recv_stamp()),
       owner(op->get_req()->get_source_inst())
-  {}
+  {
+    if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+      MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+      qos_params = m->get_qos_params();
+    }
+  }
   PGQueueable(
     const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
     const entity_inst_t &owner)
@@ -132,6 +140,7 @@ public:
   utime_t get_start_time() const { return start_time; }
   entity_inst_t get_owner() const { return owner; }
   const QVariant& get_variant() const { return qvariant; }
+  dmc::ReqParams get_qos_params() const { return qos_params; }
 }; // class PGQueueable
 
 
