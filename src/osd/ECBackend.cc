@@ -1782,8 +1782,10 @@ bool ECBackend::try_state_to_reads()
   if (!op->remote_read.empty()) {
     objects_read_async_no_cache(
       op->remote_read,
-      [this, op](hobject_t::bitwisemap<extent_map> &&results) {
-	op->remote_read_result = std::move(results);
+      [this, op](hobject_t::bitwisemap<pair<int, extent_map> > &&results) {
+	for (auto &&i: results) {
+	  op->remote_read_result.emplace(i.first, i.second.second);
+	}
 	check_ops();
       });
   }
@@ -2056,7 +2058,7 @@ void ECBackend::objects_read_async(
 	hoid(hoid),
 	to_read(to_read),
 	on_complete(on_complete) {}
-    void operator()(hobject_t::bitwisemap<extent_map> &&results) {
+    void operator()(hobject_t::bitwisemap<pair<int, extent_map> > &&results) {
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
@@ -2065,28 +2067,37 @@ void ECBackend::objects_read_async(
 
       auto &got = results[hoid];
 
+      int r = 0;
       for (auto &&read: to_read) {
-	assert(read.second.first);
-	uint64_t offset = read.first.get<0>();
-	uint64_t length = read.first.get<1>();
-	auto range = got.get_containing_range(offset, length);
-	assert(range.first != range.second);
-	assert(range.first.get_off() <= offset);
-	assert(
-	  (offset + length) <=
-	  (range.first.get_off() + range.first.get_len()));
-	read.second.first->substr_of(
-	  range.first.get_val(),
-	  offset - range.first.get_off(),
-	  length);
-	if (read.second.second) {
-	  read.second.second->complete(length);
-	  read.second.second = nullptr;
+	if (got.first < 0) {
+	  if (read.second.second) {
+	    read.second.second->complete(got.first);
+	  }
+	  if (r == 0)
+	    r = got.first;
+	} else {
+	  assert(read.second.first);
+	  uint64_t offset = read.first.get<0>();
+	  uint64_t length = read.first.get<1>();
+	  auto range = got.second.get_containing_range(offset, length);
+	  assert(range.first != range.second);
+	  assert(range.first.get_off() <= offset);
+	  assert(
+	    (offset + length) <=
+	    (range.first.get_off() + range.first.get_len()));
+	  read.second.first->substr_of(
+	    range.first.get_val(),
+	    offset - range.first.get_off(),
+	    length);
+	  if (read.second.second) {
+	    read.second.second->complete(length);
+	    read.second.second = nullptr;
+	  }
 	}
       }
       to_read.clear();
       if (on_complete) {
-	on_complete.release()->complete(0);
+	on_complete.release()->complete(r);
       }
     }
     ~cb() {
@@ -2099,11 +2110,12 @@ void ECBackend::objects_read_async(
   objects_read_and_reconstruct(
     reads,
     fast_read,
-    make_gen_lambda_context<hobject_t::bitwisemap<extent_map> &&, cb>(
-      cb(this,
-	 hoid,
-	 to_read,
-	 on_complete)));
+    make_gen_lambda_context<
+      hobject_t::bitwisemap<pair<int, extent_map> > &&, cb>(
+	cb(this,
+	   hoid,
+	   to_read,
+	   on_complete)));
 }
 
 struct CallClientContexts :
@@ -2160,7 +2172,7 @@ struct CallClientContexts :
       res.returned.pop_front();
     }
 out:
-    status->complete_object(hoid, std::move(result));
+    status->complete_object(hoid, res.r, std::move(result));
     ec->kick_reads();
   }
 };
@@ -2170,7 +2182,7 @@ void ECBackend::objects_read_and_reconstruct(
     std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
   > &reads,
   bool fast_read,
-  GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func)
+  GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func)
 {
   in_progress_client_reads.emplace_back(
     reads.size(), std::move(func));

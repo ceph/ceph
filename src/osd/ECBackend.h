@@ -141,24 +141,25 @@ public:
       std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
     > &reads,
     bool fast_read,
-    GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func);
+    GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func);
 
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
     unsigned objects_to_read;
-    GenContextURef<hobject_t::bitwisemap<extent_map> &&> func;
-    hobject_t::bitwisemap<extent_map> results;
+    GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> func;
+    hobject_t::bitwisemap<pair<int, extent_map> > results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
-      GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func)
+      GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func)
       : objects_to_read(objects_to_read), func(std::move(func)) {}
     void complete_object(
       const hobject_t &hoid,
+      int err,
       extent_map &&buffers) {
       assert(objects_to_read);
       --objects_to_read;
       assert(!results.count(hoid));
-      results.emplace(hoid, std::move(buffers));
+      results.emplace(hoid, make_pair(err, std::move(buffers)));
     }
     bool is_complete() const {
       return objects_to_read == 0;
@@ -190,8 +191,9 @@ public:
     objects_read_and_reconstruct(
       _to_read,
       false,
-      make_gen_lambda_context<hobject_t::bitwisemap<extent_map> &&, Func>(
-	std::forward<Func>(on_complete)));
+      make_gen_lambda_context<
+        hobject_t::bitwisemap<pair<int, extent_map> > &&, Func>(
+	  std::forward<Func>(on_complete)));
   }
   void kick_reads() {
     while (in_progress_client_reads.size() &&
