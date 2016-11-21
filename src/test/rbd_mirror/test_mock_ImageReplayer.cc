@@ -788,5 +788,115 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   ASSERT_EQ(0, close_ctx.wait());
 }
 
+TEST_F(TestMockImageReplayer, DelayedReplay) {
+
+  // START
+
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  librbd::MockTestJournal mock_local_journal;
+  mock_local_image_ctx.journal = &mock_local_journal;
+
+  journal::MockJournaler mock_remote_journaler;
+  MockBootstrapRequest mock_bootstrap_request;
+  MockReplay mock_local_replay;
+  MockEventPreprocessor mock_event_preprocessor;
+  MockReplayStatusFormatter mock_replay_status_formatter;
+  ::journal::MockReplayEntry mock_replay_entry;
+
+  expect_get_or_send_update(mock_replay_status_formatter);
+  expect_get_commit_tid_in_debug(mock_replay_entry);
+  expect_committed(mock_remote_journaler, 1);
+
+  InSequence seq;
+  EXPECT_CALL(mock_remote_journaler, construct());
+  expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
+
+  EXPECT_CALL(mock_local_journal, add_listener(_));
+
+  expect_init(mock_remote_journaler, 0);
+
+  EXPECT_CALL(mock_remote_journaler, add_listener(_));
+  expect_get_cached_client(mock_remote_journaler, 0);
+
+  expect_start_external_replay(mock_local_journal, &mock_local_replay, 0);
+
+  EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+
+  // REPLAY
+
+  cls::journal::Tag tag =
+    {1, 0, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
+                            librbd::Journal<>::LOCAL_MIRROR_UUID,
+                            true, 0, 0})};
+
+  expect_try_pop_front(mock_remote_journaler, tag.tid, true);
+
+  // replay_flush
+  expect_shut_down(mock_local_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, stop_external_replay());
+  expect_start_external_replay(mock_local_journal, &mock_local_replay, 0);
+  expect_get_tag(mock_remote_journaler, tag, 0);
+  expect_allocate_tag(mock_local_journal, 0);
+
+  // process with delay
+  EXPECT_CALL(mock_replay_entry, get_data());
+  librbd::journal::EventEntry event_entry(
+    librbd::journal::AioDiscardEvent(123, 345), ceph_clock_now());
+  EXPECT_CALL(mock_local_replay, decode(_, _))
+    .WillOnce(DoAll(SetArgPointee<1>(event_entry),
+                    Return(0)));
+  expect_preprocess(mock_event_preprocessor, false, 0);
+  expect_process(mock_local_replay, 0, 0);
+
+  // attempt to process the next event
+  C_SaferCond replay_ctx;
+  expect_try_pop_front_return_no_entries(mock_remote_journaler, &replay_ctx);
+
+  // fire
+  mock_local_image_ctx.mirroring_replay_delay = 2;
+  m_image_replayer->handle_replay_ready();
+  ASSERT_EQ(0, replay_ctx.wait());
+
+  // add a pending (delayed) entry before stop
+  expect_try_pop_front(mock_remote_journaler, tag.tid, true);
+  EXPECT_CALL(mock_replay_entry, get_data());
+  C_SaferCond decode_ctx;
+  EXPECT_CALL(mock_local_replay, decode(_, _))
+    .WillOnce(DoAll(Invoke([&decode_ctx](bufferlist::iterator* it,
+                                         librbd::journal::EventEntry *e) {
+                             decode_ctx.complete(0);
+                           }),
+                    Return(0)));
+
+  mock_local_image_ctx.mirroring_replay_delay = 10;
+  m_image_replayer->handle_replay_ready();
+  ASSERT_EQ(0, decode_ctx.wait());
+
+  // STOP
+
+  MockCloseImageRequest mock_close_local_image_request;
+
+  expect_stop_replay(mock_remote_journaler, 0);
+  expect_shut_down(mock_local_replay, true, 0);
+
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
+  EXPECT_CALL(mock_local_journal, stop_external_replay());
+
+  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
+  expect_shut_down(mock_remote_journaler, 0);
+
+  expect_send(mock_close_local_image_request, 0);
+
+  C_SaferCond stop_ctx;
+  m_image_replayer->stop(&stop_ctx);
+  ASSERT_EQ(0, stop_ctx.wait());
+}
+
 } // namespace mirror
 } // namespace rbd
