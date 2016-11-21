@@ -357,6 +357,24 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   ASSERT_NE(all_features, 0);
 }
 
+void set_completion_complete(rados_completion_t cb, void *arg)
+{
+  bool *my_aio_complete = (bool*)arg;
+  *my_aio_complete = true;
+}
+
+TEST_F(LibRadosMiscPP, BadFlagsPP) {
+  unsigned badflags = CEPH_OSD_FLAG_PARALLELEXEC;
+  {
+    bufferlist bl;
+    bl.append("data");
+    ASSERT_EQ(0, ioctx.write("badfoo", bl, bl.length(), 0));
+  }
+  {
+    ASSERT_EQ(-EINVAL, ioctx.remove("badfoo", badflags));
+  }
+}
+
 TEST_F(LibRadosMiscPP, Operate1PP) {
   ObjectWriteOperation o;
   {
@@ -448,12 +466,6 @@ TEST_F(LibRadosMiscPP, BigObjectPP) {
   // this test only works on 64-bit platforms
   ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, bl.length(), 500000000000ull));
 #endif
-}
-
-void set_completion_complete(rados_completion_t cb, void *arg)
-{
-  bool *my_aio_complete = (bool*)arg;
-  *my_aio_complete = true;
 }
 
 TEST_F(LibRadosMiscPP, AioOperatePP) {
