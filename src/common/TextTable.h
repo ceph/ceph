@@ -49,9 +49,11 @@ private:
   };
 
   std::vector<TextTableColumn> col;	// column definitions
-  std::vector<std::vector<std::string> > row;	// row data array
   unsigned int curcol, currow;		// col, row being inserted into
   unsigned int indent;			// indent width when rendering
+
+protected:
+  std::vector<std::vector<std::string> > row;	// row data array
 
 public:
   TextTable(): curcol(0), currow(0), indent(0) {}
