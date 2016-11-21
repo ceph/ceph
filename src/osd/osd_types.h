@@ -2733,6 +2733,7 @@ public:
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
   epoch_t last_map_marked_full; // last epoch osdmap was marked full
+  map<int64_t, epoch_t> pool_last_map_marked_full; // last epoch pool was marked full
 
   OSDSuperblock() : 
     whoami(-1), 

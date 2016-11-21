@@ -6295,6 +6295,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
+      set_pool_last_map_marked_full(o, e);
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(META_COLL, fulloid, 0, bl.length(), bl);
@@ -6328,6 +6329,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
+      set_pool_last_map_marked_full(o, e);
 
       bufferlist fbl;
       o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
@@ -8206,6 +8208,9 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     }
   }
 
+  // calc actual pgid
+  pg_t _pgid = m->get_pg();
+  int64_t pool = _pgid.pool();
   if (op->may_write()) {
     // full?
     if ((service.check_failsafe_full() ||
@@ -8217,6 +8222,17 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
       return;
     }
 
+    const pg_pool_t *pi = osdmap->get_pg_pool(pool);
+    if (!pi) {
+      return;
+    }
+    // pool is full ?
+    map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
+    if (pi->has_flag(pg_pool_t::FLAG_FULL) || 
+       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) {
+      return;
+    }
+    
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
       service.reply_op_error(op, -EINVAL);
@@ -8235,9 +8251,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     }
   }
 
-  // calc actual pgid
-  pg_t _pgid = m->get_pg();
-  int64_t pool = _pgid.pool();
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
       osdmap->have_pg_pool(pool))
     _pgid = osdmap->raw_pg_to_pg(_pgid);
@@ -8872,4 +8885,18 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
         }
   }
   in_use.insert(got.begin(), got.end());
+}
+
+void OSD::set_pool_last_map_marked_full(OSDMap *o, epoch_t &e)
+{
+  map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
+  for (map<int64_t, pg_pool_t>::const_iterator it = o->get_pools().begin();
+       it != o->get_pools().end(); it++) {
+    bool exist = pool_last_map_marked_full.count(it->first);
+    if (it->second.has_flag(pg_pool_t::FLAG_FULL) && !exist)
+      pool_last_map_marked_full[it->first] = e;
+    if (it->second.has_flag(pg_pool_t::FLAG_FULL) &&
+      (exist && pool_last_map_marked_full.count(it->first) < e))
+       pool_last_map_marked_full[it->first] = e;
+    }
 }

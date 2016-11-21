@@ -3994,7 +3994,7 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat)
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
@@ -4006,6 +4006,7 @@ void OSDSuperblock::encode(bufferlist &bl) const
   ::encode(mounted, bl);
   ::encode(osd_fsid, bl);
   ::encode(last_map_marked_full, bl);
+  ::encode(pool_last_map_marked_full, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4033,6 +4034,8 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
     ::decode(osd_fsid, bl);
   if (struct_v >= 6)
     ::decode(last_map_marked_full, bl);
+  if (struct_v >= 7)
+    ::decode(pool_last_map_marked_full, bl);
   DECODE_FINISH(bl);
 }
 
