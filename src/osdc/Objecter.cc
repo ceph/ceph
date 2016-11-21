@@ -3497,7 +3497,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
   C_NList *onack = new C_NList(list_context, onfinish, this);
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
 
-  pg_read(list_context->current_pg, oloc, op,
+  pg_read(list_context->current_pg, oloc, op, list_context->pool_snap_seq,
 	  &list_context->bl, 0, onack, &onack->epoch,
 	  &list_context->ctx_budget);
 }
@@ -3653,7 +3653,8 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
   C_List *onack = new C_List(list_context, onfinish, this);
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
 
-  pg_read(list_context->current_pg, oloc, op, &list_context->bl, 0, onack,
+  pg_read(list_context->current_pg, oloc, op, list_context->pool_snap_seq,
+          &list_context->bl, 0, onack,
 	  &onack->epoch, &list_context->ctx_budget);
 }
 
@@ -4946,6 +4947,7 @@ struct C_EnumerateReply : public Context {
 void Objecter::enumerate_objects(
     int64_t pool_id,
     const std::string &ns,
+    snapid_t& snapid,
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
@@ -5003,7 +5005,7 @@ void Objecter::enumerate_objects(
 
   // Issue.  See you later in _enumerate_reply
   object_locator_t oloc(pool_id, ns);
-  pg_read(start.get_hash(), oloc, op,
+  pg_read(start.get_hash(), oloc, op, snapid,
 	  &on_ack->bl, 0, on_ack, &on_ack->epoch, &on_ack->budget);
 }
 

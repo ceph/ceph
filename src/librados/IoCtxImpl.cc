@@ -1110,7 +1110,7 @@ int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
   rd.hit_set_ls(pls, NULL);
   object_locator_t oloc(poolid);
   Objecter::Op *o = objecter->prepare_pg_read_op(
-    hash, oloc, rd, NULL, 0, onack, NULL, NULL);
+    hash, oloc, rd, snap_seq, NULL, 0, onack, NULL, NULL);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
@@ -1127,7 +1127,7 @@ int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
   rd.hit_set_get(ceph::real_clock::from_time_t(stamp), pbl, 0);
   object_locator_t oloc(poolid);
   Objecter::Op *o = objecter->prepare_pg_read_op(
-    hash, oloc, rd, NULL, 0, onack, NULL, NULL);
+    hash, oloc, rd, snap_seq, NULL, 0, onack, NULL, NULL);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
@@ -1171,7 +1171,7 @@ int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
   op.scrub_ls(start_after, max_to_get, objects, interval, nullptr);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
-    oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, onack,
+    oloc.hash, oloc, op, snap_seq, nullptr, CEPH_OSD_FLAG_PGOP, onack,
     nullptr, nullptr);
   objecter->op_submit(o, &c->tid);
   return 0;
@@ -1192,7 +1192,7 @@ int librados::IoCtxImpl::get_inconsistent_snapsets(const pg_t& pg,
   op.scrub_ls(start_after, max_to_get, snapsets, interval, nullptr);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
-    oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, onack,
+    oloc.hash, oloc, op, snap_seq, nullptr, CEPH_OSD_FLAG_PGOP, onack,
     nullptr, nullptr);
   objecter->op_submit(o, &c->tid);
   return 0;
