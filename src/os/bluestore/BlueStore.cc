@@ -1280,11 +1280,12 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   return out << ")";
 }
 
-BlueStore::SharedBlob::SharedBlob(uint64_t i, const string& k, Cache *c)
+BlueStore::SharedBlob::SharedBlob(uint64_t i, Cache *c)
   : sbid(i),
-    key(k),
     bc(c)
 {
+  assert(sbid > 0);
+  get_shared_blob_key(sbid, &key);
 }
 
 BlueStore::SharedBlob::~SharedBlob()
@@ -1850,7 +1851,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
 	denc_varint_lowz(p->length, app);
       }
-      pos = p->logical_offset + p->length;
+      pos = p->logical_end();
       if (include_blob) {
 	p->blob->encode(app, false);
       }
@@ -2076,7 +2077,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
     --fp;
-    if (fp->logical_offset + fp->length <= offset) {
+    if (fp->logical_end() <= offset) {
       ++fp;
     }
   }
@@ -2123,7 +2124,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       break;  // stop after end
     }
     while (n != extent_map.end() &&
-	   p->logical_offset + p->length == n->logical_offset &&
+	   p->logical_end() == n->logical_offset &&
 	   p->blob == n->blob &&
 	   p->blob_offset + p->length == n->blob_offset &&
 	   n->logical_offset < shard_end) {
@@ -2147,6 +2148,9 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       }
     }
   }
+  if (removed && onode) {
+    onode->c->store->logger->inc(l_bluestore_extent_compress, removed);
+  }
   return removed;
 }
 
@@ -2162,7 +2166,7 @@ void BlueStore::ExtentMap::punch_hole(
       break;
     }
     if (p->logical_offset < offset) {
-      if (p->logical_offset + p->length > end) {
+      if (p->logical_end() > end) {
 	// split and deref middle
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
@@ -2175,7 +2179,7 @@ void BlueStore::ExtentMap::punch_hole(
 	break;
       } else {
 	// deref tail
-	assert(p->logical_offset + p->length > offset); // else seek_lextent bug
+	assert(p->logical_end() > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
 	old_extents->insert(*new Extent(offset, p->blob_offset + keep,
 					p->length - keep,  p->blob));
@@ -2192,7 +2196,7 @@ void BlueStore::ExtentMap::punch_hole(
       continue;
     }
     // deref head
-    uint64_t keep = (p->logical_offset + p->length) - end;
+    uint64_t keep = p->logical_end() - end;
     old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				    p->length - keep, p->blob));
     add(end, p->blob_offset + p->length - keep, keep, p->blob);
@@ -2291,7 +2295,7 @@ void BlueStore::Collection::open_shared_blob(BlobRef b)
   assert(!b->shared_blob);
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
-    b->shared_blob = new SharedBlob(0, string(), cache);
+    b->shared_blob = new SharedBlob(cache);
     return;
   }
 
@@ -2300,8 +2304,7 @@ void BlueStore::Collection::open_shared_blob(BlobRef b)
     dout(10) << __func__ << " sbid 0x" << std::hex << blob.sbid << std::dec
 	     << " had " << *b->shared_blob << dendl;
   } else {
-    b->shared_blob = new SharedBlob(blob.sbid, string(), cache);
-    get_shared_blob_key(blob.sbid, &b->shared_blob->key);
+    b->shared_blob = new SharedBlob(blob.sbid, cache);
     shared_blob_set.add(b->shared_blob.get());
     dout(10) << __func__ << " sbid 0x" << std::hex << blob.sbid << std::dec
 	     << " opened " << *b->shared_blob << dendl;
@@ -2713,12 +2716,10 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_gc, "bluestore_gc",
-            "Sum for garbage collection reads");
-  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes",
-            "garbage collected bytes");
   b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
             "Sum for blob splitting due to resharding");
+  b.add_u64(l_bluestore_extent_compress, "bluestore_extent_compress",
+            "Sum for extents that have been removed due to compression");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }

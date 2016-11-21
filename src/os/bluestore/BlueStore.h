@@ -94,9 +94,8 @@ enum {
   l_bluestore_write_small_new,
   l_bluestore_txc,
   l_bluestore_onode_reshard,
-  l_bluestore_gc,
-  l_bluestore_gc_bytes,
   l_bluestore_blob_split,
+  l_bluestore_extent_compress,
   l_bluestore_last
 };
 
@@ -340,7 +339,8 @@ public:
 
     BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(uint64_t i, const string& k, Cache *c);
+    SharedBlob(Cache *c) : bc(c) {}
+    SharedBlob(uint64_t i, Cache *c);
     ~SharedBlob();
 
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
@@ -609,7 +609,7 @@ public:
       return blob_start() + blob->get_blob().get_logical_length();
     }
 
-    uint32_t end() const {
+    uint32_t logical_end() const {
       return logical_offset + length;
     }
 
@@ -1117,7 +1117,7 @@ public:
 
     BlobRef new_blob() {
       BlobRef b = new Blob;
-      b->shared_blob = new SharedBlob(0, string(), cache);
+      b->shared_blob = new SharedBlob(cache);
       return b;
     }
 
@@ -1546,7 +1546,7 @@ private:
   size_t block_size_order; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  uint64_t min_min_alloc_size = 0; /// < minimum seen min_alloc_size
+  uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
   uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
