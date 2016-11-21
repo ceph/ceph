@@ -1,6 +1,6 @@
 tasks:
 - workunit:
-    branch: infernalis
+    branch: jewel
     clients:
       client.0:
         - rbd/notify_master.sh
@@ -10,7 +10,7 @@ tasks:
       RBD_FEATURES: "13"
 - print: "**** done rbd: old librbd -> new librbd"
 - workunit:
-    branch: infernalis
+    branch: jewel
     clients:
       client.0:
         - rbd/notify_slave.sh
