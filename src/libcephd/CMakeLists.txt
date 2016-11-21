@@ -16,6 +16,7 @@ set(merge_libs
   cephd_cls_kvs
   cephd_rados
   cephd_rbd
+  cephd_rgw
   cephd_common
   common_utf8
   erasure_code
