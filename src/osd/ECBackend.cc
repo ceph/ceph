@@ -1228,10 +1228,11 @@ struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
   ceph_tid_t tid;
   FinishReadOp(ECBackend *ec, ceph_tid_t tid) : ec(ec), tid(tid) {}
   void finish(ThreadPool::TPHandle &handle) {
-    assert(ec->tid_to_read_map.count(tid));
-    int priority = ec->tid_to_read_map[tid].priority;
+    auto ropiter = ec->tid_to_read_map.find(tid);
+    assert(ropiter != ec->tid_to_read_map.end());
+    int priority = ropiter->second.priority;
     RecoveryMessages rm;
-    ec->complete_read_op(ec->tid_to_read_map[tid], &rm);
+    ec->complete_read_op(ropiter->second, &rm);
     ec->dispatch_recovery_messages(rm, priority);
   }
 };
@@ -1565,13 +1566,15 @@ void ECBackend::start_read_op(
 {
   ceph_tid_t tid = get_parent()->get_tid();
   assert(!tid_to_read_map.count(tid));
-  ReadOp &op(tid_to_read_map[tid]);
-  op.priority = priority;
-  op.tid = tid;
-  op.to_read.swap(to_read);
-  op.op = _op;
-  op.do_redundant_reads = do_redundant_reads;
-  op.for_recovery = for_recovery;
+  auto &op = tid_to_read_map.emplace(
+    tid,
+    ReadOp(
+      priority,
+      tid,
+      do_redundant_reads,
+      for_recovery,
+      _op,
+      std::move(to_read))).first->second;
   dout(10) << __func__ << ": starting " << op << dendl;
   do_read_op(
     op);
@@ -1590,9 +1593,6 @@ void ECBackend::do_read_op(ReadOp &op)
        i != op.to_read.end();
        ++i) {
     bool need_attrs = i->second.want_attrs;
-    list<boost::tuple<
-      uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > &reslist =
-      op.complete[i->first].returned;
     for (set<pg_shard_t>::const_iterator j = i->second.need.begin();
 	 j != i->second.need.end();
 	 ++j) {
@@ -1607,11 +1607,6 @@ void ECBackend::do_read_op(ReadOp &op)
 	   i->second.to_read.begin();
 	 j != i->second.to_read.end();
 	 ++j) {
-      reslist.push_back(
-	boost::make_tuple(
-	  j->get<0>(),
-	  j->get<1>(),
-	  map<pg_shard_t, bufferlist>()));
       pair<uint64_t, uint64_t> chunk_off_len =
 	sinfo.aligned_offset_len_to_chunk(make_pair(j->get<0>(), j->get<1>()));
       for (set<pg_shard_t>::const_iterator k = i->second.need.begin();
