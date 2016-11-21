@@ -2026,7 +2026,7 @@ int main(int argc, char **argv)
         formatter->open_array_section("log_entries");
 
       do {
-	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+	uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
 
         agg_time += total_time;
         agg_bytes_sent += entry.bytes_sent;
