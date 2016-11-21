@@ -89,7 +89,6 @@ function test_fast_kill() {
          continue
        elif [ $down_osds -gt $i ]; then
          echo Too many \($down_osds\) osds died!
-         teardown $dir 
          return 1
        else
          break
@@ -99,7 +98,6 @@ function test_fast_kill() {
      if [ $down_osds -lt $i ]; then
         echo Killed the OSD, yet it is not marked down
         ceph osd tree
-        teardown $dir 
         return 1
      fi
    done
