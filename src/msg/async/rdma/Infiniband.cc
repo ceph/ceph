@@ -65,14 +65,14 @@ void Device::binding_port(CephContext *cct, uint8_t port_num) {
   }
 }
 
-Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num): device_list(cct), net(cct)
+Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num): device_list(cct)
 {
   device = device_list.get_device(device_name.c_str());
   device->binding_port(cct, port_num);
   assert(device);
   ib_physical_port = device->active_port->get_port_num();
   pd = new ProtectionDomain(cct, device);
-  assert(net.set_nonblock(device->ctxt->async_fd) == 0);
+  assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
   max_recv_wr = device->device_attr->max_srq_wr;
   if (max_recv_wr < cct->_conf->ms_async_rdma_receive_buffers) {
@@ -500,7 +500,7 @@ int Infiniband::CompletionChannel::init()
                           << cpp_strerror(errno) << dendl;
     return -1;
   }
-  int rc = infiniband.net.set_nonblock(channel->fd);
+  int rc = NetHandler(cct).set_nonblock(channel->fd);
   if (rc < 0) {
     ibv_destroy_comp_channel(channel);
     return -1;
