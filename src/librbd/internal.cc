@@ -87,6 +87,23 @@ int prepare_image_update(ImageCtx *ictx) {
   return r;
 }
 
+void acquire_lock(ImageCtx *ictx) {
+  assert(ictx->owner_lock.is_locked());
+  AioCompletion *comp = aio_create_completion();
+  comp->add_request();
+  comp->finish_adding_requests(ictx->cct);
+
+  ictx->image_watcher->request_lock(
+    boost::bind(&AioCompletion::complete_request, _1, ictx->cct, 0),
+    comp);
+
+  ictx->owner_lock.put_read();
+  int r = comp->wait_for_complete();
+  assert(r == 0);
+  comp->release();
+  ictx->owner_lock.get_read();
+}
+
 int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
                          bool permit_snapshot,
                          const boost::function<int(Context*)>& local_request,
@@ -104,15 +121,25 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         }
       }
 
+      bool request_lock = false;
       while (ictx->image_watcher->is_lock_supported()) {
+        if (request_lock) {
+          acquire_lock(ictx);
+        }
         r = prepare_image_update(ictx);
         if (r < 0) {
           return -EROFS;
         } else if (ictx->image_watcher->is_lock_owner()) {
           break;
+        } else if (request_lock) {
+          return -EOPNOTSUPP;
         }
 
         r = remote_request();
+        if (r == -EOPNOTSUPP) {
+          request_lock = true;
+          continue;
+        }
         if (r != -ETIMEDOUT && r != -ERESTART) {
           return r;
         }

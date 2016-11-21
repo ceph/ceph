@@ -79,6 +79,8 @@ namespace librbd {
       ictx->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
     case AIO_TYPE_FLUSH:
       ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
+    case AIO_TYPE_NONE:
+      break;
     default:
       lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
       break;
