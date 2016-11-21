@@ -197,7 +197,6 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   map<string, post_form_part, const ltstr_nocase> parts;  
   RGWPolicyEnv env;
   RGWPolicy post_policy;
-  string err_msg;
 
   int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
                          bool *reached_boundary,
@@ -213,13 +212,13 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   bool part_str(const string& name, string *val);
   bool part_bl(const string& name, bufferlist *pbl);
 
-  int get_policy();
+  rgw_ret get_policy();
   void rebuild_key(string& key);
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() {}
 
-  int get_params();
+  rgw_ret get_params();
   int complete_get_params();
   void send_response();
   int get_data(bufferlist& bl);

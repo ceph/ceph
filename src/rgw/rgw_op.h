@@ -823,7 +823,7 @@ public:
   void pre_exec();
   void execute();
 
-  virtual int get_params() = 0;
+  virtual rgw_ret get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "post_obj"; }
