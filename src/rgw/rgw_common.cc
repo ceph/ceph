@@ -733,7 +733,12 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  if (str[pos] == '?') pos++;
+
+  if (str.empty())
+    return 0;
+
+  if (str[pos] == '?')
+    pos++;
 
   while (!end) {
     int fpos = str.find('&', pos);
