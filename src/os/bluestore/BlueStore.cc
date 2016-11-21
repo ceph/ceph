@@ -7245,7 +7245,14 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       if (r == -ENOENT && !(op->op == Transaction::OP_CLONERANGE ||
 			    op->op == Transaction::OP_CLONE ||
 			    op->op == Transaction::OP_CLONERANGE2 ||
-			    op->op == Transaction::OP_COLL_ADD))
+			    op->op == Transaction::OP_COLL_ADD ||
+			    op->op == Transaction::OP_SETATTR ||
+			    op->op == Transaction::OP_SETATTRS ||
+			    op->op == Transaction::OP_RMATTR ||
+			    op->op == Transaction::OP_OMAP_SETKEYS ||
+			    op->op == Transaction::OP_OMAP_RMKEYS ||
+			    op->op == Transaction::OP_OMAP_RMKEYRANGE ||
+			    op->op == Transaction::OP_OMAP_SETHEADER))
 	// -ENOENT is usually okay
 	ok = true;
       if (r == -ENODATA)
