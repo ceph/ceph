@@ -11,6 +11,7 @@ overrides:
   ceph:
     log-whitelist:
     - failed to encode map
+    fs: xfs
     conf:
       client:
         rbd default features: 1

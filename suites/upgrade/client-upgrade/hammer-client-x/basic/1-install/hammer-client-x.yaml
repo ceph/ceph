@@ -1,7 +1,7 @@
 tasks:
 - install:
     branch: hammer 
-    exclude_packages: ['ceph-mgr']
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "**** done install hammer"
 upgrade_workload:
   sequential:
