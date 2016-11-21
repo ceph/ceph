@@ -467,9 +467,6 @@ public:
   RGWHandler_Auth_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_Auth_S3() {}
 
-  static int validate_bucket_name(const string& bucket);
-  static int validate_object_name(const string& bucket);
-
   virtual int init(RGWRados *store,
                    struct req_state *s,
                    rgw::io::BasicClient *cio);
