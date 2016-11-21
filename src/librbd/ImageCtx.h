@@ -190,6 +190,7 @@ namespace librbd {
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
+    int mirroring_replay_delay;
 
     LibrbdAdminSocketHook *asok_hook;
 
