@@ -2307,7 +2307,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   ctx->src_obc.swap(src_obc);
 
   execute_ctx(ctx);
-  utime_t prepare_latency = ceph_clock_now(cct);
+  utime_t prepare_latency = ceph_clock_now();
   prepare_latency -= op->get_dequeued_time();
   osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
   if (op->may_read() && op->may_write()) {
@@ -2645,7 +2645,7 @@ struct C_ProxyRead : public Context {
   C_ProxyRead(ReplicatedPG *p, hobject_t o, epoch_t lpr,
 	     const ReplicatedPG::ProxyReadOpRef& prd)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0), prdop(prd), start(ceph_clock_now(NULL))
+      tid(0), prdop(prd), start()
   {}
   void finish(int r) {
     if (prdop->canceled)
@@ -2657,7 +2657,7 @@ struct C_ProxyRead : public Context {
     }
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_proxy_read(oid, tid, r);
-      pg->osd->logger->tinc(l_osd_tier_r_lat, ceph_clock_now(NULL) - start);
+      pg->osd->logger->tinc(l_osd_tier_r_lat, ceph_clock_now() - start);
     }
     pg->unlock();
   }
@@ -2988,13 +2988,13 @@ public:
   PromoteCallback(ObjectContextRef obc_, ReplicatedPG *pg_)
     : obc(obc_),
       pg(pg_),
-      start(ceph_clock_now(NULL)) {}
+      start(ceph_clock_now()) {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results) {
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
     pg->finish_promote(r, results_data, obc);
-    pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now(NULL) - start);
+    pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now() - start);
   }
 };
 
@@ -3264,7 +3264,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       // _prior_ to being committed; it will not get set with
       // writeahead journaling, for instance.
       if (ctx->readable_stamp == utime_t())
-	ctx->readable_stamp = ceph_clock_now(cct);
+	ctx->readable_stamp = ceph_clock_now();
     });
   ctx->register_on_commit(
     [m, ctx, this](){
@@ -3330,7 +3330,7 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   utime_t latency = now;
   latency -= ctx->op->get_req()->get_recv_stamp();
   utime_t process_latency = now;
@@ -5507,7 +5507,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	  }
 	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
-	  p->second->got_ping(ceph_clock_now(NULL));
+	  p->second->got_ping(ceph_clock_now());
 	  result = 0;
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_UNWATCH) {
 	  map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator oi_iter =
@@ -6782,7 +6782,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   dout(20) << __func__ << " " << soid << " " << ctx
 	   << " op " << pg_log_entry_t::get_op_name(log_op_type)
 	   << dendl;
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
 
   // snapset
   bufferlist bss;
@@ -7947,7 +7947,7 @@ struct C_Flush : public Context {
   utime_t start;
   C_Flush(ReplicatedPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0), start(ceph_clock_now(NULL))
+      tid(0), start(ceph_clock_now())
   {}
   void finish(int r) {
     if (r == -ECANCELED)
@@ -7955,7 +7955,7 @@ struct C_Flush : public Context {
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_flush(oid, tid, r);
-      pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now(NULL) - start);
+      pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now() - start);
     }
     pg->unlock();
   }
@@ -8633,7 +8633,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
 
   RepGather *repop = new RepGather(ctx, rep_tid, info.last_complete);
 
-  repop->start = ceph_clock_now(cct);
+  repop->start = ceph_clock_now();
 
   repop_queue.push_back(&repop->queue_item);
   repop->get();
@@ -8655,7 +8655,7 @@ boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
     osd->get_tid(),
     info.last_complete);
 
-  repop->start = ceph_clock_now(cct);
+  repop->start = ceph_clock_now();
 
   repop_queue.push_back(&repop->queue_item);
 
@@ -8689,7 +8689,7 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::simple_opc_create(ObjectContextRef obc
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
   OpContextUPtr ctx(new OpContext(OpRequestRef(), reqid, ops, obc, this));
   ctx->op_t.reset(new PGTransaction());
-  ctx->mtime = ceph_clock_now(g_ceph_context);
+  ctx->mtime = ceph_clock_now();
   return ctx;
 }
 
@@ -9862,7 +9862,7 @@ void ReplicatedPG::mark_all_unfound_lost(
 
   mempool::osd::list<pg_log_entry_t> log_entries;
 
-  utime_t mtime = ceph_clock_now(cct);
+  utime_t mtime = ceph_clock_now();
   map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator m =
     missing_loc.get_needs_recovery().begin();
   map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator mend =
@@ -11620,7 +11620,7 @@ void ReplicatedPG::hit_set_remove_all()
     OpContextUPtr ctx = simple_opc_create(obc);
     ctx->at_version = get_next_version();
     ctx->updated_hset_history = info.hit_set;
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     ctx->mtime = now;
     hit_set_trim(ctx, 0);
     apply_ctx_scrub_stats(ctx.get());
@@ -11635,7 +11635,7 @@ void ReplicatedPG::hit_set_remove_all()
 
 void ReplicatedPG::hit_set_create()
 {
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   // make a copy of the params to modify
   HitSet::Params params(pool.info.hit_set_params);
 
@@ -11710,7 +11710,7 @@ void ReplicatedPG::hit_set_persist()
   bufferlist bl;
   unsigned max = pool.info.hit_set_count;
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   hobject_t oid;
   time_t flush_time = 0;
 
@@ -12167,7 +12167,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
     return false;
   }
 
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   utime_t ob_local_mtime;
   if (obc->obs.oi.local_mtime != utime_t()) {
     ob_local_mtime = obc->obs.oi.local_mtime;
@@ -12247,7 +12247,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 
   if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
     // is this object old than cache_min_evict_age?
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     utime_t ob_local_mtime;
     if (obc->obs.oi.local_mtime != utime_t()) {
       ob_local_mtime = obc->obs.oi.local_mtime;

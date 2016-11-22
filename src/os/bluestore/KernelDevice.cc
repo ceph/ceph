@@ -202,9 +202,9 @@ int KernelDevice::flush()
     g_ceph_context->_log->flush();
     _exit(1);
   }
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   int r = ::fdatasync(fd_direct);
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   if (r < 0) {
     r = -errno;
@@ -279,7 +279,7 @@ void KernelDevice::_aio_thread()
       }
     }
     if (g_conf->bdev_debug_aio) {
-      utime_t now = ceph_clock_now(NULL);
+      utime_t now = ceph_clock_now();
       std::lock_guard<std::mutex> l(debug_queue_lock);
       if (debug_oldest) {
 	if (debug_stall_since == utime_t()) {

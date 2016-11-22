@@ -123,7 +123,7 @@ void OSDMonitor::create_initial()
 			g_conf->osd_pg_bits, g_conf->osd_pgp_bits);
   }
   newmap.set_epoch(1);
-  newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
+  newmap.created = newmap.modified = ceph_clock_now();
 
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
@@ -296,7 +296,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       // populate down -> out map
       if (found == down_pending_out.end()) {
         dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
-        down_pending_out[o] = ceph_clock_now(g_ceph_context);
+        down_pending_out[o] = ceph_clock_now();
       }
     } else {
       if (found != down_pending_out.end()) {
@@ -1092,7 +1092,7 @@ void OSDMonitor::maybe_prime_pg_temp()
 
   PGMap *pg_map = &mon->pgmon()->pg_map;
 
-  utime_t stop = ceph_clock_now(NULL);
+  utime_t stop = ceph_clock_now();
   stop += g_conf->mon_osd_prime_pg_temp_max_time;
   int chunk = 1000;
   int n = chunk;
@@ -1105,7 +1105,7 @@ void OSDMonitor::maybe_prime_pg_temp()
       prime_pg_temp(next, pp);
       if (--n <= 0) {
 	n = chunk;
-	if (ceph_clock_now(NULL) > stop) {
+	if (ceph_clock_now() > stop) {
 	  dout(10) << __func__ << " consumed more than "
 		   << g_conf->mon_osd_prime_pg_temp_max_time
 		   << " seconds, stopping"
@@ -1120,7 +1120,7 @@ void OSDMonitor::maybe_prime_pg_temp()
       n -= prime_pg_temp(next, pg_map, *p);
       if (n <= 0) {
 	n = chunk;
-	if (ceph_clock_now(NULL) > stop) {
+	if (ceph_clock_now() > stop) {
 	  dout(10) << __func__ << " consumed more than "
 		   << g_conf->mon_osd_prime_pg_temp_max_time
 		   << " seconds, stopping"
@@ -1193,7 +1193,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	   << dendl;
 
   // finalize up pending_inc
-  pending_inc.modified = ceph_clock_now(g_ceph_context);
+  pending_inc.modified = ceph_clock_now();
 
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
@@ -1877,7 +1877,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
   // calculate failure time
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   utime_t failed_since =
     m->get_recv_stamp() -
     utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
@@ -2245,7 +2245,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       dout(10) << " not laggy, new xi " << xi << dendl;
     } else {
       if (xi.down_stamp.sec()) {
-        int interval = ceph_clock_now(g_ceph_context).sec() -
+        int interval = ceph_clock_now().sec() -
 	  xi.down_stamp.sec();
         if (g_conf->mon_osd_laggy_max_interval &&
 	    (interval > g_conf->mon_osd_laggy_max_interval)) {
@@ -2810,7 +2810,7 @@ void OSDMonitor::tick()
   if (!mon->is_leader()) return;
 
   bool do_propose = false;
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
 
   // mark osds down?
   if (check_failures(now))
@@ -7045,7 +7045,7 @@ done:
       string blacklistop;
       cmd_getval(g_ceph_context, cmdmap, "blacklistop", blacklistop);
       if (blacklistop == "add") {
-	utime_t expires = ceph_clock_now(g_ceph_context);
+	utime_t expires = ceph_clock_now();
 	double d;
 	// default one hour
 	cmd_getval(g_ceph_context, cmdmap, "expire", d, double(60*60));
@@ -7106,7 +7106,7 @@ done:
     if (pp->snap_exists(snapname.c_str())) {
       ss << "pool " << poolstr << " snap " << snapname << " already exists";
     } else {
-      pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
+      pp->add_snap(snapname.c_str(), ceph_clock_now());
       pp->set_snap_epoch(pending_inc.epoch);
       ss << "created pool " << poolstr << " snap " << snapname;
     }
@@ -8159,7 +8159,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
     if (!pp.snap_exists(m->name.c_str())) {
-      pp.add_snap(m->name.c_str(), ceph_clock_now(g_ceph_context));
+      pp.add_snap(m->name.c_str(), ceph_clock_now());
       dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp.get_snap_epoch() << dendl;
       changed = true;
     }

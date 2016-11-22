@@ -35,7 +35,7 @@ int main(int argc, char **argv)
   DecayCounter dc(hl);
   RealCounter rc;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
 
   for (int ms=0; ms < 300*1000; ms++) {
 	if (ms % 30000 == 0) {

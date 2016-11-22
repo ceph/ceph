@@ -618,7 +618,7 @@ void Server::find_idle_sessions()
   
   // timeout/stale
   //  (caps go stale, lease die)
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf->mds_session_timeout;  
   while (1) {
@@ -746,7 +746,7 @@ void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 
   // clients will get the mdsmap and discover we're reconnecting via the monitor.
   
-  reconnect_start = ceph_clock_now(g_ceph_context);
+  reconnect_start = ceph_clock_now();
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
   mds->sessionmap.dump();
 }
@@ -765,7 +765,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
-  utime_t delay = ceph_clock_now(g_ceph_context);
+  utime_t delay = ceph_clock_now();
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
@@ -881,7 +881,7 @@ void Server::reconnect_tick()
 {
   utime_t reconnect_end = reconnect_start;
   reconnect_end += g_conf->mds_reconnect_timeout;
-  if (ceph_clock_now(g_ceph_context) >= reconnect_end &&
+  if (ceph_clock_now() >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
     for (set<client_t>::iterator p = client_reconnect_gather.begin();
@@ -1096,7 +1096,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mdr->did_early_reply = true;
 
   mds->logger->inc(l_mds_reply);
-  utime_t lat = ceph_clock_now(g_ceph_context) - req->get_recv_stamp();
+  utime_t lat = ceph_clock_now() - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
   dout(20) << "lat " << lat << dendl;
 
@@ -1151,7 +1151,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   if (!did_early_reply && !is_replay) {
 
     mds->logger->inc(l_mds_reply);
-    utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
+    utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
     dout(20) << "lat " << lat << dendl;
     
@@ -1263,7 +1263,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
   bufferlist bl;
   mds_rank_t whoami = mds->get_nodeid();
   client_t client = session->get_client();
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
 
@@ -2754,7 +2754,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
 
-  mds->balancer->hit_inode(ceph_clock_now(g_ceph_context), ref, META_POP_IRD,
+  mds->balancer->hit_inode(ceph_clock_now(), ref, META_POP_IRD,
 			   req->get_source().num());
 
   // reply
@@ -3368,7 +3368,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   dir->verify_fragstat();
 #endif
 
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   mdr->set_mds_stamp(now);
 
   snapid_t snapid = mdr->snapid;
@@ -5058,7 +5058,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
 
   assert(g_conf->mds_kill_link_at != 2);
 
-  mdr->set_mds_stamp(ceph_clock_now(NULL));
+  mdr->set_mds_stamp(ceph_clock_now());
 
   // add to event
   mdr->ls = mdlog->get_current_segment();
@@ -6480,7 +6480,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     assert(g_conf->mds_kill_rename_at != 4);
 
   // -- declare now --
-  mdr->set_mds_stamp(ceph_clock_now(g_ceph_context));
+  mdr->set_mds_stamp(ceph_clock_now());
 
   // -- prepare journal entry --
   mdr->ls = mdlog->get_current_segment();

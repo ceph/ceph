@@ -207,8 +207,8 @@ public:
       return "???";
     }
 
-    void log_state_latency(PerfCounters *logger, int state) {      
-        utime_t lat, now = ceph_clock_now(g_ceph_context);
+    void log_state_latency(PerfCounters *logger, int state) {
+        utime_t lat, now = ceph_clock_now();
         lat = now - start;
         logger->tinc(state, lat);
         start = now;
@@ -237,7 +237,7 @@ public:
 	oncommit(NULL),
 	onreadable(NULL),
 	onreadable_sync(NULL),
-        start(ceph_clock_now(g_ceph_context)){
+        start(ceph_clock_now()){
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {

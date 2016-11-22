@@ -105,7 +105,7 @@ public:
    */
   bool check_ops_in_flight(std::vector<string> &warning_strings, int *slow = NULL);
   void mark_event(TrackedOp *op, const string &evt,
-                          utime_t time = ceph_clock_now(g_ceph_context));
+		  utime_t time = ceph_clock_now());
 
   void on_shutdown() {
     history.on_shutdown();
@@ -170,7 +170,7 @@ public:
     if (!events.empty() && events.rbegin()->second.compare("done") == 0)
       return events.rbegin()->first - get_initiated();
     else
-      return ceph_clock_now(NULL) - get_initiated();
+      return ceph_clock_now() - get_initiated();
   }
 
   void mark_event(const string &event);

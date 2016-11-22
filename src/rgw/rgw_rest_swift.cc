@@ -79,7 +79,7 @@ static void dump_account_metadata(struct req_state * const s,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
   /* Adding X-Timestamp to keep align with Swift API */
-  dump_header(s, "X-Timestamp", ceph_clock_now(g_ceph_context));
+  dump_header(s, "X-Timestamp", ceph_clock_now());
 
   dump_header(s, "X-Account-Container-Count", buckets_count);
   dump_header(s, "X-Account-Object-Count", buckets_object_count);
@@ -1538,7 +1538,7 @@ void RGWInfo_ObjStore_SWIFT::list_slo_data(Formatter& formatter,
 bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, CephContext* cct)
 {
   string err;
-  const utime_t now = ceph_clock_now(cct);
+  const utime_t now = ceph_clock_now();
   const uint64_t expiration = (uint64_t)strict_strtoll(expires.c_str(),
                                                        10, &err);
   if (!err.empty()) {

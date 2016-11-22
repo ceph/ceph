@@ -2451,7 +2451,7 @@ void *BlueStore::MempoolThread::entry()
     ++store->mempool_seq;
     utime_t wait;
     wait += g_conf->bluestore_cache_trim_interval;
-    cond.WaitInterval(g_ceph_context, lock, wait);
+    cond.WaitInterval(lock, wait);
   }
   stop = false;
   return NULL;
@@ -2852,7 +2852,7 @@ int BlueStore::_check_or_set_bdev_label(
   if (create) {
     label.osd_uuid = fsid;
     label.size = size;
-    label.btime = ceph_clock_now(NULL);
+    label.btime = ceph_clock_now();
     label.description = desc;
     int r = _write_bdev_label(path, label);
     if (r < 0)
@@ -4203,7 +4203,7 @@ int BlueStore::fsck(bool deep)
   uint64_t num_sharded_objects = 0;
   uint64_t num_object_shards = 0;
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
 
   int r = _open_path();
   if (r < 0)
@@ -4657,7 +4657,7 @@ int BlueStore::fsck(bool deep)
 	  << num_shared_blobs << " shared."
 	  << dendl;
 
-  utime_t duration = ceph_clock_now(NULL) - start;
+  utime_t duration = ceph_clock_now() - start;
   dout(1) << __func__ << " finish with " << errors << " errors in "
 	  << duration << " seconds" << dendl;
   return errors;
@@ -5201,7 +5201,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 {
   int bad;
   uint64_t bad_csum;
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
@@ -5225,14 +5225,14 @@ int BlueStore::_verify_csum(OnodeRef& o,
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
   }
-  logger->tinc(l_bluestore_csum_lat, ceph_clock_now(g_ceph_context) - start);
+  logger->tinc(l_bluestore_csum_lat, ceph_clock_now() - start);
   return r;
 }
 
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
@@ -5254,7 +5254,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
-  logger->tinc(l_bluestore_decompress_lat, ceph_clock_now(g_ceph_context) - start);
+  logger->tinc(l_bluestore_decompress_lat, ceph_clock_now() - start);
   return r;
 }
 
@@ -6430,7 +6430,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
   }
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->oncommit) {
-    logger->tinc(l_bluestore_commit_lat, ceph_clock_now(g_ceph_context) - txc->start);
+    logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
     finishers[n]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
@@ -6610,7 +6610,7 @@ void BlueStore::_kv_sync_thread()
       kv_committing.swap(kv_queue);
       kv_submitting.swap(kv_queue_unsubmitted);
       wal_cleaning.swap(wal_cleanup_queue);
-      utime_t start = ceph_clock_now(NULL);
+      utime_t start = ceph_clock_now();
       l.unlock();
 
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
@@ -6700,7 +6700,7 @@ void BlueStore::_kv_sync_thread()
 	dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
       }
 
-      utime_t finish = ceph_clock_now(NULL);
+      utime_t finish = ceph_clock_now();
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " cleaned " << wal_cleaning.size()
@@ -7737,7 +7737,7 @@ int BlueStore::_do_alloc_write(
     bool compressed = false;
     if(c && wi.blob_length > min_alloc_size) {
 
-      utime_t start = ceph_clock_now(g_ceph_context);
+      utime_t start = ceph_clock_now();
 
       // compress
       assert(b_off == 0);
@@ -7787,7 +7787,7 @@ int BlueStore::_do_alloc_write(
         logger->inc(l_bluestore_compress_rejected_count);
       }
       logger->tinc(l_bluestore_compress_lat,
-		   ceph_clock_now(g_ceph_context) - start);
+		   ceph_clock_now() - start);
     }
     if (!compressed) {
       dblob.set_flag(bluestore_blob_t::FLAG_MUTABLE);

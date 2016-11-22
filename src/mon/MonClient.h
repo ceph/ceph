@@ -64,7 +64,7 @@ struct MonClientPinger : public Dispatcher {
   { }
 
   int wait_for_reply(double timeout = 0.0) {
-    utime_t until = ceph_clock_now(cct);
+    utime_t until = ceph_clock_now();
     until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
     done = false;
 
