@@ -3025,17 +3025,15 @@ void Client::put_cap_ref(Inode *in, int cap)
     if (in->snapid == CEPH_NOSNAP) {
       if ((last & CEPH_CAP_FILE_WR) &&
 	  !in->cap_snaps.empty() &&
-	  in->cap_snaps.rbegin()->second->writing) {
+	  in->cap_snaps.rbegin()->second.writing) {
 	ldout(cct, 10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
-	in->cap_snaps.rbegin()->second->writing = 0;
+	in->cap_snaps.rbegin()->second.writing = 0;
 	finish_cap_snap(in, in->cap_snaps.rbegin()->second, get_caps_used(in));
 	signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
       }
       if (last & CEPH_CAP_FILE_BUFFER) {
-	for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin();
-	    p != in->cap_snaps.end();
-	    ++p)
-	  p->second->dirty_data = 0;
+	for (auto &p : in->cap_snaps)
+	  p.second.dirty_data = 0;
 	signal_cond_list(in->waitfor_commit);
 	ldout(cct, 5) << "put_cap_ref dropped last FILE_BUFFER ref on " << *in << dendl;
 	++put_nref;
@@ -3088,17 +3086,16 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 	waitfor_caps = true;
       }
       if (!in->cap_snaps.empty()) {
-	if (in->cap_snaps.rbegin()->second->writing) {
+	if (in->cap_snaps.rbegin()->second.writing) {
 	  ldout(cct, 10) << "waiting on cap_snap write to complete" << dendl;
 	  waitfor_caps = true;
 	}
-	for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin();
-	    p != in->cap_snaps.end();
-	    ++p)
-	  if (p->second->dirty_data) {
+	for (auto &p : in->cap_snaps) {
+	  if (p.second.dirty_data) {
 	    waitfor_commit = true;
 	    break;
 	  }
+        }
 	if (waitfor_commit) {
 	  _flush(in, new C_Client_FlushComplete(this, in));
 	  ldout(cct, 10) << "waiting for WRBUFFER to get dropped" << dendl;
@@ -3433,30 +3430,31 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
   ldout(cct, 10) << "queue_cap_snap " << *in << " snapc " << old_snapc << " used " << ccap_string(used) << dendl;
 
   if (in->cap_snaps.size() &&
-      in->cap_snaps.rbegin()->second->writing) {
+      in->cap_snaps.rbegin()->second.writing) {
     ldout(cct, 10) << "queue_cap_snap already have pending cap_snap on " << *in << dendl;
     return;
   } else if (in->caps_dirty() ||
             (used & CEPH_CAP_FILE_WR) ||
 	     (dirty & CEPH_CAP_ANY_WR)) {
-    CapSnap *capsnap = new CapSnap(in);
-    in->cap_snaps[old_snapc.seq] = capsnap;
-    capsnap->context = old_snapc;
-    capsnap->issued = in->caps_issued();
-    capsnap->dirty = in->caps_dirty();
+    const auto &capsnapem = in->cap_snaps.emplace(std::piecewise_construct, std::make_tuple(old_snapc.seq), std::make_tuple(in));
+    assert(capsnapem.second == true); /* element inserted */
+    CapSnap &capsnap = capsnapem.first->second;
+    capsnap.context = old_snapc;
+    capsnap.issued = in->caps_issued();
+    capsnap.dirty = in->caps_dirty();
     
-    capsnap->dirty_data = (used & CEPH_CAP_FILE_BUFFER);
+    capsnap.dirty_data = (used & CEPH_CAP_FILE_BUFFER);
     
-    capsnap->uid = in->uid;
-    capsnap->gid = in->gid;
-    capsnap->mode = in->mode;
-    capsnap->btime = in->btime;
-    capsnap->xattrs = in->xattrs;
-    capsnap->xattr_version = in->xattr_version;
+    capsnap.uid = in->uid;
+    capsnap.gid = in->gid;
+    capsnap.mode = in->mode;
+    capsnap.btime = in->btime;
+    capsnap.xattrs = in->xattrs;
+    capsnap.xattr_version = in->xattr_version;
  
     if (used & CEPH_CAP_FILE_WR) {
       ldout(cct, 10) << "queue_cap_snap WR used on " << *in << dendl;
-      capsnap->writing = 1;
+      capsnap.writing = 1;
     } else {
       finish_cap_snap(in, capsnap, used);
     }
@@ -3465,28 +3463,28 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
   }
 }
 
-void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
+void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
 {
-  ldout(cct, 10) << "finish_cap_snap " << *in << " capsnap " << (void*)capsnap << " used " << ccap_string(used) << dendl;
-  capsnap->size = in->size;
-  capsnap->mtime = in->mtime;
-  capsnap->atime = in->atime;
-  capsnap->ctime = in->ctime;
-  capsnap->time_warp_seq = in->time_warp_seq;
-  capsnap->change_attr = in->change_attr;
+  ldout(cct, 10) << "finish_cap_snap " << *in << " capsnap " << (void *)&capsnap << " used " << ccap_string(used) << dendl;
+  capsnap.size = in->size;
+  capsnap.mtime = in->mtime;
+  capsnap.atime = in->atime;
+  capsnap.ctime = in->ctime;
+  capsnap.time_warp_seq = in->time_warp_seq;
+  capsnap.change_attr = in->change_attr;
 
-  capsnap->dirty |= in->caps_dirty();
+  capsnap.dirty |= in->caps_dirty();
 
-  if (capsnap->dirty & CEPH_CAP_FILE_WR) {
-    capsnap->inline_data = in->inline_data;
-    capsnap->inline_version = in->inline_version;
+  if (capsnap.dirty & CEPH_CAP_FILE_WR) {
+    capsnap.inline_data = in->inline_data;
+    capsnap.inline_version = in->inline_version;
   }
 
   if (used & CEPH_CAP_FILE_BUFFER) {
-    ldout(cct, 10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
+    ldout(cct, 10) << "finish_cap_snap " << *in << " cap_snap " << &capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
   } else {
-    capsnap->dirty_data = 0;
+    capsnap.dirty_data = 0;
     flush_snaps(in);
   }
 }
@@ -3494,8 +3492,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
 void Client::_flushed_cap_snap(Inode *in, snapid_t seq)
 {
   ldout(cct, 10) << "_flushed_cap_snap seq " << seq << " on " << *in << dendl;
-  assert(in->cap_snaps.count(seq));
-  in->cap_snaps[seq]->dirty_data = 0;
+  in->cap_snaps.at(seq).dirty_data = 0;
   flush_snaps(in);
 }
 
@@ -3509,29 +3506,29 @@ void Client::flush_snaps(Inode *in, bool all_again)
   MetaSession *session = in->auth_cap->session;
   int mseq = in->auth_cap->mseq;
 
-  for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin(); p != in->cap_snaps.end(); ++p) {
-    CapSnap *capsnap = p->second;
+  for (auto &p : in->cap_snaps) {
+    CapSnap &capsnap = p.second;
     if (!all_again) {
       // only flush once per session
-      if (capsnap->flush_tid > 0)
+      if (capsnap.flush_tid > 0)
 	continue;
     }
 
     ldout(cct, 10) << "flush_snaps mds." << session->mds_num
-	     << " follows " << p->first
-	     << " size " << capsnap->size
-	     << " mtime " << capsnap->mtime
-	     << " dirty_data=" << capsnap->dirty_data
-	     << " writing=" << capsnap->writing
+	     << " follows " << p.first
+	     << " size " << capsnap.size
+	     << " mtime " << capsnap.mtime
+	     << " dirty_data=" << capsnap.dirty_data
+	     << " writing=" << capsnap.writing
 	     << " on " << *in << dendl;
-    if (capsnap->dirty_data || capsnap->writing)
+    if (capsnap.dirty_data || capsnap.writing)
       continue;
     
-    if (capsnap->flush_tid == 0) {
-      capsnap->flush_tid = ++last_flush_tid;
+    if (capsnap.flush_tid == 0) {
+      capsnap.flush_tid = ++last_flush_tid;
       if (!in->flushing_cap_item.is_on_list())
 	session->flushing_caps.push_back(&in->flushing_cap_item);
-      session->flushing_caps_tids.insert(capsnap->flush_tid);
+      session->flushing_caps_tids.insert(capsnap.flush_tid);
     }
 
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
@@ -3541,30 +3538,30 @@ void Client::flush_snaps(Inode *in, bool all_again)
     if (group_id >= 0)
       m->caller_gid = group_id;
 
-    m->set_client_tid(capsnap->flush_tid);
-    m->head.snap_follows = p->first;
+    m->set_client_tid(capsnap.flush_tid);
+    m->head.snap_follows = p.first;
 
-    m->head.caps = capsnap->issued;
-    m->head.dirty = capsnap->dirty;
+    m->head.caps = capsnap.issued;
+    m->head.dirty = capsnap.dirty;
 
-    m->head.uid = capsnap->uid;
-    m->head.gid = capsnap->gid;
-    m->head.mode = capsnap->mode;
-    m->btime = capsnap->btime;
+    m->head.uid = capsnap.uid;
+    m->head.gid = capsnap.gid;
+    m->head.mode = capsnap.mode;
+    m->btime = capsnap.btime;
 
-    m->size = capsnap->size;
+    m->size = capsnap.size;
 
-    m->head.xattr_version = capsnap->xattr_version;
-    ::encode(capsnap->xattrs, m->xattrbl);
+    m->head.xattr_version = capsnap.xattr_version;
+    ::encode(capsnap.xattrs, m->xattrbl);
 
-    m->ctime = capsnap->ctime;
-    m->btime = capsnap->btime;
-    m->mtime = capsnap->mtime;
-    m->atime = capsnap->atime;
-    m->time_warp_seq = capsnap->time_warp_seq;
-    m->change_attr = capsnap->change_attr;
+    m->ctime = capsnap.ctime;
+    m->btime = capsnap.btime;
+    m->mtime = capsnap.mtime;
+    m->atime = capsnap.atime;
+    m->time_warp_seq = capsnap.time_warp_seq;
+    m->change_attr = capsnap.change_attr;
 
-    if (capsnap->dirty & CEPH_CAP_FILE_WR) {
+    if (capsnap.dirty & CEPH_CAP_FILE_WR) {
       m->inline_version = in->inline_version;
       m->inline_data = in->inline_data;
     }
@@ -4088,11 +4085,11 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
 
 void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSession *new_s)
 {
-  for (auto p = in->cap_snaps.begin(); p != in->cap_snaps.end(); ++p) {
-    CapSnap *capsnap = p->second;
-    if (capsnap->flush_tid > 0) {
-      old_s->flushing_caps_tids.erase(capsnap->flush_tid);
-      new_s->flushing_caps_tids.insert(capsnap->flush_tid);
+  for (auto &p : in->cap_snaps) {
+    CapSnap &capsnap = p.second;
+    if (capsnap.flush_tid > 0) {
+      old_s->flushing_caps_tids.erase(capsnap.flush_tid);
+      new_s->flushing_caps_tids.insert(capsnap.flush_tid);
     }
   }
   for (map<ceph_tid_t, int>::iterator it = in->flushing_cap_tids.begin();
@@ -4800,18 +4797,16 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
   snapid_t follows = m->get_snap_follows();
 
   if (in->cap_snaps.count(follows)) {
-    CapSnap *capsnap = in->cap_snaps[follows];
-    if (m->get_client_tid() != capsnap->flush_tid) {
-      ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap->flush_tid << dendl;
+    CapSnap &capsnap = in->cap_snaps.at(follows);
+    if (m->get_client_tid() != capsnap.flush_tid) {
+      ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap.flush_tid << dendl;
     } else {
       ldout(cct, 5) << "handle_cap_flushedsnap mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
-      in->cap_snaps.erase(follows);
       if (in->flushing_caps == 0 && in->cap_snaps.empty())
 	in->flushing_cap_item.remove_myself();
-      session->flushing_caps_tids.erase(capsnap->flush_tid);
-
-      delete capsnap;
+      session->flushing_caps_tids.erase(capsnap.flush_tid);
+      in->cap_snaps.erase(follows);
     }
   } else {
     ldout(cct, 5) << "handle_cap_flushedsnap DUP(?) mds." << mds << " flushed snap follows " << follows
