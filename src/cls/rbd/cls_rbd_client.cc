@@ -1006,25 +1006,41 @@ namespace librbd {
       return dir_get_name_finish(&it, name);
     }
 
+    void dir_list_start(librados::ObjectReadOperation *op,
+                        const std::string &start, uint64_t max_return)
+    {
+      bufferlist in_bl;
+      ::encode(start, in_bl);
+      ::encode(max_return, in_bl);
+
+      op->exec("rbd", "dir_list", in_bl);
+    }
+
+    int dir_list_finish(bufferlist::iterator *it, map<string, string> *images)
+    {
+      try {
+        ::decode(*images, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		 const std::string &start, uint64_t max_return,
 		 map<string, string> *images)
     {
-      bufferlist in, out;
-      ::encode(start, in);
-      ::encode(max_return, in);
-      int r = ioctx->exec(oid, "rbd", "dir_list", in, out);
-      if (r < 0)
-	return r;
+      librados::ObjectReadOperation op;
+      dir_list_start(&op, start, max_return);
 
-      bufferlist::iterator iter = out.begin();
-      try {
-	::decode(*images, iter);
-      } catch (const buffer::error &err) {
-	return -EBADMSG;
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+	return r;
       }
 
-      return 0;
+      bufferlist::iterator iter = out_bl.begin();
+      return dir_list_finish(&iter, images);
     }
 
     void dir_add_image(librados::ObjectWriteOperation *op,
@@ -1417,27 +1433,40 @@ namespace librbd {
       return 0;
     }
 
-    int mirror_image_list(librados::IoCtx *ioctx,
-		          const std::string &start, uint64_t max_return,
-			  std::map<std::string, std::string> *mirror_image_ids) {
+    void mirror_image_list_start(librados::ObjectReadOperation *op,
+                                 const std::string &start, uint64_t max_return)
+    {
       bufferlist in_bl;
       ::encode(start, in_bl);
       ::encode(max_return, in_bl);
+      op->exec("rbd", "mirror_image_list", in_bl);
+    }
 
-      bufferlist out_bl;
-      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_image_list", in_bl,
-			  out_bl);
-      if (r < 0) {
-        return r;
-      }
-
+    int mirror_image_list_finish(bufferlist::iterator *it,
+                                 std::map<string, string> *mirror_image_ids)
+    {
       try {
-        bufferlist::iterator bl_it = out_bl.begin();
-        ::decode(*mirror_image_ids, bl_it);
+        ::decode(*mirror_image_ids, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
       return 0;
+    }
+
+    int mirror_image_list(librados::IoCtx *ioctx,
+		          const std::string &start, uint64_t max_return,
+			  std::map<std::string, std::string> *mirror_image_ids) {
+      librados::ObjectReadOperation op;
+      mirror_image_list_start(&op, start, max_return);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator bl_it = out_bl.begin();
+      return mirror_image_list_finish(&bl_it, mirror_image_ids);
     }
 
     void mirror_image_get_image_id_start(librados::ObjectReadOperation *op,
