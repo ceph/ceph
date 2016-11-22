@@ -3399,6 +3399,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // done with this tid?
   if (!op->onack && !op->oncommit && !op->oncommit_sync) {
+    uint32_t shard_index = op->target.pgid.ps() % num_shards;
+    qos_trk->track_resp(OsdID(op->target.osd, shard_index), m->get_qos_resp());
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
     _finish_op(op, 0);
   }
