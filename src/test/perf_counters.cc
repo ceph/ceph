@@ -200,3 +200,22 @@ TEST(PerfCounters, CephContextPerfCounters) {
   // Restore to avoid impact to other test cases
   g_ceph_context->disable_perf_counter();
 }
+
+TEST(PerfCounters, ResetPerfCounters) {
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
+  coll->clear();
+  PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
+  coll->add(fake_pf1);
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"all\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"success\":\"perf reset all\"}"), msg);
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"success\":\"perf reset test_perfcounter_1\"}"), msg);
+
+  coll->clear();
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"error\":\"Not find: test_perfcounter_1\"}"), msg);
+}
