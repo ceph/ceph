@@ -2530,6 +2530,8 @@ public:
   public:
     SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
 
+    void invalidate_state();
+
     RGWRados *get_store() { return store; }
     rgw_raw_obj& get_obj() { return obj; }
     RGWObjectCtx& get_ctx() { return ctx; }
