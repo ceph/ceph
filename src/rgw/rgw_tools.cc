@@ -47,6 +47,11 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
 
+  obj_version original_readv;
+  if (objv_tracker && !objv_tracker->read_version.empty()) {
+    original_readv = objv_tracker->read_version;
+  }
+
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
     RGWRados::SystemObject::Read rop(&source);
@@ -64,6 +69,14 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
     ret = rop.read(0, request_len - 1, bl, objv_tracker, refresh_version);
     if (ret == -ECANCELED) {
       /* raced, restart */
+      if (!original_readv.empty()) {
+        /* we were asked to read a specific obj_version, failed */
+        return ret;
+      }
+      if (objv_tracker) {
+        objv_tracker->read_version.clear();
+      }
+      source.invalidate_state();
       continue;
     }
     if (ret < 0)
