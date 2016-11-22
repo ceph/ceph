@@ -29,14 +29,14 @@ public:
 
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
                        Extents &&image_extents, char *buf, bufferlist *pbl,
-                       int op_flags, const blkin_trace_info *trace_info = nullptr);
+                       int op_flags, const blkin_trace_info *trace_info);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                         size_t len, const char *buf, int op_flags,
-                        const blkin_trace_info *trace_info = nullptr);
+                        const blkin_trace_info *trace_info);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                          uint64_t len, const blkin_trace_info *trace_info = nullptr);
+                          uint64_t len, const blkin_trace_info *trace_info);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
 
   virtual bool is_write_op() const {
@@ -66,7 +66,7 @@ protected:
 
   AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                   Extents &&image_extents,
-                  const blkin_trace_info *trace_info = nullptr)
+                  const blkin_trace_info *trace_info)
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
       m_image_extents(image_extents) {
         if (trace_info) {
@@ -90,7 +90,7 @@ public:
 
   AioImageRead(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                Extents &&image_extents, char *buf, bufferlist *pbl,
-               int op_flags, const blkin_trace_info *trace_info = nullptr)
+               int op_flags, const blkin_trace_info *trace_info)
     : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, std::move(image_extents), trace_info),
       m_buf(buf), m_pbl(pbl), m_op_flags(op_flags) {
   }
@@ -129,7 +129,7 @@ protected:
   typedef std::vector<ObjectExtent> ObjectExtents;
 
   AbstractAioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-                        Extents &&image_extents, const blkin_trace_info *trace_info = nullptr)
+                        Extents &&image_extents, const blkin_trace_info *trace_info)
     : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, std::move(image_extents), trace_info),
       m_synchronous(false) {
   }
@@ -149,7 +149,7 @@ protected:
                                     AioObjectRequests *aio_object_requests);
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish, ZTracer::Trace *trace = nullptr) = 0;
+      Context *on_finish, ZTracer::Trace *trace) = 0;
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous) = 0;
@@ -165,7 +165,7 @@ public:
   using typename AioImageRequest<ImageCtxT>::Extents;
 
   AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                size_t len, const char *buf, int op_flags, const blkin_trace_info *trace_info = nullptr)
+                size_t len, const char *buf, int op_flags, const blkin_trace_info *trace_info)
     : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, {{off, len}}, trace_info),
       m_op_flags(op_flags) {
     m_bl.append(buf, len);
@@ -173,7 +173,7 @@ public:
   AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                 Extents &&image_extents, bufferlist &&bl, int op_flags)
     : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp,
-                                       std::move(image_extents)),
+                                       std::move(image_extents), nullptr),
       m_bl(std::move(bl)), m_op_flags(op_flags) {
   }
 
@@ -200,7 +200,7 @@ protected:
                                     AioObjectRequests *aio_object_requests);
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish, ZTracer::Trace *trace = nullptr);
+      Context *on_finish, ZTracer::Trace *trace);
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);
@@ -214,7 +214,7 @@ template <typename ImageCtxT = ImageCtx>
 class AioImageDiscard : public AbstractAioImageWrite<ImageCtxT> {
 public:
   AioImageDiscard(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                  uint64_t len, const blkin_trace_info *trace_info = nullptr)
+                  uint64_t len, const blkin_trace_info *trace_info)
     : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, {{off, len}}, trace_info) {
   }
 
@@ -239,7 +239,7 @@ protected:
 
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish, ZTracer::Trace *trace = nullptr);
+      Context *on_finish, ZTracer::Trace *trace);
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);
@@ -250,7 +250,7 @@ template <typename ImageCtxT = ImageCtx>
 class AioImageFlush : public AioImageRequest<ImageCtxT> {
 public:
   AioImageFlush(ImageCtxT &image_ctx, AioCompletion *aio_comp)
-    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, {}) {
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, {}, nullptr) {
   }
 
   virtual bool is_write_op() const {

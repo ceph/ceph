@@ -157,7 +157,7 @@ namespace librbd {
 
       request_sent = true;
       AioObjectWrite *req = new AioObjectWrite(image_ctx, oid, object_no, off,
-                                               bl, snapc, this, 0);
+                                               bl, snapc, this, 0, nullptr);
       req->send();
     }
   };

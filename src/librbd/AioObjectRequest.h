@@ -49,33 +49,33 @@ public:
                                          uint64_t object_no,
                                          const ::SnapContext &snapc,
                                          Context *completion,
-                                         ZTracer::Trace *trace = nullptr);
+                                         ZTracer::Trace *trace);
   static AioObjectRequest* create_truncate(ImageCtxT *ictx,
                                            const std::string &oid,
                                            uint64_t object_no,
                                            uint64_t object_off,
                                            const ::SnapContext &snapc,
                                            Context *completion,
-                                           ZTracer::Trace *trace = nullptr);
+                                           ZTracer::Trace *trace);
   static AioObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
                                         uint64_t object_no,
                                         uint64_t object_off,
                                         const ceph::bufferlist &data,
                                         const ::SnapContext &snapc,
                                         Context *completion, int op_flags,
-                                        ZTracer::Trace *trace = nullptr);
+                                        ZTracer::Trace *trace);
   static AioObjectRequest* create_zero(ImageCtxT *ictx, const std::string &oid,
                                        uint64_t object_no, uint64_t object_off,
                                        uint64_t object_len,
                                        const ::SnapContext &snapc,
                                        Context *completion,
-                                       ZTracer::Trace *trace = nullptr);
+                                       ZTracer::Trace *trace);
 
   AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                    uint64_t objectno, uint64_t off, uint64_t len,
                    librados::snap_t snap_id,
                    Context *completion, bool hide_enoent,
-                   ZTracer::Trace *trace = nullptr);
+                   ZTracer::Trace *trace);
   virtual ~AioObjectRequest() {}
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
@@ -113,7 +113,7 @@ public:
                                uint64_t len, Extents &buffer_extents,
                                librados::snap_t snap_id, bool sparse,
                                Context *completion, int op_flags,
-                               ZTracer::Trace *trace = nullptr) {
+                               ZTracer::Trace *trace) {
     return new AioObjectRead(ictx, oid, objectno, offset, len, buffer_extents,
                              snap_id, sparse, completion, op_flags, trace);
   }
@@ -122,7 +122,7 @@ public:
                 uint64_t objectno, uint64_t offset, uint64_t len,
                 Extents& buffer_extents, librados::snap_t snap_id, bool sparse,
                 Context *completion, int op_flags,
-                ZTracer::Trace *trace = nullptr);
+                ZTracer::Trace *trace);
 
   virtual bool should_complete(int r);
   virtual void send();
@@ -186,7 +186,7 @@ public:
                          uint64_t object_no, uint64_t object_off,
                          uint64_t len, const ::SnapContext &snapc,
                          Context *completion, bool hide_enoent,
-                         ZTracer::Trace *trace = nullptr);
+                         ZTracer::Trace *trace);
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
   {
@@ -268,7 +268,7 @@ public:
   AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                  uint64_t object_off, const ceph::bufferlist &data,
                  const ::SnapContext &snapc, Context *completion,
-                 int op_flags, ZTracer::Trace *trace = nullptr)
+                 int op_flags, ZTracer::Trace *trace)
     : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
                              snapc, completion, false, trace),
       m_write_data(data), m_op_flags(op_flags) {
@@ -295,7 +295,7 @@ class AioObjectRemove : public AbstractAioObjectWrite {
 public:
   AioObjectRemove(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                   const ::SnapContext &snapc, Context *completion,
-                  ZTracer::Trace *trace = nullptr)
+                  ZTracer::Trace *trace)
     : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
                              true, trace),
       m_object_state(OBJECT_NONEXISTENT) {
@@ -344,7 +344,7 @@ public:
   AioObjectTrim(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                 const ::SnapContext &snapc, Context *completion)
     : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
-                             true) {
+                             true, nullptr) {
   }
 
 protected:
@@ -370,7 +370,7 @@ public:
   AioObjectTruncate(ImageCtx *ictx, const std::string &oid,
                     uint64_t object_no, uint64_t object_off,
                     const ::SnapContext &snapc, Context *completion,
-                    ZTracer::Trace *trace = nullptr)
+                    ZTracer::Trace *trace)
     : AbstractAioObjectWrite(ictx, oid, object_no, object_off, 0, snapc,
                              completion, true, trace) {
   }
@@ -398,7 +398,7 @@ public:
   AioObjectZero(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                 uint64_t object_off, uint64_t object_len,
                 const ::SnapContext &snapc, Context *completion,
-                ZTracer::Trace *trace = nullptr)
+                ZTracer::Trace *trace)
     : AbstractAioObjectWrite(ictx, oid, object_no, object_off, object_len,
                              snapc, completion, true, trace) {
   }

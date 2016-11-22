@@ -26,19 +26,20 @@ template <>
 struct AioImageRequest<MockReplayImageCtx> {
   static AioImageRequest *s_instance;
 
-  MOCK_METHOD5(aio_write, void(AioCompletion *c, uint64_t off, size_t len,
-                               const char *buf, int op_flags));
+  MOCK_METHOD6(aio_write, void(AioCompletion *c, uint64_t off, size_t len,
+                               const char *buf, int op_flags, const blkin_trace_info *trace_info));
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c, uint64_t off,
-                        size_t len, const char *buf, int op_flags) {
+                        size_t len, const char *buf, int op_flags, const blkin_trace_info *trace_info) {
     assert(s_instance != nullptr);
-    s_instance->aio_write(c, off, len, buf, op_flags);
+    s_instance->aio_write(c, off, len, buf, op_flags, nullptr);
   }
 
-  MOCK_METHOD3(aio_discard, void(AioCompletion *c, uint64_t off, uint64_t len));
+  MOCK_METHOD4(aio_discard, void(AioCompletion *c, uint64_t off, uint64_t len,
+                                const blkin_trace_info *trace_info));
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c, uint64_t off,
-                          uint64_t len) {
+                          uint64_t len, const blkin_trace_info *trace_info) {
     assert(s_instance != nullptr);
-    s_instance->aio_discard(c, off, len);
+    s_instance->aio_discard(c, off, len, nullptr);
   }
 
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
@@ -108,7 +109,7 @@ public:
   void expect_aio_discard(MockAioImageRequest &mock_aio_image_request,
                           AioCompletion **aio_comp, uint64_t off,
                           uint64_t len) {
-    EXPECT_CALL(mock_aio_image_request, aio_discard(_, off, len))
+    EXPECT_CALL(mock_aio_image_request, aio_discard(_, off, len, nullptr))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 
@@ -128,7 +129,7 @@ public:
                         AioCompletion **aio_comp, uint64_t off,
                         uint64_t len, const char *data) {
     EXPECT_CALL(mock_aio_image_request,
-                aio_write(_, off, len, CStrEq(data), _))
+                aio_write(_, off, len, CStrEq(data), _, nullptr))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 

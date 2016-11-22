@@ -2483,7 +2483,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       // coordinate through AIO WQ to ensure lock is acquired if needed
       m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
                                         m_bl->c_str(),
-                                        LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+                                        LIBRADOS_OP_FLAG_FADVISE_DONTNEED, nullptr);
     }
 
   private:
@@ -2539,7 +2539,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       AioCompletion *comp = AioCompletion::create_and_start(ctx, src,
                                                             AIO_TYPE_READ);
       AioImageRequest<>::aio_read(src, comp, {{offset, len}}, nullptr, bl,
-                                  fadvise_flags);
+                                  fadvise_flags, nullptr);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -2764,7 +2764,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       C_SaferCond ctx;
       AioCompletion *c = AioCompletion::create_and_start(&ctx, ictx,
                                                          AIO_TYPE_READ);
-      AioImageRequest<>::aio_read(ictx, c, {{off, read_len}}, nullptr, &bl, 0);
+      AioImageRequest<>::aio_read(ictx, c, {{off, read_len}}, nullptr, &bl, 0, nullptr);
 
       int ret = ctx.wait();
       if (ret < 0) {
@@ -3801,7 +3801,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	  ictx->readahead.inc_pending();
 	  ictx->aio_read_from_cache(q->oid, q->objectno, NULL,
 				    q->length, q->offset,
-				    req_comp, 0);
+				    req_comp, 0, nullptr);
 	}
       }
       ictx->perfcounter->inc(l_librbd_readahead);

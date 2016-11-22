@@ -27,13 +27,13 @@ public:
   int discard(uint64_t off, uint64_t len);
 
   void aio_read(AioCompletion *c, uint64_t off, uint64_t len, char *buf,
-                bufferlist *pbl, int op_flags, bool native_async=true,
-                const blkin_trace_info *trace_info = nullptr);
+                bufferlist *pbl, int op_flags, const blkin_trace_info *trace_info,
+                bool native_async=true);
   void aio_write(AioCompletion *c, uint64_t off, uint64_t len, const char *buf,
-                 int op_flags, bool native_async=true,
-                 const blkin_trace_info *trace_info = nullptr);
+                 int op_flags, const blkin_trace_info *trace_info,
+                 bool native_async=true);
   void aio_discard(AioCompletion *c, uint64_t off, uint64_t len,
-                   bool native_async=true, const blkin_trace_info *trace_info = nullptr);
+                   const blkin_trace_info *trace_info, bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
 
   using typename ThreadPool::PointerWQ<AioImageRequest<ImageCtx> >::drain;

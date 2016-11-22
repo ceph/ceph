@@ -39,7 +39,7 @@ ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
 
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
-  aio_read(c, off, len, buf, NULL, op_flags, false);
+  aio_read(c, off, len, buf, NULL, op_flags, nullptr, false);
   return cond.wait();
 }
 
@@ -59,7 +59,7 @@ ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
 
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
-  aio_write(c, off, len, buf, op_flags, false);
+  aio_write(c, off, len, buf, op_flags, nullptr, false);
 
   r = cond.wait();
   if (r < 0) {
@@ -83,7 +83,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
 
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
-  aio_discard(c, off, len, false);
+  aio_discard(c, off, len, nullptr, false);
 
   r = cond.wait();
   if (r < 0) {
@@ -94,7 +94,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
 
 void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                                  char *buf, bufferlist *pbl, int op_flags,
-                                 bool native_async, const blkin_trace_info *trace_info) {
+                                 const blkin_trace_info *trace_info, bool native_async) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_READ);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_read: ictx=" << &m_image_ctx << ", "
@@ -132,7 +132,7 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 
 void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
                                   const char *buf, int op_flags,
-                                  bool native_async, const blkin_trace_info *trace_info) {
+                                  const blkin_trace_info *trace_info, bool native_async) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_WRITE);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_write: ictx=" << &m_image_ctx << ", "
@@ -157,8 +157,8 @@ void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 }
 
 void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
-                                    uint64_t len, bool native_async,
-                                    const blkin_trace_info *trace_info) {
+                                    uint64_t len, const blkin_trace_info *trace_info,
+                                    bool native_async) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_DISCARD);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_discard: ictx=" << &m_image_ctx << ", "

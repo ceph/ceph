@@ -107,7 +107,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   std::string payload(4096, '1');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
-                                  0);
+                                  0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 
@@ -119,7 +119,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   std::string read_payload(4096, '\0');
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 &read_payload[0], NULL, 0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);
@@ -144,7 +144,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 &read_payload[0], NULL, 0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   if (ictx->cct->_conf->rbd_skip_partial_discard) {
@@ -175,7 +175,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   // verify lock ordering constraints
   aio_comp = new librbd::AioCompletion();
-  ictx->aio_work_queue->aio_discard(aio_comp, 0, read_payload.size());
+  ictx->aio_work_queue->aio_discard(aio_comp, 0, read_payload.size(), nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 }
@@ -207,7 +207,7 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   std::string read_payload(4096, '\0');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
+                                 &read_payload[0], NULL, 0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
   ASSERT_EQ(payload, read_payload);
@@ -235,7 +235,7 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   // verify lock ordering constraints
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
-                                  0);
+                                  0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 }
@@ -658,7 +658,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   std::string payload(4096, '1');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
-                                  0);
+                                  0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 
@@ -678,7 +678,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
 
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_write(aio_comp, 0, payload.size(), payload.c_str(),
-                                  0);
+                                  0, nullptr);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 

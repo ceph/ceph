@@ -129,7 +129,7 @@ TEST_F(TestJournalEntries, AioWrite) {
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 123, buffer.size(), buffer.c_str(), 0);
+  ictx->aio_work_queue->aio_write(c, 123, buffer.size(), buffer.c_str(), 0, nullptr);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 
@@ -172,7 +172,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_discard(c, 123, 234);
+  ictx->aio_work_queue->aio_discard(c, 123, 234, nullptr);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 

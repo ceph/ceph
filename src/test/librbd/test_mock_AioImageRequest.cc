@@ -206,7 +206,7 @@ TEST_F(TestMockAioImageRequest, AioWriteJournalAppendDisabled) {
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_WRITE);
   MockAioImageWrite mock_aio_image_write(mock_image_ctx, aio_comp, 0, 1, "1",
-                                         0);
+                                         0, nullptr);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_write.send();
@@ -232,7 +232,7 @@ TEST_F(TestMockAioImageRequest, AioDiscardJournalAppendDisabled) {
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
-  MockAioImageDiscard mock_aio_image_discard(mock_image_ctx, aio_comp, 0, 1);
+  MockAioImageDiscard mock_aio_image_discard(mock_image_ctx, aio_comp, 0, 1, nullptr);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_discard.send();

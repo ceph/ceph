@@ -336,7 +336,7 @@ void AioObjectRead<I>::read_from_parent(Extents&& parent_extents)
                             << dendl;
   AioImageRequest<>::aio_read(image_ctx->parent, parent_completion,
                               std::move(parent_extents), nullptr, &m_read_data,
-                              0);
+                              0, nullptr);
 }
 
 /** write **/

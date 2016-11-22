@@ -367,7 +367,7 @@ void TrimRequest<I>::send_clean_boundary() {
                               req_comp);
     } else {
       req = new AioObjectTruncate(&image_ctx, p->oid.name, p->objectno,
-                                  p->offset, snapc, req_comp);
+                                  p->offset, snapc, req_comp, nullptr);
     }
     req->send();
   }

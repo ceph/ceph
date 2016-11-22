@@ -273,7 +273,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   Context *ctx = new DummyContext();
   librbd::AioCompletion *c = librbd::AioCompletion::create(ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0, nullptr);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -295,7 +295,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   Context *ctx = new DummyContext();
   librbd::AioCompletion *c = librbd::AioCompletion::create(ctx);
   c->get();
-  ictx->aio_work_queue->aio_discard(c, 0, 256);
+  ictx->aio_work_queue->aio_discard(c, 0, 256, nullptr);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -699,7 +699,7 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0, nullptr);
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, true, no_op));

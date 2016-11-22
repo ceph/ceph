@@ -30,7 +30,7 @@ void ImageWriteback<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                                             &m_image_ctx,
                                                             AIO_TYPE_READ);
   AioImageRead<I> req(m_image_ctx, aio_comp, std::move(image_extents), nullptr,
-                      bl, fadvise_flags);
+                      bl, fadvise_flags, nullptr);
   req.set_bypass_image_cache();
   req.send();
 }
@@ -63,7 +63,7 @@ void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
   AioCompletion *aio_comp = AioCompletion::create_and_start(on_finish,
                                                             &m_image_ctx,
                                                             AIO_TYPE_DISCARD);
-  AioImageDiscard<I> req(m_image_ctx, aio_comp, offset, length);
+  AioImageDiscard<I> req(m_image_ctx, aio_comp, offset, length, nullptr);
   req.set_bypass_image_cache();
   req.send();
 }
