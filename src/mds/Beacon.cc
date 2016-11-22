@@ -33,7 +33,6 @@
 
 
 class Beacon::C_MDS_BeaconSender : public Context {
-  Beacon *beacon;
 public:
   explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
   void finish(int r) {
@@ -41,6 +40,8 @@ public:
     beacon->sender = NULL;
     beacon->_send();
   }
+private:
+  Beacon *beacon;
 };
 
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
