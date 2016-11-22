@@ -423,10 +423,10 @@ void OpenRequest<I>::send_refresh() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   using klass = OpenRequest<I>;
-  RefreshRequest<I> *ctx = RefreshRequest<I>::create(
+  RefreshRequest<I> *req = RefreshRequest<I>::create(
     *m_image_ctx, false,
     create_context_callback<klass, &klass::handle_refresh>(this));
-  ctx->send();
+  req->send();
 }
 
 template <typename I>
@@ -455,10 +455,10 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   using klass = OpenRequest<I>;
-  SetSnapRequest<I> *ctx = SetSnapRequest<I>::create(
+  SetSnapRequest<I> *req = SetSnapRequest<I>::create(
     *m_image_ctx, m_image_ctx->snap_name,
     create_context_callback<klass, &klass::handle_set_snap>(this));
-  ctx->send();
+  req->send();
   return nullptr;
 }
 
