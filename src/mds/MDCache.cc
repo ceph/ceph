@@ -3317,10 +3317,11 @@ void MDCache::maybe_resolve_finish()
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
   disambiguate_imports();
   finish_committed_masters();
-  if (mds->is_resolve()) {
+
+  if (resolve_done) {
+    assert(mds->is_resolve());
     trim_unlinked_inodes();
     recalc_auth_bits(false);
-    assert(resolve_done != NULL);
     resolve_done->complete(0);
     resolve_done = NULL;
   } else {
