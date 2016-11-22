@@ -658,7 +658,7 @@ void ECBackend::continue_recovery_op(
     // should never be called once complete
     case RecoveryOp::COMPLETE:
     default: {
-      assert(0);
+      ceph_abort();
     };
     }
   }
@@ -1716,7 +1716,7 @@ void ECBackend::start_rmw(Op *op, PGTransactionUPtr &&t)
 	     << " returned a null pointer and there is no "
 	     << " way to recover from such an error in this "
 	     << " context" << dendl;
-	assert(0);
+	ceph_abort();
       }
       return ref;
     },
@@ -1860,7 +1860,7 @@ bool ECBackend::try_reads_to_commit()
       if (i.requires_kraken()) {
 	derr << __func__ << ": log entry " << i << " requires kraken"
 	     << " but overwrites are not enabled!" << dendl;
-	assert(0);
+	ceph_abort();
       }
     }
   }

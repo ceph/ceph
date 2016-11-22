@@ -137,7 +137,7 @@ double mds_load_t::mds_load()
     return cpu_load_avg;
 
   }
-  assert(0);
+  ceph_abort();
   return 0;
 }
 

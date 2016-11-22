@@ -89,7 +89,7 @@ ceph_send_command(PyObject *self, PyObject *args)
 
   auto set_fn = PyObject_GetAttrString(completion, "complete");
   if (set_fn == nullptr) {
-    assert(0);  // TODO raise python exception instead
+    ceph_abort();  // TODO raise python exception instead
   } else {
     assert(PyCallable_Check(set_fn));
   }

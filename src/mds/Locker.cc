@@ -831,7 +831,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<M
 	  break;
 
 	default:
-	  assert(0);
+	  ceph_abort();
 	}
       }
     } else {
@@ -3535,7 +3535,7 @@ void Locker::handle_client_lease(MClientLease *m)
     break;
 
   default:
-    assert(0); // implement me
+    ceph_abort(); // implement me
     break;
   }
 }
@@ -3660,7 +3660,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
 
   default:
     dout(7) << "get_lock don't know lock_type " << lock_type << dendl;
-    assert(0);
+    ceph_abort();
     break;
   }
 
@@ -3702,7 +3702,7 @@ void Locker::handle_lock(MLock *m)
     
   default:
     dout(7) << "handle_lock got otype " << m->get_lock_type() << dendl;
-    assert(0);
+    ceph_abort();
     break;
   }
 }
@@ -3913,7 +3913,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
     case LOCK_XSYN: lock->set_state(LOCK_XSYN_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
-    default: assert(0);
+    default: ceph_abort();
     }
 
     int gather = 0;
@@ -3991,7 +3991,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
-  default: assert(0);
+  default: ceph_abort();
   }
   
   int gather = 0;
@@ -4057,7 +4057,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     (static_cast<ScatterLock *>(lock))->clear_unscatter_wanted();
     break;
   case LOCK_TSYN: lock->set_state(LOCK_TSYN_LOCK); break;
-  default: assert(0);
+  default: ceph_abort();
   }
 
   int gather = 0;
@@ -4139,7 +4139,7 @@ void Locker::simple_xlock(SimpleLock *lock)
   switch (lock->get_state()) {
   case LOCK_LOCK: 
   case LOCK_XLOCKDONE: lock->set_state(LOCK_LOCK_XLOCK); break;
-  default: assert(0);
+  default: ceph_abort();
   }
 
   int gather = 0;
@@ -4436,7 +4436,7 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool fo
 	    simple_sync(lock);
 	  break;
 	default:
-	  assert(0);
+	  ceph_abort();
 	}
 	++count;
 	if (lock->is_stable() && count == 2) {
@@ -4511,10 +4511,10 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   CInode *in = static_cast<CInode *>(lock->get_parent());
 
   switch (lock->get_state()) {
-  case LOCK_SYNC: assert(0);   // this shouldn't happen
+  case LOCK_SYNC: ceph_abort();   // this shouldn't happen
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_TSYN); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_TSYN); break;
-  default: assert(0);
+  default: ceph_abort();
   }
 
   int gather = 0;
@@ -4781,7 +4781,7 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       // fall-thru
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_MIX); break;
     case LOCK_TSYN: lock->set_state(LOCK_TSYN_MIX); break;
-    default: assert(0);
+    default: ceph_abort();
     }
 
     int gather = 0;
@@ -4855,7 +4855,7 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   case LOCK_MIX: lock->set_state(LOCK_MIX_EXCL); break;
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
-  default: assert(0);
+  default: ceph_abort();
   }
   int gather = 0;
   
@@ -4912,7 +4912,7 @@ void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
 
   switch (lock->get_state()) {
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_XSYN); break;
-  default: assert(0);
+  default: ceph_abort();
   }
   
   int gather = 0;
@@ -5027,7 +5027,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     switch (lock->get_state()) {
     case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
     case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
-    default: assert(0);
+    default: ceph_abort();
     }
 
     eval_gather(lock, true);
@@ -5183,7 +5183,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }  
   
   m->put();

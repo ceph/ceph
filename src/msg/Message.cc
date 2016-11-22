@@ -764,7 +764,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     if (cct) {
       ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
-	assert(0);
+	ceph_abort();
     }
     return 0;
   }
@@ -782,7 +782,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 		    << " because compat_version " << header.compat_version
 		    << " > supported version " << m->get_header().version << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
-	assert(0);
+	ceph_abort();
     }
     m->put();
     return 0;
@@ -806,7 +806,7 @@ Message *decode_message(CephContext *cct, int crcflags,
       m->get_payload().hexdump(*_dout);
       *_dout << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
-	assert(0);
+	ceph_abort();
     }
     m->put();
     return 0;

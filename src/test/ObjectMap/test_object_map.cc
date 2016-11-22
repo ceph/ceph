@@ -491,7 +491,7 @@ public:
     string header;
     int r = get_header(*object, &header);
     if (r < 0) {
-      assert(0);
+      ceph_abort();
     }
     if (header.size() == 0) {
       if (hmap.count(*object)) {

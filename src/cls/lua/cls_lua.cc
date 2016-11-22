@@ -246,7 +246,7 @@ static int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
   assert(err);
   if (err->error) {
     CLS_ERR("error: cls_lua state machine: unexpected error");
-    assert(0);
+    ceph_abort();
   }
 
   /* everything is cherry */
@@ -884,7 +884,7 @@ static int clslua_eval(lua_State *L)
     default:
       CLS_ERR("error: unknown encoding type");
       ctx->ret = -EFAULT;
-      assert(0);
+      ceph_abort();
       return 0;
   }
 
@@ -989,7 +989,7 @@ static int eval_generic(cls_method_context_t hctx, bufferlist *in, bufferlist *o
       struct clslua_err *err = clslua_checkerr(L);
       if (!err) {
         CLS_ERR("error: cls_lua state machine: unexpected error");
-        assert(0);
+        ceph_abort();
       }
 
       /* Error origin a cls_cxx_* method? */

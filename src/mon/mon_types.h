@@ -40,7 +40,7 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_LOG: return "logm";
   case PAXOS_AUTH: return "auth";
   case PAXOS_MGR: return "mgr";
-  default: assert(0); return 0;
+  default: ceph_abort(); return 0;
   }
 }
 

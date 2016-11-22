@@ -900,7 +900,7 @@ void Paxos::commit_start()
   else if (is_updating())
     state = STATE_WRITING;
   else
-    assert(0);
+    ceph_abort();
 
   if (mon->get_quorum().size() > 1) {
     // cancel timeout event
@@ -982,7 +982,7 @@ void Paxos::handle_commit(MonOpRequestRef op)
 
   if (!mon->is_peon()) {
     dout(10) << "not a peon, dropping" << dendl;
-    assert(0);
+    ceph_abort();
     return;
   }
 
@@ -1465,13 +1465,13 @@ void Paxos::dispatch(MonOpRequestRef op)
 	handle_lease_ack(op);
 	break;
       default:
-	assert(0);
+	ceph_abort();
       }
     }
     break;
     
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 

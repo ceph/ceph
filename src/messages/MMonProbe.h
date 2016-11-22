@@ -42,7 +42,7 @@ public:
     case OP_SLURP_LATEST: return "slurp_latest";
     case OP_DATA: return "data";
     case OP_MISSING_FEATURES: return "missing_features";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
   

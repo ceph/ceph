@@ -170,7 +170,7 @@ public:
       else if (mode == CACHE_NEXT)
 	cur = next;
       else
-	assert(0);
+	ceph_abort();
       next = cur->_next;
       return *this;
     }

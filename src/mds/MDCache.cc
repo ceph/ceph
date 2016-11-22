@@ -584,7 +584,7 @@ struct C_MDS_RetryOpenRoot : public MDSInternalContext {
       // it is not okay to call suicide() here because we are in
       // a Finisher callback.
       cache->mds->damaged();
-      assert(0);  // damaged should never return
+      ceph_abort();  // damaged should never return
     } else {
       cache->open_root();
     }
@@ -3401,7 +3401,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 	mds->server->do_rmdir_rollback(su->rollback, from, null_ref);
 	break;
       default:
-	assert(0);
+	ceph_abort();
       }
     } else {
       MDRequestRef mdr = request_get(*p);
@@ -4253,7 +4253,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
     break;
 
   default: 
-    assert(0);
+    ceph_abort();
   }
   m->put();
 }
@@ -7774,7 +7774,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     if (MDS_INO_IS_MDSDIR(path.get_ino())) 
       open_foreign_mdsdir(path.get_ino(), _get_waiter(mdr, req, fin));
     else {
-      //assert(0);  // hrm.. broken
+      //ceph_abort();  // hrm.. broken
       return -ESTALE;
     }
     return 1;
@@ -7981,7 +7981,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
 	    dn = NULL;
 	  } else if (dn) {
-	    assert(0); // should have fallen out in ->is_null() check above
+	    ceph_abort(); // should have fallen out in ->is_null() check above
 	  } else if (curdir->is_frozen()) {
 	    dout(20) << " not adding null to frozen dir " << dendl;
 	  } else if (snapid < CEPH_MAXSNAP) {
@@ -8058,7 +8058,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       }    
     }
     
-    assert(0);  // i shouldn't get here
+    ceph_abort();  // i shouldn't get here
   }
   
   // success.
@@ -8195,7 +8195,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
           dn->get_projected_linkage()->get_remote_ino());
       if (fatal) {
         mds->damaged();
-        assert(0);  // unreachable, damaged() respawns us
+        ceph_abort();  // unreachable, damaged() respawns us
       }
   }
   fin->complete(r < 0 ? r : 0);
@@ -8999,7 +8999,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       repair_inode_stats_work(mdr);
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
 }
@@ -9310,7 +9310,7 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   /*
   static int count = 5;
   if (--count == 0)
-    assert(0);  // hack test test **********
+    ceph_abort();  // hack test test **********
   */
 
   // done.
@@ -10290,7 +10290,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
       ::encode(ino, m->bl);
       ::encode(d_type, m->bl);
     } else
-      assert(0);   // aie, bad caller!
+      ceph_abort();   // aie, bad caller!
     mds->send_message_mds(m, p->first);
   }
 }
@@ -10331,7 +10331,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
       dir->link_remote_inode(dn, ino, d_type);
     }
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   if (!finished.empty())
@@ -10904,7 +10904,7 @@ bool MDCache::fragment_are_all_frozen(CDir *dir)
     if (p->first.frag.contains(dir->get_frag()))
       return p->second.all_frozen;
   }
-  assert(0);
+  ceph_abort();
   return false;
 }
 
@@ -10919,7 +10919,7 @@ void MDCache::fragment_freeze_inc_num_waiters(CDir *dir)
       return;
     }
   }
-  assert(0);
+  ceph_abort();
 }
 
 void MDCache::find_stale_fragment_freeze()
@@ -11334,7 +11334,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 
     mds->queue_waiters(waiters);
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   notify->put();

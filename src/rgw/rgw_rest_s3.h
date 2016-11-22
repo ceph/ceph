@@ -439,7 +439,7 @@ public:
     try {
       tx_buffer_it.advance(l);
     } catch (buffer::end_of_buffer &e) {
-      assert(0);
+      ceph_abort();
     }
 
     return l;

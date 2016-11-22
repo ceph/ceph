@@ -599,7 +599,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
           << std::dec << " in journal";
       mds->clog->error() << oss.str();
       mds->damaged();
-      assert(0);  // Should be unreachable because damaged() calls respawn()
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
   }
 }
@@ -1215,7 +1215,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
           mds->clog->error() << "failure replaying journal (EMetaBlob)";
           mds->damaged();
-          assert(0);  // Should be unreachable because damaged() calls respawn()
+          ceph_abort();  // Should be unreachable because damaged() calls respawn()
 	}
       }
 
@@ -1961,7 +1961,7 @@ void ETableServer::replay(MDSRank *mds)
   default:
     mds->clog->error() << "invalid tableserver op in ETableServer";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
   
   assert(version == server->get_version());
@@ -2527,7 +2527,7 @@ void ESlaveUpdate::replay(MDSRank *mds)
   default:
     mds->clog->error() << "invalid op in ESlaveUpdate";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 }
 
@@ -2770,7 +2770,7 @@ void EFragment::replay(MDSRank *mds)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   metablob.replay(mds, _segment);
@@ -3031,7 +3031,7 @@ void EImportFinish::replay(MDSRank *mds)
 	     << dendl;
     mds->clog->error() << "failure replaying journal (EImportFinish)";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 }
 

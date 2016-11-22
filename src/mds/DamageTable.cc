@@ -264,7 +264,7 @@ void DamageTable::erase(damage_entry_id_t damage_id)
     remotes.erase(backtrace_entry->ino);
   } else {
     derr << "Invalid type " << type << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   by_id.erase(by_id_entry);

@@ -162,7 +162,7 @@ void SessionMap::_load_finish(
                        << "' " << operation_r << " ("
                        << cpp_strerror(operation_r) << ")";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 
   // Decode header
@@ -172,7 +172,7 @@ void SessionMap::_load_finish(
       mds->clog->error() << "error reading sessionmap header "
                          << header_r << " (" << cpp_strerror(header_r) << ")";
       mds->damaged();
-      assert(0);  // Should be unreachable because damaged() calls respawn()
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
 
     if(header_bl.length() == 0) {
@@ -186,7 +186,7 @@ void SessionMap::_load_finish(
     } catch (buffer::error &e) {
       mds->clog->error() << "corrupt sessionmap header: " << e.what();
       mds->damaged();
-      assert(0);  // Should be unreachable because damaged() calls respawn()
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
     dout(10) << __func__ << " loaded version " << version << dendl;
   }
@@ -197,7 +197,7 @@ void SessionMap::_load_finish(
     mds->clog->error() << "error reading sessionmap values: " 
                        << values_r << " (" << cpp_strerror(values_r) << ")";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 
   // Decode session_vals
@@ -206,7 +206,7 @@ void SessionMap::_load_finish(
   } catch (buffer::error &e) {
     mds->clog->error() << "corrupt sessionmap values: " << e.what();
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 
   if (session_vals.size() == g_conf->mds_sessionmap_keys_per_op) {

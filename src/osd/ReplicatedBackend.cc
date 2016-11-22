@@ -1192,7 +1192,7 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
 	static_cast<MOSDRepOp*>(m), parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   // send ack to acker only if we haven't sent a commit already
@@ -1237,7 +1237,7 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
     commit = reply;
   }
   else {
-    assert(0);
+    ceph_abort();
   }
 
   commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!

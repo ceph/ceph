@@ -291,7 +291,7 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
     return false;
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -308,7 +308,7 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   case CEPH_MSG_AUTH:
     return prep_auth(op, true);
   default:
-    assert(0);
+    ceph_abort();
     return false;
   }
 }

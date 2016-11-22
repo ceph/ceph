@@ -63,7 +63,7 @@ class AsyncCompressor {
       return true;
     }
     void _dequeue(Job *item) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty() {
       return job_queue.empty();

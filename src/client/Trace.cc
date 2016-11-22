@@ -41,7 +41,7 @@ void Trace::start()
   fs->open(filename);
   if (!fs->is_open()) {
     //generic_dout(0) << "** unable to open trace file " << filename << dendl;
-    assert(0);
+    ceph_abort();
   }
   //generic_dout(2) << "opened traced file '" << filename << "'" << dendl;
   

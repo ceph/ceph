@@ -45,7 +45,7 @@ class ServerDispatcher : public Dispatcher {
       return true;
     }
     void _dequeue(Message *m) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty() {
       return messages.empty();

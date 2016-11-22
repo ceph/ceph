@@ -31,6 +31,7 @@
 #include <list>
 
 #include "common/Formatter.h"
+#include "include/assert.h"
 
 class PyFormatter : public ceph::Formatter
 {
@@ -54,9 +55,9 @@ public:
 
   // Obscure, don't care.
   void open_array_section_in_ns(const char *name, const char *ns)
-  {assert(0);}
+  {ceph_abort();}
   void open_object_section_in_ns(const char *name, const char *ns)
-  {assert(0);}
+  {ceph_abort();}
 
   void reset()
   {
@@ -94,20 +95,20 @@ public:
   void flush(std::ostream& os)
   {
       // This class is not a serializer: this doens't make sense
-      assert(0);
+      ceph_abort();
   }
 
   int get_len() const
   {
       // This class is not a serializer: this doens't make sense
-      assert(0);
+      ceph_abort();
       return 0;
   }
 
   void write_raw_data(const char *data)
   {
       // This class is not a serializer: this doens't make sense
-      assert(0);
+      ceph_abort();
   }
 
   PyObject *get()

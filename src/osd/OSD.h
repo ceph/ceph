@@ -2278,7 +2278,7 @@ protected:
       return true;
     }
     void _dequeue(Command *pg) override {
-      assert(0);
+      ceph_abort();
     }
     Command *_dequeue() override {
       if (osd->command_queue.empty())
@@ -2346,7 +2346,7 @@ protected:
       remove_queue.push_front(item);
     }
     bool _dequeue(pair<PGRef, DeletingStateRef> item) {
-      assert(0);
+      ceph_abort();
     }
     pair<PGRef, DeletingStateRef> _dequeue() override {
       assert(!remove_queue.empty());

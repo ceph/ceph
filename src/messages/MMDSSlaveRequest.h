@@ -86,7 +86,7 @@ class MMDSSlaveRequest : public Message {
     case OP_ABORT: return "abort";
       //case OP_COMMIT: return "commit";
 
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 

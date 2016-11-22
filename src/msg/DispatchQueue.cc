@@ -185,7 +185,7 @@ void DispatchQueue::entry()
 	  msgr->ms_deliver_handle_refused(qitem.get_connection());
 	  break;
 	default:
-	  assert(0);
+	  ceph_abort();
 	}
       } else {
 	Message *m = qitem.get_message();

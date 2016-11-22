@@ -408,7 +408,7 @@ void PG::clear_object_snap_mapping(
       &_t);
     if (!(r == 0 || r == -ENOENT)) {
       derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 }
@@ -423,7 +423,7 @@ void PG::update_object_snap_mapping(
     &_t);
   if (!(r == 0 || r == -ENOENT)) {
     derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
-    assert(0);
+    ceph_abort();
   }
   snap_mapper.add_oid(
     soid,
@@ -2785,7 +2785,7 @@ void PG::upgrade(ObjectStore *store)
   if (r != 0) {
     derr << __func__ << ": apply_transaction returned "
 	 << cpp_strerror(r) << dendl;
-    assert(0);
+    ceph_abort();
   }
   assert(r == 0);
 
@@ -3763,7 +3763,7 @@ void PG::_scan_snaps(ScrubMap &smap)
       int r = snap_mapper.get_snaps(hoid, &cur_snaps);
       if (r != 0 && r != -ENOENT) {
 	derr << __func__ << ": get_snaps returned " << cpp_strerror(r) << dendl;
-	assert(0);
+	ceph_abort();
       }
       if (r == -ENOENT || cur_snaps != oi_snaps) {
 	ObjectStore::Transaction t;
@@ -3773,7 +3773,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 	  if (r != 0) {
 	    derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
 		 << dendl;
-	    assert(0);
+	    ceph_abort();
 	  }
 	  osd->clog->error() << "osd." << osd->whoami
 			    << " found snap mapper error on pg "
@@ -4349,7 +4349,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       default:
-        assert(0);
+        ceph_abort();
     }
   }
 }
@@ -5252,14 +5252,14 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 	    if (r != 0 && r != -ENOENT) {
 	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
 		   << cpp_strerror(r) << dendl;
-	      assert(0);
+	      ceph_abort();
 	    } else if (r != -ENOENT) {
 	      assert(!hoids.empty());
 	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
 		   << cpp_strerror(r) << " for object "
 		   << hoids[0] << " on snap " << snap
 		   << " which should have been fully trimmed " << dendl;
-	      assert(0);
+	      ceph_abort();
 	    }
 	  }
 	}
@@ -5571,7 +5571,7 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
       cur_epoch,
       static_cast<MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
   }
-  assert(0);
+  ceph_abort();
   return false;
 }
 
@@ -6675,7 +6675,7 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
 
   if (pg->info.last_complete != pg->info.last_update) {
-    assert(0);
+    ceph_abort();
   }
   pg->finish_recovery(*context< RecoveryMachine >().get_on_safe_context_list());
   pg->mark_clean();

@@ -274,7 +274,7 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_offload_targets(op);
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -474,7 +474,7 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     return prepare_offload_targets(op);
   
   default:
-    assert(0);
+    ceph_abort();
   }
 
   return true;

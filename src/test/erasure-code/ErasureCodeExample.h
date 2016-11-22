@@ -140,7 +140,7 @@ public:
 
   virtual int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded) {
-    assert(0);
+    ceph_abort();
     return 0;
   }
 
@@ -189,7 +189,7 @@ public:
   virtual int decode_chunks(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded) {
-    assert(0);
+    ceph_abort();
     return 0;
   }
 

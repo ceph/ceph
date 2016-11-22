@@ -1838,7 +1838,7 @@ struct C_Objecter_GetVersion : public Context {
       objecter->wait_for_latest_osdmap(fin);
     } else {
       // it doesn't return any other error codes!
-      assert(0);
+      ceph_abort();
     }
   }
 };

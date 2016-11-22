@@ -370,7 +370,7 @@ void SharedDriverData::_aio_thread()
 {
   dout(1) << __func__ << " start" << dendl;
   if (spdk_nvme_register_io_thread() != 0) {
-    assert(0);
+    ceph_abort();
   }
 
   if (data_buf_mempool.empty()) {
@@ -421,7 +421,7 @@ void SharedDriverData::_aio_thread()
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             delete t;
             derr << __func__ << " failed to do write command" << dendl;
-            assert(0);
+            ceph_abort();
           }
           cur = ceph::coarse_real_clock::now(g_ceph_context);
           auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
@@ -550,7 +550,7 @@ class NVMEManager {
     ns = spdk_nvme_ctrlr_get_ns(c, 1);
     if (!ns) {
       derr << __func__ << " failed to get namespace at 1" << dendl;
-      assert(0);
+      ceph_abort();
     }
     dout(1) << __func__ << " successfully attach nvme device at" << name
             << " " << spdk_pci_device_get_bus(pci_dev) << ":" << spdk_pci_device_get_dev(pci_dev) << ":" << spdk_pci_device_get_func(pci_dev) << dendl;
@@ -652,7 +652,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
         if (r < 0) {
           derr << __func__ << " failed to do rte_eal_init" << dendl;
-          assert(0);
+          ceph_abort();
         }
 
         request_mempool = rte_mempool_create("nvme_request", 512,
@@ -661,7 +661,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
                                              SOCKET_ID_ANY, 0);
         if (request_mempool == NULL) {
           derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
-          assert(0);
+          ceph_abort();
         }
 
         pci_system_init();

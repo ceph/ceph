@@ -2122,7 +2122,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
     } else {
-      assert(0);
+      ceph_abort();
     }
     submit_manager.op_submit_finish(op_num);
     utime_t end = ceph_clock_now(g_ceph_context);
@@ -2933,7 +2933,7 @@ void FileStore::_do_transaction(
 
     default:
       derr << "bad op " << op->op << dendl;
-      assert(0);
+      ceph_abort();
     }
 
     if (r < 0) {
@@ -3858,7 +3858,7 @@ void FileStore::sync_entry()
       stringstream errstream;
       if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
-	assert(0);
+	ceph_abort();
       }
 
       if (backend->can_checkpoint()) {
@@ -4045,7 +4045,7 @@ void FileStore::flush()
     lock.Lock();
     while (true)
       cond.Wait(lock);
-    assert(0);
+    ceph_abort();
   }
 
   if (m_filestore_journal_writeahead) {

@@ -379,18 +379,18 @@ int64_t BitMapZone::get_used_blocks()
 
 bool BitMapZone::reserve_blocks(int64_t num_blocks)
 {
-  alloc_assert(0);
+  ceph_abort();
   return false;
 }
 
 void BitMapZone::unreserve(int64_t num_blocks, int64_t allocated)
 {
-  alloc_assert(0);
+  ceph_abort();
 }
 
 int64_t BitMapZone::get_reserved_blocks()
 {
-  alloc_assert(0);
+  ceph_abort();
   return 0;
 }
 
@@ -1264,16 +1264,16 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
   int64_t unaligned_blocks = 0;
 
   if (mode != SERIAL && mode != CONCURRENT) {
-    alloc_assert(0);
+    ceph_abort();
   }
 
   if (total_blocks <= 0) {
-    alloc_assert(0);
+    ceph_abort();
   }
 
   if (zone_size_block == 0 ||
     zone_size_block < BmapEntry::size()) {
-    alloc_assert(0);
+    ceph_abort();
   }
 
   zone_size_block = (zone_size_block / BmapEntry::size()) *
@@ -1462,7 +1462,7 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *st
 
   *start_block = 0;
   if (!check_input(num_blocks)) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
 

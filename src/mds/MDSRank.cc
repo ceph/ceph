@@ -299,7 +299,7 @@ MDSTableClient *MDSRank::get_table_client(int t)
   switch (t) {
   case TABLE_ANCHOR: return NULL;
   case TABLE_SNAP: return snapclient;
-  default: assert(0);
+  default: ceph_abort();
   }
 }
 
@@ -308,7 +308,7 @@ MDSTableServer *MDSRank::get_table_server(int t)
   switch (t) {
   case TABLE_ANCHOR: return NULL;
   case TABLE_SNAP: return snapserver;
-  default: assert(0);
+  default: ceph_abort();
   }
 }
 

@@ -79,7 +79,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
   auto handler = auth_registry.get_handler(protocol);
   if (!handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
-    assert(0);
+    ceph_abort();
     is_valid = false;
     return true;
   }

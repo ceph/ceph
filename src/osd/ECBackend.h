@@ -272,7 +272,7 @@ private:
 	return "COMPLETE";
 	break;
       default:
-	assert(0);
+	ceph_abort();
 	return "";
       }
     }

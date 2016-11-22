@@ -340,7 +340,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   // finish clean-up?
@@ -753,7 +753,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   }
   if (dir->inode->is_system()) {
     dout(7) << "i won't export system dirs (root, mdsdirs, stray, /.ceph, etc.)" << dendl;
-    //assert(0);
+    //ceph_abort();
     return;
   }
 
@@ -1923,10 +1923,10 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
-      assert(0);    // this shouldn't happen if the auth pins its path properly!!!!
+      ceph_abort();    // this shouldn't happen if the auth pins its path properly!!!!
     }
 
-    assert(0); // this shouldn't happen; the get_inode above would have succeeded.
+    ceph_abort(); // this shouldn't happen; the get_inode above would have succeeded.
   }
 
   // yay
