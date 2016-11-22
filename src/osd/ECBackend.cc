@@ -2348,14 +2348,14 @@ void ECBackend::be_deep_scrub(
   } else {
     if (!get_parent()->get_pool().is_hacky_ecoverwrites()) {
       assert(hinfo->has_chunk_hash());
-      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
-	dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
-	o.ec_hash_mismatch = true;
+      if (hinfo->get_total_chunk_size() != pos) {
+	dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
+	o.ec_size_mismatch = true;
 	return;
       }
 
-      if (hinfo->get_total_chunk_size() != pos) {
-	dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
+      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
+	dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
 	o.ec_hash_mismatch = true;
 	return;
       }
