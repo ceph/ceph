@@ -29,10 +29,12 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     
+    OLD_ARGS=$CEPH_ARGS
+    CEPH_ARGS+="--osd-fast-fail-on-connection-refused=false "
     echo "Ensuring old behavior is there..."
-    test_fast_kill $dir && (echo "OSDs died too early!" ; return 1)
+    test_fast_kill $dir && (echo "OSDs died too early! Old behavior doesn't work." ; return 1)
 
-    CEPH_ARGS+="--osd-fast-fail-on-connection-refused=true"
+    CEPH_ARGS=$OLD_ARGS"--osd-fast-fail-on-connection-refused=true "
     OLD_ARGS=$CEPH_ARGS
 
     CEPH_ARGS+="--ms_type=simple"
