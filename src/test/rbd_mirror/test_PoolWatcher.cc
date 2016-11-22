@@ -26,6 +26,8 @@
 #include <set>
 #include <vector>
 
+using rbd::mirror::ImageId;
+using rbd::mirror::ImageIds;
 using rbd::mirror::PoolWatcher;
 using rbd::mirror::peer_t;
 using rbd::mirror::RadosRef;
@@ -108,7 +110,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
                                                sizeof(mirror_image_info)));
       image.close();
 
-      m_mirrored_images.insert(PoolWatcher::ImageId(
+      m_mirrored_images.insert(ImageId(
         mirror_image_info.global_id, get_image_id(&ioctx, name), name));
     }
     if (image_name != nullptr)
@@ -154,7 +156,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
                                                sizeof(mirror_image_info)));
       image.close();
 
-      m_mirrored_images.insert(PoolWatcher::ImageId(
+      m_mirrored_images.insert(ImageId(
         mirror_image_info.global_id, get_image_id(&cioctx, name), name));
     }
     if (image_name != nullptr)
@@ -173,7 +175,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
   unique_ptr<PoolWatcher> m_pool_watcher;
 
   set<string> m_pools;
-  PoolWatcher::ImageIds m_mirrored_images;
+  ImageIds m_mirrored_images;
 
   uint64_t m_image_number;
   uint64_t m_snap_number;

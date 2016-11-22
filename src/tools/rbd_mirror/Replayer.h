@@ -55,9 +55,6 @@ public:
   void release_leader();
 
 private:
-  typedef PoolWatcher::ImageId ImageId;
-  typedef PoolWatcher::ImageIds ImageIds;
-
   void init_local_mirroring_images();
   void set_sources(const ImageIds &image_ids);
 
