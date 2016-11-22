@@ -515,7 +515,7 @@ TEST_F(TestInternal, SnapshotCopyup)
   ASSERT_EQ(256, ictx2->aio_work_queue->write(256, bl.length(), bl.c_str(), 0));
 
   librados::IoCtx snap_ctx;
-  snap_ctx.dup(m_ioctx);
+  snap_ctx.dup(ictx2->data_ctx);
   snap_ctx.snap_set_read(CEPH_SNAPDIR);
 
   librados::snap_set_t snap_set;

@@ -2413,6 +2413,7 @@ int librados::Rados::ioctx_create(const char *name, IoCtx &io)
   int ret = rados_ioctx_create((rados_t)client, name, &p);
   if (ret)
     return ret;
+  io.close();
   io.io_ctx_impl = (IoCtxImpl*)p;
   return 0;
 }
@@ -2423,6 +2424,7 @@ int librados::Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   int ret = rados_ioctx_create2((rados_t)client, pool_id, &p);
   if (ret)
     return ret;
+  io.close();
   io.io_ctx_impl = (IoCtxImpl*)p;
   return 0;
 }

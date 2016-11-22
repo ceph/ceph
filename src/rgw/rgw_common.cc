@@ -733,7 +733,12 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  if (str[pos] == '?') pos++;
+
+  if (str.empty())
+    return 0;
+
+  if (str[pos] == '?')
+    pos++;
 
   while (!end) {
     int fpos = str.find('&', pos);
@@ -899,6 +904,10 @@ bool verify_requester_payer_permission(struct req_state *s)
 
   if (s->auth_identity->is_owner_of(s->bucket_info.owner))
     return true;
+  
+  if (s->auth_identity->is_anonymous()) {
+    return false;
+  }
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
   if (!request_payer) {

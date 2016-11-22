@@ -74,6 +74,7 @@ private:
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
+  librados::IoCtx m_data_ctx; // for empty SnapContext
 
   void complete_requests(int r);
 

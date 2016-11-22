@@ -18,6 +18,7 @@
 
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+MAX_PROPAGATION_TIME=30
 
 function run() {
     local dir=$1
@@ -62,7 +63,7 @@ function test_fast_kill() {
    killid=0
    previd=0
 
-   # kill random osd and see if 1 sec after, the osd count decreased.
+   # kill random osd and see if after max MAX_PROPAGATION_TIME, the osd count decreased.
    for i in {1..2}; do
      while [ $killid -eq $previd ]; do
         killid=${pids[$RANDOM%${#pids[@]}]}
@@ -70,20 +71,35 @@ function test_fast_kill() {
      previd=$killid
 
      kill -9 $killid
-     sleep 1
+     time_left=$MAX_PROPAGATION_TIME
+     down_osds=0
+     
+     while [ $time_left -gt 0 ]; do
+       sleep 1
+       time_left=$[$time_left - 1];
 
-     down_osds=$(ceph osd tree | grep -c down)
+       grep -m 1 -c -F "ms_handle_refused" $dir/osd.*.log > /dev/null
+       if [ $? -ne 0 ]; then
+         continue
+       fi
+
+       down_osds=$(ceph osd tree | grep -c down)
+       if [ $down_osds -lt $i ]; then
+         # osds not marked down yet, try again in a second
+         continue
+       elif [ $down_osds -gt $i ]; then
+         echo Too many \($down_osds\) osds died!
+         return 1
+       else
+         break
+       fi
+     done
+
      if [ $down_osds -lt $i ]; then
         echo Killed the OSD, yet it is not marked down
         ceph osd tree
-        teardown $dir
-        return 1
-     elif [ $down_osds -gt $i ]; then
-        echo Too many \($down_osds\) osds died!
-        teardown $dir
         return 1
      fi
-     
    done
    pkill -SIGTERM rados
    teardown $dir || return 1

@@ -18,6 +18,7 @@ std::string TestFixture::_local_pool_name;
 std::string TestFixture::_remote_pool_name;
 std::shared_ptr<librados::Rados> TestFixture::_rados;
 uint64_t TestFixture::_image_number = 0;
+std::string TestFixture::_data_pool;
 
 TestFixture::TestFixture() {
 }
@@ -32,9 +33,18 @@ void TestFixture::SetUpTestCase() {
 
   _remote_pool_name = get_temp_pool_name("test-rbd-mirror-");
   ASSERT_EQ(0, _rados->pool_create(_remote_pool_name.c_str()));
+
+  ASSERT_EQ(0, create_image_data_pool(_data_pool));
+  if (!_data_pool.empty()) {
+    printf("using image data pool: %s\n", _data_pool.c_str());
+  }
 }
 
 void TestFixture::TearDownTestCase() {
+  if (!_data_pool.empty()) {
+    ASSERT_EQ(0, _rados->pool_delete(_data_pool.c_str()));
+  }
+
   ASSERT_EQ(0, _rados->pool_delete(_remote_pool_name.c_str()));
   ASSERT_EQ(0, _rados->pool_delete(_local_pool_name.c_str()));
   _rados->shutdown();
@@ -109,6 +119,24 @@ int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
 std::string TestFixture::get_temp_image_name() {
   ++_image_number;
   return "image" + stringify(_image_number);
+}
+
+int TestFixture::create_image_data_pool(std::string &data_pool) {
+  std::string pool;
+  int r = _rados->conf_get("rbd_default_data_pool", pool);
+  if (r != 0) {
+    return r;
+  } else if (pool.empty()) {
+    return 0;
+  }
+
+  r = _rados->pool_create(pool.c_str());
+  if (r == 0) {
+    data_pool = pool;
+    return 0;
+  }
+
+  return r;
 }
 
 } // namespace mirror

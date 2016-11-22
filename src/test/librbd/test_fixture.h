@@ -40,6 +40,7 @@ public:
   static std::string _pool_name;
   static librados::Rados _rados;
   static uint64_t _image_number;
+  static std::string _data_pool;
 
   librados::IoCtx m_ioctx;
   librbd::RBD m_rbd;
