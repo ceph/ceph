@@ -2612,7 +2612,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type method: str
         :param data: input data
         :type data: bytes
-        :param length: size of output buffer in bytes (default=8291)
+        :param length: size of output buffer in bytes (default=8192)
         :type length: int
 
         :raises: :class:`TypeError`
