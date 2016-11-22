@@ -85,7 +85,7 @@ class PassAlong : public ThreadPool::WorkQueue<unsigned> {
     q.push_back(item);
     return true;
   }
-  void _dequeue(unsigned *item) { assert(0); }
+  void _dequeue(unsigned *item) { ceph_abort(); }
   unsigned *_dequeue() {
     if (q.empty())
       return 0;

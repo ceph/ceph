@@ -457,7 +457,7 @@ int main(int argc, const char **argv)
 	    if (m.count(pgid)) {
 	      if (m[pgid] != r) {
 		cout << pgid << " had " << m[pgid] << " now " << r << std::endl;
-		assert(0);
+		ceph_abort();
 	      }
 	    } else
 	      m[pgid] = r;

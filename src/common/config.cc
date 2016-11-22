@@ -1197,7 +1197,7 @@ bool md_config_t::expand_meta(std::string &origval,
 	    out += "$data_dir";
 	  }
 	} else
-	  assert(0); // unreachable
+	  ceph_abort(); // unreachable
 	expanded = true;
       }
 

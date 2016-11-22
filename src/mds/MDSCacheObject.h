@@ -79,7 +79,7 @@ class MDSCacheObject {
     case PIN_PTRWAITER: return "ptrwaiter";
     case PIN_TEMPEXPORTING: return "tempexporting";
     case PIN_CLIENTLEASE: return "clientlease";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -195,7 +195,7 @@ protected:
 #ifdef MDS_REF_SET
     assert(by < 0 || ref_map[by] == 0);
 #endif
-    assert(0);
+    ceph_abort();
   }
   void get(int by) {
     if (ref == 0)
@@ -378,15 +378,15 @@ protected:
   // ---------------------------------------------
   // locking
   // noop unless overloaded.
-  virtual SimpleLock* get_lock(int type) { assert(0); return 0; }
-  virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
-  virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { assert(0); }
-  virtual void add_lock_waiter(int type, uint64_t mask, MDSInternalContextBase *c) { assert(0); }
-  virtual bool is_lock_waiting(int type, uint64_t mask) { assert(0); return false; }
+  virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
+  virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
+  virtual void encode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
+  virtual void decode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
+  virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
+  virtual void add_lock_waiter(int type, uint64_t mask, MDSInternalContextBase *c) { ceph_abort(); }
+  virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }
 
-  virtual void clear_dirty_scattered(int type) { assert(0); }
+  virtual void clear_dirty_scattered(int type) { ceph_abort(); }
 
   // ---------------------------------------------
   // ordering

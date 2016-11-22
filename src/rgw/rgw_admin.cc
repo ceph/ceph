@@ -831,7 +831,7 @@ void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
       }
       break;
     default:
-      assert(0);
+      ceph_abort();
       break;
   }
 }
@@ -6155,7 +6155,7 @@ next:
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
-      assert(0);
+      ceph_abort();
     }
     encode_json("bounds", bounds, formatter);
     formatter->flush(cout);

@@ -159,7 +159,7 @@ protected:
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
     CollectionIndex* dest  //< [in] destination index
-    ) { assert(0); return 0; }
+    ) { ceph_abort(); return 0; }
 
 
   /// List contents of collection by hash
@@ -188,9 +188,9 @@ protected:
   virtual int pre_hash_collection(
       uint32_t pg_num,            ///< [in] pg number of the pool this collection belongs to
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
-      ) { assert(0); return 0; }
+      ) { ceph_abort(); return 0; }
 
-  virtual int apply_layout_settings() { assert(0); return 0; }
+  virtual int apply_layout_settings() { ceph_abort(); return 0; }
 
   /// Virtual destructor
   virtual ~CollectionIndex() {}

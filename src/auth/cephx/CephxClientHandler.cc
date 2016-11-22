@@ -192,7 +192,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
   default:
    ldout(cct, 0) << " unknown request_type " << header.request_type << dendl;
-   assert(0);
+   ceph_abort();
   }
   return ret;
 }

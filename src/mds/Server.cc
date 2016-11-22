@@ -390,7 +390,7 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
   m->put();
 }
@@ -492,10 +492,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       }
       mds->sessionmap.remove_session(session);
     } else {
-      assert(0);
+      ceph_abort();
     }
   } else {
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1802,7 +1802,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
   
   // done with reply.
@@ -1833,7 +1833,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
 
       if (!lock) {
 	dout(10) << "don't have object, dropping" << dendl;
-	assert(0); // can this happen, if we auth pinned properly.
+	ceph_abort(); // can this happen, if we auth pinned properly.
       }
       if (op == MMDSSlaveRequest::OP_XLOCK && !lock->get_parent()->is_auth()) {
 	dout(10) << "not auth for remote xlock attempt, dropping on " 
@@ -1928,7 +1928,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     break;
 
   default: 
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1996,7 +1996,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(*p)) {
 	  dir = dn->get_dir();
 	} else {
-	  assert(0);
+	  ceph_abort();
 	}
 	if (dir) {
 	  if (dir->is_freezing_dir())
@@ -2309,7 +2309,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     mds->clog->error() << mdr->client_request->get_source()
        << " specified ino " << useino
        << " but mds." << mds->get_nodeid() << " allocated " << in->inode.ino << "\n";
-    //assert(0); // just for now.
+    //ceph_abort(); // just for now.
   }
     
   int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
@@ -5175,7 +5175,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 
   mdr->auth_pin(targeti);
 
-  //assert(0);  // test hack: make sure master can handle a slave that fails to prepare...
+  //ceph_abort();  // test hack: make sure master can handle a slave that fails to prepare...
   assert(g_conf->mds_kill_link_at != 5);
 
   // journal it

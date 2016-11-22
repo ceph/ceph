@@ -588,7 +588,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  comment += c;
 	break;
       default:
-	assert(0);
+	ceph_abort();
 	break;
     }
     assert(c != '\0'); // We better not go past the end of the input string.

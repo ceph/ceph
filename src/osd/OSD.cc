@@ -2803,7 +2803,7 @@ int OSD::shutdown()
 #ifdef PG_DEBUG_REFS
 	p->second->dump_live_ids();
 #endif
-        assert(0);
+        ceph_abort();
       }
       p->second->unlock();
       p->second->put("PGMap");
@@ -3033,7 +3033,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     OSDriver::OSTransaction _t(driver.get_transaction(&t));
     int r = mapper.remove_oid(p->hobj, &_t);
     if (r != 0 && r != -ENOENT)
-      assert(0);
+      ceph_abort();
     t.remove(tmp, *p);
     if (removed > g_conf->osd_target_transaction_size) {
       int r = store->apply_transaction(osr.get(), std::move(t));
@@ -3061,7 +3061,7 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
   if (!createmap->have_pg_pool(id)) {
     dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
 	    << id << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   PGPool p = PGPool(createmap, id);
@@ -3100,7 +3100,7 @@ PG* OSD::_make_pg(
       createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_ERASURE)
     pg = new ReplicatedPG(&service, createmap, pool, pgid);
   else
-    assert(0);
+    ceph_abort();
 
   return pg;
 }
@@ -3411,7 +3411,7 @@ void OSD::load_pgs()
     if (r != 0) {
       derr << __func__ << ": apply_transaction returned "
 	   << cpp_strerror(r) << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -3619,7 +3619,7 @@ void OSD::handle_pg_peering_evt(
     }
 
     if (service.splitting(pgid)) {
-      assert(0);
+      ceph_abort();
     }
 
     // do we need to resurrect a deleting pg?
@@ -4678,7 +4678,7 @@ bool remove_dir(
     OSDriver::OSTransaction _t(osdriver->get_transaction(&t));
     int r = mapper->remove_oid(i->hobj, &_t);
     if (r != 0 && r != -ENOENT) {
-      assert(0);
+      ceph_abort();
     }
     t.remove(coll, *i);
     if (++num >= cct->_conf->osd_target_transaction_size) {
@@ -6232,7 +6232,7 @@ epoch_t op_required_epoch(OpRequestRef op)
       MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
       op);
   default:
-    assert(0);
+    ceph_abort();
     return 0;
   }
 }
@@ -6357,7 +6357,7 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
       op, osdmap);
     break;
   default:
-    assert(0);
+    ceph_abort();
   }
   return true;
 }
@@ -8115,7 +8115,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 	m->query_epoch,
 	PG::RemoteReservationRejected()));
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   if (service.splitting(m->pgid)) {
@@ -8163,7 +8163,7 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
 	m->query_epoch,
 	PG::RecoveryDone()));
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   if (service.splitting(m->pgid)) {

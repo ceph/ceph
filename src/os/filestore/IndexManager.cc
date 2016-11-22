@@ -104,7 +104,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
 				   g_conf->filestore_split_multiple, version);
       return 0;
     }
-    default: assert(0);
+    default: ceph_abort();
     }
 
   } else {

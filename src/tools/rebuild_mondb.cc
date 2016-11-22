@@ -187,7 +187,7 @@ int update_monitor(const OSDSuperblock& sb, MonitorDBStore& ms)
   case 0:
     return 0;
   default:
-    assert(0);
+    ceph_abort();
   }
   string uuid = stringify(sb.cluster_fsid) + "\n";
   bufferlist bl;

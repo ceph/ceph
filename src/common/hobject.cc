@@ -37,7 +37,7 @@ set<string> hobject_t::get_prefixes(
   else if (bits == 32)
     from.insert(mask);
   else
-    assert(0);
+    ceph_abort();
 
 
   set<uint32_t> to;

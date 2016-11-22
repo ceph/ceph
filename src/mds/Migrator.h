@@ -76,7 +76,7 @@ public:
     case EXPORT_EXPORTING: return "exporting";
     case EXPORT_LOGGINGFINISH: return "loggingfinish";
     case EXPORT_NOTIFYING: return "notifying";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -125,7 +125,7 @@ public:
     case IMPORT_ACKING: return "acking";
     case IMPORT_FINISHING: return "finishing";
     case IMPORT_ABORTING: return "aborting";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 

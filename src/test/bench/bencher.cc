@@ -193,7 +193,7 @@ void Bencher::run_bench()
 	break;
       }
       default: {
-	assert(0);
+	ceph_abort();
       }
     } 
     ops++;

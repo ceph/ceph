@@ -1141,7 +1141,7 @@ void MDSDaemon::respawn()
 
   // We have to assert out here, because suicide() returns, and callers
   // to respawn expect it never to return.
-  assert(0);
+  ceph_abort();
 }
 
 

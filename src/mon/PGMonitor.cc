@@ -583,7 +583,7 @@ bool PGMonitor::preprocess_query(MonOpRequestRef op)
 
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -601,7 +601,7 @@ bool PGMonitor::prepare_update(MonOpRequestRef op)
     return prepare_command(op);
 
   default:
-    assert(0);
+    ceph_abort();
     return false;
   }
 }
@@ -1540,7 +1540,7 @@ static void note_stuck_detail(int what,
       whatname = "stale";
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
     ss << "pg " << p->first << " is stuck " << whatname;
     if (since == utime_t()) {

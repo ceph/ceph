@@ -209,7 +209,7 @@ int KernelDevice::flush()
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fdatasync got: " << cpp_strerror(r) << dendl;
-    assert(0);
+    ceph_abort();
   }
   dout(5) << __func__ << " in " << dur << dendl;;
   return r;
@@ -327,7 +327,7 @@ void KernelDevice::_aio_log_start(
 	   << std::hex
 	   << offset << "~" << length << std::dec
 	   << " with " << debug_inflight << dendl;
-      assert(0);
+      ceph_abort();
     }
     debug_inflight.insert(offset, length);
   }

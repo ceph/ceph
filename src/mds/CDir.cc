@@ -1891,7 +1891,7 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
       inode->ino(), frag, last, dname);
   if (fatal) {
     cache->mds->damaged();
-    assert(0);  // unreachable, damaged() respawns us
+    ceph_abort();  // unreachable, damaged() respawns us
   }
 }
 
@@ -1900,7 +1900,7 @@ void CDir::go_bad(bool complete)
   const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
   if (fatal) {
     cache->mds->damaged();
-    assert(0);  // unreachable, damaged() respawns us
+    ceph_abort();  // unreachable, damaged() respawns us
   }
 
   if (complete)
@@ -2616,7 +2616,7 @@ void CDir::verify_fragstat()
       c.nfiles != fnode.fragstat.nfiles) {
     dout(0) << "verify_fragstat failed " << fnode.fragstat << " on " << *this << dendl;
     dout(0) << "               i count " << c << dendl;
-    assert(0);
+    ceph_abort();
   } else {
     dout(0) << "verify_fragstat ok " << fnode.fragstat << " on " << *this << dendl;
   }
@@ -2736,7 +2736,7 @@ CDir *CDir::get_frozen_tree_root()
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else
-      assert(0);
+      ceph_abort();
   }
 }
 
@@ -2995,7 +2995,7 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
       } else {
 	dout(5) << " we lost dentry " << dnkey.name
 		<< ", bailing out because that's impossible!" << dendl;
-	assert(0);
+	ceph_abort();
       }
     }
     // okay, we got a  dentry

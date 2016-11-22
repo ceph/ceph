@@ -43,7 +43,7 @@ class MMonPaxos : public Message {
     case OP_COMMIT: return "commit";
     case OP_LEASE: return "lease";
     case OP_LEASE_ACK: return "lease_ack";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 

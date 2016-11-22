@@ -259,7 +259,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_log(op);
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -275,7 +275,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
   case MSG_LOG:
     return prepare_log(op);
   default:
-    assert(0);
+    ceph_abort();
     return false;
   }
 }
