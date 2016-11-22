@@ -456,10 +456,10 @@ void Inode::dump(Formatter *f) const
     f->close_section();
   }
   if (!cap_snaps.empty()) {
-    for (map<snapid_t,CapSnap*>::const_iterator p = cap_snaps.begin(); p != cap_snaps.end(); ++p) {
+    for (const auto &p : cap_snaps) {
       f->open_object_section("cap_snap");
-      f->dump_stream("follows") << p->first;
-      p->second->dump(f);
+      f->dump_stream("follows") << p.first;
+      p.second.dump(f);
       f->close_section();
     }
   }

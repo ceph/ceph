@@ -178,7 +178,7 @@ struct Inode {
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
   InodeRef snapdir_parent;  // only if we are a snapdir inode
-  map<snapid_t,CapSnap*> cap_snaps;   // pending flush to mds
+  map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
