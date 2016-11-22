@@ -31,8 +31,11 @@ struct ImageId {
 
   explicit ImageId(const std::string &global_id) : global_id(global_id) {
   }
+  ImageId(const std::string &global_id, const std::string &id)
+    : global_id(global_id), id(id) {
+  }
   ImageId(const std::string &global_id, const std::string &id,
-          const boost::optional<std::string> &name = boost::none)
+          const std::string &name)
     : global_id(global_id), id(id), name(name) {
   }
 
@@ -43,6 +46,8 @@ struct ImageId {
     return global_id < rhs.global_id;
   }
 };
+
+std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
 

@@ -295,8 +295,9 @@ ImageReplayer<I>::ImageReplayer(Threads<librbd::ImageCtx> *threads,
 	 << ": " << cpp_strerror(r) << dendl;
     pool_name = stringify(m_local_pool_id);
   }
-  m_name = pool_name + "/" + m_global_image_id;
 
+  m_name = pool_name + "/" + m_global_image_id;
+  dout(20) << "registered asok hook: " << m_name << dendl;
   m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                     this);
 }
@@ -515,6 +516,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
       }
     }
     if (!m_asok_hook) {
+      dout(20) << "registered asok hook: " << m_name << dendl;
       m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                         this);
     }

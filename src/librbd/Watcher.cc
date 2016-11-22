@@ -157,6 +157,11 @@ void Watcher::flush(Context *on_finish) {
   m_notifier.flush(on_finish);
 }
 
+std::string Watcher::get_oid() const {
+  RWLock::RLocker locker(m_watch_lock);
+  return m_oid;
+}
+
 void Watcher::set_oid(const string& oid) {
   RWLock::WLocker l(m_watch_lock);
   assert(m_watch_state == WATCH_STATE_UNREGISTERED);
