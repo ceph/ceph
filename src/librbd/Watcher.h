@@ -39,10 +39,15 @@ public:
     RWLock::RLocker locker(m_watch_lock);
     return m_watch_state == WATCH_STATE_REGISTERED;
   }
+  bool is_unregistered() const {
+    RWLock::RLocker locker(m_watch_lock);
+    return m_watch_state == WATCH_STATE_UNREGISTERED;
+  }
 
 protected:
   enum WatchState {
     WATCH_STATE_UNREGISTERED,
+    WATCH_STATE_REGISTERING,
     WATCH_STATE_REGISTERED,
     WATCH_STATE_ERROR,
     WATCH_STATE_REWATCHING
@@ -80,6 +85,8 @@ private:
    * UNREGISTERED
    *    |
    *    | (register_watch)
+   *    |
+   * REGISTERING
    *    |
    *    v      (watch error)
    * REGISTERED * * * * * * * > ERROR
@@ -122,15 +129,14 @@ private:
        : watcher(watcher), on_finish(on_finish) {
     }
     virtual void finish(int r) override {
-      watcher->handle_register_watch(r);
-      on_finish->complete(r);
+      watcher->handle_register_watch(r, on_finish);
     }
   };
 
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;
 
-  void handle_register_watch(int r);
+  void handle_register_watch(int r, Context *on_finish);
 
   void rewatch();
   void handle_rewatch(int r);
