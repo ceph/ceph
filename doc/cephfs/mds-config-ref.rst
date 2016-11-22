@@ -354,9 +354,9 @@
 
 :Description: The method for calculating MDS load. 
 
-              - ``1`` = Hybrid.
-              - ``2`` = Request rate and latency. 
-              - ``3`` = CPU load.
+              - ``0`` = Hybrid.
+              - ``1`` = Request rate and latency. 
+              - ``2`` = CPU load.
               
 :Type:  32-bit Integer
 :Default: ``0``
