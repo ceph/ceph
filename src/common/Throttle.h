@@ -143,7 +143,7 @@ public:
  *
  * delay = 0, r \in [0, l)
  * delay = (r - l) * (e / (h - l)), r \in [l, h)
- * delay = h + (r - h)((m - e)/(1 - h))
+ * delay = e + (r - h)((m - e)/(1 - h))
  */
 class BackoffThrottle {
   std::mutex lock;
