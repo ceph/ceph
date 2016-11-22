@@ -25,25 +25,6 @@ namespace mirror {
  */
 class PoolWatcher {
 public:
-  struct ImageId {
-    std::string global_id;
-    std::string id;
-    boost::optional<std::string> name;
-
-    ImageId(const std::string &global_id, const std::string &id = "",
-            const boost::optional<std::string> &name = boost::none)
-      : global_id(global_id), id(id), name(name) {
-    }
-
-    inline bool operator==(const ImageId &rhs) const {
-      return (global_id == rhs.global_id && id == rhs.id && name == rhs.name);
-    }
-    inline bool operator<(const ImageId &rhs) const {
-      return global_id < rhs.global_id;
-    }
-  };
-  typedef std::set<ImageId> ImageIds;
-
   PoolWatcher(librados::IoCtx &remote_io_ctx, double interval_seconds,
 	      Mutex &lock, Cond &cond);
   ~PoolWatcher();
