@@ -4784,6 +4784,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mdcache, frag_t());
+  newdir->state_set(CDir::STATE_CREATING);
   newdir->mark_complete();
   newdir->fnode.version = newdir->pre_dirty();
 
