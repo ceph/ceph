@@ -39,6 +39,7 @@ namespace ceph {
 
     using priority_t = unsigned;
     using cost_t = unsigned;
+    using Retn = std::pair<T, RespPm>;
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
@@ -340,6 +341,32 @@ namespace ceph {
       assert(pr.is_retn());
       auto& retn = pr.get_retn();
       return *(retn.request);
+    }
+
+    Retn _dequeue() {
+      assert(!empty());
+      RespPm resp_params = RespPm();
+
+      if (!(high_queue.empty())) {
+	T ret = high_queue.rbegin()->second.front().second;
+	high_queue.rbegin()->second.pop_front();
+	if (high_queue.rbegin()->second.empty()) {
+	  high_queue.erase(high_queue.rbegin()->first);
+	}
+	return std::make_pair(ret, resp_params);
+      }
+
+      if (!queue_front.empty()) {
+	T ret = queue_front.front().second;
+	queue_front.pop_front();
+	return std::make_pair(ret, resp_params);
+      }
+
+      auto pr = queue.pull_request();
+      assert(pr.is_retn());
+      auto& retn = pr.get_retn();
+      resp_params = retn.phase;
+      return std::make_pair(*(retn.request), resp_params);
     }
 
     void dump(ceph::Formatter *f) const override final {
