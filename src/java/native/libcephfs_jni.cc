@@ -146,6 +146,7 @@ static jfieldID cephstat_gid_fid;
 static jfieldID cephstat_size_fid;
 static jfieldID cephstat_blksize_fid;
 static jfieldID cephstat_blocks_fid;
+static jfieldID cephstat_inode_fid;
 static jfieldID cephstat_a_time_fid;
 static jfieldID cephstat_m_time_fid;
 static jfieldID cephstat_is_file_fid;
@@ -312,6 +313,7 @@ static void setup_field_ids(JNIEnv *env, jclass clz)
 	GETFID(cephstat, size, J);
 	GETFID(cephstat, blksize, J);
 	GETFID(cephstat, blocks, J);
+	GETFID(cephstat, inode, J);
 	GETFID(cephstat, a_time, J);
 	GETFID(cephstat, m_time, J);
 	GETFID(cephstat, is_file, Z);
@@ -1231,6 +1233,7 @@ static void fill_cephstat(JNIEnv *env, jobject j_cephstat, struct stat *st)
 	env->SetLongField(j_cephstat, cephstat_size_fid, st->st_size);
 	env->SetLongField(j_cephstat, cephstat_blksize_fid, st->st_blksize);
 	env->SetLongField(j_cephstat, cephstat_blocks_fid, st->st_blocks);
+	env->SetLongField(j_cephstat, cephstat_inode_fid, st->st_ino);
 
 	long long time = st->st_mtim.tv_sec;
 	time *= 1000;
