@@ -292,6 +292,13 @@ def run_qemu(ctx, config):
             tdir=testdir,
             client=client
         )
+        # Hack to make sure /dev/kvm permissions are set correctly
+        # See http://tracker.ceph.com/issues/17977 and
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1333159
+        remote.run(args='sudo udevadm control --reload')
+        remote.run(args='sudo udevadm trigger /dev/kvm')
+        remote.run(args='ls -l /dev/kvm')
+
         qemu_cmd = 'qemu-system-x86_64'
         if remote.os.package_type == "rpm":
             qemu_cmd = "/usr/libexec/qemu-kvm"
