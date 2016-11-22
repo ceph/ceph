@@ -449,6 +449,9 @@ else()
   include_directories(BEFORE ${BOOST_PREFIX}/include)
   # fixup for CheckIncludeFileCXX
   set(HAVE_BOOST_ASIO_COROUTINE ON)
+
+  set(BOOST_ROOT ${BOOST_PREFIX})
+  set(Boost_NO_SYSTEM_PATHS ON)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -460,7 +463,7 @@ if(WITH_MGR)
 endif()
 
 # require minimally the bundled version
-find_package(Boost 1.61 COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
+find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
