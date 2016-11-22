@@ -643,14 +643,16 @@ void ECTransaction::generate_transactions(
 	entry->mod_desc.append(append_after);
       }
 
-      bufferlist hbuf;
-      ::encode(*hinfo, hbuf);
-      for (auto &&i : *transactions) {
-	i.second.setattr(
-	  coll_t(spg_t(pgid, i.first)),
-	  ghobject_t(oid, ghobject_t::NO_GEN, i.first),
-	  ECUtil::get_hinfo_key(),
-	  hbuf);
+      if (!op.is_delete()) {
+	bufferlist hbuf;
+	::encode(*hinfo, hbuf);
+	for (auto &&i : *transactions) {
+	  i.second.setattr(
+	    coll_t(spg_t(pgid, i.first)),
+	    ghobject_t(oid, ghobject_t::NO_GEN, i.first),
+	    ECUtil::get_hinfo_key(),
+	    hbuf);
+	}
       }
     });
 }
