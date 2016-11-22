@@ -1597,7 +1597,6 @@ public:
       explicit Crashed(my_context ctx);
     };
 
-    struct Started;
     struct Reset;
 
     struct Initial : boost::statechart::state< Initial, RecoveryMachine >, NamedState {
@@ -1985,7 +1984,6 @@ public:
       boost::statechart::result react(const MNotifyRec& infoevt);
     };
 
-    struct GetMissing;
     struct GotLog : boost::statechart::event< GotLog > {
       GotLog() : boost::statechart::event< GotLog >() {}
     };
