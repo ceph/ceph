@@ -716,6 +716,17 @@ Miscellaneous
 :Default: ``false``
 
 
+``osd fast fail on connection refused``
+
+:Description: If this option is enabled, crashed OSDs are marked down
+              immediately by connected peers and MONs (assuming that the
+              crashed OSD host survives). Disable it to restore old
+              behavior, at the expense of possible long I/O stalls when
+              OSDs crash in the middle of I/O operations.
+:Type: Boolean
+:Default: ``true``
+
+
 
 .. _pool: ../../operations/pools
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
