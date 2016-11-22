@@ -129,7 +129,7 @@ int PoolWatcher::refresh(ImageIds *image_ids) {
       if (it2 != image_id_to_name.end()) {
         image_name = it2->second;
       }
-      image_ids->insert(ImageId(it->first, image_name, it->second));
+      image_ids->insert(ImageId(it->second, it->first, image_name));
     }
     if (!mirror_images.empty()) {
       last_read = mirror_images.rbegin()->first;

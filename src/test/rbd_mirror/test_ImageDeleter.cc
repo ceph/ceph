@@ -216,7 +216,7 @@ int64_t TestImageDeleter::m_local_pool_id;
 
 TEST_F(TestImageDeleter, Delete_NonPrimary_Image) {
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -233,7 +233,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
   promote_image();
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -249,7 +249,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Diff_GlobalId) {
   // there is bug in the implementation
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, "diff global id");
+                                   "diff global id");
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, "diff global id",
@@ -264,7 +264,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Child) {
   create_snapshot();
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -280,7 +280,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Children) {
   create_snapshot("snap2");
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -295,7 +295,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChild) {
   create_snapshot("snap1", true);
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -311,7 +311,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
   create_snapshot("snap2", true);
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -326,7 +326,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
   std::string clone_id = create_clone();
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -337,7 +337,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
   ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, clone_id,
-      "clone1", GLOBAL_CLONE_IMAGE_ID);
+                                   GLOBAL_CLONE_IMAGE_ID);
 
   C_SaferCond ctx2;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_CLONE_IMAGE_ID,
@@ -362,7 +362,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
                                             mirror_image));
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -387,7 +387,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
                                             mirror_image));
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -404,7 +404,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
   remove_image();
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -423,7 +423,7 @@ TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
   EXPECT_EQ(0, ictx->state->open(false));
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -444,7 +444,7 @@ TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
   m_deleter->set_failed_timer_interval(2);
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -470,7 +470,7 @@ TEST_F(TestImageDeleter, Delete_Is_Idempotent) {
   EXPECT_EQ(0, ictx->state->open(false));
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -481,7 +481,7 @@ TEST_F(TestImageDeleter, Delete_Is_Idempotent) {
   ASSERT_EQ(1u, m_deleter->get_failed_queue_items().size());
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
-      m_image_name, GLOBAL_IMAGE_ID);
+                                   GLOBAL_IMAGE_ID);
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(1u, m_deleter->get_failed_queue_items().size());
