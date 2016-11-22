@@ -23,11 +23,10 @@ struct MockMirroringWatcher : public MirroringWatcher<> {
     : MirroringWatcher<>(image_ctx.md_ctx, image_ctx.op_work_queue) {
   }
 
-  MOCK_METHOD2(handle_mode_updated, void(cls::rbd::MirrorMode, Context*));
-  MOCK_METHOD4(handle_image_updated, void(cls::rbd::MirrorImageState,
+  MOCK_METHOD1(handle_mode_updated, void(cls::rbd::MirrorMode));
+  MOCK_METHOD3(handle_image_updated, void(cls::rbd::MirrorImageState,
                                           const std::string &,
-                                          const std::string &,
-                                          Context*));
+                                          const std::string &));
 };
 
 } // anonymous namespace
@@ -73,7 +72,7 @@ public:
 };
 
 TEST_F(TestMirroringWatcher, ModeUpdated) {
-  EXPECT_CALL(*m_image_watcher, handle_mode_updated(cls::rbd::MIRROR_MODE_DISABLED, _));
+  EXPECT_CALL(*m_image_watcher, handle_mode_updated(cls::rbd::MIRROR_MODE_DISABLED));
 
   C_SaferCond ctx;
   MockMirroringWatcher::notify_mode_updated(m_ioctx, cls::rbd::MIRROR_MODE_DISABLED, &ctx);
@@ -83,8 +82,8 @@ TEST_F(TestMirroringWatcher, ModeUpdated) {
 TEST_F(TestMirroringWatcher, ImageStatusUpdated) {
   EXPECT_CALL(*m_image_watcher,
               handle_image_updated(cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                   StrEq("image id"), StrEq("global image id"),
-                                   _));
+                                   StrEq("image id"),
+                                   StrEq("global image id")));
 
   C_SaferCond ctx;
   MockMirroringWatcher::notify_image_updated(m_ioctx,

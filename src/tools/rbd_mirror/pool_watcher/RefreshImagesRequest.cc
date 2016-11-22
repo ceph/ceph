@@ -52,7 +52,7 @@ void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
     r = librbd::cls_client::mirror_image_list_finish(&it, &ids);
   }
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     derr << "failed to list mirrored images: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -98,7 +98,7 @@ void RefreshImagesRequest<I>::handle_dir_list(int r) {
     r = librbd::cls_client::dir_list_finish(&it, &name_to_ids);
   }
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     derr << "failed to list images: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
