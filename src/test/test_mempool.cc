@@ -265,6 +265,18 @@ TEST(mempool, unordered_map)
   h[2] = obj(1);
 }
 
+TEST(mempool, string_test)
+{
+  mempool::unittest_2::string s;
+  s.reserve(100);
+  EXPECT_EQ(mempool::unittest_2::allocated_items(), s.capacity() + 1u); // +1 for zero-byte termination :)
+  for (size_t i = 0; i < 10; ++i) {
+    s += '1';
+    s.append(s);
+    EXPECT_EQ(mempool::unittest_2::allocated_items(), s.capacity() + 1u);
+  }
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
