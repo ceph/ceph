@@ -1,5 +1,7 @@
 [Unit]
 Description=Ceph disk activation: %f
+After=local-fs.target
+Wants=local-fs.target
 
 [Service]
 Type=oneshot

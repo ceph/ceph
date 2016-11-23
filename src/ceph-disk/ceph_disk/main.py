@@ -4442,6 +4442,8 @@ def main_trigger(args):
         )
         return
 
+    if get_ceph_user() == 'ceph':
+        command_check_call(['chown', 'ceph:ceph', args.dev])
     parttype = get_partition_type(args.dev)
     partid = get_partition_uuid(args.dev)
 
