@@ -141,24 +141,25 @@ public:
       std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
     > &reads,
     bool fast_read,
-    GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func);
+    GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func);
 
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
     unsigned objects_to_read;
-    GenContextURef<hobject_t::bitwisemap<extent_map> &&> func;
-    hobject_t::bitwisemap<extent_map> results;
+    GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> func;
+    hobject_t::bitwisemap<pair<int, extent_map> > results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
-      GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func)
+      GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func)
       : objects_to_read(objects_to_read), func(std::move(func)) {}
     void complete_object(
       const hobject_t &hoid,
+      int err,
       extent_map &&buffers) {
       assert(objects_to_read);
       --objects_to_read;
       assert(!results.count(hoid));
-      results.emplace(hoid, std::move(buffers));
+      results.emplace(hoid, make_pair(err, std::move(buffers)));
     }
     bool is_complete() const {
       return objects_to_read == 0;
@@ -190,8 +191,9 @@ public:
     objects_read_and_reconstruct(
       _to_read,
       false,
-      make_gen_lambda_context<hobject_t::bitwisemap<extent_map> &&, Func>(
-	std::forward<Func>(on_complete)));
+      make_gen_lambda_context<
+        hobject_t::bitwisemap<pair<int, extent_map> > &&, Func>(
+	  std::forward<Func>(on_complete)));
   }
   void kick_reads() {
     while (in_progress_client_reads.size() &&
@@ -379,6 +381,30 @@ public:
     void dump(Formatter *f) const;
 
     set<pg_shard_t> in_progress;
+
+    ReadOp(
+      int priority,
+      ceph_tid_t tid,
+      bool do_redundant_reads,
+      bool for_recovery,
+      OpRequestRef op,
+      map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &&_to_read)
+      : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
+	for_recovery(for_recovery), to_read(std::move(_to_read)) {
+      for (auto &&hpair: to_read) {
+	auto &returned = complete[hpair.first].returned;
+	for (auto &&extent: hpair.second.to_read) {
+	  returned.push_back(
+	    boost::make_tuple(
+	      extent.get<0>(),
+	      extent.get<1>(),
+	      map<pg_shard_t, bufferlist>()));
+	}
+      }
+    }
+    ReadOp() = delete;
+    ReadOp(const ReadOp &) = default;
+    ReadOp(ReadOp &&) = default;
   };
   friend struct FinishReadOp;
   void filter_read_op(
