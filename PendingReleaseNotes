@@ -98,3 +98,12 @@ OSD: change the prefix from fs_* to os_*, because commit_latency and …
   jerasure_neon, shec_generic, shec_sse3, shec_sse4, and shec_neon. If you use any
   of these plugins directly you will see a warning in the mon log file.
   Please switch to using just 'jerasure' or 'shec'.
+
+* The librados omap get_keys and get_vals operations include a start key and a
+  limit on the number of keys to return.  The OSD now imposes a configurable
+  limit on the number of keys and number of total bytes it will respond with,
+  which means that a librados user might get fewer keys than they asked for.
+  This is necessary to prevent careless users from requesting an unreasonable
+  amount of data from the cluster in a single operation.  The new limits are
+  configured with `osd_max_omap_entries_per_request`, defaulting to 131,072, and
+  'osd_max_omap_bytes_per_request', defaulting to 4MB.
