@@ -460,9 +460,6 @@ public:
     return identify_osd(addr) >= 0;
   }
   int find_osd_on_ip(const entity_addr_t& ip) const;
-  bool have_inst(int osd) const {
-    return exists(osd) && is_up(osd); 
-  }
   const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
     return osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank;

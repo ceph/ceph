@@ -1566,7 +1566,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 
 
   // weird?
-  if (!osdmap.have_inst(badboy)) {
+  if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);

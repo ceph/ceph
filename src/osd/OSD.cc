@@ -6659,6 +6659,7 @@ void OSD::note_down_osd(int peer)
 void OSD::note_up_osd(int peer)
 {
   service.forget_peer_epoch(peer, osdmap->get_epoch() - 1);
+  heartbeat_set_peers_need_update();
 }
 
 struct C_OnMapCommit : public Context {
@@ -6982,13 +6983,17 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     osdmap->get_all_osds(old);
     for (set<int>::iterator p = old.begin(); p != old.end(); ++p) {
       if (*p != whoami &&
-	  osdmap->have_inst(*p) && // in old map
-	  !newmap->is_up(*p)) {    // but not the new one
+	  osdmap->is_up(*p) && // in old map
+	  newmap->is_down(*p)) {    // but not the new one
         if (!waited_for_reservations) {
           service.await_reserved_maps();
           waited_for_reservations = true;
         }
 	note_down_osd(*p);
+      } else if (*p != whoami &&
+                osdmap->is_down(*p) &&
+                newmap->is_up(*p)) {
+        note_up_osd(*p);
       }
     }
 
@@ -7497,11 +7502,11 @@ bool OSD::require_same_peer_instance(Message *m, OSDMapRef& map,
 {
   int from = m->get_source().num();
 
-  if (!map->have_inst(from) ||
+  if (map->is_down(from) ||
       (map->get_cluster_addr(from) != m->get_source_inst().addr)) {
     dout(5) << "from dead osd." << from << ", marking down, "
 	    << " msg was " << m->get_source_inst().addr
-	    << " expected " << (map->have_inst(from) ?
+	    << " expected " << (map->is_up(from) ?
 				map->get_cluster_addr(from) : entity_addr_t())
 	    << dendl;
     ConnectionRef con = m->get_connection();
