@@ -389,6 +389,7 @@ inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
 class RGWBulkUploadOp : public RGWOp {
 protected:
   class StreamGetter;
+  class DecoratedStreamGetter;
 
   virtual std::unique_ptr<StreamGetter> create_stream() = 0;
   virtual void send_response() = 0;
@@ -420,6 +421,30 @@ public:
   virtual ssize_t get_at_most(size_t want, ceph::bufferlist& dst) = 0;
   virtual ssize_t get_exactly(size_t want, ceph::bufferlist& dst) = 0;
 }; /* End of nested subclass StreamGetter */
+
+
+class RGWBulkUploadOp::DecoratedStreamGetter : public StreamGetter {
+  StreamGetter& decoratee;
+
+protected:
+  StreamGetter& get_decoratee() {
+    return decoratee;
+  }
+
+public:
+  DecoratedStreamGetter(StreamGetter& decoratee)
+    : decoratee(decoratee) {
+  }
+  virtual ~DecoratedStreamGetter() = default;
+
+  ssize_t get_at_most(const size_t want, ceph::bufferlist& dst) override {
+    return get_decoratee().get_at_most(want, dst);
+  }
+
+  ssize_t get_exactly(const size_t want, ceph::bufferlist& dst) override {
+    return get_decoratee().get_exactly(want, dst);
+  }
+}; /* RGWBulkUploadOp::DecoratedStreamGetter */
 
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
