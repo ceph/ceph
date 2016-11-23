@@ -22,7 +22,7 @@ source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 getjson="no"
 
 termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
-if test -n "$termwidth" ; then termwidth="-W ${termwidth}"; fi
+if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
 
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
 jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
