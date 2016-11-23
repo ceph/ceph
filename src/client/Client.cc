@@ -3858,7 +3858,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     signal_cond_list(in->waitfor_caps);
 }
 
-void Client::remove_cap(Cap *cap, bool queue_release)
+Cap* Client::remove_cap(Cap *cap, bool queue_release)
 {
   Inode *in = cap->inode;
   MetaSession *session = cap->session;
@@ -3890,6 +3890,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   } else {
     cap->cap_item.remove_myself();
     delete cap;
+    cap = nullptr;
   }
 
   if (!in->is_any_caps()) {
@@ -3898,6 +3899,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
   }
+  return cap;
 }
 
 void Client::remove_all_caps(Inode *in)
@@ -3994,7 +3996,7 @@ void Client::trim_caps(MetaSession *s, int max)
       // disposable non-auth cap
       if (!(get_caps_used(in) & ~oissued & mine)) {
 	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-	remove_cap(cap, true);
+	cap = remove_cap(cap, true);
 	trimmed++;
       }
     } else {
@@ -4025,7 +4027,7 @@ void Client::trim_caps(MetaSession *s, int max)
     }
 
     ++p;
-    if (!cap->inode) {
+    if (cap && !cap->inode) {
       cap->cap_item.remove_myself();
       delete cap;
     }
