@@ -1125,7 +1125,7 @@ function test_get_timeout_delays() {
 function wait_for_clean() {
     local num_active_clean=-1
     local cur_active_clean
-    local -a delays=($(get_timeout_delays $TIMEOUT))
+    local -a delays=($(get_timeout_delays $TIMEOUT .1))
     local -i timer=0
     local num_pgs=$(get_num_pgs)
     test $num_pgs != 0 || return 1
