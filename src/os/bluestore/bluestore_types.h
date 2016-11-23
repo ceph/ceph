@@ -78,6 +78,9 @@ public:
   uint64_t end() const {
     return offset + length;
   }
+  bool operator==(const AllocExtent& other) const {
+    return offset == other.offset && length == other.length;
+  }
 };
 
 inline static ostream& operator<<(ostream& out, const AllocExtent& e) {
