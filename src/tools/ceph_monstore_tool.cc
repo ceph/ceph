@@ -272,7 +272,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
     OSDMap::Incremental inc(bl);
     if (inc.crush.length()) {
       inc.crush.clear();
-      crush->encode(inc.crush);
+      crush->encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
     }
     if (inc.fullmap.length()) {
       OSDMap fullmap;
@@ -892,7 +892,7 @@ int main(int argc, char **argv) {
       if (r >= 0) {
         OSDMap osdmap;
         osdmap.decode(tmp);
-        osdmap.crush->encode(bl);
+        osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       }
     } else {
       r = st.get(map_type, v, bl);
