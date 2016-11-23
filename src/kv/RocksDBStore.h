@@ -140,15 +140,16 @@ public:
 
   static bool check_omap_dir(string &omap_dir);
   /// Opens underlying db
-  int open(ostream &out) {
+  int open(ostream &out) override {
     return do_open(out, false);
   }
-  int open(ostream &out, const vector<ColumnFamily>& cfs) {
+  int open_with_cf(ostream &out, const vector<ColumnFamily>& cfs) override {
     return do_open(out, false, &cfs);
   }
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out);
-  int create_and_open(ostream &out, const vector<ColumnFamily>& cfs);
+  int create_and_open(ostream &out) override;
+  int create_and_open_with_cf(ostream &out,
+			      const vector<ColumnFamily>& cfs) override;
 
   void close();
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
@@ -414,8 +415,8 @@ err:
 
 
 protected:
-  WholeSpaceIterator _get_iterator();
-  ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name);
+  WholeSpaceIterator _get_iterator() override;
+  ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name) override;
 };
 
 

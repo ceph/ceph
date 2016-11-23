@@ -136,12 +136,12 @@ public:
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
   virtual int open(std::ostream &out) = 0;
-  virtual int open(std::ostream &out, const vector<ColumnFamily>& cfs) {
+  virtual int open_with_cf(std::ostream &out, const vector<ColumnFamily>& cfs) {
     assert(0 == "Not implemented"); }
   virtual int create_and_open(std::ostream &out) = 0;
   virtual void close() { }
   // vector cfs contains column families to be created when db is created.
-  virtual int create_and_open(std::ostream &out, const vector<ColumnFamily>& cfs) {
+  virtual int create_and_open_with_cf(std::ostream &out, const vector<ColumnFamily>& cfs) {
     assert(0 == "Not implemented"); }
 
   virtual Transaction get_transaction() = 0;
