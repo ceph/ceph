@@ -1123,7 +1123,7 @@ public:
     return false;
   }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
@@ -1143,6 +1143,6 @@ public:
   static bool is_valid_crush_loc(CephContext *cct,
 				 const map<string,string>& loc);
 };
-WRITE_CLASS_ENCODER(CrushWrapper)
+WRITE_CLASS_ENCODER_FEATURES(CrushWrapper)
 
 #endif

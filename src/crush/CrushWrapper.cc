@@ -1125,7 +1125,7 @@ int CrushWrapper::remove_rule(int ruleno)
   return 0;
 }
 
-void CrushWrapper::encode(bufferlist& bl) const
+void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
 {
   assert(crush);
 
