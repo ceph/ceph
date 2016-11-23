@@ -335,6 +335,20 @@ public:
       }
     }
 
+    if (explicit_objs && head_size > 0 && !objs.empty()) {
+      /* patch up manifest due to issue 16435:
+       * the first object in the explicit objs list might not be the one we need to access, use the
+       * head object instead if set. This would happen if we had an old object that was created
+       * when the explicit objs manifest was around, and it got copied.
+       */
+      rgw_obj& obj_0 = objs[0].loc;
+
+      if (!obj_0.get_object().empty() && obj_0.ns.empty()) {
+        objs[0].loc = head_obj;
+        objs[0].size = head_size;
+      }
+    }
+
     if (struct_v >= 4) {
       ::decode(tail_bucket, bl);
     }
@@ -372,8 +386,14 @@ public:
     return (obj_size > head_size);
   }
 
-  void set_head(const rgw_obj& _o) {
+  void set_head(const rgw_obj& _o, uint64_t _s) {
     head_obj = _o;
+    head_size = _s;
+
+    if (explicit_objs && head_size > 0) {
+      objs[0].loc = head_obj;
+      objs[0].size = head_size;
+    }
   }
 
   const rgw_obj& get_head() {
