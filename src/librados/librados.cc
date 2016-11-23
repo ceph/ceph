@@ -1111,6 +1111,12 @@ int librados::IoCtx::remove(const std::string& oid)
   return io_ctx_impl->remove(obj);
 }
 
+int librados::IoCtx::remove(const std::string& oid, int flags)
+{
+  object_t obj(oid);
+  return io_ctx_impl->remove(obj, flags);
+}
+
 int librados::IoCtx::trunc(const std::string& oid, uint64_t size)
 {
   object_t obj(oid);

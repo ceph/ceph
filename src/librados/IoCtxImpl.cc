@@ -832,6 +832,14 @@ int librados::IoCtxImpl::remove(const object_t& oid)
   return operate(oid, &op, NULL);
 }
 
+int librados::IoCtxImpl::remove(const object_t& oid, int flags)
+{
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.remove();
+  return operate(oid, &op, NULL, flags);
+}
+
 int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
 {
   ::ObjectOperation op;
