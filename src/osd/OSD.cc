@@ -3224,12 +3224,12 @@ PG *OSD::_create_lock_pg(
   return pg;
 }
 
-PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
+PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op,
+				  Session *session)
 {
-  Session *session = static_cast<Session*>(
-    op->get_req()->get_connection()->get_priv());
-  if (!session)
+  if (!session) {
     return PGRef();
+  }
   // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
   // the session_dispatch_lock must already be held.
   assert(session->session_dispatch_lock.is_locked());
@@ -3249,7 +3249,6 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
     wlistiter->second.push_back(op);
     register_session_waiting_on_pg(session, pgid);
   }
-  session->put();
   return PGRef(out);
 }
 
@@ -8696,7 +8695,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  PGRef pg = get_pg_or_queue_for_pg(pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(pgid, op, client_session);
   if (pg) {
     op->send_map_update = share_map.should_send;
     op->sent_epoch = m->get_map_epoch();
@@ -8705,10 +8704,14 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // ok, we didn't have the PG.  let's see if it's our fault or the client's.
+  // ok, we didn't have the PG.
+  if (!g_conf->osd_debug_misdirected_ops) {
+    return;
+  }
+  // let's see if it's our fault or the client's.  note that this might
+  // involve loading an old OSDmap off disk, so it can be slow.
 
   OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
-  // check send epoch
   if (!send_map) {
     dout(7) << "don't have sender's osdmap; assuming it was valid and that"
 	    << " client will resend" << dendl;
@@ -8784,7 +8787,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     peer_session->put();
   }
 
-  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op, peer_session);
   if (pg) {
     op->send_map_update = should_share_map;
     op->sent_epoch = m->map_epoch;
