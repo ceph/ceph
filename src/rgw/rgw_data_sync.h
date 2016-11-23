@@ -339,6 +339,7 @@ struct rgw_bucket_shard_sync_info {
     StateInit = 0,
     StateFullSync = 1,
     StateIncrementalSync = 2,
+	StateStopping = 3,
   };
 
   uint16_t state;

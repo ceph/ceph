@@ -168,6 +168,7 @@ void req_info::rebuild_from(req_info& src)
 {
   method = src.method;
   script_uri = src.script_uri;
+  args = src.args;
   if (src.effective_uri.empty()) {
     request_uri = src.request_uri;
   } else {
@@ -176,6 +177,9 @@ void req_info::rebuild_from(req_info& src)
   effective_uri.clear();
   host = src.host;
 
+  if((src.env != NULL) && (src.env->get("CONTENT_TYPE") != NULL)) 
+    env->set("CONTENT_TYPE", src.env->get("CONTENT_TYPE"));
+  
   x_meta_map = src.x_meta_map;
   x_meta_map.erase("x-amz-date");
 }
@@ -767,6 +771,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("versions") == 0) ||
       (name.compare("versioning") == 0) ||
       (name.compare("website") == 0) ||
+      (name.compare("syncing") == 0) ||
       (name.compare("requestPayment") == 0) ||
       (name.compare("torrent") == 0)) {
     sub_resources[name] = val;

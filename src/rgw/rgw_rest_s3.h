@@ -104,6 +104,23 @@ public:
   void send_response();
 };
 
+class RGWGetBucketSyncing_ObjStore_S3 : public RGWGetBucketSyncing {
+public:
+  RGWGetBucketSyncing_ObjStore_S3() {}
+  ~RGWGetBucketSyncing_ObjStore_S3() {}
+
+  void send_response();
+};
+
+class RGWSetBucketSyncing_ObjStore_S3 : public RGWSetBucketSyncing {
+public:
+  RGWSetBucketSyncing_ObjStore_S3() {}
+  ~RGWSetBucketSyncing_ObjStore_S3() {}
+
+  int get_params();
+  void send_response();
+};
+
 class RGWGetBucketWebsite_ObjStore_S3 : public RGWGetBucketWebsite {
 public:
   RGWGetBucketWebsite_ObjStore_S3() {}

@@ -939,6 +939,62 @@ public:
   }
 };
 
+class RGWUninitBucketShardSyncStatusCoroutine : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWRados *store;
+
+  rgw_bucket_shard bs;
+  string sync_status_oid;
+
+  string lock_name;
+  string lock_name_increament;
+  string cookie;
+  rgw_bucket_shard_sync_info status;
+
+public:
+  RGWUninitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
+                                        const rgw_bucket_shard& bs)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs) {
+    store = sync_env->store;
+    lock_name = "sync_lock";
+    lock_name_increament = "sync_lock.incremental";
+
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    string cookie = buf;
+  
+    sync_status_oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
+  }
+
+  int operate() {
+    uint32_t lock_duration = 30;
+    reenter(this) {
+      yield call(new RGWSimpleRadosLockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
+	                                  lock_name, cookie, lock_duration));
+      if (retcode < 0) {
+	return set_cr_done();
+      }
+
+      yield call(new RGWSimpleRadosLockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
+		                            lock_name_increament, cookie, lock_duration));
+      if (retcode < 0) {
+	yield call(new RGWSimpleRadosUnlockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
+	                                     lock_name, cookie)); 
+	return set_cr_done();
+      }
+
+      yield {
+        call(new RGWSimpleRadosDeleteCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid));
+      }
+      return set_cr_done();
+    }
+
+    return 0;
+  }
+};
+
 #define BUCKET_SHARD_SYNC_SPAWN_WINDOW 20
 #define DATA_SYNC_MAX_ERR_ENTRIES 10
 
@@ -1588,11 +1644,13 @@ struct bucket_index_marker_info {
   string bucket_ver;
   string master_ver;
   string max_marker;
+  bool syncstopped{0};
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
     JSONDecoder::decode_json("master_ver", master_ver, obj);
     JSONDecoder::decode_json("max_marker", max_marker, obj);
+	JSONDecoder::decode_json("syncstopped", syncstopped, obj);
   }
 };
 
@@ -1639,12 +1697,14 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   string lock_name;
   string cookie;
   rgw_bucket_shard_sync_info status;
+  rgw_bucket_shard_sync_info* ostatus;
 
   bucket_index_marker_info info;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
-                                        const rgw_bucket_shard& bs)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs) {
+                                        const rgw_bucket_shard& bs,
+										rgw_bucket_shard_sync_info* _status)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),ostatus(_status) {
     store = sync_env->store;
     lock_name = "sync_lock";
 
@@ -1686,7 +1746,10 @@ public:
         return set_cr_error(retcode);
       }
       yield {
-	status.state = rgw_bucket_shard_sync_info::StateFullSync;
+	     if (info.syncstopped)
+		   status.state = rgw_bucket_shard_sync_info::StateStopping;
+		 else
+	       status.state = rgw_bucket_shard_sync_info::StateFullSync;
         status.inc_marker.position = info.max_marker;
         map<string, bufferlist> attrs;
         status.encode_all_attrs(attrs);
@@ -1697,6 +1760,8 @@ public:
 	call(new RGWSimpleRadosUnlockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
 			             lock_name, cookie));
       }
+	if (ostatus != NULL)
+	  *ostatus = status;
       return set_cr_done();
     }
     return 0;
@@ -1705,7 +1770,7 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs);
+  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, NULL);
 }
 
 template <class T>
@@ -1896,6 +1961,7 @@ public:
     reenter(this) {
       yield {
         rgw_http_param_pair pairs[] = { { "rgwx-bucket-instance", instance_key.c_str() },
+					{ "fullsyncing" , NULL },
 					{ "versions" , NULL },
 					{ "format" , "json" },
 					{ "objs-container" , "true" },
@@ -2191,6 +2257,8 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
 
   int total_entries;
 
+  RGWMetaSyncEnv meta_sync_env;
+
   RGWContinuousLeaseCR *lease_cr;
   RGWCoroutinesStack *lease_stack;
 
@@ -2254,6 +2322,33 @@ int RGWBucketShardFullSyncCR::operate()
       ldout(sync_env->cct, 20) << __func__ << "(): listing bucket for full sync" << dendl;
       yield call(new RGWListBucketShardCR(sync_env, bs, list_marker,
                                           &list_result));
+	  if (retcode == -EINVAL) {
+			if (bucket_info->datasync_flag_enabled()) {
+				yield {
+					ldout(sync_env->cct, 10) << "no local info for bucket "
+							<< bucket_str{bs.bucket} << ": fetching metadata" << dendl;
+					string raw_key = string("bucket.instance:") + bs.bucket.get_key();
+
+					meta_sync_env.init(cct, sync_env->store, sync_env->store->rest_master_conn, sync_env->async_rados, sync_env->http_manager, sync_env->error_logger);
+
+					call(new RGWMetaSyncSingleEntryCR(&meta_sync_env, raw_key,
+				      string() /* no marker */,
+				      MDLOG_STATUS_COMPLETE,
+				      NULL /* no marker tracker */));
+			}
+			if (retcode < 0) {
+			ldout(sync_env->cct, 0) << "ERROR: failed to fetch bucket instance info for " << bucket_str{bs.bucket} << dendl;
+			return set_cr_error(retcode);
+		}
+
+		yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bs.bucket, bucket_info));
+	  }
+	 if (!bucket_info->datasync_flag_enabled()) {
+		yield lease_cr->go_down();
+		drain_all();
+		return set_cr_done();
+	  }	
+	 }
       if (retcode < 0 && retcode != -ENOENT) {
         set_status("failed bucket listing, going down");
         yield lease_cr->go_down();
@@ -2333,6 +2428,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWContinuousLeaseCR *lease_cr{nullptr};
   RGWCoroutinesStack *lease_stack{nullptr};
   const string status_oid;
+  ceph::real_time sync_modify_time;
 
   string name;
   string instance;
@@ -2342,6 +2438,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
 
   RGWDataSyncDebugLogger logger;
 
+  bool syncstopped{0};
 public:
   RGWBucketShardIncrementalSyncCR(RGWDataSyncEnv *_sync_env,
                                   const rgw_bucket_shard& bs,
@@ -2393,7 +2490,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
                                                           status_oid,
                                                           inc_marker);
     do {
-      ldout(sync_env->cct, 20) << __func__ << "(): listing bilog for incremental sync" << dendl;
+      ldout(sync_env->cct, 20) << __func__ << "(): listing bilog for incremental sync "<< inc_marker.position << dendl;
       set_status() << "listing bilog; position=" << inc_marker.position;
       yield call(new RGWListBucketIndexLogCR(sync_env, bs, inc_marker.position,
                                              &list_result));
@@ -2409,6 +2506,18 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
+        if (e.op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP && (sync_modify_time < e.timestamp)) {
+     	  ldout(sync_env->cct, 20) << " syncstop on " << e.timestamp << dendl;
+     	  sync_modify_time = e.timestamp;
+     	  syncstopped = true;
+     	  continue;
+ 	    }
+     	if (e.op == RGWModifyOp::CLS_RGW_OP_RESYNC && (sync_modify_time < e.timestamp)) {
+     	  ldout(sync_env->cct, 20) << " resync on " << e.timestamp << dendl;
+     	  sync_modify_time = e.timestamp;
+     	  syncstopped = false;
+     	  continue;
+     	}
         auto& squash_entry = squash_map[e.object];
         if (squash_entry.first == e.timestamp &&
             e.op == CLS_RGW_OP_DEL) {
@@ -2417,6 +2526,23 @@ int RGWBucketShardIncrementalSyncCR::operate()
           squash_entry = make_pair<>(e.timestamp, e.op);
         }
       }
+	  if (syncstopped) {
+			yield {
+	      rgw_bucket_shard_sync_info sync_status;
+	      sync_status.state = rgw_bucket_shard_sync_info::StateStopping;
+	      map<string, bufferlist> attrs;
+	      sync_status.encode_state_attr(attrs);
+	      string oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
+	      RGWRados *store = sync_env->store;
+
+      call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, store->get_zone_params().log_pool,
+                                      oid, attrs));
+			}
+			lease_cr->go_down();
+			drain_all();
+			return set_cr_error(-EIO);
+     }
+
       entries_iter = list_result.begin();
       for (; entries_iter != list_result.end(); ++entries_iter) {
         entry = &(*entries_iter);
@@ -2429,6 +2555,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
           }
         }
         inc_marker.position = cur_id;
+
+        if (entry->op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP || entry->op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
+            ldout(sync_env->cct, 20) << "detected syncstop or resync  on " << entries_iter->timestamp << " , skipping entry" << dendl;
+            marker_tracker->try_update_high_marker(cur_id, 0, entry->timestamp);
+            continue; 
+            }
 
         if (!rgw_obj::parse_raw_oid(entries_iter->object, &name, &instance, &ns)) {
           set_status() << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry";
@@ -2585,8 +2717,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     yield {
       if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
-        call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs));
-        sync_status.state = rgw_bucket_shard_sync_info::StateFullSync;
+		call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, &sync_status));
       }
     }
 
@@ -2617,6 +2748,17 @@ int RGWRunBucketSyncCoroutine::operate()
     if (retcode < 0) {
       ldout(sync_env->cct, 5) << "incremental sync on " << bucket_shard_str{bs}
           << " failed, retcode=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
+    yield {
+      if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateStopping) {
+	    call(new RGWUninitBucketShardSyncStatusCoroutine(sync_env, bs));
+      }
+    }
+    if (retcode < 0) {
+      ldout(sync_env->cct, 5) << "incremental sync on " << bucket_shard_str{bs}
+	  << " failed, retcode=" << retcode << dendl;
       return set_cr_error(retcode);
     }
 

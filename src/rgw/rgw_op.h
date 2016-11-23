@@ -379,6 +379,7 @@ protected:
   string delimiter;
   string encoding_type;
   bool list_versions;
+  bool fullsyncing;
   int max;
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
@@ -392,7 +393,7 @@ protected:
 
 public:
   RGWListBucket() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false), shard_id(-1) {}
+                    default_max(0), is_truncated(false), fullsyncing(false),shard_id(-1) {}
   int verify_permission();
   void pre_exec();
   void execute();
@@ -426,6 +427,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const string name() { return "get_bucket_location"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_LOCATION; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -449,6 +451,7 @@ public:
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   bool enable_versioning;
+  bufferlist in_data;
 public:
   RGWSetBucketVersioning() : enable_versioning(false) {}
 
@@ -461,6 +464,40 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "set_bucket_versioning"; }
   virtual RGWOpType get_type() { return RGW_OP_SET_BUCKET_VERSIONING; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketSyncing : public RGWOp {
+protected:
+  bool enable_syncing;
+public:
+  RGWGetBucketSyncing() : enable_syncing(false) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_syncing"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_SYNCING; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWSetBucketSyncing : public RGWOp {
+protected:
+  bool enable_syncing;
+public:
+  RGWSetBucketSyncing() : enable_syncing(false) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() { return 0; }
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_bucket_syncing"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_BUCKET_SYNCING; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -974,6 +1011,7 @@ protected:
   size_t len;
   char *data;
   ACLOwner owner;
+  bufferlist in_data;
 
 public:
   RGWPutACLs() {

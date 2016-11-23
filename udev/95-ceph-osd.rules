@@ -2,8 +2,8 @@
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -12,8 +12,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -22,8 +22,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-b4b80ceff106", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660" 
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-b4b80ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -32,8 +32,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="fb3aabf9-d25f-47cc-bf5e-721d1816496b", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="fb3aabf9-d25f-47cc-bf5e-721d1816496", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -41,8 +41,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 # MPATH_OSD_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -50,8 +50,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 # MPATH_JOURNAL_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-8ae0-4982-bf9d-5a8d867af560", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-8ae0-4982-bf9d-5a8d867af560", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -59,8 +59,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 # MPATH_BLOCK_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-8ae0-4982-bf9d-5a8d867af560", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660" 
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-8ae0-4982-bf9d-5a8d867af560", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -68,8 +68,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 # MPATH_BLOCK_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="7f4a666a-16f3-47a2-8445-152ef4d03f6c", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="7f4a666a-16f3-47a2-8445-152ef4d03f6c", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -78,8 +78,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-5ec00ceff106", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-5ec00ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -88,8 +88,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-5ec00ceff106", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660" 
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-5ec00ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -98,8 +98,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-35865ceff106", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-35865ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -108,8 +108,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-35865ceff106", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660" 
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="cafecafe-9b03-4f30-b4c6-35865ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -118,8 +118,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
   OWNER="ceph", GROUP="ceph", MODE="660"
@@ -128,8 +128,8 @@ ACTION=="change", SUBSYSTEM=="block", \
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-35865ceff05d", \
-  OWNER:="ceph", GROUP:="ceph", MODE:="660", \
-  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
+  OWNER:="ceph", GROUP:="ceph", MODE:="660"
+#  RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-35865ceff05d", \
   OWNER="ceph", GROUP="ceph", MODE="660"

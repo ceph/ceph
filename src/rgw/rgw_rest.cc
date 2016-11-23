@@ -1531,7 +1531,27 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET)
     return 0;
-
+  if (op->get_type() == RGW_OP_GET_BUCKET_LOCATION)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_GET_BUCKET_SYNCING)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_SET_BUCKET_SYNCING)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_LIST_BUCKET)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_GET_ACLS)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_PUT_ACLS)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_GET_CORS)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_PUT_CORS)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_GET_BUCKET_VERSIONING)
+    s->no_redirect = true;
+  if (op->get_type() == RGW_OP_SET_BUCKET_VERSIONING)
+    s->no_redirect = true;
+ 
   return do_init_permissions();
 }
 

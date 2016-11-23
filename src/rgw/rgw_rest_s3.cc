@@ -444,6 +444,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
 int RGWListBucket_ObjStore_S3::get_params()
 {
   list_versions = s->info.args.exists("versions");
+  fullsyncing = s->info.args.exists("fullsyncing");
   prefix = s->info.args.get("prefix");
   if (!list_versions) {
     marker = s->info.args.get("marker");
@@ -680,6 +681,19 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetBucketSyncing_ObjStore_S3::send_response()
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("SyncingConfiguration", XMLNS_AWS_S3);
+  const char *status = (enable_syncing ? "Enabled" : "Disabled");
+  s->formatter->dump_string("Status", status);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 class RGWSetBucketVersioningParser : public RGWXMLParser
 {
   XMLObj *alloc_obj(const char *el) {
@@ -761,6 +775,89 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
   dump_errno(s);
   end_header(s);
 }
+
+class RGWSetBucketSyncingParser : public RGWXMLParser
+{
+  XMLObj *alloc_obj(const char *el) {
+    return new XMLObj;
+  }
+
+public:
+  RGWSetBucketSyncingParser() {}
+  ~RGWSetBucketSyncingParser() {}
+
+  int get_syncing_status(bool *status) {
+    XMLObj *config = find_first("SyncingConfiguration");
+    if (!config)
+      return -EINVAL;
+
+    *status = false;
+
+    XMLObj *field = config->find_first("Status");
+    if (!field)
+      return 0;
+
+    string& s = field->get_data();
+
+    if (stringcasecmp(s, "Enabled") == 0) {
+      *status = true;
+    } else if (stringcasecmp(s, "Disabled") == 0) {
+      *status = false;
+    }
+
+    return 0;
+  }
+};
+
+int RGWSetBucketSyncing_ObjStore_S3::get_params()
+{
+  #define GET_BUCKET_SYNCING_BUF_MAX (128 * 1024)
+
+  char *data;
+  int len = 0;
+  int r =
+    rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_SYNCING_BUF_MAX);
+  if (r < 0) {
+    return r;
+  }
+
+  if (s->aws4_auth_needs_complete) {
+    int ret_auth = do_aws4_auth_completion();
+    if (ret_auth < 0) {
+      return ret_auth;
+    }
+  }
+
+  RGWSetBucketSyncingParser parser;
+
+  if (!parser.init()) {
+    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    r = -EIO;
+    goto done;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    r = -EINVAL;
+    goto done;
+  }
+
+  r = parser.get_syncing_status(&enable_syncing);
+
+done:
+  free(data);
+
+  return r;
+}
+
+void RGWSetBucketSyncing_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 
 int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
@@ -2214,6 +2311,8 @@ void RGWGetACLs_ObjStore_S3::send_response()
 int RGWPutACLs_ObjStore_S3::get_params()
 {
   int ret =  RGWPutACLs_ObjStore::get_params();
+  bufferptr in_ptr(data, len);
+  in_data.append(in_ptr);
   if (ret < 0)
     s->aws4_auth_needs_complete = false;
   if (s->aws4_auth_needs_complete) {
@@ -2791,6 +2890,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWGetBucketVersioning_ObjStore_S3;
 
+  if (s->info.args.sub_resource_exists("syncing"))
+    return new RGWGetBucketSyncing_ObjStore_S3;
+
   if (s->info.args.sub_resource_exists("website")) {
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
@@ -2826,6 +2928,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return NULL;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
+  if (s->info.args.sub_resource_exists("syncing"))
+    return new RGWSetBucketSyncing_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
@@ -3754,6 +3858,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
         case RGW_OP_PUT_CORS:
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
+        case RGW_OP_SET_BUCKET_SYNCING:
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SET_BUCKET_WEBSITE:

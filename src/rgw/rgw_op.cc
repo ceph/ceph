@@ -373,8 +373,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (r < 0 && ret == 0) {
       ret = r;
     }
-
-    if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)) {
+    if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)&&(!s->no_redirect)) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different zonegroup (" << s->bucket_info.zonegroup << " != " << store->get_zonegroup().get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
@@ -1583,6 +1582,96 @@ void RGWSetBucketVersioning::execute()
   }
 }
 
+int RGWGetBucketSyncing::verify_permission()
+{
+  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetBucketSyncing::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketSyncing::execute()
+{
+  enable_syncing = s->bucket_info.datasync_flag_enabled();
+}
+
+int RGWSetBucketSyncing::verify_permission()
+{
+  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetBucketSyncing::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetBucketSyncing::execute()
+{
+  if (!store->is_meta_master()) {
+     bufferlist in_data;
+     JSONParser jp;
+     op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
+     if (op_ret < 0) {
+       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+     }
+    return;
+  }
+  
+  op_ret = get_params();
+
+  if (op_ret < 0)
+    return;
+
+  if (enable_syncing) {
+    s->bucket_info.flags &= ~BUCKET_DATASYNC_DISABLED;
+  } else {
+    s->bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
+  }
+
+  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+					  &s->bucket_attrs);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
+		     << " returned err=" << op_ret << dendl;
+    return;
+  }
+
+  int shards_num = s->bucket_info.num_shards? s->bucket_info.num_shards : 1;
+  int shard_id = s->bucket_info.num_shards? 0 : -1;
+
+  if (!enable_syncing) {
+    op_ret = store->stop_bi_log_entries(s->bucket_info.bucket, -1);
+    if (op_ret < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
+      return ;
+    }
+  } else {
+    op_ret = store->resync_bi_log_entries(s->bucket_info.bucket, -1);
+    if (op_ret < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;       
+      return ;
+    }
+  }
+
+
+  for (int i = 0; i < shards_num; ++i, ++shard_id) {
+    op_ret = store->data_log->add_entry(s->bucket_info.bucket, shard_id);
+    if (op_ret < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      return ;
+    }
+  }
+  
+}
+
 int RGWGetBucketWebsite::verify_permission()
 {
   if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
@@ -1732,6 +1821,12 @@ void RGWListBucket::execute()
 {
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
+  // we want remote bucket sync got reject when local bucket sync disabled
+  if (fullsyncing && !s->bucket_info.datasync_flag_enabled()) {
+    op_ret = -EINVAL; 
     return;
   }
 
@@ -3497,6 +3592,14 @@ void RGWPutACLs::execute()
   op_ret = get_params();
   if (op_ret < 0)
     return;
+
+  if (!store->is_meta_master() && (!store->get_zonegroup().equals(s->bucket_info.zonegroup))) {
+     op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
+     if (op_ret < 0) {
+       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+     }
+    return;
+  }
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 

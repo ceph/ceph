@@ -390,8 +390,11 @@ enum RGWOpType {
   RGW_OP_STAT_ACCOUNT,
   RGW_OP_LIST_BUCKET,
   RGW_OP_GET_BUCKET_LOGGING,
+  RGW_OP_GET_BUCKET_LOCATION,
   RGW_OP_GET_BUCKET_VERSIONING,
   RGW_OP_SET_BUCKET_VERSIONING,
+  RGW_OP_GET_BUCKET_SYNCING,
+  RGW_OP_SET_BUCKET_SYNCING,
   RGW_OP_GET_BUCKET_WEBSITE,
   RGW_OP_SET_BUCKET_WEBSITE,
   RGW_OP_STAT_BUCKET,
@@ -860,6 +863,7 @@ enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
   BUCKET_VERSIONED = 0x2,
   BUCKET_VERSIONS_SUSPENDED = 0x4,
+  BUCKET_DATASYNC_DISABLED = 0X8,
 };
 
 enum RGWBucketIndexType {
@@ -1002,7 +1006,7 @@ struct RGWBucketInfo
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
-
+  bool datasync_flag_enabled() { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */
     return swift_versioning && !versioned();
@@ -1258,6 +1262,7 @@ struct req_state {
   int bucket_instance_shard_id;
 
   string redirect;
+  bool no_redirect;
 
   RGWBucketInfo bucket_info;
   map<string, bufferlist> bucket_attrs;
