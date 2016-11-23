@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh -ex
 
 export COVDIR="$HOME/cov-analysis"
 if [ ! -d "$COVDIR" ]; then
