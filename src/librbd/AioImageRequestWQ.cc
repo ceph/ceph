@@ -462,6 +462,7 @@ void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest<> *req) {
   ldout(cct, 15) << "resuming IO after image refresh: r=" << r << ", "
                  << "req=" << req << dendl;
   if (r < 0) {
+    process_finish();
     req->fail(r);
     finish_queued_op(req);
     delete req;
