@@ -246,6 +246,7 @@ private:
   bool prepare_boot(class MOSDBoot *m);
   void _booted(MOSDBoot *m, bool logit);
 
+  void update_up_thru(int from, epoch_t up_thru);
   bool preprocess_alive(class MOSDAlive *m);
   bool prepare_alive(class MOSDAlive *m);
   void _reply_map(PaxosServiceMessage *m, epoch_t e);
