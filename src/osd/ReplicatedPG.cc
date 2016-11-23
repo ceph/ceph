@@ -3220,8 +3220,10 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   }
 
   if (ctx->update_log_only) {
+    if (result >= 0)
+      do_osd_op_effects(ctx, m->get_connection());
+
     dout(20) << __func__ << " update_log_only -- result=" << result << dendl;
-    assert(result < 0);
     // save just what we need from ctx
     MOSDOpReply *reply = ctx->reply;
     ctx->reply = nullptr;
@@ -6737,9 +6739,13 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     return result;
   }
 
-  // read-op?  done?
+  // read-op?  write-op noop? done?
   if (ctx->op_t->empty() && !ctx->modify) {
     unstable_stats.add(ctx->delta_stats);
+    if (ctx->op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      ctx->update_log_only = true;
+    }
     return result;
   }
 

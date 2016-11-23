@@ -92,6 +92,9 @@ public:
     bool is_fresh_object() const {
       return boost::get<Init::None>(&init_type) == nullptr;
     }
+    bool is_rename() const {
+      return boost::get<Init::Rename>(&init_type) != nullptr;
+    }
     bool has_source(hobject_t *source = nullptr) const {
       return match(
 	init_type,
@@ -295,14 +298,19 @@ public:
     op.init_type = ObjectOperation::Init::Rename{source};
   }
 
-  /// Remove
+  /// Remove -- must not be called on rename target
   void remove(
     const hobject_t &hoid          ///< [in] obj to remove
     ) {
     auto &op = get_object_op_for_modify(hoid);
-    assert(!op.updated_snaps);
-    op = ObjectOperation();
-    op.delete_first = true;
+    if (!op.is_fresh_object()) {
+      assert(!op.updated_snaps);
+      op = ObjectOperation();
+      op.delete_first = true;
+    } else {
+      assert(!op.is_rename());
+      op_map.erase(hoid); // make it a noop if it's a fresh object
+    }
   }
 
   void update_snaps(
