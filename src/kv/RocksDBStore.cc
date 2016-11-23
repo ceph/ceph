@@ -307,7 +307,8 @@ int RocksDBStore::create_and_open(ostream &out)
   return do_open(out, true);
 }
 
-int RocksDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs)
+int RocksDBStore::create_and_open(ostream &out,
+				  const vector<ColumnFamily>& cfs)
 {
   int r = create_db_dir();
   if (r < 0)
