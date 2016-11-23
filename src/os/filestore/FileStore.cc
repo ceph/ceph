@@ -3048,7 +3048,6 @@ int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
 {
   uint64_t i;
   struct fiemap_extent *extent = NULL;
-  struct fiemap_extent *last = NULL;
   struct fiemap *fiemap = NULL;
   int r = 0;
 
@@ -3072,6 +3071,7 @@ more:
 
   i = 0;
 
+  struct fiemap_extent *last = nullptr;
   while (i < fiemap->fm_mapped_extents) {
     struct fiemap_extent *next = extent + 1;
 
@@ -3094,8 +3094,9 @@ more:
     i++;
     last = extent++;
   }
+  const bool is_last = last->fe_flags & FIEMAP_EXTENT_LAST;
   free(fiemap);
-  if (!(last->fe_flags & FIEMAP_EXTENT_LAST)) {
+  if (!is_last) {
     uint64_t xoffset = last->fe_logical + last->fe_length - offset;
     offset = last->fe_logical + last->fe_length;
     len -= xoffset;
