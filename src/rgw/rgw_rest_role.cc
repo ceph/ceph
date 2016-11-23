@@ -211,3 +211,150 @@ void RGWListRoles::execute()
     s->formatter->close_section();
   }
 }
+
+int RGWPutRolePolicy::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+  policy_name = s->info.args.get("PolicyName");
+  perm_policy = s->info.args.get("PolicyDocument");
+
+  if (role_name.empty() || policy_name.empty() || perm_policy.empty()) {
+    ldout(s->cct, 20) << "ERROR: One of role name, policy name or perm policy is empty"<< dendl;
+    return -EINVAL;
+  }
+  JSONParser p;
+  if (!p.parse(perm_policy.c_str(), perm_policy.length())) {
+    ldout(s->cct, 20) << "ERROR: failed to parse perm role policy doc" << dendl;
+    return -ERR_MALFORMED_DOC;
+  }
+
+  return 0;
+}
+
+void RGWPutRolePolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(s->cct, store, role_name);
+  op_ret = role.get();
+  if (op_ret == 0) {
+    role.set_perm_policy(policy_name, perm_policy);
+    op_ret = role.update();
+  }
+}
+
+int RGWGetRolePolicy::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+  policy_name = s->info.args.get("PolicyName");
+
+  if (role_name.empty() || policy_name.empty()) {
+    ldout(s->cct, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+void RGWGetRolePolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(g_ceph_context, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    string perm_policy;
+    op_ret = role.get_role_policy(policy_name, perm_policy);
+
+    if (op_ret == 0) {
+      s->formatter->open_object_section("GetRolePolicyResult");
+      s->formatter->dump_string("PolicyName", policy_name);
+      s->formatter->dump_string("RoleName", role_name);
+      s->formatter->dump_string("Permission policy", perm_policy);
+      s->formatter->close_section();
+    }
+  }
+}
+
+int RGWListRolePolicies::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+
+  if (role_name.empty()) {
+    ldout(s->cct, 20) << "ERROR: Role name is empty"<< dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+void RGWListRolePolicies::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(g_ceph_context, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    std::vector<string> policy_names = role.get_role_policy_names();
+    s->formatter->open_array_section("PolicyNames");
+    for (const auto& it : policy_names) {
+      s->formatter->dump_string("member", it);
+    }
+    s->formatter->close_section();
+  }
+}
+
+int RGWDeleteRolePolicy::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+  policy_name = s->info.args.get("PolicyName");
+
+  if (role_name.empty() || policy_name.empty()) {
+    ldout(s->cct, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+void RGWDeleteRolePolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  RGWRole role(g_ceph_context, store, role_name);
+  op_ret = role.get();
+
+  if (op_ret == -ENOENT) {
+    op_ret = -ERR_NO_ROLE_FOUND;
+  }
+
+  if (op_ret == 0) {
+    op_ret = role.delete_policy(policy_name);
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_ROLE_FOUND;
+    }
+
+    if (op_ret == 0) {
+      op_ret = role.update();
+    }
+  }
+}
