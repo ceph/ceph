@@ -2296,26 +2296,28 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool const check_for_latest_map = _calc_target(&op->target,
-						 &op->last_force_resend)
+  bool check_for_latest_map = _calc_target(&op->target, &op->last_force_resend)
     == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
-  if (r == -EAGAIN) {
-    assert(s == NULL);
+  if (r == -EAGAIN ||
+      (check_for_latest_map && sul.owns_lock_shared())) {
+    epoch_t orig_epoch = osdmap->get_epoch();
     sul.unlock();
     sul.lock();
+    if (orig_epoch != osdmap->get_epoch()) {
+      // map changed; recalculate mapping
+      check_for_latest_map = _calc_target(&op->target, &op->last_force_resend)
+	== RECALC_OP_TARGET_POOL_DNE;
+    }
+  }
+  if (r == -EAGAIN) {
+    assert(s == NULL);
     r = _get_session(op->target.osd, &s, sul);
   }
   assert(r == 0);
   assert(s);  // may be homeless
-
-  // We may need to take wlock if we will need to _set_op_map_check later.
-  if (check_for_latest_map && sul.owns_lock_shared()) {
-    sul.unlock();
-    sul.lock();
-  }
 
   _send_op_account(op);
 
