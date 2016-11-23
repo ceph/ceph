@@ -1,8 +1,8 @@
 tasks:
 - install:
-    branch: infernalis 
-    exclude_packages: ['ceph-mgr']
-- print: "**** done install infernalis"
+    branch: jewel 
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+- print: "**** done install jewel"
 upgrade_workload:
   sequential:
   - install.upgrade:

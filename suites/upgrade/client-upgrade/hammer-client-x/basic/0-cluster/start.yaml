@@ -1,6 +1,5 @@
 roles:
 - - mon.a
-  - mds.a
   - osd.0
   - osd.1
 - - mon.b
@@ -12,3 +11,4 @@ overrides:
   ceph:
     log-whitelist:
     - failed to encode map
+    fs: xfs

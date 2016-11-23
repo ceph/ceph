@@ -4,7 +4,7 @@ tasks:
 - ceph: 
 - print: "**** done ceph"
 - workunit:
-    branch: infernalis
+    branch: jewel
     clients:
       client.0:
       - rbd/import_export.sh
