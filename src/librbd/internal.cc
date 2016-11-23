@@ -1769,7 +1769,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
       if (is_protected) {
 	lderr(ictx->cct) << "snapshot is still protected after unprotection" << dendl;
-	assert(0);
+	ceph_abort();
       }
     }
 

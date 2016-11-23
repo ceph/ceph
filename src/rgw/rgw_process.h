@@ -62,7 +62,7 @@ protected:
     }
 
     void _dequeue(RGWRequest* req) {
-      assert(0);
+      ceph_abort();
     }
 
     bool _empty() {

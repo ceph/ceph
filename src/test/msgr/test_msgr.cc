@@ -844,7 +844,7 @@ class SyntheticDispatcher : public Dispatcher {
     cond.Signal();
   }
   bool ms_dispatch(Message *m) {
-    assert(0);
+    ceph_abort();
   }
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {
@@ -1432,7 +1432,7 @@ class MarkdownDispatcher : public Dispatcher {
     return false;
   }
   void ms_fast_dispatch(Message *m) {
-    assert(0);
+    ceph_abort();
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,

@@ -37,7 +37,7 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_INO: return "ino";
   case CEPH_LOCK_IFLOCK: return "iflock";
   case CEPH_LOCK_IPOLICY: return "ipolicy";
-  default: assert(0); return 0;
+  default: ceph_abort(); return 0;
   }
 }
 
@@ -140,7 +140,7 @@ public:
 
     case LOCK_SNAP_SYNC: return "snap->sync";
 
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -257,7 +257,7 @@ public:
     case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
 

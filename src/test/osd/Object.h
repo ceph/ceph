@@ -402,7 +402,7 @@ public:
 
     void seek(uint64_t _pos) {
       if (_pos < pos) {
-	assert(0);
+	ceph_abort();
       }
       while (pos < _pos) {
 	assert(cur_valid_till >= pos);

@@ -382,7 +382,7 @@ private:
       return true;
     }
     void _dequeue(OpSequencer *o) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty() {
       return store->op_queue.empty();

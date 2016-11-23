@@ -133,7 +133,7 @@ public:
  */
 class C_MDSInternalNoop : public MDSInternalContextBase
 {
-  virtual MDSRank* get_mds() {assert(0);}
+  virtual MDSRank* get_mds() {ceph_abort();}
 public:
   void finish(int r) {}
   void complete(int r) {}

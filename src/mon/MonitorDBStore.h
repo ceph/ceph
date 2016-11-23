@@ -290,7 +290,7 @@ class MonitorDBStore
 	break;
       default:
 	derr << __func__ << " unknown op type " << op.type << dendl;
-	ceph_assert(0);
+	ceph_abort();
 	break;
       }
     }

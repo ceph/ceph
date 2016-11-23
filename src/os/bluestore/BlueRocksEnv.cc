@@ -501,7 +501,7 @@ rocksdb::Status BlueRocksEnv::LinkFile(
   const std::string& src,
   const std::string& target)
 {
-  assert(0);
+  ceph_abort();
 }
 
 rocksdb::Status BlueRocksEnv::LockFile(

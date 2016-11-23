@@ -1525,7 +1525,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
   
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1779,7 +1779,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1816,7 +1816,7 @@ void CInode::clear_dirty_scattered(int type)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1909,7 +1909,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	ename = "lock inest accounted scatter stat update";
 	break;
       default:
-	assert(0);
+	ceph_abort();
       }
 	
       mut->add_projected_fnode(dir);
@@ -2171,7 +2171,7 @@ void CInode::finish_scatter_gather_update(int type)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -2317,7 +2317,7 @@ void CInode::unfreeze_inode(list<MDSInternalContextBase*>& finished)
     state_clear(STATE_FROZEN);
     put(PIN_FROZEN);
   } else 
-    assert(0);
+    ceph_abort();
   take_waiting(WAIT_UNFREEZE, finished);
 }
 

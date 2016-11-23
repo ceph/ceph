@@ -424,7 +424,7 @@ PGBackend *PGBackend::build_pg_backend(
       pool.stripe_width);
   }
   default:
-    assert(0);
+    ceph_abort();
     return NULL;
   }
 }
@@ -478,7 +478,7 @@ void PGBackend::be_scan_list(
       o.stat_error = true;
     } else {
       derr << __func__ << " got: " << cpp_strerror(r) << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 }

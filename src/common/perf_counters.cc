@@ -287,7 +287,7 @@ void PerfCounters::tset(int idx, utime_t amt)
     return;
   data.u64.set(amt.to_nsec());
   if (data.type & PERFCOUNTER_LONGRUNAVG)
-    assert(0);
+    ceph_abort();
 }
 
 utime_t PerfCounters::tget(int idx) const
@@ -372,7 +372,7 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema,
 				  a.first / 1000000000ull,
 				  a.first % 1000000000ull);
 	} else {
-	  assert(0);
+	  ceph_abort();
 	}
 	f->close_section();
       } else {
@@ -384,7 +384,7 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema,
 				  v / 1000000000ull,
 				  v % 1000000000ull);
 	} else {
-	  assert(0);
+	  ceph_abort();
 	}
       }
     }

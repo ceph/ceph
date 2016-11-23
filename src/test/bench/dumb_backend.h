@@ -73,7 +73,7 @@ class DumbBackend : public Backend {
       item_queue.push_back(item);
       return true;
     }
-    void _dequeue(write_item*) { assert(0); }
+    void _dequeue(write_item*) { ceph_abort(); }
     write_item *_dequeue() {
       if (item_queue.empty())
 	return 0;

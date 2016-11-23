@@ -236,7 +236,7 @@ private:
 
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
-      assert(0);
+      ceph_abort();
       return nullptr;
     }
   }

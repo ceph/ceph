@@ -36,7 +36,7 @@ public:
     case OP_ACK: return "ack";
     case OP_NAK: return "nak";
     case OP_VICTORY: return "victory";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
   

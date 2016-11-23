@@ -37,7 +37,7 @@ int OSDriver::get_next(
   ObjectMap::ObjectMapIterator iter =
     os->get_omap_iterator(cid, hoid);
   if (!iter) {
-    assert(0);
+    ceph_abort();
     return -EINVAL;
   }
   iter->upper_bound(key);

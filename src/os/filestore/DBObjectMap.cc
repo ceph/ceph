@@ -234,7 +234,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
   if (header->parent) {
     Header parent = map->lookup_parent(header);
     if (!parent) {
-      assert(0);
+      ceph_abort();
       return -EINVAL;
     }
     parent_iter = std::make_shared<DBObjectMapIteratorImpl>(map, parent);
@@ -1141,11 +1141,11 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
        << " for seq " << input->seq << dendl;
   int r = db->get(sys_parent_prefix(input), keys, &out);
   if (r < 0) {
-    assert(0);
+    ceph_abort();
     return Header();
   }
   if (out.empty()) {
-    assert(0);
+    ceph_abort();
     return Header();
   }
 

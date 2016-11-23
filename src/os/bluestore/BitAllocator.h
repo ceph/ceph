@@ -206,24 +206,24 @@ public:
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
   virtual bool is_exhausted() = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
-      alloc_assert(0);
+      ceph_abort();
       return true;
   }
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
-      alloc_assert(0);
+      ceph_abort();
       return true;
   }
   virtual void child_unlock(BitMapArea *child) {
-    alloc_assert(0);
+    ceph_abort();
   }
 
   virtual void lock_excl() = 0;
   virtual bool lock_excl_try() {
-    alloc_assert(0);
+    ceph_abort();
     return false;
   }
   virtual void lock_shared() {
-    alloc_assert(0);
+    ceph_abort();
     return;
   }
   virtual void unlock() = 0;
@@ -238,22 +238,22 @@ public:
   virtual void shutdown() = 0;
   virtual int64_t alloc_blocks(bool wait, int64_t num_blocks,
                                int64_t hint, int64_t *start_block) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
   virtual int64_t alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
 
   virtual int64_t alloc_blocks_dis(bool wait, int64_t num_blocks,
              int64_t hint, int64_t blk_off, ExtentList *block_list) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
   virtual int64_t alloc_blocks_dis(int64_t num_blocks,
              int64_t hint, int64_t blk_off, ExtentList *block_list) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
   virtual void set_blocks_used(int64_t start_block, int64_t num_blocks) = 0;
@@ -364,13 +364,13 @@ public:
 
   virtual int64_t alloc_blocks(bool wait, int64_t num_blocks,
                                int64_t hint, int64_t *start_block) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
 
   virtual int64_t alloc_blocks_dis(bool wait, int64_t num_blocks,
              int64_t hint, int64_t blk_off, int64_t *block_list) {
-    alloc_assert(0);
+    ceph_abort();
     return 0;
   }
 
@@ -400,7 +400,7 @@ protected:
   virtual bool is_exhausted();
   
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
-    alloc_assert(0);
+    ceph_abort();
     return false;
   }
 
@@ -474,7 +474,7 @@ public:
   BitMapAreaLeaf(int64_t zone_num, int64_t total_blocks, bool def);
 
   bool child_check_n_lock(BitMapArea *child, int64_t required) {
-    alloc_assert(0);
+    ceph_abort();
     return false;
   }
 

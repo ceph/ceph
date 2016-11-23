@@ -823,7 +823,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
       }
     }
   }
-  assert(0); // Unreachable
+  ceph_abort(); // Unreachable
   return 0;
 }
 
@@ -1009,7 +1009,7 @@ static int parse_object(const char *s, ghobject_t& o)
 	  *t++ = '_';
 	  break;
 	}
-	default: assert(0);
+	default: ceph_abort();
 	}
       } else {
 	*t++ = *i;

@@ -549,13 +549,13 @@ void Elector::dispatch(MonOpRequestRef op)
 	handle_nak(op);
 	return;
       default:
-	assert(0);
+	ceph_abort();
       }
     }
     break;
     
   default: 
-    assert(0);
+    ceph_abort();
   }
 }
 

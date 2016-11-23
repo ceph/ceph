@@ -3830,7 +3830,7 @@ public:
 	   ++p)
 	if (available_objects.count(*p) == 0) {
 	  cerr << "+ " << *p << std::endl;
-	  assert(0);
+	  ceph_abort();
 	}
       for (set<ghobject_t>::iterator p = available_objects.begin();
 	   p != available_objects.end();

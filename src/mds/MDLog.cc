@@ -107,7 +107,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
       mds->clog->error() << "Unhandled journal write error on MDS rank " <<
         mds->get_nodeid() << ": " << cpp_strerror(r) << ", shutting down.";
       mds->damaged();
-      assert(0);  // damaged should never return
+      ceph_abort();  // damaged should never return
     }
   }
 
@@ -910,7 +910,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
       // Oh dear, something unreadable in the store for this rank: require
       // operator intervention.
       mds->damaged();
-      assert(0);  // damaged should not return
+      ceph_abort();  // damaged should not return
   }
 
   // First, read the pointer object.
@@ -927,12 +927,12 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   } else if (read_result == -EBLACKLISTED) {
     derr << "Blacklisted during JournalPointer read!  Respawning..." << dendl;
     mds->respawn();
-    assert(0); // Should be unreachable because respawn calls execv
+    ceph_abort(); // Should be unreachable because respawn calls execv
   } else if (read_result != 0) {
     mds->clog->error() << "failed to read JournalPointer: " << read_result
                        << " (" << cpp_strerror(read_result) << ")";
     mds->damaged_unlocked();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 
   // If the back pointer is non-null, that means that a journal
@@ -961,7 +961,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     if (recovery_result == -EBLACKLISTED) {
       derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
       mds->respawn();
-      assert(0); // Should be unreachable because respawn calls execv
+      ceph_abort(); // Should be unreachable because respawn calls execv
     } else if (recovery_result != 0) {
       // Journaler.recover succeeds if no journal objects are present: an error
       // means something worse like a corrupt header, which we can't handle here.
@@ -1008,7 +1008,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   if (recovery_result == -EBLACKLISTED) {
     derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
     mds->respawn();
-    assert(0); // Should be unreachable because respawn calls execv
+    ceph_abort(); // Should be unreachable because respawn calls execv
   } else if (recovery_result != 0) {
     mds->clog->error() << "Error recovering journal " << jp.front << ": "
       << cpp_strerror(recovery_result);
@@ -1279,7 +1279,7 @@ void MDLog::_replay_thread()
         } else {
           mds->clog->error() << "missing journal object";
           mds->damaged_unlocked();
-          assert(0);  // Should be unreachable because damaged() calls respawn()
+          ceph_abort();  // Should be unreachable because damaged() calls respawn()
         }
       } else if (r == -EINVAL) {
         if (journaler->get_read_pos() < journaler->get_expire_pos()) {
@@ -1290,7 +1290,7 @@ void MDLog::_replay_thread()
           } else {
             mds->clog->error() << "invalid journaler offsets";
             mds->damaged_unlocked();
-            assert(0);  // Should be unreachable because damaged() calls respawn()
+            ceph_abort();  // Should be unreachable because damaged() calls respawn()
           }
         } else {
           /* re-read head and check it
@@ -1313,7 +1313,7 @@ void MDLog::_replay_thread()
 
                 mds->clog->error() << "error reading journal header";
                 mds->damaged_unlocked();
-                assert(0);  // Should be unreachable because damaged() calls
+                ceph_abort();  // Should be unreachable because damaged() calls
                             // respawn()
             }
           }
@@ -1357,7 +1357,7 @@ void MDLog::_replay_thread()
         continue;
       } else {
         mds->damaged_unlocked();
-        assert(0);  // Should be unreachable because damaged() calls
+        ceph_abort();  // Should be unreachable because damaged() calls
                     // respawn()
       }
 

@@ -1958,7 +1958,7 @@ bool FileJournal::read_entry(
 	*corrupt = true;
       return false;
     } else {
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -2081,14 +2081,14 @@ void FileJournal::get_header(
       0,
       h);
     if (result == FAILURE || result == MAYBE_CORRUPT)
-      assert(0);
+      ceph_abort();
     if (seq == wanted_seq) {
       if (_pos)
 	*_pos = pos;
       return;
     }
   }
-  assert(0); // not reachable
+  ceph_abort(); // not reachable
 }
 
 void FileJournal::corrupt(
