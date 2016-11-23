@@ -22,3 +22,6 @@ overrides:
     conf:
       mon:
         mon warn on legacy crush tunables: false
+      client:
+        debug client: 20
+        debug ms: 1
