@@ -28,6 +28,13 @@ long long strict_strtoll(const char *str, int base, std::string *err)
   errno = 0; /* To distinguish success/failure after call (see man page) */
   long long ret = strtoll(str, &endptr, base);
 
+  if (endptr == str) {
+    errStr = "Expected option value to be integer, got '";
+    errStr.append(str);
+    errStr.append("'");
+    *err =  errStr;
+    return 0;
+  }
   if ((errno == ERANGE && (ret == LLONG_MAX || ret == LLONG_MIN))
       || (errno != 0 && ret == 0)) {
     errStr = "The option value '";
@@ -37,18 +44,11 @@ long long strict_strtoll(const char *str, int base, std::string *err)
     *err = errStr;
     return 0;
   }
-  if (endptr == str) {
-    errStr = "Expected option value to be integer, got '";
-    errStr.append(str);
-    errStr.append("'");
-    *err =  errStr;
-    return 0;
-  }
   if (*endptr != '\0') {
     errStr = "The option value '";
     errStr.append(str);
     errStr.append("'");
-    errStr.append(" seems to be invalid");
+    errStr.append(" contains invalid digits");
     *err =  errStr;
     return 0;
   }
