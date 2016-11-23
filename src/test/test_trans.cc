@@ -28,7 +28,7 @@ struct Foo : public Thread {
     dout(0) << "foo started" << dendl;
     sleep(1);
     dout(0) << "foo asserting 0" << dendl;
-    assert(0);
+    ceph_abort();
   }
 } foo;
 

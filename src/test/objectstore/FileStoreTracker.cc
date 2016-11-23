@@ -327,7 +327,7 @@ void FileStoreTracker::verify(const coll_t &coll, const string &obj,
     }
   }
   std::cerr << "Verifying " << make_pair(coll, obj) << " failed " << std::endl;
-  assert(0);
+  ceph_abort();
 }
 
 ObjectContents FileStoreTracker::get_current_content(

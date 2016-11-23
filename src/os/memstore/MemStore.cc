@@ -1008,7 +1008,7 @@ void MemStore::_do_transaction(Transaction& t)
 
     default:
       derr << "bad op " << op->op << dendl;
-      assert(0);
+      ceph_abort();
     }
 
     if (r < 0) {

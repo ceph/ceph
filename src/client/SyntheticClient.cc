@@ -244,7 +244,7 @@ void parse_syn_options(vector<const char*>& args)
 	syn_sargs.push_back(args[++i]);
       } else {
         cerr << "unknown syn arg " << args[i] << std::endl;
-        assert(0);
+        ceph_abort();
       }
     }
     else if (strcmp(args[i], "localize_reads") == 0) {
@@ -923,7 +923,7 @@ int SyntheticClient::run()
       break;
 
     default:
-      assert(0);
+      ceph_abort();
     }
   }
   dout(1) << "syn done, unmounting " << dendl;
@@ -1511,7 +1511,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 
     else {
       dout(0) << (t.get_line()-1) << ": *** trace hit unrecognized symbol '" << op << "' " << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -2807,7 +2807,7 @@ int SyntheticClient::random_walk(int num_req)
            it != c.end();
            ++it) {
         //dout(DBL) << " got " << *it << dendl;
-	assert(0);
+	ceph_abort();
 	/*contents[*it] = it->second;
         if (it->second &&
 	    S_ISDIR(it->second->st_mode)) 

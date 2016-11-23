@@ -693,7 +693,7 @@ public:
     int r;
     if ((r = comp->get_return_value())) {
       cerr << "err " << r << std::endl;
-      assert(0);
+      ceph_abort();
     }
     done = true;
     context->update_object_version(oid, comp->get_version64());
@@ -866,7 +866,7 @@ public:
     if (tid <= last_acked_tid) {
       cerr << "Error: finished tid " << tid
 	   << " when last_acked_tid was " << last_acked_tid << std::endl;
-      assert(0);
+      ceph_abort();
     }
     last_acked_tid = tid;
 
@@ -1043,7 +1043,7 @@ public:
     if (tid <= last_acked_tid) {
       cerr << "Error: finished tid " << tid
 	   << " when last_acked_tid was " << last_acked_tid << std::endl;
-      assert(0);
+      ceph_abort();
     }
     last_acked_tid = tid;
 
@@ -1147,7 +1147,7 @@ public:
     }
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
-      assert(0);
+      ceph_abort();
     }
 
     context->state_lock.Lock();
@@ -1264,7 +1264,7 @@ public:
       int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
       if (r < 0) {
 	std::cerr << "r is " << r << std::endl;
-	assert(0);
+	ceph_abort();
       }
       std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
@@ -1336,13 +1336,13 @@ public:
       if (err != retval) {
         cerr << num << ": Error: oid " << oid << " read returned different error codes: "
              << retval << " and " << err << std::endl;
-	assert(0);
+	ceph_abort();
       }
       if (err) {
         if (!(err == -ENOENT && old_value.deleted())) {
           cerr << num << ": Error: oid " << oid << " read returned error code "
                << err << std::endl;
-          assert(0);
+          ceph_abort();
         }
       } else if (version != old_value.version) {
 	cerr << num << ": oid " << oid << " version is " << version
@@ -1392,7 +1392,7 @@ public:
 	    }
 	  }
 	}
-	if (context->errors) assert(0);
+	if (context->errors) ceph_abort();
       }
 
       // Attributes
@@ -1505,7 +1505,7 @@ public:
       int ret = context->io_ctx.snap_create(snapname.c_str());
       if (ret) {
 	cerr << "snap_create returned " << ret << std::endl;
-	assert(0);
+	ceph_abort();
       }
       assert(!context->io_ctx.snap_lookup(snapname.c_str(), &snap));
 
@@ -1533,7 +1533,7 @@ public:
       int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
       if (r) {
 	cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-	assert(0);
+	ceph_abort();
       }
     }
   }
@@ -1580,7 +1580,7 @@ public:
       int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
       if (r) {
 	cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-	assert(0);
+	ceph_abort();
       }
     }
     context->state_lock.Unlock();
@@ -1638,7 +1638,7 @@ public:
 
     if (r) {
       cerr << "r is " << r << std::endl;
-      assert(0);
+      ceph_abort();
     }
 
     {
@@ -1767,7 +1767,7 @@ public:
     int r;
     if ((r = comps[last_finished]->get_return_value()) != 0) {
       cerr << "err " << r << std::endl;
-      assert(0);
+      ceph_abort();
     }
     if (--outstanding == 0) {
       done = true;
@@ -1878,7 +1878,7 @@ public:
 	} else {
 	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
 	       << r << std::endl;
-	  assert(0);
+	  ceph_abort();
 	}
       } else {
 	assert(!version || comp->get_version64() == version);

@@ -66,7 +66,7 @@
     } catch (RetryException) {			\
       failed = true;				\
     } catch (...) {				\
-      assert(0);				\
+      ceph_abort();				\
     }						\
   }						\
   return -1;					\

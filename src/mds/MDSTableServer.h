@@ -42,7 +42,7 @@ private:
   virtual void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) = 0;
   virtual bool _commit(version_t tid, MMDSTableRequest *req=NULL) = 0;
   virtual void _rollback(version_t tid) = 0;
-  virtual void _server_update(bufferlist& bl) { assert(0); }
+  virtual void _server_update(bufferlist& bl) { ceph_abort(); }
 
   void _note_prepare(mds_rank_t mds, uint64_t reqid) {
     pending_for_mds[version].mds = mds;

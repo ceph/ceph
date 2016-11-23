@@ -424,7 +424,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   else if (linkage.is_null()) {
     // encode nothing.
   }
-  else assert(0);  
+  else ceph_abort();
 }
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
@@ -465,7 +465,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
     }
     break;
   default: 
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -598,6 +598,6 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     case S_IFDIR: return "dir";
     case S_IFCHR: return "chr";
     case S_IFIFO: return "fifo";
-    default: assert(0); return "";
+    default: ceph_abort(); return "";
   }
 }

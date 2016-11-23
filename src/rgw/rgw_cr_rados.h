@@ -68,7 +68,7 @@ protected:
 
     bool _enqueue(RGWAsyncRadosRequest *req);
     void _dequeue(RGWAsyncRadosRequest *req) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty();
     RGWAsyncRadosRequest *_dequeue();

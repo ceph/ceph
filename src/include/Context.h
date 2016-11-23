@@ -372,7 +372,7 @@ public:
     return s;
   }
   void finish(int r) {
-    assert(0);    // nobody should ever call me.
+    ceph_abort();    // nobody should ever call me.
   }
 
   inline int get_sub_existing_count() const {

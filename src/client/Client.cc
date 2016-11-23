@@ -2089,7 +2089,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   m->put();
@@ -5622,7 +5622,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
         wait_on_list(waiting_for_mdsmap);
       } else {
         // Unexpected value!
-        assert(0);
+        ceph_abort();
       }
     }
   }
@@ -7617,7 +7617,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     dirp->set_end();
     return 0;
   }
-  assert(0);
+  ceph_abort();
   return 0;
 }
 
@@ -8236,7 +8236,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   ldout(cct, 3) << "_lseek(" << f << ", " << offset << ", " << whence << ") = " << f->pos << dendl;
@@ -9370,7 +9370,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 	  in->flock_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK);
 	lock_state = in->flock_locks;
       } else {
-	assert(0);
+	ceph_abort();
 	return -EINVAL;
       }
       _update_lock_state(fl, owner, lock_state);
@@ -9388,7 +9388,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 	_update_lock_state(fl, owner, lock_state);
       }
     } else
-      assert(0);
+      ceph_abort();
   }
   return ret;
 }
@@ -9403,7 +9403,7 @@ int Client::_interrupt_filelock(MetaRequest *req)
   else if (req->head.args.filelock_change.rule == CEPH_LOCK_FCNTL)
     lock_type = CEPH_LOCK_FCNTL_INTR;
   else {
-    assert(0);
+    ceph_abort();
     return -EINVAL;
   }
 
@@ -9638,7 +9638,7 @@ int Client::test_dentry_handling(bool can_invalidate)
   } else {
     lderr(cct) << "no method to invalidate kernel dentry cache; expect issues!" << dendl;
     if (cct->_conf->client_die_on_failed_remount)
-      assert(0);
+      ceph_abort();
   }
   return r;
 }
