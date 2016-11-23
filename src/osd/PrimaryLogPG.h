@@ -335,6 +335,7 @@ public:
   const pg_pool_t &get_pool() const override {
     return pool.info;
   }
+
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) override {
@@ -367,7 +368,6 @@ public:
     ObjectStore::Transaction *t) override {
     return clear_object_snap_mapping(t, soid);
   }
-
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,
