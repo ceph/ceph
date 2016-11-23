@@ -7852,7 +7852,7 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 
 int RGWRados::Object::complete_atomic_modification()
 {
-  if (!state->has_manifest || state->keep_tail)
+  if (!state->has_manifest || state->keep_tail || !state->manifest.has_tail())
     return 0;
 
   cls_rgw_obj_chain chain;
