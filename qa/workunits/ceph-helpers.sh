@@ -1126,7 +1126,7 @@ function wait_for_clean() {
     local num_active_clean=-1
     local cur_active_clean
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
-    local -i timer=0
+    local -i loop=0
     local num_pgs=$(get_num_pgs)
     test $num_pgs != 0 || return 1
 
@@ -1137,16 +1137,16 @@ function wait_for_clean() {
         cur_active_clean=$(get_num_active_clean)
         test $cur_active_clean = $num_pgs && break
         if test $cur_active_clean != $num_active_clean ; then
-            timer=0
+            loop=0
             num_active_clean=$cur_active_clean
         elif get_is_making_recovery_progress ; then
-            timer=0
-        elif (( $timer >= ${#delays[*]} )) ; then
+            loop=0
+        elif (( $loop >= ${#delays[*]} )) ; then
             ceph report
             return 1
         fi
-        sleep ${delays[$timer]}
-        timer+=1
+        sleep ${delays[$loop]}
+        loop+=1
     done
     return 0
 }
