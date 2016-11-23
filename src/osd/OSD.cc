@@ -9053,7 +9053,7 @@ void OSD::process_peering_events(
 {
   bool need_up_thru = false;
   epoch_t same_interval_since = 0;
-  OSDMapRef curmap = service.get_osdmap();
+  OSDMapRef curmap;
   PG::RecoveryCtx rctx = create_context();
   rctx.handle = &handle;
   for (list<PG*>::const_iterator i = pgs.begin();
