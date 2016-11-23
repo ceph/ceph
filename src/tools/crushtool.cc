@@ -273,6 +273,9 @@ int main(int argc, const char **argv)
   auto cct = global_init(NULL, env_args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  // crushtool times out occasionally when quits. so do not
+  // release the g_ceph_context.
+  cct->get();
   common_init_finish(g_ceph_context);
 
   int x;
