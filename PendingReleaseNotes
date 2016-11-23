@@ -8,6 +8,9 @@ v0.94
   set LD_PRELOAD=liblttng-ust-fork.so.0 to prevent a crash in the
   lttng atexit handler when the process exits. The only ceph tool that
   requires this is rbd-fuse.
+* ceph-objectstore-tool and ceph-monstore-tool now enable user to
+  rebuild the monitor database from OSDs. This feature is especially
+  useful when all monitors fail to boot due to leveldb corruption.
 
 v0.94.3
 -------
