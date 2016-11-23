@@ -279,9 +279,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     info.obj_size = 1ULL << obj_order;
     info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
     info.order = obj_order;
-    memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
-	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
-	       ictx->object_prefix.length() + 1));
+    strncpy(info.block_name_prefix, ictx->object_prefix.c_str(),
+            RBD_MAX_BLOCK_NAME_SIZE);
+    info.block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE - 1] = '\0';
+
     // clear deprecated fields
     info.parent_pool = -1L;
     info.parent_name[0] = '\0';
