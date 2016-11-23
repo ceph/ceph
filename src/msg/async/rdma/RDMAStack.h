@@ -87,9 +87,9 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   explicit RDMADispatcher(CephContext* c, Infiniband* i, RDMAStack* s)
     : cct(c), ib(i), async_handler(new C_handle_cq_async(this)), lock("RDMADispatcher::lock"),
       w_lock("RDMADispatcher::for worker pending list"), qp_lock("for qp lock"), stack(s) {
-    rx_cc = ib->create_comp_channel();
+    rx_cc = ib->create_comp_channel(c);
     assert(rx_cc);
-    rx_cq = ib->create_comp_queue(rx_cc);
+    rx_cq = ib->create_comp_queue(c, rx_cc);
     assert(rx_cq);
     t = std::thread(&RDMADispatcher::polling, this);
     cct->register_fork_watcher(this);
@@ -287,7 +287,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
       dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
       is_server(false), con_handler(new C_handle_connection(this)),
       active(false), detached(false) {
-    qp = infiniband->create_queue_pair(s->get_rx_cq(), s->get_rx_cq(), IBV_QPT_RC);
+    qp = infiniband->create_queue_pair(
+        cct, s->get_rx_cq(), s->get_rx_cq(), IBV_QPT_RC);
     my_msg.qpn = qp->get_local_qp_number();
     my_msg.psn = qp->get_initial_psn();
     my_msg.lid = infiniband->get_lid();
