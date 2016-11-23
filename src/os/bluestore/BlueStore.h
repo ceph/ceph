@@ -1164,6 +1164,27 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
+  class BlueStoreContext : public Context {
+    Context *context;
+    std::atomic_int *counter;
+
+    BlueStoreContext(Context *ctx, std::atomic_int *cnt) {
+      context = ctx;
+      counter = cnt;
+      ++(*counter);
+    }
+
+    void finish(int r) override {
+      if (context != NULL)
+	context->complete(r);
+      --(*counter);
+    }
+  public:
+    static BlueStoreContext *create(Context *ctx, std::atomic_int *cnt) {
+      return new BlueStoreContext(ctx, cnt);
+    }
+  };
+
   struct TransContext {
     typedef enum {
       STATE_PREPARE,
@@ -1229,7 +1250,9 @@ public:
     boost::intrusive::list_member_hook<> wal_queue_item;
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
 
+    bool is_pipelined_io = false;
     bool kv_submitted = false; ///< true when we've been submitted to kv db
+    bool kv_submitted_sync = false; ///< true when ShardedOpWQ does sync db
 
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
@@ -1350,12 +1373,22 @@ public:
 
     std::atomic_int kv_committing_serially = {0};
 
+    std::atomic_int kv_finisher_submitting = {0};
+    std::atomic_int kv_doing_oncommit = {0};
+
     OpSequencer()
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
+    }
+
+    bool is_finisher_done(void) {
+      if (kv_doing_oncommit == 1) {
+	return true;
+      }
+      return false;
     }
 
     void queue_new(TransContext *txc) {
@@ -1665,7 +1698,7 @@ private:
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
 
-  void _osr_reap_done(OpSequencer *osr);
+  void _osr_reap_done(OpSequencer *osr, bool need_qlock);
 
   void _kv_sync_thread();
   void _kv_stop() {

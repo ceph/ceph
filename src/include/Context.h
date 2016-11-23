@@ -64,6 +64,7 @@ class Context {
   virtual void finish(int r) = 0;
 
  public:
+  static const int FLAG_SYNC = 256;
   Context() {}
   virtual ~Context() {}       // we want a virtual destructor!!!
   virtual void complete(int r) {

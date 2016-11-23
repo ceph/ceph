@@ -80,7 +80,7 @@ class Notify {
   void maybe_complete_notify();
 
   /// Called on Notify timeout
-  void do_timeout();
+  void do_timeout(int r);
 
   Notify(
     ConnectionRef client,

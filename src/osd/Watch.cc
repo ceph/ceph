@@ -72,11 +72,11 @@ class NotifyTimeoutCB : public CancelableContext {
   bool canceled; // protected by notif lock
 public:
   explicit NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
-  void finish(int) {
+  void finish(int r) {
     notif->osd->watch_lock.Unlock();
     notif->lock.Lock();
     if (!canceled)
-      notif->do_timeout(); // drops lock
+      notif->do_timeout(r); // drops lock
     else
       notif->lock.Unlock();
     notif->osd->watch_lock.Lock();
@@ -87,7 +87,7 @@ public:
   }
 };
 
-void Notify::do_timeout()
+void Notify::do_timeout(int r)
 {
   assert(lock.is_locked_by_me());
   dout(10) << "timeout" << dendl;
@@ -108,11 +108,13 @@ void Notify::do_timeout()
        i != _watchers.end();
        ++i) {
     boost::intrusive_ptr<ReplicatedPG> pg((*i)->get_pg());
-    pg->lock();
+    if (r != Context::FLAG_SYNC)
+      pg->lock();
     if (!(*i)->is_discarded()) {
       (*i)->cancel_notify(self.lock());
     }
-    pg->unlock();
+    if (r != Context::FLAG_SYNC)
+      pg->unlock();
   }
 }
 
@@ -239,17 +241,19 @@ public:
     canceled = true;
   }
   void finish(int) { assert(0); /* not used */ }
-  void complete(int) {
+  void complete(int r) {
     dout(10) << "HandleWatchTimeout" << dendl;
     boost::intrusive_ptr<ReplicatedPG> pg(watch->pg);
     OSDService *osd(watch->osd);
     osd->watch_lock.Unlock();
-    pg->lock();
+    if (r != Context::FLAG_SYNC)
+      pg->lock();
     watch->cb = NULL;
     if (!watch->is_discarded() && !canceled)
       watch->pg->handle_watch_timeout(watch);
     delete this; // ~Watch requires pg lock!
-    pg->unlock();
+    if (r != Context::FLAG_SYNC)
+      pg->unlock();
     osd->watch_lock.Lock();
   }
 };
