@@ -197,7 +197,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   if (blkid_get_cache(&cache, NULL) >= 0)
     dev = blkid_find_dev_with_tag(cache, label, (const char*)uuid_str);
   else
-    rc = -EINVAL;
+    return -EINVAL;
 
   if (dev) {
     temp_partition_ptr = blkid_dev_devname(dev);
