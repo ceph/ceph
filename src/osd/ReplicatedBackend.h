@@ -170,6 +170,7 @@ private:
     ObjectRecoveryInfo recovery_info;
     ObjectContextRef obc;
     object_stat_sum_t stat;
+    ObcLockManager lock_manager;
 
     void dump(Formatter *f) const {
       {
@@ -188,12 +189,15 @@ private:
 
   // pull
   struct PullInfo {
+    pg_shard_t from;
+    hobject_t soid;
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
     ObjectContextRef head_ctx;
     ObjectContextRef obc;
     object_stat_sum_t stat;
     bool cache_dont_need;
+    ObcLockManager lock_manager;
 
     void dump(Formatter *f) const {
       {
@@ -217,6 +221,9 @@ private:
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> > pull_from_peer;
+  void clear_pull(
+    map<hobject_t, PullInfo, hobject_t::BitwiseComparator>::iterator piter,
+    bool clear_pull_from_peer = true);
 
   void sub_op_push(OpRequestRef op);
   void sub_op_push_reply(OpRequestRef op);
@@ -236,9 +243,15 @@ private:
 
   bool handle_push_reply(pg_shard_t peer, PushReplyOp &op, PushOp *reply);
   void handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply);
+
+  struct pull_complete_info {
+    hobject_t hoid;
+    ObjectContextRef obc;
+    object_stat_sum_t stat;
+  };
   bool handle_pull_response(
     pg_shard_t from, PushOp &op, PullOp *response,
-    list<hobject_t> *to_continue,
+    list<pull_complete_info> *to_continue,
     ObjectStore::Transaction *t);
   void handle_push(pg_shard_t from, PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t);
@@ -284,7 +297,8 @@ private:
     SnapSet& snapset, const hobject_t& poid, const pg_missing_t& missing,
     const hobject_t &last_backfill,
     interval_set<uint64_t>& data_subset,
-    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets);
+    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
+    ObcLockManager &lock_manager);
   void prepare_pull(
     eversion_t v,
     const hobject_t& soid,
@@ -297,26 +311,31 @@ private:
   void prep_push_to_replica(
     ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
     PushOp *pop, bool cache_dont_need = true);
-  void prep_push(ObjectContextRef obc,
-		 const hobject_t& oid, pg_shard_t dest,
-		 PushOp *op,
-		 bool cache_dont_need);
-  void prep_push(ObjectContextRef obc,
-		 const hobject_t& soid, pg_shard_t peer,
-		 eversion_t version,
-		 interval_set<uint64_t> &data_subset,
-		 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
-		 PushOp *op,
-                 bool cache = false);
-  void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
-			 const pg_missing_t& missing,
-			 const hobject_t &last_backfill,
-			 interval_set<uint64_t>& data_subset,
-			 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets);
+  void prep_push(
+    ObjectContextRef obc,
+    const hobject_t& oid, pg_shard_t dest,
+    PushOp *op,
+    bool cache_dont_need);
+  void prep_push(
+    ObjectContextRef obc,
+    const hobject_t& soid, pg_shard_t peer,
+    eversion_t version,
+    interval_set<uint64_t> &data_subset,
+    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
+    PushOp *op,
+    bool cache,
+    ObcLockManager &&lock_manager);
+  void calc_head_subsets(
+    ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
+    const pg_missing_t& missing,
+    const hobject_t &last_backfill,
+    interval_set<uint64_t>& data_subset,
+    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
+    ObcLockManager &lock_manager);
   ObjectRecoveryInfo recalc_subsets(
     const ObjectRecoveryInfo& recovery_info,
-    SnapSetContext *ssc
-    );
+    SnapSetContext *ssc,
+    ObcLockManager &lock_manager);
 
   /**
    * Client IO

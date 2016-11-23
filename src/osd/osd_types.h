@@ -3676,6 +3676,9 @@ public:
     }
     return false;
   }
+  bool try_get_read_lock() {
+    return rwstate.get_read_lock();
+  }
   void drop_recovery_read(list<OpRequestRef> *ls) {
     assert(rwstate.recovery_read_marker);
     rwstate.put_read(ls);
@@ -3835,6 +3838,7 @@ public:
   ObcLockManager() = default;
   ObcLockManager(ObcLockManager &&) = default;
   ObcLockManager(const ObcLockManager &) = delete;
+  ObcLockManager &operator=(ObcLockManager &&) = default;
   bool empty() const {
     return locks.empty();
   }
@@ -3894,6 +3898,23 @@ public:
       return false;
     }
   }
+
+  /// try get read lock
+  bool try_get_read_lock(
+    const hobject_t &hoid,
+    ObjectContextRef obc) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->try_get_read_lock()) {
+      locks.insert(
+	make_pair(
+	  hoid,
+	  ObjectLockState(obc, ObjectContext::RWState::RWREAD)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   void put_locks(
     list<pair<hobject_t, list<OpRequestRef> > > *to_requeue,
     bool *requeue_recovery,
