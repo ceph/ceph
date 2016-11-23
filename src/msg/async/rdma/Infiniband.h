@@ -46,7 +46,6 @@ class RDMAStack;
 class CephContext;
 
 class Port {
-  CephContext *cct;
   struct ibv_context* ctxt;
   uint8_t port_num;
   struct ibv_port_attr* port_attr;
@@ -55,7 +54,7 @@ class Port {
   union ibv_gid gid;
 
  public:
-  explicit Port(CephContext *c, struct ibv_context* ictxt, uint8_t ipn): cct(c), ctxt(ictxt), port_num(ipn), port_attr(new ibv_port_attr) {
+  explicit Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn), port_attr(new ibv_port_attr) {
     int r = ibv_query_port(ctxt, port_num, port_attr);
     if (r == -1) {
       lderr(cct) << __func__  << " query port failed  " << cpp_strerror(errno) << dendl;
@@ -78,7 +77,6 @@ class Port {
 
 
 class Device {
-  CephContext *cct;
   ibv_device *device;
   const char* name;
   uint8_t  port_cnt;
@@ -94,7 +92,7 @@ class Device {
   const char* get_name() { return name;}
   uint16_t get_lid() { return active_port->get_lid(); }
   ibv_gid get_gid() { return active_port->get_gid(); }
-  void binding_port(uint8_t port_num);
+  void binding_port(CephContext *c, uint8_t port_num);
   struct ibv_context *ctxt;
   ibv_device_attr *device_attr;
   Port* active_port;
@@ -102,12 +100,11 @@ class Device {
 
 
 class DeviceList {
-  CephContext *cct;
   struct ibv_device ** device_list;
   int num;
   Device** devices;
  public:
-  DeviceList(CephContext *c): cct(c), device_list(ibv_get_device_list(&num)) {
+  DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
     if (device_list == NULL || num == 0) {
       lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
       assert(0);
@@ -142,8 +139,8 @@ class Infiniband {
  public:
   class ProtectionDomain {
    public:
-    explicit ProtectionDomain(CephContext *c, Device *device)
-      : cct(c), pd(ibv_alloc_pd(device->ctxt))
+    explicit ProtectionDomain(CephContext *cct, Device *device)
+      : pd(ibv_alloc_pd(device->ctxt))
     {
       if (pd == NULL) {
         lderr(cct) << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno) << dendl;
@@ -152,12 +149,8 @@ class Infiniband {
     }
     ~ProtectionDomain() {
       int rc = ibv_dealloc_pd(pd);
-      if (rc != 0) {
-        lderr(cct) << __func__ << " ibv_dealloc_pd failed: "
-          << cpp_strerror(errno) << dendl;
-      }
+      assert(rc == 0);
     }
-    CephContext *cct;
     ibv_pd* const pd;
   };
 
@@ -326,8 +319,8 @@ class Infiniband {
       char* base;
     };
 
-    MemoryManager(CephContext *cct, Device *d, ProtectionDomain *p) : cct(cct), device(d), pd(p) {
-      enabled_huge_page = cct->_conf->ms_async_rdma_enable_hugepage;
+    MemoryManager(Device *d, ProtectionDomain *p, bool hugepage): device(d), pd(p) {
+      enabled_huge_page = hugepage;
     }
     ~MemoryManager() {
       if (channel)
@@ -339,13 +332,11 @@ class Infiniband {
       size_t real_size = ALIGN_TO_PAGE_SIZE(size + HUGE_PAGE_SIZE);
       char *ptr = (char *)mmap(NULL, real_size, PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS |MAP_POPULATE | MAP_HUGETLB,-1, 0);
       if (ptr == MAP_FAILED) {
-        lderr(cct) << __func__ << " MAP_FAILED" << dendl;
         ptr = (char *)malloc(real_size);
         if (ptr == NULL) return NULL;
         real_size = 0;
       }
       *((size_t *)ptr) = real_size;
-      lderr(cct) << __func__ << " bingo!" << dendl;
       return ptr + HUGE_PAGE_SIZE;
     }
     void free_huge_pages(void *ptr) {
@@ -388,7 +379,6 @@ class Infiniband {
    private:
     Cluster* channel;//RECV
     Cluster* send;// SEND
-    CephContext *cct;
     Device *device;
     ProtectionDomain *pd;
   };
@@ -402,13 +392,11 @@ class Infiniband {
   ibv_srq* srq;             // shared receive work queue
   Device *device;
   ProtectionDomain *pd;
-  CephContext* cct;
   DeviceList device_list;
   void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
   void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
 
  public:
-  NetHandler net;
   explicit Infiniband(CephContext *c, const std::string &device_name, uint8_t p);
 
   /**
@@ -421,14 +409,16 @@ class Infiniband {
   }
 
   class CompletionChannel {
-     static const uint32_t MAX_ACK_EVENT = 5000;
-     Infiniband& infiniband;
-     ibv_comp_channel *channel;
-     ibv_cq *cq;
-     uint32_t cq_events_that_need_ack;
+    static const uint32_t MAX_ACK_EVENT = 5000;
+    CephContext *cct;
+    Infiniband& infiniband;
+    ibv_comp_channel *channel;
+    ibv_cq *cq;
+    uint32_t cq_events_that_need_ack;
 
    public:
-    CompletionChannel(Infiniband &ib): infiniband(ib), channel(NULL), cq(NULL), cq_events_that_need_ack(0) {}
+    CompletionChannel(CephContext *c, Infiniband &ib)
+      : cct(c), infiniband(ib), channel(NULL), cq(NULL), cq_events_that_need_ack(0) {}
     ~CompletionChannel();
     int init();
     bool get_cq_event();
@@ -447,7 +437,9 @@ class Infiniband {
   // You need to call init and it will create a cq and associate to comp channel
   class CompletionQueue {
    public:
-    CompletionQueue(Infiniband &ib, const uint32_t qd, CompletionChannel *cc):infiniband(ib), channel(cc), cq(NULL), queue_depth(qd) {}
+    CompletionQueue(CephContext *c, Infiniband &ib,
+                    const uint32_t qd, CompletionChannel *cc)
+      : cct(c), infiniband(ib), channel(cc), cq(NULL), queue_depth(qd) {}
     ~CompletionQueue();
     int init();
     int poll_cq(int num_entries, ibv_wc *ret_wc_array);
@@ -456,6 +448,7 @@ class Infiniband {
     int rearm_notify(bool solicited_only=true);
     CompletionChannel* get_cc() const { return channel; }
    private:
+    CephContext *cct;
     Infiniband&  infiniband;     // Infiniband to which this QP belongs
     CompletionChannel *channel;
     ibv_cq *cq;
@@ -470,7 +463,11 @@ class Infiniband {
   // must call plumb() to bring the queue pair to the RTS state.
   class QueuePair {
    public:
-    QueuePair(Infiniband& infiniband, ibv_qp_type type,int ib_physical_port,  ibv_srq *srq, Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq, uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key = 0);
+    QueuePair(CephContext *c, Infiniband& infiniband, ibv_qp_type type,
+              int ib_physical_port,  ibv_srq *srq,
+              Infiniband::CompletionQueue* txcq,
+              Infiniband::CompletionQueue* rxcq,
+              uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key = 0);
     ~QueuePair();
 
     int init();
@@ -496,7 +493,7 @@ class Infiniband {
 
       int r = ibv_query_qp(qp, &qpa, IBV_QP_DEST_QPN, &qpia);
       if (r) {
-        lderr(infiniband.cct) << __func__ << " failed to query qp: "
+        lderr(cct) << __func__ << " failed to query qp: "
           << cpp_strerror(errno) << dendl;
         return -1;
       }
@@ -516,7 +513,7 @@ class Infiniband {
 
       int r = ibv_query_qp(qp, &qpa, IBV_QP_AV, &qpia);
       if (r) {
-        lderr(infiniband.cct) << __func__ << " failed to query qp: "
+        lderr(cct) << __func__ << " failed to query qp: "
           << cpp_strerror(errno) << dendl;
         return -1;
       }
@@ -534,7 +531,7 @@ class Infiniband {
 
       int r = ibv_query_qp(qp, &qpa, IBV_QP_STATE, &qpia);
       if (r) {
-        lderr(infiniband.cct) << __func__ << " failed to get state: "
+        lderr(cct) << __func__ << " failed to get state: "
           << cpp_strerror(errno) << dendl;
         return -1;
       }
@@ -549,8 +546,8 @@ class Infiniband {
 
       int r = ibv_query_qp(qp, &qpa, -1, &qpia);
       if (r) {
-        lderr(infiniband.cct) << __func__ << " failed to get state: "
-          << cpp_strerror(errno) << dendl;
+        lderr(cct) << __func__ << " failed to get state: "
+                              << cpp_strerror(errno) << dendl;
         return true;
       }
       return qpa.cur_qp_state == IBV_QPS_ERR;
@@ -562,6 +559,7 @@ class Infiniband {
     bool is_dead() const { return dead; }
 
    private:
+    CephContext  *cct;
     Infiniband&  infiniband;     // Infiniband to which this QP belongs
     ibv_qp_type  type;           // QP type (IBV_QPT_RC, etc.)
     ibv_context* ctxt;           // device context of the HCA to use
@@ -581,20 +579,20 @@ class Infiniband {
  public:
   typedef MemoryManager::Cluster Cluster;
   typedef MemoryManager::Chunk Chunk;
-  QueuePair* create_queue_pair(CompletionQueue*, CompletionQueue*, ibv_qp_type type);
+  QueuePair* create_queue_pair(CephContext *c, CompletionQueue*, CompletionQueue*, ibv_qp_type type);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   int post_chunk(Chunk* chunk);
   int post_channel_cluster();
   int get_tx_buffers(std::vector<Chunk*> &c, size_t bytes) {
     return memory_manager->get_send_buffers(c, bytes);
   }
-  CompletionChannel *create_comp_channel();
-  CompletionQueue *create_comp_queue(CompletionChannel *cc=NULL);
+  CompletionChannel *create_comp_channel(CephContext *c);
+  CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
   uint8_t get_ib_physical_port() {
     return ib_physical_port;
   }
-  int send_msg(int sd, IBSYNMsg& msg);
-  int recv_msg(int sd, IBSYNMsg& msg);
+  int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
+  int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
   uint16_t get_lid() { return device->get_lid(); }
   ibv_gid get_gid() { return device->get_gid(); }
   MemoryManager* get_memory_manager() { return memory_manager; }
