@@ -415,28 +415,24 @@ inline bool operator==(const client_writeable_range_t& l,
 
 struct inline_data_t {
 private:
-  bufferlist *blp;
+  std::unique_ptr<bufferlist> blp;
 public:
   version_t version;
 
   void free_data() {
-    delete blp;
-    blp = NULL;
+    blp.reset();
   }
   bufferlist& get_data() {
     if (!blp)
-      blp = new bufferlist;
+      blp.reset(new bufferlist);
     return *blp;
   }
   size_t length() const { return blp ? blp->length() : 0; }
 
-  inline_data_t() : blp(0), version(1) {}
-  inline_data_t(const inline_data_t& o) : blp(0), version(o.version) {
+  inline_data_t() : version(1) {}
+  inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
       get_data() = *o.blp;
-  }
-  ~inline_data_t() {
-    free_data();
   }
   inline_data_t& operator=(const inline_data_t& o) {
     version = o.version;
@@ -449,7 +445,7 @@ public:
   bool operator==(const inline_data_t& o) const {
    return length() == o.length() &&
 	  (length() == 0 ||
-	   (*const_cast<bufferlist*>(blp) == *const_cast<bufferlist*>(o.blp)));
+	   (*const_cast<bufferlist*>(blp.get()) == *const_cast<bufferlist*>(o.blp.get())));
   }
   bool operator!=(const inline_data_t& o) const {
     return !(*this == o);

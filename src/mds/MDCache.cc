@@ -178,14 +178,11 @@ public:
 
 MDCache::MDCache(MDSRank *m) :
   mds(m),
-  logger(0),
   filer(m->objecter, m->finisher),
-  rejoin_done(NULL),
-  resolve_done(NULL),
   recovery_queue(m),
   stray_manager(m)
 {
-  migrator = new Migrator(mds, this);
+  migrator.reset(new Migrator(mds, this));
   root = NULL;
   myin = NULL;
   readonly = false;
@@ -227,15 +224,9 @@ MDCache::MDCache(MDSRank *m) :
 
 MDCache::~MDCache() 
 {
-  delete migrator;
   if (logger) {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = 0;
+    g_ceph_context->get_perfcounters_collection()->remove(logger.get());
   }
-
-  delete rejoin_done; rejoin_done = NULL;
-  delete resolve_done; resolve_done = NULL;
 }
 
 
@@ -2699,8 +2690,8 @@ void MDCache::dump_resolve_status(Formatter *f) const
 void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
   dout(10) << "resolve_start" << dendl;
-  assert(resolve_done == NULL);
-  resolve_done = resolve_done_;
+  assert(!resolve_done);
+  resolve_done.reset(resolve_done_);
 
   if (mds->mdsmap->get_root() != mds->get_nodeid()) {
     // if we don't have the root dir, adjust it to UNKNOWN.  during
@@ -3322,8 +3313,7 @@ void MDCache::maybe_resolve_finish()
     assert(mds->is_resolve());
     trim_unlinked_inodes();
     recalc_auth_bits(false);
-    resolve_done->complete(0);
-    resolve_done = NULL;
+    resolve_done.release()->complete(0);
   } else {
     maybe_send_pending_rejoins();
   }
@@ -3905,8 +3895,8 @@ void MDCache::dump_rejoin_status(Formatter *f) const
 void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
   dout(10) << "rejoin_start" << dendl;
-  assert(rejoin_done == NULL);
-  rejoin_done = rejoin_done_;
+  assert(!rejoin_done);
+  rejoin_done.reset(rejoin_done_);
 
   rejoin_gather = recovery_set;
   // need finish opening cap inodes before sending cache rejoins
@@ -5791,9 +5781,8 @@ void MDCache::open_snap_parents()
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
 
-    assert(rejoin_done != NULL);
-    rejoin_done->complete(0);
-    rejoin_done = NULL;
+    assert(rejoin_done);
+    rejoin_done.release()->complete(0);
     reconnected_caps.clear();
   }
 }
@@ -12201,10 +12190,10 @@ void MDCache::register_perfcounters()
     pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
         "File recoveries completed", "recd");
 
-    logger = pcb.create_perf_counters();
-    g_ceph_context->get_perfcounters_collection()->add(logger);
-    recovery_queue.set_logger(logger);
-    stray_manager.set_logger(logger);
+    logger.reset(pcb.create_perf_counters());
+    g_ceph_context->get_perfcounters_collection()->add(logger.get());
+    recovery_queue.set_logger(logger.get());
+    stray_manager.set_logger(logger.get());
 }
 
 /**

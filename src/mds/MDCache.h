@@ -135,7 +135,7 @@ class MDCache {
 
   set<CInode*> base_inodes;
 
-  PerfCounters *logger;
+  std::unique_ptr<PerfCounters> logger;
 
   Filer filer;
 
@@ -523,8 +523,8 @@ protected:
     if (rejoins_pending)
       rejoin_send_rejoins();
   }
-  MDSInternalContext *rejoin_done;
-  MDSInternalContext *resolve_done;
+  std::unique_ptr<MDSInternalContext> rejoin_done;
+  std::unique_ptr<MDSInternalContext> resolve_done;
 public:
   void rejoin_start(MDSInternalContext *rejoin_done_);
   void rejoin_gather_finish();
@@ -637,7 +637,7 @@ public:
   void _queued_file_recover_cow(CInode *in, MutationRef& mut);
 
   // subsystems
-  Migrator *migrator;
+  std::unique_ptr<Migrator> migrator;
 
  public:
   explicit MDCache(MDSRank *m);
