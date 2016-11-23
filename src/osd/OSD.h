@@ -2031,7 +2031,8 @@ protected:
 
   PGPool _get_pool(int id, OSDMapRef createmap);
 
-  PGRef get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op);
+  PGRef get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op,
+			       Session *session);
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
   PG   *_open_lock_pg(OSDMapRef createmap,
