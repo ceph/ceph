@@ -635,6 +635,13 @@ void CDir::add_to_bloom(CDentry *dn)
     /* not create bloom filter for incomplete dir that was added by log replay */
     if (!is_complete())
       return;
+
+    /* don't maintain bloom filters in standby replay (saves cycles, and also
+     * avoids need to implement clearing it in EExport for #16924) */
+    if (cache->mds->is_standby_replay()) {
+      return;
+    }
+
     unsigned size = get_num_head_items() + get_num_snap_items();
     if (size < 100) size = 100;
     bloom.reset(new bloom_filter(size, 1.0 / size, 0));
