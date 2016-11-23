@@ -45,7 +45,7 @@ set<string> hobject_t::get_prefixes(
     for (set<uint32_t>::iterator j = from.begin();
 	 j != from.end();
 	 ++j) {
-      to.insert(*j | (1 << i));
+      to.insert(*j | (1U << i));
       to.insert(*j);
     }
     to.swap(from);
