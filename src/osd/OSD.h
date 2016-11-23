@@ -1936,6 +1936,7 @@ private:
     void _process(
       const list<PG *> &pgs,
       ThreadPool::TPHandle &handle) override {
+      assert(!pgs.empty());
       osd->process_peering_events(pgs, handle);
       for (list<PG *>::const_iterator i = pgs.begin();
 	   i != pgs.end();
