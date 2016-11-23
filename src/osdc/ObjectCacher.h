@@ -618,7 +618,7 @@ public:
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
   bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex, Context *onfinish=0);
-  void flush_all(Context *onfinish=0);
+  bool flush_all(Context *onfinish=0);
 
   void purge_set(ObjectSet *oset);
 
