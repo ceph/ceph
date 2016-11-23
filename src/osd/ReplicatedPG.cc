@@ -5755,22 +5755,29 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, "???", 0);
 	  goto fail;
 	}
+	if (max_return > g_conf->osd_max_omap_entries_per_request) {
+	  max_return = g_conf->osd_max_omap_entries_per_request;
+	}
 	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
-	set<string> out_set;
 
+	bufferlist bl;
+	uint32_t num = 0;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
 	    coll, ghobject_t(soid)
 	    );
 	  assert(iter);
 	  iter->upper_bound(start_after);
-	  for (uint64_t i = 0;
-	       i < max_return && iter->valid();
-	       ++i, iter->next(false)) {
-	    out_set.insert(iter->key());
+	  for (num = 0;
+	       num < max_return &&
+		 bl.length() < g_conf->osd_max_omap_bytes_per_request &&
+		 iter->valid();
+	       ++num, iter->next(false)) {
+	    ::encode(iter->key(), bl);
 	  }
 	} // else return empty out_set
-	::encode(out_set, osd_op.outdata);
+	::encode(num, osd_op.outdata);
+	osd_op.outdata.claim_append(bl);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -5792,9 +5799,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, "???", 0, "???");
 	  goto fail;
 	}
+	if (max_return > g_conf->osd_max_omap_entries_per_request) {
+	  max_return = g_conf->osd_max_omap_entries_per_request;
+	}
 	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
-	map<string, bufferlist> out_set;
 
+	uint32_t num = 0;
+	bufferlist bl;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
 	    coll, ghobject_t(soid)
@@ -5805,15 +5816,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           }
 	  iter->upper_bound(start_after);
 	  if (filter_prefix > start_after) iter->lower_bound(filter_prefix);
-	  for (uint64_t i = 0;
-	       i < max_return && iter->valid() &&
+	  for (num = 0;
+	       num < max_return &&
+		 bl.length() < g_conf->osd_max_omap_bytes_per_request &&
+		 iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
-	       ++i, iter->next(false)) {
+	       ++num, iter->next(false)) {
 	    dout(20) << "Found key " << iter->key() << dendl;
-	    out_set.insert(make_pair(iter->key(), iter->value()));
+	    ::encode(iter->key(), bl);
+	    ::encode(iter->value(), bl);
 	  }
 	} // else return empty out_set
-	::encode(out_set, osd_op.outdata);
+	::encode(num, osd_op.outdata);
+	osd_op.outdata.claim_append(bl);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
