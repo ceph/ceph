@@ -25,3 +25,6 @@ overrides:
       client:
         debug client: 20
         debug ms: 1
+      mds:
+        debug mds: 20
+        debug ms: 1
