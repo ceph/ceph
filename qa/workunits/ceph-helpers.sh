@@ -1082,17 +1082,19 @@ function test_is_clean() {
 # @return a list of sleep delays
 #
 function get_timeout_delays() {
-    local -i timeout=$1
-    local -i first_step=1
+    local timeout=$1
+    local first_step=${2:-1}
 
-    local -i i
-    local -i total=0
-    for (( i = $first_step ; $total + $i <= $timeout ; i *= 2 )) ; do
+    local i
+    local total="0"
+    i=$first_step
+    while test "$(echo $total + $i \<= $timeout | bc -l)" = "1"; do
         echo -n "$i "
-        total+=$i
+        total=$(echo $total + $i | bc -l)
+        i=$(echo $i \* 2 | bc -l)
     done
-    if (( $total < $timeout )) ; then
-        echo -n $(( $timeout - $total ))
+    if test "$(echo $total \< $timeout | bc -l)" = "1"; then
+        echo -n $(echo $timeout - $total | bc -l)
     fi
 }
 
@@ -1102,6 +1104,12 @@ function test_get_timeout_delays() {
     test "$(get_timeout_delays 6)" = "1 2 3" || return 1
     test "$(get_timeout_delays 7)" = "1 2 4 " || return 1
     test "$(get_timeout_delays 8)" = "1 2 4 1" || return 1
+    test "$(get_timeout_delays 1 .1)" = ".1 .2 .4 .3" || return 1
+    test "$(get_timeout_delays 1.5 .1)" = ".1 .2 .4 .8 " || return 1
+    test "$(get_timeout_delays 5 .1)" = ".1 .2 .4 .8 1.6 1.9" || return 1
+    test "$(get_timeout_delays 6 .1)" = ".1 .2 .4 .8 1.6 2.9" || return 1
+    test "$(get_timeout_delays 6.3 .1)" = ".1 .2 .4 .8 1.6 3.2 " || return 1
+    test "$(get_timeout_delays 20 .1)" = ".1 .2 .4 .8 1.6 3.2 6.4 7.3" || return 1
 }
 
 #######################################################################
@@ -1117,8 +1125,8 @@ function test_get_timeout_delays() {
 function wait_for_clean() {
     local num_active_clean=-1
     local cur_active_clean
-    local -a delays=($(get_timeout_delays $TIMEOUT))
-    local -i timer=0
+    local -a delays=($(get_timeout_delays $TIMEOUT .1))
+    local -i loop=0
     local num_pgs=$(get_num_pgs)
     test $num_pgs != 0 || return 1
 
@@ -1129,16 +1137,16 @@ function wait_for_clean() {
         cur_active_clean=$(get_num_active_clean)
         test $cur_active_clean = $num_pgs && break
         if test $cur_active_clean != $num_active_clean ; then
-            timer=0
+            loop=0
             num_active_clean=$cur_active_clean
         elif get_is_making_recovery_progress ; then
-            timer=0
-        elif (( $timer >= ${#delays[*]} )) ; then
+            loop=0
+        elif (( $loop >= ${#delays[*]} )) ; then
             ceph report
             return 1
         fi
-        sleep ${delays[$timer]}
-        timer+=1
+        sleep ${delays[$loop]}
+        loop+=1
     done
     return 0
 }
