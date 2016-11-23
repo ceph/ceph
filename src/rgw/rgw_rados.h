@@ -604,7 +604,7 @@ public:
     bool operator!=(const obj_iterator& rhs) {
       return (ofs != rhs.ofs);
     }
-    const rgw_obj& get_location() {
+    const rgw_obj& get_location() const {
       return location;
     }
 

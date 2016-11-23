@@ -4886,6 +4886,11 @@ void RGWCompleteMultipart::execute()
         op_ret = -ERR_INVALID_PART;
         return;
       } else {
+        // mp.get_part() always produce the oid like <obj-name>.<upload-id>.<num>
+        // However, when a part is uploaded more than once, the oid may be like
+        // <obj-name>.<random-alpha-numeric>.<num>
+        const string adjusted_oid = obj_part.manifest.obj_begin().get_location().get_orig_obj();
+        src_obj.init_ns(s->bucket, adjusted_oid, mp_ns);
         manifest.append(obj_part.manifest);
       }
 
