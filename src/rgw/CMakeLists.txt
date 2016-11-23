@@ -87,6 +87,7 @@ set(rgw_a_srcs
   rgw_rest_opstate.cc
   rgw_rest_realm.cc
   rgw_rest_replica_log.cc
+  rgw_rest_role.cc
   rgw_rest_s3.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
