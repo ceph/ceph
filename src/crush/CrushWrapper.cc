@@ -1216,7 +1216,9 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   ::encode(crush->chooseleaf_vary_r, bl);
   ::encode(crush->straw_calc_version, bl);
   ::encode(crush->allowed_bucket_algs, bl);
-  ::encode(crush->chooseleaf_stable, bl);
+  if (features & CEPH_FEATURE_CRUSH_TUNABLES5) {
+    ::encode(crush->chooseleaf_stable, bl);
+  }
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
