@@ -476,10 +476,10 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
 
   bool split = false;
   if (true) {
-    int old_bits = cbits(old_pg_num);
-    int old_mask = (1 << old_bits) - 1;
-    for (int n = 1; ; n++) {
-      int next_bit = (n << (old_bits-1));
+    unsigned old_bits = cbits(old_pg_num);
+    unsigned old_mask = (1 << old_bits) - 1;
+    for (unsigned n = 1; ; n++) {
+      unsigned next_bit = (n << (old_bits-1));
       unsigned s = next_bit | m_seed;
 
       if (s < old_pg_num || s == m_seed)
