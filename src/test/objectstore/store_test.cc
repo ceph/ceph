@@ -4196,6 +4196,7 @@ TEST_P(StoreTest, SyntheticMatrixCsumVsCompression) {
     { "bluestore_csum_type", "crc32c", 0 },
     { "bluestore_default_buffered_read", "true", "false", 0 },
     { "bluestore_default_buffered_write", "true", "false", 0 },
+    { "bluestore_sync_submit_transaction", "false", 0 },
     { 0 },
   };
   do_matrix(m, store);
@@ -4212,6 +4213,7 @@ TEST_P(StoreTest, SyntheticMatrixCompression) {
     { "bluestore_min_alloc_size", "4096", "65536", 0 },
     { "bluestore_compression_mode", "force", "aggressive", "passive", "none", 0},
     { "bluestore_default_buffered_write", "false", 0 },
+    { "bluestore_sync_submit_transaction", "true", 0 },
     { 0 },
   };
   do_matrix(m, store);
@@ -4247,6 +4249,7 @@ TEST_P(StoreTest, SyntheticMatrixNoCsum) {
     { "bluestore_csum_type", "none", 0},
     { "bluestore_default_buffered_read", "true", "false", 0 },
     { "bluestore_default_buffered_write", "true", 0 },
+    { "bluestore_sync_submit_transaction", "true", "false", 0 },
     { 0 },
   };
   do_matrix(m, store);

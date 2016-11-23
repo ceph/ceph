@@ -1169,8 +1169,8 @@ public:
       STATE_PREPARE,
       STATE_AIO_WAIT,
       STATE_IO_DONE,
-      STATE_KV_QUEUED,
-      STATE_KV_COMMITTING,
+      STATE_KV_QUEUED,     // queued for kv_sync_thread submission
+      STATE_KV_SUBMITTED,  // submitted to kv; not yet synced
       STATE_KV_DONE,
       STATE_WAL_QUEUED,
       STATE_WAL_APPLYING,
@@ -1189,7 +1189,7 @@ public:
       case STATE_AIO_WAIT: return "aio_wait";
       case STATE_IO_DONE: return "io_done";
       case STATE_KV_QUEUED: return "kv_queued";
-      case STATE_KV_COMMITTING: return "kv_committing";
+      case STATE_KV_SUBMITTED: return "kv_submitted";
       case STATE_KV_DONE: return "kv_done";
       case STATE_WAL_QUEUED: return "wal_queued";
       case STATE_WAL_APPLYING: return "wal_applying";
@@ -1228,8 +1228,6 @@ public:
 
     boost::intrusive::list_member_hook<> wal_queue_item;
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
-
-    bool kv_submitted = false; ///< true when we've been submitted to kv db
 
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
@@ -1285,6 +1283,7 @@ public:
 
 
     IOContext ioc;
+    bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
     CollectionRef first_collection;  ///< first referenced collection
 
@@ -1347,6 +1346,8 @@ public:
     std::mutex wal_apply_mutex;
 
     uint64_t last_seq = 0;
+
+    std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
 
     std::atomic_int kv_committing_serially = {0};
 
@@ -1655,13 +1656,14 @@ private:
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
-  void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
 public:
   void _txc_aio_finish(void *p) {
     _txc_state_proc(static_cast<TransContext*>(p));
   }
 private:
   void _txc_finish_io(TransContext *txc);
+  void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
+  void _txc_release_alloc(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
 

@@ -6201,6 +6201,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
+	txc->had_ios = true;
 	_txc_aio_submit(txc);
 	return;
       }
@@ -6213,6 +6214,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_IO_DONE:
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      if (txc->had_ios) {
+	++txc->osr->txc_with_unstable_io;
+      }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       for (auto& sb : txc->shared_blobs_written) {
@@ -6233,6 +6237,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  // sequencer that is committing serially it is possible to keep
 	  // submitting new transactions fast enough that we get stuck doing
 	  // so.  the alternative is to block here... fixme?
+	} else if (txc->osr->txc_with_unstable_io) {
+	  dout(20) << __func__ << " prior txc(s) with unstable ios "
+		   << txc->osr->txc_with_unstable_io.load() << dendl;
 	} else if (g_conf->bluestore_debug_randomize_serial_transaction &&
 		   rand() % g_conf->bluestore_debug_randomize_serial_transaction
 		   == 0) {
@@ -6240,7 +6247,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 		   << dendl;
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
-	  txc->kv_submitted = true;
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
@@ -6249,13 +6256,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
-	if (!txc->kv_submitted) {
+	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
 	}
       }
       return;
-    case TransContext::STATE_KV_QUEUED:
+    case TransContext::STATE_KV_SUBMITTED:
       txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
@@ -6574,6 +6581,11 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     fm->release(p.get_start(), p.get_len(), t);
   }
 
+  _txc_update_store_statfs(txc);
+}
+
+void BlueStore::_txc_release_alloc(TransContext *txc)
+{
   // update allocator with full released set
   if (!g_conf->bluestore_debug_no_reuse_blocks) {
     for (interval_set<uint64_t>::iterator p = txc->released.begin();
@@ -6585,7 +6597,6 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 
   txc->allocated.clear();
   txc->released.clear();
-  _txc_update_store_statfs(txc);
 }
 
 void BlueStore::_kv_sync_thread()
@@ -6649,13 +6660,19 @@ void BlueStore::_kv_sync_thread()
 	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
       }
       for (auto txc : kv_submitting) {
-	assert(!txc->kv_submitted);
+	assert(txc->state == TransContext::STATE_KV_QUEUED);
 	_txc_finalize_kv(txc, txc->t);
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	int r = db->submit_transaction(txc->t);
 	assert(r == 0);
 	--txc->osr->kv_committing_serially;
-	txc->kv_submitted = true;
+	txc->state = TransContext::STATE_KV_SUBMITTED;
+      }
+      for (auto txc : kv_committing) {
+	_txc_release_alloc(txc);
+	if (txc->had_ios) {
+	  --txc->osr->txc_with_unstable_io;
+	}
       }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
@@ -6707,7 +6724,7 @@ void BlueStore::_kv_sync_thread()
 	       << " in " << dur << dendl;
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
-	assert(txc->kv_submitted);
+	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
