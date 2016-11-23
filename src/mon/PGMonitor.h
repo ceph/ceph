@@ -36,7 +36,6 @@ class MStatfs;
 class MMonCommand;
 class MGetPoolStats;
 
-class RatioMonitor;
 class TextTable;
 class MPGStats;
 
