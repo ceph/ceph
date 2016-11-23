@@ -3430,9 +3430,9 @@ int BlueStore::_open_db(bool create)
   db->init(options);
 
   if (create)
-    r = db->create_and_open(err, cfs);
+    r = db->create_and_open_with_cf(err, cfs);
   else
-    r = db->open(err, cfs);
+    r = db->open_with_cf(err, cfs);
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     if (bluefs) {
