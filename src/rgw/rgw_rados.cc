@@ -7858,6 +7858,10 @@ int RGWRados::Object::complete_atomic_modification()
   cls_rgw_obj_chain chain;
   store->update_gc_chain(obj, state->manifest, &chain);
 
+  if (chain.empty()) {
+    return 0;
+  }
+
   string tag = state->obj_tag.to_str();
   return store->gc->send_chain(chain, tag, false);  // do it async
 }
