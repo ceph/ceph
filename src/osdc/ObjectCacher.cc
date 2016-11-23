@@ -421,7 +421,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     if (p == data.end()) {
       if (final == NULL) {
         final = new BufferHead(this, trace);
-        replace_journal_tid(final, tid);
+        replace_journal_tid(final, tid, trace);
         final->set_start( cur );
         final->set_length( max );
         oc->bh_add(this, final);
@@ -448,7 +448,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         if (cur + max >= bh->end()) {
           // we want right bit (one splice)
           final = split(bh, cur);   // just split it, take right half.
-          replace_journal_tid(final, tid);
+          replace_journal_tid(final, tid, trace);
           ++p;
           assert(p->second == final);
         } else {
@@ -457,7 +457,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
           ++p;
           assert(p->second == final);
           split(final, cur+max);
-          replace_journal_tid(final, tid);
+          replace_journal_tid(final, tid, trace);
         }
       } else {
         assert(p->first == cur);
@@ -472,11 +472,11 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
           oc->mark_dirty(final);
           --p;  // move iterator back to final
           assert(p->second == final);
-          replace_journal_tid(bh, tid);
+          replace_journal_tid(bh, tid, trace);
           merge_left(final, bh);
         } else {
           final = bh;
-          replace_journal_tid(final, tid);
+          replace_journal_tid(final, tid, trace);
         }
       }
 
@@ -497,7 +497,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         oc->bh_stat_add(final);
       } else {
         final = new BufferHead(this, trace);
-	replace_journal_tid(final, tid);
+	replace_journal_tid(final, tid, trace);
         final->set_start( cur );
         final->set_length( glen );
         oc->bh_add(this, final);
@@ -518,7 +518,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
 }
 
 void ObjectCacher::Object::replace_journal_tid(BufferHead *bh,
-					       ceph_tid_t tid) {
+					       ceph_tid_t tid, ZTracer::Trace *trace) {
   ceph_tid_t bh_tid = bh->get_journal_tid();
 
   assert(tid == 0 || bh_tid <= tid);
@@ -526,6 +526,9 @@ void ObjectCacher::Object::replace_journal_tid(BufferHead *bh,
     // inform journal that it should not expect a writeback from this extent
     oc->writeback_handler.overwrite_extent(get_oid(), bh->start(),
 					   bh->length(), bh_tid, tid);
+    if (trace) {
+      bh->b_trace = *trace;
+    }
   }
   bh->set_journal_tid(tid);
 }
@@ -549,7 +552,7 @@ void ObjectCacher::Object::truncate(loff_t s)
     // remove bh entirely
     assert(bh->start() >= s);
     assert(bh->waitfor_read.empty());
-    replace_journal_tid(bh, 0);
+    replace_journal_tid(bh, 0, nullptr);
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -591,7 +594,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
     assert(bh->waitfor_read.empty());
-    replace_journal_tid(bh, 0);
+    replace_journal_tid(bh, 0, nullptr);
     oc->bh_remove(this, bh);
     delete bh;
   }

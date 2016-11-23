@@ -354,7 +354,7 @@ class ObjectCacher {
       ZTracer::Trace *trace);
     BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid, ZTracer::Trace *trace);
     
-    void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
+    void replace_journal_tid(BufferHead *bh, ceph_tid_t tid, ZTracer::Trace *trace);
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);
 
