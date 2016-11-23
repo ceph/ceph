@@ -1494,6 +1494,12 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   uint8_t v = 24;
+  if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
+    // this was the first post-hammer thing we added; if it's missing, encode
+    // like hammer.
+    v = 21;
+  }
+
   ENCODE_START(v, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
