@@ -1,15 +1,8 @@
-#!/bin/sh -e
-
-branch="$1"
-if [ -z "$branch" ]; then branch="master"; fi
+#!/bin/sh -ex
 
 export COVDIR="$HOME/cov-analysis"
 if [ ! -d "$COVDIR" ]; then
     echo "missing $COVDIR; get that from coverity!"
-    exit 1
-fi
-if [ ! -e "$HOME/coverity_rsa" ]; then
-    echo "missing ssh key for results upload"
     exit 1
 fi
 if [ ! -e "$HOME/coverity.build.pass.txt" ]; then
@@ -19,13 +12,14 @@ fi
 
 export PATH="$COVDIR/bin:$PATH"
 
-git fetch
-git reset --hard origin/$branch
-cd ..
-git submodule update
-cd src
-rm -f project.tgz
-make project.tgz
+rm -rf build
+./do_cmake.sh
+cd build
+~/cov-analysis/bin/cov-build --dir cov-int make -j$(nproc)
+
+echo Sage Weil sage@newdream.net ceph >> README
+tar czvf project.tgz README cov-int
+rm -f README
 
 version=`git describe`
 token=`cat ~/coverity.build.pass.txt`
