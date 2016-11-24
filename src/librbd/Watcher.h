@@ -61,7 +61,7 @@ protected:
                    Context *on_finish = nullptr);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             bufferlist &bl) = 0;
+                             uint64_t notifier_id, bufferlist &bl) = 0;
 
   virtual void handle_error(uint64_t cookie, int err);
 

@@ -246,7 +246,7 @@ private:
                              const watch_notify::Payload &payload, int r);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             bufferlist &bl);
+                             uint64_t notifier_id, bufferlist &bl);
   virtual void handle_error(uint64_t cookie, int err);
   virtual void handle_rewatch_complete(int r);
 
