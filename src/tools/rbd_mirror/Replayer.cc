@@ -219,7 +219,7 @@ private:
     }
 
     virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                               bufferlist &bl) {
+                               uint64_t notifier_id, bufferlist &bl) {
       bufferlist out;
       acknowledge_notify(notify_id, handle, out);
     }

@@ -221,7 +221,7 @@ void Watcher::WatchCtx::handle_notify(uint64_t notify_id,
                                                uint64_t handle,
                                                uint64_t notifier_id,
                                                bufferlist& bl) {
-  watcher.handle_notify(notify_id, handle, bl);
+  watcher.handle_notify(notify_id, handle, notifier_id, bl);
 }
 
 void Watcher::WatchCtx::handle_error(uint64_t handle, int err) {

@@ -888,7 +888,7 @@ void ImageWatcher<I>::process_payload(uint64_t notify_id, uint64_t handle,
 
 template <typename I>
 void ImageWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
-			            bufferlist &bl) {
+			            uint64_t notifier_id, bufferlist &bl) {
   NotifyMessage notify_message;
   if (bl.length() == 0) {
     // legacy notification for header updates
