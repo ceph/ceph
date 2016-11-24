@@ -16,7 +16,6 @@
 
 #include "include/stringify.h"
 #include "mds/SessionMap.h"
-#include "test/unit.h"
 
 #include "gtest/gtest.h"
 

@@ -17,10 +17,8 @@
 
 #include "include/stringify.h"
 #include "ErasureCodeExample.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 TEST(ErasureCodeExample, chunk_size)
 {

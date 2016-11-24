@@ -14,7 +14,6 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "json_spirit/json_spirit.h"
-#include "test/unit.h"
 
 #include "osd/HitSet.h"
 

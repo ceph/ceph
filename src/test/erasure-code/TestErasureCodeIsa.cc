@@ -22,11 +22,9 @@
 #include "include/stringify.h"
 #include "erasure-code/isa/ErasureCodeIsa.h"
 #include "erasure-code/isa/xor_op.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 ErasureCodeIsaTableCache tcache;
 

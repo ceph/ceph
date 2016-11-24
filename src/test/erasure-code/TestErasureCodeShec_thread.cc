@@ -29,7 +29,6 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 void* thread1(void* pParam);
 
