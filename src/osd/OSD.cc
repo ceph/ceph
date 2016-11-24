@@ -4209,7 +4209,7 @@ void OSD::heartbeat_check()
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now(cct);
 
-  // check for incoming heartbeats (move me elsewhere?)
+  // check for heartbeat replies (move me elsewhere?)
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_heartbeat_grace;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
@@ -4295,9 +4295,6 @@ void OSD::heartbeat()
 						     MOSDPing::PING,
 						     now));
   }
-
-  dout(30) << "heartbeat check" << dendl;
-  heartbeat_check();
 
   logger->set(l_osd_hb_to, heartbeat_peers.size());
 
