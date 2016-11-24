@@ -131,6 +131,9 @@ private:
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(utime_t now, int target_osd);
 
+  // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
+  utime_t last_attempted_minwait_time;
+
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
   void _get_pending_crush(CrushWrapper& newcrush);
