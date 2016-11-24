@@ -9,8 +9,6 @@
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -19,6 +17,8 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include "test/unit.h"
+
 
 using namespace librados;
 using std::map;
@@ -1014,17 +1014,4 @@ TEST_F(LibRadosMisc, WriteSame) {
 	    rados_writesame(ioctx, "ws", buf, 0, sizeof(buf), 0));
   /* write_len = data_len, i.e. same as rados_write() */
   ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf), 0));
-}
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
 }

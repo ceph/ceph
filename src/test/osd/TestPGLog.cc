@@ -23,9 +23,7 @@
 #include <signal.h>
 #include "osd/PGLog.h"
 #include "osd/OSDMap.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include <gtest/gtest.h>
+#include "test/unit.h"
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
@@ -2156,17 +2154,6 @@ TEST_F(PGLogTest, ErrorNotIndexedByObject) {
   EXPECT_EQ(del.prior_version, entry->prior_version);
   EXPECT_EQ(del.user_version, entry->user_version);
   EXPECT_EQ(del.reqid, entry->reqid);
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 // Local Variables:
