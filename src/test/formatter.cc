@@ -12,7 +12,7 @@
  *
  */
 
-#include "test/unit.h"
+#include "gtest/gtest.h"
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 

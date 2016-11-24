@@ -28,7 +28,6 @@
 
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
-#include "test/unit.h"
 
 
 #if GTEST_HAS_PARAM_TEST

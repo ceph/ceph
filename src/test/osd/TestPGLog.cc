@@ -21,9 +21,9 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "osd/PGLog.h"
 #include "osd/OSDMap.h"
-#include "test/unit.h"
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:

@@ -3,7 +3,6 @@
 #include "gtest/gtest.h"
 
 #include "rgw/rgw_compression.h"
-#include "test/unit.h"
 
 struct MockGetDataCB : public RGWGetDataCB {
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {

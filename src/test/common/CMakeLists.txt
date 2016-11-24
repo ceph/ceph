@@ -52,6 +52,7 @@ target_link_libraries(unittest_str_map common global ${BLKID_LIBRARIES})
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry
   test_sharedptr_registry.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_sharedptr_registry ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_sharedptr_registry)
 target_link_libraries(unittest_sharedptr_registry global ${BLKID_LIBRARIES})
@@ -59,6 +60,7 @@ target_link_libraries(unittest_sharedptr_registry global ${BLKID_LIBRARIES})
 # unittest_shared_cache
 add_executable(unittest_shared_cache
   test_shared_cache.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_shared_cache ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shared_cache)
 target_link_libraries(unittest_shared_cache global ${BLKID_LIBRARIES})
@@ -89,6 +91,7 @@ target_link_libraries(unittest_util global ${BLKID_LIBRARIES})
 # unittest_throttle
 add_executable(unittest_throttle
   Throttle.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_throttle ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_throttle)
 target_link_libraries(unittest_throttle global) 

@@ -52,6 +52,7 @@ target_link_libraries(unittest_ecbackend osd global)
 # unittest_osdscrub
 add_executable(unittest_osdscrub
   TestOSDScrub.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_osdscrub ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osdscrub)
 target_link_libraries(unittest_osdscrub osd global ${CMAKE_DL_LIBS} os mon ${BLKID_LIBRARIES})
@@ -59,6 +60,7 @@ target_link_libraries(unittest_osdscrub osd global ${CMAKE_DL_LIBS} os mon ${BLK
 # unittest_pglog
 add_executable(unittest_pglog
   TestPGLog.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_pglog ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pglog)
 target_link_libraries(unittest_pglog osd global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})

@@ -4,7 +4,6 @@
 #include "rocksdb/env.h"
 #include "rocksdb/thread_status.h"
 #include "kv/RocksDBStore.h"
-#include "test/unit.h"
 #include <iostream>
 
 using namespace std;

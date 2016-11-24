@@ -1,6 +1,5 @@
 #include "gtest/gtest.h"
 #include "global/global_context.h"
-#include "test/unit.h"
 
 #include "osdc/Striper.h"
 

@@ -20,8 +20,8 @@
 #include <stdlib.h>
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
+#include "gtest/gtest.h"
 #include "common/config.h"
-#include "test/unit.h"
 
 TEST(ErasureCodePlugin, factory)
 {

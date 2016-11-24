@@ -17,7 +17,7 @@
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/ceph_argparse.h"
-#include "test/unit.h"
+#include "gtest/gtest.h"
 
 #include <stdint.h>
 #include <string.h>
