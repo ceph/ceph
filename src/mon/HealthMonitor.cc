@@ -66,9 +66,10 @@ bool HealthMonitor::service_dispatch(MonOpRequestRef op)
 }
 
 void HealthMonitor::start_epoch() {
+  epoch_t epoch = get_epoch();
   for (map<int,HealthService*>::iterator it = services.begin();
        it != services.end(); ++it) {
-    it->second->start(get_epoch());
+    it->second->start(epoch);
   }
 }
 
