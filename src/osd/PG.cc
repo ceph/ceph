@@ -2844,6 +2844,62 @@ void PG::upgrade(ObjectStore *store)
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
 
+static void _simplify_past_intervals(map<epoch_t,pg_interval_t> &pi)
+{
+  generic_dout(0) << __func__ << " on " << pi.size() << " intervals" << dendl;
+  unsigned was = pi.size();
+  if (pi.size() <= 2)
+    return;
+
+  // go backwards.  this is because, although usually we only care about
+  // up/acting, in the prior set we also look at first when doing the lost_at
+  // comparison.  we want to always keep the *most recent* interval when
+  // dropping redundant intervals so that we don't break the comparison
+  //       } else if (pinfo->lost_at > interval.first) {
+  //
+  // also note:
+  //   we will never have last_epoch_clean pointing to an interval
+  // that has maybe_went_rw=false, since it only advances during an
+  // active, healthy interval.  thus, no changes needed to prune (we won't
+  // prune *into* an interval that no longer exists).
+  auto p = pi.end();
+  --p;
+  generic_dout(0) << __func__ << " keep tail " << *p << dendl;
+  --p;
+  auto last = pi.begin();
+  generic_dout(0) << __func__ << " keep head " << *last << dendl;
+  set<string> seen;
+  while (p != last) {
+    epoch_t start = p->first;
+    if (!p->second.maybe_went_rw) {
+      generic_dout(0) << __func__ << " dropping maybe_went_rw=0 interval "
+		      << *p << dendl;
+      --p;
+      pi.erase(start);
+      continue;
+    }
+    ostringstream ss;
+    ss << p->second.up << " " << p->second.acting << " " << p->second.primary
+       << " " << p->second.up_primary;
+    string s = ss.str();
+    if (seen.count(s)) {
+      generic_dout(0) << __func__ << " dropping dup interval " << *p << dendl;
+      --p;
+      pi.erase(start);
+      continue;
+    }
+    seen.insert(s);
+    // keep it
+    generic_dout(0) << __func__ << " keep " << *p << dendl;
+    --p;
+  }
+  if (pi.size() < was) {
+    generic_dout(0) << __func__ << " finish with " << pi.size()
+		    << " (from " << was << ")"
+		    << dendl;
+  }
+}
+
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
 			    pg_info_t &info, coll_t coll,
@@ -3211,6 +3267,10 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
 		    info_struct_v);
   assert(r >= 0);
+
+  if (g_conf->osd_hack_prune_past_intervals) {
+    _simplify_past_intervals(past_intervals);
+  }
 
   ostringstream oss;
   pg_log.read_log(store,
