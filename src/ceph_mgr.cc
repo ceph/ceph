@@ -35,8 +35,9 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MGR, CODE_ENVIRONMENT_DAEMON, 0,
-              "mgr_data");
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_MGR,
+			 CODE_ENVIRONMENT_DAEMON, 0,
+			 "mgr_data");
   // For consumption by KeyRing::from_ceph_context in MonClient
   g_conf->set_val("keyring", "$mgr_data/keyring", false);
 

@@ -577,8 +577,9 @@ int main(int argc, char **argv) {
   def_args.push_back("--debug-bluefs=1/20");
   def_args.push_back("--debug-bdev=1/20");
 
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      0);
+  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",

@@ -12,15 +12,12 @@
  *
  */
 
-#include <gtest/gtest.h>
-
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
+#include "test/unit.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -291,17 +288,6 @@ TEST(AdminSocket, bind_and_listen) {
     EXPECT_NE(std::string::npos, message.find("File exists"));
     ASSERT_TRUE(asoct.shutdown());
   }
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  vector<const char*> def_args;
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*
