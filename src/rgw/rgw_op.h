@@ -398,6 +398,13 @@ protected:
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const boost::string_ref& path);
 
+  bool handle_file_verify_permission(RGWBucketInfo& binfo,
+                                     std::map<std::string, ceph::bufferlist>& battrs,
+                                     ACLOwner& bucket_owner /* out */);
+  int handle_file(boost::string_ref path,
+                  size_t size,
+                  AlignedStreamGetter& body);
+
   int handle_dir_verify_permission();
   int handle_dir(boost::string_ref path);
 public:
