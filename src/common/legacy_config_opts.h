@@ -404,6 +404,7 @@ OPTION(objecter_completion_locks_per_session, OPT_U64) // num of completion lock
 OPTION(objecter_inject_no_watch_ping, OPT_BOOL)   // suppress watch pings
 OPTION(objecter_retry_writes_after_first_reply, OPT_BOOL)   // ignore the first reply for each write, and resend the osd op instead
 OPTION(objecter_debug_inject_relock_delay, OPT_BOOL)
+OPTION(objecter_mclock_service_tracker, OPT_BOOL)
 
 // Max number of deletes at once in a single Filer::purge call
 OPTION(filer_max_purge_ops, OPT_U32)
