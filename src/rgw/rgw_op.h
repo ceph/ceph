@@ -395,6 +395,11 @@ protected:
   virtual std::unique_ptr<StreamGetter> create_stream() = 0;
   virtual void send_response() = 0;
 
+  boost::optional<std::pair<std::string, rgw_obj_key>>
+  parse_path(const boost::string_ref& path);
+
+  int handle_dir_verify_permission();
+  int handle_dir(boost::string_ref path);
 public:
   int verify_permission() override;
   void pre_exec() override;
