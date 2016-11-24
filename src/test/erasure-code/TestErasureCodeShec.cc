@@ -25,13 +25,10 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "erasure-code/shec/ErasureCodeShec.h"
 #include "erasure-code/ErasureCodePlugin.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 void* thread1(void* pParam);
 void* thread2(void* pParam);
