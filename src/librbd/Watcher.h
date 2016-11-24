@@ -48,6 +48,8 @@ protected:
     WATCH_STATE_REWATCHING
   };
 
+  librados::IoCtx& m_ioctx;
+  std::string m_oid;
   CephContext *m_cct;
   mutable RWLock m_watch_lock;
   uint64_t m_watch_handle;
@@ -124,9 +126,7 @@ private:
     }
   };
 
-  librados::IoCtx& m_ioctx;
   ContextWQ *m_work_queue;
-  std::string m_oid;
 
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;

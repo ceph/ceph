@@ -67,11 +67,12 @@ struct C_UnwatchAndFlush : public Context {
 
 Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
                           const string& oid)
-  : m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
+  : m_ioctx(ioctx), m_oid(oid),
+    m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_watch_lock(util::unique_lock_name("librbd::Watcher::m_watch_lock", this)),
     m_watch_handle(0), m_notifier(work_queue, ioctx, oid),
-    m_watch_state(WATCH_STATE_UNREGISTERED), m_ioctx(ioctx),
-    m_work_queue(work_queue), m_oid(oid), m_watch_ctx(*this)
+    m_watch_state(WATCH_STATE_UNREGISTERED), m_work_queue(work_queue),
+    m_watch_ctx(*this)
 {
 }
 
