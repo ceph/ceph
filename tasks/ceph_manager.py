@@ -18,6 +18,7 @@ from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
 from util import get_remote
+from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
@@ -209,6 +210,18 @@ class Thrasher:
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
                           format(fpath=FSPATH, jpath=JPATH))
             cmd = (prefix + "--op list-pgs").format(id=exp_osd)
+
+            # ceph-objectstore-tool might be temporarily absent during an 
+            # upgrade - see http://tracker.ceph.com/issues/18014
+            with safe_while(sleep=15, tries=40, action="type ceph-objectstore-tool") as proceed:
+                while proceed():
+                    proc = exp_remote.run(args=['type', 'ceph-objectstore-tool'], 
+                               wait=True, check_status=False, stdout=StringIO(),
+                               stderr=StringIO())
+                    if proc.exitstatus == 0:
+                        break
+                    log.debug("ceph-objectstore-tool binary not present, trying again")
+
             proc = exp_remote.run(args=cmd, wait=True,
                                   check_status=False, stdout=StringIO())
             if proc.exitstatus:
