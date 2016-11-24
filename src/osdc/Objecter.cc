@@ -3081,6 +3081,12 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
+  uint32_t shard_index = op->target.pgid.ps() % num_shards;
+  dmc::ReqParams rp = qos_trk->get_req_params(OsdID(op->target.osd,
+                                                    shard_index));
+
+  m->set_qos_params(rp);
+
   logger->inc(l_osdc_op_send);
   logger->inc(l_osdc_op_send_bytes, m->get_data().length());
 
@@ -4876,6 +4882,7 @@ Objecter::OSDSession::~OSDSession()
 
 Objecter::~Objecter()
 {
+  delete qos_trk;
   delete osdmap;
 
   assert(homeless_session->get_nref() == 1);

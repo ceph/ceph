@@ -25,6 +25,8 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
+#include "dmclock/src/dmclock_client.h"
+
 #include "include/assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
@@ -1111,6 +1113,11 @@ public:
   Messenger *messenger;
   MonClient *monc;
   Finisher *finisher;
+
+  using OsdID = std::pair<int, uint32_t>;
+  dmc::ServiceTracker<OsdID> *qos_trk;
+  uint32_t num_shards;
+
 private:
   OSDMap    *osdmap;
 public:
@@ -1934,6 +1941,7 @@ private:
 	   double mon_timeout,
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
+    num_shards(cct->_conf->osd_op_num_shards),
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
     max_linger_id(0), num_unacked(0), num_uncommitted(0), global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
@@ -1948,7 +1956,9 @@ private:
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
     epoch_barrier(0),
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  { }
+  {
+    qos_trk = new dmc::ServiceTracker<OsdID>();
+  }
   ~Objecter();
 
   void init();
