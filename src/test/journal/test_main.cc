@@ -16,11 +16,11 @@ int main(int argc, char **argv)
   std::vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   g_conf->set_val("lockdep", "true");
   common_init_finish(g_ceph_context);
 
   int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
   return r;
 }

@@ -468,5 +468,10 @@ void Log::inject_segv()
   m_inject_segv = true;
 }
 
+void Log::reset_segv()
+{
+  m_inject_segv = false;
+}
+
 } // ceph::logging::
 } // ceph::
