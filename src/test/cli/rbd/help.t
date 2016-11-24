@@ -91,3 +91,4 @@
     -o, --options <map-options>        options to use when mapping an image
     --read-only                        set device readonly when mapping image
     --allow-shrink                     allow shrinking of an image when resizing
+    --overwrite                        overwrite the path-name file when export
