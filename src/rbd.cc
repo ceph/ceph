@@ -172,7 +172,8 @@ void usage()
 "  --no-progress                      do not show progress for long-running commands\n"
 "  -o, --options <map-options>        options to use when mapping an image\n"
 "  --read-only                        set device readonly when mapping image\n"
-"  --allow-shrink                     allow shrinking of an image when resizing\n";
+"  --allow-shrink                     allow shrinking of an image when resizing\n"
+"  --overwrite                        overwrite the path-name file when export\n";
 }
 
 static void format_bitmask(Formatter *f, const std::string &name,
@@ -1128,7 +1129,7 @@ private:
   int m_fd;
 };
 
-static int do_export(librbd::Image& image, const char *path)
+static int do_export(librbd::Image& image, const char *path, bool overwrite)
 {
   librbd::image_info_t info;
   int64_t r = image.stat(info, sizeof(info));
@@ -1143,7 +1144,11 @@ static int do_export(librbd::Image& image, const char *path)
     max_concurrent_ops = 1;
   } else {
     max_concurrent_ops = max(g_conf->rbd_concurrent_management_ops, 1);
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    int flags = O_WRONLY | O_CREAT;
+    if (!overwrite) {
+      flags |= O_EXCL;
+    }
+    fd = open(path, flags, 0644);
     if (fd < 0) {
       return -errno;
     }
@@ -1163,7 +1168,10 @@ static int do_export(librbd::Image& image, const char *path)
   r = throttle.wait_for_ret();
   if (!to_stdout) {
     if (r >= 0) {
-      r = ftruncate(fd, info.size);
+      struct stat finf;
+      if (fstat(fd, &finf) < 0 || !S_ISBLK(finf.st_mode)) {
+        r = ftruncate(fd, info.size);
+      }
     }
     close(fd);
   }
@@ -2600,6 +2608,7 @@ int main(int argc, const char **argv)
     *lock_tag = NULL, *output_format = "plain",
     *fromsnapname = NULL,
     *first_diff = NULL, *second_diff = NULL;
+  bool overwrite = false;
   bool lflag = false;
   int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
@@ -2719,6 +2728,8 @@ int main(int argc, const char **argv)
 	output_format_specified = true;
       }
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--overwrite", (char *)NULL)) {
+      overwrite = true;
     } else {
       ++i;
     }
@@ -3312,7 +3323,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       cerr << "rbd: export requires pathname" << std::endl;
       return EINVAL;
     }
-    r = do_export(image, path);
+    r = do_export(image, path, overwrite);
     if (r < 0) {
       cerr << "rbd: export error: " << cpp_strerror(-r) << std::endl;
       return -r;
