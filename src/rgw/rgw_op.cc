@@ -5583,6 +5583,34 @@ void RGWBulkUploadOp::execute()
   return;
 }
 
+RGWBulkUploadOp::AlignedStreamGetter::~AlignedStreamGetter()
+{
+  const size_t aligned_legnth = length + (-length % alignment);
+  ceph::bufferlist junk;
+
+  DecoratedStreamGetter::get_exactly(aligned_legnth - position, junk);
+}
+
+ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_at_most(const size_t want,
+                                                          ceph::bufferlist& dst)
+{
+  const size_t max_to_read = std::min(want, length - position);
+  const auto len = DecoratedStreamGetter::get_at_most(max_to_read, dst);
+  if (len > 0) {
+    position += len;
+  }
+  return len;
+}
+
+ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
+                                                          ceph::bufferlist& dst)
+{
+  const auto len = DecoratedStreamGetter::get_exactly(want, dst);
+  if (len > 0) {
+    position += len;
+  }
+  return len;
+}
 
 int RGWSetAttrs::verify_permission()
 {

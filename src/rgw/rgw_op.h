@@ -390,6 +390,7 @@ class RGWBulkUploadOp : public RGWOp {
 protected:
   class StreamGetter;
   class DecoratedStreamGetter;
+  class AlignedStreamGetter;
 
   virtual std::unique_ptr<StreamGetter> create_stream() = 0;
   virtual void send_response() = 0;
@@ -445,6 +446,29 @@ public:
     return get_decoratee().get_exactly(want, dst);
   }
 }; /* RGWBulkUploadOp::DecoratedStreamGetter */
+
+
+class RGWBulkUploadOp::AlignedStreamGetter
+  : public RGWBulkUploadOp::DecoratedStreamGetter {
+  size_t position;
+  size_t length;
+  size_t alignment;
+
+public:
+  template <typename U>
+  AlignedStreamGetter(const size_t position,
+                      const size_t length,
+                      const size_t alignment,
+                      U&& decoratee)
+    : DecoratedStreamGetter(std::forward<U>(decoratee)),
+      position(position),
+      length(length),
+      alignment(alignment) {
+  }
+  virtual ~AlignedStreamGetter();
+  ssize_t get_at_most(size_t want, ceph::bufferlist& dst) override;
+  ssize_t get_exactly(size_t want, ceph::bufferlist& dst) override;
+}; /* RGWBulkUploadOp::AlignedStreamGetter */
 
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
