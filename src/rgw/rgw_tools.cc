@@ -47,6 +47,9 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
 
+#define RGW_GET_SYSEM_OBJ_RETRIES 10
+
+  int retry_count = RGW_GET_SYSEM_OBJ_RETRIES;
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
     RGWRados::SystemObject::Read rop(&source);
@@ -73,7 +76,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
       break;
     bl.clear();
     request_len *= 2;
-  } while (true);
+  } while ( --retry_count > 0);
 
   return 0;
 }
