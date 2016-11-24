@@ -1,6 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <numeric>
+#include <vector>
+
 #include "osd/osd_types.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
@@ -570,6 +576,25 @@ int CrushWrapper::get_children(int id, list<int> *children)
     return -ENOENT;
   }
 
+  for (unsigned n=0; n<b->size; n++) {
+    children->push_back(b->items[n]);
+  }
+  return b->size;
+}
+
+int CrushWrapper::get_children(int id, vector<int> *children)
+{
+  // leaf?
+  if (id >= 0) {
+    return 0;
+  }
+
+  crush_bucket *b = get_bucket(id);
+  if (IS_ERR(b)) {
+    return -ENOENT;
+  }
+
+  children->reserve(b->size);
   for (unsigned n=0; n<b->size; n++) {
     children->push_back(b->items[n]);
   }
@@ -1806,4 +1831,194 @@ bool CrushWrapper::is_valid_crush_loc(CephContext *cct,
     }
   }
   return true;
+}
+
+using std::vector;
+
+namespace {
+  /* For ease of calculation, we set the smallest non-zero weight to 1
+     and scale everything else to follow. */
+
+  void normalize(vector<double>& v) {
+    if (v.empty())
+      return;
+
+    auto m = v[0];
+
+    for (auto e : v) {
+      if ((e < m) && (e > 0))
+	m = e;
+    }
+    if (m != 0) {
+      for (auto& x : v)
+	x /= m;
+    }
+  }
+
+  /* The probability that a given item will appear in r random draws.
+
+     This is a noncentral multivariate distribution and there are no
+     nice closed forms for dealing with it. There are
+     approximations that would work for large sets, but they fail
+     miserably for the small sets we're interested in.
+
+     Fortunately, the smallness of our set means that direct
+     enumeration is tractable. Unfortunately, it's still a bit
+     slow. The most obvious optimization (don't copy/splice the
+     vector) is a bit fiddly to get right and I want to get this
+     working first. */
+
+  double multidraw(const vector<double>& v, unsigned i, unsigned r) {
+    if ((r > v.size()) || (r == 0))
+      return 0;
+
+    auto s = std::accumulate(v.begin(), v.end(), 0, std::plus<double>());
+    auto p = v[i] / s;
+    if (r > 1) {
+      vector<double> nv;
+      nv.reserve(v.size() - 1);
+      for (auto j = 0u; j < v.size(); ++j) {
+	if (j != i) {
+	  if (j == 0) {
+	    nv.insert(nv.end(), v.begin() + 1, v.end());
+	  } else if (j == v.size() - 1) {
+	    nv.insert(nv.end(), v.begin(), v.end() - 1);
+	  } else {
+	    nv.insert(nv.end(), v.begin(), v.begin() + j);
+	    nv.insert(nv.end(), v.begin() + (j + 1), v.end());
+	  }
+
+	  p += (v[j]/s * multidraw(nv, (j < i) ? (i - 1) : i,
+				   r - 1));
+	  nv.clear();
+	}
+      }
+    }
+    return p;
+  }
+
+  /* The ratio of the probabilities of two items in several draws,
+     used as the test to help balance things. */
+
+  double ratio(const std::vector<double>& b, unsigned i, unsigned j,
+	       unsigned r) {
+    if (b[i] == 1)
+      return 1;
+
+    /* We can't memoize either of these since we only call this after
+       changing some value in the vector. */
+    return multidraw(b, i, r) / multidraw(b, j, r);
+  }
+
+  /* As mentioned above, there are no good exact solutions for this,
+     so we use an iterative approximation strategy modeled on grooming
+     a cat.
+
+     Move from head to tail finding any spots that stick up
+     improperly and smoothing them down. Then we go from head to tail
+     again and smooth out anything our previous pass messed
+     up. Continue until smooth enough or we don't want to iterate any
+     more.
+
+     One obvious optimization is that we could go by contours rather
+     than by items. In the general case that would be pointless, but
+     since our use cases likely have all the items in a bucket having
+     one of a small number of weights, it would probably be a win for
+     us. Another is that we could pick the delta to adjust by on each
+     pass more intelligently (based on number of items and
+     replication count) to make it converge faster. */
+
+  std::vector<double> fiddle_weights(vector<double> s, unsigned r,
+				     double badness, unsigned maxreps,
+				     bool& exhausted) {
+    exhausted = false;
+    normalize(s);
+    auto w = s;
+    auto one = (std::find(w.begin(), w.end(), 1) - w.begin());
+    unsigned oreps;
+    for (oreps = 0u; oreps < maxreps; ++oreps) {
+      bool good = true;
+      for (auto i = 0u; i < s.size(); ++i) {
+	if (s[i] == 1 or s[i] == 0)
+	  continue;
+	for (auto ireps = 0u; ireps < maxreps; ++ireps) {
+	  auto rat = ratio(w, i, one, r);
+	  auto diff = s[i] - rat;
+	  /* Bear in mind that the Badness parameter is not and is
+	     not intended to be a guaranteed on the distribution of
+	     actual CRUSH placement. It gives the relative
+	     frequencies of an infinite number of r-draws. Actual
+	     CRUSH placement will generally be more bad, due to small
+	     sample sizes and the limited precision of the fixed
+	     point weights we use. */
+	  if (std::fabs(diff) < badness) {
+	    break;
+	  } else {
+	    good = false;
+	    w[i] += diff;
+	  }
+	}
+      }
+      if (good)
+	break;
+    }
+    if (oreps == maxreps)
+      exhausted = true;
+    return w;
+  }
+}
+
+int CrushWrapper::tweak_bucket(CephContext* cct, int bucket, unsigned reps,
+			       double badness, unsigned tries,
+			       std::ostream& errstr) {
+  vector<int> ids;
+  int r = get_children(bucket, &ids);
+  if (r < 0)
+    return r;
+
+  if (ids.size() < 2) {
+    errstr << "Cannot tweak a bucket with less than 2 items." << std::endl;
+    return -EDOM;
+  }
+  if (ids.size() <= reps) {
+    errstr << "You need fewer replicas than items." << std::endl;
+    return -EDOM;
+  }
+
+  vector<double> weights;
+  weights.reserve(ids.size());
+
+  for (auto id : ids)
+    weights.push_back(get_item_weightf(id));
+
+  bool exhausted;
+  auto f = fiddle_weights(weights, reps, badness, tries, exhausted);
+
+  ceph_assert(f.size() == ids.size());
+
+  for (auto i = 0u; i < ids.size(); ++i) {
+    r = adjust_item_weightd(cct, ids[i], f[i]);
+    if (r < 0)
+      return r;
+  }
+
+  if (exhausted) {
+    errstr << "Weight-finding did not converge on the desired distribution."
+	   << std::endl;
+    errstr << "The adjusted weights may not match what you want, but might"
+	   << std::endl;
+    errstr << "be close enough. Your specified distribution may be impossible;"
+	   << std::endl;
+    errstr << "this is most common where the bucket size is small relative to"
+	   << std::endl;
+    errstr << "the replication count. You may specify a larger value for"
+	   << std::endl;
+    errstr << "the --tweak-badness option to increase allowed deviation or"
+	   << std::endl;
+    errstr << "or for the --tweak-tries option to iterate more times."
+	   << std::endl;
+    errstr << std::endl << "Beware." << std::endl;
+  }
+
+  return exhausted ? 1 : 0;
 }

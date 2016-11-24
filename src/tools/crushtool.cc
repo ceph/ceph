@@ -163,6 +163,13 @@ void usage()
   cout << "   -i mapfn --reweight-item name weight\n";
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
+  cout << "   -i mapfn --tweak-bucket-weights name r\n"
+       << "                         Given a bucket with a set of weights, attempt\n"
+       << "                         to adjust the single-draw weights so that\n"
+       << "                         the distribution among r draws matches\n"
+       << "                         the original weights\n";
+  cout << "   --tweak-badness b     Allowed deviation from the desired distribution\n";
+  cout << "   --tweak-tries t       Number of attempts allowed to fit the desired distribution\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
   cout << "\n";
   cout << "Options for the display/test stage\n";
@@ -228,7 +235,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
 
   const char *me = argv[0];
-  std::string infn, srcfn, outfn, add_name, remove_name, reweight_name;
+  std::string infn, srcfn, outfn, add_name, remove_name, reweight_name,
+    tweak_name;
   bool compile = false;
   bool decompile = false;
   bool check = false;
@@ -247,6 +255,10 @@ int main(int argc, const char **argv)
   float add_weight = 0;
   map<string,string> add_loc;
   float reweight_weight = 0;
+
+  int tweak_rep = 0;
+  float tweak_badness = .01;
+  int tweak_tries = 50;
 
   bool adjust = false;
 
@@ -425,6 +437,24 @@ int main(int argc, const char **argv)
       }
       reweight_weight = atof(*i);
       i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, "--tweak_bucket_weights", (char*)NULL)) {
+      tweak_name = val;
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --tweak-bucket-weights" << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tweak_rep = atoi(*i);
+      i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &tweak_badness, err, "--tweak_badness", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_witharg(args, i, &tweak_tries, err, "--tweak_tries", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_flag(args, i, "--build", (char*)NULL)) {
       build = true;
     } else if (ceph_argparse_witharg(args, i, &num_osds, err, "--num_osds", (char*)NULL)) {
@@ -533,7 +563,7 @@ int main(int argc, const char **argv)
   }
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree &&
       add_item < 0 && full_location < 0 &&
-      remove_name.empty() && reweight_name.empty()) {
+      remove_name.empty() && reweight_name.empty() && tweak_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -545,7 +575,7 @@ int main(int argc, const char **argv)
     if ((args.size() % 3) != 0U) {
       cerr << "remaining args: " << args << std::endl;
       cerr << "layers must be specified with 3-tuples of (name, buckettype, size)"
-    	   << std::endl;
+	   << std::endl;
       exit(EXIT_FAILURE);
     }
     for (size_t j = 0; j < args.size(); j += 3) {
@@ -786,6 +816,45 @@ int main(int argc, const char **argv)
     if (r >= 0)
       modified = true;
     else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+
+  if (!tweak_name.empty()) {
+    cout << me << " tweaking bucket " << tweak_name << " for a replication count of " << tweak_rep << std::endl;
+    if (!crush.name_exists(tweak_name)) {
+      cerr << "name " << tweak_name << " does not exist" << std::endl;
+      return -ENOENT;
+    }
+    if (tweak_rep < 1) {
+      cerr << tweak_rep << " is not a sane replication count" << std::endl;
+      return -EINVAL;
+    }
+    if (tweak_rep == 1) {
+      cerr << "it's already tweaked for a replication count of 1" << std::endl;
+      return -EINVAL;
+    }
+    if (tweak_tries < 1) {
+      cerr << tweak_tries << " tries is nonsensical" << std::endl;
+      return -EINVAL;
+    }
+    int item = crush.get_item_id(tweak_name);
+    auto alg = crush.get_bucket_alg(item);
+    if (alg < 0) {
+      cerr << "name " << tweak_name << " is not a bucket" << std::endl;
+      return alg;
+    }
+    if (alg == CRUSH_BUCKET_UNIFORM) {
+      cerr << "name " << tweak_name << " is a uniform bucket" << std::endl;
+      return -EINVAL;
+    }
+    int r = crush.tweak_bucket(g_ceph_context, item, tweak_rep,
+			       tweak_badness, tweak_tries, std::cerr);
+
+    if (r >= 0) {
+      modified = true;
+    } else {
       cerr << me << " " << cpp_strerror(r) << std::endl;
       return r;
     }

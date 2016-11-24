@@ -57,6 +57,13 @@
      -i mapfn --reweight-item name weight
                            reweight a given item (and adjust ancestor
                            weights as needed)
+     -i mapfn --tweak-bucket-weights name r
+                           Given a bucket with a set of weights, attempt
+                           to adjust the single-draw weights so that
+                           the distribution among r draws matches
+                           the original weights
+     --tweak-badness b     Allowed deviation from the desired distribution
+     --tweak-tries t       Number of attempts allowed to fit the desired distribution
      -i mapfn --reweight   recalculate all bucket weights
   
   Options for the display/test stage

@@ -533,6 +533,14 @@ public:
   int get_children(int id, list<int> *children);
 
   /**
+   * enumerate immediate children of given node
+   *
+   * @param id parent bucket or device id
+   * @return number of items, or error
+   */
+  int get_children(int id, vector<int> *children);
+
+  /**
    * insert an item into the map at a specific position
    *
    * Add an item as a specific location of the hierarchy.
@@ -691,6 +699,9 @@ public:
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
+  }
+  int adjust_item_weightd(CephContext *cct, int id, double weight) {
+    return adjust_item_weight(cct, id, (int)round((weight * (float)0x10000)));
   }
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
@@ -1142,6 +1153,9 @@ public:
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,
 				 const map<string,string>& loc);
+
+  int tweak_bucket(CephContext* cct, int bucket, unsigned reps, double badness,
+		   unsigned tries, ostream& errstr);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
 
