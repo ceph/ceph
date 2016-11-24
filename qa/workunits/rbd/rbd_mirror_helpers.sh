@@ -14,6 +14,10 @@
 #                         after failure.
 #  RBD_MIRROR_TEMDIR    - use this path when creating the temporary directory
 #                         (should not exist) instead of running mktemp(1).
+#  RBD_MIRROR_ARGS      - use this to pass additional arguments to started
+#                         rbd-mirror daemons.
+#  RBD_MIRROR_VARGS     - use this to pass additional arguments to vstart.sh
+#                         when starting clusters.
 #
 # The cleanup can be done as a separate step, running the script with
 # `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
@@ -159,8 +163,8 @@ setup()
 
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
         cd ${CEPH_ROOT}
-        ${CEPH_SRC}/mstart.sh ${CLUSTER1} -n
-        ${CEPH_SRC}/mstart.sh ${CLUSTER2} -n
+        ${CEPH_SRC}/mstart.sh ${CLUSTER1} -n ${RBD_MIRROR_VARGS}
+        ${CEPH_SRC}/mstart.sh ${CLUSTER2} -n ${RBD_MIRROR_VARGS}
 
         ln -s $(readlink -f run/${CLUSTER1}/ceph.conf) \
            ${TEMPDIR}/${CLUSTER1}.conf
@@ -222,7 +226,8 @@ start_mirror()
 	--rbd-mirror-journal-poll-age=1 \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
-	--daemonize=true
+	--daemonize=true \
+	${RBD_MIRROR_ARGS}
 }
 
 stop_mirror()
