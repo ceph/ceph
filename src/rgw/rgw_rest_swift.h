@@ -202,8 +202,14 @@ public:
 };
 
 class RGWBulkUploadOp_ObjStore_SWIFT : public RGWBulkUploadOp_ObjStore {
+  size_t conlen;
+  size_t curpos;
+
 public:
-  RGWBulkUploadOp_ObjStore_SWIFT() = default;
+  RGWBulkUploadOp_ObjStore_SWIFT()
+    : conlen(0),
+      curpos(0) {
+  }
   ~RGWBulkUploadOp_ObjStore_SWIFT() = default;
 
   std::unique_ptr<StreamGetter> create_stream() override;

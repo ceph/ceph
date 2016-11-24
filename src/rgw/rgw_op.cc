@@ -31,6 +31,7 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
+#include "rgw_tar.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
 #include "rgw_role.h"
@@ -5509,6 +5510,56 @@ void RGWBulkUploadOp::pre_exec()
 
 void RGWBulkUploadOp::execute()
 {
+  ceph::bufferlist buffer(64 * 1024);
+
+  ldout(s->cct, 20) << "bulk upload: start" << dendl;
+
+  /* Create an instance of stream-abstracting class. Having this indirection
+   * allows for easy introduction of decompressors like gzip and bzip2. */
+  auto stream = create_stream();
+  auto status = rgw::tar::StatusIndicator::create();
+  do {
+    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    if (op_ret < 0) {
+      ldout(s->cct, 2) << "bulk upload: cannot read header" << dendl;
+      return;
+    }
+
+    /* We need to re-interpret the buffer as a TAR block. Exactly two blocks
+     * must be tracked to detect out end-of-archive. It occurs when both of
+     * them are empty (zeroed). Tracing this particular inter-block dependency
+     * is responsibility of the rgw::tar::StatusIndicator class. */
+    boost::optional<rgw::tar::HeaderView> header;
+    std::tie(status, header) = rgw::tar::interpret_block(status, buffer);
+
+    if (! status.empty() && header) {
+      /* This specific block isn't empty (entirely zeroed), so we can parse
+       * it as a TAR header and dispatch. At the moment we do support only
+       * regular files and directories. Everything else (symlinks, devices)
+       * will be ignored but won't cease the whole upload. */
+      switch (header->get_filetype()) {
+        case rgw::tar::FileType::NORMAL_FILE: {
+          ldout(s->cct, 2) << "bulk upload: handling regular file" << dendl;
+          break;
+        }
+        case rgw::tar::FileType::DIRECTORY: {
+          ldout(s->cct, 2) << "bulk upload: handling regular directory" << dendl;
+          break;
+        }
+        default: {
+          /* Not recognized. Skip. */
+          op_ret = 0;
+          break;
+        }
+      }
+    } else {
+      ldout(s->cct, 2) << "bulk upload: an empty block" << dendl;
+      op_ret = 0;
+    }
+
+    buffer.clear();
+  } while (! status.eof());
+
   return;
 }
 
