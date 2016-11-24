@@ -1061,36 +1061,25 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
     hit_dir(now, in->get_parent_dn()->get_dir(), type, who);
 }
 
-void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
+void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 {
-  // hit me
-  double v = dir->pop_me.get(type).hit(now, amount);
-
   // split/merge
   if (g_conf->mds_bal_frag && g_conf->mds_bal_fragment_interval > 0 &&
       !dir->inode->is_base() &&        // not root/base (for now at least)
       dir->is_auth()) {
 
-    dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
-	     << " size " << dir->get_frag_size() << dendl;
-
     // split
     if (g_conf->mds_bal_split_size > 0 &&
 	mds->mdsmap->allows_dirfrags() &&
-	(dir->should_split() ||
-	 (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
-	 (v > g_conf->mds_bal_split_wr && type == META_POP_IWR))) {
-      dout(10) << "hit_dir " << type << " pop is " << v
-               << ", putting in split_pending: " << *dir << dendl;
+	(dir->should_split() || hot))
+    {
       if (split_pending.count(dir->dirfrag()) == 0) {
         queue_split(dir, false);
       } else {
         if (dir->should_split_fast()) {
-          dout(4) << "hit_dir: fragment hit hard limit, splitting immediately ("
-            << *dir << ")" << dendl;
           queue_split(dir, true);
         } else {
-          dout(10) << "hit_dir: fragment already enqueued to split: "
+          dout(10) << __func__ << ": fragment already enqueued to split: "
                    << *dir << dendl;
         }
       }
@@ -1099,10 +1088,23 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     // merge?
     if (dir->get_frag() != frag_t() && dir->should_merge() &&
 	merge_pending.count(dir->dirfrag()) == 0) {
-      dout(10) << "hit_dir " << type << " pop is " << v << ", putting in merge_pending: " << *dir << dendl;
       queue_merge(dir);
     }
   }
+}
+
+void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
+{
+  // hit me
+  double v = dir->pop_me.get(type).hit(now, amount);
+
+  const bool hot = (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
+                   (v > g_conf->mds_bal_split_wr && type == META_POP_IWR);
+
+  dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
+           << " size " << dir->get_frag_size() << dendl;
+
+  maybe_fragment(dir, hot);
 
   // replicate?
   if (type == META_POP_IRD && who >= 0) {

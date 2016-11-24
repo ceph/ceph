@@ -124,6 +124,14 @@ public:
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
+
+  /**
+   * Based on size and configuration, decide whether to issue a queue_split
+   * or queue_merge for this CDir.
+   *
+   * \param hot whether the directory's temperature is enough to split it
+   */
+  void maybe_fragment(CDir *dir, bool hot);
 };
 
 
