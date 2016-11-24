@@ -3355,6 +3355,7 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
     dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     --ctx->delta_stats.num_whiteouts;
+    return true;
   }
   return false;
 }
@@ -4358,8 +4359,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           if (result >= 0) {
 	    if (maybe_create_new_object(ctx)) {
               ctx->mod_desc.create();
+	      t->touch(soid);
 	    }
-            t->touch(soid);
           }
 	}
       }
