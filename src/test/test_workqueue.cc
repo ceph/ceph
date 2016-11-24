@@ -2,7 +2,6 @@
 
 #include "common/WorkQueue.h"
 #include "common/ceph_argparse.h"
-#include "test/unit.h"
 
 TEST(WorkQueue, StartStop)
 {

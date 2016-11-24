@@ -24,7 +24,6 @@
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 
 template <typename T>

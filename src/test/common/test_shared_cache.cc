@@ -22,10 +22,9 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "common/Thread.h"
 #include "common/shared_cache.hpp"
-#include "common/ceph_argparse.h"
-#include "test/unit.h"
 
 class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:

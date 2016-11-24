@@ -20,7 +20,6 @@
 
 #include "msg/async/dpdk/UserspaceEvent.h"
 #include "global/global_context.h"
-#include "test/unit.h"
 
 class UserspaceManagerTest : public ::testing::Test {
  public:

@@ -54,7 +54,6 @@
 #include "msg/async/EventKqueue.h"
 #endif
 #include "msg/async/EventSelect.h"
-#include "test/unit.h"
 
 #include <gtest/gtest.h>
 

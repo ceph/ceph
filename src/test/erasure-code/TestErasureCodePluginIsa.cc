@@ -16,13 +16,10 @@
 #include <stdlib.h>
 #include "arch/probe.h"
 #include "arch/intel.h"
-#include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 TEST(ErasureCodePlugin, factory)
 {

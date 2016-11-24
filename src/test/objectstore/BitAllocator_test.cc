@@ -6,9 +6,7 @@
  */
 
 #include "include/Context.h"
-#include "common/ceph_argparse.h"
 #include "os/bluestore/BitAllocator.h"
-#include "test/unit.h"
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
