@@ -782,8 +782,9 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
             *hardlink = 0;
           else
             return -errno;
-        }
-	*hardlink = st.st_nlink;
+        } else {
+	  *hardlink = st.st_nlink;
+	}
       }
       return 0;
     }
