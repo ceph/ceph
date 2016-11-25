@@ -1413,7 +1413,7 @@ function run_in_background() {
     shift;
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the awk one.
-    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print PROCINFO["pid"] ": " a[i]} }'; return ${PIPESTATUS[0]}) &
+    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print "'$$': " a[i]} }'; return ${PIPESTATUS[0]}) >&2 &
     eval "$pid_variable+=\" $!\""
 }
 
