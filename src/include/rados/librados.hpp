@@ -278,6 +278,8 @@ namespace librados
     // marked full; ops will either succeed (e.g., delete) or return
     // EDQUOT or ENOSPC
     OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
+    //mainly for delete
+    OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
   };
 
   /*

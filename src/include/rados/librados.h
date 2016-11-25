@@ -124,6 +124,10 @@ enum {
      full; ops will either succeed (e.g., delete) or return EDQUOT or
      ENOSPC. */
   LIBRADOS_OPERATION_FULL_TRY           = 64,
+  /*
+   * Mainly for delete op
+   */
+  LIBRADOS_OPERATION_FULL_FORCE		= 128,
 };
 /** @} */
 
