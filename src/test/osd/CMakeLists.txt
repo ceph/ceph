@@ -76,6 +76,10 @@ target_link_libraries(unittest_hitset osd global ${BLKID_LIBRARIES})
 add_executable(unittest_osd_osdcap
   osdcap.cc
 )
+if(HAS_VTA)
+  set_source_files_properties(osdcap.cc PROPERTIES
+    COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
 add_ceph_unittest(unittest_osd_osdcap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osd_osdcap)
 target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
 
