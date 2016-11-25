@@ -786,7 +786,6 @@ public:
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
 
-    OnodeSpace *space;    ///< containing OnodeSpace
     boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
@@ -798,12 +797,11 @@ public:
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(OnodeSpace *s, Collection *c, const ghobject_t& o, const string& k)
+    Onode(Collection *c, const ghobject_t& o, const string& k)
       : nref(0),
 	c(c),
 	oid(o),
 	key(k),
-	space(s),
 	exists(false),
 	extent_map(this) {
     }

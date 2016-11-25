@@ -637,7 +637,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       assert(num == 1);
     }
     o->get();  // paranoia
-    o->space->onode_map.erase(o->oid);
+    o->c->onode_map.onode_map.erase(o->oid);
     o->put();
     --num;
   }
@@ -892,7 +892,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       assert(num == 1);
     }
     o->get();  // paranoia
-    o->space->onode_map.erase(o->oid);
+    o->c->onode_map.onode_map.erase(o->oid);
     o->put();
     --num;
   }
@@ -1239,7 +1239,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   OnodeRef o = po->second;
 
   // install a non-existent onode at old location
-  oldo.reset(new Onode(this, o->c, old_oid, o->key));
+  oldo.reset(new Onode(o->c, old_oid, o->key));
   po->second = oldo;
   cache->_add_onode(po->second, 1);
 
@@ -2387,11 +2387,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       return OnodeRef();
 
     // new object, new onode
-    on = new Onode(&onode_map, this, oid, key);
+    on = new Onode(this, oid, key);
   } else {
     // loaded
     assert(r >= 0);
-    on = new Onode(&onode_map, this, oid, key);
+    on = new Onode(this, oid, key);
     on->exists = true;
     bufferptr::iterator p = v.front().begin();
     on->onode.decode(p);
