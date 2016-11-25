@@ -449,7 +449,7 @@ int KernelDevice::aio_write(
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  _aio_log_start(ioc, off, bl.length());
+  _aio_log_start(ioc, off, len);
 
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
@@ -472,7 +472,7 @@ int KernelDevice::aio_write(
 		 << " " << aio.iov[i].iov_len << dendl;
       }
       aio.bl.claim_append(bl);
-      aio.pwritev(off);
+      aio.pwritev(off, len);
     }
     dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 	    << std::dec << " aio " << &aio << dendl;
@@ -492,7 +492,7 @@ int KernelDevice::aio_write(
     bl.prepare_iov(&iov);
     int r = ::pwritev(buffered ? fd_buffered : fd_direct,
 		      &iov[0], iov.size(), off);
-    _aio_log_finish(ioc, off, bl.length());
+    _aio_log_finish(ioc, off, len);
 
     if (r < 0) {
       r = -errno;
