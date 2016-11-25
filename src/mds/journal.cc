@@ -196,7 +196,8 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
       }
     }
     if (le) {
-      mds->mdlog->submit_entry(le, gather_bld.new_sub());
+      mds->mdlog->submit_entry(le);
+      mds->mdlog->wait_for_safe(gather_bld.new_sub());
       dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
     }
   }
@@ -495,10 +496,11 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->open_object_section("inode");
   inode.dump(f);
   f->close_section(); // inode
-  f->open_array_section("xattrs");
+  f->open_object_section("xattrs");
   for (map<string, bufferptr>::const_iterator iter = xattrs.begin();
       iter != xattrs.end(); ++iter) {
-    f->dump_string(iter->first.c_str(), iter->second.c_str());
+    string s(iter->second.c_str(), iter->second.length());
+    f->dump_string(iter->first.c_str(), s);
   }
   f->close_section(); // xattrs
   if (inode.is_symlink()) {

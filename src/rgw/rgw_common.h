@@ -93,6 +93,13 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_QUOTA_NOBJS    RGW_ATTR_META_PREFIX "quota-count"
 #define RGW_ATTR_QUOTA_MSIZE    RGW_ATTR_META_PREFIX "quota-bytes"
 
+/* Static Web Site of Swift API. */
+#define RGW_ATTR_WEB_INDEX      RGW_ATTR_META_PREFIX "web-index"
+#define RGW_ATTR_WEB_ERROR      RGW_ATTR_META_PREFIX "web-error"
+#define RGW_ATTR_WEB_LISTINGS   RGW_ATTR_META_PREFIX "web-listings"
+#define RGW_ATTR_WEB_LIST_CSS   RGW_ATTR_META_PREFIX "web-listings-css"
+#define RGW_ATTR_SUBDIR_MARKER  RGW_ATTR_META_PREFIX "web-directory-type"
+
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
 #define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
@@ -1907,6 +1914,8 @@ extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, boo
 extern string rgw_trim_whitespace(const string& src);
 extern string rgw_trim_quotes(const string& val);
 
+extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
+extern void rgw_to_iso8601(const real_time& t, string *dest);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
@@ -1929,8 +1938,12 @@ extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
-extern bool url_decode(const string& src_str, string& dest_str, bool in_query = false);
-extern void url_encode(const string& src, string& dst);
+extern bool url_decode(const std::string& src_str,
+                       std::string& dest_str,
+                       bool in_query = false);
+extern void url_encode(const std::string& src,
+                       string& dst);
+extern std::string url_encode(const std::string& src);
 
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,

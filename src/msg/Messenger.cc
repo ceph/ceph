@@ -25,7 +25,7 @@ static Spinlock random_lock;
 
 Messenger *Messenger::create(CephContext *cct, const string &type,
 			     entity_name_t name, string lname,
-			     uint64_t nonce, uint64_t features, uint64_t cflags)
+			     uint64_t nonce, uint64_t cflags)
 {
   int r = -1;
   if (type == "random") {
@@ -34,13 +34,13 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
     r = dis(random_engine);
   }
   if (r == 0 || type == "simple")
-    return new SimpleMessenger(cct, name, lname, nonce, features);
+    return new SimpleMessenger(cct, name, lname, nonce);
   else if (r == 1 || type == "async")
-    return new AsyncMessenger(cct, name, lname, nonce, features);
+    return new AsyncMessenger(cct, name, lname, nonce);
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
 	   cct->check_experimental_feature_enabled("ms-type-xio"))
-    return new XioMessenger(cct, name, lname, nonce, features, cflags);
+    return new XioMessenger(cct, name, lname, nonce, cflags);
 #endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return nullptr;

@@ -148,7 +148,12 @@ class MMDSBeacon : public PaxosServiceMessage {
   uint64_t mds_features;
 
  public:
-  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION) { }
+  MMDSBeacon()
+    : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    global_id(0), state(MDSMap::STATE_NULL), standby_for_rank(MDS_RANK_NONE),
+    standby_for_fscid(FS_CLUSTER_ID_NONE), standby_replay(false),
+    mds_features(0)
+  { }
   MMDSBeacon(const uuid_d &f, mds_gid_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se, uint64_t feat) :
     PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),

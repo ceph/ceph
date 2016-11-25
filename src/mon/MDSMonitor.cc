@@ -142,6 +142,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   assert(version > fsmap.epoch);
 
   // read and decode
+  bufferlist fsmap_bl;
   fsmap_bl.clear();
   int err = get_version(version, fsmap_bl);
   assert(err == 0);
@@ -1626,7 +1627,7 @@ int MDSMonitor::management_command(
       }
     }
 
-    if (pending_fsmap.any_filesystems()
+    if (pending_fsmap.filesystem_count() > 0
         && !pending_fsmap.get_enable_multiple()) {
       ss << "Creation of multiple filesystems is disabled.  To enable "
             "this experimental feature, use 'ceph fs flag set enable_multiple "
@@ -1698,7 +1699,7 @@ int MDSMonitor::management_command(
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
-            "inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
+            " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;
     }
 
@@ -2833,22 +2834,14 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
     pending_fsmap.promote(sgid, fs, info.rank);
 
     *mds_propose = true;
-  } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-    dout(10) << " failing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
-      << " " << ceph_mds_state_name(info.state)
+  } else if (info.state == MDSMap::STATE_STANDBY_REPLAY || 
+             info.state == MDSMap::STATE_STANDBY) {
+    dout(10) << " failing and removing " << gid << " " << info.addr << " mds." << info.rank 
+      << "." << info.inc << " " << ceph_mds_state_name(info.state)
       << dendl;
     fail_mds_gid(gid);
     *mds_propose = true;
-  } else {
-    if (info.state == MDSMap::STATE_STANDBY ||
-        info.state == MDSMap::STATE_STANDBY_REPLAY) {
-      // remove it
-      dout(10) << " removing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
-        << " " << ceph_mds_state_name(info.state)
-        << " (laggy)" << dendl;
-      fail_mds_gid(gid);
-      *mds_propose = true;
-    } else if (!info.laggy()) {
+  } else if (!info.laggy()) {
       dout(10) << " marking " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
         << " " << ceph_mds_state_name(info.state)
         << " laggy" << dendl;
@@ -2856,8 +2849,6 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
           info->laggy_since = ceph_clock_now(g_ceph_context);
       });
       *mds_propose = true;
-    }
-    last_beacon.erase(gid);
   }
 }
 
@@ -2910,6 +2901,16 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
           info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
             pending_fsmap.legacy_client_fscid : info.standby_for_fscid,
           info.standby_for_rank};
+
+        // It is possible that the map contains a standby_for_fscid
+        // that doesn't correspond to an existing filesystem, especially
+        // if we loaded from a version with a bug (#17466)
+        if (info.standby_for_fscid != FS_CLUSTER_ID_NONE
+            && !pending_fsmap.filesystem_exists(info.standby_for_fscid)) {
+          derr << "gid " << gid << " has invalid standby_for_fscid "
+               << info.standby_for_fscid << dendl;
+          continue;
+        }
 
         // If we managed to resolve a full target role
         if (target_role.fscid != FS_CLUSTER_ID_NONE) {

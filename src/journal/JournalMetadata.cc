@@ -256,21 +256,23 @@ struct C_GetTags : public Context {
   const std::string &oid;
   const std::string &client_id;
   AsyncOpTracker &async_op_tracker;
+  uint64_t start_after_tag_tid;
   boost::optional<uint64_t> tag_class;
   JournalMetadata::Tags *tags;
   Context *on_finish;
 
   const uint64_t MAX_RETURN = 64;
-  uint64_t start_after_tag_tid = 0;
   bufferlist out_bl;
 
   C_GetTags(CephContext *cct, librados::IoCtx &ioctx, const std::string &oid,
             const std::string &client_id, AsyncOpTracker &async_op_tracker,
+            uint64_t start_after_tag_tid,
             const boost::optional<uint64_t> &tag_class,
             JournalMetadata::Tags *tags, Context *on_finish)
     : cct(cct), ioctx(ioctx), oid(oid), client_id(client_id),
-      async_op_tracker(async_op_tracker), tag_class(tag_class), tags(tags),
-      on_finish(on_finish) {
+      async_op_tracker(async_op_tracker),
+      start_after_tag_tid(start_after_tag_tid), tag_class(tag_class),
+      tags(tags), on_finish(on_finish) {
     async_op_tracker.start_op();
   }
   virtual ~C_GetTags() {
@@ -559,6 +561,7 @@ void JournalMetadata::unregister_client(Context *on_finish) {
 
 void JournalMetadata::allocate_tag(uint64_t tag_class, const bufferlist &data,
                                    Tag *tag, Context *on_finish) {
+  on_finish = new C_NotifyUpdate(this, on_finish);
   C_AllocateTag *ctx = new C_AllocateTag(m_cct, m_ioctx, m_oid,
                                          m_async_op_tracker, tag_class,
                                          data, tag, on_finish);
@@ -579,11 +582,12 @@ void JournalMetadata::get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish) {
   ctx->send();
 }
 
-void JournalMetadata::get_tags(const boost::optional<uint64_t> &tag_class,
+void JournalMetadata::get_tags(uint64_t start_after_tag_tid,
+                               const boost::optional<uint64_t> &tag_class,
                                Tags *tags, Context *on_finish) {
   C_GetTags *ctx = new C_GetTags(m_cct, m_ioctx, m_oid, m_client_id,
-                                 m_async_op_tracker, tag_class,
-                                 tags, on_finish);
+                                 m_async_op_tracker, start_after_tag_tid,
+                                 tag_class, tags, on_finish);
   ctx->send();
 }
 
@@ -1010,10 +1014,10 @@ void JournalMetadata::notify_update() {
   m_ioctx.notify2(m_oid, bl, 5000, NULL);
 }
 
-void JournalMetadata::async_notify_update() {
+void JournalMetadata::async_notify_update(Context *on_safe) {
   ldout(m_cct, 10) << "async notifying journal header update" << dendl;
 
-  C_AioNotify *ctx = new C_AioNotify(this);
+  C_AioNotify *ctx = new C_AioNotify(this, on_safe);
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
@@ -1023,6 +1027,12 @@ void JournalMetadata::async_notify_update() {
   assert(r == 0);
 
   comp->release();
+}
+
+void JournalMetadata::wait_for_ops() {
+  C_SaferCond ctx;
+  m_async_op_tracker.wait_for_ops(&ctx);
+  ctx.wait();
 }
 
 void JournalMetadata::handle_notified(int r) {

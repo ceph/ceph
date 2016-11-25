@@ -33,6 +33,7 @@ static const str_to_entity_type_t STR_TO_ENTITY_TYPE[] = {
   { CEPH_ENTITY_TYPE_MON, "mon" },
   { CEPH_ENTITY_TYPE_OSD, "osd" },
   { CEPH_ENTITY_TYPE_MDS, "mds" },
+  { CEPH_ENTITY_TYPE_MGR, "mgr" },
   { CEPH_ENTITY_TYPE_CLIENT, "client" },
 };
 

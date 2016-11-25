@@ -65,6 +65,8 @@ override_dh_installinit:
 	install -m0644 src/upstart/rbdmap.conf debian/ceph-common/etc/init
 	install -d -m0755 debian/ceph-mds/etc/init
 	install -m0644 src/upstart/ceph-mds*.conf debian/ceph-mds/etc/init
+	install -d -m0755 debian/ceph-mgr/etc/init
+	install -m0644 src/upstart/ceph-mgr*.conf debian/ceph-mgr/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
 	install -d -m0755 debian/rbd-mirror/etc/init
@@ -97,6 +99,11 @@ override_dh_installinit:
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
 	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
 
+	install -d -m0755 debian/ceph-mgr/lib/systemd/system
+	install -m0644 systemd/ceph-mgr@.service debian/ceph-mgr/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
+	install -m0644 systemd/ceph-mgr.target debian/ceph-mgr/lib/systemd/system
+
 	install -d -m0755 debian/radosgw/lib/systemd/system
 	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
@@ -115,6 +122,7 @@ override_dh_systemd_start:
 
 override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
+	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
@@ -131,9 +139,7 @@ override_dh_strip:
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
 override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor \
-	  --exclude=python-rados --exclude=python-cephfs --exclude=python-rbd    \
-	  --exclude=python3-rados --exclude=python3-cephfs --exclude=python3-rbd \
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
 
 override_dh_python2:
 	for binding in rados cephfs rbd; do                                \
@@ -142,6 +148,7 @@ override_dh_python2:
 	dh_python2 -p ceph-common
 	dh_python2 -p ceph-base
 	dh_python2 -p ceph-osd
+	dh_python2 -p ceph-mgr
 
 override_dh_python3:
 	for binding in rados cephfs rbd; do                                \

@@ -11,7 +11,7 @@
 [submodule "src/erasure-code/jerasure/gf-complete"]
 	path = src/erasure-code/jerasure/gf-complete
 	url = https://github.com/ceph/gf-complete.git
-	branch = v2-ceph
+	branch = v3-ceph
 [submodule "src/rocksdb"]
 	path = src/rocksdb
 	url = https://github.com/ceph/rocksdb
@@ -33,3 +33,8 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
+[submodule "src/lua"]
+	path = src/lua
+	url = https://github.com/ceph/lua.git
+	branch = lua-5.3-ceph
+	ignore = dirty

@@ -23,10 +23,13 @@
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
     bucket check               check bucket index
+    bucket reshard             reshard bucket
+    bi get                     retrieve bucket index object entries
+    bi put                     store bucket index object entries
+    bi list                    list raw bucket index entries
     object rm                  remove object
     object unlink              unlink object from bucket index
     objects expire             run expired objects cleanup
-    period prepare             prepare a new period
     period delete              delete a period
     period get                 get period info
     period get-current         get current period info
@@ -161,6 +164,17 @@
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
      --endpoints=<list>        zone endpoints
+     --tier-type=<type>        zone tier type
+     --tier-config=<k>=<v>[,...]
+                               set zone tier config keys, values
+     --tier-config-rm=<k>[,...]
+                               unset zone tier config keys
+     --tier_type=<type>        zone tier type
+     --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers
+     --sync-from=[zone-name][,...]
+                               set list of zones to sync from
+     --sync-from-rm=[zone-name][,...]
+                               remove zones from list of zones to sync from
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
@@ -202,6 +216,7 @@
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   

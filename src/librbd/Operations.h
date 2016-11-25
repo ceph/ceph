@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_OPERATIONS_H
 #define CEPH_LIBRBD_OPERATIONS_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
 #include "librbd/operation/ObjectMapIterate.h"
 #include <atomic>
@@ -43,9 +44,14 @@ public:
   void execute_resize(uint64_t size, bool allow_shrink, ProgressContext &prog_ctx,
                       Context *on_finish, uint64_t journal_op_tid);
 
-  int snap_create(const char *snap_name);
-  void snap_create(const char *snap_name, Context *on_finish);
-  void execute_snap_create(const std::string &snap_name, Context *on_finish,
+  int snap_create(const char *snap_name,
+		  const cls::rbd::SnapshotNamespace &snap_namespace);
+  void snap_create(const char *snap_name,
+		   const cls::rbd::SnapshotNamespace &snap_namespace,
+		   Context *on_finish);
+  void execute_snap_create(const std::string &snap_name,
+			   const cls::rbd::SnapshotNamespace &snap_namespace,
+			   Context *on_finish,
                            uint64_t journal_op_tid, bool skip_object_map);
 
   int snap_rollback(const char *snap_name, ProgressContext& prog_ctx);
@@ -69,6 +75,17 @@ public:
 
   int snap_set_limit(uint64_t limit);
   void execute_snap_set_limit(uint64_t limit, Context *on_finish);
+
+  int update_features(uint64_t features, bool enabled);
+  void execute_update_features(uint64_t features, bool enabled,
+                               Context *on_finish, uint64_t journal_op_tid);
+
+  int metadata_set(const std::string &key, const std::string &value);
+  void execute_metadata_set(const std::string &key, const std::string &value,
+                            Context *on_finish);
+
+  int metadata_remove(const std::string &key);
+  void execute_metadata_remove(const std::string &key, Context *on_finish);
 
   int prepare_image_update();
 

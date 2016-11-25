@@ -39,6 +39,7 @@
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 
+#include "rebuild_mondb.h"
 #include "ceph_objectstore_tool.h"
 #include "include/compat.h"
 
@@ -476,12 +477,13 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
   map<string,bufferlist> km;
+  pg_info_t last_written_info;
   int ret = PG::_prepare_write_info(
     &km, epoch,
-    info, coll,
+    info,
+    last_written_info,
     past_intervals,
-    pgmeta_oid,
-    true, true);
+    true, true, false);
   if (ret) cerr << "Failed to write info" << std::endl;
   t.omap_setkeys(coll, pgmeta_oid, km);
   return ret;
@@ -2326,7 +2328,8 @@ int apply_layout_settings(ObjectStore *os, const OSDSuperblock &superblock,
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format, argnspace, pool;
+  string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
+  string objcmd, arg1, arg2, type, format, argnspace, pool;
   boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
@@ -2351,11 +2354,13 @@ int main(int argc, char **argv)
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, fuse, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
      "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+    ("mon-store-path", po::value<string>(&mon_store_path),
+     "path of monstore to update-mon-db")
     ("mountpoint", po::value<string>(&mountpoint),
      "fuse mountpoint")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -2425,7 +2430,8 @@ int main(int argc, char **argv)
     flags |= SKIP_JOURNAL_REPLAY;
   if (vm.count("skip-mount-omap"))
     flags |= SKIP_MOUNT_OMAP;
-
+  if (op == "update-mon-db")
+    flags |= SKIP_JOURNAL_REPLAY;
   head = (vm.count("head") > 0);
 
   vector<const char *> ceph_options;
@@ -2866,6 +2872,14 @@ int main(int argc, char **argv)
       ret = set_inc_osdmap(fs, epoch, bl, force, *osr);
     }
     goto out;
+  } else if (op == "update-mon-db") {
+    if (!vm.count("mon-store-path")) {
+      cerr << "Please specify the path to monitor db to update" << std::endl;
+      ret = -EINVAL;
+    } else {
+      ret = update_mon_db(*fs, superblock, dpath + "/keyring", mon_store_path);
+    }
+    goto out;
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -3259,9 +3273,9 @@ int main(int argc, char **argv)
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
-      if (struct_ver != PG::cur_struct_v) {
+      if (struct_ver < PG::compat_struct_v) {
         cerr << "Can't remove past-intervals, version mismatch " << (int)struct_ver
-          << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+          << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
           << std::endl;
         ret = -EFAULT;
         goto out;
@@ -3284,9 +3298,9 @@ int main(int argc, char **argv)
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
-      if (struct_ver != PG::cur_struct_v) {
-	cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
-	     << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+      if (struct_ver < PG::compat_struct_v) {
+        cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
+	     << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
 	     << std::endl;
 	ret = 1;
 	goto out;

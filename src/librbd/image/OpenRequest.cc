@@ -273,8 +273,59 @@ Context *OpenRequest<I>::handle_v2_get_stripe_unit_count(int *result) {
     return nullptr;
   }
 
-  m_image_ctx->init_layout();
+  send_v2_get_data_pool();
+  return nullptr;
+}
 
+template <typename I>
+void OpenRequest<I>::send_v2_get_data_pool() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_data_pool_start(&op);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_ack_callback<
+    klass, &klass::handle_v2_get_data_pool>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  int64_t data_pool_id = -1;
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::get_data_pool_finish(&it, &data_pool_id);
+  } else if (*result == -ENOEXEC) {
+    *result = 0;
+  }
+
+  if (*result < 0) {
+    lderr(cct) << "failed to read data pool: " << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  if (data_pool_id != -1) {
+    librados::Rados rados(m_image_ctx->md_ctx);
+    *result = rados.ioctx_create2(data_pool_id, m_image_ctx->data_ctx);
+    if (*result < 0) {
+      lderr(cct) << "failed to initialize data pool IO context: "
+                 << cpp_strerror(*result) << dendl;
+      send_close_image(*result);
+      return nullptr;
+    }
+  }
+
+  m_image_ctx->init_layout();
   send_v2_apply_metadata();
   return nullptr;
 }

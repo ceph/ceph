@@ -382,7 +382,8 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 
 RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr),
                                                                          user_data(_user_data), lock("RGWAioCompletionNotifier"), registered(true) {
-  c = librados::Rados::aio_create_completion((void *)this, _aio_completion_notifier_cb, NULL);
+  c = librados::Rados::aio_create_completion((void *)this, NULL,
+					     _aio_completion_notifier_cb);
 }
 
 RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier()
@@ -587,7 +588,19 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   }
 
   lock.get_write();
-  assert(context_stacks.empty() || going_down.read()); // assert on deadlock
+  if (!context_stacks.empty() && !going_down.read()) {
+    JSONFormatter formatter(true);
+    formatter.open_array_section("context_stacks");
+    for (auto& s : context_stacks) {
+      ::encode_json("entry", *s, &formatter);
+    }
+    formatter.close_section();
+    lderr(cct) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
+    formatter.flush(*_dout);
+    *_dout << dendl;
+    assert(context_stacks.empty() || going_down.read()); // assert on deadlock
+  }
+
   for (auto stack : context_stacks) {
     ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
     stack->put();

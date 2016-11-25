@@ -47,8 +47,6 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "erasure-code/ErasureCodePlugin.h"
-
 #define dout_subsys ceph_subsys_osd
 
 namespace {
@@ -90,21 +88,6 @@ void usage()
        << "                    get OSD fsid for the given block device\n"
        << std::endl;
   generic_server_usage();
-}
-
-int preload_erasure_code()
-{
-  string plugins = g_conf->osd_erasure_code_plugins;
-  stringstream ss;
-  int r = ErasureCodePluginRegistry::instance().preload(
-    plugins,
-    g_conf->erasure_code_dir,
-    &ss);
-  if (r)
-    derr << ss.str() << dendl;
-  else
-    dout(10) << ss.str() << dendl;
-  return r;
 }
 
 int main(int argc, const char **argv) 
@@ -447,26 +430,26 @@ int main(int argc, const char **argv)
 
   Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::OSD(whoami), "client",
-					   getpid(), 0,
+					   getpid(),
 					   Messenger::HAS_HEAVY_TRAFFIC |
 					   Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
-					    getpid(), CEPH_FEATURES_ALL,
+					    getpid(),
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
-					     getpid(), 0, Messenger::HEARTBEAT);
+					     getpid(), Messenger::HEARTBEAT);
   Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
-						   getpid(), 0, Messenger::HEARTBEAT);
+						   getpid(), Messenger::HEARTBEAT);
   Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
-						    getpid(), 0, Messenger::HEARTBEAT);
+						    getpid(), Messenger::HEARTBEAT);
   Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
-					     getpid());
+					     getpid(), 0);
   if (!ms_public || !ms_cluster || !ms_hbclient || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
     exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
@@ -510,6 +493,12 @@ int main(int argc, const char **argv)
 							       CEPH_FEATURE_UID |
 							       CEPH_FEATURE_PGID64 |
 							       CEPH_FEATURE_OSDENC));
+  ms_public->set_policy(entity_name_t::TYPE_MGR,
+                               Messenger::Policy::lossy_client(supported,
+							       CEPH_FEATURE_UID |
+							       CEPH_FEATURE_PGID64 |
+							       CEPH_FEATURE_OSDENC));
+
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
 			Messenger::Policy::stateless_server(0,0));
@@ -575,7 +564,7 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  if (preload_erasure_code() < 0)
+  if (global_init_preload_erasure_code(g_ceph_context) < 0)
     return -1;
 
   osd = new OSD(g_ceph_context,

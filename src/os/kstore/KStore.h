@@ -126,7 +126,7 @@ public:
     int trim(int max=-1);
   };
 
-  struct Collection {
+  struct Collection : public CollectionImpl {
     KStore *store;
     coll_t cid;
     kstore_cnode_t cnode;
@@ -137,6 +137,10 @@ public:
     OnodeHashLRU onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
+
+    const coll_t &get_cid() override {
+      return cid;
+    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -151,7 +155,7 @@ public:
 
     Collection(KStore *ns, coll_t c);
   };
-  typedef ceph::shared_ptr<Collection> CollectionRef;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
@@ -389,6 +393,9 @@ private:
 			uint64_t offset, bufferlist& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
 
+  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+    bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
+
 public:
   KStore(CephContext *cct, const string& path);
   ~KStore();
@@ -434,6 +441,9 @@ public:
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false); // struct stat?
+  int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts);
   using ObjectStore::read;
   int read(
     const coll_t& cid,
@@ -459,12 +469,14 @@ public:
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
-  using ObjectStore::collection_list;
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
-		      bool sort_bitwise, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next);
+	      bool sort_bitwise, int max,
+	      vector<ghobject_t> *ls, ghobject_t *next) override;
+  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
+	      bool sort_bitwise, int max,
+	      vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(
@@ -625,6 +637,13 @@ private:
 		   OnodeRef& oldo,
 		   OnodeRef& newo,
 		   uint64_t srcoff, uint64_t length, uint64_t dstoff);
+  int _move_ranges_destroy_src(
+    TransContext *txc,
+    CollectionRef& c,
+    OnodeRef& oldo,
+    CollectionRef& bc,
+    OnodeRef& newo,
+    vector<std::pair<uint64_t, uint64_t>> move_info);
   int _rename(TransContext *txc,
 	      CollectionRef& c,
 	      OnodeRef& oldo,

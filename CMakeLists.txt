@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION "10.2.1")
+set(VERSION 11.0.2)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -240,13 +240,6 @@ find_package(leveldb REQUIRED)
 find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
 endif(${WITH_LEVELDB})
 
-option(WITH_EXPAT "EXPAT is here" ON)
-if(${WITH_EXPAT})
-find_package(EXPAT REQUIRED)
-endif(${WITH_EXPAT})
-
-find_package(fcgi REQUIRED)
-
 find_package(atomic_ops REQUIRED)
 message(STATUS "${ATOMIC_OPS_LIBRARIES}")
 if(NOT ${ATOMIC_OPS_FOUND})
@@ -257,7 +250,7 @@ find_package(snappy REQUIRED)
 
 #if allocator is set on command line make sure it matches below strings
 if(ALLOCATOR)
-  if(${ALLOCATOR} STREQUAL "tcmalloc")
+  if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools REQUIRED)
     set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
@@ -325,9 +318,21 @@ endif(WITH_XIO)
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
+if(WITH_RADOSGW)
+  find_package(EXPAT REQUIRED)
+  find_package(fcgi REQUIRED)
+endif(WITH_RADOSGW)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
+
+#option for Mgr
+option(WITH_MGR "ceph-mgr is enabled" ON)
+if(WITH_MGR)
+    set(Python_ADDITIONAL_VERSIONS 2.7)
+    find_package(PythonLibs 2.7 REQUIRED)
+    find_package(Boost COMPONENTS python REQUIRED)
+endif(WITH_MGR)
 
 option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
 if(WITH_THREAD_SAFE_RES_QUERY)
@@ -345,8 +350,7 @@ set(HAVE_LIBROCKSDB 1)
 find_package(ZLIB REQUIRED)
 
 #option for LTTng
-#currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
-option(WITH_LTTNG "LTTng tracing is enabled" OFF)
+option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
   find_package(LTTngUST REQUIRED)
   find_program(LTTNG_GEN_TP
@@ -372,6 +376,11 @@ option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+
+option(WITH_FIO "Support for fio engines" OFF)
+if(WITH_FIO)
+  find_package(fio REQUIRED)
+endif(WITH_FIO)
 
 if(LINUX)
   add_definitions(-D__linux__)

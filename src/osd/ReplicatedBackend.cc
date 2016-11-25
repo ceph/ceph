@@ -30,6 +30,34 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
   return *_dout << pgb->get_parent()->gen_dbg_prefix();
 }
 
+namespace {
+class PG_SendMessageOnConn: public Context {
+  PGBackend::Listener *pg;
+  Message *reply;
+  ConnectionRef conn;
+  public:
+  PG_SendMessageOnConn(
+    PGBackend::Listener *pg,
+    Message *reply,
+    ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
+  void finish(int) {
+    pg->send_message_osd_cluster(reply, conn.get());
+  }
+};
+
+class PG_RecoveryQueueAsync : public Context {
+  PGBackend::Listener *pg;
+  GenContext<ThreadPool::TPHandle&> *c;
+  public:
+  PG_RecoveryQueueAsync(
+    PGBackend::Listener *pg,
+    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
+  void finish(int) {
+    pg->schedule_recovery_work(c);
+  }
+};
+}
+
 struct ReplicatedBackend::C_OSD_RepModifyApply : public Context {
   ReplicatedBackend *pg;
   RepModifyRef rm;
@@ -127,7 +155,7 @@ void ReplicatedBackend::recover_object(
   }
 }
 
-void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
+void ReplicatedBackend::check_recovery_sources(const OSDMapRef& osdmap)
 {
   for(map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator i = pull_from_peer.begin();
       i != pull_from_peer.end();

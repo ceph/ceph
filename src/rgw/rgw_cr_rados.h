@@ -2,6 +2,7 @@
 #define CEPH_RGW_CR_RADOS_H
 
 #include "rgw_coroutine.h"
+#include "rgw_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
@@ -180,26 +181,25 @@ class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   rgw_bucket pool;
   string oid;
 
-  map<string, bufferlist> *pattrs;
+  map<string, bufferlist> *pattrs{nullptr};
 
   T *result;
+  /// on ENOENT, call handle_data() with an empty object instead of failing
+  const bool empty_on_enoent;
 
-  RGWAsyncGetSystemObj *req;
+  RGWAsyncGetSystemObj *req{nullptr};
 
 public:
   RGWSimpleRadosReadCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      const rgw_bucket& _pool, const string& _oid,
-		      T *_result) : RGWSimpleCoroutine(_store->ctx()),
-                                                async_rados(_async_rados), store(_store),
-                                                obj_ctx(store),
-						pool(_pool), oid(_oid),
-                                                pattrs(NULL),
-						result(_result),
-                                                req(NULL) { }
+		      T *_result, bool empty_on_enoent = true)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+      obj_ctx(store), pool(_pool), oid(_oid), result(_result),
+      empty_on_enoent(empty_on_enoent) {}
   ~RGWSimpleRadosReadCR() {
     request_cleanup();
   }
-                                                         
+
   void request_cleanup() {
     if (req) {
       req->finish();
@@ -235,18 +235,26 @@ int RGWSimpleRadosReadCR<T>::request_complete()
 {
   int ret = req->get_ret_status();
   retcode = ret;
-  if (ret != -ENOENT) {
+  if (ret == -ENOENT && empty_on_enoent) {
+    *result = T();
+  } else {
     if (ret < 0) {
       return ret;
     }
-    bufferlist::iterator iter = bl.begin();
     try {
-      ::decode(*result, iter);
+      bufferlist::iterator iter = bl.begin();
+      if (iter.end()) {
+        // allow successful reads with empty buffers. ReadSyncStatus coroutines
+        // depend on this to be able to read without locking, because the
+        // cls lock from InitSyncStatus will create an empty object if it didnt
+        // exist
+        *result = T();
+      } else {
+        ::decode(*result, iter);
+      }
     } catch (buffer::error& err) {
       return -EIO;
     }
-  } else {
-    *result = T();
   }
 
   return handle_data(*result);
@@ -790,6 +798,93 @@ public:
   }
 };
 
+class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  rgw_obj_key key;
+
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  map<string, bufferlist> *pattrs;
+
+protected:
+  int _send_request();
+public:
+  RGWAsyncStatRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                         const string& _source_zone,
+                         RGWBucketInfo& _bucket_info,
+                         const rgw_obj_key& _key,
+                         ceph::real_time *_pmtime,
+                         uint64_t *_psize,
+                         map<string, bufferlist> *_pattrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                                      source_zone(_source_zone),
+                                                      bucket_info(_bucket_info),
+                                                      key(_key),
+                                                      pmtime(_pmtime),
+                                                      psize(_psize),
+                                                      pattrs(_pattrs) {}
+};
+
+class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  rgw_obj_key key;
+
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  map<string, bufferlist> *pattrs;
+
+  RGWAsyncStatRemoteObj *req;
+
+public:
+  RGWStatRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                      const string& _source_zone,
+                      RGWBucketInfo& _bucket_info,
+                      const rgw_obj_key& _key,
+                      ceph::real_time *_pmtime,
+                      uint64_t *_psize,
+                      map<string, bufferlist> *_pattrs) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                                       async_rados(_async_rados), store(_store),
+                                       source_zone(_source_zone),
+                                       bucket_info(_bucket_info),
+                                       key(_key),
+                                       pmtime(_pmtime),
+                                       psize(_psize),
+                                       pattrs(_pattrs),
+                                       req(NULL) {}
+
+
+  ~RGWStatRemoteObjCR() {
+    request_cleanup();
+  }
+
+  void request_cleanup() {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() {
+    req = new RGWAsyncStatRemoteObj(this, stack->create_completion_notifier(), store, source_zone,
+                                    bucket_info, key, pmtime, psize, pattrs);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
 class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   string source_zone;
@@ -980,6 +1075,27 @@ public:
 
   int send_request();
   int request_complete();
+};
+
+class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+  RGWAioCompletionNotifier *cn{nullptr};
+ protected:
+  std::string oid;
+  real_time start_time;
+  real_time end_time;
+  std::string from_marker;
+  std::string to_marker;
+
+ public:
+  RGWRadosTimelogTrimCR(RGWRados *store, const std::string& oid,
+                        const real_time& start_time, const real_time& end_time,
+                        const std::string& from_marker,
+                        const std::string& to_marker);
+  ~RGWRadosTimelogTrimCR();
+
+  int send_request() override;
+  int request_complete() override;
 };
 
 class RGWAsyncStatObj : public RGWAsyncRadosRequest {

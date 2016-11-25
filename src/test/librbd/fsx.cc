@@ -827,7 +827,7 @@ krbd_close(struct rbd_ctx *ctx)
 		return ret;
 	}
 
-	ret = krbd_unmap(krbd, ctx->krbd_name);
+	ret = krbd_unmap(krbd, ctx->krbd_name, "");
 	if (ret < 0) {
 		prt("krbd_unmap(%s) failed\n", ctx->krbd_name);
 		return ret;

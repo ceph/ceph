@@ -39,6 +39,7 @@ struct ExecuteOp : public Context {
 
   void execute(const journal::SnapCreateEvent &_) {
     image_ctx.operations->execute_snap_create(event.snap_name,
+					      event.snap_namespace,
                                               on_op_complete,
                                               event.op_tid, false);
   }
@@ -87,6 +88,20 @@ struct ExecuteOp : public Context {
 
   void execute(const journal::SnapLimitEvent &_) {
     image_ctx.operations->execute_snap_set_limit(event.limit, on_op_complete);
+  }
+
+  void execute(const journal::UpdateFeaturesEvent &_) {
+    image_ctx.operations->execute_update_features(event.features, event.enabled,
+						  on_op_complete, event.op_tid);
+  }
+
+  void execute(const journal::MetadataSetEvent &_) {
+    image_ctx.operations->execute_metadata_set(event.key, event.value,
+                                               on_op_complete);
+  }
+
+  void execute(const journal::MetadataRemoveEvent &_) {
+    image_ctx.operations->execute_metadata_remove(event.key, on_op_complete);
   }
 
   virtual void finish(int r) override {
@@ -654,6 +669,76 @@ void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
     m_image_ctx, new ExecuteOp<I, journal::SnapLimitEvent>(m_image_ctx,
 							   event,
 							   on_op_complete));
+
+  on_ready->complete(0);
+}
+
+template <typename I>
+void Replay<I>::handle_event(const journal::UpdateFeaturesEvent &event,
+			     Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << ": Update features event" << dendl;
+
+  Mutex::Locker locker(m_lock);
+  OpEvent *op_event;
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
+  // avoid lock cycles
+  m_image_ctx.op_work_queue->queue(new C_RefreshIfRequired<I>(
+    m_image_ctx, new ExecuteOp<I, journal::UpdateFeaturesEvent>(
+      m_image_ctx, event, on_op_complete)), 0);
+
+  // do not process more events until the state machine is ready
+  // since it will affect IO
+  op_event->op_in_progress = true;
+  op_event->on_start_ready = on_ready;
+}
+
+template <typename I>
+void Replay<I>::handle_event(const journal::MetadataSetEvent &event,
+			     Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << ": Metadata set event" << dendl;
+
+  Mutex::Locker locker(m_lock);
+  OpEvent *op_event;
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
+  op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
+    m_image_ctx, new ExecuteOp<I, journal::MetadataSetEvent>(
+      m_image_ctx, event, on_op_complete));
+
+  on_ready->complete(0);
+}
+
+template <typename I>
+void Replay<I>::handle_event(const journal::MetadataRemoveEvent &event,
+			     Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << ": Metadata remove event" << dendl;
+
+  Mutex::Locker locker(m_lock);
+  OpEvent *op_event;
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
+  op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
+    m_image_ctx, new ExecuteOp<I, journal::MetadataRemoveEvent>(
+      m_image_ctx, event, on_op_complete));
+
+  // ignore errors caused due to replay
+  op_event->ignore_error_codes = {-ENOENT};
 
   on_ready->complete(0);
 }

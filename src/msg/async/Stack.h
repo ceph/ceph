@@ -216,7 +216,7 @@ class Worker {
   Worker(CephContext *c, unsigned i)
     : cct(c), perf_logger(NULL), id(i), references(0), center(c) {
     char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    sprintf(name, "AsyncMessenger::Worker-%u", id);
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 
@@ -288,6 +288,8 @@ class NetworkStack : public CephContext::ForkWatcher {
 
   explicit NetworkStack(CephContext *c, const string &t);
  public:
+  NetworkStack(const NetworkStack &) = delete;
+  NetworkStack& operator=(const NetworkStack &) = delete;
   virtual ~NetworkStack() {
     for (auto &&w : workers)
       delete w;
@@ -331,9 +333,6 @@ class NetworkStack : public CephContext::ForkWatcher {
     start();
   }
 
- private:
-  NetworkStack(const NetworkStack &);
-  NetworkStack& operator=(const NetworkStack &);
 };
 
 #endif //CEPH_MSG_ASYNC_STACK_H

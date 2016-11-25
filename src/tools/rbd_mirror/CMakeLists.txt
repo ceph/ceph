@@ -30,8 +30,8 @@ add_executable(rbd-mirror
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 target_link_libraries(rbd-mirror
   rbd_mirror_internal
-  rbd_internal
   rbd_api
+  rbd_internal
   rbd_types
   journal
   librados

@@ -74,7 +74,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     return 0;
   }
 
-  if (need) {
+  if (_need_tickets()) {
     /* get service tickets */
     ldout(cct, 10) << "get service keys: want=" << want << " need=" << need << " have=" << have << dendl;
 
@@ -94,6 +94,15 @@ int CephxClientHandler::build_request(bufferlist& bl) const
   }
 
   return 0;
+}
+
+bool CephxClientHandler::_need_tickets() const
+{
+  // do not bother (re)requesting tickets if we *only* need the MGR
+  // ticket; that can happen during an upgrade and we want to avoid a
+  // loop.  we'll end up re-requesting it later when the secrets
+  // rotating.
+  return need && need != CEPH_ENTITY_TYPE_MGR;
 }
 
 int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
@@ -135,7 +144,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
       }
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       validate_tickets();
-      if (need)
+      if (_need_tickets())
 	ret = -EAGAIN;
       else
 	ret = 0;
@@ -152,7 +161,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
         return -EPERM;
       }
       validate_tickets();
-      if (!need) {
+      if (!_need_tickets()) {
 	ret = 0;
       }
     }
@@ -230,8 +239,11 @@ bool CephxClientHandler::need_tickets()
   RWLock::WLocker l(lock);
   validate_tickets();
 
-  ldout(cct, 20) << "need_tickets: want=" << want << " need=" << need << " have=" << have << dendl;
+  ldout(cct, 20) << "need_tickets: want=" << want
+		 << " have=" << have
+		 << " need=" << need
+		 << dendl;
 
-  return (need != 0);
+  return _need_tickets();
 }
 

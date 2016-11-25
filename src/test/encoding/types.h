@@ -35,6 +35,7 @@ TYPE(SloppyCRCMap)
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE_FEATUREFUL(entity_addr_t)
+TYPE_FEATUREFUL(entity_addrvec_t)
 TYPE_FEATUREFUL(entity_inst_t)
 
 #include "osd/OSDMap.h"
@@ -133,11 +134,11 @@ TYPE(hobject_t)
 TYPE(ghobject_t)
 
 #include "mon/AuthMonitor.h"
-TYPE(AuthMonitor::Incremental)
+TYPE_FEATUREFUL(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
-TYPE(PGMap::Incremental)
-TYPE_NONDETERMINISTIC(PGMap)
+TYPE_FEATUREFUL(PGMap::Incremental)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)

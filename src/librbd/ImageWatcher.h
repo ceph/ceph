@@ -4,11 +4,12 @@
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
-#include "librbd/image_watcher/Notifier.h"
+#include "librbd/object_watcher/Notifier.h"
 #include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
@@ -36,7 +37,9 @@ public:
                       Context *on_finish);
   void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
-  void notify_snap_create(const std::string &snap_name, Context *on_finish);
+  void notify_snap_create(const std::string &snap_name,
+			  const cls::rbd::SnapshotNamespace &snap_namespace,
+			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
                           Context *on_finish);
@@ -46,6 +49,9 @@ public:
   void notify_rebuild_object_map(uint64_t request_id,
                                  ProgressContext &prog_ctx, Context *on_finish);
   void notify_rename(const std::string &image_name, Context *on_finish);
+
+  void notify_update_features(uint64_t features, bool enabled,
+                              Context *on_finish);
 
   void notify_acquired_lock();
   void notify_released_lock();
@@ -238,7 +244,7 @@ private:
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
 
-  image_watcher::Notifier m_notifier;
+  object_watcher::Notifier m_notifier;
 
   void handle_register_watch(int r);
 
@@ -302,6 +308,8 @@ private:
   bool handle_payload(const watch_notify::RebuildObjectMapPayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::RenamePayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::UpdateFeaturesPayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);

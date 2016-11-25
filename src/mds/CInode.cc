@@ -1874,7 +1874,7 @@ void CInode::start_scatter(ScatterLock *lock)
 }
 
 
-class C_Inode_FragUpdate : public MDSInternalContextBase {
+class C_Inode_FragUpdate : public MDSLogContextBase {
 protected:
   CInode *in;
   CDir *dir;
@@ -3785,9 +3785,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
       // Whether we have a tag to apply depends on ScrubHeader (if one is
       // present)
-      if (in->scrub_infop && in->scrub_infop->header) {
+      if (in->scrub_infop) {
         // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        const std::string &tag = in->scrub_infop->header->tag;
+        const std::string &tag = in->scrub_infop->header->get_tag();
         // Rather than using the usual CInode::fetch_backtrace,
         // use a special variant that optionally writes a tag in the same
         // operation.
@@ -3813,9 +3813,13 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       bool equivalent, divergent;
       int memory_newer;
 
+      MDCache *mdcache = in->mdcache;  // For the benefit of dout
+      const inode_t& inode = in->inode;  // For the benefit of dout
+
       // Ignore rval because it's the result of a FAILOK operation
       // from fetch_backtrace_and_tag: the real result is in
       // backtrace.ondisk_read_retval
+      dout(20) << "ondisk_read_retval: " << results->backtrace.ondisk_read_retval << dendl;
       if (results->backtrace.ondisk_read_retval != 0) {
         results->backtrace.error_str << "failed to read off disk; see retval";
 	goto next;
@@ -3825,6 +3829,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       try {
         bufferlist::iterator p = bl.begin();
         ::decode(results->backtrace.ondisk_value, p);
+        dout(10) << "decoded " << bl.length() << " bytes of backtrace successfully" << dendl;
       } catch (buffer::error&) {
         if (results->backtrace.ondisk_read_retval == 0 && rval != 0) {
           // Cases where something has clearly gone wrong with the overall
@@ -3840,22 +3845,26 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
 					      &equivalent, &divergent);
 
-      if (equivalent) {
-        results->backtrace.passed = true;
+      if (divergent || memory_newer < 0) {
+	// we're divergent, or on-disk version is newer
+	results->backtrace.error_str << "On-disk backtrace is divergent or newer";
       } else {
-        if (divergent || memory_newer <= 0) {
-          // we're divergent, or don't have a newer version to write
-          results->backtrace.error_str <<
-              "On-disk backtrace is divergent or newer";
-	  goto next;
-        }
+        results->backtrace.passed = true;
       }
 next:
+
+      if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
+        std::string path;
+        in->make_path_string(path);
+        in->mdcache->mds->clog->warn() << "bad backtrace on inode " << *in
+                           << ", rewriting it at " << path;
+        in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
+                           false);
+      }
+
       // If the inode's number was free in the InoTable, fix that
       // (#15619)
       {
-        const inode_t& inode = in->inode;
-        MDCache *mdcache = in->mdcache;
         InoTable *inotable = mdcache->mds->inotable;
 
         dout(10) << "scrub: inotable ino = 0x" << std::hex << inode.ino << dendl;
@@ -3867,7 +3876,7 @@ next:
           clog->error() << "scrub: inode wrongly marked free: 0x" << std::hex
             << inode.ino;
 
-          if (in->scrub_infop->header && in->scrub_infop->header->repair) {
+          if (in->scrub_infop->header->get_repair()) {
             bool repaired = inotable->repair(inode.ino);
             if (repaired) {
               clog->error() << "inode table repaired for inode: 0x" << std::hex
@@ -3942,7 +3951,7 @@ next:
           ++p) {
         CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
 	dir->scrub_info();
-	if (!dir->scrub_infop->header && in->scrub_infop)
+	if (!dir->scrub_infop->header)
 	  dir->scrub_infop->header = in->scrub_infop->header;
         if (dir->is_complete()) {
 	  dir->scrub_local();
@@ -3987,8 +3996,7 @@ next:
 	if (dir->scrub_infop &&
 	    dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
-	  if (dir->scrub_infop->header &&
-	      dir->scrub_infop->header->repair) {
+	  if (dir->scrub_infop->header->get_repair()) {
 	    results->raw_stats.error_str
 	      << "dirfrag(" << p->first << ") has bad stats (will be fixed); ";
 	  } else {
@@ -4003,8 +4011,7 @@ next:
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {
 	if (in->scrub_infop &&
-	    in->scrub_infop->header &&
-	    in->scrub_infop->header->repair) {
+	    in->scrub_infop->header->get_repair()) {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
@@ -4233,7 +4240,7 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
     for (std::list<frag_t>::iterator i = frags.begin();
         i != frags.end();
         ++i) {
-      if (header->force)
+      if (header->get_force())
 	scrub_infop->dirfrag_stamps[*i].reset();
       else
 	scrub_infop->dirfrag_stamps[*i];
@@ -4344,10 +4351,10 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
   *c = scrub_infop->on_finish;
   scrub_infop->on_finish = NULL;
 
-  if (scrub_infop->header && scrub_infop->header->origin == this) {
+  if (scrub_infop->header->get_origin() == this) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
-    clog->info() << "scrub complete with tag '" << scrub_infop->header->tag << "'";
+    clog->info() << "scrub complete with tag '" << scrub_infop->header->get_tag() << "'";
   }
 }
 

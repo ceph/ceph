@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
@@ -21,9 +22,14 @@
 #include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
+#include "rgw_request.h"
+#include "rgw_process.h"
+
 #include <array>
 #include <sstream>
 #include <memory>
+
+#include <boost/utility/string_ref.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -263,7 +269,8 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
 
 static void dump_container_metadata(struct req_state *,
                                     const RGWBucketEnt&,
-                                    const RGWQuotaInfo&);
+                                    const RGWQuotaInfo&,
+                                    const RGWBucketWebsiteConf&);
 
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
@@ -271,7 +278,8 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, bucket, bucket_quota);
+  dump_container_metadata(s, bucket, bucket_quota,
+                          s->bucket_info.website_conf);
 
   s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
@@ -363,7 +371,8 @@ next:
 
 static void dump_container_metadata(struct req_state *s,
                                     const RGWBucketEnt& bucket,
-                                    const RGWQuotaInfo& quota)
+                                    const RGWQuotaInfo& quota,
+                                    const RGWBucketWebsiteConf& ws_conf)
 {
   char buf[32];
   /* Adding X-Timestamp to keep align with Swift API */
@@ -433,6 +442,31 @@ static void dump_container_metadata(struct req_state *s,
 			  (long long)quota.max_objects);
     }
   }
+
+  /* Dump Static Website headers. */
+  if (! ws_conf.index_doc_suffix.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Index: %s\r\n",
+	                ws_conf.index_doc_suffix.c_str());
+  }
+
+  if (! ws_conf.error_doc.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Error: %s\r\n",
+	                ws_conf.error_doc.c_str());
+  }
+
+  if (! ws_conf.subdir_marker.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Directory-Type: %s\r\n",
+                        ws_conf.subdir_marker.c_str());
+  }
+
+  if (! ws_conf.listing_css_doc.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Listings-CSS: %s\r\n",
+	                ws_conf.listing_css_doc.c_str());
+  }
+
+  if (ws_conf.listing_enabled) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Listings: true\r\n");
+  }
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
@@ -467,7 +501,8 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket, bucket_quota);
+    dump_container_metadata(s, bucket, bucket_quota,
+                            s->bucket_info.website_conf);
   }
 
   set_req_state_err(s, op_ret);
@@ -677,6 +712,20 @@ static int get_delete_at_param(req_state *s, real_time *delete_at)
   *delete_at = delat_proposal;
 
   return 0;
+}
+
+int RGWPutObj_ObjStore_SWIFT::verify_permission()
+{
+  op_ret = RGWPutObj_ObjStore::verify_permission();
+
+  /* We have to differentiate error codes depending on whether user is
+   * anonymous (401 Unauthorized) or he doesn't have necessary permissions
+   * (403 Forbidden). */
+  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+    return -EPERM;
+  } else {
+    return op_ret;
+  }
 }
 
 int RGWPutObj_ObjStore_SWIFT::get_params()
@@ -969,6 +1018,20 @@ static void bulkdelete_respond(const unsigned num_deleted,
   formatter.close_section();
 }
 
+int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
+{
+  op_ret = RGWDeleteObj_ObjStore::verify_permission();
+
+  /* We have to differentiate error codes depending on whether user is
+   * anonymous (401 Unauthorized) or he doesn't have necessary permissions
+   * (403 Forbidden). */
+  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+    return -EPERM;
+  } else {
+    return op_ret;
+  }
+}
+
 int RGWDeleteObj_ObjStore_SWIFT::get_params()
 {
   const string& mm = s->info.args.get("multipart-manifest");
@@ -1190,8 +1253,16 @@ int RGWGetObj_ObjStore_SWIFT::get_params()
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data_error()
 {
-  bufferlist bl;
-  return send_response_data(bl, 0, 0);
+  std::string error_content;
+  op_ret = error_handler(op_ret, &error_content);
+  if (! op_ret) {
+    /* The error handler has taken care of the error. */
+    return 0;
+  }
+
+  bufferlist error_bl;
+  error_bl.append(error_content);
+  return send_response_data(error_bl, 0, error_bl.length());
 }
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
@@ -1204,9 +1275,19 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     goto send_data;
   }
 
-  set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
+  if (custom_http_ret) {
+    set_req_state_err(s, 0);
+    dump_errno(s, custom_http_ret);
+  } else {
+    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
 		    : op_ret);
-  dump_errno(s);
+    dump_errno(s);
+
+    if (s->err.is_err()) {
+      end_header(s, NULL);
+      return 0;
+    }
+  }
 
   if (range_str) {
     dump_range(s, ofs, end, s->obj_size);
@@ -1532,6 +1613,333 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
   return NULL;
 }
 
+int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
+                                           const std::string error_doc)
+{
+  /* Try to throw it all away. */
+  s->formatter->reset();
+
+  class RGWGetErrorPage : public RGWGetObj_ObjStore_SWIFT {
+  public:
+    RGWGetErrorPage(RGWRados* const store,
+                    RGWHandler_REST* const handler,
+                    req_state* const s,
+                    const int http_ret) {
+      /* Calling a virtual from the base class is safe as the subobject should
+       * be properly initialized and we haven't overridden the init method. */
+      init(store, s, handler);
+      set_get_data(true);
+      set_custom_http_response(http_ret);
+    }
+
+    int error_handler(const int err_no,
+                      std::string* const error_content) override {
+      /* Enforce that any error generated while getting the error page will
+       * not be send to a client. This allows us to recover from the double
+       * fault situation by sending the original message. */
+      return 0;
+    }
+  } get_errpage_op(store, handler, s, http_ret);
+
+  s->object = std::to_string(http_ret) + error_doc;
+
+  RGWOp* newop = &get_errpage_op;
+  RGWRequest req(0);
+  return rgw_process_authenticated(handler, newop, &req, s, true);
+}
+
+int RGWSwiftWebsiteHandler::error_handler(const int err_no,
+                                          std::string* const error_content)
+{
+  const auto& ws_conf = s->bucket_info.website_conf;
+
+  if (can_be_website_req() && ! ws_conf.error_doc.empty()) {
+    struct rgw_err err;
+    set_req_state_err(err, err_no, s->prot_flags);
+    return serve_errordoc(err.http_ret, ws_conf.error_doc);
+  }
+
+  /* Let's go to the default, no-op handler. */
+  return err_no;
+}
+
+bool RGWSwiftWebsiteHandler::is_web_mode() const
+{
+  const boost::string_ref webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
+  return boost::algorithm::iequals(webmode, "true");
+}
+
+bool RGWSwiftWebsiteHandler::can_be_website_req() const
+{
+  /* Static website works only with the GET or HEAD method. Nothing more. */
+  static const std::set<boost::string_ref> ws_methods = { "GET", "HEAD" };
+  if (ws_methods.count(s->info.method) == 0) {
+    return false;
+  }
+
+  /* We also need to handle early failures from the auth system. In such cases
+   * req_state::auth_identity may be empty. Let's treat that the same way as
+   * the anonymous access. */
+  if (! s->auth_identity) {
+    return true;
+  }
+
+  /* Swift serves websites only for anonymous requests unless client explicitly
+   * requested this behaviour by supplying X-Web-Mode HTTP header set to true. */
+  if (s->auth_identity->is_anonymous() || is_web_mode()) {
+    return true;
+  }
+
+  return false;
+}
+
+RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
+{
+  class RGWMovedPermanently: public RGWOp {
+    const std::string location;
+  public:
+    RGWMovedPermanently(const std::string& location)
+      : location(location) {
+    }
+
+    int verify_permission() override {
+      return 0;
+    }
+
+    void execute() override {
+      op_ret = -ERR_PERMANENT_REDIRECT;
+      return;
+    }
+
+    void send_response() override {
+      set_req_state_err(s, op_ret);
+      dump_errno(s);
+      dump_content_length(s, 0);
+      dump_redirect(s, location);
+      end_header(s, this);
+    }
+
+    const string name() override {
+      return "RGWMovedPermanently";
+    }
+  };
+
+  return new RGWMovedPermanently(s->info.request_uri + '/');
+}
+
+RGWOp* RGWSwiftWebsiteHandler::get_ws_index_op()
+{
+  /* Retarget to get obj on requested index file. */
+  if (! s->object.empty()) {
+    s->object = s->object.name +
+                s->bucket_info.website_conf.get_index_doc();
+  } else {
+    s->object = s->bucket_info.website_conf.get_index_doc();
+  }
+
+  auto getop = new RGWGetObj_ObjStore_SWIFT;
+  getop->set_get_data(boost::algorithm::equals("GET", s->info.method));
+
+  return getop;
+}
+
+RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
+{
+  class RGWWebsiteListing : public RGWListBucket_ObjStore_SWIFT {
+    const std::string prefix_override;
+
+    int get_params() override {
+      prefix = prefix_override;
+      max = default_max;
+      delimiter = "/";
+      return 0;
+    }
+
+    void send_response() override {
+      /* Generate the header now. */
+      set_req_state_err(s, op_ret);
+      dump_errno(s);
+      dump_container_metadata(s, bucket, bucket_quota,
+                              s->bucket_info.website_conf);
+      end_header(s, this, "text/html");
+      if (op_ret < 0) {
+        return;
+      }
+
+      /* Now it's the time to start generating HTML bucket listing.
+       * All the crazy stuff with crafting tags will be delegated to
+       * RGWSwiftWebsiteListingFormatter. */
+      std::stringstream ss;
+      RGWSwiftWebsiteListingFormatter htmler(ss, prefix);
+
+      const auto& ws_conf = s->bucket_info.website_conf;
+      htmler.generate_header(s->decoded_uri,
+                             ws_conf.listing_css_doc);
+
+      for (const auto& pair : common_prefixes) {
+        std::string subdir_name = pair.first;
+        if (! subdir_name.empty()) {
+          /* To be compliant with Swift we need to remove the trailing
+           * slash. */
+          subdir_name.pop_back();
+        }
+
+        htmler.dump_subdir(subdir_name);
+      }
+
+      for (const RGWObjEnt& obj : objs) {
+        if (! common_prefixes.count(obj.key.name + '/')) {
+          htmler.dump_object(obj);
+        }
+      }
+
+      htmler.generate_footer();
+      STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+    }
+  public:
+    /* Taking prefix_override by value to leverage std::string r-value ref
+     * ctor and thus avoid extra memory copying/increasing ref counter. */
+    RGWWebsiteListing(std::string prefix_override)
+      : prefix_override(std::move(prefix_override)) {
+    }
+  };
+
+  std::string prefix = std::move(s->object.name);
+  s->object = rgw_obj_key();
+
+  return new RGWWebsiteListing(std::move(prefix));
+}
+
+bool RGWSwiftWebsiteHandler::is_web_dir() const
+{
+  std::string subdir_name;
+  url_decode(s->object.name, subdir_name);
+
+  /* Remove character from the subdir name if it is "/". */
+  if (subdir_name.empty()) {
+    return false;
+  } else if (subdir_name.back() == '/') {
+    subdir_name.pop_back();
+  }
+
+  rgw_obj obj(s->bucket, subdir_name);
+
+  /* First, get attrset of the object we'll try to retrieve. */
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.set_atomic(obj);
+
+  RGWObjState* state = nullptr;
+  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+    return false;
+  }
+
+  /* A nonexistent object cannot be a considered as a marker representing
+   * the emulation of catalog in FS hierarchy. */
+  if (! state->exists) {
+    return false;
+  }
+
+  /* Decode the content type. */
+  std::string content_type;
+  get_contype_from_attrs(state->attrset, content_type);
+
+  const auto& ws_conf = s->bucket_info.website_conf;
+  const std::string subdir_marker = ws_conf.subdir_marker.empty()
+                                      ? "application/directory"
+                                      : ws_conf.subdir_marker;
+  return subdir_marker == content_type && state->size <= 1;
+}
+
+bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
+{
+  rgw_obj obj(s->bucket, index);
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.set_atomic(obj);
+
+  RGWObjState* state = nullptr;
+  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+    return false;
+  }
+
+  /* A nonexistent object cannot be a considered as a viable index. We will
+   * try to list the bucket or - if this is impossible - return an error. */
+  return state->exists;
+}
+
+int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
+{
+  ldout(s->cct, 10) << "Starting retarget" << dendl;
+  RGWOp* op_override = nullptr;
+
+  /* In Swift static web content is served if the request is anonymous or
+   * has X-Web-Mode HTTP header specified to true. */
+  if (can_be_website_req()) {
+    const auto& ws_conf = s->bucket_info.website_conf;
+    const auto& index = s->bucket_info.website_conf.get_index_doc();
+
+    if (s->decoded_uri.back() != '/') {
+      op_override = get_ws_redirect_op();
+    } else if (! index.empty() && is_index_present(index)) {
+      op_override = get_ws_index_op();
+    } else if (ws_conf.listing_enabled) {
+      op_override = get_ws_listing_op();
+    }
+  }
+
+  if (op_override) {
+    handler->put_op(op);
+    op_override->init(store, s, handler);
+
+    *new_op = op_override;
+  } else {
+    *new_op = op;
+  }
+
+  /* Return 404 Not Found is the request has web mode enforced but we static web
+   * wasn't able to serve it accordingly. */
+  return ! op_override && is_web_mode() ? -ENOENT : 0;
+}
+
+int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
+{
+  ldout(s->cct, 10) << "Starting object retarget" << dendl;
+  RGWOp* op_override = nullptr;
+
+  /* In Swift static web content is served if the request is anonymous or
+   * has X-Web-Mode HTTP header specified to true. */
+  if (can_be_website_req() && is_web_dir()) {
+    const auto& ws_conf = s->bucket_info.website_conf;
+    const auto& index = s->bucket_info.website_conf.get_index_doc();
+
+    if (s->decoded_uri.back() != '/') {
+      op_override = get_ws_redirect_op();
+    } else if (! index.empty() && is_index_present(index)) {
+      op_override = get_ws_index_op();
+    } else if (ws_conf.listing_enabled) {
+      op_override = get_ws_listing_op();
+    }
+  } else {
+    /* A regular request or the specified object isn't a subdirectory marker.
+     * We don't need any re-targeting. Error handling (like sending a custom
+     * error page) will be performed by error_handler of the actual RGWOp. */
+    return 0;
+  }
+
+  if (op_override) {
+    handler->put_op(op);
+    op_override->init(store, s, handler);
+
+    *new_op = op_override;
+  } else {
+    *new_op = op;
+  }
+
+  /* Return 404 Not Found if we aren't able to re-target for subdir marker. */
+  return ! op_override ? -ENOENT : 0;
+}
+
+
 RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
@@ -1576,6 +1984,7 @@ RGWOp *RGWHandler_REST_Bucket_SWIFT::op_options()
 {
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
+
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::get_obj_op(bool get_data)
 {
@@ -2019,8 +2428,9 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
   if (s->init_state.url_bucket.empty())
     return new RGWHandler_REST_Service_SWIFT;
 
-  if (s->object.empty())
+  if (s->object.empty()) {
     return new RGWHandler_REST_Bucket_SWIFT;
+  }
 
   return new RGWHandler_REST_Obj_SWIFT;
 }

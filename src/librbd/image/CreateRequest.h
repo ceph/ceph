@@ -30,19 +30,18 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class CreateRequest {
 public:
-  static CreateRequest *create(IoCtx &ioctx, std::string &imgname, std::string &imageid,
-                               uint64_t size, int order, uint64_t features,
-                               uint64_t stripe_unit, uint64_t stripe_count,
-                               uint8_t journal_order, uint8_t journal_splay_width,
-                               const std::string &journal_pool,
+  static CreateRequest *create(IoCtx &ioctx, const std::string &image_name,
+                               const std::string &image_id, uint64_t size,
+                               const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    return new CreateRequest(ioctx, imgname, imageid, size, order, features, stripe_unit,
-                             stripe_count, journal_order, journal_splay_width, journal_pool,
+    return new CreateRequest(ioctx, image_name, image_id, size, image_options,
                              non_primary_global_image_id, primary_mirror_uuid,
                              op_work_queue, on_finish);
   }
+
+  static int validate_order(CephContext *cct, uint8_t order);
 
   void send();
 
@@ -91,10 +90,9 @@ private:
    * @endverbatim
    */
 
-  CreateRequest(IoCtx &ioctx, std::string &imgname, std::string &imageid,
-                uint64_t size, int order, uint64_t features,
-                uint64_t stripe_unit, uint64_t stripe_count, uint8_t journal_order,
-                uint8_t journal_splay_width, const std::string &journal_pool,
+  CreateRequest(IoCtx &ioctx, const std::string &image_name,
+                const std::string &image_id, uint64_t size,
+                const ImageOptions &image_options,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
                 ContextWQ *op_work_queue, Context *on_finish);
@@ -103,10 +101,15 @@ private:
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;
-  int m_order;
-  uint64_t m_features, m_stripe_unit, m_stripe_count;
-  uint8_t m_journal_order, m_journal_splay_width;
-  const std::string m_journal_pool;
+  uint8_t m_order = 0;
+  uint64_t m_features = 0;
+  uint64_t m_stripe_unit = 0;
+  uint64_t m_stripe_count = 0;
+  uint8_t m_journal_order = 0;
+  uint8_t m_journal_splay_width = 0;
+  std::string m_journal_pool;
+  std::string m_data_pool;
+  int64_t m_data_pool_id = -1;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
 

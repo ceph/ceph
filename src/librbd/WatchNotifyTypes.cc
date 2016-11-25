@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/WatchNotifyTypes.h"
 #include "include/assert.h"
 #include "include/stringify.h"
@@ -239,6 +240,26 @@ void SnapPayloadBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void SnapCreatePayload::encode(bufferlist &bl) const {
+  SnapPayloadBase::encode(bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+}
+
+void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
+  SnapPayloadBase::decode(version, iter);
+  if (version >= 5) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, iter);
+    snap_namespace = sn.snapshot_namespace;
+  }
+}
+
+void SnapCreatePayload::dump(Formatter *f) const {
+  SnapPayloadBase::dump(f);
+  cls::rbd::SnapshotNamespaceOnDisk sn(snap_namespace);
+  sn.dump(f);
+}
+
 void SnapRenamePayload::encode(bufferlist &bl) const {
   ::encode(snap_id, bl);
   SnapPayloadBase::encode(bl);
@@ -266,6 +287,21 @@ void RenamePayload::dump(Formatter *f) const {
   f->dump_string("image_name", image_name);
 }
 
+void UpdateFeaturesPayload::encode(bufferlist &bl) const {
+  ::encode(features, bl);
+  ::encode(enabled, bl);
+}
+
+void UpdateFeaturesPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  ::decode(features, iter);
+  ::decode(enabled, iter);
+}
+
+void UpdateFeaturesPayload::dump(Formatter *f) const {
+  f->dump_unsigned("features", features);
+  f->dump_bool("enabled", enabled);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   assert(false);
 }
@@ -281,7 +317,7 @@ bool NotifyMessage::check_for_refresh() const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(4, 1, bl);
+  ENCODE_START(5, 1, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -339,6 +375,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_RENAME:
     payload = RenamePayload();
     break;
+  case NOTIFY_OP_UPDATE_FEATURES:
+    payload = UpdateFeaturesPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -361,12 +400,14 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
   o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(SnapCreatePayload("foo")));
+  o.push_back(new NotifyMessage(SnapCreatePayload("foo",
+						  cls::rbd::UserSnapshotNamespace())));
   o.push_back(new NotifyMessage(SnapRemovePayload("foo")));
   o.push_back(new NotifyMessage(SnapProtectPayload("foo")));
   o.push_back(new NotifyMessage(SnapUnprotectPayload("foo")));
   o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(RenamePayload("foo")));
+  o.push_back(new NotifyMessage(UpdateFeaturesPayload(1, true)));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -441,6 +482,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_RENAME:
     out << "Rename";
+    break;
+  case NOTIFY_OP_UPDATE_FEATURES:
+    out << "UpdateFeatures";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

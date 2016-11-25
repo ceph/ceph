@@ -18,7 +18,6 @@
 
 #include <algorithm>
 #include <sstream>
-#include <boost/assign.hpp>
 
 #include "OSDMonitor.h"
 #include "Monitor.h"
@@ -56,6 +55,8 @@
 #include "common/errno.h"
 
 #include "erasure-code/ErasureCodePlugin.h"
+#include "compressor/Compressor.h"
+#include "common/Checksummer.h"
 
 #include "include/compat.h"
 #include "include/assert.h"
@@ -68,7 +69,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, osdmap)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
 		<< ").osd e" << osdmap.get_epoch() << " ";
@@ -1221,13 +1222,30 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  // features for osdmap and its incremental
+  uint64_t features = mon->quorum_features;
+
   // encode full map and determine its crc
   OSDMap tmp;
   {
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
+
+    // determine appropriate features
+    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
+      features &= ~CEPH_FEATURE_SERVER_JEWEL;
+    }
+    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      dout(10) << __func__ << " encoding without feature SERVER_KRAKEN | "
+	       << "MSG_ADDR2" << dendl;
+      features &= ~(CEPH_FEATURE_SERVER_KRAKEN |
+		    CEPH_FEATURE_MSG_ADDR2);
+    }
+    dout(10) << __func__ << " encoding full map with " << features << dendl;
+
     bufferlist fullbl;
-    ::encode(tmp, fullbl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+    ::encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
     pending_inc.full_crc = tmp.get_crc();
 
     // include full map in the txn.  note that old monitors will
@@ -1238,7 +1256,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+  ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
   dout(20) << " full_crc " << tmp.get_crc()
 	   << " inc_crc " << pending_inc.inc_crc << dendl;
@@ -1367,7 +1385,7 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
 bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  Message *m = op->get_req();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
@@ -1404,7 +1422,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 bool OSDMonitor::prepare_update(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  Message *m = op->get_req();
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
@@ -1820,6 +1838,22 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   return false;
 }
 
+void OSDMonitor::force_failure(utime_t now, int target_osd)
+{
+  // already pending failure?
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return;
+  }
+
+  dout(1) << " we're forcing failure of osd." << target_osd << dendl;
+  pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+
+  mon->clog->info() << osdmap.get_inst(target_osd) << " failed (forced)\n";
+  return;
+}
+
 bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -1841,8 +1875,15 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
   if (m->if_osd_failed()) {
     // add a report
+    if (m->is_immediate()) {
+      mon->clog->debug() << m->get_target() << " reported immediately failed by "
+            << m->get_orig_source_inst() << "\n";
+      force_failure(now, target_osd);
+      return true;
+    }
     mon->clog->debug() << m->get_target() << " reported failed by "
-                       << m->get_orig_source_inst() << "\n";
+		      << m->get_orig_source_inst() << "\n";
+
     failure_info_t& fi = failure_info[target_osd];
     MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
     if (old_op) {
@@ -2844,9 +2885,20 @@ void OSDMonitor::tick()
       dout(10) << "No full osds, removing full flag" << dendl;
       remove_flag(CEPH_OSDMAP_FULL);
     }
+
+    if (!mon->pgmon()->pg_map.nearfull_osds.empty()) {
+      dout(5) << "There are near full osds, setting nearfull flag" << dendl;
+      add_flag(CEPH_OSDMAP_NEARFULL);
+    } else if (osdmap.test_flag(CEPH_OSDMAP_NEARFULL)){
+      dout(10) << "No near full osds, removing nearfull flag" << dendl;
+      remove_flag(CEPH_OSDMAP_NEARFULL);
+    }
     if (pending_inc.new_flags != -1 &&
-	(pending_inc.new_flags ^ osdmap.flags) & CEPH_OSDMAP_FULL) {
-      dout(1) << "New setting for CEPH_OSDMAP_FULL -- doing propose" << dendl;
+       (pending_inc.new_flags ^ osdmap.flags) & (CEPH_OSDMAP_FULL | CEPH_OSDMAP_NEARFULL)) {
+      dout(1) << "New setting for" <<
+              (pending_inc.new_flags & CEPH_OSDMAP_FULL ? " CEPH_OSDMAP_FULL" : "") <<
+              (pending_inc.new_flags & CEPH_OSDMAP_NEARFULL ? " CEPH_OSDMAP_NEARFULL" : "")
+              << " -- doing propose" << dendl;
       do_propose = true;
     }
   }
@@ -3029,6 +3081,45 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
+    // warn about upgrade flags that can be set but are not.
+    if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) &&
+	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      string msg = "all OSDs are running kraken or later but the"
+	" 'require_kraken_osds' osdmap flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, msg));
+      if (detail) {
+	detail->push_back(make_pair(HEALTH_WARN, msg));
+      }
+    } else if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) &&
+	       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      string msg = "all OSDs are running jewel or later but the"
+	" 'require_jewel_osds' osdmap flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, msg));
+      if (detail) {
+	detail->push_back(make_pair(HEALTH_WARN, msg));
+      }
+    }
+
+    // warn about upgrade flags that can be set but are not.
+    if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) &&
+	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      string msg = "all OSDs are running jewel or later but the"
+	" 'require_jewel_osds' osdmap flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, msg));
+      if (detail) {
+	detail->push_back(make_pair(HEALTH_WARN, msg));
+      }
+    }
+    if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) &&
+	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      string msg = "all OSDs are running kraken or later but the"
+	" 'require_kraken_osds' osdmap flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, msg));
+      if (detail) {
+	detail->push_back(make_pair(HEALTH_WARN, msg));
+      }
+    }
+
     get_pools_health(summary, detail);
   }
 }
@@ -3073,7 +3164,10 @@ namespace {
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
     HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
     SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL,
-    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY};
+    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY,
+    COMPRESSION_MODE, COMPRESSION_ALGORITHM, COMPRESSION_REQUIRED_RATIO,
+    COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
+    CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3320,7 +3414,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             // Drop error, continue to get other daemons' metadata
             dout(4) << "No metadata for osd." << i << dendl;
             r = 0;
-            continue;
           } else if (r < 0) {
             // Unexpected error
             goto reply;
@@ -3542,48 +3635,60 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "var", var);
 
     typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
-    const choices_map_t ALL_CHOICES = boost::assign::map_list_of
-      ("size", SIZE)
-      ("min_size", MIN_SIZE)
-      ("crash_replay_interval", CRASH_REPLAY_INTERVAL)
-      ("pg_num", PG_NUM)("pgp_num", PGP_NUM)("crush_ruleset", CRUSH_RULESET)
-      ("hashpspool", HASHPSPOOL)("nodelete", NODELETE)
-      ("nopgchange", NOPGCHANGE)("nosizechange", NOSIZECHANGE)
-      ("noscrub", NOSCRUB)("nodeep-scrub", NODEEP_SCRUB)
-      ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
-      ("hit_set_type", HIT_SET_TYPE)("hit_set_period", HIT_SET_PERIOD)
-      ("hit_set_count", HIT_SET_COUNT)("hit_set_fpp", HIT_SET_FPP)
-      ("use_gmt_hitset", USE_GMT_HITSET)
-      ("auid", AUID)("target_max_objects", TARGET_MAX_OBJECTS)
-      ("target_max_bytes", TARGET_MAX_BYTES)
-      ("cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO)
-      ("cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO)
-      ("cache_target_full_ratio", CACHE_TARGET_FULL_RATIO)
-      ("cache_min_flush_age", CACHE_MIN_FLUSH_AGE)
-      ("cache_min_evict_age", CACHE_MIN_EVICT_AGE)
-      ("erasure_code_profile", ERASURE_CODE_PROFILE)
-      ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
-      ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
-      ("fast_read", FAST_READ)
-      ("hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE)
-      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N)
-      ("scrub_min_interval", SCRUB_MIN_INTERVAL)
-      ("scrub_max_interval", SCRUB_MAX_INTERVAL)
-      ("deep_scrub_interval", DEEP_SCRUB_INTERVAL)
-      ("recovery_priority", RECOVERY_PRIORITY)
-      ("recovery_op_priority", RECOVERY_OP_PRIORITY)
-      ("scrub_priority", SCRUB_PRIORITY);
+    const choices_map_t ALL_CHOICES = {
+      {"size", SIZE},
+      {"min_size", MIN_SIZE},
+      {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
+      {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM}, {"crush_ruleset", CRUSH_RULESET},
+      {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
+      {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
+      {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
+      {"write_fadvise_dontneed", WRITE_FADVISE_DONTNEED},
+      {"hit_set_type", HIT_SET_TYPE}, {"hit_set_period", HIT_SET_PERIOD},
+      {"hit_set_count", HIT_SET_COUNT}, {"hit_set_fpp", HIT_SET_FPP},
+      {"use_gmt_hitset", USE_GMT_HITSET},
+      {"auid", AUID}, {"target_max_objects", TARGET_MAX_OBJECTS},
+      {"target_max_bytes", TARGET_MAX_BYTES},
+      {"cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO},
+      {"cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO},
+      {"cache_target_full_ratio", CACHE_TARGET_FULL_RATIO},
+      {"cache_min_flush_age", CACHE_MIN_FLUSH_AGE},
+      {"cache_min_evict_age", CACHE_MIN_EVICT_AGE},
+      {"erasure_code_profile", ERASURE_CODE_PROFILE},
+      {"min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE},
+      {"min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE},
+      {"fast_read", FAST_READ},
+      {"hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE},
+      {"hit_set_search_last_n", HIT_SET_SEARCH_LAST_N},
+      {"scrub_min_interval", SCRUB_MIN_INTERVAL},
+      {"scrub_max_interval", SCRUB_MAX_INTERVAL},
+      {"deep_scrub_interval", DEEP_SCRUB_INTERVAL},
+      {"recovery_priority", RECOVERY_PRIORITY},
+      {"recovery_op_priority", RECOVERY_OP_PRIORITY},
+      {"scrub_priority", SCRUB_PRIORITY},
+      {"compression_mode", COMPRESSION_MODE},
+      {"compression_algorithm", COMPRESSION_ALGORITHM},
+      {"compression_required_ratio", COMPRESSION_REQUIRED_RATIO},
+      {"compression_max_blob_size", COMPRESSION_MAX_BLOB_SIZE},
+      {"compression_min_blob_size", COMPRESSION_MIN_BLOB_SIZE},
+      {"csum_type", CSUM_TYPE},
+      {"csum_max_block", CSUM_MAX_BLOCK},
+      {"csum_min_block", CSUM_MIN_BLOCK},
+    };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
-    const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
-      (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
-      (TARGET_MAX_OBJECTS)(TARGET_MAX_BYTES)(CACHE_TARGET_FULL_RATIO)
-      (CACHE_TARGET_DIRTY_RATIO)(CACHE_TARGET_DIRTY_HIGH_RATIO)
-      (CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE)
-      (HIT_SET_GRADE_DECAY_RATE)(HIT_SET_SEARCH_LAST_N);
-    const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
-      (ERASURE_CODE_PROFILE);
+    const choices_set_t ONLY_TIER_CHOICES = {
+      {HIT_SET_TYPE}, {HIT_SET_PERIOD}, {HIT_SET_COUNT}, {HIT_SET_FPP},
+      {TARGET_MAX_OBJECTS}, {TARGET_MAX_BYTES}, {CACHE_TARGET_FULL_RATIO},
+      {CACHE_TARGET_DIRTY_RATIO}, {CACHE_TARGET_DIRTY_HIGH_RATIO},
+      {CACHE_MIN_FLUSH_AGE}, {CACHE_MIN_EVICT_AGE},
+      {MIN_READ_RECENCY_FOR_PROMOTE},
+      {HIT_SET_GRADE_DECAY_RATE}, {HIT_SET_SEARCH_LAST_N}
+    };
+    const choices_set_t ONLY_ERASURE_CHOICES = {
+      {ERASURE_CODE_PROFILE}
+    };
 
     choices_set_t selected_choices;
     if (var == "all") {
@@ -3757,12 +3862,27 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case RECOVERY_PRIORITY:
           case RECOVERY_OP_PRIORITY:
           case SCRUB_PRIORITY:
+	  case COMPRESSION_MODE:
+	  case COMPRESSION_ALGORITHM:
+	  case COMPRESSION_REQUIRED_RATIO:
+	  case COMPRESSION_MAX_BLOB_SIZE:
+	  case COMPRESSION_MIN_BLOB_SIZE:
+	  case CSUM_TYPE:
+	  case CSUM_MAX_BLOCK:
+	  case CSUM_MIN_BLOCK:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
 	    }
 	    assert(i != ALL_CHOICES.end());
-	    p->opts.dump(i->first, f.get());
+            if(*it == CSUM_TYPE) {
+              int val;
+              p->opts.get(pool_opts_t::CSUM_TYPE, &val);
+              f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
+            }
+	    else {
+              p->opts.dump(i->first, f.get());
+            }
             break;
 	}
 	f->close_section();
@@ -3891,6 +4011,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case RECOVERY_PRIORITY:
           case RECOVERY_OP_PRIORITY:
           case SCRUB_PRIORITY:
+	  case COMPRESSION_MODE:
+	  case COMPRESSION_ALGORITHM:
+	  case COMPRESSION_REQUIRED_RATIO:
+	  case COMPRESSION_MAX_BLOB_SIZE:
+	  case COMPRESSION_MIN_BLOB_SIZE:
+	  case CSUM_TYPE:
+	  case CSUM_MAX_BLOCK:
+	  case CSUM_MIN_BLOCK:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -3899,7 +4027,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
-		ss << i->first << ": " << p->opts.get(key) << "\n";
+                if(key == pool_opts_t::CSUM_TYPE) {
+                  int val;
+                  p->opts.get(key, &val);
+  		  ss << i->first << ": " << Checksummer::get_csum_type_string(val) << "\n";
+                } else {
+  		  ss << i->first << ": " << p->opts.get(key) << "\n";
+                }
 	      }
 	    }
 	    break;
@@ -4381,20 +4515,47 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
 
   pending_inc.crush.clear();
   newcrush.encode(pending_inc.crush);
-  *ss << "renamed bucket " << srcname << " into " << dstname;
+  *ss << "renamed bucket " << srcname << " into " << dstname;	
   return 0;
 }
 
-int OSDMonitor::normalize_profile(ErasureCodeProfile &profile, ostream *ss)
+void OSDMonitor::check_legacy_ec_plugin(const string& plugin, const string& profile) const
+{
+  string replacement = "";
+
+  if (plugin == "jerasure_generic" || 
+      plugin == "jerasure_sse3" ||
+      plugin == "jerasure_sse4" ||
+      plugin == "jerasure_neon") {
+    replacement = "jerasure";
+  } else if (plugin == "shec_generic" ||
+	     plugin == "shec_sse3" ||
+	     plugin == "shec_sse4" ||
+             plugin == "shec_neon") {
+    replacement = "shec";
+  }
+
+  if (replacement != "") {
+    dout(0) << "WARNING: erasure coding profile " << profile << " uses plugin "
+	    << plugin << " that has been deprecated. Please use " 
+	    << replacement << " instead." << dendl;
+  }
+}
+
+int OSDMonitor::normalize_profile(const string& profilename, 
+				  ErasureCodeProfile &profile, 
+				  ostream *ss)
 {
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
+  check_legacy_ec_plugin(plugin->second, profilename);
   int err = instance.factory(plugin->second,
 			     g_conf->erasure_code_dir,
 			     profile, &erasure_code, ss);
   if (err)
     return err;
+
   return erasure_code->init(profile, ss);
 }
 
@@ -4451,6 +4612,7 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 	<< profile << std::endl;
     return -EINVAL;
   }
+  check_legacy_ec_plugin(plugin->second, erasure_code_profile);
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   return instance.factory(plugin->second,
 			  g_conf->erasure_code_dir,
@@ -5093,10 +5255,9 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
       return -EPERM;
     }
-    int expected_osds = MAX(1, MIN(p.get_pg_num(), osdmap.get_num_osds()));
+    int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
     int64_t new_pgs = n - p.get_pg_num();
-    int64_t pgs_per_osd = new_pgs / expected_osds;
-    if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
+    if (new_pgs > g_conf->mon_osd_max_split_count * expected_osds) {
       ss << "specified pg_num " << n << " is too large (creating "
 	 << new_pgs << " new PGs on ~" << expected_osds
 	 << " OSDs exceeds per-OSD max of " << g_conf->mon_osd_max_split_count
@@ -5328,6 +5489,46 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
   } else if (pool_opts_t::is_opt_name(var)) {
+    if (var == "compression_mode") {
+      auto cmode = Compressor::get_comp_mode_type(val);
+      if (!cmode) {
+	ss << "unrecognized compression mode '" << val << "'";
+	return EINVAL;
+      }
+    } else if (var == "compression_algorithm") {
+      auto alg = Compressor::get_comp_alg_type(val);
+      if (!alg) {
+        ss << "unrecognized compression_algorithm '" << val << "'";
+	return EINVAL;
+      }
+    } else if (var == "compression_required_ratio") {
+      if (floaterr.length()) {
+        ss << "error parsing float value '" << val << "': " << floaterr;
+        return -EINVAL;
+      }
+      if (f < 0 || f>1) {
+        ss << "compression_required_ratio is out of range (0-1): '" << val << "'";
+	return EINVAL;
+      }
+    } else if (var == "csum_type") {
+      auto t = val != "unset" ? Checksummer::get_csum_string_type(val) : 0;
+      if (t < 0 ) {
+        ss << "unrecognized csum_type '" << val << "'";
+	return EINVAL;
+      }
+      //preserve csum_type numeric value
+      n = t;
+      interr.clear(); 
+    } else if (var == "compression_max_blob_size" ||
+               var == "compression_min_blob_size" ||
+               var == "csum_max_block" ||
+               var == "csum_min_block") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+    }
+
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
     switch (desc.type) {
     case pool_opts_t::STR:
@@ -6121,14 +6322,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (err)
 	  goto reply;
       }
-      err = normalize_profile(profile_map, &ss);
+      err = normalize_profile(name, profile_map, &ss);
       if (err)
 	goto reply;
 
       if (osdmap.has_erasure_code_profile(name)) {
 	ErasureCodeProfile existing_profile_map =
 	  osdmap.get_erasure_code_profile(name);
-	err = normalize_profile(existing_profile_map, &ss);
+	err = normalize_profile(name, existing_profile_map, &ss);
 	if (err)
 	  goto reply;
 
@@ -6182,7 +6383,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						      &ss);
 	if (err)
 	  goto reply;
-	err = normalize_profile(profile_map, &ss);
+	err = normalize_profile(name, profile_map, &ss);
 	if (err)
 	  goto reply;
 	dout(20) << "erasure code profile set " << profile << "="
@@ -6350,7 +6551,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     } else if (key == "require_kraken_osds") {
       if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
-	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+	// ensure JEWEL is also set
+	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
+	return r;
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
 	err = -EPERM;

@@ -180,6 +180,7 @@ class RGWLC {
   int max_objs;
   string *obj_names;
   atomic_t down_flag;
+  string cookie;
 
   class LCWorker : public Thread {
     CephContext *cct;
@@ -192,12 +193,11 @@ class RGWLC {
     void *entry();
     void stop();
     bool should_work(utime_t& now);
-    int shedule_next_start_time(utime_t& now);
+    int schedule_next_start_time(utime_t& start, utime_t& now);
   };
   
   public:
   LCWorker *worker;
-public:
   RGWLC() : cct(NULL), store(NULL), worker(NULL) {}
   ~RGWLC() {
     stop_processor();
@@ -218,6 +218,9 @@ public:
   bool going_down();
   void start_processor();
   void stop_processor();
+
+  private:
+  bool obj_has_expired(double timediff, int days);
 };
 
 

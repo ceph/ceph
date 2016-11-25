@@ -368,11 +368,13 @@ RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
                                       const std::vector<std::string>& admin_roles
                                     ) const noexcept
 {
+  using acct_privilege_t = RGWRemoteAuthApplier::AuthInfo::acct_privilege_t;
+
   /* Check whether the user has an admin status. */
-  bool is_admin = false;
+  acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
   for (const auto& admin_role : admin_roles) {
     if (token.has_role(admin_role)) {
-      is_admin = true;
+      level = acct_privilege_t::IS_ADMIN_ACCT;
       break;
     }
   }
@@ -385,7 +387,7 @@ RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
     /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
-    is_admin,
+    level,
   };
 }
 

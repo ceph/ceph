@@ -53,6 +53,7 @@ public:
   }
 };
 
+struct ShardedTrackingData;
 class OpTracker {
   class RemoveOnDelete {
     OpTracker *tracker;
@@ -63,12 +64,6 @@ class OpTracker {
   friend class RemoveOnDelete;
   friend class OpHistory;
   atomic64_t seq;
-  struct ShardedTrackingData {
-    Mutex ops_in_flight_lock_sharded;
-    xlist<TrackedOp *> ops_in_flight_sharded;
-    explicit ShardedTrackingData(string lock_name):
-        ops_in_flight_lock_sharded(lock_name.c_str()) {}
-  };
   vector<ShardedTrackingData*> sharded_in_flight_list;
   uint32_t num_optracker_shards;
   OpHistory history;
@@ -80,19 +75,7 @@ class OpTracker {
 
 public:
   CephContext *cct;
-  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards) : seq(0), 
-                                     num_optracker_shards(num_shards),
-				     complaint_time(0), log_threshold(0),
-				     tracking_enabled(tracking),
-				     lock("OpTracker::lock"), cct(cct_) {
-
-    for (uint32_t i = 0; i < num_optracker_shards; i++) {
-      char lock_name[32] = {0};
-      snprintf(lock_name, sizeof(lock_name), "%s:%d", "OpTracker::ShardedLock", i);
-      ShardedTrackingData* one_shard = new ShardedTrackingData(lock_name);
-      sharded_in_flight_list.push_back(one_shard);
-    }
-  }
+  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
       
   void set_complaint_and_threshold(float time, int threshold) {
     complaint_time = time;
@@ -127,13 +110,7 @@ public:
   void on_shutdown() {
     history.on_shutdown();
   }
-  ~OpTracker() {
-    while (!sharded_in_flight_list.empty()) {
-      assert((sharded_in_flight_list.back())->ops_in_flight_sharded.empty());
-      delete sharded_in_flight_list.back();
-      sharded_in_flight_list.pop_back();
-    }    
-  }
+  ~OpTracker();
 
   template <typename T, typename U>
   typename T::Ref create_request(U params)

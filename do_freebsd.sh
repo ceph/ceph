@@ -10,10 +10,24 @@ if [ x"$1"x = x"--deps"x ]; then
     fi
     sudo ./install-deps.sh
 fi
-. ./autogen_freebsd.sh
-./autogen.sh
-./configure ${CONFIGURE_FLAGS}
-( cd src/gmock/gtest; patch < /usr/ports/devel/googletest/files/patch-bsd-defines )
-gmake -j$NPROC ENABLE_GIT_VERSION=OFF
-gmake -j$NPROC check ENABLE_GIT_VERSION=OFF CEPH_BUFFER_NO_BENCH=yes
+rm -rf build && ./do_cmake.sh "$*" \
+	-D CMAKE_BUILD_TYPE=Debug \
+	-D CMAKE_CXX_FLAGS_DEBUG="-O0 -g" \
+	-D CMAKE_C_FLAGS_DEBUG="-O0 -g" \
+	-D ENABLE_GIT_VERSION=OFF \
+	-D WITH_BLKID=OFF \
+	-D WITH_LTTNG=OFF \
+	-D WITH_FUSE=OFF \
+	-D WITH_RBD=OFF \
+	-D WITH_XFS=OFF \
+	-D WITH_KVS=OFF \
+	-D WITH_MANPAGE=OFF \
+	-D WITH_LIBCEPHFS=OFF \
+	-D WITH_CEPHFS=OFF \
+	-D WITH_RADOSGW=OFF \
+	2>&1 | tee cmake.log
+
+cd build
+gmake -j$NPROC V=1 VERBOSE=1 
+gmake -j$NPROC check CEPH_BUFFER_NO_BENCH=yes 
 

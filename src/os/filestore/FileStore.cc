@@ -14,6 +14,7 @@
  */
 #include "include/compat.h"
 #include "include/int_types.h"
+#include "boost/tuple/tuple.hpp"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -143,10 +144,10 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
 {
   os_commit_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_j_lat));
+      l_filestore_journal_latency));
   os_apply_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_apply_lat));
+      l_filestore_apply_latency));
 }
 
 
@@ -472,13 +473,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
     }
 
     if (!force_clear_omap) {
-      if (hardlink == 0) {
-          if (!m_disable_wbthrottle) {
-	    wbthrottle.clear_object(o); // should be only non-cache ref
-          }
-	  fdcache.clear(o);
-	  return 0;
-      } else if (hardlink == 1) {
+      if (hardlink == 0 || hardlink == 1) {
 	  force_clear_omap = true;
       }
     }
@@ -504,6 +499,12 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
        */
       if (!backend->can_checkpoint())
 	object_map->sync(&o, &spos);
+    }
+    if (hardlink == 0) {
+      if (!m_disable_wbthrottle) {
+	wbthrottle.clear_object(o); // should be only non-cache ref
+      }
+      return 0;
     }
   }
   r = index->unlink(o);
@@ -599,29 +600,29 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   }
 
   // initialize logger
-  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, internal_name, l_filestore_first, l_filestore_last);
 
-  plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
-  plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
-  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
-  plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
-  plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
-  plb.add_u64_counter(l_os_j_wr, "journal_wr", "Journal write IOs");
-  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes", "Journal data written");
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops", "Operations in writing to FS queue");
-  plb.add_u64_counter(l_os_ops, "ops", "Operations written to store");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes", "Size of writing to FS queue");
-  plb.add_u64_counter(l_os_bytes, "bytes", "Data written to store");
-  plb.add_time_avg(l_os_apply_lat, "apply_latency", "Apply latency");
-  plb.add_u64(l_os_committing, "committing", "Is currently committing");
+  plb.add_u64(l_filestore_journal_queue_ops, "journal_queue_ops", "Operations in journal queue");
+  plb.add_u64_counter(l_filestore_journal_ops, "journal_ops", "Total journal entries written");
+  plb.add_u64(l_filestore_journal_queue_bytes, "journal_queue_bytes", "Size of journal queue");
+  plb.add_u64_counter(l_filestore_journal_bytes, "journal_bytes", "Total operations size in journal");
+  plb.add_time_avg(l_filestore_journal_latency, "journal_latency", "Average journal queue completing latency");
+  plb.add_u64_counter(l_filestore_journal_wr, "journal_wr", "Journal write IOs");
+  plb.add_u64_avg(l_filestore_journal_wr_bytes, "journal_wr_bytes", "Journal data written");
+  plb.add_u64(l_filestore_op_queue_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
+  plb.add_u64(l_filestore_op_queue_ops, "op_queue_ops", "Operations in writing to FS queue");
+  plb.add_u64_counter(l_filestore_ops, "ops", "Operations written to store");
+  plb.add_u64(l_filestore_op_queue_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
+  plb.add_u64(l_filestore_op_queue_bytes, "op_queue_bytes", "Size of writing to FS queue");
+  plb.add_u64_counter(l_filestore_bytes, "bytes", "Data written to store");
+  plb.add_time_avg(l_filestore_apply_latency, "apply_latency", "Apply latency");
+  plb.add_u64(l_filestore_committing, "committing", "Is currently committing");
 
-  plb.add_u64_counter(l_os_commit, "commitcycle", "Commit cycles");
-  plb.add_time_avg(l_os_commit_len, "commitcycle_interval", "Average interval between commits");
-  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency", "Average latency of commit");
-  plb.add_u64_counter(l_os_j_full, "journal_full", "Journal writes while full");
-  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg", "Store operation queue latency");
+  plb.add_u64_counter(l_filestore_commitcycle, "commitcycle", "Commit cycles");
+  plb.add_time_avg(l_filestore_commitcycle_interval, "commitcycle_interval", "Average interval between commits");
+  plb.add_time_avg(l_filestore_commitcycle_latency, "commitcycle_latency", "Average latency of commit");
+  plb.add_u64_counter(l_filestore_journal_full, "journal_full", "Journal writes while full");
+  plb.add_time_avg(l_filestore_queue_transaction_latency_avg, "queue_transaction_latency_avg", "Store operation queue latency");
 
   logger = plb.create_perf_counters();
 
@@ -1946,8 +1947,8 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
   osr->queue(o);
 
-  logger->inc(l_os_ops);
-  logger->inc(l_os_bytes, o->bytes);
+  logger->inc(l_filestore_ops);
+  logger->inc(l_filestore_bytes, o->bytes);
 
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
@@ -1962,16 +1963,16 @@ void FileStore::op_queue_reserve_throttle(Op *o)
   throttle_ops.get();
   throttle_bytes.get(o->bytes);
 
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  logger->set(l_filestore_op_queue_ops, throttle_ops.get_current());
+  logger->set(l_filestore_op_queue_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
   throttle_ops.put();
   throttle_bytes.put(o->bytes);
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  logger->set(l_filestore_op_queue_ops, throttle_ops.get_current());
+  logger->set(l_filestore_op_queue_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
@@ -2016,7 +2017,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   // called with tp lock held
   op_queue_release_throttle(o);
 
-  logger->tinc(l_os_apply_lat, lat);
+  logger->tinc(l_filestore_apply_latency, lat);
 
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
@@ -2123,7 +2124,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     }
     submit_manager.op_submit_finish(op_num);
     utime_t end = ceph_clock_now(g_ceph_context);
-    logger->tinc(l_os_queue_lat, end - start);
+    logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
 
@@ -2151,7 +2152,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
       apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
     utime_t end = ceph_clock_now(g_ceph_context);
-    logger->tinc(l_os_queue_lat, end - start);
+    logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
 
@@ -2188,7 +2189,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   apply_manager.op_apply_finish(op);
 
   utime_t end = ceph_clock_now(g_ceph_context);
-  logger->tinc(l_os_queue_lat, end - start);
+  logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
   return r;
 }
 
@@ -2343,10 +2344,12 @@ void FileStore::_set_replay_guard(int fd,
   // first make sure the previous operation commits
   ::fsync(fd);
 
-  // sync object_map too.  even if this object has a header or keys,
-  // it have had them in the past and then removed them, so always
-  // sync.
-  object_map->sync(hoid, &spos);
+  if (!in_progress) {
+    // sync object_map too.  even if this object has a header or keys,
+    // it have had them in the past and then removed them, so always
+    // sync.
+    object_map->sync(hoid, &spos);
+  }
 
   _inject_failure();
 
@@ -2384,7 +2387,8 @@ void FileStore::_close_replay_guard(const coll_t& cid,
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
+void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
+				    const ghobject_t *hoid)
 {
   if (backend->can_checkpoint())
     return;
@@ -2392,6 +2396,11 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   dout(10) << "_close_replay_guard " << spos << dendl;
 
   _inject_failure();
+
+  // sync object_map too.  even if this object has a header or keys,
+  // it have had them in the past and then removed them, so always
+  // sync.
+  object_map->sync(hoid, &spos);
 
   // then record that we are done with this operation
   bufferlist v(40);
@@ -2669,13 +2678,14 @@ void FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        coll_t ncid = cid;
         ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+	_kludge_temp_object_collection(cid, oid);
+	_kludge_temp_object_collection(ncid, noid);
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, clone_range_enter, osr_name, len);
-        r = _clone_range(cid, oid, noid, off, len, off, spos);
+        r = _clone_range(cid, oid, ncid, noid, off, len, off, spos);
         tracepoint(objectstore, clone_range_exit, r);
       }
       break;
@@ -2684,15 +2694,32 @@ void FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        coll_t ncid = cid;
         ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+	_kludge_temp_object_collection(cid, oid);
+	_kludge_temp_object_collection(ncid, noid);
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
         tracepoint(objectstore, clone_range2_enter, osr_name, len);
-        r = _clone_range(cid, oid, noid, srcoff, len, dstoff, spos);
+        r = _clone_range(cid, oid, ncid, noid, srcoff, len, dstoff, spos);
         tracepoint(objectstore, clone_range2_exit, r);
+      }
+      break;
+
+    case Transaction::OP_MERGE_DELETE:
+      {
+        ghobject_t src_oid = i.get_oid(op->oid);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->dest_oid);
+        coll_t src_cid = i.get_cid(op->cid);
+        _kludge_temp_object_collection(cid, oid);
+        _kludge_temp_object_collection(src_cid, src_oid);
+        vector<std::pair<uint64_t, uint64_t>> move_info;
+        i.decode_move_info(move_info);
+        tracepoint(objectstore, move_ranges_destroy_src_enter, osr_name);
+        r = _move_ranges_destroy_src(src_cid, src_oid, cid, oid, move_info, spos);
+        tracepoint(objectstore, move_ranges_destroy_src_exit, r);
       }
       break;
 
@@ -2812,7 +2839,7 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_SETATTR:
     case Transaction::OP_COLL_RMATTR:
-      assert(0 == "collection attr methods no longer implmented");
+      assert(0 == "collection attr methods no longer implemented");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -2984,8 +3011,8 @@ void FileStore::_do_transaction(
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	}
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
-		<< " (" << spos << ", or op " << spos.op << ", counting from 0)" << dendl;
+	derr  << " error " << cpp_strerror(r) << " not handled on operation " << op
+	      << " (" << spos << ", or op " << spos.op << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
 	JSONFormatter f(true);
@@ -3048,6 +3075,13 @@ int FileStore::stat(
     tracepoint(objectstore, stat_exit, r);
     return r;
   }
+}
+
+int FileStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
 }
 
 int FileStore::read(
@@ -3709,22 +3743,22 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   return r;
 }
 
-int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+int FileStore::_clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 			    uint64_t srcoff, uint64_t len, uint64_t dstoff,
 			    const SequencerPosition& spos)
 {
-  dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
+  dout(15) << "clone_range " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
 
-  if (_check_replay_guard(cid, newoid, spos) < 0)
+  if (_check_replay_guard(newcid, newoid, spos) < 0)
     return 0;
 
   int r;
   FDRef o, n;
-  r = lfn_open(cid, oldoid, false, &o);
+  r = lfn_open(oldcid, oldoid, false, &o);
   if (r < 0) {
     goto out2;
   }
-  r = lfn_open(cid, newoid, true, &n);
+  r = lfn_open(newcid, newoid, true, &n);
   if (r < 0) {
     goto out;
   }
@@ -3741,8 +3775,90 @@ int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const g
  out:
   lfn_close(o);
  out2:
-  dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
+  dout(10) << "clone_range " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+  return r;
+}
+
+/*
+ * Move contents of src object according to move_info to base object. Once the move_info is traversed completely, delete the src object.
+ */
+int FileStore::_move_ranges_destroy_src(
+  const coll_t& src_cid, const ghobject_t& src_oid,
+  const coll_t& cid, const ghobject_t& oid,
+  const vector<std::pair<uint64_t, uint64_t>> move_info,
+  const SequencerPosition& spos)
+{
+  int r = 0;
+
+  dout(10) << __func__ << src_cid << "/" << src_oid << " -> "
+	   << cid << "/" << oid << dendl;
+
+  // check replay guard for base object. If not possible to replay, return.
+  int dstcmp = _check_replay_guard(cid, oid, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  // check the src name too; it might have a newer guard, and we don't
+  // want to clobber it
+  int srccmp = _check_replay_guard(src_cid, src_oid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  FDRef b;
+  r = lfn_open(cid, oid, true, &b);
+  if (r < 0) {
+    return 0;
+  }
+
+  FDRef t;
+  r = lfn_open(src_cid, src_oid, false, &t);
+  //If we are replaying, it is possible that we do not find src obj as
+  //it is deleted before crashing.
+  if (r < 0) {
+    lfn_close(b);
+    dout(10) << __func__ << " replaying -->" << replaying  << dendl;
+    if (replaying) {
+      _set_replay_guard(**b, spos, &oid);
+      return 0;
+    } else {
+      return -ENOENT;
+    }
+  }
+
+  for (unsigned i = 0; i < move_info.size(); ++i) {
+    uint64_t off = move_info[i].first;
+    uint64_t len = move_info[i].second;
+    r = _do_clone_range(**t, **b, off, len, off);
+    if (r < 0)
+      break;
+  }
+
+  dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
+
+  lfn_close(t);
+
+  //In case crash occurs here, replay will have to do cloning again.
+  //Only if do_clone_range is successful, go ahead with deleting the source object.
+  if (r < 0)
+    goto out;
+
+  r = lfn_unlink(src_cid, src_oid, spos, true);
+  // If crash occurs between unlink and set guard, correct the error.
+  // as during next time, it might not find the already deleted object.
+  if (r < 0 && replaying) {
+    r = 0;
+  }
+
+  if (r < 0)
+    goto out;
+
+  //set replay guard for base obj coll_t, as this api is not idempotent.
+  _set_replay_guard(**b, spos, &oid);
+
+out:
+  lfn_close(b);
+  dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
   return r;
 }
 
@@ -3819,7 +3935,7 @@ void FileStore::sync_entry()
       timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
 
-      logger->set(l_os_committing, 1);
+      logger->set(l_filestore_committing, 1);
 
       dout(15) << "sync_entry committing " << cp << dendl;
       stringstream errstream;
@@ -3892,16 +4008,16 @@ void FileStore::sync_entry()
       utime_t dur = done - startwait;
       dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
 
-      logger->inc(l_os_commit);
-      logger->tinc(l_os_commit_lat, lat);
-      logger->tinc(l_os_commit_len, dur);
+      logger->inc(l_filestore_commitcycle);
+      logger->tinc(l_filestore_commitcycle_latency, lat);
+      logger->tinc(l_filestore_commitcycle_interval, dur);
 
       apply_manager.commit_finish();
       if (!m_disable_wbthrottle) {
         wbthrottle.clear();
       }
 
-      logger->set(l_os_committing, 0);
+      logger->set(l_filestore_committing, 0);
 
       // remove old snaps?
       if (backend->can_checkpoint()) {
@@ -4639,7 +4755,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       continue;
     coll_t cid;
     if (!cid.parse(de->d_name)) {
-      derr << "ignoging invalid collection '" << de->d_name << "'" << dendl;
+      derr << "ignoring invalid collection '" << de->d_name << "'" << dendl;
       continue;
     }
     if (!cid.is_temp() || include_temp)
@@ -4681,14 +4797,17 @@ bool FileStore::collection_exists(const coll_t& c)
   return ret;
 }
 
-bool FileStore::collection_empty(const coll_t& c)
+int FileStore::collection_empty(const coll_t& c, bool *empty)
 {
   tracepoint(objectstore, collection_empty_enter, c.c_str());
   dout(15) << "collection_empty " << c << dendl;
   Index index;
   int r = get_index(c, &index);
-  if (r < 0)
-    return false;
+  if (r < 0) {
+    derr << __func__ << " get_index returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
 
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
@@ -4697,12 +4816,14 @@ bool FileStore::collection_empty(const coll_t& c)
   r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
 				     1, &ls, NULL);
   if (r < 0) {
+    derr << __func__ << " collection_list_partial returned: "
+         << cpp_strerror(r) << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
-    return false;
+    return r;
   }
-  bool ret = ls.empty();
-  tracepoint(objectstore, collection_empty_exit, ret);
-  return ret;
+  *empty = ls.empty();
+  tracepoint(objectstore, collection_empty_exit, *empty);
+  return 0;
 }
 int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
 			       bool sort_bitwise, int max,
@@ -4963,13 +5084,16 @@ int FileStore::_collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_n
   dout(15) << __func__ << " collection: " << c << " pg number: "
      << pg_num << " expected number of objects: " << expected_num_objs << dendl;
 
-  if (!collection_empty(c) && !replaying) {
+  bool empty;
+  int ret = collection_empty(c, &empty);
+  if (ret < 0)
+    return ret;
+  if (!empty && !replaying) {
     dout(0) << "Failed to give an expected number of objects hint to collection : "
       << c << ", only empty collection can take such type of hint. " << dendl;
     return 0;
   }
 
-  int ret;
   Index index;
   ret = get_index(c, &index);
   if (ret < 0)
@@ -5150,18 +5274,30 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
       } else {
 	assert(0 == "ERROR: source must exist");
       }
-      return 0;
-    }
-    if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
-      _set_replay_guard(**fd, spos, &o, true);
-    }
 
-    r = lfn_link(oldcid, c, oldoid, o);
-    if (replaying && !backend->can_checkpoint() &&
-	r == -EEXIST)    // crashed between link() and set_replay_guard()
-      r = 0;
+      if (!replaying) {
+	return 0;
+      }
+      if (allow_enoent && dstcmp > 0) { // if dstcmp == 0, try_rename was started.
+	return 0;
+      }
 
-    _inject_failure();
+      r = 0; // don't know if object_map was cloned
+    } else {
+      if (dstcmp > 0) { // if dstcmp == 0 the guard already says "in-progress"
+	_set_replay_guard(**fd, spos, &o, true);
+      }
+
+      r = lfn_link(oldcid, c, oldoid, o);
+      if (replaying && !backend->can_checkpoint() &&
+	  r == -EEXIST)    // crashed between link() and set_replay_guard()
+	r = 0;
+
+      lfn_close(fd);
+      fd = FDRef();
+
+      _inject_failure();
+    }
 
     if (r == 0) {
       // the name changed; link the omap content
@@ -5172,9 +5308,6 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
     _inject_failure();
 
-    lfn_close(fd);
-    fd = FDRef();
-
     if (r == 0)
       r = lfn_unlink(oldcid, oldoid, spos, true);
 
@@ -5183,7 +5316,7 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
     // close guard on object so we don't do this again
     if (r == 0) {
-      _close_replay_guard(**fd, spos);
+      _close_replay_guard(**fd, spos, &o);
       lfn_close(fd);
     }
   }
@@ -5580,8 +5713,8 @@ int FileStore::set_throttle_params()
     g_conf->filestore_queue_max_ops,
     &ss);
 
-  logger->set(l_os_oq_max_ops, throttle_ops.get_max());
-  logger->set(l_os_oq_max_bytes, throttle_bytes.get_max());
+  logger->set(l_filestore_op_queue_max_ops, throttle_ops.get_max());
+  logger->set(l_filestore_op_queue_max_bytes, throttle_bytes.get_max());
 
   if (!valid) {
     derr << "tried to set invalid params: "

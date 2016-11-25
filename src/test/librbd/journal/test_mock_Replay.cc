@@ -155,9 +155,9 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _,
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, _,
                                                                 op_tid, false))
-                  .WillOnce(DoAll(SaveArg<1>(on_finish),
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
@@ -194,6 +194,29 @@ public:
                             Context **on_finish, const char *snap_name) {
     EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(StrEq(snap_name), _, _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
+                                  NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
+  }
+
+  void expect_update_features(MockReplayImageCtx &mock_image_ctx, Context **on_finish,
+                              uint64_t features, bool enabled, uint64_t op_tid) {
+      EXPECT_CALL(*mock_image_ctx.operations, execute_update_features(features, enabled, _, op_tid))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
+                                  NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
+  }
+
+  void expect_metadata_set(MockReplayImageCtx &mock_image_ctx,
+                           Context **on_finish, const char *key,
+                           const char *value) {
+    EXPECT_CALL(*mock_image_ctx.operations, execute_metadata_set(StrEq(key),
+                                                                 StrEq(value), _))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
+                                  NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
+  }
+
+  void expect_metadata_remove(MockReplayImageCtx &mock_image_ctx,
+                              Context **on_finish, const char *key) {
+    EXPECT_CALL(*mock_image_ctx.operations, execute_metadata_remove(StrEq(key), _))
+                  .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
@@ -534,7 +557,8 @@ TEST_F(TestMockJournalReplay, BlockedOpFinishError) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap",
+								 cls::rbd::UserSnapshotNamespace())},
                &on_start_ready, &on_start_safe);
 
   C_SaferCond on_resume;
@@ -580,7 +604,8 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 
   C_SaferCond on_snap_create_ready;
   C_SaferCond on_snap_create_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap",
+							       cls::rbd::UserSnapshotNamespace())},
                &on_snap_create_ready, &on_snap_create_safe);
 
   C_SaferCond on_shut_down;
@@ -621,7 +646,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 
   C_SaferCond on_snap_create_ready;
   C_SaferCond on_snap_create_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
                &on_snap_create_ready, &on_snap_create_safe);
 
   C_SaferCond on_resume;
@@ -706,7 +731,7 @@ TEST_F(TestMockJournalReplay, SnapCreateEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
                &on_start_ready, &on_start_safe);
 
   C_SaferCond on_resume;
@@ -743,7 +768,7 @@ TEST_F(TestMockJournalReplay, SnapCreateEventExists) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
                &on_start_ready, &on_start_safe);
 
   wait_for_op_invoked(&on_finish, -EEXIST);
@@ -1237,6 +1262,143 @@ TEST_F(TestMockJournalReplay, FlattenEventInvalid) {
                &on_finish_ready, &on_finish_safe);
 
   wait_for_op_invoked(&on_finish, -EINVAL);
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, UpdateFeaturesEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  uint64_t features = RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF;
+  bool enabled = !ictx->test_features(features);
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_update_features(mock_image_ctx, &on_finish, features, enabled, 123);
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay,
+               EventEntry{UpdateFeaturesEvent(123, features, enabled)},
+               &on_start_ready, &on_start_safe);
+
+  C_SaferCond on_resume;
+  when_replay_op_ready(mock_journal_replay, 123, &on_resume);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  ASSERT_EQ(0, on_resume.wait());
+  wait_for_op_invoked(&on_finish, 0);
+
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, MetadataSetEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_metadata_set(mock_image_ctx, &on_finish, "key", "value");
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{MetadataSetEvent(123, "key", "value")},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  wait_for_op_invoked(&on_finish, 0);
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, MetadataRemoveEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_metadata_remove(mock_image_ctx, &on_finish, "key");
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{MetadataRemoveEvent(123, "key")},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  wait_for_op_invoked(&on_finish, 0);
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, MetadataRemoveEventDNE) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_metadata_remove(mock_image_ctx, &on_finish, "key");
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{MetadataRemoveEvent(123, "key")},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  wait_for_op_invoked(&on_finish, -ENOENT);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());

@@ -11,6 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#ifndef TEXT_TABLE_H_
+#define TEXT_TABLE_H_
+
 #include <vector>
 #include <sstream>
 #include <iomanip>
@@ -158,3 +162,6 @@ public:
 
   void clear();
 };
+
+#endif
+

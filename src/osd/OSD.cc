@@ -194,6 +194,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HINTS);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGMETA);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_MISSING);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_FASTINFO);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -325,7 +326,7 @@ void OSDService::mark_split_in_progress(spg_t parent, const set<spg_t> &children
 void OSDService::cancel_pending_splits_for_parent(spg_t parent)
 {
   Mutex::Locker l(in_progress_split_lock);
-  return _cancel_pending_splits_for_parent(parent);
+  _cancel_pending_splits_for_parent(parent);
 }
 
 void OSDService::_cancel_pending_splits_for_parent(spg_t parent)
@@ -1645,6 +1646,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   client_messenger(external_messenger),
   objecter_messenger(osdc_messenger),
   monc(mc),
+  mgrc(cct_, client_messenger),
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
@@ -2174,10 +2176,48 @@ int OSD::init()
 
   objecter_messenger->add_dispatcher_head(service.objecter);
 
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD
+                      | CEPH_ENTITY_TYPE_MGR);
   r = monc->init();
   if (r < 0)
     goto out;
+
+  /**
+   * FIXME: this is a placeholder implementation that unconditionally
+   * sends every is_primary PG's stats every time we're called, unlike
+   * the existing mon PGStats mechanism that uses pg_stat_queue and acks.
+   * This has equivalent cost to the existing worst case where all
+   * PGs are busy and their stats are always enqueued for sending.
+   */
+  mgrc.set_pgstats_cb([this](){
+      RWLock::RLocker l(map_lock);
+      
+      utime_t had_for = ceph_clock_now(cct) - had_map_since;
+      osd_stat_t cur_stat = service.get_osd_stat();
+      cur_stat.fs_perf_stat = store->get_cur_stats();
+
+      MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+      m->osd_stat = cur_stat;
+
+      RWLock::RLocker lpg(pg_map_lock);
+      for (const auto &i : pg_map) {
+        PG *pg = i.second;
+        if (!pg->is_primary()) {
+          continue;
+        }
+
+        pg->pg_stats_publish_lock.Lock();
+        if (pg->pg_stats_publish_valid) {
+          m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
+        }
+        pg->pg_stats_publish_lock.Unlock();
+      }
+
+      return m;
+  });
+
+  mgrc.init();
+  client_messenger->add_dispatcher_head(&mgrc);
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
@@ -2252,6 +2292,9 @@ int OSD::init()
   // subscribe to any pg creations
   monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
 
+  // MgrClient needs this (it doesn't have MonClient reference itself)
+  monc->sub_want("mgrmap", 0, 0);
+
   // we don't need to ask for an osdmap here; objecter will
   //monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
 
@@ -2261,6 +2304,7 @@ int OSD::init()
 
   return 0;
 monout:
+  mgrc.shutdown();
   monc->shutdown();
 
 out:
@@ -2273,11 +2317,10 @@ out:
 
 void OSD::final_init()
 {
-  int r;
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
-  r = admin_socket->register_command("status", "status", asok_hook,
-				     "high-level status of OSD");
+  int r = admin_socket->register_command("status", "status", asok_hook,
+					 "high-level status of OSD");
   assert(r == 0);
   r = admin_socket->register_command("flush_journal", "flush_journal",
                                      asok_hook,
@@ -2548,6 +2591,13 @@ void OSD::create_logger()
   osd_plb.add_time_avg(l_osd_tier_promote_lat, "osd_tier_promote_lat", "Object promote latency");
   osd_plb.add_time_avg(l_osd_tier_r_lat, "osd_tier_r_lat", "Object proxy read latency");
 
+  osd_plb.add_u64_counter(l_osd_pg_info, "osd_pg_info",
+			  "PG updated its info (using any method)");
+  osd_plb.add_u64_counter(l_osd_pg_fastinfo, "osd_pg_fastinfo",
+			  "PG updated its info using fastinfo attr");
+  osd_plb.add_u64_counter(l_osd_pg_biginfo, "osd_pg_biginfo",
+			  "PG updated its biginfo attr");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -2758,6 +2808,7 @@ int OSD::shutdown()
   store = 0;
   dout(10) << "Store synced" << dendl;
 
+  mgrc.shutdown();
   monc->shutdown();
   osd_lock.Unlock();
 
@@ -3043,7 +3094,6 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   service.pg_add_epoch(pg->info.pgid, pg->get_osdmap()->get_epoch());
 
   dout(10) << "Adding newly split pg " << *pg << dendl;
-  pg->reg_next_scrub();
   pg->handle_loaded(rctx);
   pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
@@ -3186,9 +3236,11 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
   RWLock::RLocker l(pg_map_lock);
-  if (!pg_map.count(pgid))
-    return NULL;
-  PG *pg = pg_map[pgid];
+
+  auto pg_map_entry = pg_map.find(pgid);
+  if (pg_map_entry == pg_map.end())
+    return nullptr;
+  PG *pg = pg_map_entry->second;
   pg->lock();
   return pg;
 }
@@ -4729,7 +4781,8 @@ void OSD::ms_handle_connect(Connection *con)
 
 void OSD::ms_handle_fast_connect(Connection *con)
 {
-  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
+      con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(cct);
@@ -4747,7 +4800,8 @@ void OSD::ms_handle_fast_connect(Connection *con)
 
 void OSD::ms_handle_fast_accept(Connection *con)
 {
-  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
+      con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(cct);
@@ -4772,6 +4826,37 @@ bool OSD::ms_handle_reset(Connection *con)
   session->wstate.reset(con);
   session->con.reset(NULL);  // break con <-> session ref cycle
   session_handle_reset(session);
+  session->put();
+  return true;
+}
+
+bool OSD::ms_handle_refused(Connection *con)
+{
+  if (!cct->_conf->osd_fast_fail_on_connection_refused)
+    return false;
+
+  OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
+  if (!session)
+    return false;
+  int type = con->get_peer_type();
+  // handle only OSD failures here
+  if (monc && (type == CEPH_ENTITY_TYPE_OSD)) {
+    OSDMapRef osdmap = get_osdmap();
+    if (osdmap) {
+      int id = osdmap->identify_osd_on_all_channels(con->get_peer_addr());
+      if (id >= 0 && osdmap->is_up(id)) {
+	// I'm cheating mon heartbeat grace logic, because we know it's not going
+	// to respawn alone. +1 so we won't hit any boundary case.
+	monc->send_mon_message(new MOSDFailure(monc->get_fsid(),
+						  osdmap->get_inst(id),
+						  cct->_conf->osd_heartbeat_grace + 1,
+						  osdmap->get_epoch(),
+						  MOSDFailure::FLAG_IMMEDIATE | MOSDFailure::FLAG_FAILED
+						  ));
+      }
+    }
+  }
   session->put();
   return true;
 }
@@ -4944,8 +5029,6 @@ void OSD::_send_boot()
 
 void OSD::_collect_metadata(map<string,string> *pm)
 {
-  (*pm)["ceph_version"] = pretty_version_to_str();
-
   // config info
   (*pm)["osd_data"] = dev_path;
   (*pm)["osd_journal"] = journal_path;
@@ -5085,8 +5168,7 @@ void OSD::send_failures()
 
 void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch);
-  m->is_failed = false;
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch, MOSDFailure::FLAG_ALIVE);
   monc->send_mon_message(m);
 }
 
@@ -5181,18 +5263,19 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     PGRef _pg(pg);
     ++p;
 
-    if (ack->pg_stat.count(pg->info.pgid.pgid)) {
-      pair<version_t,epoch_t> acked = ack->pg_stat[pg->info.pgid.pgid];
+    auto acked = ack->pg_stat.find(pg->info.pgid.pgid);
+    if (acked != ack->pg_stat.end()) {
       pg->pg_stats_publish_lock.Lock();
-      if (acked.first == pg->pg_stats_publish.reported_seq &&
-	  acked.second == pg->pg_stats_publish.reported_epoch) {
+      if (acked->second.first == pg->pg_stats_publish.reported_seq &&
+	  acked->second.second == pg->pg_stats_publish.reported_epoch) {
 	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
 		 << ":" << pg->pg_stats_publish.reported_seq << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put("pg_stat_queue");
       } else {
 	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
-		 << ":" << pg->pg_stats_publish.reported_seq << " > acked " << acked << dendl;
+		 << ":" << pg->pg_stats_publish.reported_seq << " > acked "
+		 << acked->second << dendl;
       }
       pg->pg_stats_publish_lock.Unlock();
     } else {
@@ -5391,7 +5474,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability);
+			   cp->module, cp->perm, cp->availability, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
@@ -5805,6 +5888,7 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
+  dout(20) << "OSD::ms_dispatch: " << *m << dendl;
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
     service.got_stop_ack();
     m->put();
@@ -5978,8 +6062,10 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   if (force_new) {
     /* the MonClient checks keys every tick(), so we should just wait for that cycle
        to get through */
-    if (monc->wait_auth_rotating(10) < 0)
+    if (monc->wait_auth_rotating(10) < 0) {
+      derr << "OSD::ms_get_authorizer wait_auth_rotating failed" << dendl;
       return false;
+    }
   }
 
   *authorizer = monc->auth->build_authorizer(dest_type);
@@ -5999,6 +6085,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
      * this makes the 'cluster' consistent w/ monitor's usage.
      */
   case CEPH_ENTITY_TYPE_OSD:
+  case CEPH_ENTITY_TYPE_MGR:
     authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
     break;
   default:
@@ -6345,9 +6432,12 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p != m->scrub_pgs.end();
 	 ++p) {
       spg_t pcand;
-      if (osdmap->get_primary_shard(*p, &pcand) &&
-	  pg_map.count(pcand))
-	handle_pg_scrub(m, pg_map[pcand]);
+      if (osdmap->get_primary_shard(*p, &pcand)) {
+	auto pg_map_entry = pg_map.find(pcand);
+	if (pg_map_entry != pg_map.end()) {
+	  handle_pg_scrub(m, pg_map_entry->second);
+	}
+      }
     }
   }
 
@@ -6835,11 +6925,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 {
   dout(10) << __func__ << " " << first << ".." << last << dendl;
-  Mutex::Locker l(osd_lock);
   if (is_stopping()) {
     dout(10) << __func__ << " bailing, we are shutting down" << dendl;
     return;
   }
+  Mutex::Locker l(osd_lock);
   map_lock.get_write();
 
   bool do_shutdown = false;

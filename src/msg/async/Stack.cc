@@ -69,6 +69,14 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
 {
   const uint64_t InitEventNumber = 5000;
   num_workers = cct->_conf->ms_async_op_threads;
+  if (num_workers >= EventCenter::MAX_EVENTCENTER) {
+    ldout(cct, 0) << __func__ << " max thread limit is "
+                  << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
+                  << "Higher thread values are unnecessary and currently unsupported."
+                  << dendl;
+    num_workers = EventCenter::MAX_EVENTCENTER;
+  }
+
   for (unsigned i = 0; i < num_workers; ++i) {
     Worker *w = create_worker(cct, type, i);
     w->center.init(InitEventNumber, i);
@@ -85,9 +93,6 @@ void NetworkStack::start()
     return ;
   }
 
-  if (started) {
-    return ;
-  }
   for (unsigned i = 0; i < num_workers; ++i) {
     if (workers[i]->is_init())
       continue;

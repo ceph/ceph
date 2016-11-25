@@ -84,6 +84,7 @@ void FSMap::print(ostream& out) const
   out << "enable_multiple, ever_enabled_multiple: " << enable_multiple << ","
       << ever_enabled_multiple << std::endl;
   out << "compat: " << compat << std::endl;
+  out << "legacy client fscid: " << legacy_client_fscid << std::endl;
   out << " " << std::endl;
 
   if (filesystems.empty()) {
@@ -497,7 +498,7 @@ int FSMap::parse_filesystem(
   std::string ns_err;
   fs_cluster_id_t fscid = strict_strtol(ns_str.c_str(), 10, &ns_err);
   if (!ns_err.empty() || filesystems.count(fscid) == 0) {
-    for (auto fs : filesystems) {
+    for (auto &fs : filesystems) {
       if (fs.second->mds_map.fs_name == ns_str) {
         *result = std::const_pointer_cast<const Filesystem>(fs.second);
         return 0;
@@ -654,7 +655,7 @@ void FSMap::sanity() const
 
 void FSMap::promote(
     mds_gid_t standby_gid,
-    std::shared_ptr<Filesystem> filesystem,
+    const std::shared_ptr<Filesystem> &filesystem,
     mds_rank_t assigned_rank)
 {
   assert(gid_exists(standby_gid));
@@ -676,10 +677,9 @@ void FSMap::promote(
   }
   MDSMap::mds_info_t &info = mds_map.mds_info[standby_gid];
 
-  if (mds_map.stopped.count(assigned_rank)) {
+  if (mds_map.stopped.erase(assigned_rank)) {
     // The cluster is being expanded with a stopped rank
     info.state = MDSMap::STATE_STARTING;
-    mds_map.stopped.erase(assigned_rank);
   } else if (!mds_map.is_in(assigned_rank)) {
     // The cluster is being expanded with a new rank
     info.state = MDSMap::STATE_CREATING;
@@ -737,7 +737,7 @@ void FSMap::erase(mds_gid_t who, epoch_t blacklist_epoch)
     standby_daemons.erase(who);
     standby_epochs.erase(who);
   } else {
-    auto fs = filesystems.at(mds_roles.at(who));
+    auto &fs = filesystems.at(mds_roles.at(who));
     const auto &info = fs->mds_map.mds_info.at(who);
     if (info.state != MDSMap::STATE_STANDBY_REPLAY) {
       if (info.state == MDSMap::STATE_CREATING) {
@@ -782,8 +782,7 @@ bool FSMap::undamaged(const fs_cluster_id_t fscid, const mds_rank_t rank)
 {
   auto fs = filesystems.at(fscid);
 
-  if (fs->mds_map.damaged.count(rank)) {
-    fs->mds_map.damaged.erase(rank);
+  if (fs->mds_map.damaged.erase(rank)) {
     fs->mds_map.failed.insert(rank);
     fs->mds_map.epoch = epoch;
     return true;
@@ -845,66 +844,41 @@ int FSMap::parse_role(
     mds_role_t *role,
     std::ostream &ss) const
 {
-  auto colon_pos = role_str.find(":");
-
-  if (colon_pos != std::string::npos && colon_pos != role_str.size()) {
-    auto fs_part = role_str.substr(0, colon_pos);
-    auto rank_part = role_str.substr(colon_pos + 1);
-
-    std::string err;
-    fs_cluster_id_t fs_id = FS_CLUSTER_ID_NONE;
-    long fs_id_i = strict_strtol(fs_part.c_str(), 10, &err);
-    if (fs_id_i < 0 || !err.empty()) {
-      // Try resolving as name
-      auto fs = get_filesystem(fs_part);
-      if (fs == nullptr) {
-        ss << "Unknown filesystem name '" << fs_part << "'";
-        return -EINVAL;
-      } else {
-        fs_id = fs->fscid;
-      }
-    } else {
-      fs_id = fs_id_i;
-    }
-
-    mds_rank_t rank;
-    long rank_i = strict_strtol(rank_part.c_str(), 10, &err);
-    if (rank_i < 0 || !err.empty()) {
-      ss << "Invalid rank '" << rank_part << "'";
-      return -EINVAL;
-    } else {
-      rank = rank_i;
-    }
-
-    *role = {fs_id, rank};
-  } else {
-    std::string err;
-    long who_i = strict_strtol(role_str.c_str(), 10, &err);
-    if (who_i < 0 || !err.empty()) {
-      ss << "Invalid rank '" << role_str << "'";
-      return -EINVAL;
-    }
-
+  size_t colon_pos = role_str.find(":");
+  size_t rank_pos;
+  std::shared_ptr<const Filesystem> fs;
+  if (colon_pos == std::string::npos) {
     if (legacy_client_fscid == FS_CLUSTER_ID_NONE) {
       ss << "No filesystem selected";
       return -ENOENT;
-    } else {
-      *role = mds_role_t(legacy_client_fscid, who_i);
     }
+    fs = get_filesystem(legacy_client_fscid);
+    rank_pos = 0;
+  } else {
+    if (parse_filesystem(role_str.substr(0, colon_pos), &fs) < 0) {
+      ss << "Invalid filesystem";
+      return -ENOENT;
+    }
+    rank_pos = colon_pos+1;
   }
 
-  // Now check that the role actually exists
-  if (get_filesystem(role->fscid) == nullptr) {
-    ss << "Filesystem with ID '" << role->fscid << "' not found";
+  mds_rank_t rank;
+  std::string err;
+  std::string rank_str = role_str.substr(rank_pos);
+  long rank_i = strict_strtol(rank_str.c_str(), 10, &err);
+  if (rank_i < 0 || !err.empty()) {
+    ss << "Invalid rank '" << rank_str << "'";
+    return -EINVAL;
+  } else {
+    rank = rank_i;
+  }
+
+  if (fs->mds_map.in.count(rank) == 0) {
+    ss << "Rank '" << rank << "' not found";
     return -ENOENT;
   }
 
-  auto fs = get_filesystem(role->fscid);
-  if (fs->mds_map.in.count(role->rank) == 0) {
-    ss << "Rank '" << role->rank << "' not found";
-    return -ENOENT;
-  }
+  *role = {fs->fscid, rank};
 
   return 0;
 }
-

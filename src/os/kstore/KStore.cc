@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "KStore.h"
+#include "osd/osd_types.h"
 #include "kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -84,10 +85,10 @@ static void append_escaped(const string &in, string *out)
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') {
-      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (unsigned)*i);
+      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else if (*i >= '~') {
-      snprintf(hexbyte, sizeof(hexbyte), "~%02x", (unsigned)*i);
+      snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else {
       out->push_back(*i);
@@ -1155,6 +1156,13 @@ int KStore::stat(
   return 0;
 }
 
+int KStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
+}
+
 int KStore::read(
   const coll_t& cid,
   const ghobject_t& oid,
@@ -1375,18 +1383,21 @@ bool KStore::collection_exists(const coll_t& c)
   return coll_map.count(c);
 }
 
-bool KStore::collection_empty(const coll_t& cid)
+int KStore::collection_empty(const coll_t& cid, bool *empty)
 {
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
   int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 1,
 			  &ls, &next);
-  if (r < 0)
-    return false;  // fixme?
-  bool empty = ls.empty();
-  dout(10) << __func__ << " " << cid << " = " << (int)empty << dendl;
-  return empty;
+  if (r < 0) {
+    derr << __func__ << " collection_list returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
+  *empty = ls.empty();
+  dout(10) << __func__ << " " << cid << " = " << (int)(*empty) << dendl;
+  return 0;
 }
 
 int KStore::collection_list(
@@ -1394,14 +1405,42 @@ int KStore::collection_list(
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
-  dout(15) << __func__ << " " << cid
-	   << " start " << start << " end " << end << " max " << max << dendl;
-  if (!sort_bitwise)
-    return -EOPNOTSUPP;
-  CollectionRef c = _get_collection(cid);
+  CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  return collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+}
+
+int KStore::collection_list(
+  CollectionHandle &c_, ghobject_t start, ghobject_t end,
+  bool sort_bitwise, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+
+{
+  Collection *c = static_cast<Collection*>(c_.get());
+  dout(15) << __func__ << " " << c->cid
+           << " start " << start << " end " << end << " max " << max << dendl;
+  int r;
+  {
+    RWLock::RLocker l(c->lock);
+    r = _collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+  }
+
+  dout(10) << __func__ << " " << c->cid
+    << " start " << start << " end " << end << " max " << max
+    << " = " << r << ", ls.size() = " << ls->size()
+    << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
+  return r;
+}
+
+int KStore::_collection_list(
+  Collection* c, ghobject_t start, ghobject_t end,
+  bool sort_bitwise, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+{
+  if (!sort_bitwise)
+    return -EOPNOTSUPP;
+
   int r = 0;
   KeyValueDB::Iterator it;
   string temp_start_key, temp_end_key;
@@ -1414,9 +1453,11 @@ int KStore::collection_list(
   if (!pnext)
     pnext = &static_next;
 
-  if (start == ghobject_t::get_max())
+  if (start == ghobject_t::get_max() ||
+    start.hobj.is_max()) {
     goto out;
-  get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
+  }
+  get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
 		     &start_key, &end_key);
   dout(20) << __func__
 	   << " range " << pretty_binary_string(temp_start_key)
@@ -1425,7 +1466,7 @@ int KStore::collection_list(
 	   << " to " << pretty_binary_string(end_key)
 	   << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t() || start == cid.get_min_hobj()) {
+  if (start == ghobject_t() || start == c->cid.get_min_hobj()) {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
@@ -1489,14 +1530,10 @@ int KStore::collection_list(
     ls->push_back(oid);
     it->next();
   }
+out:
   if (!set_next) {
     *pnext = ghobject_t::get_max();
   }
- out:
-  dout(10) << __func__ << " " << cid
-	   << " start " << start << " end " << end << " max " << max
-	   << " = " << r << ", ls.size() = " << ls->size()
-	   << ", next = " << *pnext << dendl;
   return r;
 }
 
@@ -2228,9 +2265,9 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
     }
     if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r)
-	      << " not handled on operation " << op->op
-	      << " (op " << pos << ", counting from 0)" << dendl;
+      derr << " error " << cpp_strerror(r)
+	   << " not handled on operation " << op->op
+	   << " (op " << pos << ", counting from 0)" << dendl;
       dout(0) << " transaction dump:\n";
       JSONFormatter f(true);
       f.open_object_section("transaction");
@@ -2357,6 +2394,16 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
 	r = _clone_range(txc, c, o, no, srcoff, len, dstoff);
+      }
+      break;
+
+    case Transaction::OP_MERGE_DELETE:
+      {
+        const ghobject_t& boid = i.get_oid(op->dest_oid);
+        OnodeRef bo = c->get_onode(boid, true);
+        vector<std::pair<uint64_t, uint64_t>> move_info;
+        i.decode_move_info(move_info);
+        r = _move_ranges_destroy_src(txc, c, o, cvec[op->dest_cid], bo, move_info);
       }
       break;
 
@@ -3169,6 +3216,44 @@ int KStore::_clone_range(TransContext *txc,
   return r;
 }
 
+/* Move contents of src object according to move_info to base object.
+ * Once the move_info is traversed completely, delete the src object.
+ */
+int KStore::_move_ranges_destroy_src(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& srco,
+  CollectionRef& basec,
+  OnodeRef& baseo,
+  vector<std::pair<uint64_t, uint64_t>> move_info)
+{
+  int r = 0;
+  bufferlist bl;
+  baseo->exists = true;
+  _assign_nid(txc, baseo);
+
+  // Traverse move_info completely, move contents from src to base object.
+  for (unsigned i = 0; i < move_info.size(); ++i) {
+    uint64_t off = move_info[i].first;
+    uint64_t len = move_info[i].second;
+
+    r = _do_read(srco, off, len, bl, 0);
+    if (r < 0)
+    goto out;
+
+    r = _do_write(txc, baseo, off, bl.length(), bl, 0);
+    txc->write_onode(baseo);
+    r = 0;
+  }
+
+  // After for loop ends, remove src obj
+  r = _do_remove(txc, srco);
+
+  out:
+  return r;
+}
+
+
 int KStore::_rename(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& oldo,
@@ -3243,19 +3328,46 @@ int KStore::_remove_collection(TransContext *txc, coll_t cid,
       r = -ENOENT;
       goto out;
     }
-    pair<ghobject_t,OnodeRef> next;
-    while ((*c)->onode_map.get_next(next.first, &next)) {
-      if (next.second->exists) {
+    size_t nonexistent_count = 0;
+    pair<ghobject_t,OnodeRef> next_onode;
+    while ((*c)->onode_map.get_next(next_onode.first, &next_onode)) {
+      if (next_onode.second->exists) {
 	r = -ENOTEMPTY;
 	goto out;
       }
+      ++nonexistent_count;
     }
-    coll_map.erase(cid);
-    txc->removed_collections.push_back(*c);
-    c->reset();
+    vector<ghobject_t> ls;
+    ghobject_t next;
+    // Enumerate onodes in db, up to nonexistent_count + 1
+    // then check if all of them are marked as non-existent.
+    // Bypass the check if returned number is greater than nonexistent_count
+    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(), true,
+                         nonexistent_count + 1, &ls, &next);
+    if (r >= 0) {
+      bool exists = false; //ls.size() > nonexistent_count;
+      for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
+        dout(10) << __func__ << " oid " << *it << dendl;
+        auto onode = (*c)->onode_map.lookup(*it);
+        exists = !onode || onode->exists;
+        if (exists) {
+          dout(10) << __func__ << " " << *it
+                   << " exists in db" << dendl;
+        }
+      }
+      if (!exists) {
+        coll_map.erase(cid);
+        txc->removed_collections.push_back(*c);
+        c->reset();
+        txc->t->rmkey(PREFIX_COLL, stringify(cid));
+        r = 0;
+      } else {
+        dout(10) << __func__ << " " << cid
+                 << " is non-empty" << dendl;
+        r = -ENOTEMPTY;
+      }
+    }
   }
-  txc->t->rmkey(PREFIX_COLL, stringify(cid));
-  r = 0;
 
  out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;

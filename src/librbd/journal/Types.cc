@@ -154,6 +154,25 @@ void SnapEventBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void SnapCreateEvent::encode(bufferlist &bl) const {
+  SnapEventBase::encode(bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+}
+
+void SnapCreateEvent::decode(__u8 version, bufferlist::iterator& it) {
+  SnapEventBase::decode(version, it);
+  if (version >= 3) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, it);
+    snap_namespace = sn.snapshot_namespace;
+  }
+}
+
+void SnapCreateEvent::dump(Formatter *f) const {
+  SnapEventBase::dump(f);
+  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+}
+
 void SnapLimitEvent::encode(bufferlist &bl) const {
   OpEventBase::encode(bl);
   ::encode(limit, bl);
@@ -229,6 +248,57 @@ void DemoteEvent::decode(__u8 version, bufferlist::iterator& it) {
 void DemoteEvent::dump(Formatter *f) const {
 }
 
+void UpdateFeaturesEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(features, bl);
+  ::encode(enabled, bl);
+}
+
+void UpdateFeaturesEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(features, it);
+  ::decode(enabled, it);
+}
+
+void UpdateFeaturesEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_unsigned("features", features);
+  f->dump_bool("enabled", enabled);
+}
+
+void MetadataSetEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(key, bl);
+  ::encode(value, bl);
+}
+
+void MetadataSetEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(key, it);
+  ::decode(value, it);
+}
+
+void MetadataSetEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_string("key", key);
+  f->dump_string("value", value);
+}
+
+void MetadataRemoveEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(key, bl);
+}
+
+void MetadataRemoveEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(key, it);
+}
+
+void MetadataRemoveEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_string("key", key);
+}
+
 void UnknownEvent::encode(bufferlist& bl) const {
   assert(false);
 }
@@ -244,7 +314,7 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
 }
@@ -299,6 +369,15 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_DEMOTE:
     event = DemoteEvent();
     break;
+  case EVENT_TYPE_UPDATE_FEATURES:
+    event = UpdateFeaturesEvent();
+    break;
+  case EVENT_TYPE_METADATA_SET:
+    event = MetadataSetEvent();
+    break;
+  case EVENT_TYPE_METADATA_REMOVE:
+    event = MetadataRemoveEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -326,7 +405,8 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(OpFinishEvent(123, -1)));
 
   o.push_back(new EventEntry(SnapCreateEvent()));
-  o.push_back(new EventEntry(SnapCreateEvent(234, "snap")));
+  o.push_back(new EventEntry(SnapCreateEvent(234, "snap",
+					       cls::rbd::UserSnapshotNamespace())));
 
   o.push_back(new EventEntry(SnapRemoveEvent()));
   o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
@@ -352,6 +432,15 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(FlattenEvent(123)));
 
   o.push_back(new EventEntry(DemoteEvent()));
+
+  o.push_back(new EventEntry(UpdateFeaturesEvent()));
+  o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true)));
+
+  o.push_back(new EventEntry(MetadataSetEvent()));
+  o.push_back(new EventEntry(MetadataSetEvent(123, "key", "value")));
+
+  o.push_back(new EventEntry(MetadataRemoveEvent()));
+  o.push_back(new EventEntry(MetadataRemoveEvent(123, "key")));
 }
 
 // Journal Client
@@ -602,6 +691,15 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_DEMOTE:
     out << "Demote";
+    break;
+  case EVENT_TYPE_UPDATE_FEATURES:
+    out << "UpdateFeatures";
+    break;
+  case EVENT_TYPE_METADATA_SET:
+    out << "MetadataSet";
+    break;
+  case EVENT_TYPE_METADATA_REMOVE:
+    out << "MetadataRemove";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

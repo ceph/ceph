@@ -80,7 +80,7 @@ public:
     );
 
   /// @see ReadOp below
-  void check_recovery_sources(const OSDMapRef osdmap);
+  void check_recovery_sources(const OSDMapRef& osdmap);
 
   void on_change();
   void clear_recovery_state();
@@ -313,7 +313,7 @@ public:
   };
   friend struct FinishReadOp;
   void filter_read_op(
-    const OSDMapRef osdmap,
+    const OSDMapRef& osdmap,
     ReadOp &op);
   void complete_read_op(ReadOp &rop, RecoveryMessages *m);
   friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);

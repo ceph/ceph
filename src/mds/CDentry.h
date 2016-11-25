@@ -25,8 +25,8 @@
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"
-#include "mdstypes.h"
 
+#include "MDSCacheObject.h"
 #include "SimpleLock.h"
 #include "LocalLock.h"
 #include "ScrubHeader.h"

@@ -2,22 +2,20 @@
 # the source files include the tracing headers like
 # #include "tracing/oprequest.h". so better put them into
 # ${PROJECT_BINARY_DIR}/include, where acconfig.h is also located
-set(header_dir ${CMAKE_BINARY_DIR}/include/tracing)
+set(working_dir ${CMAKE_BINARY_DIR}/include)
+set(header_dir ${working_dir}/tracing)
 file(MAKE_DIRECTORY ${header_dir})
 
 file(GLOB tps "*.tp")
 foreach(tp ${tps})
   get_filename_component(name ${tp} NAME_WE)
   set(header ${header_dir}/${name}.h)
-  set(src ${header_dir}/${name}.c)
   add_custom_command(
-    OUTPUT ${header} ${src}
-    COMMAND ${LTTNG_GEN_TP} ${tp} -o tracing/${name}.h -o tracing/${name}.c
+    OUTPUT ${header}
+    COMMAND ${LTTNG_GEN_TP} ${tp} -o tracing/${name}.h
     DEPENDS ${tp}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/include
-    COMMENT "generating ${header} ${src}")
-  set_source_files_properties(${header} ${src}
-    PROPERTIES GENERATED TRUE)
+    WORKING_DIRECTORY ${working_dir}
+    COMMENT "generating ${header}")
   add_custom_target(
     ${name}-tp
     DEPENDS ${header})
@@ -28,11 +26,8 @@ function(add_tracing_library name tracings version)
     get_filename_component(tp ${tp_file} NAME_WE)
     list(APPEND hdrs
       ${header_dir}/${tp}.h)
-    list(APPEND srcs
-      ${header_dir}/${tp}.h
-      ${header_dir}/${tp}.c)
   endforeach()
-  add_library(${name} SHARED ${srcs})
+  add_library(${name} SHARED ${hdrs} ${tp}.c)
   target_link_libraries(${name} ${LTTNGUST_LIBRARIES} ${CMAKE_DL_LIBS})
   string(REGEX MATCH "^[0-9]+" soversion ${version})
   set_target_properties(${name} PROPERTIES

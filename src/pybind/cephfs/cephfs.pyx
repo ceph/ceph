@@ -63,28 +63,32 @@ cdef extern from "dirent.h":
 cdef extern from "time.h":
     ctypedef long int time_t
 
+cdef extern from "time.h":
+    cdef struct timespec:
+        time_t      tv_sec
+        long int    tv_nsec
 
 cdef extern from "sys/types.h":
     ctypedef unsigned long mode_t
 
-
-cdef extern from "sys/stat.h":
-    cdef struct stat:
-        unsigned long st_dev
-        unsigned long st_ino
-        unsigned long st_nlink
-        unsigned int st_mode
-        unsigned int st_uid
-        unsigned int st_gid
-        int __pad0
-        unsigned long st_rdev
-        long int st_size
-        long int st_blksize
-        long int st_blocks
-        time_t st_atime
-        time_t st_mtime
-        time_t st_ctime
-
+cdef extern from "cephfs/ceph_statx.h":
+    cdef struct statx "ceph_statx":
+        uint32_t    stx_mask
+        uint32_t    stx_blksize
+        uint32_t    stx_nlink
+        uint32_t    stx_uid
+        uint32_t    stx_gid
+        uint16_t    stx_mode
+        uint64_t    stx_ino
+        uint64_t    stx_size
+        uint64_t    stx_blocks
+        uint64_t    stx_dev
+        uint64_t    stx_rdev
+        timespec    stx_atime
+        timespec    stx_ctime
+        timespec    stx_mtime
+        timespec    stx_btime
+        uint64_t    stx_version
 
 cdef extern from "cephfs/libcephfs.h" nogil:
     cdef struct ceph_mount_info:
@@ -109,8 +113,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
     int ceph_unmount(ceph_mount_info *cmount)
-    int ceph_fstat(ceph_mount_info *cmount, int fd, stat *stbuf)
-    int ceph_stat(ceph_mount_info *cmount, const char *path, stat *stbuf)
+    int ceph_fstatx(ceph_mount_info *cmount, int fd, statx *stx, unsigned want, unsigned flags)
+    int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
 
     int ceph_mds_command(ceph_mount_info *cmount, const char *mds_spec, const char **cmd, size_t cmdlen,
@@ -793,21 +797,22 @@ cdef class LibCephFS(object):
 
         cdef:
             char* _path = path
-            stat statbuf
+            statx stx
 
         with nogil:
-            ret = ceph_stat(self.cluster, _path, &statbuf)
+            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
+            ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
         if ret < 0:
             raise make_ex(ret, "error in stat: %s" % path)
-        return StatResult(st_dev=statbuf.st_dev, st_ino=statbuf.st_ino,
-                          st_mode=statbuf.st_mode, st_nlink=statbuf.st_nlink,
-                          st_uid=statbuf.st_uid, st_gid=statbuf.st_gid,
-                          st_rdev=statbuf.st_rdev, st_size=statbuf.st_size,
-                          st_blksize=statbuf.st_blksize,
-                          st_blocks=statbuf.st_blocks,
-                          st_atime=datetime.fromtimestamp(statbuf.st_atime),
-                          st_mtime=datetime.fromtimestamp(statbuf.st_mtime),
-                          st_ctime=datetime.fromtimestamp(statbuf.st_ctime))
+        return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
+                          st_mode=stx.stx_mode, st_nlink=stx.stx_nlink,
+                          st_uid=stx.stx_uid, st_gid=stx.stx_gid,
+                          st_rdev=stx.stx_rdev, st_size=stx.stx_size,
+                          st_blksize=stx.stx_blksize,
+                          st_blocks=stx.stx_blocks,
+                          st_atime=datetime.fromtimestamp(stx.stx_atime.tv_sec),
+                          st_mtime=datetime.fromtimestamp(stx.stx_mtime.tv_sec),
+                          st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
 
     def fstat(self, fd):
         self.require_state("mounted")
@@ -816,21 +821,22 @@ cdef class LibCephFS(object):
 
         cdef:
             int _fd = fd
-            stat statbuf
+            statx stx
 
         with nogil:
-            ret = ceph_fstat(self.cluster, _fd, &statbuf)
+            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
+            ret = ceph_fstatx(self.cluster, _fd, &stx, 0x7ffu, 0)
         if ret < 0:
             raise make_ex(ret, "error in fsat")
-        return StatResult(st_dev=statbuf.st_dev, st_ino=statbuf.st_ino,
-                          st_mode=statbuf.st_mode, st_nlink=statbuf.st_nlink,
-                          st_uid=statbuf.st_uid, st_gid=statbuf.st_gid,
-                          st_rdev=statbuf.st_rdev, st_size=statbuf.st_size,
-                          st_blksize=statbuf.st_blksize,
-                          st_blocks=statbuf.st_blocks,
-                          st_atime=datetime.fromtimestamp(statbuf.st_atime),
-                          st_mtime=datetime.fromtimestamp(statbuf.st_mtime),
-                          st_ctime=datetime.fromtimestamp(statbuf.st_ctime))
+        return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
+                          st_mode=stx.stx_mode, st_nlink=stx.stx_nlink,
+                          st_uid=stx.stx_uid, st_gid=stx.stx_gid,
+                          st_rdev=stx.stx_rdev, st_size=stx.stx_size,
+                          st_blksize=stx.stx_blksize,
+                          st_blocks=stx.stx_blocks,
+                          st_atime=datetime.fromtimestamp(stx.stx_atime.tv_sec),
+                          st_mtime=datetime.fromtimestamp(stx.stx_mtime.tv_sec),
+                          st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
 
     def symlink(self, existing, newname):
         self.require_state("mounted")
@@ -922,4 +928,3 @@ cdef class LibCephFS(object):
                 return (ret, b"", "")
         finally:
             free(_cmd)
-

@@ -254,6 +254,43 @@ TEST_F(TestLibRBD, CreateAndStat)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, CreateWithSameDataPool)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
+  rbd_image_options_t image_options;
+  rbd_image_options_create(&image_options);
+  BOOST_SCOPE_EXIT( (&image_options) ) {
+    rbd_image_options_destroy(image_options);
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, rbd_image_options_set_uint64(image_options,
+                                            RBD_IMAGE_OPTION_FEATURES,
+                                            features));
+  ASSERT_EQ(0, rbd_image_options_set_string(image_options,
+                                            RBD_IMAGE_OPTION_DATA_POOL,
+                                            m_pool_name.c_str()));
+
+  ASSERT_EQ(0, rbd_create4(ioctx, name.c_str(), size, image_options));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, CreateAndStatPP)
 {
   librados::IoCtx ioctx;
@@ -275,6 +312,90 @@ TEST_F(TestLibRBD, CreateAndStatPP)
   }
 
   ioctx.close();
+}
+
+TEST_F(TestLibRBD, GetId)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  char id[4096];
+  if (!is_feature_enabled(0)) {
+    // V1 image
+    ASSERT_EQ(-EINVAL, rbd_get_id(image, id, sizeof(id)));
+  } else {
+    ASSERT_EQ(-ERANGE, rbd_get_id(image, id, 0));
+    ASSERT_EQ(0, rbd_get_id(image, id, sizeof(id)));
+    ASSERT_LT(0U, strlen(id));
+  }
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, GetIdPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  std::string id;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  if (!is_feature_enabled(0)) {
+    // V1 image
+    ASSERT_EQ(-EINVAL, image.get_id(&id));
+  } else {
+    ASSERT_EQ(0, image.get_id(&id));
+    ASSERT_LT(0U, id.size());
+  }
+}
+
+TEST_F(TestLibRBD, GetBlockNamePrefix)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  char prefix[4096];
+  ASSERT_EQ(-ERANGE, rbd_get_block_name_prefix(image, prefix, 0));
+  ASSERT_EQ(0, rbd_get_block_name_prefix(image, prefix, sizeof(prefix)));
+  ASSERT_LT(0U, strlen(prefix));
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, GetBlockNamePrefixPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  ASSERT_LT(0U, image.get_block_name_prefix().size());
 }
 
 TEST_F(TestLibRBD, OpenAio)
@@ -1336,6 +1457,106 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, TestDataPoolIO)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  std::string data_pool_name = create_pool(true);
+
+  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
+  bool skip_discard = cct->_conf->rbd_skip_partial_discard;
+
+  rbd_image_t image;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
+  rbd_image_options_t image_options;
+  rbd_image_options_create(&image_options);
+  BOOST_SCOPE_EXIT( (&image_options) ) {
+    rbd_image_options_destroy(image_options);
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, rbd_image_options_set_uint64(image_options,
+                                            RBD_IMAGE_OPTION_FEATURES,
+                                            features));
+  ASSERT_EQ(0, rbd_image_options_set_string(image_options,
+                                            RBD_IMAGE_OPTION_DATA_POOL,
+                                            data_pool_name.c_str()));
+
+  ASSERT_EQ(0, rbd_create4(ioctx, name.c_str(), size, image_options));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_NE(-1, rbd_get_data_pool_id(image));
+
+  char test_data[TEST_IO_SIZE + 1];
+  char zero_data[TEST_IO_SIZE + 1];
+  int i;
+
+  for (i = 0; i < TEST_IO_SIZE; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+  test_data[TEST_IO_SIZE] = '\0';
+  memset(zero_data, 0, sizeof(zero_data));
+
+  for (i = 0; i < 5; ++i)
+    ASSERT_PASSED(write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  for (i = 0; i < 5; ++i)
+    ASSERT_PASSED(read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  // discard 2nd, 4th sections.
+  ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
+  ASSERT_PASSED(aio_discard_test_data, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
+
+  ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image, skip_discard ? test_data : zero_data,
+		TEST_IO_SIZE, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*2, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image, skip_discard ? test_data : zero_data,
+		TEST_IO_SIZE*3, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*4, TEST_IO_SIZE, 0);
+
+  rbd_image_info_t info;
+  rbd_completion_t comp;
+  ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
+  // can't read or write starting past end
+  ASSERT_EQ(-EINVAL, rbd_write(image, info.size, 1, test_data));
+  ASSERT_EQ(-EINVAL, rbd_read(image, info.size, 1, test_data));
+  // reading through end returns amount up to end
+  ASSERT_EQ(10, rbd_read(image, info.size - 10, 100, test_data));
+  // writing through end returns amount up to end
+  ASSERT_EQ(10, rbd_write(image, info.size - 10, 100, test_data));
+
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_write(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_read(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
 TEST_F(TestLibRBD, TestEmptyDiscard)
 {
   rados_ioctx_t ioctx;
@@ -3782,26 +4003,45 @@ TEST_F(TestLibRBD, UpdateFeatures)
     ASSERT_EQ(0, image.update_features(disable_features, false));
   }
 
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(0U, features & disable_features);
+
   // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_JOURNALING, true));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
 
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_NE(0U, features & RBD_FEATURE_EXCLUSIVE_LOCK);
+
   // cannot enable fast diff w/o object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, true));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_NE(0U, features & RBD_FEATURE_OBJECT_MAP);
+
+  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+  uint64_t flags;
+  ASSERT_EQ(0, image.get_flags(&flags));
+  ASSERT_EQ(expected_flags, flags);
+
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(0U, features & RBD_FEATURE_OBJECT_MAP);
+
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
                                      RBD_FEATURE_FAST_DIFF |
                                      RBD_FEATURE_JOURNALING, true));
 
-  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID |
-                            RBD_FLAG_FAST_DIFF_INVALID;
-  uint64_t flags;
+  expected_flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
   ASSERT_EQ(0, image.get_flags(&flags));
   ASSERT_EQ(expected_flags, flags);
 
   // cannot disable object map w/ fast diff
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_FAST_DIFF, false));
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(0U, features & RBD_FEATURE_FAST_DIFF);
 
   expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
   ASSERT_EQ(0, image.get_flags(&flags));
@@ -3820,6 +4060,7 @@ TEST_F(TestLibRBD, UpdateFeatures)
 
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
 
+  ASSERT_EQ(0, image.features(&features));
   if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0) {
     ASSERT_EQ(0, image.update_features(RBD_FEATURE_DEEP_FLATTEN, false));
   }

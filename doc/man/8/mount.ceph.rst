@@ -46,12 +46,15 @@ Options
 =======
 
 :command:`wsize`
-  int, max write size. Default: none (writeback uses smaller of wsize
+  int (bytes), max write size. Default: none (writeback uses smaller of wsize
   and stripe unit)
 
 :command:`rsize`
-  int (bytes), max readahead, multiple of 1024, Default: 524288
-  (512*1024)
+  int (bytes), max read size. Default: none
+
+:command:`rasize`
+  int (bytes), max readahead, multiple of 1024, Default: 8388608
+  (8192*1024)
 
 :command:`osdtimeout`
   int (seconds), Default: 60

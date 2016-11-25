@@ -95,6 +95,17 @@ public:
   }
 };
 
+class MigratorLogContext : public MDSLogContextBase {
+protected:
+  Migrator *mig;
+  MDSRank *get_mds() {
+    return mig->mds;
+  }
+public:
+  explicit MigratorLogContext(Migrator *mig_) : mig(mig_) {
+    assert(mig != NULL);
+  }
+};
 
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
@@ -409,8 +420,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
       export_try_cancel(dir);
     } else {
       // bystander failed.
-      if (p->second.warning_ack_waiting.count(who)) {
-	p->second.warning_ack_waiting.erase(who);
+      if (p->second.warning_ack_waiting.erase(who)) {
 	p->second.notify_ack_waiting.erase(who);   // they won't get a notify either.
 	if (p->second.state == EXPORT_WARNING) {
 	  // exporter waiting for warning acks, let's fake theirs.
@@ -421,8 +431,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	    export_go(dir);
 	}
       }
-      if (p->second.notify_ack_waiting.count(who)) {
-	p->second.notify_ack_waiting.erase(who);
+      if (p->second.notify_ack_waiting.erase(who)) {
 	if (p->second.state == EXPORT_NOTIFYING) {
 	  // exporter is waiting for notify acks, fake it
 	  dout(10) << "faking export_notify_ack from mds." << who
@@ -922,7 +931,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   }
 
   assert(it->second.state == EXPORT_FREEZING);
-  assert(dir->is_frozen());
+  assert(dir->is_frozen_tree_root());
   assert(dir->get_cum_auth_pins() == 0);
 
   CInode *diri = dir->get_inode();
@@ -1220,6 +1229,7 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   it->second.state = EXPORT_EXPORTING;
   assert(g_conf->mds_kill_export_at != 7);
 
+  assert(dir->is_frozen_tree_root());
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
@@ -1535,10 +1545,10 @@ void Migrator::finish_export_dir(CDir *dir, utime_t now, mds_rank_t peer,
     finish_export_dir(*it, now, peer, peer_imported, finished, num_dentries);
 }
 
-class C_MDS_ExportFinishLogged : public MigratorContext {
+class C_MDS_ExportFinishLogged : public MigratorLogContext {
   CDir *dir;
 public:
-  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorContext(m), dir(d) {}
+  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorLogContext(m), dir(d) {}
   void finish(int r) {
     mig->export_logged_finish(dir);
   }
@@ -2183,7 +2193,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
 
 
-class C_MDS_ImportDirLoggedStart : public MigratorContext {
+class C_MDS_ImportDirLoggedStart : public MigratorLogContext {
   dirfrag_t df;
   CDir *dir;
   mds_rank_t from;
@@ -2192,7 +2202,7 @@ public:
   map<client_t,uint64_t> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
-    MigratorContext(m), df(d->dirfrag()), dir(d), from(f) {
+    MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
   }
   void finish(int r) {
     mig->import_logged_start(df, dir, from, imported_client_map, sseqmap);
@@ -3037,7 +3047,7 @@ out:
   m->put();
 }
 
-class C_M_LoggedImportCaps : public MigratorContext {
+class C_M_LoggedImportCaps : public MigratorLogContext {
   CInode *in;
   mds_rank_t from;
 public:
@@ -3045,7 +3055,7 @@ public:
   map<client_t,entity_inst_t> client_map;
   map<client_t,uint64_t> sseqmap;
 
-  C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorContext(m), in(i), from(f) {}
+  C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorLogContext(m), in(i), from(f) {}
   void finish(int r) {
     mig->logged_import_caps(in, from, peer_exports, client_map, sseqmap);
   }  

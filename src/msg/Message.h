@@ -176,6 +176,20 @@
 // Special
 #define MSG_NOP                   0x607
 
+// *** ceph-mgr <-> OSD/MDS daemons ***
+#define MSG_MGR_OPEN              0x700
+#define MSG_MGR_CONFIGURE         0x701
+#define MSG_MGR_REPORT            0x702
+
+// *** ceph-mgr <-> ceph-mon ***
+#define MSG_MGR_BEACON            0x703
+
+// *** ceph-mon(MgrMonitor) -> OSD/MDS daemons ***
+#define MSG_MGR_MAP               0x704
+
+// *** ceph-mon(MgrMonitor) -> ceph-mgr
+#define MSG_MGR_DIGEST               0x705
+
 // ======================================================
 
 // abstract Message class
@@ -315,8 +329,9 @@ public:
    */
 
   void clear_payload() {
-    if (byte_throttler)
+    if (byte_throttler) {
       byte_throttler->put(payload.length() + middle.length());
+    }
     payload.clear();
     middle.clear();
   }
@@ -346,10 +361,10 @@ public:
 
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
-      byte_throttler->put(payload.length());
+      byte_throttler->put(middle.length());
     middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
-      byte_throttler->take(payload.length());
+      byte_throttler->take(middle.length());
   }
   bufferlist& get_middle() { return middle; }
 

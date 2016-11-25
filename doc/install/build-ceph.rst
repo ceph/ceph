@@ -24,14 +24,14 @@ and tools::
 Build Ceph
 ==========
 
-Ceph provides ``automake`` and ``configure`` scripts to streamline the build 
-process. To build Ceph, navigate to your cloned Ceph repository and execute the 
-following::
+Ceph is built using cmake. To build Ceph, navigate to your cloned Ceph
+repository and execute the following::
 
-	cd ceph
-	./autogen.sh
-	./configure
-	make
+    cd ceph
+    mkdir build
+    cd build
+    cmake ..
+    make
 
 .. topic:: Hyperthreading
 

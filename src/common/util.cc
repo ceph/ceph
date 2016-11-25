@@ -20,6 +20,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "common/version.h"
 
 #ifdef HAVE_SYS_VFS_H
 #include <sys/vfs.h>
@@ -213,6 +214,9 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
 
 void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
+  // version
+  (*m)["ceph_version"] = pretty_version_to_str();
+
   // kernel info
   struct utsname u;
   int r = uname(&u);

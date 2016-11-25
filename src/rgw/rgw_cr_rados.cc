@@ -525,6 +525,46 @@ int RGWAsyncFetchRemoteObj::_send_request()
   return r;
 }
 
+int RGWAsyncStatRemoteObj::_send_request()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  string user_id;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
+  string client_id = store->zone_id() + buf;
+  string op_id = store->unique_id(store->get_new_req_id());
+
+  rgw_obj src_obj(bucket_info.bucket, key.name);
+  src_obj.set_instance(key.instance);
+
+  rgw_obj dest_obj(src_obj);
+
+  int r = store->stat_remote_obj(obj_ctx,
+                       user_id,
+                       client_id,
+                       nullptr, /* req_info */
+                       source_zone,
+                       src_obj,
+                       bucket_info, /* source */
+                       pmtime, /* real_time* src_mtime, */
+                       psize, /* uint64_t * */
+                       nullptr, /* const real_time* mod_ptr, */
+                       nullptr, /* const real_time* unmod_ptr, */
+                       true, /* high precision time */
+                       nullptr, /* const char *if_match, */
+                       nullptr, /* const char *if_nomatch, */
+                       pattrs,
+                       nullptr,
+                       nullptr, /* string *ptag, */
+                       nullptr); /* string *petag, */
+
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+  }
+  return r;
+}
+
 
 int RGWAsyncRemoveObj::_send_request()
 {
@@ -643,6 +683,47 @@ int RGWRadosTimelogAddCR::send_request()
 }
 
 int RGWRadosTimelogAddCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
+RGWRadosTimelogTrimCR::RGWRadosTimelogTrimCR(RGWRados *store,
+                                             const std::string& oid,
+                                             const real_time& start_time,
+                                             const real_time& end_time,
+                                             const std::string& from_marker,
+                                             const std::string& to_marker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), oid(oid),
+    start_time(start_time), end_time(end_time),
+    from_marker(from_marker), to_marker(to_marker)
+{
+  set_description() << "timelog trim oid=" <<  oid
+      << " start_time=" << start_time << " end_time=" << end_time
+      << " from_marker=" << from_marker << " to_marker=" << to_marker;
+}
+
+RGWRadosTimelogTrimCR::~RGWRadosTimelogTrimCR()
+{
+  if (cn) {
+    cn->put();
+  }
+}
+
+int RGWRadosTimelogTrimCR::send_request()
+{
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  cn->get();
+  return store->time_log_trim(oid, start_time, end_time, from_marker,
+                              to_marker, cn->completion());
+}
+
+int RGWRadosTimelogTrimCR::request_complete()
 {
   int r = cn->completion()->get_return_value();
 

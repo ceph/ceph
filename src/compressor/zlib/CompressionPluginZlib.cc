@@ -27,18 +27,24 @@
 
 class CompressionPluginZlib : public CompressionPlugin {
 public:
+  bool has_isal = false;
 
   explicit CompressionPluginZlib(CephContext *cct) : CompressionPlugin(cct)
   {}
 
   virtual int factory(CompressorRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
-    if (compressor == 0) {
+    bool isal;
+    if (cct->_conf->compressor_zlib_isal) {
       ceph_arch_probe();
-      bool isal = (ceph_arch_intel_pclmul && ceph_arch_intel_sse41);
-      ZlibCompressor *interface = new ZlibCompressor(isal);
-      compressor = CompressorRef(interface);
+      isal = (ceph_arch_intel_pclmul && ceph_arch_intel_sse41);
+    } else {
+      isal = false;
+    }
+    if (compressor == 0 || has_isal != isal) {
+      compressor = CompressorRef(new ZlibCompressor(isal));
+      has_isal = isal;
     }
     *cs = compressor;
     return 0;

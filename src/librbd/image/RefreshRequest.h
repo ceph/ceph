@@ -55,6 +55,9 @@ private:
    *            V2_GET_SNAPSHOTS (skip if no snaps)           |
    *                |                                         |
    *                v                                         |
+   *            V2_GET_SNAP_NAMESPACES                        |
+   *                |                                         |
+   *                v                                         |
    *            V2_REFRESH_PARENT (skip if no parent or       |
    *                |              refresh not needed)        |
    *                v                                         |
@@ -120,6 +123,7 @@ private:
 
   ::SnapContext m_snapc;
   std::vector<std::string> m_snap_names;
+  std::vector<cls::rbd::SnapshotNamespace> m_snap_namespaces;
   std::vector<uint64_t> m_snap_sizes;
   std::vector<parent_info> m_snap_parents;
   std::vector<uint8_t> m_snap_protection;
@@ -153,6 +157,9 @@ private:
 
   void send_v2_get_snapshots();
   Context *handle_v2_get_snapshots(int *result);
+
+  void send_v2_get_snap_namespaces();
+  Context *handle_v2_get_snap_namespaces(int *result);
 
   void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);

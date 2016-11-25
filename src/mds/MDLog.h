@@ -129,14 +129,22 @@ protected:
 
   struct PendingEvent {
     LogEvent *le;
-    MDSInternalContextBase *fin;
+    MDSContext *fin;
     bool flush;
-    PendingEvent(LogEvent *e, MDSInternalContextBase *c, bool f=false) : le(e), fin(c), flush(f) {}
+    PendingEvent(LogEvent *e, MDSContext *c, bool f=false) : le(e), fin(c), flush(f) {}
   };
 
   map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
   Mutex submit_mutex;
   Cond submit_cond;
+
+  void set_safe_pos(uint64_t pos)
+  {
+    Mutex::Locker l(submit_mutex);
+    assert(pos >= safe_pos);
+    safe_pos = pos;
+  }
+  friend class MDSLogContextBase;
 
   void _submit_thread();
   class SubmitThread : public Thread {
@@ -268,13 +276,13 @@ public:
     _start_entry(e);
   }
   void cancel_entry(LogEvent *e);
-  void _submit_entry(LogEvent *e, MDSInternalContextBase *c);
-  void submit_entry(LogEvent *e, MDSInternalContextBase *c = 0) {
+  void _submit_entry(LogEvent *e, MDSLogContextBase *c);
+  void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
     Mutex::Locker l(submit_mutex);
     _submit_entry(e, c);
     submit_cond.Signal();
   }
-  void start_submit_entry(LogEvent *e, MDSInternalContextBase *c = 0) {
+  void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
     Mutex::Locker l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c);

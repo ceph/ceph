@@ -91,6 +91,19 @@ class C_VoidFn : public Context
   }
 };
 
+class MDSDaemon::C_MDS_Tick : public Context {
+  protected:
+    MDSDaemon *mds_daemon;
+public:
+  explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
+  void finish(int r) {
+    assert(mds_daemon->mds_lock.is_locked_by_me());
+
+    mds_daemon->tick_event = 0;
+    mds_daemon->tick();
+  }
+};
+
 // cons/des
 MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
@@ -109,6 +122,7 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   name(n),
   messenger(m),
   monc(mc),
+  mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
   tick_event(0),
@@ -185,6 +199,7 @@ void MDSDaemon::dump_status(Formatter *f)
     f->dump_unsigned("whoami", MDS_RANK_NONE);
   }
 
+  f->dump_int("id", monc->get_global_id());
   f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
   f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
 	    monc->get_global_id()))));
@@ -457,7 +472,8 @@ int MDSDaemon::init()
   // get monmap
   monc->set_messenger(messenger);
 
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD |
+                      CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_MGR);
   int r = 0;
   r = monc->init();
   if (r < 0) {
@@ -496,6 +512,9 @@ int MDSDaemon::init()
     return -ETIMEDOUT;
   }
 
+  mgrc.init();
+  messenger->add_dispatcher_head(&mgrc);
+
   mds_lock.Lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
@@ -504,6 +523,7 @@ int MDSDaemon::init()
   }
 
   monc->sub_want("mdsmap", 0, 0);
+  monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
   mds_lock.Unlock();
@@ -741,7 +761,7 @@ int MDSDaemon::_handle_command(
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability);
+			   cp->module, cp->perm, cp->availability, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
@@ -1076,6 +1096,7 @@ void MDSDaemon::suicide()
   } else {
     timer.shutdown();
 
+    mgrc.shutdown();
     monc->shutdown();
     messenger->shutdown();
   }
@@ -1093,12 +1114,12 @@ void MDSDaemon::respawn()
   }
   new_argv[orig_argc] = NULL;
 
-  /* Determine the path to our executable, try to read
-   * linux-specific /proc/ path first */
-  char exe_path[PATH_MAX];
-  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
-				    sizeof(exe_path) - 1);
-  if (exe_path_bytes < 0) {
+  /* Determine the path to our executable, test if Linux /proc/self/exe exists.
+   * This allows us to exec the same executable even if it has since been
+   * unlinked.
+   */
+  char exe_path[PATH_MAX] = "";
+  if (readlink("/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1106,9 +1127,10 @@ void MDSDaemon::respawn()
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
-    strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
+    strncpy(exe_path, orig_argv[0], PATH_MAX-1);
   } else {
-    exe_path[exe_path_bytes] = '\0';
+    dout(1) << "respawning with exe " << exe_path << dendl;
+    strcpy(exe_path, "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
@@ -1269,6 +1291,12 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
     }
     session->put();
   }
+}
+
+bool MDSDaemon::ms_handle_refused(Connection *con)
+{
+  // do nothing for now
+  return false;
 }
 
 bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,

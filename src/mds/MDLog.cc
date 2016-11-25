@@ -118,9 +118,9 @@ class C_MDL_WriteError : public MDSIOContextBase {
 
 void MDLog::write_head(MDSInternalContextBase *c) 
 {
-  C_OnFinisher *fin = NULL;
+  Context *fin = NULL;
   if (c != NULL) {
-    fin = new C_OnFinisher(new C_IO_Wrapper(mds, c), mds->finisher);
+    fin = new C_IO_Wrapper(mds, c);
   }
   journaler->write_head(fin);
 }
@@ -149,7 +149,7 @@ void MDLog::create(MDSInternalContextBase *c)
   C_GatherBuilder gather(g_ceph_context);
   // This requires an OnFinisher wrapper because Journaler will call back the completion for write_head inside its own lock
   // XXX but should maybe that be handled inside Journaler?
-  gather.set_finisher(new C_OnFinisher(new C_IO_Wrapper(mds, c), mds->finisher));
+  gather.set_finisher(new C_IO_Wrapper(mds, c));
 
   // The inode of the default Journaler we will create
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
@@ -271,7 +271,7 @@ void MDLog::cancel_entry(LogEvent *le)
   delete le;
 }
 
-void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c)
+void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 {
   assert(submit_mutex.is_locked_by_me());
   assert(!mds->is_any_replay());
@@ -283,7 +283,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c)
   if (!g_conf->mds_log) {
     // hack: log is disabled.
     if (c) {
-      c->complete(0);
+      mds->finisher->queue(c, 0);
     }
     return;
   }
@@ -334,27 +334,23 @@ void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c)
 /**
  * Invoked on the flush after each entry submitted
  */
-class C_MDL_Flushed : public MDSIOContextBase {
-  protected:
+class C_MDL_Flushed : public MDSLogContextBase {
+protected:
   MDLog *mdlog;
   MDSRank *get_mds() {return mdlog->mds;}
-  uint64_t flushed_to;
   MDSInternalContextBase *wrapped;
 
   void finish(int r) {
-    if (wrapped) {
+    if (wrapped)
       wrapped->complete(r);
-    }
-
-    mdlog->submit_mutex.Lock();
-    assert(mdlog->safe_pos <= flushed_to);
-    mdlog->safe_pos = flushed_to;
-    mdlog->submit_mutex.Unlock();
   }
 
-  public:
-  C_MDL_Flushed(MDLog *m, uint64_t ft, MDSInternalContextBase *w)
-    : mdlog(m), flushed_to(ft), wrapped(w) {}
+public:
+  C_MDL_Flushed(MDLog *m, MDSInternalContextBase *w)
+    : mdlog(m), wrapped(w) {}
+  C_MDL_Flushed(MDLog *m, uint64_t wp) : mdlog(m), wrapped(NULL) {
+    set_write_pos(wp);
+  }
 };
 
 void MDLog::_submit_thread()
@@ -405,8 +401,16 @@ void MDLog::_submit_thread()
       const uint64_t new_write_pos = journaler->append_entry(bl);  // bl is destroyed.
       ls->end = new_write_pos;
 
-      journaler->wait_for_flush(new C_MDL_Flushed(
-            this, new_write_pos, data.fin));
+      MDSLogContextBase *fin;
+      if (data.fin) {
+	fin = dynamic_cast<MDSLogContextBase*>(data.fin);
+	assert(fin);
+	fin->set_write_pos(new_write_pos);
+      } else {
+	fin = new C_MDL_Flushed(this, new_write_pos);
+      }
+
+      journaler->wait_for_flush(fin);
 
       if (data.flush)
 	journaler->flush();
@@ -416,8 +420,14 @@ void MDLog::_submit_thread()
 
       delete le;
     } else {
-      journaler->wait_for_flush(new C_MDL_Flushed(
-            this, journaler->get_write_pos(), data.fin));
+      if (data.fin) {
+	MDSInternalContextBase* fin =
+		dynamic_cast<MDSInternalContextBase*>(data.fin);
+	assert(fin);
+	C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
+	fin2->set_write_pos(journaler->get_write_pos());
+	journaler->wait_for_flush(fin2);
+      }
       if (data.flush)
 	journaler->flush();
     }
@@ -566,7 +576,8 @@ void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
   dout(7) << __func__ << dendl;
   ESubtreeMap *sle = mds->mdcache->create_subtree_map();
   sle->event_seq = get_last_segment_seq();
-  _submit_entry(sle, onsync);
+
+  _submit_entry(sle, new C_MDL_Flushed(this, onsync));
 }
 
 void MDLog::trim(int m)
@@ -913,6 +924,10 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     int write_result = jp.save(mds->objecter);
     // Nothing graceful we can do for this
     assert(write_result >= 0);
+  } else if (read_result == -EBLACKLISTED) {
+    derr << "Blacklisted during JournalPointer read!  Respawning..." << dendl;
+    mds->respawn();
+    assert(0); // Should be unreachable because respawn calls execv
   } else if (read_result != 0) {
     mds->clog->error() << "failed to read JournalPointer: " << read_result
                        << " (" << cpp_strerror(read_result) << ")";
@@ -943,7 +958,11 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     C_SaferCond recover_wait;
     back.recover(&recover_wait);
     int recovery_result = recover_wait.wait();
-    if (recovery_result != 0) {
+    if (recovery_result == -EBLACKLISTED) {
+      derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
+      mds->respawn();
+      assert(0); // Should be unreachable because respawn calls execv
+    } else if (recovery_result != 0) {
       // Journaler.recover succeeds if no journal objects are present: an error
       // means something worse like a corrupt header, which we can't handle here.
       mds->clog->error() << "Error recovering journal " << jp.front << ": "
@@ -986,7 +1005,11 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   int recovery_result = recover_wait.wait();
   dout(4) << "Journal " << jp.front << " recovered." << dendl;
 
-  if (recovery_result != 0) {
+  if (recovery_result == -EBLACKLISTED) {
+    derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
+    mds->respawn();
+    assert(0); // Should be unreachable because respawn calls execv
+  } else if (recovery_result != 0) {
     mds->clog->error() << "Error recovering journal " << jp.front << ": "
       << cpp_strerror(recovery_result);
     mds->damaged_unlocked();

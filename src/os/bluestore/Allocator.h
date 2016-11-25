@@ -12,8 +12,8 @@
 #ifndef CEPH_OS_BLUESTORE_ALLOCATOR_H
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
-#include "kv/KeyValueDB.h"
 #include <ostream>
+#include <boost/scoped_ptr.hpp>
 #include "include/assert.h"
 #include "os/bluestore/bluestore_types.h"
 

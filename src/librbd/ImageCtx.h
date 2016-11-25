@@ -23,6 +23,7 @@
 #include "include/xlist.h"
 #include "osdc/ObjectCacher.h"
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/SnapInfo.h"
@@ -230,6 +231,8 @@ namespace librbd {
     const SnapInfo* get_snap_info(librados::snap_t in_snap_id) const;
     int get_snap_name(librados::snap_t in_snap_id,
 		      std::string *out_snap_name) const;
+    int get_snap_namespace(librados::snap_t in_snap_id,
+			   cls::rbd::SnapshotNamespace *out_snap_namespace) const;
     int get_parent_spec(librados::snap_t in_snap_id,
 			parent_spec *pspec) const;
     int is_snap_protected(librados::snap_t in_snap_id,
@@ -244,7 +247,9 @@ namespace librbd {
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;
 
-    void add_snap(std::string in_snap_name, librados::snap_t id,
+    void add_snap(std::string in_snap_name,
+		  cls::rbd::SnapshotNamespace in_snap_namespace,
+		  librados::snap_t id,
 		  uint64_t in_size, parent_info parent,
                   uint8_t protection_status, uint64_t flags);
     void rm_snap(std::string in_snap_name, librados::snap_t id);

@@ -15,8 +15,7 @@ namespace journal {
 class DisabledPolicy : public Policy {
 public:
   virtual bool append_disabled() const {
-    assert(false);
-    return false;
+    return true;
   }
   virtual bool journal_disabled() const {
     return true;

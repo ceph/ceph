@@ -233,13 +233,13 @@ public:
       cached_up_features(0)
   { }
 
-  bool get_inline_data_enabled() { return inline_data_enabled; }
+  bool get_inline_data_enabled() const { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
 
-  utime_t get_session_timeout() {
+  utime_t get_session_timeout() const {
     return utime_t(session_timeout,0);
   }
-  uint64_t get_max_filesize() { return max_file_size; }
+  uint64_t get_max_filesize() const { return max_file_size; }
   void set_max_filesize(uint64_t m) { max_file_size = m; }
   
   int get_flags() const { return flags; }
@@ -394,21 +394,21 @@ public:
   /**
    * Get MDS ranks which are in but not up.
    */
-  void get_down_mds_set(std::set<mds_rank_t> *s)
+  void get_down_mds_set(std::set<mds_rank_t> *s) const
   {
     assert(s != NULL);
     s->insert(failed.begin(), failed.end());
     s->insert(damaged.begin(), damaged.end());
   }
 
-  int get_failed() {
+  int get_failed() const {
     if (!failed.empty()) return *failed.begin();
     return -1;
   }
-  void get_stopped_mds_set(std::set<mds_rank_t>& s) {
+  void get_stopped_mds_set(std::set<mds_rank_t>& s) const {
     s = stopped;
   }
-  void get_recovery_mds_set(std::set<mds_rank_t>& s) {
+  void get_recovery_mds_set(std::set<mds_rank_t>& s) const {
     s = failed;
     for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
@@ -416,7 +416,9 @@ public:
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
-  void get_clientreplay_or_active_or_stopping_mds_set(std::set<mds_rank_t>& s) {
+
+  void
+  get_clientreplay_or_active_or_stopping_mds_set(std::set<mds_rank_t>& s) const {
     for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
@@ -543,16 +545,16 @@ public:
 	return true;
     return false;
   }
-  bool is_any_failed() {
+  bool is_any_failed() const {
     return failed.size();
   }
-  bool is_resolving() {
+  bool is_resolving() const {
     return
       get_num_mds(STATE_RESOLVE) > 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
       failed.empty();
   }
-  bool is_rejoining() {  
+  bool is_rejoining() const {
     // nodes are rejoining cache state
     return 
       get_num_mds(STATE_REJOIN) > 0 &&
@@ -561,7 +563,7 @@ public:
       get_num_mds(STATE_RESOLVE) == 0 &&
       failed.empty();
   }
-  bool is_stopped() {
+  bool is_stopped() const {
     return up.empty();
   }
 
@@ -570,7 +572,7 @@ public:
    * an MDS daemon's entity_inst_t associated
    * with it.
    */
-  bool have_inst(mds_rank_t m) {
+  bool have_inst(mds_rank_t m) const {
     return up.count(m);
   }
 
@@ -610,9 +612,10 @@ public:
     }
   }
 
-  int get_inc_gid(mds_gid_t gid) {
-    if (mds_info.count(gid))
-      return mds_info[gid].inc;
+  int get_inc_gid(mds_gid_t gid) const {
+    auto mds_info_entry = mds_info.find(gid);
+    if (mds_info_entry != mds_info.end())
+      return mds_info_entry->second.inc;
     return -1;
   }
   void encode(bufferlist& bl, uint64_t features) const;

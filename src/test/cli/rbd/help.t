@@ -145,6 +145,7 @@
                    [--object-size <object-size>] 
                    [--image-feature <image-feature>] [--image-shared] 
                    [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
+                   [--data-pool <data-pool>] 
                    [--journal-splay-width <journal-splay-width>] 
                    [--journal-object-size <journal-object-size>] 
                    [--journal-pool <journal-pool>] 
@@ -170,10 +171,11 @@
     --image-feature arg       image features
                               [layering(+), striping, exclusive-lock(+*),
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*)]
+                              journaling(*), data-pool]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
     --stripe-count arg        stripe count
+    --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
@@ -189,6 +191,7 @@
                   [--object-size <object-size>] 
                   [--image-feature <image-feature>] [--image-shared] 
                   [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
+                  [--data-pool <data-pool>] 
                   [--journal-splay-width <journal-splay-width>] 
                   [--journal-object-size <journal-object-size>] 
                   [--journal-pool <journal-pool>] [--no-progress] 
@@ -214,10 +217,11 @@
     --image-feature arg          image features
                                  [layering(+), striping, exclusive-lock(+*),
                                  object-map(+*), fast-diff(+*), deep-flatten(+-),
-                                 journaling(*)]
+                                 journaling(*), data-pool]
     --image-shared               shared image
     --stripe-unit arg            stripe unit
     --stripe-count arg           stripe count
+    --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
     --journal-object-size arg    size of journal objects
     --journal-pool arg           pool for journal objects
@@ -234,7 +238,7 @@
                     [--order <order>] [--object-size <object-size>] 
                     [--image-feature <image-feature>] [--image-shared] 
                     [--stripe-unit <stripe-unit>] 
-                    [--stripe-count <stripe-count>] 
+                    [--stripe-count <stripe-count>] [--data-pool <data-pool>] 
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] --size <size> 
@@ -257,10 +261,11 @@
     --image-feature arg       image features
                               [layering(+), striping, exclusive-lock(+*),
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*)]
+                              journaling(*), data-pool]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
     --stripe-count arg        stripe count
+    --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
@@ -366,7 +371,7 @@
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
                          [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten, journaling]
+                         fast-diff, deep-flatten, journaling, data-pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -386,7 +391,7 @@
                               (example: [<pool-name>/]<image-name>)
     <features>                image features
                               [layering, striping, exclusive-lock, object-map,
-                              fast-diff, deep-flatten, journaling]
+                              fast-diff, deep-flatten, journaling, data-pool]
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -576,7 +581,7 @@
                     [--order <order>] [--object-size <object-size>] 
                     [--image-feature <image-feature>] [--image-shared] 
                     [--stripe-unit <stripe-unit>] 
-                    [--stripe-count <stripe-count>] 
+                    [--stripe-count <stripe-count>] [--data-pool <data-pool>] 
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] [--no-progress] 
@@ -602,10 +607,11 @@
     --image-feature arg       image features
                               [layering(+), striping, exclusive-lock(+*),
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*)]
+                              journaling(*), data-pool]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
     --stripe-count arg        stripe count
+    --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
@@ -864,8 +870,8 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    -o [ --options ] arg  mapping options
-    --read-only           mount read-only
+    -o [ --options ] arg  map options
+    --read-only           map read-only
   
   rbd help merge-diff
   usage: rbd merge-diff [--path <path>] [--no-progress] 
@@ -1080,7 +1086,7 @@
   
   rbd help nbd map
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
-                     [--read-only] [--device <device>] 
+                     [--read-only] [--exclusive] [--device <device>] 
                      <image-or-snap-spec> 
   
   Map image to a nbd device.
@@ -1094,6 +1100,7 @@
     --image arg           image name
     --snap arg            snapshot name
     --read-only           mount read-only
+    --exclusive           forbid other clients write
     --device arg          specify nbd device
   
   rbd help nbd unmap
@@ -1382,6 +1389,7 @@
   
   rbd help unmap
   usage: rbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] 
+                   [--options <options>] 
                    <image-or-snap-or-device-spec> 
   
   Unmap a rbd device that was used by the kernel.
@@ -1395,6 +1403,7 @@
     -p [ --pool ] arg               pool name
     --image arg                     image name
     --snap arg                      snapshot name
+    -o [ --options ] arg            unmap options
   
   rbd help watch
   usage: rbd watch [--pool <pool>] [--image <image>] 

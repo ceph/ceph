@@ -79,6 +79,9 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   // use whatever user specified (if anything)
   entity_addr_t listen_addr = bind_addr;
+  if (listen_addr.get_type() == entity_addr_t::TYPE_NONE) {
+    listen_addr.set_type(entity_addr_t::TYPE_LEGACY);
+  }
   listen_addr.set_family(family);
 
   /* bind to port */
@@ -259,7 +262,7 @@ class C_handle_reap : public EventCallback {
  */
 
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
-                               string mname, uint64_t _nonce, uint64_t features)
+                               string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     dispatch_queue(cct, this, mname),
     lock("AsyncMessenger::lock"),
@@ -274,7 +277,6 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   stack->start();
   local_worker = stack->get_worker();
   local_connection = new AsyncConnection(cct, this, &dispatch_queue, local_worker);
-  local_features = features;
   init_local_connection();
   reap_handler = new C_handle_reap(this);
   unsigned processor_num = 1;
@@ -654,7 +656,8 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     need_addr = false;
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    my_inst.addr.u = t.u;
+    t.set_nonce(my_inst.addr.get_nonce());
+    my_inst.addr = t;
     ldout(cct, 1) << __func__ << " learned my addr " << my_inst.addr << dendl;
     _init_local_connection();
   }

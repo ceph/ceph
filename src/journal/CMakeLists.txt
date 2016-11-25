@@ -1,5 +1,4 @@
 set(journal_srcs
-  AsyncOpTracker.cc
   Entry.cc
   Future.cc
   FutureImpl.cc

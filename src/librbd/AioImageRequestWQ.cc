@@ -439,8 +439,9 @@ void AioImageRequestWQ::queue(AioImageRequest<> *req) {
 
   assert(m_image_ctx.owner_lock.is_locked());
   bool write_op = req->is_write_op();
-  bool lock_required = (write_op && is_lock_required()) ||
-    (!write_op && m_require_lock_on_read);
+  bool lock_required = (m_image_ctx.exclusive_lock != nullptr &&
+                        ((write_op && is_lock_required()) ||
+                          (!write_op && m_require_lock_on_read)));
 
   if (lock_required && !m_image_ctx.get_exclusive_lock_policy()->may_auto_request_lock()) {
     lderr(cct) << "op requires exclusive lock" << dendl;

@@ -183,7 +183,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   projected_version(0),  item_dirty(this), item_new(this),
-  scrub_infop(NULL),
   num_head_items(0), num_head_null(0),
   num_snap_items(0), num_snap_null(0),
   num_dirty(0), committing_version(0), committed_version(0),
@@ -195,7 +194,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
   num_dentries_nested(0), num_dentries_auth_subtree(0),
   num_dentries_auth_subtree_nested(0),
-  bloom(NULL),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
   g_num_dir++;
@@ -639,7 +637,7 @@ void CDir::add_to_bloom(CDentry *dn)
       return;
     unsigned size = get_num_head_items() + get_num_snap_items();
     if (size < 100) size = 100;
-    bloom = new bloom_filter(size, 1.0 / size, 0);
+    bloom.reset(new bloom_filter(size, 1.0 / size, 0));
   }
   /* This size and false positive probability is completely random.*/
   bloom->insert(dn->name.c_str(), dn->name.size());
@@ -650,12 +648,6 @@ bool CDir::is_in_bloom(const string& name)
   if (!bloom)
     return false;
   return bloom->contains(name.c_str(), name.size());
-}
-
-void CDir::remove_bloom()
-{
-  delete bloom;
-  bloom = NULL;
 }
 
 void CDir::remove_null_dentries() {
@@ -1357,29 +1349,19 @@ void CDir::mark_clean()
   }
 }
 
-
-struct C_Dir_Dirty : public CDirContext {
-  version_t pv;
-  LogSegment *ls;
-  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
-  void finish(int r) {
-    dir->mark_dirty(pv, ls);
-    dir->auth_unpin(dir);
-  }
-};
-
 // caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
-  MDLog *mdlog = inode->mdcache->mds->mdlog;
+  if (is_dirty() || is_projected())
+    return; // noop if it is already dirty or will be dirty
+
   version_t pv = pre_dirty();
-  mdlog->flush();
-  mdlog->wait_for_safe(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
+  mark_dirty(pv, cache->mds->mdlog->get_current_segment());
 }
 
 void CDir::mark_complete() {
   state_set(STATE_COMPLETE);
-  remove_bloom();
+  bloom.reset();
 }
 
 void CDir::first_get()
@@ -1878,10 +1860,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   // dirty myself to remove stale snap dentries
-  if (force_dirty && !is_dirty() && !inode->mdcache->is_readonly())
+  if (force_dirty && !inode->mdcache->is_readonly())
     log_mark_dirty();
-  else
-    auth_unpin(this);
+
+  auth_unpin(this);
 
   if (complete) {
     // kick waiters
@@ -2915,7 +2897,7 @@ void CDir::scrub_info_create() const
   CDir *me = const_cast<CDir*>(this);
   fnode_t *fn = me->get_projected_fnode();
 
-  scrub_info_t *si = new scrub_info_t();
+  std::unique_ptr<scrub_info_t> si(new scrub_info_t());
 
   si->last_recursive.version = si->recursive_start.version =
       fn->recursive_scrub_version;
@@ -2925,13 +2907,14 @@ void CDir::scrub_info_create() const
   si->last_local.version = fn->localized_scrub_version;
   si->last_local.time = fn->localized_scrub_stamp;
 
-  me->scrub_infop = si;
+  me->scrub_infop.swap(si);
 }
 
 void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
 {
   dout(20) << __func__ << dendl;
   assert(is_complete());
+  assert(header != nullptr);
 
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
@@ -3019,7 +3002,7 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
     dns.erase(dnkey);
 
     if (dn->get_projected_version() < scrub_infop->last_recursive.version &&
-	!(scrub_infop->header && scrub_infop->header->force)) {
+	!(scrub_infop->header->get_force())) {
       dout(15) << " skip dentry " << dnkey.name
 	       << ", no change since last scrub" << dendl;
       continue;
@@ -3089,8 +3072,7 @@ void CDir::scrub_dentry_finished(CDentry *dn)
   dout(20) << __func__ << " on dn " << *dn << dendl;
   assert(scrub_infop && scrub_infop->directory_scrubbing);
   dentry_key_t dn_key = dn->key();
-  if (scrub_infop->directories_scrubbing.count(dn_key)) {
-    scrub_infop->directories_scrubbing.erase(dn_key);
+  if (scrub_infop->directories_scrubbing.erase(dn_key)) {
     scrub_infop->directories_scrubbed.insert(dn_key);
   } else {
     assert(scrub_infop->others_scrubbing.count(dn_key));
@@ -3107,8 +3089,7 @@ void CDir::scrub_maybe_delete_info()
       !scrub_infop->last_scrub_dirty &&
       !scrub_infop->pending_scrub_error &&
       scrub_infop->dirty_scrub_stamps.empty()) {
-    delete scrub_infop;
-    scrub_infop = NULL;
+    scrub_infop.reset();
   }
 }
 
@@ -3125,8 +3106,7 @@ bool CDir::scrub_local()
     scrub_infop->last_scrub_dirty = true;
   } else {
     scrub_infop->pending_scrub_error = true;
-    if (scrub_infop->header &&
-	scrub_infop->header->repair)
+    if (scrub_infop->header->get_repair())
       cache->repair_dirfrag_stats(this);
   }
   return rval;

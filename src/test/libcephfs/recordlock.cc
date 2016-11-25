@@ -749,7 +749,8 @@ static void process_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   exit(EXIT_SUCCESS);
 }
 
-TEST(LibCephFS, InterProcessRecordLocking) {
+// Disabled because of fork() issues (http://tracker.ceph.com/issues/16556)
+TEST(LibCephFS, DISABLED_InterProcessRecordLocking) {
   PROCESS_SLOW_MS();
   // Process synchronization
   char c_file[1024];
@@ -909,7 +910,8 @@ TEST(LibCephFS, InterProcessRecordLocking) {
   CLEANUP_CEPH();
 }
 
-TEST(LibCephFS, ThreesomeInterProcessRecordLocking) {
+// Disabled because of fork() issues (http://tracker.ceph.com/issues/16556)
+TEST(LibCephFS, DISABLED_ThreesomeInterProcessRecordLocking) {
   PROCESS_SLOW_MS();
   // Process synchronization
   char c_file[1024];

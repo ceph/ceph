@@ -161,7 +161,46 @@ inline ImageCtx *get_image_ctx(ImageCtx *image_ctx) {
   return image_ctx;
 }
 
+/// helper for tracking in-flight async ops when coordinating
+/// a shut down of the invoking class instance
+class AsyncOpTracker {
+public:
+  AsyncOpTracker() : m_refs(0) {
+  }
+
+  void start_op() {
+    m_refs.inc();
+  }
+
+  void finish_op() {
+    if (m_refs.dec() == 0 && m_on_finish != nullptr) {
+      Context *on_finish = nullptr;
+      std::swap(on_finish, m_on_finish);
+      on_finish->complete(0);
+    }
+  }
+
+  template <typename I>
+  void wait(I &image_ctx, Context *on_finish) {
+    assert(m_on_finish == nullptr);
+
+    on_finish = create_async_context_callback(image_ctx, on_finish);
+    if (m_refs.read() == 0) {
+      on_finish->complete(0);
+      return;
+    }
+    m_on_finish = on_finish;
+  }
+
+private:
+  atomic_t m_refs;
+  Context *m_on_finish = nullptr;
+};
+
+uint64_t parse_rbd_default_features(CephContext* cct);
+
 } // namespace util
+
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_UTILS_H

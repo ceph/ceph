@@ -87,6 +87,7 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("prefix", prefix, f);
   ::encode_json("tail_bucket", tail_bucket, f);
   ::encode_json("rules", rules, f);
+  ::encode_json("tail_instance", tail_instance, f);
 }
 
 void rgw_log_entry::dump(Formatter *f) const
@@ -580,8 +581,9 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
 void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
   JSONDecoder::decode_json("owner", owner, obj);
-  utime_t ut(creation_time);
+  utime_t ut;
   JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
   JSONDecoder::decode_json("linked", linked, obj);
   JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
   if (has_bucket_info) {
@@ -696,8 +698,9 @@ void RGWBucketInfo::dump(Formatter *f) const
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
-  utime_t ut(creation_time);
+  utime_t ut;
   JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("zonegroup", zonegroup, obj);
@@ -855,6 +858,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
   encode_json("metadata_heap", metadata_heap.data_pool, f);
+  encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
 }
 
@@ -900,6 +904,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   ::decode_json("metadata_heap", metadata_heap, obj);
+  JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
 
 }
@@ -913,6 +918,9 @@ void RGWZone::dump(Formatter *f) const
   encode_json("log_data", log_data, f);
   encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
   encode_json("read_only", read_only, f);
+  encode_json("tier_type", tier_type, f);
+  encode_json("sync_from_all", sync_from_all, f);
+  encode_json("sync_from", sync_from, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -927,6 +935,9 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("log_data", log_data, obj);
   JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
   JSONDecoder::decode_json("read_only", read_only, obj);
+  JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("sync_from_all", sync_from_all, obj);
+  JSONDecoder::decode_json("sync_from", sync_from, obj);
 }
 
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
@@ -1085,8 +1096,9 @@ void RGWMetadataLogInfo::dump(Formatter *f) const
 void RGWMetadataLogInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("marker", marker, obj);
-  utime_t ut(last_update);
+  utime_t ut;
   JSONDecoder::decode_json("last_update", ut, obj);
+  last_update = ut.to_real_time();
 }
 
 void RGWDataChangesLogInfo::dump(Formatter *f) const
@@ -1099,8 +1111,9 @@ void RGWDataChangesLogInfo::dump(Formatter *f) const
 void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("marker", marker, obj);
-  utime_t ut(last_update);
+  utime_t ut;
   JSONDecoder::decode_json("last_update", ut, obj);
+  last_update = ut.to_real_time();
 }
 
 

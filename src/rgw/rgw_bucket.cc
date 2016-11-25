@@ -224,6 +224,7 @@ int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket
 
   ep.linked = true;
   ep.owner = user_id;
+  ep.bucket = bucket;
   ret = store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), &attrs);
   if (ret < 0)
     goto done_err;
@@ -588,7 +589,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 static int aio_wait(librados::AioCompletion *handle)
 {
   librados::AioCompletion *c = (librados::AioCompletion *)handle;
-  c->wait_for_complete();
+  c->wait_for_safe();
   int ret = c->get_return_value();
   c->release();
   return ret;
@@ -891,7 +892,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     rgw_obj obj_bucket_instance(bucket_instance, no_oid);
     r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
 
-    r = rgw_link_bucket(store, user_info.user_id, bucket, real_time());
+    r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket, real_time());
     if (r < 0)
       return r;
   }
@@ -1008,7 +1009,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   int max = 1000;
 
   map<string, bool> common_prefixes;
-  string ns = "multipart";
+  string ns = "";
 
   bool is_truncated;
   map<string, bool> meta_objs;
@@ -1094,7 +1095,8 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 }
 
 int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
-        map<string, RGWObjEnt> result, std::string *err_msg)
+                                  RGWFormatterFlusher& flusher,
+                                  std::string *err_msg)
 {
 
   bool fix_index = op_state.will_fix_index();
@@ -1115,6 +1117,8 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   rgw_obj_key marker;
   bool is_truncated = true;
 
+  Formatter *formatter = flusher.get_formatter();
+  formatter->open_object_section("objects");
   while (is_truncated) {
     map<string, RGWObjEnt> result;
 
@@ -1126,7 +1130,14 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
     }
+
+
+    dump_bucket_index(result, formatter);
+    flusher.flush();
+
   }
+
+  formatter->close_section();
 
   store->cls_obj_set_bucket_tag_timeout(bucket, 0);
 
@@ -1325,12 +1336,9 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   dump_mulipart_index_results(objs_to_unlink, formatter);
   flusher.flush();
 
-  ret = bucket.check_object_index(op_state, result);
+  ret = bucket.check_object_index(op_state, flusher);
   if (ret < 0)
     return ret;
-
-  dump_bucket_index(result,  formatter);
-  flusher.flush();
 
   ret = bucket.check_index(op_state, existing_stats, calculated_stats);
   if (ret < 0)

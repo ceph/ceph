@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "include/atomic.h"
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
@@ -205,6 +206,26 @@ private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
 
+  struct JournalListener : public librbd::journal::Listener {
+    ImageReplayer *img_replayer;
+
+    JournalListener(ImageReplayer *img_replayer)
+      : img_replayer(img_replayer) {
+    }
+
+    virtual void handle_close() {
+      img_replayer->on_stop_journal_replay();
+    }
+
+    virtual void handle_promoted() {
+      img_replayer->on_stop_journal_replay(0, "force promoted");
+    }
+
+    virtual void handle_resync() {
+      img_replayer->resync_image();
+    }
+  };
+
   class BootstrapProgressContext : public ProgressContext {
   public:
     BootstrapProgressContext(ImageReplayer<ImageCtxT> *replayer) :
@@ -242,7 +263,7 @@ private:
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
   Journaler* m_remote_journaler = nullptr;
   ::journal::ReplayHandler *m_replay_handler = nullptr;
-  librbd::journal::ResyncListener *m_resync_listener;
+  librbd::journal::Listener *m_journal_listener;
   bool m_stopping_for_resync = false;
 
   Context *m_on_start_finish = nullptr;
@@ -269,6 +290,7 @@ private:
   cls::journal::Tag m_replay_tag;
   librbd::journal::TagData m_replay_tag_data;
   librbd::journal::EventEntry m_event_entry;
+  AsyncOpTracker m_event_replay_tracker;
 
   struct RemoteJournalerListener : public ::journal::JournalMetadataListener {
     ImageReplayer *replayer;
@@ -327,7 +349,6 @@ private:
 
   void start_replay();
   void handle_start_replay(int r);
-  void handle_stop_replay_request(int r);
 
   void replay_flush();
   void handle_replay_flush(int r);

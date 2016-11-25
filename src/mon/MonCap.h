@@ -39,7 +39,8 @@ struct StringConstraint {
   string prefix;
 
   StringConstraint() {}
-  StringConstraint(string a, string b) : value(a), prefix(b) {}
+  StringConstraint(string a, string b)
+    : value(std::move(a)), prefix(std::move(b)) {}
 };
 
 ostream& operator<<(ostream& out, const StringConstraint& c);
@@ -82,10 +83,10 @@ struct MonCapGrant {
   MonCapGrant() : allow(0) {}
   // cppcheck-suppress noExplicitConstructor
   MonCapGrant(mon_rwxa_t a) : allow(a) {}
-  MonCapGrant(string s, mon_rwxa_t a) : service(s), allow(a) {}
+  MonCapGrant(string s, mon_rwxa_t a) : service(std::move(s)), allow(a) {}
   // cppcheck-suppress noExplicitConstructor  
-  MonCapGrant(string c) : command(c) {}
-  MonCapGrant(string c, string a, StringConstraint co) : command(c) {
+  MonCapGrant(string c) : command(std::move(c)) {}
+  MonCapGrant(string c, string a, StringConstraint co) : command(std::move(c)) {
     command_args[a] = co;
   }
 

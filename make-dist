@@ -35,8 +35,18 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 echo "including src/.git_version, src/ceph_ver.h, ceph.spec"
 src/make_version -g src/.git_version -c src/ceph_ver.h
 
-rpm_version=`echo $version | cut -d - -f 1-1`
-rpm_release=`echo $version | cut -d - -f 2- | sed 's/-/./'`
+# if the version has '-' in it, it has a 'release' part,
+# like vX.Y.Z-N-g<shortsha1>.  If it doesn't, it's just
+# vX.Y.Z.  Handle both, and translate - to . for rpm
+# naming rules (the - separates version and release).
+
+if expr index $version '-' > /dev/null; then
+	rpm_version=`echo $version | cut -d - -f 1-1`
+	rpm_release=`echo $version | cut -d - -f 2- | sed 's/-/./'`
+else
+	rpm_version=$version
+	rpm_release=0
+fi
 
 cat ceph.spec.in | \
     sed "s/@VERSION@/$rpm_version/g" | \

@@ -136,7 +136,7 @@ EventCenter::~EventCenter()
 void EventCenter::set_owner()
 {
   owner = pthread_self();
-  ldout(cct, 1) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
+  ldout(cct, 2) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
   if (!global_centers) {
     cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
         global_centers, "AsyncMessenger::EventCenter::global_center");
@@ -261,7 +261,7 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  ldout(cct, 1) << __func__ << dendl;
+  ldout(cct, 2) << __func__ << dendl;
 
   char buf = 'c';
   // wake up "event_wait"

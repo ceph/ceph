@@ -122,7 +122,7 @@ void SyncPointCreateRequest<I>::send_create_snap() {
     SyncPointCreateRequest<I>, &SyncPointCreateRequest<I>::handle_create_snap>(
       this);
   m_remote_image_ctx->operations->snap_create(
-    sync_point.snap_name.c_str(), ctx);
+    sync_point.snap_name.c_str(), cls::rbd::UserSnapshotNamespace(), ctx);
 }
 
 template <typename I>

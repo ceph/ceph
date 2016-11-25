@@ -84,10 +84,12 @@ class EventDriver {
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
 class EventCenter {
-
-  using clock_type = ceph::coarse_mono_clock;
+ public:
   // should be enough;
   static const int MAX_EVENTCENTER = 24;
+
+ private:
+  using clock_type = ceph::coarse_mono_clock;
 
   struct AssociatedCenters {
     EventCenter *centers[MAX_EVENTCENTER];

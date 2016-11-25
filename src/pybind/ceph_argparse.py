@@ -388,11 +388,15 @@ class CephName(CephArgtype):
         if s == '*':
             self.val = s
             return
+        elif s == "mgr":
+            self.nametype = "mgr"
+            self.val = s
+            return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
             t, i = s.split('.', 1)
-            if t not in ('osd', 'mon', 'client', 'mds'):
+            if t not in ('osd', 'mon', 'client', 'mds', 'mgr'):
                 raise ArgumentValid('unknown type ' + t)
             if t == 'osd':
                 if i != '*':
@@ -904,6 +908,8 @@ def validate(args, signature, partial=False):
     reqsiglen = len([desc for desc in mysig if desc.req])
     matchcnt = 0
     d = dict()
+    save_exception = None
+
     for desc in mysig:
         setattr(desc, 'numseen', 0)
         while desc.numseen < desc.n:
@@ -1185,11 +1191,22 @@ def run_in_thread(target, *args, **kwargs):
         interrupt = True
 
     if interrupt:
-        t.retval = -errno.EINTR
+        t.retval = -errno.EINTR, None, 'Interrupted!'
     if t.exception:
         raise t.exception
     return t.retval
 
+
+def send_command_retry(*args, **kwargs):
+    while True:
+        try:
+            return send_command(*args, **kwargs)
+        except Exception as e:
+            if ('get_command_descriptions' in str(e) and
+                'object in state configuring' in str(e)):
+                continue
+            else:
+                raise
 
 def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
@@ -1214,6 +1231,10 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
                 cluster.osd_command, osdid, cmd, inbuf, timeout)
+
+        elif target[0] == 'mgr':
+            ret, outbuf, outs = run_in_thread(
+                cluster.mgr_command, cmd, inbuf, timeout)
 
         elif target[0] == 'pg':
             pgid = target[1]
@@ -1304,8 +1325,9 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                 # use the target we were originally given
                 pass
 
-        ret, outbuf, outs = send_command(cluster, target, [json.dumps(cmddict)],
-                                         inbuf, timeout, verbose)
+        ret, outbuf, outs = send_command_retry(cluster,
+                                               target, [json.dumps(cmddict)],
+                                               inbuf, timeout, verbose)
 
     except Exception as e:
         if not isinstance(e, ArgumentError):

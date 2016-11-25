@@ -543,6 +543,7 @@ extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 extern void dump_continue(struct req_state *s);
 extern void list_all_buckets_end(struct req_state *s);
 extern void dump_time(struct req_state *s, const char *name, real_time *t);
+extern std::string dump_time_to_str(const real_time& t);
 extern void dump_bucket_from_state(struct req_state *s);
 extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);

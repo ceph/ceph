@@ -25,7 +25,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
-#define dout_prefix (*_dout << "rgw meta sync: ")
+#define dout_prefix (*_dout << "meta sync: ")
 
 static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
@@ -814,6 +814,7 @@ public:
       }
       if (get_ret_status() < 0) {
         ldout(cct, 0) << "ERROR: failed to fetch metadata sections" << dendl;
+        yield entries_index->finish();
         yield lease_cr->go_down();
         drain_all();
 	return set_cr_error(get_ret_status());
@@ -829,6 +830,7 @@ public:
 	}
         if (get_ret_status() < 0) {
           ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
+          yield entries_index->finish();
           yield lease_cr->go_down();
           drain_all();
           return set_cr_error(get_ret_status());
@@ -1888,8 +1890,8 @@ int RGWRemoteMetaLog::run_sync()
       return 0;
     }
     r = read_log_info(&mdlog_info);
-    if (r == -EIO) {
-      // keep retrying if master isn't alive
+    if (r == -EIO || r == -ENOENT) {
+      // keep retrying if master isn't alive or hasn't initialized the log
       ldout(store->ctx(), 10) << __func__ << "(): waiting for master.." << dendl;
       backoff.backoff_sleep();
       continue;
@@ -1920,6 +1922,9 @@ int RGWRemoteMetaLog::run_sync()
       if (sync_status.sync_info.period.empty() ||
           sync_status.sync_info.realm_epoch < mdlog_info.realm_epoch) {
         sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
+        ldout(store->ctx(), 1) << "epoch=" << sync_status.sync_info.realm_epoch
+           << " in sync status comes before remote's oldest mdlog epoch="
+           << mdlog_info.realm_epoch << ", restarting sync" << dendl;
       }
     }
 

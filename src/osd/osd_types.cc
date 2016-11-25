@@ -161,24 +161,6 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
 }
 
 // -- osd_reqid_t --
-void osd_reqid_t::encode(bufferlist &bl) const
-{
-  ENCODE_START(2, 2, bl);
-  ::encode(name, bl);
-  ::encode(tid, bl);
-  ::encode(inc, bl);
-  ENCODE_FINISH(bl);
-}
-
-void osd_reqid_t::decode(bufferlist::iterator &bl)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(name, bl);
-  ::decode(tid, bl);
-  ::decode(inc, bl);
-  DECODE_FINISH(bl);
-}
-
 void osd_reqid_t::dump(Formatter *f) const
 {
   f->dump_stream("name") << name;
@@ -979,7 +961,23 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("recovery_op_priority", pool_opts_t::opt_desc_t(
              pool_opts_t::RECOVERY_OP_PRIORITY, pool_opts_t::INT))
            ("scrub_priority", pool_opts_t::opt_desc_t(
-             pool_opts_t::SCRUB_PRIORITY, pool_opts_t::INT));
+             pool_opts_t::SCRUB_PRIORITY, pool_opts_t::INT))
+           ("compression_mode", pool_opts_t::opt_desc_t(
+	     pool_opts_t::COMPRESSION_MODE, pool_opts_t::STR))
+           ("compression_algorithm", pool_opts_t::opt_desc_t(
+	     pool_opts_t::COMPRESSION_ALGORITHM, pool_opts_t::STR))
+           ("compression_required_ratio", pool_opts_t::opt_desc_t(
+	     pool_opts_t::COMPRESSION_REQUIRED_RATIO, pool_opts_t::DOUBLE))
+           ("compression_max_blob_size", pool_opts_t::opt_desc_t(
+	     pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, pool_opts_t::INT))
+           ("compression_min_blob_size", pool_opts_t::opt_desc_t(
+	     pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, pool_opts_t::INT))
+           ("csum_type", pool_opts_t::opt_desc_t(
+	     pool_opts_t::CSUM_TYPE, pool_opts_t::INT))
+           ("csum_max_block", pool_opts_t::opt_desc_t(
+	     pool_opts_t::CSUM_MAX_BLOCK, pool_opts_t::INT))
+           ("csum_min_block", pool_opts_t::opt_desc_t(
+	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.find(name) != opt_mapping.end();
@@ -1418,7 +1416,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(auid, bl);
 
     ::encode_nohead(snaps, bl, features);
-    removed_snaps.encode_nohead(bl);
+    ::encode_nohead(removed_snaps, bl);
     return;
   }
 
@@ -1574,7 +1572,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(m, bl);
     ::decode(auid, bl);
     ::decode_nohead(n, snaps, bl);
-    removed_snaps.decode_nohead(m, bl);
+    ::decode_nohead(m, removed_snaps, bl);
   }
 
   if (struct_v >= 4) {
@@ -3123,6 +3121,7 @@ bool pg_interval_t::check_new_interval(
       if (*p != CRUSH_ITEM_NONE)
 	++num_acting;
 
+    assert(lastmap->get_pools().count(pgid.pool()));
     const pg_pool_t& old_pg_pool = lastmap->get_pools().find(pgid.pool())->second;
     set<pg_shard_t> old_acting_shards;
     old_pg_pool.convert_to_pg_shards(old_acting, &old_acting_shards);
@@ -4442,6 +4441,7 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.back()->cookie = 123;
   o.back()->timeout_seconds = 99;
   entity_addr_t ea;
+  ea.set_type(entity_addr_t::TYPE_LEGACY);
   ea.set_nonce(1);
   ea.set_family(AF_INET);
   ea.set_in4_quad(0, 127);
@@ -5098,9 +5098,9 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 
   // handle hobject_t upgrade
   if (struct_v < 3) {
-    map<hobject_t, object, hobject_t::BitwiseComparator> tmp;
+    map<hobject_t, object, hobject_t::ComparatorWithDefault> tmp;
     tmp.swap(objects);
-    for (map<hobject_t, object, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
+    for (map<hobject_t, object, hobject_t::ComparatorWithDefault>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -5116,7 +5116,7 @@ void ScrubMap::dump(Formatter *f) const
   f->dump_stream("valid_through") << valid_through;
   f->dump_stream("incremental_since") << incr_since;
   f->open_array_section("objects");
-  for (map<hobject_t,object, hobject_t::BitwiseComparator>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
+  for (map<hobject_t,object, hobject_t::ComparatorWithDefault>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
     f->open_object_section("object");
     f->dump_string("name", p->first.oid.name);
     f->dump_unsigned("hash", p->first.get_hash());

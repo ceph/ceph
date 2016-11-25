@@ -25,6 +25,7 @@
 #include "ScrubStore.h"
 
 #include "common/Timer.h"
+#include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
@@ -74,6 +75,7 @@ const string infover_key("_infover");
 const string info_key("_info");
 const string biginfo_key("_biginfo");
 const string epoch_key("_epoch");
+const string fastinfo_key("_fastinfo");
 
 
 template <class T>
@@ -87,9 +89,6 @@ void PG::get(const char* tag)
   ref++;
 #ifdef PG_DEBUG_REFS
   Mutex::Locker l(_ref_id_lock);
-  if (!_tag_counts.count(tag)) {
-    _tag_counts[tag] = 0;
-  }
   _tag_counts[tag]++;
 #endif
 }
@@ -99,10 +98,11 @@ void PG::put(const char* tag)
 #ifdef PG_DEBUG_REFS
   {
     Mutex::Locker l(_ref_id_lock);
-    assert(_tag_counts.count(tag));
-    _tag_counts[tag]--;
-    if (_tag_counts[tag] == 0) {
-      _tag_counts.erase(tag);
+    auto tag_counts_entry = _tag_counts.find(tag);
+    assert(_tag_counts_entry != _tag_counts.end());
+    --tag_counts_entry->second;
+    if (tag_counts_entry->second == 0) {
+      _tag_counts.erase(tag_counts_entry);
     }
   }
 #endif
@@ -950,7 +950,7 @@ void PG::clear_primary_state()
 
   snap_trimq.clear();
 
-  finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
+  finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
 
   missing_loc.clear();
 
@@ -1029,10 +1029,10 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
     // Only consider peers with last_update >= min_last_update_acceptable
     if (p->second.last_update < min_last_update_acceptable)
       continue;
-    // disqualify anyone with a too old last_epoch_started
+    // Disqualify anyone with a too old last_epoch_started
     if (p->second.last_epoch_started < max_last_epoch_started_found)
       continue;
-    // Disquality anyone who is incomplete (not fully backfilled)
+    // Disqualify anyone who is incomplete (not fully backfilled)
     if (p->second.is_incomplete())
       continue;
     if (best == infos.end()) {
@@ -2486,8 +2486,7 @@ void PG::_update_calc_stats()
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
-  info.stats.ondisk_log_size =
-    pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
 
@@ -2742,23 +2741,30 @@ void PG::init(
 
 void PG::upgrade(ObjectStore *store)
 {
-  assert(info_struct_v <= 8);
+  assert(info_struct_v <= 9);
   ObjectStore::Transaction t;
 
-  assert(info_struct_v == 7);
+  assert(info_struct_v >= 7);
+
+  // 8 -> 9
+  if (info_struct_v <= 8) {
+    // no special action needed.
+  }
 
   // 7 -> 8
-  pg_log.mark_log_for_rewrite();
-  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(coll_t::meta(), log_oid);
-  t.remove(coll_t::meta(), biginfo_oid);
+  if (info_struct_v <= 7) {
+    pg_log.mark_log_for_rewrite();
+    ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+    ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+    t.remove(coll_t::meta(), log_oid);
+    t.remove(coll_t::meta(), biginfo_oid);
 
-  t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> v;
-  __u8 ver = cur_struct_v;
-  ::encode(ver, v[infover_key]);
-  t.omap_setkeys(coll, pgmeta_oid, v);
+    t.touch(coll, pgmeta_oid);
+    map<string,bufferlist> v;
+    __u8 ver = cur_struct_v;
+    ::encode(ver, v[infover_key]);
+    t.omap_setkeys(coll, pgmeta_oid, v);
+  }
 
   dirty_info = true;
   dirty_big_info = true;
@@ -2785,16 +2791,51 @@ void PG::upgrade(ObjectStore *store)
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
-			    pg_info_t &info, coll_t coll,
+			    pg_info_t &info, pg_info_t &last_written_info,
 			    map<epoch_t,pg_interval_t> &past_intervals,
-			    ghobject_t &pgmeta_oid,
 			    bool dirty_big_info,
-			    bool dirty_epoch)
+			    bool dirty_epoch,
+			    bool try_fast_info,
+			    PerfCounters *logger)
 {
+  if (dirty_epoch) {
+    ::encode(epoch, (*km)[epoch_key]);
+  }
+
+  if (logger)
+    logger->inc(l_osd_pg_info);
+
+  // try to do info efficiently?
+  if (!dirty_big_info && try_fast_info &&
+      info.last_update > last_written_info.last_update) {
+    pg_fast_info_t fast;
+    fast.populate_from(info);
+    bool did = fast.try_apply_to(&last_written_info);
+    assert(did);  // we verified last_update increased above
+    if (info == last_written_info) {
+      ::encode(fast, (*km)[fastinfo_key]);
+      if (logger)
+	logger->inc(l_osd_pg_fastinfo);
+      return 0;
+    }
+    generic_dout(30) << __func__ << " fastinfo failed, info:\n";
+    {
+      JSONFormatter jf(true);
+      jf.dump_object("info", info);
+      jf.flush(*_dout);
+    }
+    {
+      *_dout << "\nlast_written_info:\n";
+      JSONFormatter jf(true);
+      jf.dump_object("last_written_info", last_written_info);
+      jf.flush(*_dout);
+    }
+    *_dout << dendl;
+  }
+  last_written_info = info;
+
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  if (dirty_epoch)
-    ::encode(epoch, (*km)[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
   ::encode(info, (*km)[info_key]);
   purged_snaps.swap(info.purged_snaps);
@@ -2805,6 +2846,8 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
     ::encode(past_intervals, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    if (logger)
+      logger->inc(l_osd_pg_biginfo);
   }
 
   return 0;
@@ -2845,9 +2888,13 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   unstable_stats.clear();
 
   bool need_update_epoch = last_epoch < get_osdmap()->get_epoch();
-  int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info, coll,
-				past_intervals, pgmeta_oid,
-				dirty_big_info, need_update_epoch);
+  int ret = _prepare_write_info(km, get_osdmap()->get_epoch(),
+				info,
+				last_written_info,
+				past_intervals,
+				dirty_big_info, need_update_epoch,
+				g_conf->osd_fast_info,
+				osd->logger);
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();
@@ -3067,11 +3114,13 @@ int PG::read_info(
   keys.insert(infover_key);
   keys.insert(info_key);
   keys.insert(biginfo_key);
+  keys.insert(fastinfo_key);
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
   if (r == 0) {
-    assert(values.size() == 3);
+    assert(values.size() == 3 ||
+	   values.size() == 4);
 
     bufferlist::iterator p = values[infover_key].begin();
     ::decode(struct_v, p);
@@ -3083,6 +3132,13 @@ int PG::read_info(
     p = values[biginfo_key].begin();
     ::decode(past_intervals, p);
     ::decode(info.purged_snaps, p);
+
+    p = values[fastinfo_key].begin();
+    if (!p.end()) {
+      pg_fast_info_t fast;
+      ::decode(fast, p);
+      fast.try_apply_to(&info);
+    }
     return 0;
   }
 
@@ -3118,6 +3174,8 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
 		    info_struct_v);
   assert(r >= 0);
+
+  last_written_info = info;
 
   ostringstream oss;
   pg_log.read_log_and_missing(
@@ -3411,6 +3469,7 @@ void PG::reg_next_scrub()
   double scrub_min_interval = 0, scrub_max_interval = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
   pool.info.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &scrub_max_interval);
+  assert(scrubber.scrub_reg_stamp == utime_t());
   scrubber.scrub_reg_stamp = osd->reg_pg_scrub(info.pgid,
 					       reg_stamp,
 					       scrub_min_interval,
@@ -3420,8 +3479,10 @@ void PG::reg_next_scrub()
 
 void PG::unreg_next_scrub()
 {
-  if (is_primary())
+  if (is_primary()) {
     osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+    scrubber.scrub_reg_stamp = utime_t();
+  }
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)
@@ -4026,6 +4087,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
       case PG::Scrubber::INACTIVE:
         dout(10) << "scrub start" << dendl;
 
+	scrubber.cleaned_meta_map.reset_bitwise(get_sort_bitwise());
+
         publish_stats_to_osd();
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
@@ -4066,54 +4129,54 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.received_maps.clear();
 
         {
-	  hobject_t candidate_end;
-
-          // get the start and end of our scrub chunk
-          //
-          // start and end need to lie on a hash boundary. We test for this by
-          // requesting a list and searching backward from the end looking for a
-          // boundary. If there's no boundary, we request a list after the first
-          // list, and so forth.
-
-          bool boundary_found = false;
+          /* get the start and end of our scrub chunk
+	   *
+	   * Our scrub chunk has an important restriction we're going to need to
+	   * respect. We can't let head or snapdir be start or end.
+	   * Using a half-open interval means that if end == head|snapdir,
+	   * we'd scrub/lock head and the clone right next to head in different
+	   * chunks which would allow us to miss clones created between
+	   * scrubbing that chunk and scrubbing the chunk including head.
+	   * This isn't true for any of the other clones since clones can
+	   * only be created "just to the left of" head.  There is one exception
+	   * to this: promotion of clones which always happens to the left of the
+	   * left-most clone, but promote_object checks the scrubber in that
+	   * case, so it should be ok.  Also, it's ok to "miss" clones at the
+	   * left end of the range if we are a tier because they may legitimately
+	   * not exist (see _scrub).
+	   */
+	  unsigned min = MAX(3, cct->_conf->osd_scrub_chunk_min);
           hobject_t start = scrubber.start;
-          unsigned loop = 0;
-          while (!boundary_found) {
-            vector<hobject_t> objects;
-            ret = get_pgbackend()->objects_list_partial(
-	      start,
-	      cct->_conf->osd_scrub_chunk_min,
-	      cct->_conf->osd_scrub_chunk_max,
-	      &objects,
-	      &candidate_end);
-            assert(ret >= 0);
+	  hobject_t candidate_end;
+	  vector<hobject_t> objects;
+	  ret = get_pgbackend()->objects_list_partial(
+	    start,
+	    min,
+	    MAX(min, cct->_conf->osd_scrub_chunk_max),
+	    &objects,
+	    &candidate_end);
+	  assert(ret >= 0);
 
-            // in case we don't find a boundary: start again at the end
-            start = candidate_end;
-
-            // special case: reached end of file store, implicitly a boundary
-            if (objects.empty()) {
-              break;
-            }
-
-            // search backward from the end looking for a boundary
-            objects.push_back(candidate_end);
-            while (!boundary_found && objects.size() > 1) {
-              hobject_t end = objects.back().get_boundary();
-              objects.pop_back();
-
-              if (objects.back().get_hash() != end.get_hash()) {
-                candidate_end = end;
-                boundary_found = true;
-              }
-            }
-
-            // reset handle once in a while, the search maybe takes long.
-            if (++loop >= g_conf->osd_loop_before_reset_tphandle) {
-              handle.reset_tp_timeout();
-              loop = 0;
-            }
-          }
+	  if (!objects.empty()) {
+	    hobject_t back = objects.back();
+	    while (candidate_end.has_snapset() &&
+		      candidate_end.get_head() == back.get_head()) {
+	      candidate_end = back;
+	      objects.pop_back();
+	      if (objects.empty()) {
+		assert(0 ==
+		       "Somehow we got more than 2 objects which"
+		       "have the same head but are not clones");
+	      }
+	      back = objects.back();
+	    }
+	    if (candidate_end.has_snapset()) {
+	      assert(candidate_end.get_head() != back.get_head());
+	      candidate_end = candidate_end.get_object_boundary();
+	    }
+	  } else {
+	    assert(candidate_end.is_max());
+	  }
 
 	  if (!_range_available_for_scrub(scrubber.start, candidate_end)) {
 	    // we'll be requeued by whatever made us unavailable for scrub
@@ -4138,7 +4201,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           }
         }
 
-        // ask replicas to wait until last_update_applied >= scrubber.subset_last_update and then scan
+        // ask replicas to wait until
+        // last_update_applied >= scrubber.subset_last_update and then scan
         scrubber.waiting_on_whom.insert(pg_whoami);
         ++scrubber.waiting_on;
 
@@ -4285,7 +4349,7 @@ void PG::scrub_compare_maps()
   dout(10) << __func__ << " has maps, analyzing" << dendl;
 
   // construct authoritative scrub map for type specific scrubbing
-  ScrubMap authmap(scrubber.primary_scrubmap);
+  scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
   map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> missing_digest;
 
   if (acting.size() > 1) {
@@ -4347,13 +4411,34 @@ void PG::scrub_compare_maps()
     for (map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator>::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
-      authmap.objects.erase(i->first);
-      authmap.objects.insert(*(maps[i->second.back()]->objects.find(i->first)));
+      scrubber.cleaned_meta_map.objects.erase(i->first);
+      scrubber.cleaned_meta_map.objects.insert(
+	*(maps[i->second.back()]->objects.find(i->first))
+	);
     }
   }
 
+  ScrubMap for_meta_scrub(get_sort_bitwise());
+  if (scrubber.end.is_max() ||
+      scrubber.cleaned_meta_map.objects.empty()) {
+    scrubber.cleaned_meta_map.swap(for_meta_scrub);
+  } else {
+    auto iter = scrubber.cleaned_meta_map.objects.end();
+    --iter; // not empty, see if clause
+    auto begin = scrubber.cleaned_meta_map.objects.begin();
+    while (iter != begin) {
+      auto next = iter--;
+      if (next->first.get_head() != iter->first.get_head()) {
+	++iter;
+	break;
+      }
+    }
+    for_meta_scrub.objects.insert(begin, iter);
+    scrubber.cleaned_meta_map.objects.erase(begin, iter);
+  }
+
   // ok, do the pg-type specific scrubbing
-  _scrub(authmap, missing_digest);
+  _scrub(for_meta_scrub, missing_digest);
   if (!scrubber.store->empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;
@@ -5529,8 +5614,10 @@ void PG::handle_advance_map(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
   recovery_state.handle_event(evt, rctx);
-  if (pool.info.last_change == osdmap_ref->get_epoch())
+  if (pool.info.last_change == osdmap_ref->get_epoch()) {
     on_pool_change();
+    update_store_with_options();
+  }
 }
 
 void PG::handle_activate_map(RecoveryCtx *rctx)
@@ -5576,7 +5663,13 @@ void PG::handle_query_state(Formatter *f)
   recovery_state.handle_event(q, 0);
 }
 
-
+void PG::update_store_with_options()
+{
+  auto r = osd->store->set_collection_opts(coll, pool.info.opts);
+  if(r < 0 && r != -EOPNOTSUPP) {
+    derr << __func__ << "set_collection_opts returns error:" << r << dendl;
+  }
+}
 
 std::ostream& operator<<(std::ostream& oss,
 			 const struct PG::PriorSet &prior)
@@ -5616,6 +5709,7 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
 
   // do we tell someone we're here?
   pg->send_notify = (!pg->is_primary());
+  pg->update_store_with_options();
 
   return transit< Reset >();
 }

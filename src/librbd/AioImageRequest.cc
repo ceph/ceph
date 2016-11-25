@@ -684,25 +684,31 @@ void AioImageFlush<I>::send_request() {
       journal::EventEntry(journal::AioFlushEvent()),
       AioObjectRequests(), 0, 0, false);
 
-    aio_comp->set_request_count(2);
-
-    C_FlushJournalCommit<I> *ctx = new C_FlushJournalCommit<I>(image_ctx,
-                                                               aio_comp,
-                                                               journal_tid);
-    C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    image_ctx.journal->flush_event(journal_tid, ctx);
+    aio_comp->set_request_count(1);
     aio_comp->associate_journal_event(journal_tid);
-    image_ctx.flush_async_operations(req_comp);
+
+    FunctionContext *flush_ctx = new FunctionContext(
+      [aio_comp, &image_ctx, journal_tid] (int r) {
+        C_FlushJournalCommit<I> *ctx = new C_FlushJournalCommit<I>(image_ctx,
+                                                                 aio_comp,
+                                                                 journal_tid);
+        image_ctx.journal->flush_event(journal_tid, ctx);
+
+        // track flush op for block writes
+        aio_comp->start_op(true);
+        aio_comp->put();
+    });
+
+    image_ctx.flush_async_operations(flush_ctx);
   } else {
     // flush rbd cache only when journaling is not enabled
     aio_comp->set_request_count(1);
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.flush(req_comp);
-  }
 
-  // track flush op for block writes
-  aio_comp->start_op(true);
-  aio_comp->put();
+    aio_comp->start_op(true);
+    aio_comp->put();
+  }
 
   image_ctx.perfcounter->inc(l_librbd_aio_flush);
 }

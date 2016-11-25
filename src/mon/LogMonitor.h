@@ -151,17 +151,7 @@ private:
     return true;
   }
 
-  struct C_Log : public C_MonOp {
-    LogMonitor *logmon;
-    C_Log(LogMonitor *p, MonOpRequestRef o) : 
-      C_MonOp(o), logmon(p) {}
-    void _finish(int r) {
-      if (r == -ECANCELED) {
-	return;
-      }
-      logmon->_updated_log(op);
-    }    
-  };
+  struct C_Log;
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);

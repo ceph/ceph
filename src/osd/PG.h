@@ -292,9 +292,12 @@ public:
     return pool.info.ec_pool();
   }
   // pg state
-  pg_info_t        info;
+  pg_info_t info;               ///< current pg info
+  pg_info_t last_written_info;  ///< last written info
   __u8 info_struct_v;
-  static const __u8 cur_struct_v = 8;
+  static const __u8 cur_struct_v = 9;
+  // v9 was fastinfo_key addition
+  // v8 was the move to a per-pg pgmeta object
   // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
   // (first appeared in cuttlefish).
   static const __u8 compat_struct_v = 7;
@@ -420,7 +423,7 @@ public:
       );
 
     /// Uses osdmap to update structures for now down sources
-    void check_recovery_sources(const OSDMapRef osdmap);
+    void check_recovery_sources(const OSDMapRef& osdmap);
 
     /// Call when hoid is no longer missing in acting set
     void recovered(const hobject_t &hoid) {
@@ -1120,7 +1123,7 @@ public:
   void cancel_recovery();
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
-  virtual void check_recovery_sources(const OSDMapRef newmap) = 0;
+  virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
 
@@ -1165,6 +1168,9 @@ public:
 
     // Map from object with errors to good peers
     map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >, hobject_t::BitwiseComparator> authoritative;
+
+    // Cleaned map pending snap metadata scrub
+    ScrubMap cleaned_meta_map;
 
     // digest updates which we are waiting on
     int num_digest_updates_pending;
@@ -1264,6 +1270,7 @@ public:
       missing.clear();
       authoritative.clear();
       num_digest_updates_pending = 0;
+      cleaned_meta_map = ScrubMap();
     }
 
     void create_results(const hobject_t& obj);
@@ -2227,14 +2234,19 @@ public:
 private:
   void prepare_write_info(map<string,bufferlist> *km);
 
+  void update_store_with_options();
+
 public:
-  static int _prepare_write_info(map<string,bufferlist> *km,
+  static int _prepare_write_info(
+    map<string,bufferlist> *km,
     epoch_t epoch,
-    pg_info_t &info, coll_t coll,
+    pg_info_t &info,
+    pg_info_t &last_written_info,
     map<epoch_t,pg_interval_t> &past_intervals,
-    ghobject_t &pgmeta_oid,
     bool dirty_big_info,
-    bool dirty_epoch);
+    bool dirty_epoch,
+    bool try_fast_info,
+    PerfCounters *logger = NULL);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   eversion_t get_next_version() const {

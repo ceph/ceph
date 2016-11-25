@@ -81,12 +81,10 @@ struct MockJournal {
   MOCK_METHOD3(commit_op_event, void(uint64_t, int, Context *));
   MOCK_METHOD2(replay_op_ready, void(uint64_t, Context *));
 
-  MOCK_METHOD2(add_listener, void(journal::ListenerType,
-                                  journal::JournalListenerPtr));
-  MOCK_METHOD2(remove_listener, void(journal::ListenerType,
-                                     journal::JournalListenerPtr));
+  MOCK_METHOD1(add_listener, void(journal::Listener *));
+  MOCK_METHOD1(remove_listener, void(journal::Listener *));
 
-  MOCK_METHOD1(check_resync_requested, int(bool *));
+  MOCK_METHOD1(is_resync_requested, int(bool *));
 };
 
 } // namespace librbd

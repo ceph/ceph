@@ -49,7 +49,6 @@ MonClient::MonClient(CephContext *cct_) :
   rng(getpid()),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock), finisher(cct_),
-  authorize_handler_registry(NULL),
   initialized(false),
   no_keyring_disabled_cephx(false),
   log_client(NULL),
@@ -495,6 +494,18 @@ void MonClient::handle_auth(MAuthReply *m)
 	m->put();
 	return;
       }
+      // do not request MGR key unless the mon has the SERVER_KRAKEN
+      // feature.  otherwise it will give us an auth error.  note that
+      // we have to check for both the kraken and jewel key because
+      // pre-jewel the kraken feature bit was used for something else.
+      if ((want_keys & CEPH_ENTITY_TYPE_MGR) &&
+	  !(m->get_connection()->has_feature(CEPH_FEATURE_SERVER_KRAKEN) &&
+	    m->get_connection()->has_feature(CEPH_FEATURE_SERVER_JEWEL))) {
+	ldout(cct, 1) << __func__
+		      << " not requesting MGR keys from pre-kraken monitor"
+		      << dendl;
+	want_keys &= ~CEPH_ENTITY_TYPE_MGR;
+      }
       auth->set_want_keys(want_keys);
       auth->init(entity_name);
       auth->set_global_id(global_id);
@@ -745,6 +756,14 @@ void MonClient::tick()
 
 void MonClient::schedule_tick()
 {
+  struct C_Tick : public Context {
+    MonClient *monc;
+    explicit C_Tick(MonClient *m) : monc(m) {}
+    void finish(int r) {
+      monc->tick();
+    }
+  };
+
   if (hunting)
     timer.add_event_after(cct->_conf->mon_client_hunt_interval
                           * reopen_interval_multiplier, new C_Tick(this));

@@ -133,6 +133,7 @@ protected:
   utime_t gc_invalidate_time;
   bool is_slo;
   string lo_etag;
+  bool rgwx_stat; /* extended rgw stat operation */
 
   int init_common();
 public:
@@ -155,6 +156,7 @@ public:
     range_parsed = false;
     skip_manifest = false;
     is_slo = false;
+    rgwx_stat = false;
  }
 
   bool prefetch_data();
@@ -653,6 +655,15 @@ protected:
   const char *supplied_etag;
   const char *if_match;
   const char *if_nomatch;
+  const char *copy_source;
+  const char *copy_source_range;
+  RGWBucketInfo copy_source_bucket_info;
+  string copy_source_tenant_name;
+  string copy_source_bucket_name;
+  string copy_source_object_name;
+  string copy_source_version_id;
+  off_t copy_source_range_fst;
+  off_t copy_source_range_lst;
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
@@ -662,6 +673,7 @@ protected:
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
+  bufferlist bl_aux;
 
   ceph::real_time delete_at;
 
@@ -671,6 +683,10 @@ public:
                 supplied_etag(NULL),
                 if_match(NULL),
                 if_nomatch(NULL),
+                copy_source(NULL),
+                copy_source_range(NULL),
+                copy_source_range_fst(0),
+                copy_source_range_lst(0),
                 chunked_upload(0),
                 dlo_manifest(NULL),
                 slo_info(NULL),
@@ -696,6 +712,9 @@ public:
   void pre_exec();
   void execute();
 
+  int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
+  int get_data(const off_t fst, const off_t lst, bufferlist& bl);
+
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
@@ -705,9 +724,6 @@ public:
 };
 
 class RGWPostObj : public RGWOp {
-
-  friend class RGWPutObjProcessor;
-
 protected:
   off_t min_len;
   off_t max_len;
@@ -724,9 +740,14 @@ protected:
   ceph::real_time delete_at;
 
 public:
-  RGWPostObj() : min_len(0), max_len(LLONG_MAX), len(0), ofs(0),
-		 supplied_md5_b64(NULL), supplied_etag(NULL),
-		 data_pending(false) {}
+  RGWPostObj() : min_len(0),
+                 max_len(LLONG_MAX),
+                 len(0),
+                 ofs(0),
+                 supplied_md5_b64(nullptr),
+                 supplied_etag(nullptr),
+                 data_pending(false) {
+  }
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
@@ -740,9 +761,6 @@ public:
   int verify_permission();
   void pre_exec();
   void execute();
-
-  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
-  void dispose_processor(RGWPutObjProcessor *processor);
 
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
@@ -1013,10 +1031,9 @@ public:
 
 class RGWGetLC : public RGWOp {
 protected:
-  int ret;
-
+    
 public:
-  RGWGetLC() : ret(0) { }
+  RGWGetLC() { }
   virtual ~RGWGetLC() { }
 
   int verify_permission();
@@ -1030,18 +1047,26 @@ public:
 
 class RGWPutLC : public RGWOp {
 protected:
-  int ret;
   size_t len;
   char *data;
+  string cookie;
 
 public:
   RGWPutLC() {
-    ret = 0;
     len = 0;
     data = NULL;
   }
   virtual ~RGWPutLC() {
     free(data);
+  }
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    RGWOp::init(store, s, dialect_handler);
+    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+    cookie = buf;
   }
 
   int verify_permission();
@@ -1057,13 +1082,11 @@ public:
 
 class RGWDeleteLC : public RGWOp {
 protected:
-  int ret;
   size_t len;
   char *data;
 
 public:
   RGWDeleteLC() {
-    ret = 0;
     len = 0;
     data = NULL;
   }

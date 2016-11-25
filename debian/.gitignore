@@ -8,6 +8,8 @@
 /ceph-fs-common
 /ceph-mds-dbg
 /ceph-mds
+/ceph-mgr-dbg
+/ceph-mgr
 /ceph-mon-dbg
 /ceph-mon
 /ceph-osd-dbg

@@ -16,6 +16,7 @@ add_subdirectory(cls_replica_log)
 add_subdirectory(cls_rgw)
 add_subdirectory(cls_statelog)
 add_subdirectory(cls_version)
+add_subdirectory(cls_lua)
 add_subdirectory(common)
 add_subdirectory(compressor)
 add_subdirectory(crush)
@@ -48,6 +49,9 @@ if(WITH_RBD)
   add_subdirectory(rbd_mirror)
 endif(WITH_RBD)
 add_subdirectory(system)
+if(WITH_FIO)
+  add_subdirectory(fio)
+endif()
 
 # test_timers
 add_executable(ceph_test_timers
@@ -307,6 +311,7 @@ target_include_directories(ceph_test_librgw_file_nfsns PRIVATE ${FCGI_INCLUDE_DI
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
+  boost_system
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
@@ -693,6 +698,13 @@ add_executable(unittest_arch
 add_ceph_unittest(unittest_arch ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_arch)
 target_link_libraries(unittest_arch global)
 
+# unittest_denc
+add_executable(unittest_denc
+  test_denc.cc
+  )
+add_ceph_unittest(unittest_denc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_denc)
+target_link_libraries(unittest_denc os global)
+
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc
@@ -765,11 +777,9 @@ target_link_libraries(unittest_heartbeatmap common global)
 
 if(${WITH_RADOSGW})
   # unittest_formatter
-  # why does this include rgw/rgw_formats.cc...?
   add_executable(unittest_formatter
     formatter.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_formats.cc
-  )
+    )
   add_ceph_unittest(unittest_formatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_formatter)
   target_link_libraries(unittest_formatter global)
 endif(${WITH_RADOSGW})

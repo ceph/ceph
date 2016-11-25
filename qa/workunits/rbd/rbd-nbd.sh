@@ -32,7 +32,7 @@ function cleanup()
 	${SUDO} rbd-nbd unmap ${DEV}
     fi
     if rbd -p ${POOL} status ${IMAGE} 2>/dev/null; then
-	for s in 0.1 0.2 0.4 0.8 1.6 3.2 6.4 12.8; do
+	for s in 0.5 1 2 4 8 16 32; do
 	    sleep $s
 	    rbd -p ${POOL} status ${IMAGE} | grep 'Watchers: none' && break
 	done
@@ -111,5 +111,23 @@ rbd resize ${POOL}/${IMAGE} --allow-shrink --size ${SIZE}M
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
+
+# read-only option test
+${SUDO} rbd-nbd unmap ${DEV}
+DEV=`${SUDO} rbd-nbd map --read-only ${POOL}/${IMAGE}`
+${SUDO} rbd-nbd list-mapped | grep "^${DEV}$"
+${SUDO} dd if=${DEV} of=/dev/null bs=1M
+expect_false ${SUDO} dd if=${DATA} of=${DEV} bs=1M oflag=direct
+${SUDO} rbd-nbd unmap ${DEV}
+
+# exclusive option test
+DEV=`${SUDO} rbd-nbd map --exclusive ${POOL}/${IMAGE}`
+${SUDO} rbd-nbd list-mapped | grep "^${DEV}$"
+${SUDO} dd if=${DATA} of=${DEV} bs=1M oflag=direct
+expect_false timeout 10 \
+	rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
+${SUDO} rbd-nbd unmap ${DEV}
+DEV=
+rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 echo OK

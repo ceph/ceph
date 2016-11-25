@@ -50,6 +50,7 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_MDS    0x02
 #define CEPH_ENTITY_TYPE_OSD    0x04
 #define CEPH_ENTITY_TYPE_CLIENT 0x08
+#define CEPH_ENTITY_TYPE_MGR    0x10
 #define CEPH_ENTITY_TYPE_AUTH   0x20
 
 #define CEPH_ENTITY_TYPE_ANY    0xFF

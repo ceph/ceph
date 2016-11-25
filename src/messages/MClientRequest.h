@@ -76,6 +76,7 @@ public:
 
   // path arguments
   filepath path, path2;
+  vector<uint64_t> gid_list;
 
 
 
@@ -137,6 +138,12 @@ public:
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
+  void set_gid_list(int count, const gid_t *gids) {
+    gid_list.reserve(count);
+    for (int i = 0; i < count; ++i) {
+      gid_list.push_back(gids[i]);
+    }
+  }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
@@ -151,6 +158,7 @@ public:
   int get_op() const { return head.op; }
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
+  const vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
   const string& get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
@@ -187,6 +195,8 @@ public:
     ::decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
       ::decode(stamp, p);
+    if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
+      ::decode(gid_list, p);
   }
 
   void encode_payload(uint64_t features) {
@@ -206,6 +216,7 @@ public:
     ::encode(path2, payload);
     ::encode_nohead(releases, payload);
     ::encode(stamp, payload);
+    ::encode(gid_list, payload);
   }
 
   const char *get_type_name() const { return "creq"; }
@@ -249,7 +260,13 @@ public:
       out << " RETRY=" << (int)head.num_retry;
     if (get_flags() & CEPH_MDS_FLAG_REPLAY)
       out << " REPLAY";
-    out << ")";
+    out << " caller_uid=" << head.caller_uid
+	<< ", caller_gid=" << head.caller_gid
+	<< '{';
+    for (auto i = gid_list.begin(); i != gid_list.end(); ++i)
+      out << *i << ',';
+    out << '}'
+	<< ")";
   }
 
 };

@@ -329,6 +329,9 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " pending " << ioc->num_pending.load()
 	   << " running " << ioc->num_running.load()
 	   << dendl;
+  if (ioc->num_pending.load() == 0) {
+    return;
+  }
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
@@ -509,6 +512,8 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
   if (r < 0) {
     r = -errno;
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec 
+      << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
   assert((uint64_t)r == aligned_len);
@@ -548,6 +553,8 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
       r = ::pread(fd_buffered, t, left, off);
       if (r < 0) {
 	r = -errno;
+        derr << __func__ << " 0x" << std::hex << off << "~" << left 
+          << std::dec << " error: " << cpp_strerror(r) << dendl;
 	goto out;
       }
       off += r;
@@ -559,6 +566,9 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
+      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex 
+        << off << "~" << left << std::dec << " error: " << cpp_strerror(r) 
+        << dendl;
       goto out;
     }
     assert((uint64_t)r == len);

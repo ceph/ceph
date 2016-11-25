@@ -76,11 +76,7 @@ if(no_yasm)
   message(STATUS " we do not have a modern/working yasm")
 else(no_yasm)
   message(STATUS " we have a modern and working yasm")
-  execute_process(
-    COMMAND uname -m
-    OUTPUT_VARIABLE arch
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(arch MATCHES "amd64|x86_64")
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
     message(STATUS " we are x84_64")
     set(save_quiet ${CMAKE_REQUIRED_QUIET})
     set(CMAKE_REQUIRED_QUIET true)
@@ -108,9 +104,9 @@ else(no_yasm)
     else(not_arch_x32)
       message(STATUS " we are x32; no yasm for you")
     endif(not_arch_x32)
-  else(arch MATCHES "amd64|x86_64")
+  else(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
     message(STATUS " we are not x86_64 && !x32")
-  endif(arch MATCHES "amd64|x86_64")
+  endif(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
 endif(no_yasm)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
@@ -182,6 +178,13 @@ option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
 if(${ENABLE_GIT_VERSION})
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
   git_describe(CEPH_GIT_NICE_VER --always)
+  #if building from a source tarball via make-dist
+  if(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
+    message(STATUS "Ceph/.git directory not found, parsing ${CMAKE_CURRENT_SOURCE_DIR}/.git_version for CEPH_GIT_VER and CEPH_GIT_NICE_VER")
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/.git_version CEPH_GIT_SHA_AND_TAG)
+    list(GET CEPH_GIT_SHA_AND_TAG 0 CEPH_GIT_VER)
+    list(GET CEPH_GIT_SHA_AND_TAG 1 CEPH_GIT_NICE_VER)
+  endif(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
 else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
@@ -225,6 +228,10 @@ if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
+elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
+  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_MINIMAL_LIBRARY})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
+  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
   set(ALLOC_LIBS jemalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
@@ -314,6 +321,7 @@ add_library(common_texttable_obj OBJECT
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
+  common/AsyncOpTracker.cc
   common/DecayCounter.cc
   common/LogClient.cc
   common/LogEntry.cc
@@ -364,6 +372,7 @@ set(libcommon_files
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
+  mgr/MgrClient.cc
   msg/simple/Accepter.cc
   msg/DispatchQueue.cc
   msg/Message.cc
@@ -482,7 +491,6 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
 include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
-  set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
   target_link_libraries(common common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
 
@@ -493,6 +501,8 @@ if(${WITH_LTTNG})
 endif(${WITH_LTTNG})
 
 add_subdirectory(global)
+
+add_subdirectory(lua)
 
 # rados object classes
 add_subdirectory(cls)
@@ -505,6 +515,27 @@ add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(libradosstriper)
+
+if (WITH_MGR)
+  set(mgr_srcs
+      ceph_mgr.cc
+      mon/PGMap.cc
+      mgr/DaemonState.cc
+      mgr/DaemonServer.cc
+      mgr/ClusterState.cc
+      mgr/PyModules.cc
+      mgr/PyFormatter.cc
+      mgr/PyState.cc
+      mgr/MgrPyModule.cc
+      mgr/MgrStandby.cc
+      mgr/Mgr.cc)
+  add_executable(ceph-mgr ${mgr_srcs}
+                 $<TARGET_OBJECTS:heap_profiler_objs>)
+  target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
+  target_link_libraries(ceph-mgr mds osdc global
+      -lboost_python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
+  install(TARGETS ceph-mgr DESTINATION bin)
+endif (WITH_MGR)
 
 set(librados_config_srcs
   librados-config.cc)
@@ -599,26 +630,44 @@ install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
 # make rocksdb statically
-if(NOT ALLOCATOR STREQUAL "jemalloc")
-  set(disable_jemalloc "DISABLE_JEMALLOC=1")
+
+set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+
+if(ALLOCATOR STREQUAL "jemalloc")
+  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_JEMALLOC=ON)
 endif()
 
-set(ROCKSDB_EXTRA_CXXFLAG -fPIC -Wno-unused-variable)
-if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(ROCKSDB_EXTRA_CXXFLAG ${ROCKSDB_EXTRA_CXXFLAG} -DNDEBUG)
-endif(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+if (WITH_CCACHE AND CCACHE_FOUND)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=ccache)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER})
+else(WITH_CCACHE AND CCACHE_FOUND)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
+endif(WITH_CCACHE AND CCACHE_FOUND)
 
-add_custom_target(build_rocksdb
-    COMMAND
-    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib CXX="${CMAKE_CXX_COMPILER}" EXTRA_CXXFLAGS="${ROCKSDB_EXTRA_CXXFLAG}"
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
-    COMMENT "rocksdb building")
+list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
 
-# add a imported library for librocksdb.a
+# we use an external project and copy the sources to bin directory to ensure
+# that object files are built outside of the source tree.
+include(ExternalProject)
+ExternalProject_Add(rocksdb_ext
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb
+  CMAKE_ARGS ${ROCKSDB_CMAKE_ARGS}
+  BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/rocksdb
+  BUILD_COMMAND $(MAKE) rocksdblib
+  INSTALL_COMMAND "true")
+
+# force rocksdb make to be called on each time
+ExternalProject_Add_Step(rocksdb_ext forcebuild
+  DEPENDEES configure
+  DEPENDERS build
+  COMMAND "true"
+  ALWAYS 1)
+
+set(ROCKSDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/include)
+
 add_library(rocksdb STATIC IMPORTED)
-set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
-add_dependencies(rocksdb build_rocksdb)
-set(ROCKSDB_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
+add_dependencies(rocksdb rocksdb_ext)
+set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdblib.a")
 
 add_subdirectory(kv)
 add_subdirectory(os)
@@ -830,6 +879,7 @@ add_subdirectory(brag)
 add_custom_target(vstart DEPENDS
     ceph-osd
     ceph-mon
+    ceph-mgr
     ceph-authtool
     ceph-conf
     monmaptool
