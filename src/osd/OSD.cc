@@ -3854,6 +3854,7 @@ void OSD::_add_heartbeat_peer(int p)
   if (p == whoami)
     return;
   HeartbeatInfo *hi;
+  string heartbeat_peers_subtree_level = g_conf->mon_osd_reporter_subtree_level;
 
   map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(p);
   if (i == heartbeat_peers.end()) {
@@ -3865,6 +3866,9 @@ void OSD::_add_heartbeat_peer(int p)
     HeartbeatSession *s = new HeartbeatSession(p);
     hi->con_back = cons.first.get();
     hi->con_back->set_priv(s->get());
+    string osd_subtree = osdmap->get_osd_subtree(p,heartbeat_peers_subtree_level);
+    assert(!osd_subtree.empty());
+    ++heartbeat_peers_by_subtree[osd_subtree];
     if (cons.second) {
       hi->con_front = cons.second.get();
       hi->con_front->set_priv(s->get());
@@ -3898,6 +3902,11 @@ void OSD::_remove_heartbeat_peer(int n)
     q->second.con_front->mark_down();
   }
   heartbeat_peers.erase(q);
+  string sub_tree = osdmap->get_osd_subtree(n,g_conf->mon_osd_reporter_subtree_level);
+  
+  if (heartbeat_peers_by_subtree.count(sub_tree))
+    if (!(--heartbeat_peers_by_subtree[sub_tree]))
+      heartbeat_peers_by_subtree.erase(sub_tree);
 }
 
 void OSD::need_heartbeat_peer_update()
@@ -4030,6 +4039,7 @@ void OSD::reset_heartbeat_peers()
     }
     heartbeat_peers.erase(heartbeat_peers.begin());
   }
+  heartbeat_peers_by_subtree.clear();
   failure_queue.clear();
 }
 
@@ -4208,6 +4218,9 @@ void OSD::heartbeat_check()
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now(cct);
 
+  set<string> _heartbeat_peers_by_subtree;
+  string heartbeat_peers_subtree_level = g_conf->mon_osd_reporter_subtree_level;
+
   // check for incoming heartbeats (move me elsewhere?)
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_heartbeat_grace;
@@ -4228,7 +4241,18 @@ void OSD::heartbeat_check()
 	     << " last_rx_front " << p->second.last_rx_front
 	     << dendl;
     if (p->second.is_unhealthy(cutoff)) {
-      if (p->second.last_rx_back == utime_t() ||
+      _heartbeat_peers_by_subtree.insert(osdmap->get_osd_subtree(p->first,g_conf->mon_osd_reporter_subtree_level));
+      if ((_heartbeat_peers_by_subtree.size() >= (heartbeat_peers_by_subtree.size() - 1))
+	&& (heartbeat_peers_by_subtree.size() > 2)) {
+        map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
+        while (it != failure_pending.end()) {
+          dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << it->first << dendl;
+          send_still_alive(osdmap->get_epoch(), it->second.second);
+          failure_pending.erase(it++);
+        }
+        return;
+      }
+      else if (p->second.last_rx_back == utime_t() ||
 	  p->second.last_rx_front == utime_t()) {
 	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
 	     << " osd." << p->first << " ever on either front or back, first ping sent "
@@ -4348,6 +4372,10 @@ bool OSD::heartbeat_reset(Connection *con)
       } else {
 	dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
 		 << ", raced with osdmap update, closing out peer" << dendl;
+	string osd_subtree = osdmap->get_osd_subtree(s->peer,g_conf->mon_osd_reporter_subtree_level);
+	if (heartbeat_peers_by_subtree.count(osd_subtree))
+	  if (!(--heartbeat_peers_by_subtree[osd_subtree]))
+	    heartbeat_peers_by_subtree.erase(osd_subtree);
 	heartbeat_peers.erase(p);
       }
     } else {
@@ -6651,6 +6679,10 @@ void OSD::note_down_osd(int peer)
       p->second.con_front->mark_down();
     }
     heartbeat_peers.erase(p);
+    string osd_subtree = osdmap->get_osd_subtree(peer,g_conf->mon_osd_reporter_subtree_level);
+    if (heartbeat_peers_by_subtree.count(osd_subtree))
+      if (!(--heartbeat_peers_by_subtree[osd_subtree]))
+	heartbeat_peers_by_subtree.erase(osd_subtree);
   }
   heartbeat_lock.Unlock();
 }
