@@ -185,6 +185,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
 
 // ---------------
 
+#if defined(HAVE_LIBAIO)
 int FS::aio_queue_t::submit(aio_t &aio, int *retries)
 {
   // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
@@ -230,3 +231,4 @@ int FS::aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
   }
   return r;
 }
+#endif
