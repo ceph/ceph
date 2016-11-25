@@ -1977,7 +1977,7 @@ static void sync_status(Formatter *formatter)
 
   list<string> md_status;
 
-  if (zone.id == zonegroup.master_zone) {
+  if (store->is_meta_master()) {
     md_status.push_back("no sync (zone is master)");
   } else {
     get_md_sync_status(md_status);
