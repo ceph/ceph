@@ -144,7 +144,7 @@ void PaxosService::refresh(bool *need_bootstrap)
 
   dout(10) << __func__ << dendl;
 
-  update_from_paxos(need_bootstrap);
+  update_from_paxos(need_bootstrap);//调用update_from_paxos{上层回调}
 }
 
 void PaxosService::post_refresh()
@@ -407,10 +407,10 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
 
   for (version_t v = from; v < to; ++v) {
     dout(20) << __func__ << " " << v << dendl;
-    t->erase(get_service_name(), v);
+    t->erase(get_service_name(), v);//删除v
 
     string full_key = mon->store->combine_strings("full", v);
-    if (mon->store->exists(get_service_name(), full_key)) {
+    if (mon->store->exists(get_service_name(), full_key)) {//删除full
       dout(20) << __func__ << " " << full_key << dendl;
       t->erase(get_service_name(), full_key);
     }

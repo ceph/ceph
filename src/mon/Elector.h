@@ -119,11 +119,11 @@ class Elector {
    * to be elected if we think we might have a chance (i.e., the other guy's
    * rank is lower than ours).
    */
-  bool     electing_me;
+  bool     electing_me;//标明选择的是否自已
   /**
    * Holds the time at which we started the election.
    */
-  utime_t  start_stamp;
+  utime_t  start_stamp;//标明从哪个时间点，我们开始这个选举
   /**
    * Set containing all those that acked our proposal to become the Leader.
    *
@@ -142,11 +142,11 @@ class Elector {
   /**
    * Indicates who we have acked
    */
-  int	    leader_acked;
+  int	    leader_acked;//记录我们向应响应了ack
   /**
    * Indicates when we have acked it
    */
-  utime_t   ack_stamp;
+  utime_t   ack_stamp;//记录我们ack发送的时间
   /**
    * @}
    */
@@ -393,7 +393,7 @@ class Elector {
    *
    * This function simply calls Elector::start.
    */
-  void call_election() {
+  void call_election() {//启动选举
     start();
   }
 

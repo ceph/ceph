@@ -14,15 +14,15 @@
 
 /* note: no header guard */
 OPTION(host, OPT_STR, "localhost")
-OPTION(fsid, OPT_UUID, uuid_d())
+OPTION(fsid, OPT_UUID, uuid_d())//设置集群对应的fsid
 OPTION(public_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
 OPTION(public_network, OPT_STR, "")
 OPTION(cluster_network, OPT_STR, "")
 OPTION(num_client, OPT_INT, 1)
-OPTION(monmap, OPT_STR, "")
-OPTION(mon_host, OPT_STR, "")
-OPTION(mon_dns_srv_name, OPT_STR, "ceph-mon")
+OPTION(monmap, OPT_STR, "") //monmap对应的文件
+OPTION(mon_host, OPT_STR, "")//mon对就看主机端口列表
+OPTION(mon_dns_srv_name, OPT_STR, "ceph-mon")//dns地址
 OPTION(lockdep, OPT_BOOL, false)
 OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
@@ -240,7 +240,9 @@ OPTION(ms_dpdk_rx_buffer_count_per_core, OPT_INT, 8192)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
+//mon数据地址
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
+//mon　map初始化列表
 OPTION(mon_initial_members, OPT_STR, "")    // list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
 OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_compact_on_start, OPT_BOOL, false)  // compact leveldb on ceph-mon start

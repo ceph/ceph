@@ -134,10 +134,10 @@ public:
   void register_cluster_logger();
   void unregister_cluster_logger();
 
-  MonMap *monmap;
+  MonMap *monmap;//monitor map
   uuid_d fingerprint;
 
-  set<entity_addr_t> extra_probe_peers;
+  set<entity_addr_t> extra_probe_peers;//需要额外探测的（不存在monmap中）
 
   LogClient log_client;
   LogChannelRef clog;
@@ -168,7 +168,7 @@ private:
   enum {
     STATE_PROBING = 1,
     STATE_SYNCHRONIZING,
-    STATE_ELECTING,
+    STATE_ELECTING,//开始选举
     STATE_LEADER,
     STATE_PEON,
     STATE_SHUTDOWN
@@ -227,7 +227,7 @@ private:
   bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
   set<int> classic_mons; // set of "classic" monitors; only valid on leader
 
-  set<string> outside_quorum;
+  set<string> outside_quorum;//不在monmap中存在的monitor名称
 
   /**
    * @defgroup Monitor_h_scrub
@@ -300,9 +300,9 @@ private:
    * @} // requester state
    */
   entity_inst_t sync_provider;   ///< who we are syncing from
-  uint64_t sync_cookie;          ///< 0 if we are starting, non-zero otherwise
+  uint64_t sync_cookie;          ///< 0 if we are starting, non-zero otherwise　//０表示非同步，其它记录cookie
   bool sync_full;                ///< true if we are a full sync, false for recent catch-up
-  version_t sync_start_version;  ///< last_committed at sync start
+  version_t sync_start_version;  ///< last_committed at sync start 开始同步时的版本号
   Context *sync_timeout_event;   ///< timeout event
 
   /**

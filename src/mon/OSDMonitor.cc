@@ -188,7 +188,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     dout(10) << __func__ << " looking for valid full map in interval"
              << " [" << fc << ", " << lc << "]" << dendl;
 
-    latest_full = 0;
+    latest_full = 0;//寻找最后一个全量的osdmap
     for (version_t v = lc; v >= fc; v--) {
       string full_key = "full_" + stringify(v);
       if (mon->store->exists(get_service_name(), full_key)) {
@@ -289,17 +289,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
-    if (osdmap.is_out(o))
+    if (osdmap.is_out(o))//如果osd是out状态，则不考虑
       continue;
     auto found = down_pending_out.find(o);
-    if (osdmap.is_down(o)) {
+    if (osdmap.is_down(o)) {//o处于down状态，但还没有out
       // populate down -> out map
-      if (found == down_pending_out.end()) {
+      if (found == down_pending_out.end()) {//为了发现osd被out掉，我们在检测到osd　down掉后，记录在此数组
         dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
-        down_pending_out[o] = ceph_clock_now(g_ceph_context);
+        down_pending_out[o] = ceph_clock_now(g_ceph_context);//保存down的时间
       }
     } else {
-      if (found != down_pending_out.end()) {
+      if (found != down_pending_out.end()) {//如果osd不再down,但down_pending_out中存在，则删除
         dout(10) << " removing osd." << o << " from down_pending_out map" << dendl;
         down_pending_out.erase(found);
       }
@@ -311,7 +311,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
    * supporting primary_temp mappings without breaking old clients/OSDs.*/
   assert(g_conf->mon_osd_allow_primary_temp || osdmap.primary_temp->empty());
 
-  if (mon->is_leader()) {
+  if (mon->is_leader()) {//如果是leader,检查osdmap
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
   }
@@ -1335,14 +1335,15 @@ void OSDMonitor::print_nodes(Formatter *f)
   dump_services(f, osds, "osd");
 }
 
+//和任意一个osd分享osdmap
 void OSDMonitor::share_map_with_random_osd()
 {
-  if (osdmap.get_num_up_osds() == 0) {
+  if (osdmap.get_num_up_osds() == 0) {//没有up的osds时
     dout(10) << __func__ << " no up osds, don't share with anyone" << dendl;
     return;
   }
 
-  MonSession *s = mon->session_map.get_random_osd_session(&osdmap);
+  MonSession *s = mon->session_map.get_random_osd_session(&osdmap);//任选一个s
   if (!s) {
     dout(10) << __func__ << " no up osd on our session map" << dendl;
     return;
@@ -1350,8 +1351,8 @@ void OSDMonitor::share_map_with_random_osd()
 
   dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
   // whatev, they'll request more if they need it
-  MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
-  s->con->send_message(m);
+  MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());//间隔为１
+  s->con->send_message(m);//发送（然后osd就会进行解析）
   // NOTE: do *not* record osd has up to this epoch (as we do
   // elsewhere) as they may still need to request older values.
 }
@@ -2615,6 +2616,7 @@ MOSDMap *OSDMonitor::build_latest_full()
   return r;
 }
 
+//key-value数据库中保存了各个版本对应的osdmap(或者增量，或者全量）
 MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 {
   dout(10) << "build_incremental [" << from << ".." << to << "]" << dendl;
@@ -2624,7 +2626,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 
   for (epoch_t e = to; e >= from && e > 0; e--) {
     bufferlist bl;
-    int err = get_version(e, bl);
+    int err = get_version(e, bl);//获取e版本对应的数据（增量）
     if (err == 0) {
       assert(bl.length());
       // if (get_version(e, bl) > 0) {
@@ -2634,13 +2636,14 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
     } else {
       assert(err == -ENOENT);
       assert(!bl.length());
-      get_version_full(e, bl);
+      get_version_full(e, bl);//获取e版本对应的数据（全量）
       if (bl.length() > 0) {
       //else if (get_version("full", e, bl) > 0) {
       dout(20) << "build_incremental   full " << e << " "
 	       << bl.length() << " bytes" << dendl;
       m->maps[e] = bl;
-      } else {
+      } else {//全量没有，增量也没有，这个是不应发生的。
+
 	ceph_abort();  // we should have all maps.
       }
     }
@@ -2738,12 +2741,12 @@ void OSDMonitor::send_incremental(epoch_t first,
 
 int OSDMonitor::get_version(version_t ver, bufferlist& bl)
 {
-    if (inc_osd_cache.lookup(ver, &bl)) {
+    if (inc_osd_cache.lookup(ver, &bl)) {//如果本地有，用本地
       return 0;
     }
-    int ret = PaxosService::get_version(ver, bl);
+    int ret = PaxosService::get_version(ver, bl);//本地没有，则远程请求
     if (!ret) {
-      inc_osd_cache.add(ver, bl);
+      inc_osd_cache.add(ver, bl);//加入缓存
     }
     return ret;
 }

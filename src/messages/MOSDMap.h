@@ -26,8 +26,8 @@ class MOSDMap : public Message {
 
  public:
   uuid_d fsid;
-  map<epoch_t, bufferlist> maps;
-  map<epoch_t, bufferlist> incremental_maps;
+  map<epoch_t, bufferlist> maps;//存储全量
+  map<epoch_t, bufferlist> incremental_maps;//存储增量
   epoch_t oldest_map, newest_map;
 
   epoch_t get_first() const {

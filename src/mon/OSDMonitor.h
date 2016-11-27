@@ -112,7 +112,7 @@ struct failure_info_t {
 class OSDMonitor : public PaxosService {
   CephContext *cct;
 public:
-  OSDMap osdmap;
+  OSDMap osdmap;//osdmap存储（最新的）
 
 private:
   // [leader]
@@ -120,12 +120,13 @@ private:
   map<int, bufferlist> pending_metadata;
   set<int>             pending_metadata_rm;
   map<int, failure_info_t> failure_info;
-  map<int,utime_t>    down_pending_out;  // osd down -> out
+  map<int,utime_t>    down_pending_out;  // osd down -> out（为了检测out,我们记录首次down的时间)
 
   map<int,double> osd_weight;
 
-  SimpleLRU<version_t, bufferlist> inc_osd_cache;
-  SimpleLRU<version_t, bufferlist> full_osd_cache;
+  SimpleLRU<version_t, bufferlist> inc_osd_cache;//osd增量cache
+  SimpleLRU<version_t, bufferlist> full_osd_cache;//osd全量cache
+
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);

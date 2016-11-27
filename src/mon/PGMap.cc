@@ -303,28 +303,31 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 
 void PGMap::redo_full_sets()
 {
+　　//先清空
   full_osds.clear();
   nearfull_osds.clear();
+  //遍历osd_stat,针对每一个osd_stat,调整full_osds,nearfull_osds
   for (ceph::unordered_map<int32_t, osd_stat_t>::iterator i = osd_stat.begin();
        i != osd_stat.end();
        ++i) {
     register_nearfull_status(i->first, i->second);
   }
 }
-
+//移据osd的比率信息，维护full_osds,nearfull_osds列表
 void PGMap::register_nearfull_status(int osd, const osd_stat_t& s)
 {
-  float ratio = ((float)s.kb_used) / ((float)s.kb);
+  float ratio = ((float)s.kb_used) / ((float)s.kb);//算出osd对应的比率
 
-  if (full_ratio > 0 && ratio > full_ratio) {
+  if (full_ratio > 0 && ratio > full_ratio) {//如果有full_ration,且比率大于其，则加入
     // full
     full_osds.insert(osd);
     nearfull_osds.erase(osd);
-  } else if (nearfull_ratio > 0 && ratio > nearfull_ratio) {
+  } else if (nearfull_ratio > 0 && ratio > nearfull_ratio) {//如果有nearfull_ration，
+	  //且比率大于共，则加入，且删除full
     // nearfull
     full_osds.erase(osd);
     nearfull_osds.insert(osd);
-  } else {
+  } else {//由于均未达到，故都删除掉
     // ok
     full_osds.erase(osd);
     nearfull_osds.erase(osd);
@@ -359,17 +362,17 @@ void PGMap::calc_stats()
 void PGMap::update_pg(pg_t pgid, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
-  ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
+  ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);//取出pg对应的状态
   epoch_t old_lec = 0, lec;
   if (s != pg_stat.end()) {
-    old_lec = s->second.get_effective_last_epoch_clean();
-    stat_pg_update(pgid, s->second, p);
-    lec = s->second.get_effective_last_epoch_clean();
-  } else {
+    old_lec = s->second.get_effective_last_epoch_clean();//old last epoch clean
+    stat_pg_update(pgid, s->second, p);//注，这里pg_stat状也被更新
+    lec = s->second.get_effective_last_epoch_clean();//获取更新后的last epoch clean
+  } else {//没有找到，为添加操作
     pg_stat_t& r = pg_stat[pgid];
     ::decode(r, p);
     stat_pg_add(pgid, r);
-    lec = r.get_effective_last_epoch_clean();
+    lec = r.get_effective_last_epoch_clean();//获取更新后的last epoch clean
   }
 
   if (min_last_epoch_clean &&
@@ -397,7 +400,7 @@ void PGMap::update_osd(int osd, bufferlist& bl)
   bufferlist::iterator p = bl.begin();
   ceph::unordered_map<int32_t,osd_stat_t>::iterator o = osd_stat.find(osd);
   epoch_t old_lec = 0;
-  if (o != osd_stat.end()) {
+  if (o != osd_stat.end()) {//如果存在就先删除掉
     ceph::unordered_map<int32_t,epoch_t>::iterator i = osd_epochs.find(osd);
     if (i != osd_epochs.end())
       old_lec = i->second;
@@ -405,26 +408,27 @@ void PGMap::update_osd(int osd, bufferlist& bl)
   }
   osd_stat_t& r = osd_stat[osd];
   ::decode(r, p);
-  stat_osd_add(r);
+  stat_osd_add(r);//加上
 
   // adjust [near]full status
-  register_nearfull_status(osd, r);
+  register_nearfull_status(osd, r);//检查osd是否将满
 
   // epoch?
-  if (!p.end()) {
+  if (!p.end()) {//检查后面是否还有epoch
     epoch_t e;
     ::decode(e, p);
 
-    if (e < min_last_epoch_clean ||
-        (e > min_last_epoch_clean &&
+    if (e < min_last_epoch_clean ||　//出现比mlec更小的值
+        (e > min_last_epoch_clean && //出现比mlec更大的值，则mlec取的极有可能就是这个pg的值
          old_lec == min_last_epoch_clean))
-      min_last_epoch_clean = 0;
+      min_last_epoch_clean = 0;//清为空，在get时会重新计算，这里可以理解为（更新min_lec)
   } else {
     // WARNING: we are not refreshing min_last_epoch_clean!  must be old store
     // or old mon running.
   }
 }
 
+//osd删除
 void PGMap::remove_osd(int osd)
 {
   ceph::unordered_map<int32_t,osd_stat_t>::iterator o = osd_stat.find(osd);
@@ -438,10 +442,11 @@ void PGMap::remove_osd(int osd)
   }
 }
 
+//pg状态添加
 void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
-  pg_pool_sum[pgid.pool()].add(s);
+  pg_pool_sum[pgid.pool()].add(s);//合入此s对应的状态
   pg_sum.add(s);
 
   num_pg++;
@@ -458,18 +463,21 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
   if (sameosds)
     return;
 
+  //增加*p阻塞的pg数量
   for (vector<int>::const_iterator p = s.blocked_by.begin();
        p != s.blocked_by.end();
        ++p) {
     ++blocked_by_sum[*p];
   }
 
+  //增加osd负责的pg
   for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p)
     pg_by_osd[*p].insert(pgid);
   for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
     pg_by_osd[*p].insert(pgid);
 }
 
+//删除一个pg对应的状态
 void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
@@ -486,7 +494,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     num_pg_by_state.erase(s.state);
 
   if ((s.state & PG_STATE_CREATING) &&
-      s.parent_split_bits == 0) {
+      s.parent_split_bits == 0) {//移除
     creating_pgs.erase(pgid);
     if (s.acting_primary >= 0) {
       map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
@@ -525,29 +533,31 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   }
 }
 
+//更新pgmap中的pg状态信息
 void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
                            bufferlist::iterator& blp)
 {
   pg_stat_t n;
   ::decode(n, blp);
 
+  //s是旧的状态，n是新的状态
   bool sameosds =
     s.acting == n.acting &&
     s.up == n.up &&
     s.blocked_by == n.blocked_by;
 
-  stat_pg_sub(pgid, s, sameosds);
+  stat_pg_sub(pgid, s, sameosds);//先去除这个pg对应的状态
   s = n;
-  stat_pg_add(pgid, n, sameosds);
+  stat_pg_add(pgid, n, sameosds);//再加上这个pg对应的新状态
 }
 
-void PGMap::stat_osd_add(const osd_stat_t &s)
+void PGMap::stat_osd_add(const osd_stat_t &s)//增加osd状态及数目
 {
   num_osd++;
   osd_sum.add(s);
 }
 
-void PGMap::stat_osd_sub(const osd_stat_t &s)
+void PGMap::stat_osd_sub(const osd_stat_t &s)//减少osd状态及数目
 {
   num_osd--;
   osd_sum.sub(s);
@@ -559,19 +569,21 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
     return 0;
 
   ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin();
-  epoch_t min = p->second.get_effective_last_epoch_clean();
+  epoch_t min = p->second.get_effective_last_epoch_clean();//假设最小的是第一个
   for (++p; p != pg_stat.end(); ++p) {
-    epoch_t lec = p->second.get_effective_last_epoch_clean();
+    epoch_t lec = p->second.get_effective_last_epoch_clean();//所有pg中最小的lec
     if (lec < min)
-      min = lec;
+      min = lec;//更新为次小的
   }
+
+  //这里再扫描，所有上报过的osd其在上报时对应的epoch
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
   for (ceph::unordered_map<int32_t, epoch_t>::const_iterator i = osd_epochs.begin();
        i != osd_epochs.end();
        ++i) {
     if (i->second < min)
-      min = i->second;
+      min = i->second;//更新为最小的
   }
   return min;
 }

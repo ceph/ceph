@@ -137,16 +137,16 @@ struct MonSessionMap {
 
   MonSession *get_random_osd_session(OSDMap *osdmap) {
     // ok, this isn't actually random, but close enough.
-    if (by_osd.empty())
+    if (by_osd.empty())//集合为空，不处理
       return 0;
-    int n = by_osd.rbegin()->first + 1;
-    int r = rand() % n;
+    int n = by_osd.rbegin()->first + 1;//取出一个任意值
+    int r = rand() % n;//两个随机数产生一个随机值
 
     multimap<int,MonSession*>::iterator p = by_osd.lower_bound(r);
-    if (p == by_osd.end())
-      --p;
+    if (p == by_osd.end())//如果不巧找到了end
+      --p;//向后退一
 
-    if (!osdmap) {
+    if (!osdmap) {//传入的osdmap为null时处理
       return p->second;
     }
 

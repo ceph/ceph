@@ -46,12 +46,12 @@ class PaxosService {
    * Our name. This will be associated with the class implementing us, and will
    * be used mainly for store-related operations.
    */
-  string service_name;
+  string service_name;//服务名
   /**
    * If we are or have queued anything for proposal, this variable will be true
    * until our proposal has been finished.
    */
-  bool proposing;
+  bool proposing;//提案
 
  protected:
   /**
@@ -832,7 +832,7 @@ public:
    * @param bl The bufferlist to be populated
    * @returns 0 on success; <0 otherwise
    */
-  virtual int get_version_full(version_t ver, bufferlist& bl) {
+  virtual int get_version_full(version_t ver, bufferlist& bl) {//全量
     string key = mon->store->combine_strings(full_prefix_name, ver);
     return mon->store->get(get_service_name(), key, bl);
   }

@@ -64,7 +64,7 @@ void Elector::bump_epoch(epoch_t e)
 }
 
 
-void Elector::start()
+void Elector::start()//开始选举
 {
   if (!participating) {
     dout(0) << "not starting new election -- not participating" << dendl;
@@ -93,7 +93,7 @@ void Elector::start()
   leader_acked = -1;
 
   // bcast to everyone else
-  for (unsigned i=0; i<mon->monmap->size(); ++i) {
+  for (unsigned i=0; i<mon->monmap->size(); ++i) {//给monmap中的每个人发送propose消息（计划选自已）
     if ((int)i == mon->rank) continue;
     MMonElection *m =
       new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
@@ -104,7 +104,7 @@ void Elector::start()
   reset_timer();
 }
 
-void Elector::defer(int who)
+void Elector::defer(int who)//向对方响应ack
 {
   dout(5) << "defer to " << who << dendl;
 
@@ -116,7 +116,7 @@ void Elector::defer(int who)
   }
 
   // ack them
-  leader_acked = who;
+  leader_acked = who;//记录我们向应响应了ack
   ack_stamp = ceph_clock_now(g_ceph_context);
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
@@ -148,7 +148,7 @@ void Elector::reset_timer(double plus)
   public:
     explicit C_ElectionExpire(Elector *e) : elector(e) { }
     void finish(int r) {
-      elector->expire();
+      elector->expire();//如果无人长时间响应，则自然当选
     }
   };
   // set the timer
@@ -167,15 +167,16 @@ void Elector::cancel_timer()
   }
 }
 
-void Elector::expire()
+void Elector::expire()//选举过程中超时
 {
   dout(5) << "election timer expired" << dendl;
   
   // did i win?
+  //当前选的是我，且半数通过
   if (electing_me &&
       acked_me.size() > (unsigned)(mon->monmap->size() / 2)) {
     // i win
-    victory();
+    victory();//选举获胜
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
     if (mon->has_ever_joined)
@@ -186,7 +187,7 @@ void Elector::expire()
 }
 
 
-void Elector::victory()
+void Elector::victory()//选举获胜
 {
   leader_acked = -1;
   electing_me = false;
@@ -195,7 +196,7 @@ void Elector::victory()
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   set<int> quorum;
   for (map<int, elector_features_t>::iterator p = acked_me.begin();
-       p != acked_me.end();
+       p != acked_me.end();//遍历acked_me
        ++p) {
     quorum.insert(p->first);
     cluster_features &= p->second.cluster_features;
@@ -225,11 +226,12 @@ void Elector::victory()
   }
   
   // tell everyone!
+  //通其其它人，我选举成功，让他们执行选举失败函数
   for (set<int>::iterator p = quorum.begin();
        p != quorum.end();
        ++p) {
     if (*p == mon->rank) continue;
-    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
+    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);//选举成功消息
     m->quorum = quorum;
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
@@ -238,18 +240,19 @@ void Elector::victory()
   }
     
   // tell monitor
+  //选举成功
   mon->win_election(epoch, quorum,
                     cluster_features, mon_features,
                     cmds, cmdsize, &copy_classic_mons);
 }
 
 
-void Elector::handle_propose(MonOpRequestRef op)
+void Elector::handle_propose(MonOpRequestRef op)//收到别人提名并主持的选举
 {
   op->mark_event("elector:handle_propose");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_propose from " << m->get_source() << dendl;
-  int from = m->get_source().num();
+  int from = m->get_source().num();//从哪个monitor来
 
   assert(m->epoch % 2 == 1); // election
   uint64_t required_features = mon->get_required_features();
@@ -291,38 +294,39 @@ void Elector::handle_propose(MonOpRequestRef op)
     }
   }
 
-  if (mon->rank < from) {
+  if (mon->rank < from) {//选举获胜的标准是比大小，现在from比我们大，那我们胜
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
       assert(leader_acked < from);  // and they still win, of course
       dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
+    //如果我们没有参选，则我们要提名自已并主持选举
       // wait, i should win!
       if (!electing_me) {
-	mon->start_election();
+	mon->start_election();//开始选举
       }
     }
   } else {
     // they would win over me
-    if (leader_acked < 0 ||      // haven't acked anyone yet, or
-	leader_acked > from ||   // they would win over who you did ack, or
-	leader_acked == from) {  // this is the guy we're already deferring to
+    if (leader_acked < 0 ||      // haven't acked anyone yet, or　//我们之前没有向任何人回复过ack或者
+	leader_acked > from ||   // they would win over who you did ack, or　//之前回复ack的id较大
+	leader_acked == from) {  // this is the guy we're already deferring to　//之前给此人已回复过ack
       defer(from);
     } else {
       // ignore them!
-      dout(5) << "no, we already acked " << leader_acked << dendl;
+      dout(5) << "no, we already acked " << leader_acked << dendl;　//
     }
   }
 }
 
-void Elector::handle_ack(MonOpRequestRef op)
+void Elector::handle_ack(MonOpRequestRef op)//处理ack消息，此消息为选举响应
 {
   op->mark_event("elector:handle_ack");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  assert(m->epoch % 2 == 1); // election
+  assert(m->epoch % 2 == 1); // election，消息中的epoch是奇数
   if (m->epoch > epoch) {
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
@@ -347,7 +351,7 @@ void Elector::handle_ack(MonOpRequestRef op)
     return;
   }
 
-  if (electing_me) {
+  if (electing_me) {//加入acted_me记录中，对方响应了我
     // thanks
     acked_me[from].cluster_features = m->get_connection()->get_features();
     acked_me[from].mon_features = m->mon_features;
@@ -366,9 +370,9 @@ void Elector::handle_ack(MonOpRequestRef op)
     *_dout << " }" << dendl;
 
     // is that _everyone_?
-    if (acked_me.size() == mon->monmap->size()) {
+    if (acked_me.size() == mon->monmap->size()) {//如果monmap中规定的数量，都回复我了，我获胜
       // if yes, shortcut to election finish
-      victory();
+      victory();//选举获胜
     }
   } else {
     // ignore, i'm deferring already.
@@ -377,7 +381,7 @@ void Elector::handle_ack(MonOpRequestRef op)
 }
 
 
-void Elector::handle_victory(MonOpRequestRef op)
+void Elector::handle_victory(MonOpRequestRef op)//收到获胜消息
 {
   op->mark_event("elector:handle_victory");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
@@ -403,6 +407,7 @@ void Elector::handle_victory(MonOpRequestRef op)
   bump_epoch(m->epoch);
 
   // they win
+  //选举失败
   mon->lose_election(epoch, m->quorum, from,
                      m->quorum_features, m->mon_features);
 
@@ -528,7 +533,7 @@ void Elector::dispatch(MonOpRequestRef op)
       } 
 
       switch (em->op) {
-      case MMonElection::OP_PROPOSE:
+      case MMonElection::OP_PROPOSE://收到某一个mon的提议
 	handle_propose(op);
 	return;
       }
@@ -539,7 +544,7 @@ void Elector::dispatch(MonOpRequestRef op)
       }
 
       switch (em->op) {
-      case MMonElection::OP_ACK:
+      case MMonElection::OP_ACK://选举响应
 	handle_ack(op);
 	return;
       case MMonElection::OP_VICTORY:

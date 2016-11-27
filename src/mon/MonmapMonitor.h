@@ -44,7 +44,7 @@ class MonmapMonitor : public PaxosService {
   }
   MonMap pending_map; //the pending map awaiting passage
 
-  void create_initial();
+  void create_initial();//初始化创建
 
   void update_from_paxos(bool *need_bootstrap);
 

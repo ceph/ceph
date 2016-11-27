@@ -138,14 +138,14 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
    * address -- which is obtained from the public address of each entry
    * in the 'mons' map.
    */
-  map<string,entity_addr_t> mon_addr;
+  map<string,entity_addr_t> mon_addr;//产生mon名称与公有地址之间的映射
   for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
        p != mon_info.end();
        ++p) {
     mon_addr[p->first] = p->second.public_addr;
   }
 
-  if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {
+  if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {//如果没有mon名称
     __u16 v = 1;
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
@@ -153,7 +153,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     vector<entity_inst_t> mon_inst(mon_addr.size());
     for (unsigned n = 0; n < mon_addr.size(); n++)
       mon_inst[n] = get_inst(n);
-    ::encode(mon_inst, blist, con_features);
+    ::encode(mon_inst, blist, con_features);//编入mon_inst类型
     ::encode(last_changed, blist);
     ::encode(created, blist);
     return;
@@ -164,7 +164,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
-    ::encode(mon_addr, blist, con_features);
+    ::encode(mon_addr, blist, con_features);//编入mon_addr
     ::encode(last_changed, blist);
     ::encode(created, blist);
   }
@@ -250,16 +250,16 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
 }
 
 // read from/write to a file
-int MonMap::write(const char *fn) 
+int MonMap::write(const char *fn) //将自身信息写入文件fn
 {
   // encode
   bufferlist bl;
-  encode(bl, CEPH_FEATURES_ALL);
+  encode(bl, CEPH_FEATURES_ALL);//调用encode写入文件fn
   
   return bl.write_file(fn);
 }
 
-int MonMap::read(const char *fn) 
+int MonMap::read(const char *fn) //自文件中读取自身信息
 {
   // read
   bufferlist bl;
@@ -291,7 +291,7 @@ void MonMap::print_summary(ostream& out) const
   out << "}";
 }
  
-void MonMap::print(ostream& out) const
+void MonMap::print(ostream& out) const//打印信息
 {
   out << "epoch " << epoch << "\n";
   out << "fsid " << fsid << "\n";
@@ -305,7 +305,7 @@ void MonMap::print(ostream& out) const
   }
 }
 
-void MonMap::dump(Formatter *f) const
+void MonMap::dump(Formatter *f) const //dump
 {
   f->dump_unsigned("epoch", epoch);
   f->dump_stream("fsid") <<  fsid;
@@ -339,19 +339,21 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
       return -ENOENT;
     for (unsigned i=0; i<addrs.size(); i++) {
       char n[2];
-      n[0] = 'a' + i;
+      n[0] = 'a' + i;//从a开始排序
       n[1] = 0;
       if (addrs[i].get_port() == 0)
-	addrs[i].set_port(CEPH_MON_PORT);
+	addrs[i].set_port(CEPH_MON_PORT);//mon对应的端口号
       string name = prefix;
-      name += n;
-      if (!contains(addrs[i]))
+      name += n;//设置名称
+      if (!contains(addrs[i]))//如果名称不存在，则添加此名称
 	add(name, addrs[i]);
     }
     return 0;
   }
 
   // maybe they passed us a DNS-resolvable name
+  //如果解析ip地址失败，猜测采用dns名称（后面的代码与前半部分基本相同，
+  //不看了，应抽取函数才对，或者，将dns处理提前）
   char *hosts = NULL;
   hosts = resolve_addrs(hostlist.c_str());
   if (!hosts)
@@ -393,18 +395,19 @@ void MonMap::set_initial_members(CephContext *cct,
       i++;
       continue;
     }
-
+    //找出一个i,这个i在initial_members中不存在，但rank中存在
     lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addr(i) << dendl;
     if (removed)
-      removed->insert(get_addr(i));
-    remove(n);
-    assert(!contains(n));
+      removed->insert(get_addr(i));//于是这个i是需要删除的
+    remove(n);//这个i被删除
+    assert(!contains(n));//断言，这个i一定不存在
   }
+  //这样处理后，rank中仅含有initial中存在项。于时接下来，需要加入initial_members中有，但rank中没有项
 
   // add missing initial members
   for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
     if (!contains(*p)) {
-      if (*p == my_name) {
+      if (*p == my_name) {//对于self,加入my_addr,而不用initaial_member中的
 	lgeneric_dout(cct, 1) << " adding self " << *p << " " << my_addr << dendl;
 	add(*p, my_addr);
       } else {
@@ -412,12 +415,12 @@ void MonMap::set_initial_members(CephContext *cct,
 	a.set_type(entity_addr_t::TYPE_LEGACY);
 	a.set_family(AF_INET);
 	for (int n=1; ; n++) {
-	  a.set_nonce(n);
+	  a.set_nonce(n);//探测未用id
 	  if (!contains(a))
 	    break;
 	}
 	lgeneric_dout(cct, 1) << " adding " << *p << " " << a << dendl;
-	add(*p, a);
+	add(*p, a);//加入其它的
       }
       assert(contains(*p));
     }
@@ -432,7 +435,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   if (!conf->monmap.empty()) {
     int r;
     try {
-      r = read(conf->monmap.c_str());
+      r = read(conf->monmap.c_str());//通过read读自身内容
     }
     catch (const buffer::error &e) {
       r = -EINVAL;
@@ -445,13 +448,13 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   }
 
   // fsid from conf?
-  if (!cct->_conf->fsid.is_zero()) {
+  if (!cct->_conf->fsid.is_zero()) {//fsid被配置了
     fsid = cct->_conf->fsid;
   }
 
   // -m foo?
-  if (!conf->mon_host.empty()) {
-    int r = build_from_host_list(conf->mon_host, "noname-");
+  if (!conf->mon_host.empty()) {//mon对应的host不为空？
+    int r = build_from_host_list(conf->mon_host, "noname-");//noname-a,noname-b,...
     if (r < 0) {
       errout << "unable to parse addrs in '" << conf->mon_host << "'"
              << std::endl;
@@ -464,7 +467,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 
   // What monitors are in the config file?
   std::vector <std::string> sections;
-  int ret = conf->get_all_sections(sections);
+  int ret = conf->get_all_sections(sections);//取配置文件中所有的段“[XXXX]"
   if (ret) {
     errout << "Unable to find any monitors in the configuration "
          << "file, because there was an error listing the sections. error "
@@ -475,7 +478,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   for (std::vector <std::string>::const_iterator s = sections.begin();
        s != sections.end(); ++s) {
     if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
-      mon_names.push_back(s->substr(4));
+      mon_names.push_back(s->substr(4));//mon名称，取头后，保存
     }
   }
 
@@ -485,7 +488,9 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     std::vector <std::string> sections;
     std::string m_name("mon");
     m_name += ".";
-    m_name += *m;
+    m_name += *m;//这么处理，倒不如当时加入mon_names不去头
+
+    //从下面这三个段里，分析mon addr
     sections.push_back(m_name);
     sections.push_back("mon");
     sections.push_back("global");
@@ -511,10 +516,11 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     if (contains(*m))
       remove(*m);
 
-    add(m->c_str(), addr);
+    add(m->c_str(), addr);//加入mon列表
   }
 
-  if (size() == 0) {
+  if (size() == 0) {//没有加入仍何mon列表
+	  //向dns请求地址，dns地址会返回多个地址
     // no info found from conf options lets try use DNS SRV records
     string srv_name = conf->mon_dns_srv_name;
     string domain;
@@ -539,7 +545,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     }
   }
 
-  if (size() == 0) {
+  if (size() == 0) {//仍然没有mon列表
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
