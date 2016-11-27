@@ -84,7 +84,7 @@ void intrusive_ptr_release(PG *pg);
   typedef boost::intrusive_ptr<PG> PGRef;
 #endif
 
-struct PGRecoveryStats {
+class PGRecoveryStats {
   struct per_state_info {
     uint64_t enter, exit;     // enter/exit counts
     uint64_t events;
@@ -98,6 +98,7 @@ struct PGRecoveryStats {
   map<const char *,per_state_info> info;
   Mutex lock;
 
+  public:
   PGRecoveryStats() : lock("PGRecoverStats::lock") {}
 
   void reset() {
@@ -1546,7 +1547,6 @@ public:
       explicit Crashed(my_context ctx);
     };
 
-    struct Started;
     struct Reset;
 
     struct Initial : boost::statechart::state< Initial, RecoveryMachine >, NamedState {
@@ -1934,7 +1934,6 @@ public:
       boost::statechart::result react(const MNotifyRec& infoevt);
     };
 
-    struct GetMissing;
     struct GotLog : boost::statechart::event< GotLog > {
       GotLog() : boost::statechart::event< GotLog >() {}
     };

@@ -54,7 +54,7 @@ int clog_type_to_syslog_level(clog_type t)
     case CLOG_SEC:
       return LOG_CRIT;
     default:
-      assert(0);
+      ceph_abort();
       return 0;
   }
 }
@@ -164,7 +164,7 @@ string clog_type_to_string(clog_type t)
     case CLOG_SEC:
       return "crit";
     default:
-      assert(0);
+      ceph_abort();
       return 0;
   }
 }

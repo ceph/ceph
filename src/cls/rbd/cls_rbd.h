@@ -131,7 +131,7 @@ struct cls_rbd_snap {
       f->dump_string("protection_status", "protected");
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
   static void generate_test_instances(list<cls_rbd_snap*>& o) {

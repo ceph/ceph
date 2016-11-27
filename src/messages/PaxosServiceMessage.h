@@ -39,12 +39,12 @@ class PaxosServiceMessage : public Message {
   }
 
   void encode_payload(uint64_t features) {
-    assert(0);
+    ceph_abort();
     paxos_encode();
   }
 
   void decode_payload() {
-    assert(0);
+    ceph_abort();
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
   }

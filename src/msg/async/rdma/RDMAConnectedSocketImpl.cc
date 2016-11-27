@@ -108,23 +108,24 @@ int RDMAConnectedSocketImpl::activate()
 int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const SocketOptions &opts) {
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
-  tcp_fd = infiniband->net.connect(peer_addr);
+  NetHandler net(cct);
+  tcp_fd = net.connect(peer_addr);
 
   if (tcp_fd < 0) {
     return -errno;
   }
-  infiniband->net.set_close_on_exec(tcp_fd);
+  net.set_close_on_exec(tcp_fd);
 
-  int r = infiniband->net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
+  int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
   if (r < 0) {
     ::close(tcp_fd);
     return -errno;
   }
 
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
-  infiniband->net.set_priority(tcp_fd, opts.priority);
+  net.set_priority(tcp_fd, opts.priority);
   my_msg.peer_qpn = 0;
-  r = infiniband->send_msg(tcp_fd, my_msg);
+  r = infiniband->send_msg(cct, tcp_fd, my_msg);
   if (r < 0)
     return r;
 
@@ -134,7 +135,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
 void RDMAConnectedSocketImpl::handle_connection() {
   ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " fd: " << notify_fd << dendl;
-  int r = infiniband->recv_msg(tcp_fd, peer_msg);
+  int r = infiniband->recv_msg(cct, tcp_fd, peer_msg);
   if (r < 0) {
     if (r != -EAGAIN)
       fault();
@@ -150,7 +151,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       assert(!r);
     }
     notify();
-    r = infiniband->send_msg(tcp_fd, my_msg);
+    r = infiniband->send_msg(cct, tcp_fd, my_msg);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send client ack failed." << dendl;
       fault();
@@ -161,7 +162,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
         ldout(cct, 10) << __func__ << " server is already active." << dendl;
         return ;
       }
-      r = infiniband->send_msg(tcp_fd, my_msg);
+      r = infiniband->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
         fault();

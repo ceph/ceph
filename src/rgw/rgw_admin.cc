@@ -831,7 +831,7 @@ void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
       }
       break;
     default:
-      assert(0);
+      ceph_abort();
       break;
   }
 }
@@ -2190,7 +2190,8 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   rgw_user user_id;
@@ -6155,7 +6156,7 @@ next:
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
-      assert(0);
+      ceph_abort();
     }
     encode_json("bounds", bounds, formatter);
     formatter->flush(cout);

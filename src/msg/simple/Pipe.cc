@@ -677,7 +677,7 @@ int Pipe::accept()
       existing = NULL;
       goto open;
     }
-    assert(0);
+    ceph_abort();
 
   retry_session:
     assert(existing->pipe_lock.is_locked());

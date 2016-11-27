@@ -3830,7 +3830,7 @@ public:
 	   ++p)
 	if (available_objects.count(*p) == 0) {
 	  cerr << "+ " << *p << std::endl;
-	  assert(0);
+	  ceph_abort();
 	}
       for (set<ghobject_t>::iterator p = available_objects.begin();
 	   p != available_objects.end();
@@ -4196,6 +4196,7 @@ TEST_P(StoreTest, SyntheticMatrixCsumVsCompression) {
     { "bluestore_csum_type", "crc32c", 0 },
     { "bluestore_default_buffered_read", "true", "false", 0 },
     { "bluestore_default_buffered_write", "true", "false", 0 },
+    { "bluestore_sync_submit_transaction", "false", 0 },
     { 0 },
   };
   do_matrix(m, store);
@@ -4212,6 +4213,7 @@ TEST_P(StoreTest, SyntheticMatrixCompression) {
     { "bluestore_min_alloc_size", "4096", "65536", 0 },
     { "bluestore_compression_mode", "force", "aggressive", "passive", "none", 0},
     { "bluestore_default_buffered_write", "false", 0 },
+    { "bluestore_sync_submit_transaction", "true", 0 },
     { 0 },
   };
   do_matrix(m, store);
@@ -4247,6 +4249,7 @@ TEST_P(StoreTest, SyntheticMatrixNoCsum) {
     { "bluestore_csum_type", "none", 0},
     { "bluestore_default_buffered_read", "true", "false", 0 },
     { "bluestore_default_buffered_write", "true", 0 },
+    { "bluestore_sync_submit_transaction", "true", "false", 0 },
     { 0 },
   };
   do_matrix(m, store);
@@ -5563,7 +5566,8 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
@@ -5599,9 +5603,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
-  int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
-  return r;
+  return RUN_ALL_TESTS();
 }
 
 /*

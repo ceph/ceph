@@ -241,7 +241,7 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
       // gap
       return false;
     } else
-      assert(0);
+      ceph_abort();
   }
 
   return true;
@@ -320,7 +320,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         errors[cur] = e;
         ldout(oc->cct, 20) << "map_read error " << *e << dendl;
       } else {
-        assert(0);
+        ceph_abort();
       }
       
       loff_t lenfromcur = MIN(e->end() - cur, left);
@@ -349,7 +349,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
       left -= MIN(left, n->length());
       continue;    // more?
     } else {
-      assert(0);
+      ceph_abort();
     }
   }
   return 0;
@@ -2435,7 +2435,7 @@ void ObjectCacher::verify_stats() const
 	  error += bh->length();
 	  break;
 	default:
-	  assert(0);
+	  ceph_abort();
 	}
       }
     }

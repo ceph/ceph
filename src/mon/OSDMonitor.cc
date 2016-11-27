@@ -1423,7 +1423,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_remove_snaps(op);
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -1457,7 +1457,7 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_remove_snaps(op);
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   return false;
@@ -1566,7 +1566,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 
 
   // weird?
-  if (!osdmap.have_inst(badboy)) {
+  if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
@@ -2641,7 +2641,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 	       << bl.length() << " bytes" << dendl;
       m->maps[e] = bl;
       } else {
-	assert(0);  // we should have all maps.
+	ceph_abort();  // we should have all maps.
       }
     }
   }
@@ -3259,11 +3259,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     epoch_t epoch = 0;
     int64_t epochnum;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
+    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
     epoch = epochnum;
-    if (!epoch)
-      epoch = osdmap.get_epoch();
-
+    
     bufferlist osdmap_bl;
     int err = get_version_full(epoch, osdmap_bl);
     if (err == -ENOENT) {
@@ -8041,7 +8039,7 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
   case POOL_OP_AUID_CHANGE:
     return false;
   default:
-    assert(0);
+    ceph_abort();
     break;
   }
 
@@ -8199,7 +8197,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
     break;
   }
 

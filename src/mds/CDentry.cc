@@ -204,10 +204,10 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
-void CDentry::make_path_string(string& s) const
+void CDentry::make_path_string(string& s, bool projected) const
 {
   if (dir) {
-    dir->inode->make_path_string(s);
+    dir->inode->make_path_string(s, projected);
   } else {
     s = "???";
   }
@@ -215,34 +215,12 @@ void CDentry::make_path_string(string& s) const
   s.append(name.data(), name.length());
 }
 
-void CDentry::make_path(filepath& fp) const
+void CDentry::make_path(filepath& fp, bool projected) const
 {
   assert(dir);
-  if (dir->inode->is_base())
-    fp = filepath(dir->inode->ino());               // base case
-  else if (dir->inode->get_parent_dn())
-    dir->inode->get_parent_dn()->make_path(fp);  // recurse
-  else
-    fp = filepath(dir->inode->ino());               // relative but not base?  hrm!
+  dir->inode->make_path(fp, projected);
   fp.push_dentry(name);
 }
-
-/*
-void CDentry::make_path(string& s, inodeno_t tobase)
-{
-  assert(dir);
-  
-  if (dir->inode->is_root()) {
-    s += "/";  // make it an absolute path (no matter what) if we hit the root.
-  } 
-  else if (dir->inode->get_parent_dn() &&
-	   dir->inode->ino() != tobase) {
-    dir->inode->get_parent_dn()->make_path(s, tobase);
-    s += "/";
-  }
-  s += name;
-}
-*/
 
 /*
  * we only add ourselves to remote_parents when the linkage is
@@ -446,7 +424,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   else if (linkage.is_null()) {
     // encode nothing.
   }
-  else assert(0);  
+  else ceph_abort();
 }
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
@@ -487,7 +465,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
     }
     break;
   default: 
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -620,6 +598,6 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     case S_IFDIR: return "dir";
     case S_IFCHR: return "chr";
     case S_IFIFO: return "fifo";
-    default: assert(0); return "";
+    default: ceph_abort(); return "";
   }
 }

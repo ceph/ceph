@@ -10,13 +10,11 @@
 #include "include/stringify.h"
 #include "include/types.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
 #include "common/Cond.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "json_spirit/json_spirit.h"
+#include "test/unit.h"
 
 #include "osd/HitSet.h"
 
@@ -2286,12 +2284,16 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
     c->wait_for_complete();
     c->release();
 
-    //std::cout << "bl len is " << bl.length() << "\n";
-    //bl.hexdump(std::cout);
-    //std::cout << std::endl;
-
-    bufferlist::iterator p = bl.begin();
-    ::decode(hitsets[i], p);
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(hitsets[i], p);
+    }
+    catch (buffer::error& e) {
+      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
+      bl.hexdump(std::cout);
+      std::cout << std::endl;
+      throw e;
+    }
 
     // cope with racing splits by refreshing pg_num
     if (i == num_pg - 1)
@@ -5346,18 +5348,4 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
-}
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args),
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
 }

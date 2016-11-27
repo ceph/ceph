@@ -66,7 +66,7 @@ BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cb
 #endif
 
   derr << __func__ << " unknown backend " << type << dendl;
-  assert(0);
+  ceph_abort();
   return NULL;
 }
 

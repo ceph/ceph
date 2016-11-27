@@ -1280,11 +1280,12 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   return out << ")";
 }
 
-BlueStore::SharedBlob::SharedBlob(uint64_t i, const string& k, Cache *c)
+BlueStore::SharedBlob::SharedBlob(uint64_t i, Cache *c)
   : sbid(i),
-    key(k),
     bc(c)
 {
+  assert(sbid > 0);
+  get_shared_blob_key(sbid, &key);
 }
 
 BlueStore::SharedBlob::~SharedBlob()
@@ -1850,7 +1851,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
 	denc_varint_lowz(p->length, app);
       }
-      pos = p->logical_offset + p->length;
+      pos = p->logical_end();
       if (include_blob) {
 	p->blob->encode(app, false);
       }
@@ -2076,7 +2077,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
     --fp;
-    if (fp->logical_offset + fp->length <= offset) {
+    if (fp->logical_end() <= offset) {
       ++fp;
     }
   }
@@ -2123,7 +2124,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       break;  // stop after end
     }
     while (n != extent_map.end() &&
-	   p->logical_offset + p->length == n->logical_offset &&
+	   p->logical_end() == n->logical_offset &&
 	   p->blob == n->blob &&
 	   p->blob_offset + p->length == n->blob_offset &&
 	   n->logical_offset < shard_end) {
@@ -2147,6 +2148,9 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
       }
     }
   }
+  if (removed && onode) {
+    onode->c->store->logger->inc(l_bluestore_extent_compress, removed);
+  }
   return removed;
 }
 
@@ -2162,7 +2166,7 @@ void BlueStore::ExtentMap::punch_hole(
       break;
     }
     if (p->logical_offset < offset) {
-      if (p->logical_offset + p->length > end) {
+      if (p->logical_end() > end) {
 	// split and deref middle
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
@@ -2175,7 +2179,7 @@ void BlueStore::ExtentMap::punch_hole(
 	break;
       } else {
 	// deref tail
-	assert(p->logical_offset + p->length > offset); // else seek_lextent bug
+	assert(p->logical_end() > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
 	old_extents->insert(*new Extent(offset, p->blob_offset + keep,
 					p->length - keep,  p->blob));
@@ -2192,7 +2196,7 @@ void BlueStore::ExtentMap::punch_hole(
       continue;
     }
     // deref head
-    uint64_t keep = (p->logical_offset + p->length) - end;
+    uint64_t keep = p->logical_end() - end;
     old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				    p->length - keep, p->blob));
     add(end, p->blob_offset + p->length - keep, keep, p->blob);
@@ -2291,7 +2295,7 @@ void BlueStore::Collection::open_shared_blob(BlobRef b)
   assert(!b->shared_blob);
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
-    b->shared_blob = new SharedBlob(0, string(), cache);
+    b->shared_blob = new SharedBlob(cache);
     return;
   }
 
@@ -2300,8 +2304,7 @@ void BlueStore::Collection::open_shared_blob(BlobRef b)
     dout(10) << __func__ << " sbid 0x" << std::hex << blob.sbid << std::dec
 	     << " had " << *b->shared_blob << dendl;
   } else {
-    b->shared_blob = new SharedBlob(blob.sbid, string(), cache);
-    get_shared_blob_key(blob.sbid, &b->shared_blob->key);
+    b->shared_blob = new SharedBlob(blob.sbid, cache);
     shared_blob_set.add(b->shared_blob.get());
     dout(10) << __func__ << " sbid 0x" << std::hex << blob.sbid << std::dec
 	     << " opened " << *b->shared_blob << dendl;
@@ -2359,7 +2362,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     if (!oid.match(cnode.bits, pgid.ps())) {
       derr << __func__ << " oid " << oid << " not part of " << pgid
 	   << " bits " << cnode.bits << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -2640,6 +2643,8 @@ void BlueStore::_init_logger()
     "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
+  b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
+    "Average commit latency");
   b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
     "Average compress latency");
   b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
@@ -2711,12 +2716,10 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_gc, "bluestore_gc",
-            "Sum for garbage collection reads");
-  b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes",
-            "garbage collected bytes");
   b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
             "Sum for blob splitting due to resharding");
+  b.add_u64(l_bluestore_extent_compress, "bluestore_extent_compress",
+            "Sum for extents that have been removed due to compression");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -6198,6 +6201,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
+	txc->had_ios = true;
 	_txc_aio_submit(txc);
 	return;
       }
@@ -6210,6 +6214,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_IO_DONE:
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      if (txc->had_ios) {
+	++txc->osr->txc_with_unstable_io;
+      }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       for (auto& sb : txc->shared_blobs_written) {
@@ -6230,6 +6237,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  // sequencer that is committing serially it is possible to keep
 	  // submitting new transactions fast enough that we get stuck doing
 	  // so.  the alternative is to block here... fixme?
+	} else if (txc->osr->txc_with_unstable_io) {
+	  dout(20) << __func__ << " prior txc(s) with unstable ios "
+		   << txc->osr->txc_with_unstable_io.load() << dendl;
 	} else if (g_conf->bluestore_debug_randomize_serial_transaction &&
 		   rand() % g_conf->bluestore_debug_randomize_serial_transaction
 		   == 0) {
@@ -6237,7 +6247,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 		   << dendl;
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
-	  txc->kv_submitted = true;
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
@@ -6246,13 +6256,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
-	if (!txc->kv_submitted) {
+	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
 	}
       }
       return;
-    case TransContext::STATE_KV_QUEUED:
+    case TransContext::STATE_KV_SUBMITTED:
       txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
@@ -6427,6 +6437,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
   }
   unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->oncommit) {
+    logger->tinc(l_bluestore_commit_lat, ceph_clock_now(g_ceph_context) - txc->start);
     finishers[n]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
@@ -6442,6 +6453,17 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
 
   throttle_ops.put(txc->ops);
   throttle_bytes.put(txc->bytes);
+}
+
+void BlueStore::BSPerfTracker::update_from_perfcounters(
+  PerfCounters &logger)
+{
+  os_commit_latency.consume_next(
+    logger.get_tavg_ms(
+      l_bluestore_commit_lat));
+  os_apply_latency.consume_next(
+    logger.get_tavg_ms(
+      l_bluestore_commit_lat));
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
@@ -6559,6 +6581,11 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     fm->release(p.get_start(), p.get_len(), t);
   }
 
+  _txc_update_store_statfs(txc);
+}
+
+void BlueStore::_txc_release_alloc(TransContext *txc)
+{
   // update allocator with full released set
   if (!g_conf->bluestore_debug_no_reuse_blocks) {
     for (interval_set<uint64_t>::iterator p = txc->released.begin();
@@ -6570,7 +6597,6 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 
   txc->allocated.clear();
   txc->released.clear();
-  _txc_update_store_statfs(txc);
 }
 
 void BlueStore::_kv_sync_thread()
@@ -6634,13 +6660,19 @@ void BlueStore::_kv_sync_thread()
 	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
       }
       for (auto txc : kv_submitting) {
-	assert(!txc->kv_submitted);
+	assert(txc->state == TransContext::STATE_KV_QUEUED);
 	_txc_finalize_kv(txc, txc->t);
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	int r = db->submit_transaction(txc->t);
 	assert(r == 0);
 	--txc->osr->kv_committing_serially;
-	txc->kv_submitted = true;
+	txc->state = TransContext::STATE_KV_SUBMITTED;
+      }
+      for (auto txc : kv_committing) {
+	_txc_release_alloc(txc);
+	if (txc->had_ios) {
+	  --txc->osr->txc_with_unstable_io;
+	}
       }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
@@ -6692,7 +6724,7 @@ void BlueStore::_kv_sync_thread()
 	       << " in " << dur << dendl;
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
-	assert(txc->kv_submitted);
+	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
@@ -7220,7 +7252,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     default:
       derr << __func__ << "bad op " << op->op << dendl;
-      assert(0);
+      ceph_abort();
     }
 
   endop:

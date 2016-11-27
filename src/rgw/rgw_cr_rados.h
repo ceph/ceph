@@ -22,11 +22,9 @@ public:
   RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn), retcode(0),
                                                                                done(false), lock("RGWAsyncRadosRequest::lock") {
     notifier->get();
-    caller->get();
   }
   virtual ~RGWAsyncRadosRequest() {
     notifier->put();
-    caller->put();
   }
 
   void send_request() {
@@ -68,7 +66,7 @@ protected:
 
     bool _enqueue(RGWAsyncRadosRequest *req);
     void _dequeue(RGWAsyncRadosRequest *req) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty();
     RGWAsyncRadosRequest *_dequeue();

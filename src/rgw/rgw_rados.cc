@@ -3334,9 +3334,9 @@ int RGWRados::convert_regionmap()
 {
   RGWZoneGroupMap zonegroupmap;
 
-  string pool_name = cct->_conf->rgw_zone_root_pool;
+  string pool_name = cct->_conf->rgw_region_root_pool;
   if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+    pool_name = RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
   }
   string oid = region_map_oid; 
 
@@ -7099,12 +7099,20 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   boost::optional<RGWPutObj_Compress> compressor;
+  CompressorRef plugin;
 
   RGWPutObjDataProcessor *filter = &processor;
-  bool compression_enabled = cct->_conf->rgw_compression_type != "none";
-  if (compression_enabled) {
-    compressor = boost::in_place(cct, filter);
-    filter = &*compressor;
+
+  const auto& compression_type = cct->_conf->rgw_compression_type;
+  if (compression_type != "none") {
+    plugin = Compressor::create(cct, compression_type);
+    if (!plugin) {
+      ldout(cct, 1) << "Cannot load plugin for rgw_compression_type "
+          << compression_type << dendl;
+    } else {
+      compressor = boost::in_place(cct, plugin, filter);
+      filter = &*compressor;
+    }
   }
 
   RGWRadosPutObj cb(cct, filter, &processor, opstate, progress_cb, progress_data);
@@ -7171,10 +7179,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 	}
       }
     }
-    if (compression_enabled && compressor->is_compressed()) {
+    if (compressor && compressor->is_compressed()) {
       bufferlist tmp;
       RGWCompressionInfo cs_info;
-      cs_info.compression_type = cct->_conf->rgw_compression_type;
+      cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = cb.get_data_len();
       cs_info.blocks = move(compressor->get_compression_blocks());
       ::encode(cs_info, tmp);
@@ -7849,6 +7857,10 @@ int RGWRados::Object::complete_atomic_modification()
 
   cls_rgw_obj_chain chain;
   store->update_gc_chain(obj, state->manifest, &chain);
+
+  if (chain.empty()) {
+    return 0;
+  }
 
   string tag = state->obj_tag.to_str();
   return store->gc->send_chain(chain, tag, false);  // do it async

@@ -22,7 +22,7 @@ source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 getjson="no"
 
 termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
-if test -n "$termwidth" ; then termwidth="-W ${termwidth}"; fi
+if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
 
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
 jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
@@ -72,7 +72,7 @@ function TEST_corrupt_and_repair_replicated() {
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
 
-    add_something $dir $poolname
+    add_something $dir $poolname || return 1
     corrupt_and_repair_one $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
     # Reproduces http://tracker.ceph.com/issues/8914
     corrupt_and_repair_one $dir $poolname $(get_primary $poolname SOMETHING) || return 1
@@ -152,7 +152,7 @@ function corrupt_and_repair_erasure_coded() {
         || return 1
     wait_for_clean || return 1
 
-    add_something $dir $poolname
+    add_something $dir $poolname || return 1
 
     local primary=$(get_primary $poolname SOMETHING)
     local -a osds=($(get_osds $poolname SOMETHING | sed -e "s/$primary//"))
@@ -272,7 +272,7 @@ function TEST_unfound_erasure_coded() {
       || return 1
     wait_for_clean || return 1
 
-    add_something $dir $poolname
+    add_something $dir $poolname || return 1
 
     local primary=$(get_primary $poolname SOMETHING)
     local -a osds=($(get_osds $poolname SOMETHING | sed -e "s/$primary//"))
@@ -393,7 +393,7 @@ function TEST_corrupt_scrub_replicated() {
 
     for i in $(seq 1 $total_objs) ; do
         objname=ROBJ${i}
-        add_something $dir $poolname $objname
+        add_something $dir $poolname $objname || return 1
 
         rados --pool $poolname setomapheader $objname hdr-$objname || return 1
         rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
@@ -1513,7 +1513,7 @@ function TEST_corrupt_scrub_erasure() {
 
     for i in $(seq 1 $total_objs) ; do
         objname=EOBJ${i}
-        add_something $dir $poolname $objname
+        add_something $dir $poolname $objname || return 1
 
         local osd=$(expr $i % 2)
 

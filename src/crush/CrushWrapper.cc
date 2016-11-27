@@ -1185,7 +1185,7 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
       break;
 
     default:
-      assert(0);
+      ceph_abort();
       break;
     }
   }
@@ -1414,7 +1414,7 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
 
   default:
     // We should have handled this case in the first switch statement
-    assert(0);
+    ceph_abort();
     break;
   }
 }

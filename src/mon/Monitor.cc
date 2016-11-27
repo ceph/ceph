@@ -3851,6 +3851,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     // OSDs
     case CEPH_MSG_MON_GET_OSDMAP:
+    case CEPH_MSG_POOLOP:
     case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
@@ -3876,10 +3877,6 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_PGMAP]->dispatch(op);
-      break;
-
-    case CEPH_MSG_POOLOP:
-      paxos_service[PAXOS_OSDMAP]->dispatch(op);
       break;
 
     // log

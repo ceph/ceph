@@ -1348,7 +1348,7 @@ ssize_t AsyncConnection::_process_connection()
     default:
       {
         lderr(async_msgr->cct) << __func__ << " bad state: " << state << dendl;
-        assert(0);
+        ceph_abort();
       }
   }
 
@@ -1624,7 +1624,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     existing = NULL;
     goto open;
   }
-  assert(0);
+  ceph_abort();
 
  replace:
   ldout(async_msgr->cct, 10) << __func__ << " accept replacing " << existing << dendl;
@@ -1695,7 +1695,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
           cs.close();
           return ;
         } else {
-          assert(0);
+          ceph_abort();
         }
       }
 

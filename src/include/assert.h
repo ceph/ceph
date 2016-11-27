@@ -85,7 +85,7 @@ using namespace ceph;
 /*
  * ceph_abort aborts the program with a nice backtrace.
  *
- * Currently, it's the same as assert(0), but we may one day make assert a
+ * Currently, it's the same as ceph_abort(), but we may one day make assert a
  * debug-only thing, like it is in many projects.
  */
 #define ceph_abort() abort()

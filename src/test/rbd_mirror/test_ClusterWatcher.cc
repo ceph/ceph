@@ -7,6 +7,7 @@
 #include "librbd/internal.h"
 #include "tools/rbd_mirror/ClusterWatcher.h"
 #include "tools/rbd_mirror/types.h"
+#include "test/rbd_mirror/test_fixture.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>
@@ -25,7 +26,7 @@ using std::string;
 void register_test_cluster_watcher() {
 }
 
-class TestClusterWatcher : public ::testing::Test {
+class TestClusterWatcher : public ::rbd::mirror::TestFixture {
 public:
 
   TestClusterWatcher() : m_lock("TestClusterWatcherLock")

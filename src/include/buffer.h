@@ -155,7 +155,6 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
-  raw* create_dummy();
   raw* create_static(unsigned len, char *buf);
   raw* claim_buffer(unsigned len, char *buf, deleter del);
 
@@ -391,8 +390,8 @@ namespace buffer CEPH_BUFFER_API {
 	//return off == bl->length();
       }
 
-      void advance(ssize_t o);
-      void seek(size_t o);
+      void advance(int o);
+      void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
@@ -435,8 +434,8 @@ namespace buffer CEPH_BUFFER_API {
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
-      void advance(ssize_t o);
-      void seek(size_t o);
+      void advance(int o);
+      void seek(unsigned o);
       char operator*();
       iterator& operator++();
       ptr get_current_ptr();

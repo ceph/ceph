@@ -39,7 +39,7 @@ class MMDSCacheRejoin : public Message {
     case OP_WEAK: return "weak";
     case OP_STRONG: return "strong";
     case OP_ACK: return "ack";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 

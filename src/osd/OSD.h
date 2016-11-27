@@ -1936,6 +1936,7 @@ private:
     void _process(
       const list<PG *> &pgs,
       ThreadPool::TPHandle &handle) override {
+      assert(!pgs.empty());
       osd->process_peering_events(pgs, handle);
       for (list<PG *>::const_iterator i = pgs.begin();
 	   i != pgs.end();
@@ -2031,7 +2032,8 @@ protected:
 
   PGPool _get_pool(int id, OSDMapRef createmap);
 
-  PGRef get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op);
+  PGRef get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op,
+			       Session *session);
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
   PG   *_open_lock_pg(OSDMapRef createmap,
@@ -2278,7 +2280,7 @@ protected:
       return true;
     }
     void _dequeue(Command *pg) override {
-      assert(0);
+      ceph_abort();
     }
     Command *_dequeue() override {
       if (osd->command_queue.empty())
@@ -2346,7 +2348,7 @@ protected:
       remove_queue.push_front(item);
     }
     bool _dequeue(pair<PGRef, DeletingStateRef> item) {
-      assert(0);
+      ceph_abort();
     }
     pair<PGRef, DeletingStateRef> _dequeue() override {
       assert(!remove_queue.empty());

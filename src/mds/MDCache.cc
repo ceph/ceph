@@ -178,14 +178,11 @@ public:
 
 MDCache::MDCache(MDSRank *m) :
   mds(m),
-  logger(0),
   filer(m->objecter, m->finisher),
-  rejoin_done(NULL),
-  resolve_done(NULL),
   recovery_queue(m),
   stray_manager(m)
 {
-  migrator = new Migrator(mds, this);
+  migrator.reset(new Migrator(mds, this));
   root = NULL;
   myin = NULL;
   readonly = false;
@@ -227,15 +224,9 @@ MDCache::MDCache(MDSRank *m) :
 
 MDCache::~MDCache() 
 {
-  delete migrator;
   if (logger) {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = 0;
+    g_ceph_context->get_perfcounters_collection()->remove(logger.get());
   }
-
-  delete rejoin_done; rejoin_done = NULL;
-  delete resolve_done; resolve_done = NULL;
 }
 
 
@@ -584,7 +575,7 @@ struct C_MDS_RetryOpenRoot : public MDSInternalContext {
       // it is not okay to call suicide() here because we are in
       // a Finisher callback.
       cache->mds->damaged();
-      assert(0);  // damaged should never return
+      ceph_abort();  // damaged should never return
     } else {
       cache->open_root();
     }
@@ -2699,8 +2690,8 @@ void MDCache::dump_resolve_status(Formatter *f) const
 void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
   dout(10) << "resolve_start" << dendl;
-  assert(resolve_done == NULL);
-  resolve_done = resolve_done_;
+  assert(!resolve_done);
+  resolve_done.reset(resolve_done_);
 
   if (mds->mdsmap->get_root() != mds->get_nodeid()) {
     // if we don't have the root dir, adjust it to UNKNOWN.  during
@@ -3317,12 +3308,12 @@ void MDCache::maybe_resolve_finish()
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
   disambiguate_imports();
   finish_committed_masters();
-  if (mds->is_resolve()) {
+
+  if (resolve_done) {
+    assert(mds->is_resolve());
     trim_unlinked_inodes();
     recalc_auth_bits(false);
-    assert(resolve_done != NULL);
-    resolve_done->complete(0);
-    resolve_done = NULL;
+    resolve_done.release()->complete(0);
   } else {
     maybe_send_pending_rejoins();
   }
@@ -3401,7 +3392,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 	mds->server->do_rmdir_rollback(su->rollback, from, null_ref);
 	break;
       default:
-	assert(0);
+	ceph_abort();
       }
     } else {
       MDRequestRef mdr = request_get(*p);
@@ -3904,8 +3895,8 @@ void MDCache::dump_rejoin_status(Formatter *f) const
 void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
   dout(10) << "rejoin_start" << dendl;
-  assert(rejoin_done == NULL);
-  rejoin_done = rejoin_done_;
+  assert(!rejoin_done);
+  rejoin_done.reset(rejoin_done_);
 
   rejoin_gather = recovery_set;
   // need finish opening cap inodes before sending cache rejoins
@@ -4253,7 +4244,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
     break;
 
   default: 
-    assert(0);
+    ceph_abort();
   }
   m->put();
 }
@@ -5790,9 +5781,8 @@ void MDCache::open_snap_parents()
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
 
-    assert(rejoin_done != NULL);
-    rejoin_done->complete(0);
-    rejoin_done = NULL;
+    assert(rejoin_done);
+    rejoin_done.release()->complete(0);
     reconnected_caps.clear();
   }
 }
@@ -6146,7 +6136,11 @@ void MDCache::identify_files_to_recover()
     }
 
     if (recover) {
-      in->auth_pin(&in->filelock);
+      if (in->filelock.is_stable()) {
+	in->auth_pin(&in->filelock);
+      } else {
+	assert(in->filelock.get_state() == LOCK_XLOCKSNAP);
+      }
       in->filelock.set_state(LOCK_PRE_SCAN);
       rejoin_recover_q.push_back(in);
     } else {
@@ -6158,6 +6152,8 @@ void MDCache::identify_files_to_recover()
 void MDCache::start_files_to_recover()
 {
   for (CInode *in : rejoin_check_q) {
+    if (in->filelock.get_state() == LOCK_XLOCKSNAP)
+      mds->locker->issue_caps(in);
     mds->locker->check_inode_max_size(in);
   }
   rejoin_check_q.clear();
@@ -6181,6 +6177,17 @@ void MDCache::do_file_recover()
 // ----------------------------
 // truncate
 
+class C_MDC_RetryTruncate : public MDCacheContext {
+  CInode *in;
+  LogSegment *ls;
+public:
+  C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegment *l) :
+    MDCacheContext(c), in(i), ls(l) {}
+  void finish(int r) {
+    mdcache->_truncate_inode(in, ls);
+  }
+};
+
 void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 {
   inode_t *pi = in->get_projected_inode();
@@ -6191,6 +6198,15 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
+  in->auth_pin(this);
+
+  if (!in->client_need_snapflush.empty() &&
+      (in->get_caps_issued() & CEPH_CAP_FILE_BUFFER)) {
+    assert(in->filelock.is_xlocked());
+    in->filelock.set_xlock_snap_sync(new C_MDC_RetryTruncate(this, in, ls));
+    mds->locker->issue_caps(in);
+    return;
+  }
 
   _truncate_inode(in, ls);
 }
@@ -6218,7 +6234,6 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   assert(pi->truncate_from < (1ULL << 63));
   assert(pi->truncate_size < pi->truncate_from);
 
-  in->auth_pin(this);
 
   SnapRealm *realm = in->find_snaprealm();
   SnapContext nullsnap;
@@ -6328,8 +6343,21 @@ void MDCache::start_recovered_truncates()
     LogSegment *ls = p->second;
     for (set<CInode*>::iterator q = ls->truncating_inodes.begin();
 	 q != ls->truncating_inodes.end();
-	 ++q)
-      _truncate_inode(*q, ls);
+	 ++q) {
+      CInode *in = *q;
+      in->auth_pin(this);
+
+      if (!in->client_need_snapflush.empty() &&
+	  (in->get_caps_issued() & CEPH_CAP_FILE_BUFFER)) {
+	assert(in->filelock.is_stable());
+	in->filelock.set_state(LOCK_XLOCKDONE);
+	in->auth_pin(&in->filelock);
+	in->filelock.set_xlock_snap_sync(new C_MDC_RetryTruncate(this, in, ls));
+	// start_files_to_recover will revoke caps
+	continue;
+      }
+      _truncate_inode(in, ls);
+    }
   }
 }
 
@@ -7774,7 +7802,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     if (MDS_INO_IS_MDSDIR(path.get_ino())) 
       open_foreign_mdsdir(path.get_ino(), _get_waiter(mdr, req, fin));
     else {
-      //assert(0);  // hrm.. broken
+      //ceph_abort();  // hrm.. broken
       return -ESTALE;
     }
     return 1;
@@ -7981,7 +8009,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
 	    dn = NULL;
 	  } else if (dn) {
-	    assert(0); // should have fallen out in ->is_null() check above
+	    ceph_abort(); // should have fallen out in ->is_null() check above
 	  } else if (curdir->is_frozen()) {
 	    dout(20) << " not adding null to frozen dir " << dendl;
 	  } else if (snapid < CEPH_MAXSNAP) {
@@ -8058,7 +8086,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       }    
     }
     
-    assert(0);  // i shouldn't get here
+    ceph_abort();  // i shouldn't get here
   }
   
   // success.
@@ -8195,7 +8223,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
           dn->get_projected_linkage()->get_remote_ino());
       if (fatal) {
         mds->damaged();
-        assert(0);  // unreachable, damaged() respawns us
+        ceph_abort();  // unreachable, damaged() respawns us
       }
   }
   fin->complete(r < 0 ? r : 0);
@@ -8999,7 +9027,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       repair_inode_stats_work(mdr);
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
 }
@@ -9310,7 +9338,7 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   /*
   static int count = 5;
   if (--count == 0)
-    assert(0);  // hack test test **********
+    ceph_abort();  // hack test test **********
   */
 
   // done.
@@ -10290,7 +10318,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
       ::encode(ino, m->bl);
       ::encode(d_type, m->bl);
     } else
-      assert(0);   // aie, bad caller!
+      ceph_abort();   // aie, bad caller!
     mds->send_message_mds(m, p->first);
   }
 }
@@ -10331,7 +10359,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
       dir->link_remote_inode(dn, ino, d_type);
     }
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   if (!finished.empty())
@@ -10904,7 +10932,7 @@ bool MDCache::fragment_are_all_frozen(CDir *dir)
     if (p->first.frag.contains(dir->get_frag()))
       return p->second.all_frozen;
   }
-  assert(0);
+  ceph_abort();
   return false;
 }
 
@@ -10919,7 +10947,7 @@ void MDCache::fragment_freeze_inc_num_waiters(CDir *dir)
       return;
     }
   }
-  assert(0);
+  ceph_abort();
 }
 
 void MDCache::find_stale_fragment_freeze()
@@ -11334,7 +11362,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 
     mds->queue_waiters(waiters);
   } else {
-    assert(0);
+    ceph_abort();
   }
 
   notify->put();
@@ -12200,10 +12228,10 @@ void MDCache::register_perfcounters()
     pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
         "File recoveries completed", "recd");
 
-    logger = pcb.create_perf_counters();
-    g_ceph_context->get_perfcounters_collection()->add(logger);
-    recovery_queue.set_logger(logger);
-    stray_manager.set_logger(logger);
+    logger.reset(pcb.create_perf_counters());
+    g_ceph_context->get_perfcounters_collection()->add(logger.get());
+    recovery_queue.set_logger(logger.get());
+    stray_manager.set_logger(logger.get());
 }
 
 /**

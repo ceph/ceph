@@ -59,6 +59,7 @@ enum {
   l_bluestore_state_wal_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_commit_lat,
   l_bluestore_compress_lat,
   l_bluestore_decompress_lat,
   l_bluestore_csum_lat,
@@ -93,9 +94,8 @@ enum {
   l_bluestore_write_small_new,
   l_bluestore_txc,
   l_bluestore_onode_reshard,
-  l_bluestore_gc,
-  l_bluestore_gc_bytes,
   l_bluestore_blob_split,
+  l_bluestore_extent_compress,
   l_bluestore_last
 };
 
@@ -339,7 +339,8 @@ public:
 
     BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(uint64_t i, const string& k, Cache *c);
+    SharedBlob(Cache *c) : bc(c) {}
+    SharedBlob(uint64_t i, Cache *c);
     ~SharedBlob();
 
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
@@ -608,7 +609,7 @@ public:
       return blob_start() + blob->get_blob().get_logical_length();
     }
 
-    uint32_t end() const {
+    uint32_t logical_end() const {
       return logical_offset + length;
     }
 
@@ -1116,7 +1117,7 @@ public:
 
     BlobRef new_blob() {
       BlobRef b = new Blob;
-      b->shared_blob = new SharedBlob(0, string(), cache);
+      b->shared_blob = new SharedBlob(cache);
       return b;
     }
 
@@ -1168,8 +1169,8 @@ public:
       STATE_PREPARE,
       STATE_AIO_WAIT,
       STATE_IO_DONE,
-      STATE_KV_QUEUED,
-      STATE_KV_COMMITTING,
+      STATE_KV_QUEUED,     // queued for kv_sync_thread submission
+      STATE_KV_SUBMITTED,  // submitted to kv; not yet synced
       STATE_KV_DONE,
       STATE_WAL_QUEUED,
       STATE_WAL_APPLYING,
@@ -1188,7 +1189,7 @@ public:
       case STATE_AIO_WAIT: return "aio_wait";
       case STATE_IO_DONE: return "io_done";
       case STATE_KV_QUEUED: return "kv_queued";
-      case STATE_KV_COMMITTING: return "kv_committing";
+      case STATE_KV_SUBMITTED: return "kv_submitted";
       case STATE_KV_DONE: return "kv_done";
       case STATE_WAL_QUEUED: return "wal_queued";
       case STATE_WAL_APPLYING: return "wal_applying";
@@ -1203,9 +1204,10 @@ public:
 
     void log_state_latency(PerfCounters *logger, int state) {
       utime_t lat, now = ceph_clock_now(g_ceph_context);
-      lat = now - start;
+      lat = now - last_stamp;
       logger->tinc(state, lat);
       start = now;
+      last_stamp = now;
     }
 
     OpSequencerRef osr;
@@ -1226,8 +1228,6 @@ public:
 
     boost::intrusive::list_member_hook<> wal_queue_item;
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
-
-    bool kv_submitted = false; ///< true when we've been submitted to kv db
 
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
@@ -1283,11 +1283,13 @@ public:
 
 
     IOContext ioc;
+    bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
     CollectionRef first_collection;  ///< first referenced collection
 
     uint64_t seq = 0;
     utime_t start;
+    utime_t last_stamp;
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
@@ -1303,6 +1305,7 @@ public:
 	wal_txn(NULL),
 	ioc(this),
 	start(ceph_clock_now(g_ceph_context)) {
+        last_stamp = start;
     }
     ~TransContext() {
       delete wal_txn;
@@ -1343,6 +1346,8 @@ public:
     std::mutex wal_apply_mutex;
 
     uint64_t last_seq = 0;
+
+    std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
 
     std::atomic_int kv_committing_serially = {0};
 
@@ -1542,7 +1547,7 @@ private:
   size_t block_size_order; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  uint64_t min_min_alloc_size = 0; /// < minimum seen min_alloc_size
+  uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
   uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
@@ -1651,13 +1656,14 @@ private:
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
-  void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
 public:
   void _txc_aio_finish(void *p) {
     _txc_state_proc(static_cast<TransContext*>(p));
   }
 private:
   void _txc_finish_io(TransContext *txc);
+  void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
+  void _txc_release_alloc(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
 
@@ -1904,8 +1910,23 @@ public:
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
+  struct BSPerfTracker {
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+
+    objectstore_perf_stat_t get_cur_stats() const {
+      objectstore_perf_stat_t ret;
+      ret.os_commit_latency = os_commit_latency.avg();
+      ret.os_apply_latency = os_apply_latency.avg();
+      return ret;
+    }
+
+    void update_from_perfcounters(PerfCounters &logger);
+  } perf_tracker;
+
   objectstore_perf_stat_t get_cur_stats() override {
-    return objectstore_perf_stat_t();
+    perf_tracker.update_from_perfcounters(*logger);
+    return perf_tracker.get_cur_stats();
   }
 
   int queue_transactions(

@@ -839,6 +839,7 @@ OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_randomize_hobject_sort_order, OPT_BOOL, false)
+OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
@@ -928,6 +929,9 @@ OPTION(osd_max_object_name_len, OPT_U32, 2048) // max rados object name len
 OPTION(osd_max_object_namespace_len, OPT_U32, 256) // max rados object namespace len
 OPTION(osd_max_attr_name_len, OPT_U32, 100)    // max rados attr name len; cannot go higher than 100 chars for file system backends
 OPTION(osd_max_attr_size, OPT_U64, 0)
+
+OPTION(osd_max_omap_entries_per_request, OPT_U64, 131072)
+OPTION(osd_max_omap_bytes_per_request, OPT_U64, 4<<20)
 
 OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 OPTION(osd_objectstore_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
@@ -1445,6 +1449,7 @@ OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
 OPTION(rgw_default_zone_info_oid, OPT_STR, "default.zone")  // oid where default zone info is stored
 OPTION(rgw_region, OPT_STR, "") // region name
+OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
 OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
 OPTION(rgw_zonegroup, OPT_STR, "") // zone group name
 OPTION(rgw_zonegroup_root_pool, OPT_STR, ".rgw.root")  // pool where all zone group info is stored
