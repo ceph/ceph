@@ -356,7 +356,7 @@ static T vec_stddev(vector<T>& v)
 int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 				     uint64_t *op_size, uint64_t* object_size,
 				     int* num_objects, int* num_writes,
-                                     int* prevPid) {
+				     int* prevPid) {
   int r = 0;
   bufferlist object_data;
 
