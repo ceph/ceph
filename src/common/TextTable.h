@@ -11,6 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#ifndef TEXT_TABLE_H_
+#define TEXT_TABLE_H_
+
 #include <vector>
 #include <sstream>
 #include <iomanip>
@@ -49,9 +53,11 @@ private:
   };
 
   std::vector<TextTableColumn> col;	// column definitions
-  std::vector<std::vector<std::string> > row;	// row data array
   unsigned int curcol, currow;		// col, row being inserted into
   unsigned int indent;			// indent width when rendering
+
+protected:
+  std::vector<std::vector<std::string> > row;	// row data array
 
 public:
   TextTable(): curcol(0), currow(0), indent(0) {}
@@ -156,3 +162,6 @@ public:
 
   void clear();
 };
+
+#endif
+

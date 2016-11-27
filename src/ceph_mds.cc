@@ -50,13 +50,11 @@ using namespace std;
 
 void usage()
 {
-  cout << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
+  cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --journal-check rank\n"
-       << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
        << "        start up as a hot standby for rank\n"
        << std::endl;
@@ -93,8 +91,9 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
-	      0, "mds_data");
+  auto cct = global_init(NULL, args,
+			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
+			 0, "mds_data");
   ceph_heap_profiler_init();
 
   std::string val, action;
@@ -136,9 +135,12 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
+  uint64_t nonce = 0;
+  get_random_bytes((char*)&nonce, sizeof(nonce));
+
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
-				      getpid(), 0, Messenger::HAS_MANY_CONNECTIONS);
+				      nonce, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
@@ -226,8 +228,6 @@ int main(int argc, const char **argv)
     delete mds;
     delete msgr;
   }
-
-  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

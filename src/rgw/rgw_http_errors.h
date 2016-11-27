@@ -50,6 +50,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, 404, "NoSuchWebsiteConfiguration" },
     { ERR_NO_SUCH_UPLOAD, 404, "NoSuchUpload" },
     { ERR_NOT_FOUND, 404, "Not Found"},
+    { ERR_NO_SUCH_LC, 404, "NoSuchLifecycleConfiguration"},
     { ERR_METHOD_NOT_ALLOWED, 405, "MethodNotAllowed" },
     { ETIMEDOUT, 408, "RequestTimeout" },
     { EEXIST, 409, "BucketAlreadyExists" },
@@ -71,7 +72,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
 };
 
 const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
-    { EACCES, 401, "AccessDenied" },
+    { EACCES, 403, "AccessDenied" },
     { EPERM, 401, "AccessDenied" },
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
     { ERR_INVALID_UTF8, 412, "Invalid UTF8" },

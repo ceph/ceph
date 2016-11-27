@@ -77,8 +77,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_DAEMON,
+			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -87,7 +88,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      assert(0);
+      ceph_abort();
     } else {
       ++i;
     }
@@ -161,7 +162,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
 	  char buf[5050];
 	  string mountpoint = cfuse->get_mount_point();
-	  snprintf(buf, 5049, "fusermount -u -z %s", mountpoint.c_str());
+	  snprintf(buf, sizeof(buf), "fusermount -u -z %s", mountpoint.c_str());
 	  int umount_r = system(buf);
 	  if (umount_r) {
 	    if (umount_r != -1) {
@@ -189,6 +190,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     Messenger *messenger = NULL;
     Client *client;
     CephFuse *cfuse;
+    UserPerm perms;
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
@@ -219,7 +221,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     r = messenger->start();
     if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: ceph messenger failed with " << cpp_strerror(-r) << std::endl;
       goto out_messenger_start_failed;
     }
 
@@ -229,15 +231,16 @@ int main(int argc, const char **argv, const char *envp[]) {
     // start client
     r = client->init();
     if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: ceph client failed with " << cpp_strerror(-r) << std::endl;
       goto out_init_failed;
     }
     
     client->update_metadata("mount_point", cfuse->get_mount_point());
-
+    perms = client->pick_my_perms();
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    r = client->mount(g_conf->client_mountpoint.c_str(), g_ceph_context->_conf->fuse_require_active_mds);
+    r = client->mount(g_conf->client_mountpoint.c_str(), perms,
+		      g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
       if (r == CEPH_FUSE_NO_MDS_UP)
         cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
@@ -285,7 +288,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       foo += ::write(fd[1], &r, sizeof(r));
     }
     
-    g_ceph_context->put();
     free(newargv);
     
     delete mc;

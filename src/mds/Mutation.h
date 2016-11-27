@@ -19,7 +19,7 @@
 #include "include/elist.h"
 #include "include/filepath.h"
 
-#include "mdstypes.h"
+#include "MDSCacheObject.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"
@@ -38,8 +38,8 @@ class MMDSSlaveRequest;
 
 struct MutationImpl {
   metareqid_t reqid;
-  __u32 attempt;      // which attempt for this request
-  LogSegment *ls;  // the log segment i'm committing to
+  __u32 attempt = 0;      // which attempt for this request
+  LogSegment *ls = nullptr;  // the log segment i'm committing to
 
 private:
   utime_t mds_stamp; ///< mds-local timestamp (real time)
@@ -47,7 +47,7 @@ private:
 
 public:
   // flag mutation as slave
-  mds_rank_t slave_to_mds;                // this is a slave request if >= 0.
+  mds_rank_t slave_to_mds = MDS_RANK_NONE;  // this is a slave request if >= 0.
 
   // -- my pins and locks --
   // cache pins (so things don't expire)
@@ -67,15 +67,15 @@ public:
 
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
-  SimpleLock *locking;
-  mds_rank_t locking_target_mds;
+  SimpleLock *locking = nullptr;
+  mds_rank_t locking_target_mds = -1;
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
-  bool done_locking; 
-  bool committing;
-  bool aborted;
-  bool killed;
+  bool done_locking = false;
+  bool committing = false;
+  bool aborted = false;
+  bool killed = false;
 
   // for applying projected inode changes
   list<CInode*> projected_inodes;
@@ -86,20 +86,10 @@ public:
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl()
-    : attempt(0),
-      ls(0),
-      slave_to_mds(MDS_RANK_NONE),
-      locking(NULL),
-      locking_target_mds(-1),
-      done_locking(false), committing(false), aborted(false), killed(false) { }
+  MutationImpl() = default;
   MutationImpl(metareqid_t ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
     : reqid(ri), attempt(att),
-      ls(0),
-      slave_to_mds(slave_to), 
-      locking(NULL),
-      locking_target_mds(-1),
-      done_locking(false), committing(false), aborted(false), killed(false) { }
+      slave_to_mds(slave_to) { }
   virtual ~MutationImpl() {
     assert(locking == NULL);
     assert(pins.empty());
@@ -113,7 +103,7 @@ public:
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
   bool is_slave() const { return slave_to_mds != MDS_RANK_NONE; }
 
-  client_t get_client() {
+  client_t get_client() const {
     if (reqid.name.is_client())
       return client_t(reqid.name.num());
     return -1;
@@ -144,7 +134,7 @@ public:
   void finish_locking(SimpleLock *lock);
 
   // auth pins
-  bool is_auth_pinned(MDSCacheObject *object);
+  bool is_auth_pinned(MDSCacheObject *object) const;
   void auth_pin(MDSCacheObject *object);
   void auth_unpin(MDSCacheObject *object);
   void drop_local_auth_pins();
@@ -321,10 +311,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   ~MDRequestImpl();
   
   More* more();
-  bool has_more();
+  bool has_more() const;
   bool has_witnesses();
   bool slave_did_prepare();
-  bool did_ino_allocation();
+  bool did_ino_allocation() const;
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
@@ -343,6 +333,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   // TrackedOp stuff
   typedef ceph::shared_ptr<MDRequestImpl> Ref;
 protected:
+  void _dump(Formatter *f) const;
   void _dump_op_descriptor_unlocked(ostream& stream) const;
 };
 

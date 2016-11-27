@@ -28,6 +28,7 @@ class JournalRecorder;
 class JournalTrimmer;
 class ReplayEntry;
 class ReplayHandler;
+class Settings;
 
 class Journaler {
 public:
@@ -51,15 +52,15 @@ public:
 				       const std::string &journal_id);
 
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
-	    const std::string &client_id, double commit_interval);
+	    const std::string &client_id, const Settings &settings);
   Journaler(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
             librados::IoCtx &header_ioctx, const std::string &journal_id,
-	    const std::string &client_id, double commit_interval);
+	    const std::string &client_id, const Settings &settings);
   ~Journaler();
 
-  int exists(bool *header_exists) const;
-  int create(uint8_t order, uint8_t splay_width, int64_t pool_id);
-  int remove(bool force);
+  void exists(Context *on_finish) const;
+  void create(uint8_t order, uint8_t splay_width, int64_t pool_id, Context *ctx);
+  void remove(bool force, Context *on_finish);
 
   void init(Context *on_init);
   void shut_down();
@@ -95,6 +96,8 @@ public:
                     cls::journal::Tag *tag, Context *on_finish);
   void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
   void get_tags(uint64_t tag_class, Tags *tags, Context *on_finish);
+  void get_tags(uint64_t start_after_tag_tid, uint64_t tag_class, Tags *tags,
+                Context *on_finish);
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);
@@ -138,6 +141,7 @@ private:
   std::string m_header_oid;
   std::string m_object_oid_prefix;
 
+  bool m_initialized = false;
   JournalMetadata *m_metadata = nullptr;
   JournalPlayer *m_player = nullptr;
   JournalRecorder *m_recorder = nullptr;
@@ -145,7 +149,7 @@ private:
 
   void set_up(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
               librados::IoCtx &header_ioctx, const std::string &journal_id,
-              double commit_interval);
+              const Settings &settings);
 
   int init_complete();
   void create_player(ReplayHandler *replay_handler);

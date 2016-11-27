@@ -22,19 +22,19 @@
 #include <signal.h>
 #include <climits>
 #include <list>
+#include <mutex>
 #include <map>
 using namespace std;
 
 #include "auth/AuthSessionHandler.h"
 #include "common/ceph_time.h"
-#include "common/Mutex.h"
 #include "common/perf_counters.h"
 #include "include/buffer.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
 
 #include "Event.h"
-#include "net_handler.h"
+#include "Stack.h"
 
 class AsyncMessenger;
 class Worker;
@@ -50,17 +50,13 @@ static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
  */
 class AsyncConnection : public Connection {
 
-  ssize_t read_bulk(int fd, char *buf, unsigned len);
-  void suppress_sigpipe();
-  void restore_sigpipe();
+  ssize_t read_bulk(char *buf, unsigned len);
   ssize_t do_sendmsg(struct msghdr &msg, unsigned len, bool more);
   ssize_t try_send(bufferlist &bl, bool more=false) {
-    Mutex::Locker l(write_lock);
+    std::lock_guard<std::mutex> l(write_lock);
     outcoming_bl.claim_append(bl);
     return _try_send(more);
   }
-  // if "send" is false, it will only append bl to send buffer
-  // the main usage is avoid error happen outside messenger threads
   ssize_t _try_send(bool more=false);
   ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
@@ -77,7 +73,7 @@ class AsyncConnection : public Connection {
   void requeue_sent();
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
-  void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
+  void _append_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl, bool more);
   void inject_delay();
   ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
@@ -99,16 +95,24 @@ class AsyncConnection : public Connection {
     state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
     return 0;
   }
-  bool is_queued() {
-    assert(write_lock.is_locked());
+  bool is_queued() const {
     return !out_q.empty() || outcoming_bl.length();
   }
   void shutdown_socket() {
-    if (sd >= 0)
-      ::shutdown(sd, SHUT_RDWR);
+    for (auto &&t : register_time_events)
+      center->delete_time_event(t);
+    register_time_events.clear();
+    if (last_tick_id) {
+      center->delete_time_event(last_tick_id);
+      last_tick_id = 0;
+    }
+    if (cs) {
+      center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
+      cs.shutdown();
+      cs.close();
+    }
   }
   Message *_get_next_outgoing(bufferlist *bl) {
-    assert(write_lock.is_locked());
     Message *m = 0;
     while (!m && !out_q.empty()) {
       map<int, list<pair<bufferlist, Message*> > >::reverse_iterator it = out_q.rbegin();
@@ -124,8 +128,7 @@ class AsyncConnection : public Connection {
     }
     return m;
   }
-  bool _has_next_outgoing() {
-    assert(write_lock.is_locked());
+  bool _has_next_outgoing() const {
     return !out_q.empty();
   }
   void reset_recv_state();
@@ -139,7 +142,7 @@ class AsyncConnection : public Connection {
   class DelayedDelivery : public EventCallback {
     std::set<uint64_t> register_time_events; // need to delete it if stop
     std::deque<std::pair<utime_t, Message*> > delay_queue;
-    Mutex delay_lock;
+    std::mutex delay_lock;
     AsyncMessenger *msgr;
     EventCenter *center;
     DispatchQueue *dispatch_queue;
@@ -149,23 +152,23 @@ class AsyncConnection : public Connection {
    public:
     explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
                              DispatchQueue *q, uint64_t cid)
-      : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
+      : msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
         stop_dispatch(false) { }
     ~DelayedDelivery() {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
     }
+    void set_center(EventCenter *c) { center = c; }
     void do_request(int id) override;
     void queue(double delay_period, utime_t release, Message *m) {
-      Mutex::Locker l(delay_lock);
+      std::lock_guard<std::mutex> l(delay_lock);
       delay_queue.push_back(std::make_pair(release, m));
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
       stop_dispatch = true;
       center->submit_to(center->get_id(), [this] () mutable {
-        Mutex::Locker l(delay_lock);
+        std::lock_guard<std::mutex> l(delay_lock);
         while (!delay_queue.empty()) {
           Message *m = delay_queue.front().second;
           dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
@@ -201,13 +204,13 @@ class AsyncConnection : public Connection {
     _connect();
   }
   // Only call when AsyncConnection first construct
-  void accept(int sd);
+  void accept(ConnectedSocket socket, entity_addr_t &addr);
   int send_message(Message *m) override;
 
   void send_keepalive() override;
   void mark_down() override;
   void mark_disposable() override {
-    Mutex::Locker l(lock);
+    std::lock_guard<std::mutex> l(lock);
     policy.lossy = true;
   }
   
@@ -295,15 +298,16 @@ class AsyncConnection : public Connection {
   atomic64_t ack_left, in_seq;
   int state;
   int state_after_send;
-  int sd;
+  ConnectedSocket cs;
   int port;
   Messenger::Policy policy;
 
   DispatchQueue *dispatch_queue;
 
-  Mutex write_lock;
+  std::mutex write_lock;
   enum class WriteStatus {
     NOWRITE,
+    REPLACING,
     CANWRITE,
     CLOSED
   };
@@ -314,7 +318,7 @@ class AsyncConnection : public Connection {
   bufferlist outcoming_bl;
   bool keepalive;
 
-  Mutex lock;
+  std::mutex lock;
   utime_t backoff;         // backoff time
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
@@ -345,6 +349,7 @@ class AsyncConnection : public Connection {
   // Connecting state
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
+  bufferlist authorizer_buf;
   ceph_msg_connect_reply connect_reply;
   // Accepting state
   entity_addr_t socket_addr;
@@ -362,16 +367,9 @@ class AsyncConnection : public Connection {
   char *state_buffer;
   // used only by "read_until"
   uint64_t state_offset;
-  NetHandler net;
   Worker *worker;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
-
-#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
-  sigset_t sigpipe_mask;
-  bool sigpipe_pending;
-  bool sigpipe_unblock;
-#endif
 
  public:
   // used by eventcallback
@@ -381,18 +379,15 @@ class AsyncConnection : public Connection {
   void tick(uint64_t id);
   void local_deliver();
   void stop(bool queue_reset) {
-    lock.Lock();
+    lock.lock();
     bool need_queue_reset = (state != STATE_CLOSED) && queue_reset;
-    lock.Unlock();
-    mark_down();
+    _stop();
+    lock.unlock();
     if (need_queue_reset)
       dispatch_queue->queue_reset(this);
   }
-  void cleanup_handler() {
-    for (auto &&t : register_time_events)
-      center->delete_time_event(t);
-    register_time_events.clear();
-    center->delete_time_event(last_tick_id);
+  void cleanup() {
+    shutdown_socket();
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;

@@ -32,6 +32,18 @@
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
 
+class Beacon::C_MDS_BeaconSender : public Context {
+public:
+  explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
+  void finish(int r) {
+    assert(beacon->lock.is_locked_by_me());
+    beacon->sender = NULL;
+    beacon->_send();
+  }
+private:
+  Beacon *beacon;
+};
+
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
   name(name_), standby_for_rank(MDS_RANK_NONE),
@@ -215,6 +227,7 @@ void Beacon::_send()
   if (want_state == MDSMap::STATE_BOOT) {
     map<string, string> sys_info;
     collect_sys_info(&sys_info, cct);
+    sys_info["addr"] = stringify(monc->get_myaddr());
     beacon->set_sys_info(sys_info);
   }
   monc->send_mon_message(beacon);
@@ -384,8 +397,10 @@ void Beacon::notify_health(MDSRank const *mds)
   {
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
+
     utime_t cutoff = ceph_clock_now(g_ceph_context);
     cutoff -= g_conf->mds_recall_state_timeout;
+    utime_t last_recall = mds->mdcache->last_recall_state;
 
     std::list<MDSHealthMetric> late_recall_metrics;
     std::list<MDSHealthMetric> large_completed_requests_metrics;
@@ -395,7 +410,10 @@ void Beacon::notify_health(MDSRank const *mds)
         dout(20) << "Session servicing RECALL " << session->info.inst
           << ": " << session->recalled_at << " " << session->recall_release_count
           << "/" << session->recall_count << dendl;
-        if (session->recalled_at < cutoff) {
+	if (last_recall < cutoff || session->last_recall_sent < last_recall) {
+	  dout(20) << "  no longer recall" << dendl;
+	  session->clear_recalled_at();
+	} else if (session->recalled_at < cutoff) {
           dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
           std::ostringstream oss;
 	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
@@ -460,6 +478,18 @@ void Beacon::notify_health(MDSRank const *mds)
   if (mds->mdcache->is_readonly()) {
     MDSHealthMetric m(MDS_HEALTH_READ_ONLY, HEALTH_WARN,
                       "MDS in read-only mode");
+    health.metrics.push_back(m);
+  }
+
+  // Report if we have significantly exceeded our cache size limit
+  if (mds->mdcache->get_num_inodes() > g_conf->mds_cache_size * 1.5) {
+    std::ostringstream oss;
+    oss << "Too many inodes in cache (" << mds->mdcache->get_num_inodes()
+        << "/" << g_conf->mds_cache_size << "), "
+        << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
+        << mds->mdcache->get_num_strays() << " stray files";
+
+    MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, oss.str());
     health.metrics.push_back(m);
   }
 }

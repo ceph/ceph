@@ -117,7 +117,8 @@ function test_setup() {
 function teardown() {
     local dir=$1
     kill_daemons $dir KILL
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ `uname` != FreeBSD ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
     rm -fr $dir
@@ -214,7 +215,7 @@ function test_kill_daemon() {
         # kill the mon and verify it cannot be reached
         #
         kill_daemon $pidfile TERM || return 1
-        ! ceph --connect-timeout 60 status || return 1
+        ! timeout 60 ceph --connect-timeout 60 status || return 1
     done
 
     teardown $dir || return 1
@@ -290,7 +291,7 @@ function test_kill_daemons() {
     # kill the mon and verify it cannot be reached
     #
     kill_daemons $dir TERM || return 1
-    ! ceph --connect-timeout 60 status || return 1
+    ! timeout 60 ceph --connect-timeout 60 status || return 1
     teardown $dir || return 1
 }
 
@@ -368,6 +369,7 @@ function run_mon() {
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
+	--mon-allow-pool-delete \
         "$@" || return 1
 
     cat > $dir/ceph.conf <<EOF
@@ -608,8 +610,6 @@ function activate_osd() {
         $osd_data || return 1
 
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
-
-    ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
     wait_for_osd up $id || return 1
 }
@@ -1027,8 +1027,9 @@ function test_get_num_pgs() {
 #
 function get_last_scrub_stamp() {
     local pgid=$1
+    local sname=${2:-last_scrub_stamp}
     ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/last_scrub_stamp" -v .
+        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/$sname" -v .
 }
 
 function test_get_last_scrub_stamp() {
@@ -1072,6 +1073,49 @@ function test_is_clean() {
 #######################################################################
 
 ##
+# Return a list of numbers that are increasingly larger and whose
+# total is **timeout** seconds. It can be used to have short sleep
+# delay while waiting for an event on a fast machine. But if running
+# very slowly the larger delays avoid stressing the machine even
+# further or spamming the logs.
+#
+# @param timeout sum of all delays, in seconds
+# @return a list of sleep delays
+#
+function get_timeout_delays() {
+    local timeout=$1
+    local first_step=${2:-1}
+
+    local i
+    local total="0"
+    i=$first_step
+    while test "$(echo $total + $i \<= $timeout | bc -l)" = "1"; do
+        echo -n "$i "
+        total=$(echo $total + $i | bc -l)
+        i=$(echo $i \* 2 | bc -l)
+    done
+    if test "$(echo $total \< $timeout | bc -l)" = "1"; then
+        echo -n $(echo $timeout - $total | bc -l)
+    fi
+}
+
+function test_get_timeout_delays() {
+    test "$(get_timeout_delays 1)" = "1 " || return 1
+    test "$(get_timeout_delays 5)" = "1 2 2" || return 1
+    test "$(get_timeout_delays 6)" = "1 2 3" || return 1
+    test "$(get_timeout_delays 7)" = "1 2 4 " || return 1
+    test "$(get_timeout_delays 8)" = "1 2 4 1" || return 1
+    test "$(get_timeout_delays 1 .1)" = ".1 .2 .4 .3" || return 1
+    test "$(get_timeout_delays 1.5 .1)" = ".1 .2 .4 .8 " || return 1
+    test "$(get_timeout_delays 5 .1)" = ".1 .2 .4 .8 1.6 1.9" || return 1
+    test "$(get_timeout_delays 6 .1)" = ".1 .2 .4 .8 1.6 2.9" || return 1
+    test "$(get_timeout_delays 6.3 .1)" = ".1 .2 .4 .8 1.6 3.2 " || return 1
+    test "$(get_timeout_delays 20 .1)" = ".1 .2 .4 .8 1.6 3.2 6.4 7.3" || return 1
+}
+
+#######################################################################
+
+##
 # Wait until the cluster becomes clean or if it does not make progress
 # for $TIMEOUT seconds.
 # Progress is measured either via the **get_is_making_recovery_progress**
@@ -1080,10 +1124,10 @@ function test_is_clean() {
 # @return 0 if the cluster is clean, 1 otherwise
 #
 function wait_for_clean() {
-    local status=1
     local num_active_clean=-1
     local cur_active_clean
-    local -i timer=0
+    local -a delays=($(get_timeout_delays $TIMEOUT .1))
+    local -i loop=0
     local num_pgs=$(get_num_pgs)
     test $num_pgs != 0 || return 1
 
@@ -1094,16 +1138,16 @@ function wait_for_clean() {
         cur_active_clean=$(get_num_active_clean)
         test $cur_active_clean = $num_pgs && break
         if test $cur_active_clean != $num_active_clean ; then
-            timer=0
+            loop=0
             num_active_clean=$cur_active_clean
         elif get_is_making_recovery_progress ; then
-            timer=0
-        elif (( timer >= $(($TIMEOUT * 10)))) ; then
+            loop=0
+        elif (( $loop >= ${#delays[*]} )) ; then
             ceph report
             return 1
         fi
-        sleep .1
-        timer=$(expr $timer + 1)
+        sleep ${delays[$loop]}
+        loop+=1
     done
     return 0
 }
@@ -1165,6 +1209,13 @@ function pg_scrub() {
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph pg scrub $pgid
     wait_for_scrub $pgid "$last_scrub"
+}
+
+function pg_deep_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
+    ceph pg deep-scrub $pgid
+    wait_for_scrub $pgid "$last_scrub" last_deep_scrub_stamp
 }
 
 function test_pg_scrub() {
@@ -1246,9 +1297,10 @@ function test_expect_failure() {
 function wait_for_scrub() {
     local pgid=$1
     local last_scrub="$2"
+    local sname=${3:-last_scrub_stamp}
 
     for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
+        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid $sname)" ; then
             return 0
         fi
         sleep 1
@@ -1284,10 +1336,17 @@ function test_wait_for_scrub() {
 
 function erasure_code_plugin_exists() {
     local plugin=$1
-
     local status
+    local grepstr
+    case `uname` in
+        FreeBSD) grepstr="Cannot open.*$plugin" ;;
+        *) grepstr="$plugin.*No such file" ;;
+    esac
+
     if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$plugin.*No such file" ; then
+        grep "$grepstr" ; then
+        # display why the string was rejected.
+        ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
         status=1
     else
         status=0
@@ -1354,7 +1413,7 @@ function run_in_background() {
     shift;
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the awk one.
-    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print PROCINFO["pid"] ": " a[i]} }'; return ${PIPESTATUS[0]}) &
+    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print "'$$': " a[i]} }'; return ${PIPESTATUS[0]}) >&2 &
     eval "$pid_variable+=\" $!\""
 }
 
@@ -1438,7 +1497,7 @@ function test_wait_background() {
 # @return 0 on success, 1 on error
 #
 function main() {
-    local dir=testdir/$1
+    local dir=td/$1
     shift
 
     shopt -s -o xtrace
@@ -1477,7 +1536,7 @@ function run_tests() {
     export CEPH_CONF=/dev/null
 
     local funcs=${@:-$(set | sed -n -e 's/^\(test_[0-9a-z_]*\) .*/\1/p')}
-    local dir=testdir/ceph-helpers
+    local dir=td/ceph-helpers
 
     for func in $funcs ; do
         $func $dir || return 1

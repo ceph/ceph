@@ -58,6 +58,7 @@ devices simultaneously.
 	Manpage rbd-replay-prep <../../man/8/rbd-replay-prep>
 	Manpage rbd-replay <../../man/8/rbd-replay>
 	Manpage rbd-replay-many <../../man/8/rbd-replay-many>
+	Manpage rbdmap <../../man/8/rbdmap>
 	librbd <librbdpy>
 	
 	

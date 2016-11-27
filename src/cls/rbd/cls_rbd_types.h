@@ -4,12 +4,16 @@
 #ifndef CEPH_CLS_RBD_TYPES_H
 #define CEPH_CLS_RBD_TYPES_H
 
+#include <boost/variant.hpp>
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/stringify.h"
 #include "include/utime.h"
 #include <iosfwd>
 #include <string>
+
+#define RBD_GROUP_REF "rbd_group_ref"
 
 namespace ceph { class Formatter; }
 
@@ -17,12 +21,31 @@ namespace cls {
 namespace rbd {
 
 static const uint32_t MAX_OBJECT_MAP_OBJECT_COUNT = 256000000;
+static const string RBD_GROUP_IMAGE_KEY_PREFIX = "image_";
 
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
   MIRROR_MODE_POOL     = 2
 };
+
+enum GroupImageLinkState {
+  GROUP_IMAGE_LINK_STATE_ATTACHED,
+  GROUP_IMAGE_LINK_STATE_INCOMPLETE
+};
+
+inline void encode(const GroupImageLinkState &state, bufferlist& bl,
+		   uint64_t features=0)
+{
+  ::encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(GroupImageLinkState &state, bufferlist::iterator& it)
+{
+  uint8_t int_state;
+  ::decode(int_state, it);
+  state = static_cast<GroupImageLinkState>(int_state);
+}
 
 struct MirrorPeer {
   MirrorPeer() {
@@ -58,7 +81,8 @@ WRITE_CLASS_ENCODER(MirrorPeer);
 
 enum MirrorImageState {
   MIRROR_IMAGE_STATE_DISABLING = 0,
-  MIRROR_IMAGE_STATE_ENABLED   = 1
+  MIRROR_IMAGE_STATE_ENABLED   = 1,
+  MIRROR_IMAGE_STATE_DISABLED  = 2,
 };
 
 struct MirrorImage {
@@ -133,6 +157,158 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
+
+struct GroupImageSpec {
+  GroupImageSpec() {}
+
+  GroupImageSpec(const std::string &image_id, int64_t pool_id)
+    : image_id(image_id), pool_id(pool_id) {}
+
+  static int from_key(const std::string &image_key, GroupImageSpec *spec);
+
+  std::string image_id;
+  int64_t pool_id = -1;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  std::string image_key();
+
+};
+
+WRITE_CLASS_ENCODER(GroupImageSpec);
+
+struct GroupImageStatus {
+  GroupImageStatus() {}
+  GroupImageStatus(const std::string &image_id,
+		   int64_t pool_id,
+		   GroupImageLinkState state)
+    : spec(image_id, pool_id), state(state) {}
+
+  GroupImageStatus(GroupImageSpec spec,
+		   GroupImageLinkState state)
+    : spec(spec), state(state) {}
+
+  GroupImageSpec spec;
+  GroupImageLinkState state = GROUP_IMAGE_LINK_STATE_INCOMPLETE;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  std::string state_to_string() const;
+};
+
+WRITE_CLASS_ENCODER(GroupImageStatus);
+
+struct GroupSpec {
+  GroupSpec() {}
+  GroupSpec(const std::string &group_id, int64_t pool_id)
+    : group_id(group_id), pool_id(pool_id) {}
+
+  std::string group_id;
+  int64_t pool_id = -1;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+  bool is_valid() const;
+};
+
+WRITE_CLASS_ENCODER(GroupSpec);
+
+enum SnapshotNamespaceType {
+  SNAPSHOT_NAMESPACE_TYPE_USER = 0,
+  SNAPSHOT_NAMESPACE_TYPE_GROUP = 1
+};
+
+struct UserSnapshotNamespace {
+  static const uint32_t SNAPSHOT_NAMESPACE_TYPE = SNAPSHOT_NAMESPACE_TYPE_USER;
+
+  UserSnapshotNamespace() {}
+
+  void encode(bufferlist& bl) const {}
+  void decode(bufferlist::iterator& it) {}
+
+  void dump(Formatter *f) const {}
+
+  inline bool operator==(const UserSnapshotNamespace& usn) const {
+    return true;
+  }
+
+};
+
+std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
+
+struct GroupSnapshotNamespace {
+  static const uint32_t SNAPSHOT_NAMESPACE_TYPE = SNAPSHOT_NAMESPACE_TYPE_GROUP;
+
+  GroupSnapshotNamespace() {}
+
+  GroupSnapshotNamespace(int64_t _group_pool,
+			 const string &_group_id,
+			 const snapid_t &_snapshot_id) :group_pool(_group_pool),
+							group_id(_group_id),
+							snapshot_id(_snapshot_id) {}
+
+  int64_t group_pool;
+  string group_id;
+  snapid_t snapshot_id;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+
+  void dump(Formatter *f) const;
+
+  inline bool operator==(const GroupSnapshotNamespace& gsn) const {
+    return group_pool == gsn.group_pool &&
+	   group_id == gsn.group_id &&
+	   snapshot_id == gsn.snapshot_id;
+  }
+
+};
+
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
+
+struct UnknownSnapshotNamespace {
+  static const uint32_t SNAPSHOT_NAMESPACE_TYPE = static_cast<uint32_t>(-1);
+
+  UnknownSnapshotNamespace() {}
+
+  void encode(bufferlist& bl) const {}
+  void decode(bufferlist::iterator& it) {}
+  void dump(Formatter *f) const {}
+  inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
+    return true;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
+
+typedef boost::variant<UserSnapshotNamespace, GroupSnapshotNamespace, UnknownSnapshotNamespace> SnapshotNamespace;
+
+
+struct SnapshotNamespaceOnDisk {
+
+  SnapshotNamespaceOnDisk() : snapshot_namespace(UnknownSnapshotNamespace()) {}
+  SnapshotNamespaceOnDisk(const SnapshotNamespace &sn) : snapshot_namespace(sn) {}
+
+  SnapshotNamespace snapshot_namespace;
+
+  SnapshotNamespaceType get_namespace_type() const;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<SnapshotNamespaceOnDisk *> &o);
+
+  inline bool operator==(const SnapshotNamespaceOnDisk& gsn) const {
+    return snapshot_namespace == gsn.snapshot_namespace;
+  }
+};
+WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
 
 } // namespace rbd
 } // namespace cls

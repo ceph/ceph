@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "epoch": {
+      "description": "Scrub epoch",
+      "type": "integer"
+    },
+    "inconsistents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "nspace": {
+            "type": "string"
+          },
+          "locator": {
+            "type": "string"
+          },
+          "snap": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "head",
+                  "snapdir"
+                ]
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          },
+          "errors": {
+            "description": "Errors for this object's snap",
+            "type": "array",
+            "items": {
+              "enum": [
+                "ss_attr_missing",
+                "ss_attr_corrupted",
+                "oi_attr_missing",
+                "oi_attr_corrupted",
+                "snapset_mismatch",
+                "head_mismatch",
+                "headless",
+                "size_mismatch",
+                "extra_clones",
+                "clone_missing"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "missing": {
+            "description": "List of missing clones if clone_missing error set",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "extra_clones": {
+            "description": "List of extra clones if extra_clones error set",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "nspace",
+          "locator",
+          "snap",
+          "errors"
+        ]
+      }
+    }
+  },
+  "required": [
+    "epoch",
+    "inconsistents"
+  ]
+}

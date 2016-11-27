@@ -23,6 +23,7 @@ import mock
 import testtools
 
 import ceph_detect_init
+from ceph_detect_init import alpine
 from ceph_detect_init import centos
 from ceph_detect_init import debian
 from ceph_detect_init import exc
@@ -30,12 +31,20 @@ from ceph_detect_init import fedora
 from ceph_detect_init import main
 from ceph_detect_init import rhel
 from ceph_detect_init import suse
+from ceph_detect_init import gentoo
+from ceph_detect_init import freebsd
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.DEBUG)
 
 
 class TestCephDetectInit(testtools.TestCase):
+
+    def test_alpine(self):
+        self.assertEqual('openrc', alpine.choose_init())
+
+    def test_freebsd(self):
+        self.assertEqual('bsdrc', freebsd.choose_init())
 
     def test_centos(self):
         with mock.patch('ceph_detect_init.centos.release',
@@ -95,18 +104,66 @@ class TestCephDetectInit(testtools.TestCase):
                         '13.2'):
             self.assertEqual('systemd', suse.choose_init())
 
+    def test_gentoo_is_openrc(self):
+        with mock.patch('os.path.isdir', return_value=True):
+            self.assertEqual(gentoo.is_openrc(), True)
+        with mock.patch('os.path.isdir', return_value=False):
+            self.assertEqual(gentoo.is_openrc(), False)
+
+    def test_gentoo_is_systemd(self):
+        import sys
+        if sys.version_info >= (3, 0):
+            mocked_fn = 'builtins.open'
+        else:
+            mocked_fn = '__builtin__.open'
+
+        f = mock.mock_open(read_data='systemd')
+        with mock.patch(mocked_fn, f, create=True) as m:
+            self.assertEqual(gentoo.is_systemd(), True)
+            m.assert_called_once_with('/proc/1/comm')
+        f = mock.mock_open(read_data='init')
+        with mock.patch(mocked_fn, f, create=True) as m:
+            self.assertEqual(gentoo.is_systemd(), False)
+            m.assert_called_once_with('/proc/1/comm')
+        f = mock.mock_open(read_data='upstart')
+        with mock.patch(mocked_fn, f, create=True) as m:
+            self.assertEqual(gentoo.is_systemd(), False)
+            m.assert_called_once_with('/proc/1/comm')
+
+    def test_gentoo(self):
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                                 is_systemd=(lambda: True),
+                                 is_openrc=(lambda: True)):
+            self.assertEqual('openrc', gentoo.choose_init())
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                                 is_systemd=(lambda: True),
+                                 is_openrc=(lambda: False)):
+            self.assertEqual('systemd', gentoo.choose_init())
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                                 is_systemd=(lambda: False),
+                                 is_openrc=(lambda: True)):
+            self.assertEqual('openrc', gentoo.choose_init())
+        with mock.patch.multiple('ceph_detect_init.gentoo',
+                                 is_systemd=(lambda: False),
+                                 is_openrc=(lambda: False)):
+            self.assertEqual('unknown', gentoo.choose_init())
+
     def test_get(self):
-        g = ceph_detect_init.get
-        with mock.patch('platform.linux_distribution',
-                        lambda: (('unknown', '', ''))):
+        with mock.patch.multiple(
+                'platform',
+                system=lambda: 'Linux',
+                linux_distribution=lambda **kwargs: (('unknown', '', ''))):
+            g = ceph_detect_init.get
             self.assertRaises(exc.UnsupportedPlatform, g)
             try:
                 g()
             except exc.UnsupportedPlatform as e:
                 self.assertIn('Platform is not supported', str(e))
 
-        with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '6.0', ''))):
+        with mock.patch.multiple(
+                'platform',
+                system=lambda: 'Linux',
+                linux_distribution=lambda **kwargs: (('debian', '6.0', ''))):
             distro = ceph_detect_init.get()
             self.assertEqual(debian, distro)
             self.assertEqual('debian', distro.name)
@@ -116,6 +173,24 @@ class TestCephDetectInit(testtools.TestCase):
             self.assertEqual('6.0', distro.release)
             self.assertEqual('squeeze', distro.codename)
             self.assertEqual('sysvinit', distro.init)
+
+        with mock.patch.multiple('platform',
+                                 system=lambda: 'FreeBSD',
+                                 release=lambda: '12.0-CURRENT',
+                                 version=lambda: 'FreeBSD 12.0 #1 r306554M:'):
+            distro = ceph_detect_init.get()
+            self.assertEqual(freebsd, distro)
+            self.assertEqual('freebsd', distro.name)
+            self.assertEqual('freebsd', distro.normalized_name)
+            self.assertEqual('freebsd', distro.distro)
+            self.assertFalse(distro.is_el)
+            self.assertEqual('12.0-CURRENT', distro.release)
+            self.assertEqual('r306554M', distro.codename)
+            self.assertEqual('bsdrc', distro.init)
+
+        with mock.patch('platform.system',
+                        lambda: 'cephix'):
+            self.assertRaises(exc.UnsupportedPlatform, ceph_detect_init.get)
 
     def test_get_distro(self):
         g = ceph_detect_init._get_distro
@@ -127,6 +202,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(fedora, g('fedora'))
         self.assertEqual(suse, g('suse'))
         self.assertEqual(rhel, g('redhat', use_rhceph=True))
+        self.assertEqual(gentoo, g('gentoo'))
 
     def test_normalized_distro_name(self):
         n = ceph_detect_init._normalized_distro_name
@@ -148,39 +224,56 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('debian', n('debian'))
         self.assertEqual('ubuntu', n('Ubuntu'))
         self.assertEqual('ubuntu', n('ubuntu'))
+        self.assertEqual('gentoo', n('Gentoo'))
+        self.assertEqual('gentoo', n('gentoo'))
+        self.assertEqual('gentoo', n('Funtoo'))
+        self.assertEqual('gentoo', n('funtoo'))
+        self.assertEqual('gentoo', n('Exherbo'))
+        self.assertEqual('gentoo', n('exherbo'))
 
-    def test_platform_information(self):
+    @mock.patch('platform.system', lambda: 'Linux')
+    def test_platform_information_linux(self):
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '6.0', ''))):
+                        lambda **kwargs: (('debian', '6.0', ''))):
             self.assertEqual(('debian', '6.0', 'squeeze'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '7.0', ''))):
+                        lambda **kwargs: (('debian', '7.0', ''))):
             self.assertEqual(('debian', '7.0', 'wheezy'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '8.0', ''))):
+                        lambda **kwargs: (('debian', '8.0', ''))):
             self.assertEqual(('debian', '8.0', 'jessie'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', 'jessie/sid', ''))):
+                        lambda **kwargs: (('debian', 'jessie/sid', ''))):
             self.assertEqual(('debian', 'jessie/sid', 'sid'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', 'sid/jessie', ''))):
+                        lambda **kwargs: (('debian', 'sid/jessie', ''))):
             self.assertEqual(('debian', 'sid/jessie', 'sid'),
+                             ceph_detect_init.platform_information())
+
+    @mock.patch('platform.system', lambda: 'FreeBSD')
+    def test_platform_information_freebsd(self):
+        with mock.patch.multiple('platform',
+                                 release=lambda: '12.0-CURRENT',
+                                 version=lambda: 'FreeBSD 12.0 #1 r306554M:'):
+            self.assertEqual(('freebsd', '12.0-CURRENT', 'r306554M'),
                              ceph_detect_init.platform_information())
 
     def test_run(self):
         argv = ['--use-rhceph', '--verbose']
         self.assertEqual(0, main.run(argv))
 
-        with mock.patch('platform.linux_distribution',
-                        lambda: (('unknown', '', ''))):
+        with mock.patch.multiple(
+                'platform',
+                system=lambda: 'Linux',
+                linux_distribution=lambda **kwargs: (('unknown', '', ''))):
             self.assertRaises(exc.UnsupportedPlatform, main.run, argv)
             self.assertEqual(0, main.run(argv + ['--default=sysvinit']))
 

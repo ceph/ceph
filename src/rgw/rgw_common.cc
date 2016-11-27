@@ -157,6 +157,7 @@ void req_info::rebuild_from(req_info& src)
 {
   method = src.method;
   script_uri = src.script_uri;
+  args = src.args;
   if (src.effective_uri.empty()) {
     request_uri = src.request_uri;
   } else {
@@ -174,9 +175,9 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
     info(_cct, e)
 {
-  enable_ops_log = e->conf->enable_ops_log;
-  enable_usage_log = e->conf->enable_usage_log;
-  defer_to_bucket_acls = e->conf->defer_to_bucket_acls;
+  enable_ops_log = e->conf.enable_ops_log;
+  enable_usage_log = e->conf.enable_usage_log;
+  defer_to_bucket_acls = e->conf.defer_to_bucket_acls;
   content_started = false;
   format = 0;
   formatter = NULL;
@@ -473,6 +474,32 @@ int parse_time(const char *time_str, real_time *time)
   return 0;
 }
 
+#define TIME_BUF_SIZE 128
+
+void rgw_to_iso8601(const real_time& t, char *dest, int buf_size)
+{
+  utime_t ut(t);
+
+  char buf[TIME_BUF_SIZE];
+  struct tm result;
+  time_t epoch = ut.sec();
+  struct tm *tmp = gmtime_r(&epoch, &result);
+  if (tmp == NULL)
+    return;
+
+  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T", tmp) == 0)
+    return;
+
+  snprintf(dest, buf_size, "%s.%03dZ", buf, (int)(ut.usec() / 1000));
+}
+
+void rgw_to_iso8601(const real_time& t, string *dest)
+{
+  char buf[TIME_BUF_SIZE];
+  rgw_to_iso8601(t, buf, sizeof(buf));
+  *dest = buf;
+}
+
 /*
  * calculate the sha1 value of a given msg and key
  */
@@ -706,7 +733,12 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  if (str[pos] == '?') pos++;
+
+  if (str.empty())
+    return 0;
+
+  if (str[pos] == '?')
+    pos++;
 
   while (!end) {
     int fpos = str.find('&', pos);
@@ -745,6 +777,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("location") == 0) ||
       (name.compare("logging") == 0) ||
       (name.compare("usage") == 0) ||
+      (name.compare("lifecycle") == 0) ||
       (name.compare("delete") == 0) ||
       (name.compare("uploads") == 0) ||
       (name.compare("partNumber") == 0) ||
@@ -871,6 +904,10 @@ bool verify_requester_payer_permission(struct req_state *s)
 
   if (s->auth_identity->is_owner_of(s->bucket_info.owner))
     return true;
+  
+  if (s->auth_identity->is_anonymous()) {
+    return false;
+  }
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
   if (!request_payer) {
@@ -1105,6 +1142,14 @@ void url_encode(const string& src, string& dst)
 
     dst.append(p, 1);
   }
+}
+
+std::string url_encode(const std::string& src)
+{
+  std::string dst;
+  url_encode(src, dst);
+
+  return dst;
 }
 
 string rgw_trim_whitespace(const string& src)
@@ -1377,6 +1422,37 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
   }
 
   return false;
+}
+
+std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
+{
+  static constexpr size_t shard_len{12}; // ":4294967295\0"
+  const size_t max_len = tenant.size() + sizeof(tenant_delim) +
+      name.size() + sizeof(id_delim) + bucket_id.size() + shard_len;
+
+  std::string key;
+  key.reserve(max_len);
+  if (!tenant.empty() && tenant_delim) {
+    key.append(tenant);
+    key.append(1, tenant_delim);
+  }
+  key.append(name);
+  if (!bucket_id.empty() && id_delim) {
+    key.append(1, id_delim);
+    key.append(bucket_id);
+  }
+  return key;
+}
+
+std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim,
+                                      char shard_delim) const
+{
+  auto key = bucket.get_key(tenant_delim, id_delim);
+  if (shard_id >= 0 && shard_delim) {
+    key.append(1, shard_delim);
+    key.append(std::to_string(shard_id));
+  }
+  return key;
 }
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},

@@ -41,17 +41,28 @@ int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
 
 int get_image_id(librbd::Image &image, std::string *image_id)
 {
-  librbd::image_info_t info;
-  int r = image.stat(info, sizeof(info));
+  int r = image.get_id(image_id);
   if (r < 0) {
     return r;
   }
-
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-  *image_id = std::string(prefix + strlen(RBD_DATA_PREFIX));
   return 0;
 }
 
+int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool *created) {
+  std::string pool;
+  int r = rados.conf_get("rbd_default_data_pool", pool);
+  if (r != 0) {
+    return r;
+  } else if (pool.empty()) {
+    return 0;
+  }
+
+  r = rados.pool_create(pool.c_str());
+  if ((r == 0) || (r == -EEXIST)) {
+    data_pool = pool;
+    *created = (r == 0);
+    return 0;
+  }
+
+  return r;
+}

@@ -649,7 +649,7 @@ C Example
 		}
 		
 		/* Wait for the operation to complete */
-		rados_wait_for_complete(comp);
+		rados_aio_wait_for_complete(comp);
 		
 		/* Release the asynchronous I/O complete handle to avoid memory leaks. */
 		rados_aio_release(comp);		
@@ -992,8 +992,8 @@ PHP Example
 
 
 
-.. _user ID: ../../operations/authentication#cephx-commandline-options
-.. _CAPS: ../../operations/auth-intro#ceph-authorization-caps
+.. _user ID: ../../operations/user-management#command-line-usage
+.. _CAPS: ../../operations/user-management#authorization-capabilities
 .. _Installation (Quick): ../../../start
 .. _Smart Daemons Enable Hyperscale: ../../../architecture#smart-daemons-enable-hyperscale
 .. _Calculating PG IDs: ../../../architecture#calculating-pg-ids

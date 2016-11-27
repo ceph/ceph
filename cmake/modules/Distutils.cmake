@@ -13,12 +13,10 @@ function(distutils_install_module name)
     DEPENDS ${py_clone})
   cmake_parse_arguments(DU "" INSTALL_SCRIPT "" ${ARGN})
   install(CODE "
-    set(options)
+    set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
       if(EXISTS /etc/debian_version)
         list(APPEND options --install-layout=deb)
-      else()
-        list(APPEND options --prefix=/usr)
       endif()
       list(APPEND options --root=\$ENV{DESTDIR})
       if(NOT \"${DU_INSTALL_SCRIPT}\" STREQUAL \"\")
@@ -26,7 +24,7 @@ function(distutils_install_module name)
       endif()
     endif()
     execute_process(
-    COMMAND ${PYTHON_EXECUTABLE}
+    COMMAND ${PYTHON${PYTHON_VERSION}_EXECUTABLE}
         setup.py install \${options}
     WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\")")
 endfunction(distutils_install_module)
@@ -43,36 +41,43 @@ function(distutils_add_cython_module name src)
     CC=${PY_CC}
     CXX=${PY_CXX}
     LDSHARED=${PY_LDSHARED}
-    OPT=\"-DNDEBUG -g -fwrapv -O2 -Wall\"
+    OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
-    CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
-    ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py build --build-base ${CYTHON_MODULE_DIR} --verbose
+    CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    CFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include -w\"
+    ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
+    build --verbose --build-base ${CYTHON_MODULE_DIR}
+    --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS ${src})
 endfunction(distutils_add_cython_module)
 
 function(distutils_install_cython_module name)
   install(CODE "
+    set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
       if(EXISTS /etc/debian_version)
-        set(options --install-layout=deb)
-      else()
-        set(options --prefix=/usr)
+        list(APPEND options --install-layout=deb)
       endif()
-      set(root --root=\$ENV{DESTDIR})
+      list(APPEND options --root=\$ENV{DESTDIR})
     else()
-      set(options \"--prefix=${CMAKE_INSTALL_PREFIX}\")
-      set(root --root=/)
+      list(APPEND options --root=/)
     endif()
     execute_process(
        COMMAND env
            CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
-           CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
-           ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
-           build --build-base ${CYTHON_MODULE_DIR} --verbose
-           install \${options} \${root} --verbose
-           --single-version-externally-managed --record /dev/null
+           CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+           CC=${CMAKE_C_COMPILER}
+           CPPFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"
+           LDFLAGS=\"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\"
+           ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
+           build --verbose --build-base ${CYTHON_MODULE_DIR}
+           --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
+           build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
+           install \${options} --single-version-externally-managed --record /dev/null
+           egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
+           --verbose
        WORKING_DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\"
        RESULT_VARIABLE install_res)
     if(NOT \"\${install_res}\" STREQUAL 0)

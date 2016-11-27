@@ -24,7 +24,7 @@
 #define CEPH_FEATURE_PGPOOL3        (1ULL<<11)
 #define CEPH_FEATURE_OSDREPLYMUX    (1ULL<<12)
 #define CEPH_FEATURE_OSDENC         (1ULL<<13)
-// UNUSED: (1ULL<<14)
+#define CEPH_FEATURE_SERVER_KRAKEN  (1ULL<<14) // REUSED
 #define CEPH_FEATURE_MONENC         (1ULL<<15)
 #define DEPRECATED_CEPH_FEATURE_QUERY_T        (1ULL<<16) // DEPRECATED: JEWEL
 #define DEPRECATED_CEPH_FEATURE_INDEP_PG_MAP   (1ULL<<17) // DEPRECATED: JEWEL
@@ -84,6 +84,10 @@
 // duplicated since it was introduced at the same time as CEPH_FEATURE_CRUSH_TUNABLES5
 #define CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING (1ULL<<58) /* New, v7 encoding */
 #define CEPH_FEATURE_FS_FILE_LAYOUT_V2       (1ULL<<58) /* file_layout_t */
+#define CEPH_FEATURE_FS_BTIME                (1ULL<<59) /* btime */
+#define CEPH_FEATURE_FS_CHANGE_ATTR          (1ULL<<59) /* change_attr */
+
+#define CEPH_FEATURE_MSG_ADDR2 (1ULL<<59)  /* ADDR2 feature */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -179,6 +183,10 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_CRUSH_TUNABLES5 |	    \
 	 CEPH_FEATURE_SERVER_JEWEL |  \
 	 CEPH_FEATURE_FS_FILE_LAYOUT_V2 |		 \
+	 CEPH_FEATURE_SERVER_KRAKEN |	\
+	 CEPH_FEATURE_FS_BTIME |			 \
+	 CEPH_FEATURE_FS_CHANGE_ATTR |			 \
+	 CEPH_FEATURE_MSG_ADDR2 | \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL

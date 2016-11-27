@@ -82,7 +82,7 @@ public:
    * features The local features bits for the local_connection
    */
   SimpleMessenger(CephContext *cct, entity_name_t name,
-		  string mname, uint64_t _nonce, uint64_t features);
+		  string mname, uint64_t _nonce);
 
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
@@ -93,7 +93,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(entity_addr_t& addr);
+  void set_addr_unknowns(const entity_addr_t& addr) override;
 
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
@@ -305,6 +305,9 @@ private:
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
+  Cond  stop_cond;
+  bool stopped = true;
+
   bool reaper_started, reaper_stop;
   Cond reaper_cond;
 
@@ -329,7 +332,6 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
-  uint64_t local_features;
 
   /**
    * @defgroup SimpleMessenger internals

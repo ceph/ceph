@@ -78,9 +78,7 @@ boost::pool<> CDir::pool(sizeof(CDir));
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
-  string path;
-  dir.get_inode()->make_path_string_projected(path);
-  out << "[dir " << dir.dirfrag() << " " << path << "/"
+  out << "[dir " << dir.dirfrag() << " " << dir.get_path() << "/"
       << " [" << dir.first << ",head]";
   if (dir.is_auth()) {
     out << " auth";
@@ -185,7 +183,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   projected_version(0),  item_dirty(this), item_new(this),
-  scrub_infop(NULL),
   num_head_items(0), num_head_null(0),
   num_snap_items(0), num_snap_null(0),
   num_dirty(0), committing_version(0), committed_version(0),
@@ -197,7 +194,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
   num_dentries_nested(0), num_dentries_auth_subtree(0),
   num_dentries_auth_subtree_nested(0),
-  bloom(NULL),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
   g_num_dir++;
@@ -641,7 +637,7 @@ void CDir::add_to_bloom(CDentry *dn)
       return;
     unsigned size = get_num_head_items() + get_num_snap_items();
     if (size < 100) size = 100;
-    bloom = new bloom_filter(size, 1.0 / size, 0);
+    bloom.reset(new bloom_filter(size, 1.0 / size, 0));
   }
   /* This size and false positive probability is completely random.*/
   bloom->insert(dn->name.c_str(), dn->name.size());
@@ -652,12 +648,6 @@ bool CDir::is_in_bloom(const string& name)
   if (!bloom)
     return false;
   return bloom->contains(name.c_str(), name.size());
-}
-
-void CDir::remove_bloom()
-{
-  delete bloom;
-  bloom = NULL;
 }
 
 void CDir::remove_null_dentries() {
@@ -941,10 +931,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
   frag_info_t fragstatdiff;
   if (fnode.accounted_rstat.version == rstat_version)
     rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
-  if (fnode.accounted_fragstat.version == dirstat_version) {
-    bool touched_mtime;
-    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
-  }
+  if (fnode.accounted_fragstat.version == dirstat_version)
+    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat);
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   prepare_old_fragment(replay);
@@ -1022,7 +1010,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 
   nest_info_t rstatdiff;
   frag_info_t fragstatdiff;
-  bool touched_mtime;
+  bool touched_mtime, touched_chattr;
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
@@ -1035,7 +1023,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       rstatdiff.add_delta(dir->fnode.accounted_rstat, dir->fnode.rstat);
     if (dir->fnode.accounted_fragstat.version == dirstat_version)
       fragstatdiff.add_delta(dir->fnode.accounted_fragstat, dir->fnode.fragstat,
-			     touched_mtime);
+			     &touched_mtime, &touched_chattr);
 
     dir->prepare_old_fragment(replay);
 
@@ -1361,29 +1349,19 @@ void CDir::mark_clean()
   }
 }
 
-
-struct C_Dir_Dirty : public CDirContext {
-  version_t pv;
-  LogSegment *ls;
-  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
-  void finish(int r) {
-    dir->mark_dirty(pv, ls);
-    dir->auth_unpin(dir);
-  }
-};
-
 // caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
-  MDLog *mdlog = inode->mdcache->mds->mdlog;
+  if (is_dirty() || is_projected())
+    return; // noop if it is already dirty or will be dirty
+
   version_t pv = pre_dirty();
-  mdlog->flush();
-  mdlog->wait_for_safe(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
+  mark_dirty(pv, cache->mds->mdlog->get_current_segment());
 }
 
 void CDir::mark_complete() {
   state_set(STATE_COMPLETE);
-  remove_bloom();
+  bloom.reset();
 }
 
 void CDir::first_get()
@@ -1729,7 +1707,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   if (hdrbl.length() == 0) {
     dout(0) << "_fetched missing object for " << *this << dendl;
-    clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
+
+    clog->error() << "dir " << dirfrag() << " object missing on disk; some "
+                     "files may be lost (" << get_path() << ")";
 
     go_bad(complete);
     return;
@@ -1744,13 +1724,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       derr << "Corrupt fnode in dirfrag " << dirfrag()
         << ": " << err << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
-		  << err;
+		  << err << " (" << get_path() << ")";
       go_bad(complete);
       return;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
-		  << hdrbl.length() - p.get_off() << " extra bytes\n";
+		  << hdrbl.length() - p.get_off() << " extra bytes ("
+                  << get_path() << ")";
       go_bad(complete);
       return;
     }
@@ -1809,7 +1790,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     } catch (const buffer::error &err) {
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
-                               << err;
+                               << err << "(" << get_path() << ")";
 
       // Remember that this dentry is damaged.  Subsequent operations
       // that try to act directly on it will get their EIOs, but this
@@ -1879,10 +1860,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   // dirty myself to remove stale snap dentries
-  if (force_dirty && !is_dirty() && !inode->mdcache->is_readonly())
+  if (force_dirty && !inode->mdcache->is_readonly())
     log_mark_dirty();
-  else
-    auth_unpin(this);
+
+  auth_unpin(this);
 
   if (complete) {
     // kick waiters
@@ -1910,7 +1891,7 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
       inode->ino(), frag, last, dname);
   if (fatal) {
     cache->mds->damaged();
-    assert(0);  // unreachable, damaged() respawns us
+    ceph_abort();  // unreachable, damaged() respawns us
   }
 }
 
@@ -1919,7 +1900,7 @@ void CDir::go_bad(bool complete)
   const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
   if (fatal) {
     cache->mds->damaged();
-    assert(0);  // unreachable, damaged() respawns us
+    ceph_abort();  // unreachable, damaged() respawns us
   }
 
   if (complete)
@@ -2211,11 +2192,19 @@ void CDir::_commit(version_t want, int op_prio)
 void CDir::_committed(int r, version_t v)
 {
   if (r < 0) {
-    dout(1) << "commit error " << r << " v " << v << dendl;
-    cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
-			      << " errno " << r << "\n";
-    cache->mds->handle_write_error(r);
-    return;
+    // the directory could be partly purged during MDS failover
+    if (r == -ENOENT && committed_version == 0 &&
+	inode->inode.nlink == 0 && inode->snaprealm) {
+      inode->state_set(CInode::STATE_MISSINGOBJS);
+      r = 0;
+    }
+    if (r < 0) {
+      dout(1) << "commit error " << r << " v " << v << dendl;
+      cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
+				<< " errno " << r << "\n";
+      cache->mds->handle_write_error(r);
+      return;
+    }
   }
 
   dout(10) << "_committed v " << v << " on " << *this << dendl;
@@ -2627,7 +2616,7 @@ void CDir::verify_fragstat()
       c.nfiles != fnode.fragstat.nfiles) {
     dout(0) << "verify_fragstat failed " << fnode.fragstat << " on " << *this << dendl;
     dout(0) << "               i count " << c << dendl;
-    assert(0);
+    ceph_abort();
   } else {
     dout(0) << "verify_fragstat ok " << fnode.fragstat << " on " << *this << dendl;
   }
@@ -2747,7 +2736,7 @@ CDir *CDir::get_frozen_tree_root()
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else
-      assert(0);
+      ceph_abort();
   }
 }
 
@@ -2861,9 +2850,7 @@ void CDir::dump(Formatter *f) const
 {
   assert(f != NULL);
 
-  string path;
-  get_inode()->make_path_string_projected(path);
-  f->dump_stream("path") << path;
+  f->dump_stream("path") << get_path();
 
   f->dump_stream("dirfrag") << dirfrag();
   f->dump_int("snapid_first", first);
@@ -2910,7 +2897,7 @@ void CDir::scrub_info_create() const
   CDir *me = const_cast<CDir*>(this);
   fnode_t *fn = me->get_projected_fnode();
 
-  scrub_info_t *si = new scrub_info_t();
+  std::unique_ptr<scrub_info_t> si(new scrub_info_t());
 
   si->last_recursive.version = si->recursive_start.version =
       fn->recursive_scrub_version;
@@ -2920,13 +2907,14 @@ void CDir::scrub_info_create() const
   si->last_local.version = fn->localized_scrub_version;
   si->last_local.time = fn->localized_scrub_stamp;
 
-  me->scrub_infop = si;
+  me->scrub_infop.swap(si);
 }
 
 void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
 {
   dout(20) << __func__ << dendl;
   assert(is_complete());
+  assert(header != nullptr);
 
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
@@ -3007,14 +2995,14 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
       } else {
 	dout(5) << " we lost dentry " << dnkey.name
 		<< ", bailing out because that's impossible!" << dendl;
-	assert(0);
+	ceph_abort();
       }
     }
     // okay, we got a  dentry
     dns.erase(dnkey);
 
     if (dn->get_projected_version() < scrub_infop->last_recursive.version &&
-	!(scrub_infop->header && scrub_infop->header->force)) {
+	!(scrub_infop->header->get_force())) {
       dout(15) << " skip dentry " << dnkey.name
 	       << ", no change since last scrub" << dendl;
       continue;
@@ -3039,7 +3027,7 @@ int CDir::scrub_dentry_next(MDSInternalContext *cb, CDentry **dnout)
     dout(20) << __func__ << " inserted to directories scrubbing: "
       << *dnout << dendl;
     scrub_infop->directories_scrubbing.insert((*dnout)->key());
-  } else if (rval < 0 || rval == EAGAIN) {
+  } else if (rval == EAGAIN) {
     // we don't need to do anything else
   } else { // we emptied out the directory scrub set
     assert(rval == ENOENT);
@@ -3084,8 +3072,7 @@ void CDir::scrub_dentry_finished(CDentry *dn)
   dout(20) << __func__ << " on dn " << *dn << dendl;
   assert(scrub_infop && scrub_infop->directory_scrubbing);
   dentry_key_t dn_key = dn->key();
-  if (scrub_infop->directories_scrubbing.count(dn_key)) {
-    scrub_infop->directories_scrubbing.erase(dn_key);
+  if (scrub_infop->directories_scrubbing.erase(dn_key)) {
     scrub_infop->directories_scrubbed.insert(dn_key);
   } else {
     assert(scrub_infop->others_scrubbing.count(dn_key));
@@ -3102,8 +3089,7 @@ void CDir::scrub_maybe_delete_info()
       !scrub_infop->last_scrub_dirty &&
       !scrub_infop->pending_scrub_error &&
       scrub_infop->dirty_scrub_stamps.empty()) {
-    delete scrub_infop;
-    scrub_infop = NULL;
+    scrub_infop.reset();
   }
 }
 
@@ -3120,9 +3106,16 @@ bool CDir::scrub_local()
     scrub_infop->last_scrub_dirty = true;
   } else {
     scrub_infop->pending_scrub_error = true;
-    if (scrub_infop->header &&
-	scrub_infop->header->repair)
+    if (scrub_infop->header->get_repair())
       cache->repair_dirfrag_stats(this);
   }
   return rval;
 }
+
+std::string CDir::get_path() const
+{
+  std::string path;
+  get_inode()->make_path_string(path, true);
+  return path;
+}
+

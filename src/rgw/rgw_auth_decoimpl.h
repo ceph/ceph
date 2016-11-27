@@ -21,31 +21,31 @@ public:
       decoratee(decoratee) {
   }
 
-  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
     return decoratee.get_perms_from_aclspec(aclspec);
   }
 
-  virtual bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin_of(const rgw_user& uid) const override {
     return decoratee.is_admin_of(uid);
   }
 
-  virtual bool is_owner_of(const rgw_user& uid) const override {
+  bool is_owner_of(const rgw_user& uid) const override {
     return decoratee.is_owner_of(uid);
   }
 
-  virtual uint32_t get_perm_mask() const override {
+  uint32_t get_perm_mask() const override {
     return decoratee.get_perm_mask();
   }
 
-  virtual void to_str(std::ostream& out) const override {
+  void to_str(std::ostream& out) const override {
     decoratee.to_str(out);
   }
 
-  virtual void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
+  void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
     return decoratee.load_acct_info(user_info);
   }
 
-  virtual void modify_request_state(req_state * s) const override {     /* in/out */
+  void modify_request_state(req_state * s) const override {     /* in/out */
     return decoratee.modify_request_state(s);
   }
 };
@@ -63,31 +63,31 @@ public:
       decoratee(std::move(decoratee)) {
   }
 
-  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
     return decoratee->get_perms_from_aclspec(aclspec);
   }
 
-  virtual bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin_of(const rgw_user& uid) const override {
     return decoratee->is_admin_of(uid);
   }
 
-  virtual bool is_owner_of(const rgw_user& uid) const override {
+  bool is_owner_of(const rgw_user& uid) const override {
     return decoratee->is_owner_of(uid);
   }
 
-  virtual uint32_t get_perm_mask() const override {
+  uint32_t get_perm_mask() const override {
     return decoratee->get_perm_mask();
   }
 
-  virtual void to_str(std::ostream& out) const override {
+  void to_str(std::ostream& out) const override {
     decoratee->to_str(out);
   }
 
-  virtual void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
+  void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
     return decoratee->load_acct_info(user_info);
   }
 
-  virtual void modify_request_state(req_state * s) const override {     /* in/out */
+  void modify_request_state(req_state * s) const override {     /* in/out */
     return decoratee->modify_request_state(s);
   }
 };
@@ -98,7 +98,9 @@ class RGWThirdPartyAccountAuthApplier : public RGWDecoratingAuthApplier<T> {
   /* const */RGWRados * const store;
   const rgw_user acct_user_override;
 public:
-  /* FIXME: comment this. */
+  /* A value representing situations where there is no requested account
+   * override. In other words, acct_user_override will be equal to this
+   * constant where the request isn't a cross-tenant one. */
   static const rgw_user UNKNOWN_ACCT;
 
   template <typename U>
@@ -110,11 +112,12 @@ public:
       acct_user_override(acct_user_override) {
   }
 
-  virtual void to_str(std::ostream& out) const override;
-  virtual void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
+  void to_str(std::ostream& out) const override;
+  void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
 };
 
-/* static declaration */
+/* static declaration: UNKNOWN_ACCT will be an empty rgw_user that is a result
+ * of the default construction. */
 template <typename T>
 const rgw_user RGWThirdPartyAccountAuthApplier<T>::UNKNOWN_ACCT;
 
@@ -153,7 +156,11 @@ void RGWThirdPartyAccountAuthApplier<T>::load_acct_info(RGWUserInfo& user_info) 
     if (ret < 0) {
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
-      throw ret;
+      if (ret == -ENOENT) {
+        throw -EACCES;
+      } else {
+        throw ret;
+      }
     }
 
   }

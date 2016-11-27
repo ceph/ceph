@@ -145,7 +145,7 @@ history of past maps to generate a set of *past intervals* to
 determine which OSDs must be consulted before we can successfully
 *peer*.  The set of past intervals is bounded by *last epoch started*,
 the most recent *past interval* for which we know *peering* completed.
-The process by with an OSD discovers a PG exists in the first place is
+The process by which an OSD discovers a PG exists in the first place is
 by exchanging *PG info* messages, so the OSD always has some lower
 bound on *last epoch started*.
 

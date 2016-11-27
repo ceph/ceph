@@ -91,7 +91,8 @@ class RecoveryDriver {
     }
 
     RecoveryDriver()
-      : force_corrupt(false)
+      : force_corrupt(false),
+	force_init(false)
     {}
 
     virtual ~RecoveryDriver() {}
@@ -194,9 +195,6 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
         frag_t fragment,
         bool *created);
 
-    int inject_linkage(
-        inodeno_t dir_ino, const std::string &dname,
-        const frag_t fragment, const InodeStore &inode);
 
     /**
      * Work out which fragment of a directory should contain a named
@@ -215,6 +213,10 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
         librados::Rados &rados,
         const FSMap *fsmap,
         fs_cluster_id_t fscid);
+
+    int inject_linkage(
+        inodeno_t dir_ino, const std::string &dname,
+        const frag_t fragment, const InodeStore &inode);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
@@ -264,10 +266,8 @@ class DataScan : public MDSUtility, public MetadataTool
      */
     bool valid_ino(inodeno_t ino) const;
 
-    /**
-     * Invoke tmap_to_omap on all metadata pool objects
-     */
-    int tmap_upgrade();
+
+    int scan_links();
 
     // Accept pools which are not in the FSMap
     bool force_pool;

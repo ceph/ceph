@@ -47,7 +47,6 @@ struct CancelableContext;
  *
  * References are held by Watch and the timeout callback.
  */
-class NotifyTimeoutCB;
 class Notify {
   friend class NotifyTimeoutCB;
   friend class Watch;
@@ -197,10 +196,10 @@ public:
     return last_ping;
   }
 
-  bool is_connected() {
+  bool is_connected() const {
     return conn.get() != NULL;
   }
-  bool is_connected(Connection *con) {
+  bool is_connected(Connection *con) const {
     return conn.get() == con;
   }
 
@@ -248,7 +247,7 @@ public:
   void discard();
 
   /// True if removed or discarded
-  bool is_discarded();
+  bool is_discarded() const;
 
   /// Called on unwatch
   void remove(bool send_disconnect);

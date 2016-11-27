@@ -24,6 +24,7 @@
 #include "librbd/Operations.h"
 #include "librbd/journal/Types.h"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
@@ -238,7 +239,7 @@ public:
   }
 
   void check_remove_image(rbd_mirror_mode_t mirror_mode, uint64_t features,
-                          bool enable_mirroring) {
+                          bool enable_mirroring, bool demote = false) {
 
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
 
@@ -250,6 +251,11 @@ public:
 
     if (enable_mirroring) {
       ASSERT_EQ(0, image.mirror_image_enable());
+    }
+
+    if (demote) {
+      ASSERT_EQ(0, image.mirror_image_demote());
+      ASSERT_EQ(0, image.mirror_image_disable(true));
     }
 
     image.close();
@@ -267,7 +273,7 @@ public:
       "remote-image-id", {{"sync-point-snap", boost::none}}, {});
     librbd::journal::ClientData client_data(peer_client_meta);
 
-    journal::Journaler journaler(io_ctx, image_id, "peer-client", 5);
+    journal::Journaler journaler(io_ctx, image_id, "peer-client", {});
     C_SaferCond init_ctx;
     journaler.init(&init_ctx);
     ASSERT_EQ(-ENOENT, init_ctx.wait());
@@ -605,6 +611,12 @@ TEST_F(TestMirroring, RemoveImage_With_ImageWithoutJournal) {
   check_remove_image(RBD_MIRROR_MODE_IMAGE,
                      RBD_FEATURE_EXCLUSIVE_LOCK,
                      false);
+}
+
+TEST_F(TestMirroring, RemoveImage_With_MirrorImageDemoted) {
+  check_remove_image(RBD_MIRROR_MODE_IMAGE,
+                     RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING,
+                     true, true);
 }
 
 TEST_F(TestMirroring, MirrorStatusList) {

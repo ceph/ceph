@@ -39,12 +39,17 @@ struct osd_reqid_t {
   osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
     : name(a), tid(t), inc(i) {}
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  DENC(osd_reqid_t, v, p) {
+    DENC_START(2, 2, p);
+    denc(v.name, p);
+    denc(v.tid, p);
+    denc(v.inc, p);
+    DENC_FINISH(p);
+  }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<osd_reqid_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_reqid_t)
+WRITE_CLASS_DENC(osd_reqid_t)
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference
@@ -63,8 +68,6 @@ struct OpRequest : public TrackedOp {
   bool includes_pg_op();
   bool need_read_cap();
   bool need_write_cap();
-  bool need_class_read_cap();
-  bool need_class_write_cap();
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
@@ -78,7 +81,25 @@ struct OpRequest : public TrackedOp {
   void set_skip_handle_cache();
   void set_skip_promote();
 
-  void _dump(utime_t now, Formatter *f) const;
+  struct ClassInfo {
+    ClassInfo(const std::string& name, bool read, bool write,
+        bool whitelisted) :
+      name(name), read(read), write(write), whitelisted(whitelisted)
+    {}
+    const std::string name;
+    const bool read, write, whitelisted;
+  };
+
+  void add_class(const std::string& name, bool read, bool write,
+      bool whitelisted) {
+    classes_.emplace_back(name, read, write, whitelisted);
+  }
+
+  std::vector<ClassInfo> classes() const {
+    return classes_;
+  }
+
+  void _dump(Formatter *f) const;
 
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);
@@ -96,6 +117,8 @@ private:
   static const uint8_t flag_started =     1 << 3;
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
+
+  std::vector<ClassInfo> classes_;
 
   OpRequest(Message *req, OpTracker *tracker);
 
@@ -175,5 +198,7 @@ private:
 };
 
 typedef OpRequest::Ref OpRequestRef;
+
+ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i);
 
 #endif /* OPREQUEST_H_ */

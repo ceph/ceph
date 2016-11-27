@@ -234,7 +234,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
   if (header->parent) {
     Header parent = map->lookup_parent(header);
     if (!parent) {
-      assert(0);
+      ceph_abort();
       return -EINVAL;
     }
     parent_iter = std::make_shared<DBObjectMapIteratorImpl>(map, parent);
@@ -902,10 +902,10 @@ int DBObjectMap::clone(const ghobject_t &oid,
   {
     Header destination = lookup_map_header(*ltarget, target);
     if (destination) {
-      remove_map_header(*ltarget, target, destination, t);
       if (check_spos(target, destination, spos))
 	return 0;
       destination->num_children--;
+      remove_map_header(*ltarget, target, destination, t);
       _clear(destination, t);
     }
   }
@@ -1141,11 +1141,11 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
        << " for seq " << input->seq << dendl;
   int r = db->get(sys_parent_prefix(input), keys, &out);
   if (r < 0) {
-    assert(0);
+    ceph_abort();
     return Header();
   }
   if (out.empty()) {
-    assert(0);
+    ceph_abort();
     return Header();
   }
 

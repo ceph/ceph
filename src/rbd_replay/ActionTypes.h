@@ -72,6 +72,8 @@ enum ActionType {
   ACTION_TYPE_CLOSE_IMAGE     = 7,
   ACTION_TYPE_AIO_OPEN_IMAGE  = 8,
   ACTION_TYPE_AIO_CLOSE_IMAGE = 9,
+  ACTION_TYPE_DISCARD         = 10,
+  ACTION_TYPE_AIO_DISCARD     = 11
 };
 
 struct ActionBase {
@@ -170,6 +172,18 @@ struct WriteAction : public IoActionBase {
   }
 };
 
+struct DiscardAction : public IoActionBase {
+  static const ActionType ACTION_TYPE = ACTION_TYPE_DISCARD;
+
+  DiscardAction() {
+  }
+  DiscardAction(action_id_t id, thread_id_t thread_id,
+                const Dependencies &dependencies, imagectx_id_t imagectx_id,
+                uint64_t offset, uint64_t length)
+    : IoActionBase(id, thread_id, dependencies, imagectx_id, offset, length) {
+  }
+};
+
 struct AioReadAction : public IoActionBase {
   static const ActionType ACTION_TYPE = ACTION_TYPE_AIO_READ;
 
@@ -190,6 +204,18 @@ struct AioWriteAction : public IoActionBase {
   AioWriteAction(action_id_t id, thread_id_t thread_id,
                  const Dependencies &dependencies, imagectx_id_t imagectx_id,
                  uint64_t offset, uint64_t length)
+    : IoActionBase(id, thread_id, dependencies, imagectx_id, offset, length) {
+  }
+};
+
+struct AioDiscardAction : public IoActionBase {
+  static const ActionType ACTION_TYPE = ACTION_TYPE_AIO_DISCARD;
+
+  AioDiscardAction() {
+  }
+  AioDiscardAction(action_id_t id, thread_id_t thread_id,
+                   const Dependencies &dependencies, imagectx_id_t imagectx_id,
+                   uint64_t offset, uint64_t length)
     : IoActionBase(id, thread_id, dependencies, imagectx_id, offset, length) {
   }
 };
@@ -272,8 +298,10 @@ typedef boost::variant<StartThreadAction,
                        StopThreadAction,
                        ReadAction,
                        WriteAction,
+                       DiscardAction,
                        AioReadAction,
                        AioWriteAction,
+                       AioDiscardAction,
                        OpenImageAction,
                        CloseImageAction,
                        AioOpenImageAction,

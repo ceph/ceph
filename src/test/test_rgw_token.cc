@@ -43,6 +43,9 @@ namespace {
 
   std::string enc_ldap{"ewogICAgIlJHV19UT0tFTiI6IHsKICAgICAgICAidmVyc2lvbiI6IDEsCiAgICAgICAgInR5cGUiOiAibGRhcCIsCiAgICAgICAgImlkIjogIlNtb25ueSIsCiAgICAgICAgImtleSI6ICJUdXJqYW4gb2YgTWlpciIKICAgIH0KfQo="};
 
+  std::string non_base64{"stuff here"};
+  std::string non_base64_sploded{"90KLscc0Dz4U49HX-7Tx"};
+
   Formatter* formatter{nullptr};
   bool verbose {false};
 }
@@ -69,6 +72,31 @@ TEST(TOKEN, DECODE) {
     ASSERT_EQ(token.id, access_key);
     ASSERT_EQ(token.key, secret_key);
   }
+}
+
+TEST(TOKEN, EMPTY) {
+    std::string empty{""};
+    RGWToken token{from_base64(empty)}; // decode ctor
+    ASSERT_FALSE(token.valid());
+}
+
+TEST(TOKEN, BADINPUT) {
+    RGWToken token{from_base64(non_base64)}; // decode ctor
+    ASSERT_FALSE(token.valid());
+}
+
+TEST(TOKEN, BADINPUT2) {
+    RGWToken token{from_base64(non_base64_sploded)}; // decode ctor
+    ASSERT_FALSE(token.valid());
+}
+
+TEST(TOKEN, BADINPUT3) {
+  try {
+    std::string stuff = from_base64(non_base64_sploded); // decode
+  } catch(...) {
+    // do nothing
+  }
+  ASSERT_EQ(1, 1);
 }
 
 TEST(TOKEN, SHUTDOWN) {

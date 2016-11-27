@@ -29,6 +29,15 @@
 using std::chrono::seconds;
 
 
+class Journaler::C_DelayFlush : public Context {
+  Journaler *journaler;
+  public:
+  C_DelayFlush(Journaler *j) : journaler(j) {}
+  void finish(int r) {
+    journaler->_do_delayed_flush();
+  }
+};
+
 void Journaler::set_readonly()
 {
   lock_guard l(lock);
@@ -345,7 +354,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
     end = write_pos;
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end << " (header had "
 		  << write_pos << "). log was empty. recovered." << dendl;
-    assert(0); // hrm.
+    ceph_abort(); // hrm.
   } else {
     assert(end >= write_pos);
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end

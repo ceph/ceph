@@ -35,6 +35,8 @@ public:
     total_free(0) {
   }
 
+  int create(uint64_t size, KeyValueDB::Transaction txn) override;
+
   int init() override;
   void shutdown() override;
 

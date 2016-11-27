@@ -89,6 +89,7 @@ struct rename_rollback {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rename_rollback*>& ls);
 };
+WRITE_CLASS_ENCODER(rename_rollback::drec)
 WRITE_CLASS_ENCODER(rename_rollback)
 
 

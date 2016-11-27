@@ -1,19 +1,22 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS} ${CMAKE_DL_LIBS})
-set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
+set(UNITTEST_LIBS gmock_main gmock gtest ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/googletest/googlemock/include -I${CMAKE_BINARY_DIR}/src/googletest/googlemock/include -I${CMAKE_SOURCE_DIR}/src/googletest/googletest/include -I${CMAKE_BINARY_DIR}/src/googletest/googletest/include -fno-strict-aliasing")
 
 add_subdirectory(bench)
 add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
 add_subdirectory(cls_numops)
-add_subdirectory(cls_rbd)
+if(WITH_RBD)
+  add_subdirectory(cls_rbd)
+endif(WITH_RBD)
 add_subdirectory(cls_refcount)
 add_subdirectory(cls_replica_log)
 add_subdirectory(cls_rgw)
 add_subdirectory(cls_statelog)
 add_subdirectory(cls_version)
+add_subdirectory(cls_lua)
 add_subdirectory(common)
 add_subdirectory(compressor)
 add_subdirectory(crush)
@@ -26,7 +29,9 @@ add_subdirectory(libcephfs)
 add_subdirectory(librados)
 add_subdirectory(librados_test_stub)
 add_subdirectory(libradosstriper)
-add_subdirectory(librbd)
+if(WITH_RBD)
+  add_subdirectory(librbd)
+endif(WITH_RBD)
 add_subdirectory(messenger)
 add_subdirectory(mds)
 add_subdirectory(mon)
@@ -40,8 +45,13 @@ add_subdirectory(pybind)
 if(${WITH_RADOSGW})
   add_subdirectory(rgw)
 endif(${WITH_RADOSGW})
-add_subdirectory(rbd_mirror)
+if(WITH_RBD)
+  add_subdirectory(rbd_mirror)
+endif(WITH_RBD)
 add_subdirectory(system)
+if(WITH_FIO)
+  add_subdirectory(fio)
+endif()
 
 # test_timers
 add_executable(ceph_test_timers
@@ -79,14 +89,16 @@ target_link_libraries(test_crypto
 add_executable(test_build_libcommon buildtest_skeleton.cc)
 target_link_libraries(test_build_libcommon common pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 
-if(${WITH_RADOSGW})
-add_executable(test_build_librgw buildtest_skeleton.cc)
-target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
-endif(${WITH_RADOSGW})
+if(WITH_RADOSGW)
+  add_executable(test_build_librgw buildtest_skeleton.cc)
+  target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+endif(WITH_RADOSGW)
 
-# From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
-add_executable(test_build_libcephfs buildtest_skeleton.cc)
-target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+if(WITH_LIBCEPHFS)
+  # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
+  add_executable(test_build_libcephfs buildtest_skeleton.cc)
+  target_link_libraries(test_build_libcephfs cephfs pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES})
@@ -104,7 +116,7 @@ target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAK
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
+target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES} 
   ${CMAKE_DL_LIBS})
 
 # test_trans
@@ -131,15 +143,16 @@ target_link_libraries(ceph_omapbench
   ${CMAKE_DL_LIBS}
   )
 
-# ceph_kvstorebench
-set(kvstorebench_srcs
-  kv_store_bench.cc
-  ${CMAKE_SOURCE_DIR}/src/key_value_store/kv_flat_btree_async.cc
-  )
-add_executable(ceph_kvstorebench
-  ${kvstorebench_srcs}
-  )
-target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(WITH_KVS)
+  # ceph_kvstorebench
+  set(kvstorebench_srcs
+    kv_store_bench.cc
+    ${CMAKE_SOURCE_DIR}/src/key_value_store/kv_flat_btree_async.cc
+    )
+  add_executable(ceph_kvstorebench ${kvstorebench_srcs})
+  target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+  install(TARGETS ceph_kvstorebench DESTINATION bin)
+endif(WITH_KVS)
 
 # ceph_objectstore_bench
 add_executable(ceph_objectstore_bench objectstore_bench.cc)
@@ -155,9 +168,9 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
@@ -171,8 +184,6 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     cls_version_client
     cls_log_client
     cls_statelog_client
@@ -182,6 +193,8 @@ if(${WITH_RADOSGW})
     cls_lock_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
   set_target_properties(ceph_test_cls_rgw_meta PROPERTIES
     COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
@@ -201,8 +214,6 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     cls_version_client
     cls_log_client
     cls_statelog_client
@@ -212,6 +223,8 @@ if(${WITH_RADOSGW})
     cls_lock_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
@@ -237,9 +250,9 @@ if(${WITH_RADOSGW})
     cls_user_client
     cls_lock_client
     global
-    curl
-    expat
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}
     ${CRYPTO_LIBS}
@@ -254,6 +267,7 @@ add_executable(ceph_test_librgw_file
   )
 set_target_properties(ceph_test_librgw_file PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+target_include_directories(ceph_test_librgw_file PRIVATE ${FCGI_INCLUDE_DIR})
 target_link_libraries(ceph_test_librgw_file
   rgw
   librados
@@ -293,9 +307,11 @@ add_executable(ceph_test_librgw_file_nfsns
   )
 set_target_properties(ceph_test_librgw_file_nfsns PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+target_include_directories(ceph_test_librgw_file_nfsns PRIVATE ${FCGI_INCLUDE_DIR})
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
+  boost_system
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
@@ -336,7 +352,8 @@ set_target_properties(test_rgw_ldap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rgw_ldap
   librados
-  ${OPENLDAP_LIBS}
+  common
+  ${OPENLDAP_LIBRARIES}
   ${Boost_LIBRARIES}
   ${UNITTEST_LIBS}
   )
@@ -354,10 +371,16 @@ target_link_libraries(ceph_multi_stress_watch librados global radostest
 add_executable(ceph_perf_local 
   perf_local.cc
   perf_helper.cc)
-#INTEL_SSE & INTEL_SSE2 flags
-set(PERF_LOCAL_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2") 
-set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
-  ${PERF_LOCAL_FLAGS})
+if(HAVE_SSE)
+  set(PERF_LOCAL_FLAGS ${SSE3_FLAGS})
+endif(HAVE_SSE)
+if(HAVE_NEON)
+  set(PERF_LOCAL_FLAGS ${ARM_NEON_FLAGS})
+endif(HAVE_NEON)
+if(PERF_LOCAL_FLAGS)
+  set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
+    ${PERF_LOCAL_FLAGS})
+endif()
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
 
 # ceph_xattr_bench
@@ -378,7 +401,6 @@ target_link_libraries(ceph_xattr_bench
 
 install(TARGETS
   ceph_bench_log
-  ceph_kvstorebench
   ceph_multi_stress_watch
   ceph_objectstore_bench
   ceph_omapbench
@@ -437,7 +459,7 @@ install(TARGETS
   ceph_test_stress_watch
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(${HAVE_FUSE})
+if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -447,7 +469,7 @@ if(${HAVE_FUSE})
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${HAVE_FUSE})
+endif(WITH_FUSE)
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers
@@ -476,7 +498,7 @@ target_link_libraries(ceph_test_get_blkdev_size
 #make check starts here
 
 #following dependencies are run inside make check unit tests
-add_dependencies(check 
+add_dependencies(tests
   ceph-mon
   ceph
   ceph-authtool
@@ -488,12 +510,9 @@ add_dependencies(check
   monmaptool
   ceph-osd
   ceph-dencoder
-  unittest_librbd
   ceph-objectstore-tool
   ceph-monstore-tool
   osdmaptool
-  rbd
-  radosgw-admin
   ceph_example
   ceph_snappy
   cls_lock
@@ -501,28 +520,38 @@ add_dependencies(check
   ceph_erasure_code_non_regression
   ceph_erasure_code
   ceph-disk
-  ceph-detect-init
   cython_modules)
+if(WITH_RBD)
+  add_dependencies(tests unittest_librbd rbd)
+endif(WITH_RBD)
+if(WITH_RADOSGW)
+  add_dependencies(tests radosgw-admin)
+endif(WITH_RADOSGW)
+if(NOT FREEBSD)
+  add_dependencies(tests ceph-detect-init)
+endif(NOT FREEBSD)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
 
 add_ceph_test(ceph_objectstore_tool.py ${CMAKE_CURRENT_SOURCE_DIR}/ceph_objectstore_tool.py)
-add_ceph_test(cephtool-test-mds.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mds.sh)
+if(WITH_LIBCEPHFS)
+  add_ceph_test(cephtool-test-mds.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mds.sh)
+endif(WITH_LIBCEPHFS)
 add_ceph_test(cephtool-test-mon.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mon.sh)
 add_ceph_test(cephtool-test-osd.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-osd.sh)
 add_ceph_test(cephtool-test-rados.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-rados.sh)
-add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh)
+if(WITH_RBD)
+  add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh)
+endif(WITH_RBD)
 add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_objectstore_memstore.sh)
 add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
+add_ceph_test(test_subman.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_subman.sh)
 add_ceph_test(unittest_bufferlist.sh ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
 
 add_test(NAME run-tox-ceph-disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/run-tox.sh)
-add_dependencies(check run-tox-ceph-disk)
-
-add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_dependencies(check run-tox-ceph-detect-init)
+add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh)
 
 set(CEPH_DISK_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv)
 set(CEPH_DETECT_INIT_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv)
@@ -555,14 +584,14 @@ add_executable(unittest_encoding
   encoding.cc
   )
 add_ceph_unittest(unittest_encoding ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_encoding)
-target_link_libraries(unittest_encoding librados pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_encoding common librados ${XIO_LIBRARY} pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_addrs
 add_executable(unittest_addrs
   test_addrs.cc
   )
 add_ceph_unittest(unittest_addrs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_addrs)
-target_link_libraries(unittest_addrs librados pthread rt m ${BLKID_LIBRARIES}) 
+target_link_libraries(unittest_addrs common librados ${XIO_LIBRARY} pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_workqueue
 add_executable(unittest_workqueue
@@ -660,7 +689,7 @@ add_executable(unittest_xlist
   test_xlist.cc
   )
 add_ceph_unittest(unittest_xlist ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_xlist)
-target_link_libraries(unittest_xlist common)
+target_link_libraries(unittest_xlist common ${XIO_LIBRARY})
 
 # unittest_arch
 add_executable(unittest_arch
@@ -668,6 +697,20 @@ add_executable(unittest_arch
   )
 add_ceph_unittest(unittest_arch ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_arch)
 target_link_libraries(unittest_arch global)
+
+# unittest_denc
+add_executable(unittest_denc
+  test_denc.cc
+  )
+add_ceph_unittest(unittest_denc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_denc)
+target_link_libraries(unittest_denc os global)
+
+# unittest_mempool
+add_executable(unittest_mempool
+  test_mempool.cc
+  )
+add_ceph_unittest(unittest_mempool ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mempool)
+target_link_libraries(unittest_mempool global)
 
 # unittest_crypto
 add_executable(unittest_crypto
@@ -737,15 +780,13 @@ add_executable(unittest_heartbeatmap
   heartbeat_map.cc
   )
 add_ceph_unittest(unittest_heartbeatmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_heartbeatmap)
-target_link_libraries(unittest_heartbeatmap global)
+target_link_libraries(unittest_heartbeatmap common global)
 
 if(${WITH_RADOSGW})
   # unittest_formatter
-  # why does this include rgw/rgw_formats.cc...?
   add_executable(unittest_formatter
     formatter.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_formats.cc
-  )
+    )
   add_ceph_unittest(unittest_formatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_formatter)
   target_link_libraries(unittest_formatter global)
 endif(${WITH_RADOSGW})
@@ -762,18 +803,19 @@ target_link_libraries(unittest_daemon_config
   ${EXTRALIBS}
   )
 
+if(WITH_LIBCEPHFS)
 # unittest_libcephfs_config
 add_executable(unittest_libcephfs_config
   libcephfs_config.cc
   )
 add_ceph_unittest(unittest_libcephfs_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_libcephfs_config)
 target_link_libraries(unittest_libcephfs_config cephfs)
+endif(WITH_LIBCEPHFS)
 
+if(WITH_RBD)
 # unittest_rbd_replay
 add_executable(unittest_rbd_replay
-  test_rbd_replay.cc
-  $<TARGET_OBJECTS:parse_secret_objs>
-)
+  test_rbd_replay.cc)
 add_ceph_unittest(unittest_rbd_replay ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_replay)
 target_link_libraries(unittest_rbd_replay
   librbd
@@ -784,6 +826,7 @@ target_link_libraries(unittest_rbd_replay
   keyutils
   ${BLKID_LIBRARIES}
   )
+endif(WITH_RBD)
 
 # unittest_ipaddr
 add_executable(unittest_ipaddr

@@ -50,8 +50,9 @@ int main(int argc, char **argv) {
   preargs.push_back("--admin-socket");
   preargs.push_back(get_rand_socket_path());
   std::vector<const char*> args;
-  global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
@@ -199,4 +200,23 @@ TEST(PerfCounters, CephContextPerfCounters) {
 
   // Restore to avoid impact to other test cases
   g_ceph_context->disable_perf_counter();
+}
+
+TEST(PerfCounters, ResetPerfCounters) {
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
+  coll->clear();
+  PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
+  coll->add(fake_pf1);
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"all\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"success\":\"perf reset all\"}"), msg);
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"success\":\"perf reset test_perfcounter_1\"}"), msg);
+
+  coll->clear();
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"error\":\"Not find: test_perfcounter_1\"}"), msg);
 }

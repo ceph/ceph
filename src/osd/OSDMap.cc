@@ -1007,6 +1007,15 @@ int OSDMap::identify_osd(const uuid_d& u) const
   return -1;
 }
 
+int OSDMap::identify_osd_on_all_channels(const entity_addr_t& addr) const
+{
+  for (int i=0; i<max_osd; i++)
+    if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr ||
+	get_hb_back_addr(i) == addr || get_hb_front_addr(i) == addr))
+      return i;
+  return -1;
+}
+
 int OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
   for (int i=0; i<max_osd; i++)
@@ -1289,9 +1298,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (map<int64_t,string>::const_iterator p = inc.new_pool_names.begin();
        p != inc.new_pool_names.end();
        ++p) {
-    if (pool_name.count(p->first))
-      name_pool.erase(pool_name[p->first]);
-    pool_name[p->first] = p->second;
+    auto pool_name_entry = pool_name.find(p->first);
+    if (pool_name_entry != pool_name.end()) {
+      name_pool.erase(pool_name_entry->second);
+      pool_name_entry->second = p->second;
+    } else {
+      pool_name[p->first] = p->second;
+    }
     name_pool[p->second] = p->first;
   }
   for (set<int64_t>::const_iterator p = inc.old_pools.begin();
@@ -1424,10 +1437,8 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
 
   // blacklist
-  for (map<entity_addr_t,utime_t>::const_iterator p = inc.new_blacklist.begin();
-       p != inc.new_blacklist.end();
-       ++p) {
-    blacklist[p->first] = p->second;
+  if (!inc.new_blacklist.empty()) {
+    blacklist.insert(inc.new_blacklist.begin(),inc.new_blacklist.end());
     new_blacklist_entries = true;
   }
   for (vector<entity_addr_t>::const_iterator p = inc.old_blacklist.begin();
@@ -2382,6 +2393,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",sortbitwise";
   if (f & CEPH_OSDMAP_REQUIRE_JEWEL)
     s += ",require_jewel_osds";
+  if (f & CEPH_OSDMAP_REQUIRE_KRAKEN)
+    s += ",require_kraken_osds";
   if (s.length())
     s.erase(0, 1);
   return s;

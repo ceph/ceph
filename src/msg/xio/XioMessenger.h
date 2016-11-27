@@ -63,7 +63,7 @@ private:
 
 public:
   XioMessenger(CephContext *cct, entity_name_t name,
-	       string mname, uint64_t nonce, uint64_t features,
+	       string mname, uint64_t nonce,
 	       uint64_t cflags = 0,
 	       DispatchStrategy* ds = new QueueStrategy(1));
 
@@ -95,7 +95,7 @@ public:
 		    void *cb_user_context);
 
   /* Messenger interface */
-  virtual void set_addr_unknowns(entity_addr_t &addr)
+  virtual void set_addr_unknowns(const entity_addr_t &addr) override
     { } /* XXX applicable? */
 
   virtual int get_dispatch_queue_len()
@@ -156,9 +156,6 @@ private:
 protected:
   virtual void ready()
     { }
-
-public:
-  uint64_t local_features;
 };
 
 XioCommand* pool_alloc_xio_command(XioConnection *xcon);

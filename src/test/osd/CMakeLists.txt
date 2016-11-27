@@ -23,22 +23,10 @@ add_ceph_test(osd-config.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-config.sh)
 add_ceph_test(osd-markdown.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-markdown.sh) 
 add_ceph_test(osd-reactivate.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reactivate.sh) 
 add_ceph_test(osd-reuse-id.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reuse-id.sh)
+add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh) 
 add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
-
-#osd-copy-from.sh needs to be run out of ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-add_test(NAME osd-copy-from.sh COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
-add_dependencies(check osd-copy-from.sh)
-
-set_property(TEST 
-  osd-copy-from.sh
-  PROPERTY ENVIRONMENT 
-  CEPH_ROOT=${CMAKE_SOURCE_DIR}
-  CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-  CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-  CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
-  LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
-  PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
-  PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.linux-x86_64-2.7:${CMAKE_SOURCE_DIR}/src/pybind)
+add_ceph_test(osd-copy-from.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh)
+add_ceph_test(osd-fast-mark-down.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-fast-mark-down.sh)
 
 # unittest_osdmap
 add_executable(unittest_osdmap
@@ -66,14 +54,14 @@ add_executable(unittest_osdscrub
   TestOSDScrub.cc
   )
 add_ceph_unittest(unittest_osdscrub ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osdscrub)
-target_link_libraries(unittest_osdscrub osd global dl os mon ${BLKID_LIBRARIES})
+target_link_libraries(unittest_osdscrub osd global ${CMAKE_DL_LIBS} os mon ${BLKID_LIBRARIES})
 
 # unittest_pglog
 add_executable(unittest_pglog
   TestPGLog.cc
   )
 add_ceph_unittest(unittest_pglog ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pglog)
-target_link_libraries(unittest_pglog osd global dl ${BLKID_LIBRARIES})
+target_link_libraries(unittest_pglog osd global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 
 # unittest_hitset
 add_executable(unittest_hitset
@@ -89,3 +77,16 @@ add_executable(unittest_osd_osdcap
 add_ceph_unittest(unittest_osd_osdcap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osd_osdcap)
 target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
 
+# unittest ExtentCache
+add_executable(unittest_extent_cache
+  test_extent_cache.cc
+)
+add_ceph_unittest(unittest_extent_cache ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_extent_cache)
+target_link_libraries(unittest_extent_cache osd global ${BLKID_LIBRARIES})
+
+# unittest PGTransaction
+add_executable(unittest_pg_transaction
+  test_pg_transaction.cc
+)
+add_ceph_unittest(unittest_pg_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pg_transaction)
+target_link_libraries(unittest_pg_transaction osd global ${BLKID_LIBRARIES})

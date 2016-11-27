@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 
+from collections import Callable
 from datetime import datetime
 from functools import partial, wraps
 from itertools import chain
@@ -80,6 +81,8 @@ cdef extern from "rados/librados.h" nogil:
         _LIBRADOS_OPERATION_IGNORE_CACHE "LIBRADOS_OPERATION_IGNORE_CACHE"
         _LIBRADOS_OPERATION_SKIPRWLOCKS "LIBRADOS_OPERATION_SKIPRWLOCKS"
         _LIBRADOS_OPERATION_IGNORE_OVERLAY "LIBRADOS_OPERATION_IGNORE_OVERLAY"
+        _LIBRADOS_CREATE_EXCLUSIVE "LIBRADOS_CREATE_EXCLUSIVE"
+        _LIBRADOS_CREATE_IDEMPOTENT "LIBRADOS_CREATE_IDEMPOTENT"
 
     cdef uint64_t _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
 
@@ -152,6 +155,10 @@ cdef extern from "rados/librados.h" nogil:
                           const char *inbuf, size_t inbuflen,
                           char **outbuf, size_t *outbuflen,
                           char **outs, size_t *outslen)
+    int rados_mgr_command(rados_t cluster, const char **cmd, size_t cmdlen,
+                          const char *inbuf, size_t inbuflen,
+                          char **outbuf, size_t *outbuflen,
+                          char **outs, size_t *outslen)
     int rados_mon_command_target(rados_t cluster, const char *name, const char **cmd, size_t cmdlen,
                                  const char *inbuf, size_t inbuflen,
                                  char **outbuf, size_t *outbuflen,
@@ -218,6 +225,7 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_aio_create_completion(void * cb_arg, rados_callback_t cb_complete, rados_callback_t cb_safe, rados_completion_t * pc)
     void rados_aio_release(rados_completion_t c)
+    int rados_aio_stat(rados_ioctx_t io, const char *oid, rados_completion_t completion, uint64_t *psize, time_t *pmtime)
     int rados_aio_write(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len, uint64_t off)
     int rados_aio_append(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len)
     int rados_aio_write_full(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len)
@@ -237,13 +245,26 @@ cdef extern from "rados/librados.h" nogil:
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
+    int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
+    void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
+
+    void rados_write_op_create(rados_write_op_t write_op, int exclusive, const char *category)
+    void rados_write_op_append(rados_write_op_t write_op, const char *buffer, size_t len)
+    void rados_write_op_write_full(rados_write_op_t write_op, const char *buffer, size_t len)
+    void rados_write_op_write(rados_write_op_t write_op, const char *buffer, size_t len, uint64_t offset)
+    void rados_write_op_remove(rados_write_op_t write_op)
+    void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
+    void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
+
     void rados_read_op_omap_get_vals(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
     void rados_read_op_omap_get_keys(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
     int rados_read_op_operate(rados_read_op_t read_op, rados_ioctx_t io, const char * oid, int flags)
+    int rados_aio_read_op_operate(rados_read_op_t read_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, int flags)
+    void rados_read_op_set_flags(rados_read_op_t read_op, int flags)
     int rados_omap_get_next(rados_omap_iter_t iter, const char * const* key, const char * const* val, size_t * len)
     void rados_omap_get_end(rados_omap_iter_t iter)
 
@@ -267,6 +288,9 @@ LIBRADOS_OPERATION_SKIPRWLOCKS = _LIBRADOS_OPERATION_SKIPRWLOCKS
 LIBRADOS_OPERATION_IGNORE_OVERLAY = _LIBRADOS_OPERATION_IGNORE_OVERLAY
 
 LIBRADOS_ALL_NSPACES = _LIBRADOS_ALL_NSPACES.decode('utf-8')
+
+LIBRADOS_CREATE_EXCLUSIVE = _LIBRADOS_CREATE_EXCLUSIVE
+LIBRADOS_CREATE_IDEMPOTENT = _LIBRADOS_CREATE_IDEMPOTENT
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -1205,6 +1229,47 @@ Rados object in state %s." % self.state)
         finally:
             free(_cmd)
 
+    def mgr_command(self, cmd, inbuf, timeout=0):
+        """
+        returns (int ret, string outbuf, string outs)
+        """
+        # NOTE(sileht): timeout is ignored because C API doesn't provide
+        # timeout argument, but we keep it for backward compat with old python binding
+        self.require_state("connected")
+
+        cmd = cstr_list(cmd, 'cmd')
+        inbuf = cstr(inbuf, 'inbuf')
+
+        cdef:
+            char **_cmd = to_bytes_array(cmd)
+            size_t _cmdlen = len(cmd)
+
+            char *_inbuf = inbuf
+            size_t _inbuf_len = len(inbuf)
+
+            char *_outbuf
+            size_t _outbuf_len
+            char *_outs
+            size_t _outs_len
+
+        try:
+            with nogil:
+                ret = rados_mgr_command(self.cluster,
+                                        <const char **>_cmd, _cmdlen,
+                                        <const char*>_inbuf, _inbuf_len,
+                                        &_outbuf, &_outbuf_len,
+                                        &_outs, &_outs_len)
+
+            my_outs = decode_cstr(_outs[:_outs_len])
+            my_outbuf = _outbuf[:_outbuf_len]
+            if _outs_len:
+                rados_buffer_free(_outs)
+            if _outbuf_len:
+                rados_buffer_free(_outbuf)
+            return (ret, my_outbuf, my_outs)
+        finally:
+            free(_cmd)
+
     def pg_command(self, pgid, cmd, inbuf, timeout=0):
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
@@ -1689,6 +1754,119 @@ cdef class WriteOp(object):
         with nogil:
             rados_release_write_op(self.write_op)
 
+    @requires(('exclusive', opt(int)))
+    def new(self, exclusive=None):
+        """
+        Create the object.
+        """
+
+        cdef:
+            int _exclusive = exclusive
+
+        with nogil:
+            rados_write_op_create(self.write_op, _exclusive, NULL)
+
+
+    def remove(self):
+        """
+        Remove object.
+        """
+        with nogil:
+            rados_write_op_remove(self.write_op)
+
+    @requires(('flags', int))
+    def set_flags(self, flags=LIBRADOS_OPERATION_NOFLAG):
+        """
+        Set flags for the last operation added to this write_op.
+        :para flags: flags to apply to the last operation
+        :type flags: int
+        """
+
+        cdef:
+            int _flags = flags
+
+        with nogil:
+            rados_write_op_set_flags(self.write_op, _flags)
+
+    @requires(('to_write', bytes))
+    def append(self, to_write):
+        """
+        Append data to an object synchronously
+        :param to_write: data to write
+        :type to_write: bytes
+        """
+
+        cdef:
+            char *_to_write = to_write
+            size_t length = len(to_write)
+
+        with nogil:
+            rados_write_op_append(self.write_op, _to_write, length)
+
+    @requires(('to_write', bytes))
+    def write_full(self, to_write):
+        """
+        Write whole object, atomically replacing it.
+        :param to_write: data to write
+        :type to_write: bytes
+        """
+
+        cdef:
+            char *_to_write = to_write
+            size_t length = len(to_write)
+
+        with nogil:
+            rados_write_op_write_full(self.write_op, _to_write, length)
+
+    @requires(('to_write', bytes), ('offset', int))
+    def write(self, to_write, offset=0):
+        """
+        Write to offset.
+        :param to_write: data to write
+        :type to_write: bytes
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        """
+
+        cdef:
+            char *_to_write = to_write
+            size_t length = len(to_write)
+            uint64_t _offset = offset
+
+        with nogil:
+            rados_write_op_write(self.write_op, _to_write, length, _offset)
+
+    @requires(('offset', int), ('length', int))
+    def zero(self, offset, length):
+        """
+        Zero part of an object.
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        :param offset: number of zero to write
+        :type offset: int
+        """
+
+        cdef:
+            size_t _length = length
+            uint64_t _offset = offset
+
+        with nogil:
+            rados_write_op_zero(self.write_op, _length, _offset)
+
+    @requires(('offset', int))
+    def truncate(self, offset):
+        """
+        Truncate an object.
+        :param offset: byte offset in the object to begin truncating at
+        :type offset: int
+        """
+
+        cdef:
+            uint64_t _offset = offset
+
+        with nogil:
+            rados_write_op_truncate(self.write_op,  _offset)
+
 
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""
@@ -1705,6 +1883,20 @@ cdef class ReadOp(object):
     def release(self):
         with nogil:
             rados_release_read_op(self.read_op)
+
+    @requires(('flags', int))
+    def set_flags(self, flags=LIBRADOS_OPERATION_NOFLAG):
+        """
+        Set flags for the last operation added to this read_op.
+        :para flags: flags to apply to the last operation
+        :type flags: int
+        """
+
+        cdef:
+            int _flags = flags
+
+        with nogil:
+            rados_read_op_set_flags(self.read_op, _flags)
 
 
 class ReadOpCtx(ReadOp, OpCtx):
@@ -1797,6 +1989,51 @@ cdef class Ioctx(object):
 
         completion_obj.rados_comp = completion
         return completion_obj
+
+    def aio_stat(self, object_name, oncomplete):
+        """
+        Asynchronously get object stats (size/mtime)
+
+        oncomplete will be called with the returned size and mtime
+        as well as the completion:
+
+        oncomplete(completion, size, mtime)
+
+        :param object_name: the name of the object to get stats from
+        :type object_name: str
+        :param oncomplete: what to do when the stat is complete
+        :type oncomplete: completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        object_name = cstr(object_name, 'object_name')
+
+        cdef:
+            Completion completion
+            char *_object_name = object_name
+            uint64_t psize
+            time_t pmtime
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            if return_value >= 0:
+                return oncomplete(_completion_v, psize, time.localtime(pmtime))
+            else:
+                return oncomplete(_completion_v, None, None)
+
+        completion = self.__get_completion(oncomplete_, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_stat(self.io, _object_name, completion.rados_comp,
+                                 &psize, &pmtime)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "error stating %s" % object_name)
+        return completion
 
     def aio_write(self, object_name, to_write, offset=0,
                   oncomplete=None, onsafe=None):
@@ -2803,6 +3040,48 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret != 0:
             raise make_ex(ret, "Failed to operate write op for oid %s" % oid)
 
+    @requires(('write_op', WriteOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('mtime', opt(int)), ('flags', opt(int)))
+    def operate_aio_write_op(self, write_op, oid, oncomplete=None, onsafe=None, mtime=0, flags=LIBRADOS_OPERATION_NOFLAG):
+        """
+        excute the real write operation asynchronously
+        :para write_op: write operation object
+        :type write_op: WriteOp
+        :para oid: object name
+        :type oid: str
+        :param oncomplete: what to do when the remove is safe and complete in memory
+            on all replicas
+        :type oncomplete: completion
+        :param onsafe:  what to do when the remove is safe and complete on storage
+            on all replicas
+        :type onsafe: completion
+        :para mtime: the time to set the mtime to, 0 for the current time
+        :type mtime: int
+        :para flags: flags to apply to the entire operation
+        :type flags: int
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        oid = cstr(oid, 'oid')
+        cdef:
+            WriteOp _write_op = write_op
+            char *_oid = oid
+            Completion completion
+            time_t _mtime = mtime
+            int _flags = flags
+
+        completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
+
+        with nogil:
+            ret = rados_aio_write_op_operate(_write_op.write_op, self.io, completion.rados_comp, _oid,
+                                             &_mtime, _flags)
+        if ret != 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to operate aio write op for oid %s" % oid)
+        return completion
+
     @requires(('read_op', ReadOp), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=LIBRADOS_OPERATION_NOFLAG):
         """
@@ -2824,6 +3103,40 @@ returned %d, but should return zero on success." % (self.name, ret))
             ret = rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
         if ret != 0:
             raise make_ex(ret, "Failed to operate read op for oid %s" % oid)
+
+    @requires(('read_op', ReadOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('flag', opt(int)))
+    def operate_aio_read_op(self, read_op, oid, oncomplete=None, onsafe=None, flag=LIBRADOS_OPERATION_NOFLAG):
+        """
+        excute the real read operation
+        :para read_op: read operation object
+        :type read_op: ReadOp
+        :para oid: object name
+        :type oid: str
+        :param oncomplete: what to do when the remove is safe and complete in memory
+            on all replicas
+        :type oncomplete: completion
+        :param onsafe:  what to do when the remove is safe and complete on storage
+            on all replicas
+        :type onsafe: completion
+        :para flag: flags to apply to the entire operation
+        :type flag: int
+        """
+        oid = cstr(oid, 'oid')
+        cdef:
+            ReadOp _read_op = read_op
+            char *_oid = oid
+            Completion completion
+            int _flag = flag
+
+        completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
+
+        with nogil:
+            ret = rados_aio_read_op_operate(_read_op.read_op, self.io, completion.rados_comp, _oid, _flag)
+        if ret != 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to operate aio read op for oid %s" % oid)
+        return completion
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
     def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):

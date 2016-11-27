@@ -5,6 +5,7 @@
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -54,7 +55,7 @@ public:
 
     m_remote_journaler = new ::journal::Journaler(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-      m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", 5);
+      m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {});
 
     m_client_meta = {"image-id"};
 
@@ -144,7 +145,7 @@ TEST_F(TestImageSync, SnapshotStress) {
 
     librbd::NoOpProgressContext no_op_progress_ctx;
     uint64_t size = 1 + rand() % m_image_size;
-    ASSERT_EQ(0, m_remote_image_ctx->operations->resize(size,
+    ASSERT_EQ(0, m_remote_image_ctx->operations->resize(size, true,
                                                         no_op_progress_ctx));
     ASSERT_EQ(0, m_remote_image_ctx->state->refresh());
 

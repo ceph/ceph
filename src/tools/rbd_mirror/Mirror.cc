@@ -16,7 +16,6 @@
 #define dout_prefix *_dout << "rbd::mirror::Mirror: " << this << " " \
                            << __func__ << ": "
 
-using std::chrono::seconds;
 using std::list;
 using std::map;
 using std::set;
@@ -215,10 +214,9 @@ int Mirror::init()
     return r;
   }
 
-  // TODO: make interval configurable
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
-  m_image_deleter.reset(new ImageDeleter(m_local, m_threads->work_queue,
+  m_image_deleter.reset(new ImageDeleter(m_threads->work_queue,
                                          m_threads->timer,
                                          &m_threads->timer_lock));
 
@@ -236,8 +234,15 @@ void Mirror::run()
     if (!m_manual_stop) {
       update_replayers(m_local_cluster_watcher->get_pool_peers());
     }
-    // TODO: make interval configurable
-    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
+    m_cond.WaitInterval(g_ceph_context, m_lock,
+	utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
+  }
+
+  // stop all replayers in parallel
+  Mutex::Locker locker(m_lock);
+  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
+    auto &replayer = it->second;
+    replayer->stop(false);
   }
   dout(20) << "return" << dendl;
 }
@@ -313,7 +318,7 @@ void Mirror::stop()
 
   for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
     auto &replayer = it->second;
-    replayer->stop();
+    replayer->stop(true);
   }
 }
 
@@ -358,8 +363,12 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
   for (auto it = m_replayers.begin(); it != m_replayers.end();) {
     auto &peer = it->first.second;
     auto pool_peer_it = pool_peers.find(it->first.first);
-    if (pool_peer_it == pool_peers.end() ||
-        pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
+    if (it->second->is_blacklisted()) {
+      derr << "removing blacklisted replayer for " << peer << dendl;
+      // TODO: make async
+      it = m_replayers.erase(it);
+    } else if (pool_peer_it == pool_peers.end() ||
+               pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
       dout(20) << "removing replayer for " << peer << dendl;
       // TODO: make async
       it = m_replayers.erase(it);
@@ -375,8 +384,7 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
         dout(20) << "starting replayer for " << peer << dendl;
         unique_ptr<Replayer> replayer(new Replayer(m_threads, m_image_deleter,
                                                    m_image_sync_throttler,
-                                                   m_local, kv.first, peer,
-                                                   m_args));
+                                                   kv.first, peer, m_args));
         // TODO: make async, and retry connecting within replayer
         int r = replayer->init();
         if (r < 0) {

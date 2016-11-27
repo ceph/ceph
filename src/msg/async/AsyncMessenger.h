@@ -30,77 +30,15 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-#include "common/Throttle.h"
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
-#include "common/simple_spin.h"
 
 
 class AsyncMessenger;
-class WorkerPool;
-
-enum {
-  l_msgr_first = 94000,
-  l_msgr_recv_messages,
-  l_msgr_send_messages,
-  l_msgr_send_messages_inline,
-  l_msgr_recv_bytes,
-  l_msgr_send_bytes,
-  l_msgr_created_connections,
-  l_msgr_active_connections,
-  l_msgr_last,
-};
-
-
-class Worker : public Thread {
-  static const uint64_t InitEventNumber = 5000;
-  static const uint64_t EventMaxWaitUs = 30000000;
-  CephContext *cct;
-  WorkerPool *pool;
-  bool done;
-  int id;
-  PerfCounters *perf_logger;
-
- public:
-  EventCenter center;
-  std::atomic_uint references;
-  Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
-    center.init(InitEventNumber, i);
-    char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
-    // initialize perf_logger
-    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
-
-    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
-    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-    plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent inline messages");
-    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
-
-    perf_logger = plb.create_perf_counters();
-    cct->get_perfcounters_collection()->add(perf_logger);
-  }
-  ~Worker() {
-    if (perf_logger) {
-      cct->get_perfcounters_collection()->remove(perf_logger);
-      delete perf_logger;
-    }
-  }
-  void *entry();
-  void stop();
-  PerfCounters *get_perf_counter() { return perf_logger; }
-  void release_worker() {
-    int oldref = references.fetch_sub(1);
-    assert(oldref > 0);
-  }
-};
 
 /**
  * If the Messenger binds to a specific address, the Processor runs
@@ -110,20 +48,20 @@ class Processor {
   AsyncMessenger *msgr;
   NetHandler net;
   Worker *worker;
-  int listen_sd;
+  ServerSocket listen_socket;
   uint64_t nonce;
   EventCallbackRef listen_handler;
 
   class C_processor_accept;
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n);
+  Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n);
   ~Processor() { delete listen_handler; };
 
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
-  int start(Worker *w);
+  void start();
   void accept();
 };
 
@@ -146,7 +84,7 @@ public:
    * be a value that will be repeated if the daemon restarts.
    */
   AsyncMessenger(CephContext *cct, entity_name_t name,
-                 string mname, uint64_t _nonce, uint64_t features);
+                 string mname, uint64_t _nonce);
 
   /**
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
@@ -157,7 +95,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(entity_addr_t& addr);
+  void set_addr_unknowns(const entity_addr_t &addr) override;
 
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
@@ -222,8 +160,6 @@ public:
    * @{
    */
 
-  Connection *create_anon_connection();
-
   /**
    * @} // Inner classes
    */
@@ -279,22 +215,11 @@ private:
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;
 
-  WorkerPool *pool;
-
-  Processor processor;
+  NetworkStack *stack;
+  std::vector<Processor*> processors;
   friend class Processor;
   DispatchQueue dispatch_queue;
 
-  class C_handle_reap : public EventCallback {
-    AsyncMessenger *msgr;
-
-   public:
-    explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
-    void do_request(int id) {
-      // judge whether is a time event
-      msgr->reap_dead();
-    }
-  };
   // the worker run messenger's cron jobs
   Worker *local_worker;
 
@@ -381,7 +306,7 @@ private:
     assert(lock.is_locked());
     local_connection->peer_addr = my_inst.addr;
     local_connection->peer_type = my_inst.name.type();
-    local_connection->set_features(local_features);
+    local_connection->set_features(CEPH_FEATURES_ALL);
     ms_deliver_handle_fast_connect(local_connection.get());
   }
 
@@ -391,7 +316,6 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
-  uint64_t local_features;
 
   /**
    * @defgroup AsyncMessenger internals
@@ -426,7 +350,10 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  AsyncConnectionRef add_accept(int sd);
+  void add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr);
+  NetworkStack *get_stack() {
+    return stack;
+  }
 
   /**
    * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.
@@ -463,7 +390,7 @@ public:
    * a peer protocol (if it matches our own), the protocol version for the
    * peer (if we're connecting), or our protocol version (if we're accepting).
    */
-  int get_proto_version(int peer_type, bool connect);
+  int get_proto_version(int peer_type, bool connect) const;
 
   /**
    * Fill in the address and peer type for the local connection, which

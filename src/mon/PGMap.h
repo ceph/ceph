@@ -22,8 +22,13 @@
 #define CEPH_PGMAP_H
 
 #include "common/debug.h"
+#include "common/TextTable.h"
 #include "osd/osd_types.h"
 #include <sstream>
+
+// FIXME: don't like including this here to get OSDMap::Incremental, maybe
+// PGMapUpdater needs its own header.
+#include "osd/OSDMap.h"
 
 namespace ceph { class Formatter; }
 
@@ -176,6 +181,8 @@ public:
 
   epoch_t calc_min_last_epoch_clean() const;
 
+  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+
  public:
 
   set<pg_t> creating_pgs;
@@ -269,6 +276,14 @@ public:
   void dirty_all(Incremental& inc);
 
   void dump(Formatter *f) const; 
+  void dump_pool_stats(const OSDMap &osd_map, stringstream *ss, Formatter *f,
+      bool verbose) const;
+  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+			    const object_stat_sum_t &sum,
+			    uint64_t avail,
+			    float raw_used_rate,
+			    bool verbose, const pg_pool_t *pool);
   void dump_basic(Formatter *f) const;
   void dump_pg_stats(Formatter *f, bool brief) const;
   void dump_pool_stats(Formatter *f) const;
@@ -300,7 +315,7 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
+  void get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs);
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;
@@ -370,5 +385,40 @@ inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_oneline_summary(NULL, &out);
   return out;
 }
+
+class PGMapUpdater
+{
+public:
+  static void check_osd_map(
+      const OSDMap::Incremental &osd_inc,
+      std::set<int> *need_check_down_pg_osds,
+      std::map<int,utime_t> *last_osd_report,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+  /**
+   * check latest osdmap for new pgs to register
+   */
+  static void register_new_pgs(
+      const OSDMap &osd_map,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+  /**
+   * recalculate creating pg mappings
+   */
+  static void update_creating_pgs(
+      const OSDMap &osd_map,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+protected:
+  static void register_pg(
+      const OSDMap &osd_map,
+      pg_t pgid, epoch_t epoch,
+      bool new_pool,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+};
 
 #endif

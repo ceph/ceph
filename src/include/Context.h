@@ -21,6 +21,7 @@
 #include <boost/function.hpp>
 #include <list>
 #include <set>
+#include <memory>
 
 #include "include/assert.h"
 #include "include/memory.h"
@@ -41,11 +42,16 @@ class GenContext {
  public:
   GenContext() {}
   virtual ~GenContext() {}       // we want a virtual destructor!!!
-  virtual void complete(T t) {
-    finish(t);
+
+  template <typename C>
+  void complete(C &&t) {
+    finish(std::forward<C>(t));
     delete this;
   }
 };
+
+template <typename T>
+using GenContextURef = std::unique_ptr<GenContext<T> >;
 
 /*
  * Context - abstract callback class
@@ -76,6 +82,10 @@ public:
   ContainerContext(T &obj) : obj(obj) {}
   void finish(int r) {}
 };
+template <typename T>
+ContainerContext<T> *make_container_context(T &&t) {
+  return new ContainerContext<T>(std::forward<T>(t));
+}
 
 template <class T>
 struct Wrapper : public Context {
@@ -96,6 +106,32 @@ struct RunOnDelete {
   }
 };
 typedef ceph::shared_ptr<RunOnDelete> RunOnDeleteRef;
+
+template <typename T>
+struct LambdaContext : public Context {
+  T t;
+  LambdaContext(T &&t) : t(std::forward<T>(t)) {}
+  void finish(int) {
+    t();
+  }
+};
+template <typename T>
+LambdaContext<T> *make_lambda_context(T &&t) {
+  return new LambdaContext<T>(std::move(t));
+}
+
+template <typename F, typename T>
+struct LambdaGenContext : GenContext<T> {
+  F f;
+  LambdaGenContext(F &&f) : f(std::forward<F>(f)) {}
+  void finish(T t) {
+    f(std::forward<T>(t));
+  }
+};
+template <typename T, typename F>
+GenContextURef<T> make_gen_lambda_context(F &&f) {
+  return GenContextURef<T>(new LambdaGenContext<F, T>(std::move(f)));
+}
 
 /*
  * finish and destroy a list of Contexts
@@ -336,7 +372,7 @@ public:
     return s;
   }
   void finish(int r) {
-    assert(0);    // nobody should ever call me.
+    ceph_abort();    // nobody should ever call me.
   }
 
   inline int get_sub_existing_count() const {
@@ -451,8 +487,8 @@ typedef C_GatherBuilderBase<Context, C_Gather > C_GatherBuilder;
 
 class FunctionContext : public Context {
 public:
-  FunctionContext(const boost::function<void(int)> &callback)
-    : m_callback(callback)
+  FunctionContext(boost::function<void(int)> &&callback)
+    : m_callback(std::move(callback))
   {
   }
 

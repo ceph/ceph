@@ -4,11 +4,12 @@
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
-#include "librbd/image_watcher/Notifier.h"
+#include "librbd/object_watcher/Notifier.h"
 #include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
@@ -22,9 +23,10 @@ namespace librbd {
 class ImageCtx;
 template <typename T> class TaskFinisher;
 
+template <typename ImageCtxT = ImageCtx>
 class ImageWatcher {
 public:
-  ImageWatcher(ImageCtx& image_ctx);
+  ImageWatcher(ImageCtxT& image_ctx);
   ~ImageWatcher();
 
   void register_watch(Context *on_finish);
@@ -33,9 +35,11 @@ public:
 
   void notify_flatten(uint64_t request_id, ProgressContext &prog_ctx,
                       Context *on_finish);
-  void notify_resize(uint64_t request_id, uint64_t size,
+  void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
-  void notify_snap_create(const std::string &snap_name, Context *on_finish);
+  void notify_snap_create(const std::string &snap_name,
+			  const cls::rbd::SnapshotNamespace &snap_namespace,
+			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
                           Context *on_finish);
@@ -45,6 +49,9 @@ public:
   void notify_rebuild_object_map(uint64_t request_id,
                                  ProgressContext &prog_ctx, Context *on_finish);
   void notify_rename(const std::string &image_name, Context *on_finish);
+
+  void notify_update_features(uint64_t features, bool enabled,
+                              Context *on_finish);
 
   void notify_acquired_lock();
   void notify_released_lock();
@@ -63,7 +70,8 @@ private:
   enum WatchState {
     WATCH_STATE_UNREGISTERED,
     WATCH_STATE_REGISTERED,
-    WATCH_STATE_ERROR
+    WATCH_STATE_ERROR,
+    WATCH_STATE_REWATCHING
   };
 
   enum TaskCode {
@@ -219,12 +227,13 @@ private:
     }
   };
 
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
 
   mutable RWLock m_watch_lock;
   WatchCtx m_watch_ctx;
   uint64_t m_watch_handle;
   WatchState m_watch_state;
+  Context *m_unregister_watch_ctx = nullptr;
 
   TaskFinisher<Task> *m_task_finisher;
 
@@ -235,7 +244,7 @@ private:
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
 
-  image_watcher::Notifier m_notifier;
+  object_watcher::Notifier m_notifier;
 
   void handle_register_watch(int r);
 
@@ -300,6 +309,8 @@ private:
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::RenamePayload& payload,
                       C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::UpdateFeaturesPayload& payload,
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
   void process_payload(uint64_t notify_id, uint64_t handle,
@@ -309,9 +320,12 @@ private:
   void handle_error(uint64_t cookie, int err);
   void acknowledge_notify(uint64_t notify_id, uint64_t handle, bufferlist &out);
 
-  void reregister_watch();
+  void rewatch();
+  void handle_rewatch(int r);
 };
 
 } // namespace librbd
+
+extern template class librbd::ImageWatcher<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IMAGE_WATCHER_H

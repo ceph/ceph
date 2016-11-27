@@ -34,7 +34,6 @@
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 
-#include "messages/MOSDFailure.h"
 #include "messages/MMonCommand.h"
 
 #include "messages/MCommand.h"
@@ -152,6 +151,14 @@ enum {
 static const char *config_keys[] = {
   "crush_location",
   NULL
+};
+
+class Objecter::RequestStateHook : public AdminSocketHook {
+  Objecter *m_objecter;
+public:
+  explicit RequestStateHook(Objecter *objecter);
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+            bufferlist& out);
 };
 
 /**
@@ -386,12 +393,14 @@ void Objecter::init()
 /*
  * ok, cluster interaction can happen
  */
-void Objecter::start()
+void Objecter::start(const OSDMap* o)
 {
   shared_lock rl(rwlock);
 
   start_tick();
-  if (osdmap->get_epoch() == 0) {
+  if (o) {
+    osdmap->deepish_copy_from(*o);
+  } else if (osdmap->get_epoch() == 0) {
     _maybe_request_map();
   }
 }
@@ -1829,7 +1838,7 @@ struct C_Objecter_GetVersion : public Context {
       objecter->wait_for_latest_osdmap(fin);
     } else {
       // it doesn't return any other error codes!
-      assert(0);
+      ceph_abort();
     }
   }
 };
@@ -2287,26 +2296,28 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool const check_for_latest_map = _calc_target(&op->target,
-						 &op->last_force_resend)
+  bool check_for_latest_map = _calc_target(&op->target, &op->last_force_resend)
     == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
-  if (r == -EAGAIN) {
-    assert(s == NULL);
+  if (r == -EAGAIN ||
+      (check_for_latest_map && sul.owns_lock_shared())) {
+    epoch_t orig_epoch = osdmap->get_epoch();
     sul.unlock();
     sul.lock();
+    if (orig_epoch != osdmap->get_epoch()) {
+      // map changed; recalculate mapping
+      check_for_latest_map = _calc_target(&op->target, &op->last_force_resend)
+	== RECALC_OP_TARGET_POOL_DNE;
+    }
+  }
+  if (r == -EAGAIN) {
+    assert(s == NULL);
     r = _get_session(op->target.osd, &s, sul);
   }
   assert(r == 0);
   assert(s);  // may be homeless
-
-  // We may need to take wlock if we will need to _set_op_map_check later.
-  if (check_for_latest_map && sul.owns_lock_shared()) {
-    sul.unlock();
-    sul.lock();
-  }
 
   _send_op_account(op);
 
@@ -3215,6 +3226,24 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		<< dendl;
   Op *op = iter->second;
 
+  if (retry_writes_after_first_reply && op->attempts == 1 &&
+      (op->target.flags & CEPH_OSD_FLAG_WRITE)) {
+    ldout(cct, 7) << "retrying write after first reply: " << tid << dendl;
+    if (op->onack) {
+      num_unacked.dec();
+    }
+    if (op->oncommit || op->oncommit_sync) {
+      num_uncommitted.dec();
+    }
+    _session_op_remove(s, op);
+    sl.unlock();
+    put_session(s);
+
+    _op_submit(op, sul, NULL);
+    m->put();
+    return;
+  }
+
   if (m->get_retry_attempt() >= 0) {
     if (m->get_retry_attempt() != (op->attempts - 1)) {
       ldout(cct, 7) << " ignoring reply from attempt "
@@ -3461,7 +3490,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  assert(list_context->current_pg <= pg_num);
+  assert(list_context->current_pg < pg_num);
 
   ObjectOperation op;
   op.pg_nls(list_context->max_entries, list_context->filter,
@@ -3617,7 +3646,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  assert(list_context->current_pg <= pg_num);
+  assert(list_context->current_pg < pg_num);
 
   ObjectOperation op;
   op.pg_ls(list_context->max_entries, list_context->filter,
@@ -4316,6 +4345,18 @@ void Objecter::ms_handle_remote_reset(Connection *con)
   ms_handle_reset(con);
 }
 
+bool Objecter::ms_handle_refused(Connection *con)
+{
+  // just log for now
+  if (osdmap && (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)) {
+    int osd = osdmap->identify_osd(con->get_peer_addr());
+    if (osd >= 0) {
+      ldout(cct, 1) << "ms_handle_refused on osd." << osd << dendl;
+    }
+  }
+  return false;
+}
+
 bool Objecter::ms_get_authorizer(int dest_type,
 				 AuthAuthorizer **authorizer,
 				 bool force_new)
@@ -4327,7 +4368,6 @@ bool Objecter::ms_get_authorizer(int dest_type,
   *authorizer = monc->auth->build_authorizer(dest_type);
   return *authorizer != NULL;
 }
-
 
 void Objecter::op_target_t::dump(Formatter *f) const
 {
@@ -4708,7 +4748,14 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
       return RECALC_OP_TARGET_POOL_DNE;
     }
     vector<int> acting;
-    osdmap->pg_to_acting_osds(c->target_pg, &acting, &c->osd);
+    int acting_primary;
+    osdmap->pg_to_acting_osds(c->target_pg, &acting, &acting_primary);
+    if (acting_primary == -1) {
+      c->map_check_error = -ENXIO;
+      c->map_check_error_str = "osd down";
+      return RECALC_OP_TARGET_OSD_DOWN;
+    }
+    c->osd = acting_primary;
   }
 
   OSDSession *s;
@@ -4853,7 +4900,7 @@ void Objecter::set_epoch_barrier(epoch_t epoch)
   ldout(cct, 7) << __func__ << ": barrier " << epoch << " (was "
 		<< epoch_barrier << ") current epoch " << osdmap->get_epoch()
 		<< dendl;
-  if (epoch >= epoch_barrier) {
+  if (epoch > epoch_barrier) {
     epoch_barrier = epoch;
     _maybe_request_map();
   }
@@ -5081,8 +5128,15 @@ namespace {
 			       int *rval)
       : interval(interval), snapsets(snapsets), rval(rval) {}
     void finish(int r) override {
-      if (r < 0 && r != -EAGAIN)
+      if (r < 0 && r != -EAGAIN) {
+        if (rval)
+          *rval = r;
 	return;
+      }
+
+      if (rval)
+        *rval = 0;
+
       try {
 	decode();
       } catch (buffer::error&) {

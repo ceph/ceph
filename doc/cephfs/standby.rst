@@ -24,7 +24,7 @@ how many ranks will be created.  The actual number of ranks
 in the filesystem will only be increased if a spare daemon is
 available to take on the new rank.
 
-An daemon has a *name* that is set statically by the administrator
+A daemon has a *name* that is set statically by the administrator
 when the daemon is first configured.  Typical configurations
 use the hostname where the daemon runs as the daemon name.
 
@@ -95,12 +95,12 @@ mds_standby_replay
 ~~~~~~~~~~~~~~~~~~
 
 If this is set to true, then the standby daemon will continuously read
-the metadata journal an up rank.  This will give it
+the metadata journal of an up rank.  This will give it
 a warm metadata cache, and speed up the process of failing over
 if the daemon serving the rank fails.
 
 An up rank may only have one standby replay daemon assigned to it,
-f two daemons are both set to be standby replay then one of them
+if two daemons are both set to be standby replay then one of them
 will arbitrarily win, and the other will become a normal non-replay
 standby.
 
@@ -108,6 +108,9 @@ Once a daemon has entered the standby replay state, it will only be
 used as a standby for the rank that it is following.  If another rank
 fails, this standby replay daemon will not be used as a replacement,
 even if no other standbys are available.
+
+*Historical note:* In Ceph prior to v10.2.1, this setting (when ``false``) is
+always true when ``mds_standby_for_*`` is also set.
 
 mds_standby_for_name
 ~~~~~~~~~~~~~~~~~~~~
@@ -138,7 +141,7 @@ this if you have a daemon that you want to use for any rank, but
 only within a particular filesystem.
 
 mon_force_standby_active
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 This setting is used on monitor hosts.  It defaults to true.
 
@@ -166,12 +169,12 @@ of the other.
 ::
 
     [mds.a]
-    standby replay = true
-    standby for rank = 0
+    mds standby replay = true
+    mds standby for rank = 0
 
     [mds.b]
-    standby replay = true
-    standby for rank = 0
+    mds standby replay = true
+    mds standby for rank = 0
 
 Floating standby
 ~~~~~~~~~~~~~~~~
@@ -195,14 +198,14 @@ for the other filesystem.
 ::
 
     [mds.a]
-    standby for fscid = 1
+    mds standby for fscid = 1
 
     [mds.b]
-    standby for fscid = 1
+    mds standby for fscid = 1
 
     [mds.c]
-    standby for fscid = 2
+    mds standby for fscid = 2
 
     [mds.d]
-    standby for fscid = 2
+    mds standby for fscid = 2
 

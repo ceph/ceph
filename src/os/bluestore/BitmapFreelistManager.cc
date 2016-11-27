@@ -56,8 +56,9 @@ BitmapFreelistManager::BitmapFreelistManager(KeyValueDB *db,
 
 int BitmapFreelistManager::create(uint64_t new_size, KeyValueDB::Transaction txn)
 {
-  size = new_size;
   bytes_per_block = g_conf->bdev_block_size;
+  assert(ISP2(bytes_per_block));
+  size = P2ALIGN(new_size, bytes_per_block);
   blocks_per_key = g_conf->bluestore_freelist_blocks_per_key;
 
   _init_misc();
@@ -520,17 +521,15 @@ void BitmapFreelistManager::_xor(
       first_key += bytes_per_key;
     }
     // middle keys
-    if (first_key < last_key) {
-      while (first_key < last_key) {
-	string k;
-	make_offset_key(first_key, &k);
-	dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec
-		 << ": ";
-	all_set_bl.hexdump(*_dout, false);
-	*_dout << dendl;
-	txn->merge(bitmap_prefix, k, all_set_bl);
-	first_key += bytes_per_key;
-      }
+    while (first_key < last_key) {
+      string k;
+      make_offset_key(first_key, &k);
+      dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec
+      	 << ": ";
+      all_set_bl.hexdump(*_dout, false);
+      *_dout << dendl;
+      txn->merge(bitmap_prefix, k, all_set_bl);
+      first_key += bytes_per_key;
     }
     assert(first_key == last_key);
     {

@@ -9,12 +9,14 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/WorkQueue.h"
+#include "common/Timer.h"
 
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
@@ -62,6 +64,21 @@ public:
   }
 };
 
+class SafeTimerSingleton : public SafeTimer {
+public:
+  Mutex lock;
+
+  explicit SafeTimerSingleton(CephContext *cct)
+      : SafeTimer(cct, lock, true),
+        lock("librbd::Journal::SafeTimerSingleton::lock") {
+    init();
+  }
+  virtual ~SafeTimerSingleton() {
+    Mutex::Locker locker(lock);
+    shutdown();
+  }
+};
+
 struct C_FlushCache : public Context {
   ImageCtx *image_ctx;
   Context *on_safe;
@@ -71,7 +88,6 @@ struct C_FlushCache : public Context {
   }
   virtual void finish(int r) {
     // successful cache flush indicates all IO is now safe
-    assert(image_ctx->owner_lock.is_locked());
     image_ctx->flush_cache(on_safe);
   }
 };
@@ -181,9 +197,7 @@ struct C_InvalidateCache : public Context {
 
     memset(&header, 0, sizeof(header));
 
-    ThreadPoolSingleton *thread_pool_singleton;
-    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::thread_pool");
+    ThreadPool *thread_pool_singleton = get_thread_pool_instance(cct);
     aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
                                            cct->_conf->rbd_op_thread_timeout,
                                            thread_pool_singleton);
@@ -191,8 +205,12 @@ struct C_InvalidateCache : public Context {
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
 
-    exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
-    journal_policy = new journal::StandardPolicy(this);
+    if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
+      exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
+    } else {
+      exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    }
+    journal_policy = new journal::StandardPolicy<ImageCtx>(this);
   }
 
   ImageCtx::~ImageCtx() {
@@ -440,6 +458,18 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
+  int ImageCtx::get_snap_namespace(snap_t in_snap_id,
+				   cls::rbd::SnapshotNamespace *out_snap_namespace) const
+  {
+    assert(snap_lock.is_locked());
+    const SnapInfo *info = get_snap_info(in_snap_id);
+    if (info) {
+      *out_snap_namespace = info->snap_namespace;
+      return 0;
+    }
+    return -ENOENT;
+  }
+
   int ImageCtx::get_parent_spec(snap_t in_snap_id,
 				parent_spec *out_pspec) const
   {
@@ -509,13 +539,16 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
+  void ImageCtx::add_snap(string in_snap_name,
+			  cls::rbd::SnapshotNamespace in_snap_namespace,
+			  snap_t id, uint64_t in_size,
 			  parent_info parent, uint8_t protection_status,
                           uint64_t flags)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, parent, protection_status, flags);
+    SnapInfo info(in_snap_name, in_snap_namespace,
+		  in_size, parent, protection_status, flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
@@ -663,17 +696,6 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  uint64_t ImageCtx::get_copyup_snap_id() const
-  {
-    assert(snap_lock.is_locked());
-    // copyup requires the largest possible parent overlap,
-    // which is always the oldest snapshot (if any).
-    if (!snaps.empty()) {
-      return snaps.back();
-    }
-    return CEPH_NOSNAP;
-  }
-
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
 				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish,
@@ -731,7 +753,6 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::flush_cache(Context *onfinish) {
-    assert(owner_lock.is_locked());
     cache_lock.Lock();
     object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
@@ -743,7 +764,6 @@ struct C_InvalidateCache : public Context {
       return;
     }
 
-    RWLock::RLocker owner_locker(owner_lock);
     cache_lock.Lock();
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -791,7 +811,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::register_watch(Context *on_finish) {
     assert(image_watcher == NULL);
-    image_watcher = new ImageWatcher(*this);
+    image_watcher = new ImageWatcher<>(*this);
     image_watcher->register_watch(on_finish);
   }
 
@@ -846,7 +866,6 @@ struct C_InvalidateCache : public Context {
     // ensure no locks are held when flush is complete
     on_safe = util::create_async_context_callback(*this, on_safe);
 
-    assert(owner_lock.is_locked());
     if (object_cacher != NULL) {
       // flush cache after completing all in-flight AIO ops
       on_safe = new C_FlushCache(this, on_safe);
@@ -939,7 +958,10 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_object_flush_interval", false)(
         "rbd_journal_object_flush_bytes", false)(
         "rbd_journal_object_flush_age", false)(
-        "rbd_journal_pool", false);
+        "rbd_journal_pool", false)(
+        "rbd_journal_max_payload_bytes", false)(
+        "rbd_journal_max_concurrent_object_sets", false)(
+        "rbd_mirroring_resync_after_disconnect", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -994,6 +1016,9 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_bytes);
     ASSIGN_OPTION(journal_object_flush_age);
     ASSIGN_OPTION(journal_pool);
+    ASSIGN_OPTION(journal_max_payload_bytes);
+    ASSIGN_OPTION(journal_max_concurrent_object_sets);
+    ASSIGN_OPTION(mirroring_resync_after_disconnect);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
@@ -1020,7 +1045,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::notify_update() {
     state->handle_update_notification();
-    ImageWatcher::notify_header_update(md_ctx, header_oid);
+    ImageWatcher<>::notify_header_update(md_ctx, header_oid);
   }
 
   void ImageCtx::notify_update(Context *on_finish) {
@@ -1052,5 +1077,21 @@ struct C_InvalidateCache : public Context {
     assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
+  }
+
+  ThreadPool *ImageCtx::get_thread_pool_instance(CephContext *cct) {
+    ThreadPoolSingleton *thread_pool_singleton;
+    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "librbd::thread_pool");
+    return thread_pool_singleton;
+  }
+
+  void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
+                                    Mutex **timer_lock) {
+    SafeTimerSingleton *safe_timer_singleton;
+    cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
+      safe_timer_singleton, "librbd::journal::safe_timer");
+    *timer = safe_timer_singleton;
+    *timer_lock = &safe_timer_singleton->lock;
   }
 }

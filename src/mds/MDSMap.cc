@@ -184,6 +184,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("metadata_pool", metadata_pool);
   f->dump_bool("enabled", enabled);
   f->dump_string("fs_name", fs_name);
+  f->dump_string("balancer", balancer);
 }
 
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
@@ -226,6 +227,7 @@ void MDSMap::print(ostream& out) const
   out << "data_pools\t" << data_pools << "\n";
   out << "metadata_pool\t" << metadata_pool << "\n";
   out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
+  out << "balancer\t" << balancer << "\n";
 
   multimap< pair<mds_rank_t, unsigned>, mds_gid_t > foo;
   for (const auto &p : mds_info) {
@@ -556,7 +558,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 10;
+  __u16 ev = 11;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -575,6 +577,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
   ::encode(damaged, bl);
+  ::encode(balancer, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -679,6 +682,10 @@ void MDSMap::decode(bufferlist::iterator& p)
   if (ev >= 9) {
     ::decode(damaged, p);
   }
+
+  if (ev >= 11) {
+  ::decode(balancer, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -726,4 +733,30 @@ MDSMap::availability_t MDSMap::is_cluster_available() const
     // that the client doesn't block.
     return STUCK_UNAVAILABLE;
   }
+}
+
+bool MDSMap::state_transition_valid(DaemonState prev, DaemonState next)
+{
+  bool state_valid = true;
+  if (next != prev) {
+    if (prev == MDSMap::STATE_REPLAY) {
+      if (next != MDSMap::STATE_RESOLVE && next != MDSMap::STATE_RECONNECT) {
+        state_valid = false;
+      }
+    } else if (prev == MDSMap::STATE_REJOIN) {
+      if (next != MDSMap::STATE_ACTIVE
+          && next != MDSMap::STATE_CLIENTREPLAY
+          && next != MDSMap::STATE_STOPPED) {
+        state_valid = false;
+      }
+    } else if (prev >= MDSMap::STATE_RECONNECT && prev < MDSMap::STATE_ACTIVE) {
+      // Once I have entered replay, the only allowable transitions are to
+      // the next next along in the sequence.
+      if (next != prev + 1) {
+        state_valid = false;
+      }
+    }
+  }
+
+  return state_valid;
 }

@@ -150,7 +150,7 @@ cluster topology, which is inclusive of 5 maps collectively referred to as the
 #. **The MDS Map:** Contains the current MDS map epoch, when the map was 
    created, and the last time it changed. It also contains the pool for 
    storing metadata, a list of metadata servers, and which metadata servers
-   are ``up`` and ``in``. To view an MDS map, execute ``ceph mds dump``.
+   are ``up`` and ``in``. To view an MDS map, execute ``ceph fs dump``.
 
 Each map maintains an iterative history of its operating state changes. Ceph
 Monitors maintain a master copy of the cluster map including the cluster
@@ -1584,7 +1584,7 @@ instance for high availability.
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
 .. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure
 .. _Ceph Authentication and Authorization: ../rados/operations/auth-intro/
-.. _Hardware Recommendations: ../install/hardware-recommendations
+.. _Hardware Recommendations: ../start/hardware-recommendations
 .. _Network Config Reference: ../rados/configuration/network-config-ref
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _striping: http://en.wikipedia.org/wiki/Data_striping

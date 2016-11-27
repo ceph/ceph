@@ -95,6 +95,17 @@ public:
   }
 };
 
+class MigratorLogContext : public MDSLogContextBase {
+protected:
+  Migrator *mig;
+  MDSRank *get_mds() {
+    return mig->mds;
+  }
+public:
+  explicit MigratorLogContext(Migrator *mig_) : mig(mig_) {
+    assert(mig != NULL);
+  }
+};
 
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
@@ -233,8 +244,7 @@ void Migrator::find_stale_export_freeze()
     CDir* dir = p->first;
     export_state_t& stat = p->second;
     ++p;
-    if (p->second.state != EXPORT_DISCOVERING &&
-	p->second.state != EXPORT_FREEZING)
+    if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
     if (stat.last_cum_auth_pins != dir->get_cum_auth_pins()) {
       stat.last_cum_auth_pins = dir->get_cum_auth_pins();
@@ -329,7 +339,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   // finish clean-up?
@@ -409,8 +419,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
       export_try_cancel(dir);
     } else {
       // bystander failed.
-      if (p->second.warning_ack_waiting.count(who)) {
-	p->second.warning_ack_waiting.erase(who);
+      if (p->second.warning_ack_waiting.erase(who)) {
 	p->second.notify_ack_waiting.erase(who);   // they won't get a notify either.
 	if (p->second.state == EXPORT_WARNING) {
 	  // exporter waiting for warning acks, let's fake theirs.
@@ -421,8 +430,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	    export_go(dir);
 	}
       }
-      if (p->second.notify_ack_waiting.count(who)) {
-	p->second.notify_ack_waiting.erase(who);
+      if (p->second.notify_ack_waiting.erase(who)) {
 	if (p->second.state == EXPORT_NOTIFYING) {
 	  // exporter is waiting for notify acks, fake it
 	  dout(10) << "faking export_notify_ack from mds." << who
@@ -527,8 +535,9 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	break;
       }
     } else {
-      if (q->second.bystanders.count(who)) {
-	q->second.bystanders.erase(who);
+      auto bystanders_entry = q->second.bystanders.find(who);
+      if (bystanders_entry != q->second.bystanders.end()) {
+	q->second.bystanders.erase(bystanders_entry);
 	if (q->second.state == IMPORT_ABORTING) {
 	  assert(dir);
 	  dout(10) << "faking export_notify_ack from mds." << who
@@ -743,7 +752,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   }
   if (dir->inode->is_system()) {
     dout(7) << "i won't export system dirs (root, mdsdirs, stray, /.ceph, etc.)" << dendl;
-    //assert(0);
+    //ceph_abort();
     return;
   }
 
@@ -922,7 +931,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   }
 
   assert(it->second.state == EXPORT_FREEZING);
-  assert(dir->is_frozen());
+  assert(dir->is_frozen_tree_root());
   assert(dir->get_cum_auth_pins() == 0);
 
   CInode *diri = dir->get_inode();
@@ -1220,6 +1229,7 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   it->second.state = EXPORT_EXPORTING;
   assert(g_conf->mds_kill_export_at != 7);
 
+  assert(dir->is_frozen_tree_root());
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
@@ -1535,10 +1545,10 @@ void Migrator::finish_export_dir(CDir *dir, utime_t now, mds_rank_t peer,
     finish_export_dir(*it, now, peer, peer_imported, finished, num_dentries);
 }
 
-class C_MDS_ExportFinishLogged : public MigratorContext {
+class C_MDS_ExportFinishLogged : public MigratorLogContext {
   CDir *dir;
 public:
-  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorContext(m), dir(d) {}
+  C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorLogContext(m), dir(d) {}
   void finish(int r) {
     mig->export_logged_finish(dir);
   }
@@ -1735,8 +1745,9 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
   assert(dir);
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
-  if (export_state.count(dir)) {
-    export_state_t& stat = export_state[dir];
+  auto export_state_entry = export_state.find(dir);
+  if (export_state_entry != export_state.end()) {
+    export_state_t& stat = export_state_entry->second;
     if (stat.state == EXPORT_WARNING) {
       // exporting. process warning.
       dout(7) << "handle_export_notify_ack from " << m->get_source()
@@ -1755,16 +1766,19 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
 	export_finish(dir);
     }
   }
-  else if (import_state.count(dir->dirfrag())) {
-    import_state_t& stat = import_state[dir->dirfrag()];
-    if (stat.state == IMPORT_ABORTING) {
-      // reversing import
-      dout(7) << "handle_export_notify_ack from " << m->get_source()
-	      << ": aborting import on " << *dir << dendl;
-      assert(stat.bystanders.count(from));
-      stat.bystanders.erase(from);
-      if (stat.bystanders.empty())
-	import_reverse_unfreeze(dir);
+  else {
+    auto import_state_entry = import_state.find(dir->dirfrag());
+    if (import_state_entry != import_state.end()) {
+      import_state_t& stat = import_state_entry->second;
+      if (stat.state == IMPORT_ABORTING) {
+	// reversing import
+	dout(7) << "handle_export_notify_ack from " << m->get_source()
+	  << ": aborting import on " << *dir << dendl;
+	assert(stat.bystanders.count(from));
+	stat.bystanders.erase(from);
+	if (stat.bystanders.empty())
+	  import_reverse_unfreeze(dir);
+      }
     }
   }
 
@@ -1908,10 +1922,10 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
-      assert(0);    // this shouldn't happen if the auth pins its path properly!!!!
+      ceph_abort();    // this shouldn't happen if the auth pins its path properly!!!!
     }
 
-    assert(0); // this shouldn't happen; the get_inode above would have succeeded.
+    ceph_abort(); // this shouldn't happen; the get_inode above would have succeeded.
   }
 
   // yay
@@ -2183,7 +2197,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
 
 
-class C_MDS_ImportDirLoggedStart : public MigratorContext {
+class C_MDS_ImportDirLoggedStart : public MigratorLogContext {
   dirfrag_t df;
   CDir *dir;
   mds_rank_t from;
@@ -2192,7 +2206,7 @@ public:
   map<client_t,uint64_t> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
-    MigratorContext(m), df(d->dirfrag()), dir(d), from(f) {
+    MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
   }
   void finish(int r) {
     mig->import_logged_start(df, dir, from, imported_client_map, sseqmap);
@@ -3037,7 +3051,7 @@ out:
   m->put();
 }
 
-class C_M_LoggedImportCaps : public MigratorContext {
+class C_M_LoggedImportCaps : public MigratorLogContext {
   CInode *in;
   mds_rank_t from;
 public:
@@ -3045,7 +3059,7 @@ public:
   map<client_t,entity_inst_t> client_map;
   map<client_t,uint64_t> sseqmap;
 
-  C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorContext(m), in(i), from(f) {}
+  C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorLogContext(m), in(i), from(f) {}
   void finish(int r) {
     mig->logged_import_caps(in, from, peer_exports, client_map, sseqmap);
   }  

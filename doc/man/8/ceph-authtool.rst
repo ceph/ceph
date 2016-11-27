@@ -11,7 +11,7 @@ Synopsis
 
 | **ceph-authtool** *keyringfile*
   [ -l | --list ]
-  [ -p | --print ]
+  [ -p | --print-key ]
   [ -C | --create-keyring ]
   [ -g | --gen-key ]
   [ --gen-print-key ]
@@ -45,7 +45,7 @@ Options
 
    will list all keys and capabilities present in the keyring
 
-.. option:: -p, --print
+.. option:: -p, --print-key
 
    will print an encoded key for the specified entityname. This is
    suitable for the ``mount -o secret=`` argument

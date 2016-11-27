@@ -41,7 +41,7 @@ test_object() {
       incompat=""
       incompat_paths=""
       sawarversion=0
-      for iv in `ls -v $dir/archive`; do
+      for iv in `ls $dir/archive | sort -n`; do
         if [ "$iv" = "$arversion" ]; then
           sawarversion=1
         fi
@@ -53,7 +53,7 @@ test_object() {
           # all paths for this type into variable. Assuming that this path won't contain any
           # whitechars (implication of above for loop).
           if [ -d "$dir/archive/$iv/forward_incompat/$type" ]; then
-            if [ -n "`ls -v $dir/archive/$iv/forward_incompat/$type/`" ]; then
+            if [ -n "`ls $dir/archive/$iv/forward_incompat/$type/ | sort -n`" ]; then
               incompat_paths="$incompat_paths $dir/archive/$iv/forward_incompat/$type"
             else
               echo "type $type directory empty, ignoring whole type instead of single objects"
@@ -69,7 +69,7 @@ test_object() {
       if [ -n "$incompat" ]; then
         if [ -z "$incompat_paths" ]; then
           echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
-          continue
+	  return
         else
           # If we are ignoring not whole type, but objects that are in $incompat_path,
           # we don't skip here, just give info.
@@ -171,9 +171,14 @@ waitall() { # PID...
 
 # Using $MAX_PARALLEL_JOBS jobs if defined, unless the number of logical
 # processors
-max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
+if [ `uname` == FreeBSD ]; then
+  NPROC=`sysctl -n hw.ncpu`
+  max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
+else
+  max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
+fi
 
-for arversion in `ls -v $dir/archive`; do
+for arversion in `ls $dir/archive | sort -n`; do
   vdir="$dir/archive/$arversion"
   #echo $vdir
 

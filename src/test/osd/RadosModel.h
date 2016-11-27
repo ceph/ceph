@@ -186,6 +186,7 @@ public:
   const uint64_t max_stride_size;
   AttrGenerator attr_gen;
   const bool no_omap;
+  const bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
   int snapname_num;
@@ -196,6 +197,7 @@ public:
 		   uint64_t min_stride_size,
 		   uint64_t max_stride_size,
 		   bool no_omap,
+		   bool no_sparse,
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
 		   const char *id = 0) :
@@ -212,6 +214,7 @@ public:
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
     attr_gen(2000, 20000),
     no_omap(no_omap),
+    no_sparse(no_sparse),
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
     snapname_num(0)
@@ -690,7 +693,7 @@ public:
     int r;
     if ((r = comp->get_return_value())) {
       cerr << "err " << r << std::endl;
-      assert(0);
+      ceph_abort();
     }
     done = true;
     context->update_object_version(oid, comp->get_version64());
@@ -863,7 +866,7 @@ public:
     if (tid <= last_acked_tid) {
       cerr << "Error: finished tid " << tid
 	   << " when last_acked_tid was " << last_acked_tid << std::endl;
-      assert(0);
+      ceph_abort();
     }
     last_acked_tid = tid;
 
@@ -1040,7 +1043,7 @@ public:
     if (tid <= last_acked_tid) {
       cerr << "Error: finished tid " << tid
 	   << " when last_acked_tid was " << last_acked_tid << std::endl;
-      assert(0);
+      ceph_abort();
     }
     last_acked_tid = tid;
 
@@ -1144,7 +1147,7 @@ public:
     }
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
-      assert(0);
+      ceph_abort();
     }
 
     context->state_lock.Lock();
@@ -1209,7 +1212,7 @@ public:
     uint64_t len = 0;
     if (old_value.has_contents())
       len = old_value.most_recent_gen()->get_length(old_value.most_recent());
-    if (rand() % 2) {
+    if (context->no_sparse || rand() % 2) {
       is_sparse_read[index] = false;
       read_op.read(0,
 		   len,
@@ -1261,7 +1264,7 @@ public:
       int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
       if (r < 0) {
 	std::cerr << "r is " << r << std::endl;
-	assert(0);
+	ceph_abort();
       }
       std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
@@ -1333,13 +1336,13 @@ public:
       if (err != retval) {
         cerr << num << ": Error: oid " << oid << " read returned different error codes: "
              << retval << " and " << err << std::endl;
-	assert(0);
+	ceph_abort();
       }
       if (err) {
         if (!(err == -ENOENT && old_value.deleted())) {
           cerr << num << ": Error: oid " << oid << " read returned error code "
                << err << std::endl;
-          assert(0);
+          ceph_abort();
         }
       } else if (version != old_value.version) {
 	cerr << num << ": oid " << oid << " version is " << version
@@ -1389,7 +1392,7 @@ public:
 	    }
 	  }
 	}
-	if (context->errors) assert(0);
+	if (context->errors) ceph_abort();
       }
 
       // Attributes
@@ -1502,7 +1505,7 @@ public:
       int ret = context->io_ctx.snap_create(snapname.c_str());
       if (ret) {
 	cerr << "snap_create returned " << ret << std::endl;
-	assert(0);
+	ceph_abort();
       }
       assert(!context->io_ctx.snap_lookup(snapname.c_str(), &snap));
 
@@ -1530,7 +1533,7 @@ public:
       int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
       if (r) {
 	cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-	assert(0);
+	ceph_abort();
       }
     }
   }
@@ -1577,7 +1580,7 @@ public:
       int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
       if (r) {
 	cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-	assert(0);
+	ceph_abort();
       }
     }
     context->state_lock.Unlock();
@@ -1635,7 +1638,7 @@ public:
 
     if (r) {
       cerr << "r is " << r << std::endl;
-      assert(0);
+      ceph_abort();
     }
 
     {
@@ -1764,7 +1767,7 @@ public:
     int r;
     if ((r = comps[last_finished]->get_return_value()) != 0) {
       cerr << "err " << r << std::endl;
-      assert(0);
+      ceph_abort();
     }
     if (--outstanding == 0) {
       done = true;
@@ -1875,7 +1878,7 @@ public:
 	} else {
 	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
 	       << r << std::endl;
-	  assert(0);
+	  ceph_abort();
 	}
       } else {
 	assert(!version || comp->get_version64() == version);

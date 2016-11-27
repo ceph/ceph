@@ -269,8 +269,10 @@ public:
       param(NULL) {}
   ~CryptoAESKeyHandler() {
     SECITEM_FreeItem(param, PR_TRUE);
-    PK11_FreeSymKey(key);
-    PK11_FreeSlot(slot);
+    if (key)
+      PK11_FreeSymKey(key);
+    if (slot)
+      PK11_FreeSlot(slot);
   }
 
   int init(const bufferptr& s, ostringstream& err) {
@@ -384,7 +386,7 @@ void CryptoKey::decode(bufferlist::iterator& bl)
   __u16 len;
   ::decode(len, bl);
   bufferptr tmp;
-  bl.copy(len, tmp);
+  bl.copy_deep(len, tmp);
   if (_set_secret(type, tmp) < 0)
     throw buffer::malformed_input("malformed secret");
 }

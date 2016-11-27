@@ -12,7 +12,8 @@ Build-Depends: btrfs-tools,
                cpio,
 	       cryptsetup-bin | cryptsetup,
                cython,
-               debhelper (>= 8),
+               cython3,
+               debhelper (>= 9),
                dh-python,
 	       dh-systemd,
                default-jdk,
@@ -33,6 +34,7 @@ Build-Depends: btrfs-tools,
 	       libboost-regex-dev,
 	       libboost-random-dev,
                libboost-iostreams-dev (>= 1.42),
+               libboost-python-dev,
                libcurl4-gnutls-dev,
                libexpat1-dev,
                libfcgi-dev,
@@ -51,14 +53,14 @@ Build-Depends: btrfs-tools,
 	       lsb-release,
                parted,
                pkg-config,
-               python (>= 2.6.6-3~),
-               python-argparse | libpython2.7-stdlib,
-               python-dev,
+               python (>= 2.7),
+               python-all-dev,
                python-nose,
 	       python-setuptools,
                python-sphinx,
+               python3-all-dev,
+               python3-setuptools,
                virtualenv | python-virtualenv,
-               sdparm | hdparm,
                uuid-runtime,
                valgrind,
                xfslibs-dev,
@@ -71,6 +73,7 @@ Standards-Version: 3.9.3
 Package: ceph
 Architecture: linux-any
 Depends: ceph-mon (= ${binary:Version}),
+         ceph-mgr (= ${binary:Version}),
          ceph-osd (= ${binary:Version})
 Recommends: ceph-mds (= ${binary:Version})
 Description: distributed storage and file system
@@ -88,11 +91,7 @@ Depends: binutils,
          gdisk,
          grep,
          logrotate,
-         lsb-release,
-         python,
-         python-argparse | libpython2.7-stdlib,
-         python-pkg-resources,
-         sdparm | hdparm,
+         ${python:Depends},
          xfsprogs,
          ${misc:Depends},
          ${shlibs:Depends}
@@ -112,15 +111,16 @@ Description: common ceph daemon libraries and management tools
  block and file system storage.
  .
  This package contains the libraries and management tools that are common among
- the three Ceph server daemons (ceph-mon, ceph-osd, ceph-mds). These tools are
- necessary for creating, running, and administering a Ceph storage cluster.
+ the Ceph server daemons (ceph-mon, ceph-mgr, ceph-osd, ceph-mds). These tools
+ are necessary for creating, running, and administering a Ceph storage cluster.
 
 Package: ceph-mds
 Architecture: linux-any
-Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
-Recommends: ceph-fs-common (= ${binary:Version}),
-            ceph-fuse (= ${binary:Version}),
-            libcephfs1 (= ${binary:Version})
+Depends: ceph-base (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Recommends: ceph-fuse (= ${binary:Version}),
+            libcephfs2 (= ${binary:Version})
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
 Description: metadata server for the ceph distributed file system
@@ -142,6 +142,34 @@ Description: debugging symbols for ceph-mds
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-mds.
+
+Package: ceph-mgr
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}),
+         ${misc:Depends},
+         ${python:Depends},
+         ${shlibs:Depends}
+Replaces: ceph (<< 0.93-417)
+Breaks: ceph (<< 0.93-417)
+Description: metadata server for the ceph distributed file system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the manager daemon, which is used to expose high
+ level management and monitoring functionality.
+
+Package: ceph-mgr-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-mgr (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-mgr.
 
 Package: ceph-mon
 Architecture: linux-any
@@ -179,6 +207,7 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          parted,
          ${misc:Depends},
+         ${python:Depends},
          ${shlibs:Depends}
 Recommends: ceph-common (= ${binary:Version})
 Replaces: ceph (<< 10)
@@ -264,7 +293,8 @@ Package: rbd-mirror
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
          librados2 (= ${binary:Version}),
-         ${misc:Depends}, ${shlibs:Depends}
+         ${misc:Depends},
+         ${shlibs:Depends}
 Description: Ceph daemon for mirroring RBD images
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -288,7 +318,8 @@ Description: debugging symbols for rbd-mirror
 
 Package: rbd-nbd
 Architecture: linux-any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
 Description: NBD-based rbd client for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -319,17 +350,21 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-rados (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
+         python-rgw (= ${binary:Version}),
+         ${python:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
 	  ceph (<< 10),
 	  ceph-test (<< 9.0.3-1646),
 	  python-ceph (<< 0.92-1223),
-	  librbd1 (<< 0.92-1238)
+	  librbd1 (<< 0.92-1238),
+	  ceph-fs-common (<< 11.0)
 Breaks: ceph (<< 10),
 	ceph-test (<< 9.0.3-1646),
 	python-ceph (<< 0.92-1223),
-	librbd1 (<< 0.92-1238)
+	librbd1 (<< 0.92-1238),
+	ceph-fs-common (<< 11.0)
 Suggests: ceph-base (= ${binary:Version}), ceph-mds (= ${binary:Version})
 Description: common utilities to mount and interact with a ceph storage cluster
  Ceph is a massively scalable, open-source, distributed
@@ -353,34 +388,6 @@ Description: debugging symbols for ceph-common
  of common tools that allow one to interact with and administer a Ceph cluster.
  .
  This package contains the debugging symbols for ceph-common.
-
-Package: ceph-fs-common
-Architecture: linux-any
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Conflicts: ceph-client-tools
-Suggests: ceph-mds (= ${binary:Version})
-Description: common utilities to mount and interact with a ceph file system
- Ceph is a massively scalable, open-source, distributed
- storage system that runs on commodity hardware and delivers object,
- block and file system storage.  This is a collection
- of common tools, including the mount utility, that allows one to mount the
- Ceph file system with the kernel client.
-
-Package: ceph-fs-common-dbg
-Architecture: linux-any
-Depends: ceph-fs-common (= ${binary:Version}), ${misc:Depends}
-Conflicts: ceph-client-tools-dbg
-Replaces: ceph-client-tools-dbg
-Section: debug
-Priority: extra
-Description: debugging symbols for ceph-fs-common
- Ceph is a massively scalable, open-source, distributed
- storage system that runs on commodity hardware and delivers object,
- block and file system storage.  This is a collection
- of common tools, including the mount utility, that allows one to mount the
- Ceph file system with the kernel client.
- .
- This package contains the debugging symbols for ceph-fs-common.
 
 Package: ceph-resource-agents
 Architecture: linux-any
@@ -510,7 +517,7 @@ Description: RADOS block device client library (development files)
  This package contains development files needed for building applications that
  link against librbd1.
 
-Package: libcephfs1
+Package: libcephfs2
 Conflicts: libceph, libceph1, libcephfs
 Replaces: libceph, libceph1, libcephfs
 Architecture: linux-any
@@ -523,28 +530,28 @@ Description: Ceph distributed file system client library
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
 
-Package: libcephfs1-dbg
+Package: libcephfs2-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
+Depends: libcephfs2 (= ${binary:Version}), ${misc:Depends}
 Conflicts: libceph1-dbg
 Replaces: libceph1-dbg
-Description: debugging symbols for libcephfs1
+Description: debugging symbols for libcephfs2
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
  .
- This package contains debugging symbols for libcephfs1.
+ This package contains debugging symbols for libcephfs2.
 
 Package: libcephfs-dev
 Architecture: linux-any
 Section: libdevel
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
-Conflicts: libceph-dev, libceph1-dev, libcephfs1-dev
-Replaces: libceph-dev, libceph1-dev, libcephfs1-dev
+Depends: libcephfs2 (= ${binary:Version}), ${misc:Depends}
+Conflicts: libceph-dev, libceph1-dev, libcephfs2-dev
+Replaces: libceph-dev, libceph1-dev, libcephfs2-dev
 Description: Ceph distributed file system client library (development files)
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -645,55 +652,154 @@ Architecture: linux-any
 Section: python
 Depends: python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
+         python-rgw (= ${binary:Version}),
          python-cephfs (= ${binary:Version})
 Description: Meta-package for python libraries for the Ceph libraries
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package is a metapackage for all python bindings.
+ This package is a metapackage for all Python 2 bindings.
 
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-Description: Python libraries for the Ceph librados library
+Description: Python 2 libraries for the Ceph librados library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains Python libraries for interacting with Ceph's
+ This package contains Python 2 libraries for interacting with Ceph's
+ RADOS object storage.
+
+Package: python3-rados
+Architecture: linux-any
+Section: python
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python3:Depends}
+Description: Python 3 libraries for the Ceph librados library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 3 libraries for interacting with Ceph's
  RADOS object storage.
 
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-Description: Python libraries for the Ceph librbd library
+Description: Python 2 libraries for the Ceph librbd library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains Python libraries for interacting with Ceph's
+ This package contains Python 2 libraries for interacting with Ceph's
  RBD block device library.
+
+Package: python3-rbd
+Architecture: linux-any
+Section: python
+Depends: librbd1 (>= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python3:Depends}
+Description: Python 3 libraries for the Ceph librbd library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 3 libraries for interacting with Ceph's
+ RBD block device library.
+
+Package: python-rgw
+Architecture: linux-any
+Section: python
+Depends: librgw2 (>= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python:Depends}
+Replaces: python-ceph (<< 0.92-1223)
+Breaks: python-ceph (<< 0.92-1223)
+Description: Python 2 libraries for the Ceph librgw library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 2 libraries for interacting with Ceph's
+ RGW library.
+
+Package: python3-rgw
+Architecture: linux-any
+Section: python
+Depends: librgw2 (>= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python3:Depends}
+Description: Python 3 libraries for the Ceph librgw library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 3 libraries for interacting with Ceph's
+ RGW library.
 
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: libcephfs2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-Description: Python libraries for the Ceph libcephfs library
+Description: Python 2 libraries for the Ceph libcephfs library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains Python libraries for interacting with Ceph's
+ This package contains Python 2 libraries for interacting with Ceph's
  CephFS file system client library.
+
+Package: python3-cephfs
+Architecture: linux-any
+Section: python
+Depends: libcephfs2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         ${python3:Depends}
+Description: Python 3 libraries for the Ceph libcephfs library
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains Python 3 libraries for interacting with Ceph's
+ CephFS file system client library.
+
+Package: python3-ceph-argparse
+Architecture: linux-any
+Section: python
+Depends: ${misc:Depends}, ${python3:Depends}
+Description: Python 3 utility libraries for Ceph CLI
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains types and routines for Python 3 used by the
+ Ceph CLI as well as the RESTful interface.
 
 Package: libcephfs-java
 Section: java
@@ -704,6 +810,6 @@ Description: Java libraries for the Ceph File System
 Package: libcephfs-jni
 Architecture: linux-any
 Section: java
-Depends: libcephfs1 (= ${binary:Version}), ${java:Depends},
+Depends: libcephfs2 (= ${binary:Version}), ${java:Depends},
          ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings

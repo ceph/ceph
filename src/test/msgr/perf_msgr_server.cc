@@ -45,7 +45,7 @@ class ServerDispatcher : public Dispatcher {
       return true;
     }
     void _dequeue(Message *m) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty() {
       return messages.empty();
@@ -93,6 +93,7 @@ class ServerDispatcher : public Dispatcher {
   bool ms_dispatch(Message *m) { return true; }
   bool ms_handle_reset(Connection *con) { return true; }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) { return false; }
   void ms_fast_dispatch(Message *m) {
     usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;
@@ -115,7 +116,7 @@ class MessengerServer {
  public:
   MessengerServer(string t, string addr, int threads, int delay):
       msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay) {
-    msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0);
+    msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0, 0);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
   }
   ~MessengerServer() {
@@ -144,7 +145,8 @@ int main(int argc, char **argv)
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 

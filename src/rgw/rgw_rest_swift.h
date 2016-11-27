@@ -5,10 +5,14 @@
 #define CEPH_RGW_REST_SWIFT_H
 #define TIME_BUF_SIZE 128
 
+#include <boost/optional.hpp>
+#include <boost/utility/typed_in_place_factory.hpp>
+
 #include "rgw_op.h"
 #include "rgw_rest.h"
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
+  int custom_http_ret = 0;
 public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() {}
@@ -16,7 +20,14 @@ public:
   int get_params();
   int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
-  bool need_object_expiration() { return true; }
+
+  void set_custom_http_response(const int http_ret) {
+    custom_http_ret = http_ret;
+  }
+
+  bool need_object_expiration() {
+    return true;
+  }
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
@@ -95,6 +106,7 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() {}
 
+  int verify_permission() override;
   int get_params();
   void send_response();
 };
@@ -132,6 +144,7 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() {}
 
+  int verify_permission() override;
   int get_params();
   bool need_object_expiration() { return true; }
   void send_response();
@@ -185,23 +198,78 @@ public:
   void send_response();
 };
 
+class RGWInfo_ObjStore_SWIFT : public RGWInfo_ObjStore {
+protected:
+  struct info
+  {
+    bool is_admin_info;
+    function<void (Formatter&, const md_config_t&, RGWRados&)> list_data;
+  };
+
+  static const vector<pair<string, struct info>> swift_info;
+public:
+  RGWInfo_ObjStore_SWIFT() {}
+  ~RGWInfo_ObjStore_SWIFT() {}
+
+  void execute() override;
+  void send_response() override;
+  static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static bool is_expired(const std::string& expires, CephContext* cct);
+};
+
+
+class RGWSwiftWebsiteHandler {
+  RGWRados* const store;
+  req_state* const s;
+  RGWHandler_REST* const handler;
+
+  bool is_web_mode() const;
+  bool can_be_website_req() const;
+  bool is_web_dir() const;
+  bool is_index_present(const std::string& index);
+
+  int serve_errordoc(int http_ret, std::string error_doc);
+
+  RGWOp* get_ws_redirect_op();
+  RGWOp* get_ws_index_op();
+  RGWOp* get_ws_listing_op();
+public:
+  RGWSwiftWebsiteHandler(RGWRados* const store,
+                         req_state* const s,
+                         RGWHandler_REST* const handler)
+    : store(store),
+      s(s),
+      handler(handler) {
+  }
+
+  int error_handler(const int err_no,
+                    std::string* const error_content);
+  int retarget_bucket(RGWOp* op, RGWOp** new_op);
+  int retarget_object(RGWOp* op, RGWOp** new_op);
+};
+
+
 class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
+  friend class RGWRESTMgr_SWIFT_Info;
 protected:
   virtual bool is_acl_op() {
     return false;
   }
 
-  static int init_from_header(struct req_state *s);
+  static int init_from_header(struct req_state* s,
+                              const std::string& frontend_prefix);
 public:
   RGWHandler_REST_SWIFT() {}
   virtual ~RGWHandler_REST_SWIFT() {}
 
   static int validate_bucket_name(const string& bucket);
 
-  int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
-  int authorize();
-  int postauth_init();
+  int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio);
+  int authorize() override;
+  int postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
@@ -209,59 +277,273 @@ public:
 
 class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
-  RGWOp *op_get();
-  RGWOp *op_head();
-  RGWOp *op_post();
-  RGWOp *op_delete();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
+  RGWOp *op_post() override;
+  RGWOp *op_delete() override;
 public:
   RGWHandler_REST_Service_SWIFT() {}
   virtual ~RGWHandler_REST_Service_SWIFT() {}
 };
 
 class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
+  /* We need the boost::optional here only because of handler's late
+   * initialization (see the init() method). */
+  boost::optional<RGWSwiftWebsiteHandler> website_handler;
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
   }
 
   RGWOp *get_obj_op(bool get_data);
-  RGWOp *op_get();
-  RGWOp *op_head();
-  RGWOp *op_put();
-  RGWOp *op_delete();
-  RGWOp *op_post();
-  RGWOp *op_options();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
+  RGWOp *op_put() override;
+  RGWOp *op_delete() override;
+  RGWOp *op_post() override;
+  RGWOp *op_options() override;
 public:
   RGWHandler_REST_Bucket_SWIFT() {}
   virtual ~RGWHandler_REST_Bucket_SWIFT() {}
+
+  int error_handler(int err_no, std::string *error_content) override {
+    return website_handler->error_handler(err_no, error_content);
+  }
+
+  int retarget(RGWOp* op, RGWOp** new_op) override {
+    return website_handler->retarget_bucket(op, new_op);
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const s,
+           rgw::io::BasicClient* const cio) override {
+    website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
+    return RGWHandler_REST_SWIFT::init(store, s, cio);
+  }
 };
 
 class RGWHandler_REST_Obj_SWIFT : public RGWHandler_REST_SWIFT {
+  /* We need the boost::optional here only because of handler's late
+   * initialization (see the init() method). */
+  boost::optional<RGWSwiftWebsiteHandler> website_handler;
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
   }
 
   RGWOp *get_obj_op(bool get_data);
-  RGWOp *op_get();
-  RGWOp *op_head();
-  RGWOp *op_put();
-  RGWOp *op_delete();
-  RGWOp *op_post();
-  RGWOp *op_copy();
-  RGWOp *op_options();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
+  RGWOp *op_put() override;
+  RGWOp *op_delete() override;
+  RGWOp *op_post() override;
+  RGWOp *op_copy() override;
+  RGWOp *op_options() override;
 
 public:
   RGWHandler_REST_Obj_SWIFT() {}
   virtual ~RGWHandler_REST_Obj_SWIFT() {}
+
+  int error_handler(int err_no, std::string *error_content) override {
+    return website_handler->error_handler(err_no, error_content);
+  }
+
+  int retarget(RGWOp* op, RGWOp** new_op) override {
+    return website_handler->retarget_object(op, new_op);
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const s,
+           rgw::io::BasicClient* const cio) override {
+    website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
+    return RGWHandler_REST_SWIFT::init(store, s, cio);
+  }
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
-public:
-  RGWRESTMgr_SWIFT() {}
-  virtual ~RGWRESTMgr_SWIFT() {}
+protected:
+  RGWRESTMgr* get_resource_mgr_as_default(struct req_state* const s,
+                                          const std::string& uri,
+                                          std::string* const out_uri) override {
+    return this->get_resource_mgr(s, uri, out_uri);
+  }
 
-  virtual RGWHandler_REST *get_handler(struct req_state *s);
+public:
+  RGWRESTMgr_SWIFT() = default;
+  virtual ~RGWRESTMgr_SWIFT() = default;
+
+  RGWHandler_REST *get_handler(struct req_state *s,
+                               const std::string& frontend_prefix) override;
+};
+
+
+class  RGWGetCrossDomainPolicy_ObjStore_SWIFT
+  : public RGWGetCrossDomainPolicy_ObjStore {
+public:
+  RGWGetCrossDomainPolicy_ObjStore_SWIFT() = default;
+  ~RGWGetCrossDomainPolicy_ObjStore_SWIFT() = default;
+
+  void send_response() override;
+};
+
+class  RGWGetHealthCheck_ObjStore_SWIFT
+  : public RGWGetHealthCheck_ObjStore {
+public:
+  RGWGetHealthCheck_ObjStore_SWIFT() = default;
+  ~RGWGetHealthCheck_ObjStore_SWIFT() = default;
+
+  void send_response() override;
+};
+
+class RGWHandler_SWIFT_CrossDomain : public RGWHandler_REST {
+public:
+  RGWHandler_SWIFT_CrossDomain() = default;
+  ~RGWHandler_SWIFT_CrossDomain() = default;
+
+  RGWOp *op_get() override {
+    return new RGWGetCrossDomainPolicy_ObjStore_SWIFT();
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const state,
+           rgw::io::BasicClient* const cio) override {
+    state->dialect = "swift";
+    state->formatter = new JSONFormatter;
+    state->format = RGW_FORMAT_JSON;
+
+    return RGWHandler::init(store, state, cio);
+  }
+
+  int authorize() override {
+    return 0;
+  }
+
+  int postauth_init() override {
+    return 0;
+  }
+
+  int read_permissions(RGWOp *) override {
+    return 0;
+  }
+
+  virtual RGWAccessControlPolicy *alloc_policy() { return nullptr; }
+  virtual void free_policy(RGWAccessControlPolicy *policy) {}
+};
+
+class RGWRESTMgr_SWIFT_CrossDomain : public RGWRESTMgr {
+protected:
+  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+                               const std::string& uri,
+                               std::string* const out_uri) override {
+    return this;
+  }
+
+public:
+  RGWRESTMgr_SWIFT_CrossDomain() = default;
+  ~RGWRESTMgr_SWIFT_CrossDomain() = default;
+
+  RGWHandler_REST* get_handler(struct req_state* const s,
+                               const std::string&) override {
+    s->prot_flags |= RGW_REST_SWIFT;
+    return new RGWHandler_SWIFT_CrossDomain;
+  }
+};
+
+
+class RGWHandler_SWIFT_HealthCheck : public RGWHandler_REST {
+public:
+  RGWHandler_SWIFT_HealthCheck() = default;
+  ~RGWHandler_SWIFT_HealthCheck() = default;
+
+  RGWOp *op_get() override {
+    return new RGWGetHealthCheck_ObjStore_SWIFT();
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const state,
+           rgw::io::BasicClient* const cio) override {
+    state->dialect = "swift";
+    state->formatter = new JSONFormatter;
+    state->format = RGW_FORMAT_JSON;
+
+    return RGWHandler::init(store, state, cio);
+  }
+
+  int authorize() override {
+    return 0;
+  }
+
+  int postauth_init() override {
+    return 0;
+  }
+
+  int read_permissions(RGWOp *) override {
+    return 0;
+  }
+
+  virtual RGWAccessControlPolicy *alloc_policy() { return nullptr; }
+  virtual void free_policy(RGWAccessControlPolicy *policy) {}
+};
+
+class RGWRESTMgr_SWIFT_HealthCheck : public RGWRESTMgr {
+protected:
+  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+                               const std::string& uri,
+                               std::string* const out_uri) override {
+    return this;
+  }
+
+public:
+  RGWRESTMgr_SWIFT_HealthCheck() = default;
+  ~RGWRESTMgr_SWIFT_HealthCheck() = default;
+
+  RGWHandler_REST* get_handler(struct req_state* const s,
+                               const std::string&) override {
+    s->prot_flags |= RGW_REST_SWIFT;
+    return new RGWHandler_SWIFT_HealthCheck;
+  }
+};
+
+
+class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
+public:
+  RGWHandler_REST_SWIFT_Info() = default;
+  ~RGWHandler_REST_SWIFT_Info() = default;
+
+  RGWOp *op_get() override {
+    return new RGWInfo_ObjStore_SWIFT();
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const state,
+           rgw::io::BasicClient* const cio) override {
+    state->dialect = "swift";
+    state->formatter = new JSONFormatter;
+    state->format = RGW_FORMAT_JSON;
+
+    return RGWHandler::init(store, state, cio);
+  }
+
+  int authorize() override {
+    return 0;
+  }
+
+  int postauth_init() override {
+    return 0;
+  }
+
+  int read_permissions(RGWOp *) override {
+    return 0;
+  }
+};
+
+class RGWRESTMgr_SWIFT_Info : public RGWRESTMgr {
+public:
+  RGWRESTMgr_SWIFT_Info() = default;
+  virtual ~RGWRESTMgr_SWIFT_Info() = default;
+
+  RGWHandler_REST *get_handler(struct req_state* s,
+                               const std::string& frontend_prefix) override;
 };
 
 #endif

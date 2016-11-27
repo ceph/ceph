@@ -237,6 +237,38 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
   dump_bi_entry(data, type, f);
 }
 
+bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats)
+{
+  bool account = false;
+  bufferlist::iterator iter = data.begin();
+  switch (type) {
+    case PlainIdx:
+    case InstanceIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        ::decode(entry, iter);
+        *key = entry.key;
+        *category = entry.meta.category;
+        accounted_stats->num_entries++;
+        accounted_stats->total_size += entry.meta.accounted_size;
+        accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        account = true;
+      }
+      break;
+    case OLHIdx:
+      {
+        rgw_bucket_olh_entry entry;
+        ::decode(entry, iter);
+        *key = entry.key;
+      }
+      break;
+    default:
+      break;
+  }
+
+  return account;
+}
+
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
   encode_json("key", key, f);
@@ -436,6 +468,7 @@ void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category
   s->total_size = 1024;
   s->total_size_rounded = 4096;
   s->num_entries = 2;
+  s->actual_size = 1024;
   o.push_back(s);
   o.push_back(new rgw_bucket_category_stats);
 }
@@ -445,6 +478,7 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
   f->dump_unsigned("total_size", total_size);
   f->dump_unsigned("total_size_rounded", total_size_rounded);
   f->dump_unsigned("num_entries", num_entries);
+  f->dump_unsigned("actual_size", actual_size);
 }
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)

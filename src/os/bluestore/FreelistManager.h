@@ -22,10 +22,7 @@ public:
 
   static void setup_merge_operators(KeyValueDB *db);
 
-  virtual int create(uint64_t size, KeyValueDB::Transaction txn) {
-    release(0, size, txn);
-    return 0;
-  }
+  virtual int create(uint64_t size, KeyValueDB::Transaction txn) = 0;
 
   virtual int init() = 0;
   virtual void shutdown() = 0;
@@ -41,6 +38,10 @@ public:
   virtual void release(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn) = 0;
+
+  virtual bool supports_parallel_transactions() {
+    return false;
+  }
 };
 
 

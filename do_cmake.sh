@@ -6,11 +6,15 @@ if test -e build; then
 fi
 mkdir build
 cd build
-cmake $@ ..
+cmake -DBOOST_J=$(nproc) "$@" ..
 
+# minimal config to find plugins
 cat <<EOF > ceph.conf
 plugin dir = lib
 erasure code dir = lib
 EOF
+
+# give vstart a (hopefully) unique mon port to start with
+echo $(( RANDOM % 1000 + 40000 )) > .ceph_port
 
 echo done.

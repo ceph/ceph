@@ -28,7 +28,6 @@
 
 #define CEPH_INO_ROOT   1
 #define CEPH_INO_CEPH   2       /* hidden .ceph dir */
-#define CEPH_INO_DOTDOT 3	/* used by ceph fuse for parent (..) */
 #define CEPH_INO_LOST_AND_FOUND 4	/* reserved ino for use in recovery */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
@@ -369,7 +368,7 @@ enum {
 
 extern const char *ceph_mds_op_name(int op);
 
-
+#ifndef CEPH_SETATTR_MODE
 #define CEPH_SETATTR_MODE	(1 << 0)
 #define CEPH_SETATTR_UID	(1 << 1)
 #define CEPH_SETATTR_GID	(1 << 2)
@@ -377,6 +376,8 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_ATIME	(1 << 4)
 #define CEPH_SETATTR_SIZE	(1 << 5)
 #define CEPH_SETATTR_CTIME	(1 << 6)
+#define CEPH_SETATTR_BTIME	(1 << 9)
+#endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 
@@ -399,7 +400,8 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_READDIR_FRAG_COMPLETE	(1<<8)
 #define CEPH_READDIR_HASH_ORDER		(1<<9)
 
-union ceph_mds_request_args {
+/* Note that this is embedded wthin ceph_mds_request_head_legacy. */
+union ceph_mds_request_args_legacy {
 	struct {
 		__le32 mask;                 /* CEPH_CAP_* */
 	} __attribute__ ((packed)) getattr;
@@ -456,7 +458,86 @@ union ceph_mds_request_args {
 #define CEPH_MDS_FLAG_REPLAY        1  /* this is a replayed op */
 #define CEPH_MDS_FLAG_WANT_DENTRY   2  /* want dentry in reply */
 
+struct ceph_mds_request_head_legacy {
+	__le64 oldest_client_tid;
+	__le32 mdsmap_epoch;           /* on client */
+	__le32 flags;                  /* CEPH_MDS_FLAG_* */
+	__u8 num_retry, num_fwd;       /* count retry, fwd attempts */
+	__le16 num_releases;           /* # include cap/lease release records */
+	__le32 op;                     /* mds op code */
+	__le32 caller_uid, caller_gid;
+	__le64 ino;                    /* use this ino for openc, mkdir, mknod,
+					  etc. (if replaying) */
+	union ceph_mds_request_args_legacy args;
+} __attribute__ ((packed));
+
+/*
+ * Note that this is embedded wthin ceph_mds_request_head. Also, compatability
+ * with the ceph_mds_request_args_legacy must be maintained!
+ */
+union ceph_mds_request_args {
+	struct {
+		__le32 mask;                 /* CEPH_CAP_* */
+	} __attribute__ ((packed)) getattr;
+	struct {
+		__le32 mode;
+		__le32 uid;
+		__le32 gid;
+		struct ceph_timespec mtime;
+		struct ceph_timespec atime;
+		__le64 size, old_size;       /* old_size needed by truncate */
+		__le32 mask;                 /* CEPH_SETATTR_* */
+		struct ceph_timespec btime;
+	} __attribute__ ((packed)) setattr;
+	struct {
+		__le32 frag;                 /* which dir fragment */
+		__le32 max_entries;          /* how many dentries to grab */
+		__le32 max_bytes;
+		__le16 flags;
+	} __attribute__ ((packed)) readdir;
+	struct {
+		__le32 mode;
+		__le32 rdev;
+	} __attribute__ ((packed)) mknod;
+	struct {
+		__le32 mode;
+	} __attribute__ ((packed)) mkdir;
+	struct {
+		__le32 flags;
+		__le32 mode;
+		__le32 stripe_unit;          /* layout for newly created file */
+		__le32 stripe_count;         /* ... */
+		__le32 object_size;
+		__le32 pool;                 /* if >= 0 and CREATEPOOLID feature */
+		__le32 mask;                 /* CEPH_CAP_* */
+		__le64 old_size;             /* if O_TRUNC */
+	} __attribute__ ((packed)) open;
+	struct {
+		__le32 flags;
+		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
+	} __attribute__ ((packed)) setxattr;
+	struct {
+		struct ceph_file_layout layout;
+	} __attribute__ ((packed)) setlayout;
+	struct {
+		__u8 rule; /* currently fcntl or flock */
+		__u8 type; /* shared, exclusive, remove*/
+		__le64 owner; /* who requests/holds the lock */
+		__le64 pid; /* process id requesting the lock */
+		__le64 start; /* initial location to lock */
+		__le64 length; /* num bytes to lock from start */
+		__u8 wait; /* will caller wait for lock to become available? */
+	} __attribute__ ((packed)) filelock_change;
+} __attribute__ ((packed));
+
+#define CEPH_MDS_REQUEST_HEAD_VERSION	1
+
+/*
+ * Note that any change to this structure must ensure that it is compatible
+ * with ceph_mds_request_head_legacy.
+ */
 struct ceph_mds_request_head {
+	__le16 version;
 	__le64 oldest_client_tid;
 	__le32 mdsmap_epoch;           /* on client */
 	__le32 flags;                  /* CEPH_MDS_FLAG_* */
@@ -477,6 +558,20 @@ struct ceph_mds_request_release {
 	__le32 dname_seq;              /* if releasing a dentry lease, a */
 	__le32 dname_len;              /* string follows. */
 } __attribute__ ((packed));
+
+static inline void
+copy_from_legacy_head(struct ceph_mds_request_head *head,
+			struct ceph_mds_request_head_legacy *legacy)
+{
+	memcpy(&(head->oldest_client_tid), legacy, sizeof(*legacy));
+}
+
+static inline void
+copy_to_legacy_head(struct ceph_mds_request_head_legacy *legacy,
+			struct ceph_mds_request_head *head)
+{
+	memcpy(legacy, &(head->oldest_client_tid), sizeof(*legacy));
+}
 
 /* client reply */
 struct ceph_mds_reply_head {
@@ -579,9 +674,6 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_SLINK      4
 #define CEPH_CAP_SXATTR     6
 #define CEPH_CAP_SFILE      8
-#define CEPH_CAP_SFLOCK    20
-
-#define CEPH_CAP_BITS      22
 
 /* composed values */
 #define CEPH_CAP_AUTH_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SAUTH)
@@ -599,9 +691,6 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_FILE_BUFFER   (CEPH_CAP_GBUFFER   << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_WREXTEND (CEPH_CAP_GWREXTEND << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_LAZYIO   (CEPH_CAP_GLAZYIO   << CEPH_CAP_SFILE)
-#define CEPH_CAP_FLOCK_SHARED  (CEPH_CAP_GSHARED   << CEPH_CAP_SFLOCK)
-#define CEPH_CAP_FLOCK_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SFLOCK)
-
 
 /* cap masks (for getattr) */
 #define CEPH_STAT_CAP_INODE    CEPH_CAP_PIN

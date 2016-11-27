@@ -906,6 +906,8 @@ int Rados::ioctx_create(const char *name, IoCtx &io) {
   if (ret) {
     return ret;
   }
+
+  io.close();
   io.io_ctx_impl = reinterpret_cast<IoCtxImpl*>(p);
   return 0;
 }
@@ -917,6 +919,8 @@ int Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   if (ret) {
     return ret;
   }
+
+  io.close();
   io.io_ctx_impl = reinterpret_cast<IoCtxImpl*>(p);
   return 0;
 }
@@ -1184,6 +1188,10 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
 }
 
 uint64_t cls_get_features(cls_method_context_t hctx) {
+  return CEPH_FEATURES_SUPPORTED_DEFAULT;
+}
+
+uint64_t cls_get_client_features(cls_method_context_t hctx) {
   return CEPH_FEATURES_SUPPORTED_DEFAULT;
 }
 

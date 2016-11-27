@@ -19,6 +19,7 @@
 
 #include "HashIndex.h"
 
+#include "common/errno.h"
 #include "common/debug.h"
 #define dout_subsys ceph_subsys_filestore
 
@@ -32,7 +33,7 @@ int hex_to_int(char c)
     return c - '0';
   if (c >= 'A' && c <= 'F')
     return c - 'A' + 10;
-  assert(0);
+  ceph_abort();
 }
 
 /// int value to hex digit
@@ -303,6 +304,59 @@ int HashIndex::_split(
     &mkdirred);
 }
 
+int HashIndex::split_dirs(const vector<string> &path) {
+  dout(20) << __func__ << " " << path << dendl;
+  subdir_info_s info;
+  int r = get_info(path, &info);
+  if (r < 0) {
+    dout(10) << "error looking up info for " << path << ": "
+	     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (must_split(info)) {
+    r = initiate_split(path, info);
+    if (r < 0) {
+      dout(10) << "error initiating split on " << path << ": "
+	       << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    r = complete_split(path, info);
+    if (r < 0) {
+      dout(10) << "error completing split on " << path << ": "
+	       << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  vector<string> subdirs;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0) {
+    dout(10) << "error listing subdirs of " << path << ": "
+	     << cpp_strerror(r) << dendl;
+    return r;
+  }
+  for (vector<string>::const_iterator it = subdirs.begin();
+       it != subdirs.end(); ++it) {
+    vector<string> subdir_path(path);
+    subdir_path.push_back(*it);
+    r = split_dirs(subdir_path);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return r;
+}
+
+int HashIndex::apply_layout_settings() {
+  vector<string> path;
+  dout(10) << __func__ << " split multiple = " << split_multiplier
+	   << " merge threshold = " << merge_threshold << dendl;
+  return split_dirs(path);
+}
+
 int HashIndex::_init() {
   subdir_info_s info;
   vector<string> path;
@@ -550,7 +604,12 @@ int HashIndex::recursive_create_path(vector<string>& path, int level)
 }
 
 int HashIndex::recursive_remove(const vector<string> &path) {
+  return _recursive_remove(path, true);
+}
+
+int HashIndex::_recursive_remove(const vector<string> &path, bool top) {
   vector<string> subdirs;
+  dout(20) << __func__ << " path=" << path << dendl;
   int r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -565,12 +624,15 @@ int HashIndex::recursive_remove(const vector<string> &path) {
        i != subdirs.end();
        ++i) {
     subdir.push_back(*i);
-    r = recursive_remove(subdir);
+    r = _recursive_remove(subdir, false);
     if (r < 0)
       return r;
     subdir.pop_back();
   }
-  return remove_path(path);
+  if (top)
+    return 0;
+  else
+    return remove_path(path);
 }
 
 int HashIndex::start_col_split(const vector<string> &path) {
@@ -1003,7 +1065,7 @@ int HashIndex::list_by_hash_bitwise(
 	}
 	if (cmp_bitwise(j->second, end) >= 0) {
 	  if (next)
-	    *next = ghobject_t::get_max();
+	    *next = j->second;
 	  return 0;
 	}
 	if (!next || cmp_bitwise(j->second, *next) >= 0) {
@@ -1069,7 +1131,7 @@ int HashIndex::list_by_hash_nibblewise(
 	}
 	if (cmp_nibblewise(j->second, end) >= 0) {
 	  if (next)
-	    *next = ghobject_t::get_max();
+	    *next = j->second;
 	  return 0;
 	}
 	if (!next || cmp_nibblewise(j->second, *next) >= 0) {

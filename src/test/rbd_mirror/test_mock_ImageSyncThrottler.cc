@@ -101,7 +101,6 @@ std::vector<MockImageSync *> MockImageSync::instances;
 
 // template definitions
 #include "tools/rbd_mirror/ImageSyncThrottler.cc"
-template class rbd::mirror::ImageSyncThrottler<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
@@ -159,7 +158,7 @@ public:
     } else {
       EXPECT_CALL(*sync, cancel()).Times(0);
     }
-    mock_sync_throttler->cancel_sync(mirror_uuid);
+    mock_sync_throttler->cancel_sync(m_local_io_ctx, mirror_uuid);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;

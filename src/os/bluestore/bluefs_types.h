@@ -7,17 +7,12 @@
 #include "include/utime.h"
 #include "include/encoding.h"
 
-struct bluefs_extent_t {
-  uint64_t offset;
-  uint32_t length;
-  uint16_t bdev;
+class bluefs_extent_t : public AllocExtent{
+public:
+  uint8_t bdev;
 
-  bluefs_extent_t(uint16_t b = 0, uint64_t o = 0, uint32_t l = 0)
-    : offset(o), length(l), bdev(b) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
+  bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
+    : AllocExtent(o, l), bdev(b) {}
 
   void encode(bufferlist&) const;
   void decode(bufferlist::iterator&);
@@ -34,7 +29,7 @@ struct bluefs_fnode_t {
   uint64_t size;
   utime_t mtime;
   uint8_t prefer_bdev;
-  vector<bluefs_extent_t> extents;
+  mempool::bluefs::vector<bluefs_extent_t> extents;
 
   bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0) {}
 
@@ -45,7 +40,8 @@ struct bluefs_fnode_t {
     return r;
   }
 
-  vector<bluefs_extent_t>::iterator seek(uint64_t off, uint64_t *x_off);
+  mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
+    uint64_t off, uint64_t *x_off);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -95,6 +91,7 @@ struct bluefs_transaction_t {
     OP_DIR_REMOVE,  ///< remove a dir (dirname)
     OP_FILE_UPDATE, ///< set/update file metadata (file)
     OP_FILE_REMOVE, ///< remove file (ino)
+    OP_JUMP,        ///< jump the seq # and offset
     OP_JUMP_SEQ,    ///< jump the seq #
   } op_t;
 
@@ -152,6 +149,11 @@ struct bluefs_transaction_t {
   void op_file_remove(uint64_t ino) {
     ::encode((__u8)OP_FILE_REMOVE, op_bl);
     ::encode(ino, op_bl);
+  }
+  void op_jump(uint64_t next_seq, uint64_t offset) {
+    ::encode((__u8)OP_JUMP, op_bl);
+    ::encode(next_seq, op_bl);
+    ::encode(offset, op_bl);
   }
   void op_jump_seq(uint64_t next_seq) {
     ::encode((__u8)OP_JUMP_SEQ, op_bl);

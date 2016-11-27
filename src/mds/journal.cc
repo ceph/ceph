@@ -147,7 +147,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   assert(g_conf->mds_kill_journal_expire_at != 2);
 
-  // open files
+  // open files and snap inodes 
   if (!open_files.empty()) {
     assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
@@ -156,9 +156,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
-      assert(in->last == CEPH_NOSNAP);
       ++p;
-      if (in->is_auth() && !in->is_ambiguous_auth() && in->is_any_caps()) {
+      if (in->last == CEPH_NOSNAP && in->is_auth() &&
+	  !in->is_ambiguous_auth() && in->is_any_caps()) {
 	if (in->is_any_caps_wanted()) {
 	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
 	  if (!le) {
@@ -172,6 +172,15 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 	  dout(20) << "try_to_expire not requeueing and delisting unwanted file " << *in << dendl;
 	  in->item_open_file.remove_myself();
 	}
+      } else if (in->last != CEPH_NOSNAP && !in->client_snap_caps.empty()) {
+	// journal snap inodes that need flush. This simplify the mds failover hanlding
+	dout(20) << "try_to_expire requeueing snap needflush inode " << *in << dendl;
+	if (!le) {
+	  le = new EOpen(mds->mdlog);
+	  mds->mdlog->start_entry(le);
+	}
+	le->add_clean_inode(in);
+	ls->open_files.push_back(&in->item_open_file);
       } else {
 	/*
 	 * we can get a capless inode here if we replay an open file, the client fails to
@@ -187,7 +196,8 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
       }
     }
     if (le) {
-      mds->mdlog->submit_entry(le, gather_bld.new_sub());
+      mds->mdlog->submit_entry(le);
+      mds->mdlog->wait_for_safe(gather_bld.new_sub());
       dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
     }
   }
@@ -486,10 +496,11 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->open_object_section("inode");
   inode.dump(f);
   f->close_section(); // inode
-  f->open_array_section("xattrs");
+  f->open_object_section("xattrs");
   for (map<string, bufferptr>::const_iterator iter = xattrs.begin();
       iter != xattrs.end(); ++iter) {
-    f->dump_string(iter->first.c_str(), iter->second.c_str());
+    string s(iter->second.c_str(), iter->second.length());
+    f->dump_string(iter->first.c_str(), s);
   }
   f->close_section(); // xattrs
   if (inode.is_symlink()) {
@@ -588,7 +599,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
           << std::dec << " in journal";
       mds->clog->error() << oss.str();
       mds->damaged();
-      assert(0);  // Should be unreachable because damaged() calls respawn()
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
   }
 }
@@ -1204,7 +1215,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
           mds->clog->error() << "failure replaying journal (EMetaBlob)";
           mds->damaged();
-          assert(0);  // Should be unreachable because damaged() calls respawn()
+          ceph_abort();  // Should be unreachable because damaged() calls respawn()
 	}
       }
 
@@ -1267,7 +1278,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->is_dirty()) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay added (full) " << *dn << dendl;
       } else {
 	dn->set_version(p->dnv);
 	if (p->is_dirty()) dn->_mark_dirty(logseg);
@@ -1293,6 +1304,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    mds->clog->warn(ss);
 	  }
 	  dir->unlink_inode(dn);
+          mds->mdcache->touch_dentry_bottom(dn);
 	}
 	if (unlinked.count(in))
 	  linked.insert(in);
@@ -1304,7 +1316,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
+          CDentry *unlinked_dn = in->get_parent_dn();
 	  in->get_parent_dir()->unlink_inode(in->get_parent_dn());
+          mds->mdcache->touch_dentry_bottom(unlinked_dn);
 	}
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
@@ -1317,6 +1331,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	      mds->clog->warn(ss);
 	    }
 	    dir->unlink_inode(dn);
+            mds->mdcache->touch_dentry_bottom(dn);
 	  }
 	  if (unlinked.count(in))
 	    linked.insert(in);
@@ -1332,6 +1347,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	in->_mark_dirty(logseg);
       if (p->is_dirty_parent())
 	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+      if (p->need_snapflush())
+	logseg->open_files.push_back(&in->item_open_file);
       if (dn->is_auth())
 	in->state_set(CInode::STATE_AUTH);
       else
@@ -1360,6 +1377,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    dout(0) << ss.str() << dendl;
 	  }
 	  dir->unlink_inode(dn);
+          mds->mdcache->touch_dentry_bottom(dn);
 	}
 	dir->link_remote_inode(dn, p->ino, p->d_type);
 	dn->set_version(p->dnv);
@@ -1381,7 +1399,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay added (nullbit) " << *dn << dendl;
       } else {
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
@@ -1394,6 +1412,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    if (dn->get_linkage()->is_primary())
 	      unlinked[in] = dir;
 	    dir->unlink_inode(dn);
+            mds->mdcache->touch_dentry_bottom(dn);
 	  }
 	}
 	dn->set_version(p->dnv);
@@ -1404,6 +1423,10 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       olddir = dir;
       if (lump.is_importing())
 	dn->state_set(CDentry::STATE_AUTH);
+
+      // Make null dentries the first things we trim
+      dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
+      mds->mdcache->touch_dentry_bottom(dn);
     }
   }
 
@@ -1611,7 +1634,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     CInode *in = mds->mdcache->get_inode(*p);
     if (in) {
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", dropping " << *in << dendl;
+      CDentry *parent = in->get_parent_dn();
       mds->mdcache->remove_inode(in);
+      if (parent) {
+        dout(10) << "EMetaBlob.replay unlinked from dentry " << *parent << dendl;
+        assert(parent->get_linkage()->is_null());
+        mds->mdcache->touch_dentry_bottom(parent);
+      }
     } else {
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
     }
@@ -1932,7 +1961,7 @@ void ETableServer::replay(MDSRank *mds)
   default:
     mds->clog->error() << "invalid tableserver op in ETableServer";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
   
   assert(version == server->get_version());
@@ -2120,10 +2149,11 @@ void EUpdate::replay(MDSRank *mds)
 // EOpen
 
 void EOpen::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
   ::encode(metablob, bl, features);
   ::encode(inos, bl);
+  ::encode(snap_inos, bl);
   ENCODE_FINISH(bl);
 } 
 
@@ -2133,6 +2163,8 @@ void EOpen::decode(bufferlist::iterator &bl) {
     ::decode(stamp, bl);
   ::decode(metablob, bl);
   ::decode(inos, bl);
+  if (struct_v >= 4)
+    ::decode(snap_inos, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2167,12 +2199,18 @@ void EOpen::replay(MDSRank *mds)
   metablob.replay(mds, _segment);
 
   // note which segments inodes belong to, so we don't have to start rejournaling them
-  for (vector<inodeno_t>::iterator p = inos.begin();
-       p != inos.end();
-       ++p) {
-    CInode *in = mds->mdcache->get_inode(*p);
+  for (const auto &ino : inos) {
+    CInode *in = mds->mdcache->get_inode(ino);
     if (!in) {
-      dout(0) << "EOpen.replay ino " << *p << " not in metablob" << dendl;
+      dout(0) << "EOpen.replay ino " << ino << " not in metablob" << dendl;
+      assert(in);
+    }
+    _segment->open_files.push_back(&in->item_open_file);
+  }
+  for (const auto &vino : snap_inos) {
+    CInode *in = mds->mdcache->get_inode(vino);
+    if (!in) {
+      dout(0) << "EOpen.replay ino " << vino << " not in metablob" << dendl;
       assert(in);
     }
     _segment->open_files.push_back(&in->item_open_file);
@@ -2489,7 +2527,7 @@ void ESlaveUpdate::replay(MDSRank *mds)
   default:
     mds->clog->error() << "invalid op in ESlaveUpdate";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 }
 
@@ -2707,8 +2745,7 @@ void EFragment::replay(MDSRank *mds)
   switch (op) {
   case OP_PREPARE:
     mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags, _segment, &rollback);
-    // fall-thru
-  case OP_ONESHOT:
+
     if (in)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
     break;
@@ -2733,7 +2770,7 @@ void EFragment::replay(MDSRank *mds)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   metablob.replay(mds, _segment);
@@ -2760,8 +2797,6 @@ void EFragment::decode(bufferlist::iterator &bl) {
     ::decode(stamp, bl);
   if (struct_v >= 3)
     ::decode(op, bl);
-  else
-    op = OP_ONESHOT;
   ::decode(ino, bl);
   ::decode(basefrag, bl);
   ::decode(bits, bl);
@@ -2996,7 +3031,7 @@ void EImportFinish::replay(MDSRank *mds)
 	     << dendl;
     mds->clog->error() << "failure replaying journal (EImportFinish)";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 }
 

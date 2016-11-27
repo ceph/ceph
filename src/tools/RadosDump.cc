@@ -62,7 +62,7 @@ int RadosDump::get_footer(footer *f)
   bytes = ebl.read_fd(file_fd, sh.footer_size);
   if ((size_t)bytes != sh.footer_size) {
     cerr << "Unexpected EOF" << std::endl;
-    return EFAULT;
+    return -EFAULT;
   }
 
   f->decode(ebliter);

@@ -10,27 +10,27 @@ class TestRootController(FunctionalTest):
         assert response.status_int == 400
 
     def test_2_put(self):
-        with open ("sample.json", "r") as myfile:
-            data=myfile.read().replace('\n', '')
+        with open("sample.json", "rb") as myfile:
+            data = myfile.read().replace(b'\n', b'')
         response = self.app.request('/', method='PUT', body=data)
         assert response.status_int == 201
 
     def test_3_put_invalid_json(self):
-        response = self.app.request('/', method='PUT', body='{asdfg', expect_errors=True)
+        response = self.app.request('/', method='PUT', body=b'{asdfg', expect_errors=True)
         assert response.status_int == 422
 
     def test_4_put_invalid_entries_1(self):
-        response = self.app.request('/', method='PUT', body='{}', expect_errors=True)
+        response = self.app.request('/', method='PUT', body=b'{}', expect_errors=True)
         assert response.status_int == 422
 
     def test_5_put_incomplete_json(self):
-        response = self.app.request('/', method='PUT', body='{\"uuid\":\"adfs-12312ad\"}',
+        response = self.app.request('/', method='PUT', body=b'{"uuid":"adfs-12312ad"}',
                                     expect_errors=True)
         assert response.status_int == 422
 
     def test_6_get(self):
         response = self.app.get('/')
-        js = json.loads(response.body)
+        js = json.loads(response.body.decode('utf-8'))
         for entry in js:
             ci = entry
             break
@@ -44,7 +44,7 @@ class TestRootController(FunctionalTest):
 
     def test_8_get_invalid_version(self):
         response = self.app.get('/')
-        js = json.loads(response.body)
+        js = json.loads(response.body.decode('utf-8'))
         for entry in js:
             ci = entry
             break
@@ -62,7 +62,7 @@ class TestRootController(FunctionalTest):
 
     def test_92_delete(self):
         response = self.app.get('/')
-        js = json.loads(response.body)
+        js = json.loads(response.body.decode('utf-8'))
         for entry in js:
             response = self.app.delete('/?uuid='+entry['uuid'])
             assert response.status_int == 200

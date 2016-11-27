@@ -75,6 +75,8 @@ corecmd_exec_shell(ceph_t)
 
 dev_read_urand(ceph_t)
 
+domain_read_all_domains_state(ceph_t)
+
 fs_getattr_all_fs(ceph_t)
 
 auth_use_nsswitch(ceph_t)
@@ -91,6 +93,7 @@ allow ceph_t self:tcp_socket { accept listen };
 corenet_tcp_connect_cyphesis_port(ceph_t)
 corenet_tcp_connect_generic_port(ceph_t)
 files_list_tmp(ceph_t)
+files_manage_generic_tmp_files(ceph_t)
 fstools_exec(ceph_t)
 nis_use_ypbind_uncond(ceph_t)
 storage_raw_rw_fixed_disk(ceph_t)

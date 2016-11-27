@@ -113,8 +113,8 @@ be in memory or on disk on all replicas::
 		rados_shutdown(cluster);
 		exit(1);
 	}
-	rados_wait_for_complete(comp); // in memory
-	rados_wait_for_safe(comp); // on disk
+	rados_aio_wait_for_complete(comp); // in memory
+	rados_aio_wait_for_safe(comp); // on disk
 
 Finally, we need to free the memory used by the completion with :c:func:`rados_aio_release`::
 

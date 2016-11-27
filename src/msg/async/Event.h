@@ -73,21 +73,24 @@ struct FiredFileEvent {
 class EventDriver {
  public:
   virtual ~EventDriver() {}       // we want a virtual destructor!!!
-  virtual int init(int nevent) = 0;
+  virtual int init(EventCenter *center, int nevent) = 0;
   virtual int add_event(int fd, int cur_mask, int mask) = 0;
   virtual int del_event(int fd, int cur_mask, int del_mask) = 0;
   virtual int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp) = 0;
   virtual int resize_events(int newsize) = 0;
+  virtual bool need_wakeup() { return true; }
 };
 
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
 class EventCenter {
-
-  using clock_type = ceph::coarse_mono_clock;
+ public:
   // should be enough;
   static const int MAX_EVENTCENTER = 24;
+
+ private:
+  using clock_type = ceph::coarse_mono_clock;
 
   struct AssociatedCenters {
     EventCenter *centers[MAX_EVENTCENTER];
@@ -110,16 +113,58 @@ class EventCenter {
     TimeEvent(): id(0), time_cb(NULL) {}
   };
 
+ public:
+  /**
+     * A Poller object is invoked once each time through the dispatcher's
+     * inner polling loop.
+     */
+  class Poller {
+   public:
+    explicit Poller(EventCenter* center, const string& pollerName);
+    virtual ~Poller();
+
+    /**
+     * This method is defined by a subclass and invoked once by the
+     * center during each pass through its inner polling loop.
+     *
+     * \return
+     *      1 means that this poller did useful work during this call.
+     *      0 means that the poller found no work to do.
+     */
+    virtual int poll() = 0;
+
+   private:
+    /// The EventCenter object that owns this Poller.  NULL means the
+    /// EventCenter has been deleted.
+    EventCenter* owner;
+
+    /// Human-readable string name given to the poller to make it
+    /// easy to identify for debugging. For most pollers just passing
+    /// in the subclass name probably makes sense.
+    string poller_name;
+
+    /// Index of this Poller in EventCenter::pollers.  Allows deletion
+    /// without having to scan all the entries in pollers. -1 means
+    /// this poller isn't currently in EventCenter::pollers (happens
+    /// after EventCenter::reset).
+    int slot;
+  };
+
+ private:
   CephContext *cct;
   int nevent;
   // Used only to external event
   pthread_t owner;
-  std::mutex external_lock, file_lock;;
+  std::mutex external_lock;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
   std::multimap<clock_type::time_point, TimeEvent> time_events;
+  // Keeps track of all of the pollers currently defined.  We don't
+  // use an intrusive list here because it isn't reentrant: we need
+  // to add/remove elements while the center is traversing the list.
+  std::vector<Poller*> pollers;
   std::map<uint64_t, std::multimap<clock_type::time_point, TimeEvent>::iterator> event_map;
   uint64_t time_event_next_id;
   int notify_receive_fd;
@@ -127,7 +172,7 @@ class EventCenter {
   NetHandler net;
   EventCallbackRef notify_handler;
   unsigned idx = 10000;
-  AssociatedCenters *global_centers;
+  AssociatedCenters *global_centers = nullptr;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -136,22 +181,21 @@ class EventCenter {
   }
 
  public:
-  atomic_t already_wakeup;
-
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c),
-    notify_handler(NULL),
-    already_wakeup(0) {
-  }
+    notify_handler(NULL) { }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
   int init(int nevent, unsigned idx);
   void set_owner();
-  unsigned get_id() { return idx; }
+  pthread_t get_owner() const { return owner; }
+  unsigned get_id() const { return idx; }
+
+  EventDriver *get_driver() { return driver; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
@@ -183,8 +227,9 @@ class EventCenter {
       lock.lock();
       cond.notify_all();
       done = true;
+      bool del = nonwait;
       lock.unlock();
-      if (nonwait)
+      if (del)
         delete this;
     }
     void wait() {

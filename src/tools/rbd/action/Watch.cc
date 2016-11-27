@@ -61,19 +61,13 @@ static int do_watch(librados::IoCtx& pp, librbd::Image &image,
   if (old_format != 0) {
     header_oid = std::string(imgname) + RBD_SUFFIX;
   } else {
-    librbd::image_info_t info;
-    r = image.stat(info, sizeof(info));
+    std::string id;
+    r = image.get_id(&id);
     if (r < 0) {
-      std::cerr << "failed to stat image" << std::endl;
       return r;
     }
 
-    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
-    header_oid = RBD_HEADER_PREFIX + image_id;
+    header_oid = RBD_HEADER_PREFIX + id;
   }
 
   uint64_t cookie;

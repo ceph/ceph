@@ -41,15 +41,8 @@ function run() {
 }
 
 function setup_osds() {
-    local subread=$1
-
     for id in $(seq 0 3) ; do
-        # TODO: the feature of "osd-pool-erasure-code-subread-all" is not yet supported.
-        if [ -n "$osd_pool_erasure_code_subread_all__is_supported" ]; then
-            run_osd $dir $id "--osd-pool-erasure-code-subread-all=$subread" || return 1
-        else
-            run_osd $dir $id || return 1
-        fi
+        run_osd $dir $id || return 1
     done
     wait_for_clean || return 1
 
@@ -117,14 +110,14 @@ function rados_put_get() {
     local dir=$1
     local poolname=$2
     local objname=${3:-SOMETHING}
-    local expect=${4:-0}
-    local recovery=$5
+    local recovery=$4
 
     #
     # get and put an object, compare they are equal
     #
     rados_put $dir $poolname $objname || return 1
-    rados_get $dir $poolname $objname $expect || return 1
+    # We can read even though caller injected read error on one of the shards
+    rados_get $dir $poolname $objname 0 || return 1
 
     if [ -n "$recovery" ];
     then
@@ -137,7 +130,8 @@ function rados_put_get() {
         local last=$((${#initial_osds[@]} - 1))
         ceph osd out ${initial_osds[$last]} || return 1
         ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
-        rados_get $dir $poolname $objname $expect || return 1
+        # This will fail since one shard is out and one shard has injected read error
+        rados_get $dir $poolname $objname 1 || return 1
         ceph osd in ${initial_osds[$last]} || return 1
     fi
 
@@ -173,10 +167,11 @@ function rados_get_data_eio() {
     local poolname=pool-jerasure
     local objname=obj-eio-$$-$shard_id
     inject_eio $objname $dir $shard_id || return 1
-    rados_put_get $dir $poolname $objname 0 $recovery || return 1
+    rados_put_get $dir $poolname $objname $recovery || return 1
 
     shard_id=$(expr $shard_id + 1)
     inject_eio $objname $dir $shard_id || return 1
+    # Now 2 out of 3 shards get EIO, so should fail
     rados_get $dir $poolname $objname 1 || return 1
 }
 
@@ -196,6 +191,7 @@ function set_size() {
     local poolname=pool-jerasure
     local -a initial_osds=($(get_osds $poolname $objname))
     local osd_id=${initial_osds[$shard_id]}
+    ceph osd set noout
     if [ "$mode" = "add" ];
     then
       objectstore_tool $dir $osd_id $objname get-bytes $dir/CORRUPT || return 1
@@ -206,9 +202,9 @@ function set_size() {
     else
       dd if=/dev/urandom bs=$bytes count=1 of=$dir/CORRUPT
     fi
-    objectstore_tool $dir $osd_id --op list $objname
     objectstore_tool $dir $osd_id $objname set-bytes $dir/CORRUPT || return 1
     rm -f $dir/CORRUPT
+    ceph osd unset noout
 }
 
 function rados_get_data_bad_size() {
@@ -245,7 +241,7 @@ function rados_get_data_bad_size() {
 #
 function TEST_rados_get_subread_eio_shard_0() {
     local dir=$1
-    setup_osds false || return 1
+    setup_osds || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
@@ -257,7 +253,7 @@ function TEST_rados_get_subread_eio_shard_0() {
 
 function TEST_rados_get_subread_eio_shard_1() {
     local dir=$1
-    setup_osds false || return 1
+    setup_osds || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
@@ -276,7 +272,7 @@ function TEST_rados_get_subread_eio_shard_1() {
 #
 function TEST_rados_get_bad_size_shard_0() {
     local dir=$1
-    setup_osds false || return 1
+    setup_osds || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
@@ -290,7 +286,7 @@ function TEST_rados_get_bad_size_shard_0() {
 
 function TEST_rados_get_bad_size_shard_1() {
     local dir=$1
-    setup_osds false || return 1
+    setup_osds || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
@@ -303,19 +299,11 @@ function TEST_rados_get_bad_size_shard_1() {
 }
 
 : <<'DISABLED_TESTS'
-# this test case is aimed to test the fix of https://github.com/ceph/ceph/pull/2952
-# this test case can test both client read and recovery read on EIO
-# but at this moment, above pull request ONLY resolves client read on EIO
-# so this case will fail at function *rados_put_get* when one OSD out
-# so disable this case for now until both crashes of client read and recovery read
-# on EIO to be fixed
-#
-
 function TEST_rados_get_with_subreadall_eio_shard_0() {
     local dir=$1
     local shard_id=0
 
-    setup_osds true || return 1
+    setup_osds || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
@@ -323,7 +311,6 @@ function TEST_rados_get_with_subreadall_eio_shard_0() {
     local shard_id=0
     rados_get_data_eio $dir $shard_id recovery || return 1
 
-    check_pg_status $pg "inconsistent" || return 1
     delete_pool $poolname
 }
 
@@ -331,7 +318,7 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     local dir=$1
     local shard_id=0
 
-    setup_osds true || return 1
+    setup_osds || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
@@ -339,11 +326,6 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     local shard_id=1
     rados_get_data_eio $dir $shard_id recovery || return 1
 
-    # the reason to skip this check when current shardid != 0 is that the first
-    # k chunks returned is not always containing current shardid, so this pg may
-    # not be marked as inconsistent. However, primary OSD (when shard_id == 0) is
-    # always the faster one normally, so we can check pg status.
-    ## check_pg_status $pg "inconsistent" || return 1
     delete_pool $poolname
 }
 DISABLED_TESTS

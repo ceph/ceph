@@ -79,7 +79,7 @@ public:
     dout(1) << __func__ << dendl;
 
     msg = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
-                            "test-mon-msg", 0);
+                            "test-mon-msg", 0, 0);
     assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0,0));
     dout(0) << __func__ << " starting messenger at "
@@ -187,6 +187,7 @@ fail:
   void ms_handle_connect(Connection *con) { }
   void ms_handle_remote_reset(Connection *con) { }
   bool ms_handle_reset(Connection *con) { return false; }
+  bool ms_handle_refused(Connection *con) { return false; }
 
   bool is_wanted(Message *m) {
     dout(20) << __func__ << " " << *m << " type " << m->get_type() << dendl;
@@ -321,13 +322,12 @@ TEST_F(MonMsgTest, MMonJoin)
 
 int main(int argc, char *argv[])
 {
-  vector<const char*> def_args;
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(&def_args, args,
-	      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      0);
+  auto cct = global_init(nullptr, args,
+			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+			 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   ::testing::InitGoogleTest(&argc, argv);

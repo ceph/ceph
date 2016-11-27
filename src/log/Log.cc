@@ -6,24 +6,16 @@
 #include <errno.h>
 #include <syslog.h>
 
-#include <iostream>
-#include <sstream>
-
-#include <boost/asio.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
-#include <boost/shared_ptr.hpp>
-
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
 #include "common/Graylog.h"
 #include "common/valgrind.h"
-#include "common/Formatter.h"
+
 #include "include/assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
-#include "include/uuid.h"
+
 #include "Entry.h"
 #include "SubsystemMap.h"
 
@@ -34,7 +26,7 @@
 
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 static OnExitManager exit_callbacks;
 
@@ -476,5 +468,10 @@ void Log::inject_segv()
   m_inject_segv = true;
 }
 
-} // ceph::log::
+void Log::reset_segv()
+{
+  m_inject_segv = false;
+}
+
+} // ceph::logging::
 } // ceph::

@@ -3,6 +3,7 @@
 #ifndef LIBRBD_WATCH_NOTIFY_TYPES_H
 #define LIBRBD_WATCH_NOTIFY_TYPES_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
@@ -87,7 +88,8 @@ enum NotifyOp {
   NOTIFY_OP_SNAP_RENAME        = 11,
   NOTIFY_OP_SNAP_PROTECT       = 12,
   NOTIFY_OP_SNAP_UNPROTECT     = 13,
-  NOTIFY_OP_RENAME             = 14
+  NOTIFY_OP_RENAME             = 14,
+  NOTIFY_OP_UPDATE_FEATURES    = 15,
 };
 
 struct AcquiredLockPayload {
@@ -177,7 +179,7 @@ struct AsyncCompletePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_COMPLETE;
   static const bool CHECK_FOR_REFRESH = false;
 
-  AsyncCompletePayload() {}
+  AsyncCompletePayload() : result(0) {}
   AsyncCompletePayload(const AsyncRequestId &id, int r)
     : AsyncRequestPayloadBase(id), result(r) {}
 
@@ -200,11 +202,12 @@ struct ResizePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RESIZE;
   static const bool CHECK_FOR_REFRESH = true;
 
-  ResizePayload() : size(0) {}
-  ResizePayload(uint64_t size_, const AsyncRequestId &id)
-    : AsyncRequestPayloadBase(id), size(size_) {}
+  ResizePayload() : size(0), allow_shrink(true) {}
+  ResizePayload(uint64_t size_, bool allow_shrink_, const AsyncRequestId &id)
+    : AsyncRequestPayloadBase(id), size(size_), allow_shrink(allow_shrink_) {}
 
   uint64_t size;
+  bool allow_shrink;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
@@ -230,7 +233,14 @@ struct SnapCreatePayload : public SnapPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_CREATE;
 
   SnapCreatePayload() {}
-  SnapCreatePayload(const std::string &name) : SnapPayloadBase(name) {}
+  SnapCreatePayload(const std::string &name,
+		    const cls::rbd::SnapshotNamespace &_snap_namespace) : SnapPayloadBase(name), snap_namespace(_snap_namespace) {}
+
+  cls::rbd::SnapshotNamespace snap_namespace;
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct SnapRenamePayload : public SnapPayloadBase {
@@ -291,6 +301,22 @@ struct RenamePayload {
   void dump(Formatter *f) const;
 };
 
+struct UpdateFeaturesPayload {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_UPDATE_FEATURES;
+  static const bool CHECK_FOR_REFRESH = true;
+
+  UpdateFeaturesPayload() : features(0), enabled(false) {}
+  UpdateFeaturesPayload(uint64_t features_, bool enabled_)
+    : features(features_), enabled(enabled_) {}
+
+  uint64_t features;
+  bool enabled;
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
   static const bool CHECK_FOR_REFRESH = false;
@@ -315,6 +341,7 @@ typedef boost::variant<AcquiredLockPayload,
                        SnapUnprotectPayload,
                        RebuildObjectMapPayload,
                        RenamePayload,
+                       UpdateFeaturesPayload,
                        UnknownPayload> Payload;
 
 struct NotifyMessage {

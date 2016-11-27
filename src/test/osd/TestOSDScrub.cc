@@ -21,13 +21,13 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include <gtest/gtest.h>
 #include "osd/OSD.h"
 #include "os/ObjectStore.h"
 #include "mon/MonClient.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include <gtest/gtest.h>
 #include "msg/Messenger.h"
+#include "test/unit.h"
 
 class TestOSDScrub: public OSD {
 
@@ -57,8 +57,8 @@ TEST(TestOSDScrub, scrub_time_permit) {
              g_conf->osd_data,
              g_conf->osd_journal);
   Messenger *ms = Messenger::create(g_ceph_context, g_conf->ms_type,
-             entity_name_t::OSD(0), "make_checker",
-             getpid());
+				    entity_name_t::OSD(0), "make_checker",
+				    getpid(), 0);
   ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms->set_default_policy(Messenger::Policy::stateless_server(0, 0));
   ms->bind(g_conf->public_addr);
@@ -139,17 +139,6 @@ TEST(TestOSDScrub, scrub_time_permit) {
   ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 // Local Variables:

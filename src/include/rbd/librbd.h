@@ -32,7 +32,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 10
+#define LIBRBD_VER_EXTRA 11
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -61,6 +61,8 @@ typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 
 typedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void *ptr);
 
+typedef void (*rbd_update_callback_t)(void *arg);
+
 typedef struct {
   uint64_t id;
   uint64_t size;
@@ -69,6 +71,10 @@ typedef struct {
 
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
+
+#define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
+#define RBD_SNAP_REMOVE_FLATTEN		1 << 1
+#define RBD_SNAP_REMOVE_FORCE		(RBD_SNAP_REMOVE_UNPROTECT | RBD_SNAP_REMOVE_FLATTEN)
 
 /**
  * These types used to in set_image_notification to indicate the type of event
@@ -84,9 +90,9 @@ typedef struct {
   uint64_t obj_size;
   uint64_t num_objs;
   int order;
-  char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
-  int64_t parent_pool;			      /* deprecated */
-  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
+  char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE]; /* deprecated */
+  int64_t parent_pool;			           /* deprecated */
+  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];       /* deprecated */
 } rbd_image_info_t;
 
 typedef enum {
@@ -132,6 +138,31 @@ typedef struct {
   bool up;
 } rbd_mirror_image_status_t;
 
+typedef enum {
+  GROUP_IMAGE_STATE_ATTACHED,
+  GROUP_IMAGE_STATE_INCOMPLETE
+} rbd_group_image_state_t;
+
+typedef struct {
+  char *name;
+  int64_t pool;
+} rbd_group_image_spec_t;
+
+typedef struct {
+  rbd_group_image_spec_t spec;
+  rbd_group_image_state_t state;
+} rbd_group_image_status_t;
+
+typedef struct {
+  char *name;
+  int64_t pool;
+} rbd_group_spec_t;
+
+typedef enum {
+  RBD_LOCK_MODE_EXCLUSIVE = 0,
+  RBD_LOCK_MODE_SHARED = 1,
+} rbd_lock_mode_t;
+
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
 
 /* image options */
@@ -144,6 +175,9 @@ enum {
   RBD_IMAGE_OPTION_JOURNAL_ORDER = 5,
   RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH = 6,
   RBD_IMAGE_OPTION_JOURNAL_POOL = 7,
+  RBD_IMAGE_OPTION_FEATURES_SET = 8,
+  RBD_IMAGE_OPTION_FEATURES_CLEAR = 9,
+  RBD_IMAGE_OPTION_DATA_POOL = 10
 };
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
@@ -272,6 +306,8 @@ CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
 CEPH_RBD_API int rbd_close(rbd_image_t image);
 CEPH_RBD_API int rbd_aio_close(rbd_image_t image, rbd_completion_t c);
 CEPH_RBD_API int rbd_resize(rbd_image_t image, uint64_t size);
+CEPH_RBD_API int rbd_resize2(rbd_image_t image, uint64_t size, bool allow_shrink,
+			     librbd_progress_fn_t cb, void *cbdata);
 CEPH_RBD_API int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 			     librbd_progress_fn_t cb, void *cbdata);
 CEPH_RBD_API int rbd_stat(rbd_image_t image, rbd_image_info_t *info,
@@ -285,6 +321,10 @@ CEPH_RBD_API int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
 CEPH_RBD_API int rbd_get_stripe_count(rbd_image_t image,
                                       uint64_t *stripe_count);
 CEPH_RBD_API int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
+CEPH_RBD_API int rbd_get_id(rbd_image_t image, char *id, size_t id_len);
+CEPH_RBD_API int rbd_get_block_name_prefix(rbd_image_t image,
+                                           char *prefix, size_t prefix_len);
+CEPH_RBD_API int64_t rbd_get_data_pool_id(rbd_image_t image);
 CEPH_RBD_API int rbd_get_parent_info(rbd_image_t image,
 			             char *parent_poolname, size_t ppoolnamelen,
 			             char *parent_name, size_t pnamelen,
@@ -295,6 +335,8 @@ CEPH_RBD_API int rbd_set_image_notification(rbd_image_t image, int fd, int type)
 
 /* exclusive lock feature */
 CEPH_RBD_API int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner);
+CEPH_RBD_API int rbd_lock_acquire(rbd_image_t image, rbd_lock_mode_t lock_mode);
+CEPH_RBD_API int rbd_lock_release(rbd_image_t image);
 
 /* object map feature */
 CEPH_RBD_API int rbd_rebuild_object_map(rbd_image_t image,
@@ -322,6 +364,8 @@ CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
 CEPH_RBD_API void rbd_snap_list_end(rbd_snap_info_t *snaps);
 CEPH_RBD_API int rbd_snap_create(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove(rbd_image_t image, const char *snapname);
+CEPH_RBD_API int rbd_snap_remove2(rbd_image_t image, const char *snap_name, uint32_t flags,
+				  librbd_progress_fn_t cb, void *cbdata);
 CEPH_RBD_API int rbd_snap_rollback(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_rollback_with_progress(rbd_image_t image,
                                                  const char *snapname,
@@ -663,6 +707,48 @@ CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_remove(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_list(rados_ioctx_t p, char *names, size_t *size);
 
+/**
+ * Register an image metadata change watcher.
+ *
+ * @param image the image to watch
+ * @param handle where to store the internal id assigned to this watch
+ * @param watch_cb what to do when a notify is received on this image
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_update_watch(rbd_image_t image, uint64_t *handle,
+				  rbd_update_callback_t watch_cb, void *arg);
+
+/**
+ * Unregister an image watcher.
+ *
+ * @param image the image to unwatch
+ * @param handle which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_update_unwatch(rbd_image_t image, uint64_t handle);
+
+
+CEPH_RBD_API int rbd_group_image_add(
+				rados_ioctx_t group_p, const char *group_name,
+				rados_ioctx_t image_p, const char *image_name);
+CEPH_RBD_API int rbd_group_image_remove(
+				rados_ioctx_t group_p, const char *group_name,
+				rados_ioctx_t image_p, const char *image_name);
+CEPH_RBD_API int rbd_group_image_list(
+				  rados_ioctx_t group_p, const char *group_name,
+				  rbd_group_image_status_t *images,
+				  size_t *image_size);
+CEPH_RBD_API int rbd_image_get_group(rados_ioctx_t image_p,
+				     const char *image_name,
+				     rbd_group_spec_t *group_spec);
+CEPH_RBD_API void rbd_group_spec_cleanup(rbd_group_spec_t *group_spec);
+CEPH_RBD_API void rbd_group_image_status_cleanup(
+						rbd_group_image_status_t *image
+						);
+CEPH_RBD_API void rbd_group_image_status_list_cleanup(
+					      rbd_group_image_status_t *images,
+					      size_t len);
 #ifdef __cplusplus
 }
 #endif

@@ -106,7 +106,7 @@ public:
   virtual ~RGWRESTStreamRWRequest() {}
   int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
   int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr = NULL);
-  int complete(string& etag, real_time *mtime, map<string, string>& attrs);
+  int complete(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   void set_outbl(bufferlist& _outbl) {
     outbl.swap(_outbl);
@@ -119,6 +119,12 @@ class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
 public:
   RGWRESTStreamReadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, param_vec_t *_headers,
 		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, "GET", _url, _cb, _headers, _params) {}
+};
+
+class RGWRESTStreamHeadRequest : public RGWRESTStreamRWRequest {
+public:
+  RGWRESTStreamHeadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, param_vec_t *_headers,
+		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params) {}
 };
 
 #endif

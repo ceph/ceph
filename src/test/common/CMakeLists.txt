@@ -6,18 +6,20 @@ add_executable(get_command_descriptions
 target_link_libraries(get_command_descriptions
   mon
   global
-  leveldb
+  ${LEVELDB_LIBRARIES}
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   )
 
+if(HAVE_BLKID)
 # unittest_blkdev
 add_executable(unittest_blkdev
   test_blkdev.cc
   )
 add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
 target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
+endif(HAVE_BLKID)
 
 # unittest_bloom_filter
 add_executable(unittest_bloom_filter
@@ -155,12 +157,19 @@ add_ceph_unittest(unittest_bit_vector ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest
 target_link_libraries(unittest_bit_vector global)
 
 # unittest_async_compressor
+# the test is disabled, because async_compressor is not used anywhere yet.
 add_executable(unittest_async_compressor
-  test_async_compressor.cc
-)
-add_ceph_unittest(unittest_async_compressor ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_async_compressor)
-target_link_libraries(unittest_async_compressor global)
+  test_async_compressor.cc)
+target_link_libraries(unittest_async_compressor global ${UNITTEST_LIBS})
 add_dependencies(unittest_async_compressor ceph_snappy)
+set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# unittest_interval_map
+add_executable(unittest_interval_map
+  test_interval_map.cc
+)
+add_ceph_unittest(unittest_interval_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_interval_map)
+target_link_libraries(unittest_interval_map global)
 
 # unittest_interval_set
 add_executable(unittest_interval_set
@@ -189,3 +198,12 @@ add_executable(unittest_shunique_lock
   )
 add_ceph_unittest(unittest_shunique_lock ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
+# unittest_global_doublefree
+if(WITH_CEPHFS)
+  add_executable(unittest_global_doublefree
+    test_global_doublefree.cc
+    )
+  add_ceph_unittest(unittest_global_doublefree ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_global_doublefree)
+  target_link_libraries(unittest_global_doublefree cephfs librados)
+endif(WITH_CEPHFS)

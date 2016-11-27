@@ -13,7 +13,8 @@
 namespace librbd {
 namespace journal {
 
-void StandardPolicy::allocate_tag_on_lock(Context *on_finish) {
+template<typename I>
+void StandardPolicy<I>::allocate_tag_on_lock(Context *on_finish) {
   assert(m_image_ctx->journal != nullptr);
 
   if (!m_image_ctx->journal->is_tag_owner()) {
@@ -25,10 +26,7 @@ void StandardPolicy::allocate_tag_on_lock(Context *on_finish) {
   m_image_ctx->journal->allocate_local_tag(on_finish);
 }
 
-void StandardPolicy::cancel_external_replay(Context *on_finish) {
-  // external replay is only handled by rbd-mirror
-  assert(false);
-}
-
 } // namespace journal
 } // namespace librbd
+
+template class librbd::journal::StandardPolicy<librbd::ImageCtx>;

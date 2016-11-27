@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "OpenLocalImageRequest.h"
 #include "CloseImageRequest.h"
 #include "common/errno.h"
@@ -29,10 +30,15 @@ namespace {
 
 struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 
-  virtual void lock_requested(bool force) {
+  virtual bool may_auto_request_lock() {
+    return false;
+  }
+
+  virtual int lock_requested(bool force) {
     // TODO: interlock is being requested (e.g. local promotion)
     // Wait for demote event from peer or abort replay on forced
     // promotion.
+    return -EROFS;
   }
 
 };
@@ -43,17 +49,18 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
   MirrorJournalPolicy(ContextWQ *work_queue) : work_queue(work_queue) {
   }
 
+  virtual bool append_disabled() const {
+    // avoid recording any events to the local journal
+    return true;
+  }
+  virtual bool journal_disabled() const {
+    return false;
+  }
+
   virtual void allocate_tag_on_lock(Context *on_finish) {
     // rbd-mirror will manually create tags by copying them from the peer
     work_queue->queue(on_finish, 0);
   }
-
-  virtual void cancel_external_replay(Context *on_finish) {
-    // TODO: journal is being closed due to a comms error.  This means
-    // the journal is being closed and the exclusive lock is being released.
-    // ImageReplayer needs to restart.
-  }
-
 };
 
 } // anonymous namespace
@@ -113,7 +120,9 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
 template <typename I>
 void OpenLocalImageRequest<I>::send_lock_image() {
   // deduce the class type for the journal to support unit tests
-  typedef typename std::decay<decltype(*I::journal)>::type Journal;
+  using Journal = typename std::decay<
+    typename std::remove_pointer<decltype(std::declval<I>().journal)>
+    ::type>::type;
 
   dout(20) << dendl;
 

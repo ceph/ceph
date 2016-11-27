@@ -20,7 +20,6 @@ namespace po = boost::program_options;
 static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
                           const char *imgname, Formatter *f)
 {
-  librbd::image_info_t info;
   uint8_t old_format;
   int r;
   std::string header_oid;
@@ -34,16 +33,13 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
     header_oid = imgname;
     header_oid += RBD_SUFFIX;
   } else {
-    r = image.stat(info, sizeof(info));
-    if (r < 0)
+    std::string id;
+    r = image.get_id(&id);
+    if (r < 0) {
       return r;
+    }
 
-    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-    header_oid = RBD_HEADER_PREFIX;
-    header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
+    header_oid = RBD_HEADER_PREFIX + id;
   }
 
   r = io_ctx.list_watchers(header_oid, &watchers);

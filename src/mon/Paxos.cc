@@ -37,6 +37,70 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< ") ";
 }
 
+class Paxos::C_CollectTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_CollectTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->collect_timeout();
+  }
+};
+
+class Paxos::C_AcceptTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_AcceptTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->accept_timeout();
+  }
+};
+
+class Paxos::C_LeaseAckTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->lease_ack_timeout();
+  }
+};
+
+class Paxos::C_LeaseTimeout : public Context {
+  Paxos *paxos;
+public:
+  explicit C_LeaseTimeout(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->lease_timeout();
+  }
+};
+
+class Paxos::C_LeaseRenew : public Context {
+  Paxos *paxos;
+public:
+  explicit C_LeaseRenew(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    if (r == -ECANCELED)
+      return;
+    paxos->lease_renew_timeout();
+  }
+};
+
+class Paxos::C_Trimmed : public Context {
+  Paxos *paxos;
+public:
+  explicit C_Trimmed(Paxos *p) : paxos(p) { }
+  void finish(int r) {
+    paxos->trimming = false;
+  }
+};
+
 MonitorDBStore *Paxos::get_store()
 {
   return mon->store;
@@ -195,6 +259,7 @@ void Paxos::collect(version_t oldpn)
 // peon
 void Paxos::handle_collect(MonOpRequestRef op)
 {
+  
   op->mark_paxos_event("handle_collect");
 
   MMonPaxos *collect = static_cast<MMonPaxos*>(op->get_req());
@@ -204,6 +269,9 @@ void Paxos::handle_collect(MonOpRequestRef op)
 
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
+
+  //update the peon recovery timeout 
+  reset_lease_timeout();
 
   if (collect->first_committed > last_committed+1) {
     dout(2) << __func__
@@ -832,7 +900,7 @@ void Paxos::commit_start()
   else if (is_updating())
     state = STATE_WRITING;
   else
-    assert(0);
+    ceph_abort();
 
   if (mon->get_quorum().size() > 1) {
     // cancel timeout event
@@ -914,7 +982,7 @@ void Paxos::handle_commit(MonOpRequestRef op)
 
   if (!mon->is_peon()) {
     dout(10) << "not a peon, dropping" << dendl;
-    assert(0);
+    ceph_abort();
     return;
   }
 
@@ -1016,9 +1084,7 @@ void Paxos::commit_proposal()
   assert(mon->is_leader());
   assert(is_refresh());
 
-  list<Context*> ls;
-  ls.swap(committing_finishers);
-  finish_contexts(g_ceph_context, ls);
+  finish_contexts(g_ceph_context, committing_finishers);
 }
 
 void Paxos::finish_round()
@@ -1399,13 +1465,13 @@ void Paxos::dispatch(MonOpRequestRef op)
 	handle_lease_ack(op);
 	break;
       default:
-	assert(0);
+	ceph_abort();
       }
     }
     break;
     
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 

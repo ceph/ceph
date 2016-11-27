@@ -4,14 +4,32 @@
 #ifndef CEPH_OS_FUSESTORE_H
 #define CEPH_OS_FUSESTORE_H
 
+#include <string>
+#include <map>
+#include <mutex>
+
 #include "common/Thread.h"
-#include "os/ObjectStore.h"
+#include "include/buffer.h"
+
+class ObjectStore;
 
 class FuseStore {
 public:
   ObjectStore *store;
-  string mount_point;
+  std::string mount_point;
   struct fs_info *info;
+  std::mutex lock;
+
+  struct OpenFile {
+    std::string path;
+    bufferlist bl;
+    bool dirty = false;
+    int ref = 0;
+  };
+  std::map<std::string,OpenFile*> open_files;
+
+  int open_file(std::string p, struct fuse_file_info *fi,
+		std::function<int(bufferlist *bl)> f);
 
   class FuseThread : public Thread {
     FuseStore *fs;
@@ -23,7 +41,7 @@ public:
     }
   } fuse_thread;
 
-  FuseStore(ObjectStore *s, string p);
+  FuseStore(ObjectStore *s, std::string p);
   ~FuseStore();
 
   int main();

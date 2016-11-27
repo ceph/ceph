@@ -138,6 +138,14 @@ public:
     return ret;
   }
 
+  hobject_t get_object_boundary() const {
+    if (is_max())
+      return *this;
+    hobject_t ret = *this;
+    ret.snap = 0;
+    return ret;
+  }
+
   /// @return head version of this hobject_t
   hobject_t get_head() const {
     hobject_t ret(*this);
@@ -162,14 +170,14 @@ public:
     return snap == CEPH_NOSNAP;
   }
 
-  /// @return true if object is neither head nor snapdir
+  /// @return true if object is neither head nor snapdir nor max
   bool is_snap() const {
-    return (snap != CEPH_NOSNAP) && (snap != CEPH_SNAPDIR);
+    return !is_max() && !is_head() && !is_snapdir();
   }
 
   /// @return true iff the object should have a snapset in it's attrs
   bool has_snapset() const {
-    return !is_snap();
+    return is_head() || is_snapdir();
   }
 
   /* Do not use when a particular hash function is needed */
@@ -244,17 +252,18 @@ public:
     return max ? 0x100000000ull : hash_reverse_bits;
   }
 
+  // please remember to update set_bitwise_key_u32() also
+  // once you change build_hash_cache()
   void build_hash_cache() {
     nibblewise_key_cache = _reverse_nibbles(hash);
     hash_reverse_bits = _reverse_bits(hash);
   }
-  void set_nibblewise_key_u32(uint32_t value) {
-    hash = _reverse_nibbles(value);
-    build_hash_cache();
-  }
   void set_bitwise_key_u32(uint32_t value) {
     hash = _reverse_bits(value);
-    build_hash_cache();
+    // below is identical to build_hash_cache() and shall be
+    // updated correspondingly if you change build_hash_cache() 
+    nibblewise_key_cache = _reverse_nibbles(hash);
+    hash_reverse_bits = value;
   }
 
   const string& get_effective_key() const {
@@ -318,6 +327,10 @@ public:
 	return cmp_nibblewise(l, r) < 0;
     }
   };
+  template <typename T>
+  using bitwisemap = std::map<hobject_t, T, BitwiseComparator>;
+
+  using bitwiseset = std::set<hobject_t, BitwiseComparator>;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 

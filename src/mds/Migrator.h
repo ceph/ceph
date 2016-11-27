@@ -76,7 +76,7 @@ public:
     case EXPORT_EXPORTING: return "exporting";
     case EXPORT_LOGGINGFINISH: return "loggingfinish";
     case EXPORT_NOTIFYING: return "notifying";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -125,7 +125,7 @@ public:
     case IMPORT_ACKING: return "acking";
     case IMPORT_FINISHING: return "finishing";
     case IMPORT_ABORTING: return "aborting";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -155,21 +155,21 @@ public:
   void show_exporting();
   
   // -- status --
-  int is_exporting(CDir *dir) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  int is_exporting(CDir *dir) const {
+    map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
     if (it != export_state.end()) return it->second.state;
     return 0;
   }
-  bool is_exporting() { return !export_state.empty(); }
-  int is_importing(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+  bool is_exporting() const { return !export_state.empty(); }
+  int is_importing(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
     if (it != import_state.end()) return it->second.state;
     return 0;
   }
-  bool is_importing() { return !import_state.empty(); }
+  bool is_importing() const { return !import_state.empty(); }
 
-  bool is_ambiguous_import(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator p = import_state.find(df);
+  bool is_ambiguous_import(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator p = import_state.find(df);
     if (p == import_state.end())
       return false;
     if (p->second.state >= IMPORT_LOGGINGSTART &&
@@ -178,19 +178,19 @@ public:
     return false;
   }
 
-  int get_import_state(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+  int get_import_state(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
     assert(it != import_state.end());
     return it->second.state;
   }
-  int get_import_peer(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+  int get_import_peer(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
     assert(it != import_state.end());
     return it->second.peer;
   }
 
-  int get_export_state(CDir *dir) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  int get_export_state(CDir *dir) const {
+    map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
     assert(it != export_state.end());
     return it->second.state;
   }
@@ -205,8 +205,8 @@ public:
     return (it->second.warning_ack_waiting.count(who) == 0);
   }
 
-  bool export_has_notified(CDir *dir, mds_rank_t who) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  bool export_has_notified(CDir *dir, mds_rank_t who) const {
+    map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
     assert(it != export_state.end());
     assert(it->second.state == EXPORT_NOTIFYING);
     return (it->second.notify_ack_waiting.count(who) == 0);
@@ -291,6 +291,7 @@ public:
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
   friend class MigratorContext;
+  friend class MigratorLogContext;
 
   // importer
   void handle_export_discover(MExportDirDiscover *m);

@@ -9,11 +9,13 @@
 #include <vector>
 
 #include "include/atomic.h"
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
@@ -45,6 +47,7 @@ namespace mirror {
 struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
+namespace image_replayer { template <typename> class EventPreprocessor; }
 namespace image_replayer { template <typename> class ReplayStatusFormatter; }
 
 /**
@@ -62,18 +65,6 @@ public:
     STATE_REPLAY_FLUSHING,
     STATE_STOPPING,
     STATE_STOPPED,
-  };
-
-  struct BootstrapParams {
-    std::string local_image_name;
-
-    BootstrapParams() {}
-    BootstrapParams(const std::string local_image_name) :
-      local_image_name(local_image_name) {}
-
-    bool empty() const {
-      return local_image_name.empty();
-    }
   };
 
   ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
@@ -94,6 +85,11 @@ public:
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
+
+  inline bool is_blacklisted() const {
+    Mutex::Locker locker(m_lock);
+    return (m_last_r == -EBLACKLISTED);
+  }
 
   inline int64_t get_local_pool_id() const {
     return m_local_pool_id;
@@ -116,10 +112,9 @@ public:
     return m_local_image_name;
   }
 
-  void start(Context *on_finish = nullptr,
-	     const BootstrapParams *bootstrap_params = nullptr,
-	     bool manual = false);
-  void stop(Context *on_finish = nullptr, bool manual = false);
+  void start(Context *on_finish = nullptr, bool manual = false);
+  void stop(Context *on_finish = nullptr, bool manual = false,
+	    int r = 0, const std::string& desc = "");
   void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
 
@@ -174,6 +169,9 @@ protected:
    *    |                     ALLOCATE_LOCAL_TAG  * * * * * *
    *    |                         |                     |   *
    *    |                         v                 (error) *
+   *    |                     PREPROCESS_ENTRY  * * * * * * *
+   *    |                         |                     |   *
+   *    |                         v                 (error) *
    *    |                     PROCESS_ENTRY * * * * * * * * *
    *    |                         |                     |   *
    *    |                         \---------------------/   *
@@ -195,7 +193,7 @@ protected:
   virtual void on_start_fail(int r, const std::string &desc = "");
   virtual bool on_start_interrupted();
 
-  virtual void on_stop_journal_replay();
+  virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
   virtual void on_flush_local_replay_flush_start(Context *on_flush);
   virtual void on_flush_local_replay_flush_finish(Context *on_flush, int r);
@@ -204,11 +202,29 @@ protected:
 
   bool on_replay_interrupted();
 
-  void close_local_image(Context *on_finish); // for tests
-
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
+
+  struct JournalListener : public librbd::journal::Listener {
+    ImageReplayer *img_replayer;
+
+    JournalListener(ImageReplayer *img_replayer)
+      : img_replayer(img_replayer) {
+    }
+
+    virtual void handle_close() {
+      img_replayer->on_stop_journal_replay();
+    }
+
+    virtual void handle_promoted() {
+      img_replayer->on_stop_journal_replay(0, "force promoted");
+    }
+
+    virtual void handle_resync() {
+      img_replayer->resync_image();
+    }
+  };
 
   class BootstrapProgressContext : public ProgressContext {
   public:
@@ -232,11 +248,12 @@ private:
   std::string m_remote_image_id, m_local_image_id, m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
-  Mutex m_lock;
+  mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
   int m_last_r = 0;
   std::string m_state_desc;
   BootstrapProgressContext m_progress_cxt;
+  image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
@@ -246,7 +263,7 @@ private:
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
   Journaler* m_remote_journaler = nullptr;
   ::journal::ReplayHandler *m_replay_handler = nullptr;
-  librbd::journal::ResyncListener *m_resync_listener;
+  librbd::journal::Listener *m_journal_listener;
   bool m_stopping_for_resync = false;
 
   Context *m_on_start_finish = nullptr;
@@ -272,6 +289,16 @@ private:
   uint64_t m_replay_tag_tid = 0;
   cls::journal::Tag m_replay_tag;
   librbd::journal::TagData m_replay_tag_data;
+  librbd::journal::EventEntry m_event_entry;
+  AsyncOpTracker m_event_replay_tracker;
+
+  struct RemoteJournalerListener : public ::journal::JournalMetadataListener {
+    ImageReplayer *replayer;
+
+    RemoteJournalerListener(ImageReplayer *replayer) : replayer(replayer) { }
+
+    void handle_update(::journal::JournalMetadata *);
+  } m_remote_listener;
 
   struct C_ReplayCommitted : public Context {
     ImageReplayer *replayer;
@@ -298,7 +325,8 @@ private:
     return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
   }
   bool is_replaying_() const {
-    return m_state == STATE_REPLAYING;
+    return (m_state == STATE_REPLAYING ||
+            m_state == STATE_REPLAY_FLUSHING);
   }
 
   bool update_mirror_image_status(bool force, const OptionalState &state);
@@ -309,8 +337,9 @@ private:
   void handle_mirror_status_update(int r);
   void reschedule_update_status_task(int new_interval = 0);
 
-  void shut_down(int r, Context *on_start);
-  void handle_shut_down(int r, Context *on_start);
+  void shut_down(int r);
+  void handle_shut_down(int r);
+  void handle_remote_journal_metadata_updated();
 
   void bootstrap();
   void handle_bootstrap(int r);
@@ -320,7 +349,6 @@ private:
 
   void start_replay();
   void handle_start_replay(int r);
-  void handle_stop_replay_request(int r);
 
   void replay_flush();
   void handle_replay_flush(int r);
@@ -330,6 +358,9 @@ private:
 
   void allocate_local_tag();
   void handle_allocate_local_tag(int r);
+
+  void preprocess_entry();
+  void handle_preprocess_entry(int r);
 
   void process_entry();
   void handle_process_entry_ready(int r);

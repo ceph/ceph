@@ -919,8 +919,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </stats>
 
 # cleanup
-  $ rbd snap remove rbd_other/deep-flatten-child@snap
-  $ rbd snap remove rbd_other/child@snap
+  $ rbd snap remove --no-progress rbd_other/deep-flatten-child@snap
+  $ rbd snap remove --no-progress rbd_other/child@snap
   $ rbd snap unprotect bar@snap
   $ rbd snap purge bar 2> /dev/null
   $ rbd snap purge foo 2> /dev/null

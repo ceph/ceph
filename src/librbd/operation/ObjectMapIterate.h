@@ -30,8 +30,7 @@ public:
 			  ProgressContext &prog_ctx,
 			  ObjectIterateWork<ImageCtxT> handle_mismatch)
     : AsyncRequest<ImageCtxT>(image_ctx, on_finish), m_image_ctx(image_ctx),
-    m_prog_ctx(prog_ctx), m_handle_mismatch(handle_mismatch),
-    m_invalidate(ATOMIC_FLAG_INIT)
+    m_prog_ctx(prog_ctx), m_handle_mismatch(handle_mismatch)
   {
   }
 
@@ -49,7 +48,7 @@ private:
   ImageCtxT &m_image_ctx;
   ProgressContext &m_prog_ctx;
   ObjectIterateWork<ImageCtxT> m_handle_mismatch;
-  std::atomic_flag m_invalidate;
+  std::atomic_flag m_invalidate = ATOMIC_FLAG_INIT;
   State m_state;
 
   void send_verify_objects();

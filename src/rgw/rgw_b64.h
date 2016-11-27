@@ -28,8 +28,7 @@ namespace rgw {
   inline std::string to_base64(boost::string_ref sref)
   {
     using namespace boost::archive::iterators;
-    std::string ostr;
-    
+
     // output must be =padded modulo 3
     auto psize = sref.size();
     while ((psize % 3) != 0) {
@@ -52,11 +51,11 @@ namespace rgw {
     std::string outstr(b64_iter(sref.data()),
 		       b64_iter(sref.data() + sref.size()));
 
-    // pad ostr with '=' to a length that is a multiple of 3
+    // pad outstr with '=' to a length that is a multiple of 3
     for (size_t ix = 0; ix < (psize-sref.size()); ++ix)
       outstr.push_back('=');
 
-    return std::move(outstr);
+    return outstr;
   }
 
   inline std::string from_base64(boost::string_ref sref)
@@ -79,7 +78,7 @@ namespace rgw {
     std::string outstr(b64_iter(sref.data()),
 		      b64_iter(sref.data() + sref.size()));
 
-    return std::move(outstr);
+    return outstr;
   }
 
 } /* namespace */

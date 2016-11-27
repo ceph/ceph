@@ -19,6 +19,32 @@
 #include "ceph_time.h"
 #include "config.h"
 
+#if defined(DARWIN)
+int clock_gettime(int clk_id, struct timespec *tp)
+{
+  if (clk_id == CALENDAR_CLOCK) {
+    // gettimeofday is much faster than clock_get_time
+    struct timeval now;
+    int ret = gettimeofday(&now, NULL);
+    if (ret)
+      return ret;
+    tp->tv_sec = now.tv_sec;
+    tp->tv_nsec = now.tv_usec * 1000L;
+  } else {
+    clock_serv_t cclock;
+    mach_timespec_t mts;
+
+    host_get_clock_service(mach_host_self(), clk_id, &cclock);
+    clock_get_time(cclock, &mts);
+    mach_port_deallocate(mach_task_self(), cclock);
+
+    tp->tv_sec = mts.tv_sec;
+    tp->tv_nsec = mts.tv_nsec;
+  }
+  return 0;
+}
+#endif
+
 namespace ceph {
   namespace time_detail {
     real_clock::time_point real_clock::now(const CephContext* cct) noexcept {

@@ -7,6 +7,7 @@
 #include "include/buffer_fwd.h"
 #include "common/Formatter.h"
 #include "librbd/parent_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 
 /// information about our parent image, if any
 struct cls_rbd_parent {
@@ -64,6 +65,7 @@ struct cls_rbd_snap {
   uint8_t protection_status;
   cls_rbd_parent parent;
   uint64_t flags;
+  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace;
 
   /// true if we have a parent
   bool has_parent() const {
@@ -75,7 +77,7 @@ struct cls_rbd_snap {
                    flags(0)
     {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
@@ -83,10 +85,11 @@ struct cls_rbd_snap {
     ::encode(parent, bl);
     ::encode(protection_status, bl);
     ::encode(flags, bl);
+    ::encode(snapshot_namespace, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(4, p);
+    DECODE_START(5, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
@@ -99,6 +102,11 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 4) {
       ::decode(flags, p);
+    }
+    if (struct_v >= 5) {
+      ::decode(snapshot_namespace, p);
+    } else {
+      snapshot_namespace = cls::rbd::SnapshotNamespaceOnDisk(cls::rbd::UserSnapshotNamespace());
     }
     DECODE_FINISH(p);
   }
@@ -123,7 +131,7 @@ struct cls_rbd_snap {
       f->dump_string("protection_status", "protected");
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
   static void generate_test_instances(list<cls_rbd_snap*>& o) {

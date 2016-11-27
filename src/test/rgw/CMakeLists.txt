@@ -1,7 +1,17 @@
+#unittest_rgw_bencode
+add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
+add_ceph_unittest(unittest_rgw_bencode ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_bencode)
+target_link_libraries(unittest_rgw_bencode rgw_a)
+
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history rgw_a)
+
+# unitttest_rgw_compression
+add_executable(unittest_rgw_compression test_rgw_compression.cc)
+add_ceph_unittest(unittest_rgw_compression ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_compression)
+target_link_libraries(unittest_rgw_compression rgw_a)
 
 # unitttest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
@@ -26,9 +36,9 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_user_client
   librados
   global
-  curl
-  expat
   ${BLKID_LIBRARIES}
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
@@ -53,13 +63,11 @@ target_link_libraries(ceph_test_rgw_obj
   cls_user_client
   librados
   global
-  curl
-  uuid
-  expat
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
 set_target_properties(ceph_test_rgw_obj PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
-

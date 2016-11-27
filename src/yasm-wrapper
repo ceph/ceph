@@ -2,7 +2,7 @@
 
 # libtool and yasm do not get along.
 # filter out any crap that libtool feeds us that yasm does not understand.
-echo $0: got $*
+#echo $0: got $*
 new=""
 touch=""
 while [ -n "$*" ]; do
@@ -15,7 +15,7 @@ while [ -n "$*" ]; do
 	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -m* | -pipe | ggc-min* )
 	    shift
 	    ;;
-	-I )
+	-I | -isystem )
 	    shift
 	    new="$new -i $1"
 	    shift
@@ -36,7 +36,7 @@ while [ -n "$*" ]; do
     esac
 done
 
-echo $0: yasm $new
+#echo $0: yasm $new
 yasm $new
 
 [ -n "$touch" ] && touch $touch

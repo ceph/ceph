@@ -90,7 +90,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
 {
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
-  fs->mds_map.max_mds = g_conf->max_mds;
+  fs->mds_map.max_mds = 1;
   fs->mds_map.data_pools.insert(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
@@ -101,7 +101,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
   fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
-  if (mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL) {
+  if (mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL) {
     fs->fscid = fsm.next_filesystem_id++;
     // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
     // have initialized next_filesystem_id such that it's never used here.
@@ -142,6 +142,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   assert(version > fsmap.epoch);
 
   // read and decode
+  bufferlist fsmap_bl;
   fsmap_bl.clear();
   int err = get_version(version, fsmap_bl);
   assert(err == 0);
@@ -195,7 +196,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // apply to paxos
   assert(get_last_committed() + 1 == pending_fsmap.epoch);
   bufferlist fsmap_bl;
-  pending_fsmap.encode(fsmap_bl, mon->get_quorum_features());
+  pending_fsmap.encode(fsmap_bl, mon->get_quorum_con_features());
 
   /* put everything in the transaction */
   put_version(t, pending_fsmap.epoch, fsmap_bl);
@@ -273,7 +274,7 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_offload_targets(op);
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -473,13 +474,11 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     return prepare_offload_targets(op);
   
   default:
-    assert(0);
+    ceph_abort();
   }
 
   return true;
 }
-
-
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 {
@@ -599,8 +598,16 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 	     << "  standby_for_rank=" << m->get_standby_for_rank()
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
-      pending_fsmap.stop(gid);
-      last_beacon.erase(gid);
+      auto erased = pending_fsmap.stop(gid);
+      erased.push_back(gid);
+
+      for (const auto &erased_gid : erased) {
+        last_beacon.erase(erased_gid);
+        if (pending_daemon_health.count(erased_gid)) {
+          pending_daemon_health.erase(erased_gid);
+          pending_daemon_health_rm.insert(erased_gid);
+        }
+      }
     } else if (state == MDSMap::STATE_DAMAGED) {
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DAMAGED from rank " << info.rank
@@ -645,7 +652,23 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), fsmap.get_epoch(), state, seq,
 			CEPH_FEATURES_SUPPORTED_DEFAULT));
+    } else if (info.state == MDSMap::STATE_STANDBY && state != info.state) {
+      // Standby daemons should never modify their own
+      // state.  Reject any attempts to do so.
+      derr << "standby " << gid << " attempted to change state to "
+           << ceph_mds_state_name(state) << ", rejecting" << dendl;
+      return true;
+    } else if (info.state != MDSMap::STATE_STANDBY && state != info.state &&
+               !MDSMap::state_transition_valid(info.state, state)) {
+      // Validate state transitions for daemons that hold a rank
+      derr << "daemon " << gid << " (rank " << info.rank << ") "
+           << "reported invalid state transition "
+           << ceph_mds_state_name(info.state) << " -> "
+           << ceph_mds_state_name(state) << dendl;
+      return true;
     } else {
+      // Made it through special cases and validations, record the
+      // daemon's reported state to the FSMap.
       pending_fsmap.modify_daemon(gid, [state, seq](MDSMap::mds_info_t *info) {
         info->state = state;
         info->state_seq = seq;
@@ -656,7 +679,15 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   dout(7) << "prepare_beacon pending map now:" << dendl;
   print_map(pending_fsmap);
   
-  wait_for_finished_proposal(op, new C_Updated(this, op));
+  wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+    if (r >= 0)
+      _updated(op);   // success
+    else if (r == -ECANCELED) {
+      mon->no_reply(op);
+    } else {
+      dispatch(op);        // try again
+    }
+  }));
 
   return true;
 }
@@ -1502,7 +1533,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL;
+      bool jewel = mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL;
       if (flag_bool && !jewel) {
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
@@ -1584,7 +1615,7 @@ int MDSMonitor::management_command(
       }
     }
 
-    if (pending_fsmap.any_filesystems()
+    if (pending_fsmap.filesystem_count() > 0
         && !pending_fsmap.get_enable_multiple()) {
       ss << "Creation of multiple filesystems is disabled.  To enable "
             "this experimental feature, use 'ceph fs flag set enable_multiple "
@@ -1656,7 +1687,7 @@ int MDSMonitor::management_command(
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
-            "inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
+            " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;
     }
 
@@ -1711,7 +1742,7 @@ int MDSMonitor::management_command(
     // Carry forward what makes sense
     new_fs->fscid = fs->fscid;
     new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
-    new_fs->mds_map.max_mds = g_conf->max_mds;
+    new_fs->mds_map.max_mds = 1;
     new_fs->mds_map.data_pools = fs->mds_map.data_pools;
     new_fs->mds_map.metadata_pool = fs->mds_map.metadata_pool;
     new_fs->mds_map.cas_pool = fs->mds_map.cas_pool;
@@ -1868,6 +1899,15 @@ public:
           fs->mds_map.set_inline_data_enabled(false);
         });
       }
+    } else if (var == "balancer") {
+      ss << "setting the metadata load balancer to " << val;
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [val](std::shared_ptr<Filesystem> fs)
+        {
+          fs->mds_map.set_balancer(val);
+        });
+      return true;
     } else if (var == "max_file_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";
@@ -2641,8 +2681,10 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
   bufferlist bl;
   int r = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  if (r)
+  if (r) {
+    dout(1) << "Unable to load 'last_metadata'" << dendl;
     return r;
+  }
 
   bufferlist::iterator it = bl.begin();
   ::decode(m, it);
@@ -2789,22 +2831,14 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
     pending_fsmap.promote(sgid, fs, info.rank);
 
     *mds_propose = true;
-  } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-    dout(10) << " failing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
-      << " " << ceph_mds_state_name(info.state)
+  } else if (info.state == MDSMap::STATE_STANDBY_REPLAY || 
+             info.state == MDSMap::STATE_STANDBY) {
+    dout(10) << " failing and removing " << gid << " " << info.addr << " mds." << info.rank 
+      << "." << info.inc << " " << ceph_mds_state_name(info.state)
       << dendl;
     fail_mds_gid(gid);
     *mds_propose = true;
-  } else {
-    if (info.state == MDSMap::STATE_STANDBY ||
-        info.state == MDSMap::STATE_STANDBY_REPLAY) {
-      // remove it
-      dout(10) << " removing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
-        << " " << ceph_mds_state_name(info.state)
-        << " (laggy)" << dendl;
-      fail_mds_gid(gid);
-      *mds_propose = true;
-    } else if (!info.laggy()) {
+  } else if (!info.laggy()) {
       dout(10) << " marking " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
         << " " << ceph_mds_state_name(info.state)
         << " laggy" << dendl;
@@ -2812,8 +2846,6 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
           info->laggy_since = ceph_clock_now(g_ceph_context);
       });
       *mds_propose = true;
-    }
-    last_beacon.erase(gid);
   }
 }
 
@@ -2840,11 +2872,9 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
 	do_propose = true;
       }
     }
-  }
-
-  // There were no failures to replace, so try using any available standbys
-  // as standby-replay daemons.
-  if (failed.empty()) {
+  } else {
+    // There were no failures to replace, so try using any available standbys
+    // as standby-replay daemons.
     for (const auto &j : pending_fsmap.standby_daemons) {
       const auto &gid = j.first;
       const auto &info = j.second;
@@ -2868,6 +2898,16 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
           info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
             pending_fsmap.legacy_client_fscid : info.standby_for_fscid,
           info.standby_for_rank};
+
+        // It is possible that the map contains a standby_for_fscid
+        // that doesn't correspond to an existing filesystem, especially
+        // if we loaded from a version with a bug (#17466)
+        if (info.standby_for_fscid != FS_CLUSTER_ID_NONE
+            && !pending_fsmap.filesystem_exists(info.standby_for_fscid)) {
+          derr << "gid " << gid << " has invalid standby_for_fscid "
+               << info.standby_for_fscid << dendl;
+          continue;
+        }
 
         // If we managed to resolve a full target role
         if (target_role.fscid != FS_CLUSTER_ID_NONE) {
@@ -2925,8 +2965,25 @@ void MDSMonitor::tick()
     do_propose |= maybe_expand_cluster(i.second);
   }
 
+  const auto now = ceph_clock_now(g_ceph_context);
+  if (last_tick.is_zero()) {
+    last_tick = now;
+  }
+
+  if (now - last_tick > (g_conf->mds_beacon_grace - g_conf->mds_beacon_interval)) {
+    // This case handles either local slowness (calls being delayed
+    // for whatever reason) or cluster election slowness (a long gap
+    // between calls while an election happened)
+    dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
+            "(slow election?) of " << now - last_tick << " seconds" << dendl;
+    for (auto &i : last_beacon) {
+      i.second.stamp = now;
+    }
+  }
+
+  last_tick = now;
+
   // check beacon timestamps
-  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t cutoff = now;
   cutoff -= g_conf->mds_beacon_grace;
 
@@ -2934,7 +2991,7 @@ void MDSMonitor::tick()
   for (const auto &p : pending_fsmap.mds_roles) {
     auto &gid = p.first;
     if (last_beacon.count(gid) == 0) {
-      last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
+      last_beacon[gid].stamp = now;
       last_beacon[gid].seq = 0;
     }
   }
@@ -3014,5 +3071,12 @@ MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
         "mds remove_data_pool"));
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds rm_data_pool"));
+}
+
+void MDSMonitor::on_restart()
+{
+  // Clear out the leader-specific state.
+  last_tick = utime_t();
+  last_beacon.clear();
 }
 

@@ -90,6 +90,18 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
   return exists;
 }
 
+bool ObjectMap::update_required(uint64_t object_no, uint8_t new_state) {
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+  uint8_t state = (*this)[object_no];
+
+  if ((state == new_state) ||
+      (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT) ||
+      (new_state == OBJECT_NONEXISTENT && state != OBJECT_PENDING)) {
+    return false;
+  }
+  return true;
+}
+
 void ObjectMap::open(Context *on_finish) {
   object_map::RefreshRequest<> *req = new object_map::RefreshRequest<>(
     m_image_ctx, &m_object_map, m_snap_id, on_finish);
@@ -190,7 +202,6 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 {
   assert(m_image_ctx.snap_lock.is_locked());
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
-  assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher != NULL);
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());

@@ -1216,12 +1216,23 @@ TEST(BufferListIterator, copy) {
     EXPECT_EQ(0, ::memcmp(copy, expected, 3));
   }
   //
-  // void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
   //
   {
     bufferptr ptr;
     bufferlist::iterator i(&bl);
-    i.copy(2, ptr);
+    i.copy_deep(2, ptr);
+    EXPECT_EQ((unsigned)2, ptr.length());
+    EXPECT_EQ('A', ptr[0]);
+    EXPECT_EQ('B', ptr[1]);
+  }
+  //
+  // void buffer::list::iterator::copy_shallow(unsigned len, ptr &dest)
+  //
+  {
+    bufferptr ptr;
+    bufferlist::iterator i(&bl);
+    i.copy_shallow(2, ptr);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('A', ptr[0]);
     EXPECT_EQ('B', ptr[1]);
@@ -1284,21 +1295,6 @@ TEST(BufferListIterator, copy) {
     EXPECT_EQ('C', copy[4]);
     EXPECT_EQ((unsigned)(2 + 3), copy.length());
   }
-}
-
-TEST(BufferListIterator, copy_huge) {
-  constexpr unsigned len = 2268888894U;
-  static_assert(int(len) < 0,
-		"should be a number underflows when being casted to int.");
-  bufferptr ptr(buffer::create_dummy());
-  ptr.set_length(len);
-
-  bufferlist src, dest;
-  src.append(ptr);
-  auto bp = src.begin();
-  bp.copy(len, dest);
-  // contents_equal() is not for this test
-  EXPECT_EQ(len, dest.length());
 }
 
 TEST(BufferListIterator, copy_in) {

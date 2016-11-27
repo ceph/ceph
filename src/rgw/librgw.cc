@@ -82,6 +82,14 @@ namespace rgw {
 
   void RGWLibProcess::run()
   {
+    /* write completion interval */
+    RGWLibFS::write_completion_interval_s =
+      cct->_conf->rgw_nfs_write_completion_interval_s;
+
+    /* start write timer */
+    RGWLibFS::write_timer.resume();
+
+    /* gc loop */
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
       unique_lock uniq(mtx);
@@ -282,9 +290,11 @@ namespace rgw {
     op->complete();
 
   done:
-    int r = io->complete_request();
-    if (r < 0) {
-      dout(0) << "ERROR: io->complete_request() returned " << r << dendl;
+    try {
+      io->complete_request();
+    } catch (rgw::io::Exception& e) {
+      dout(0) << "ERROR: io->complete_request() returned "
+              << e.what() << dendl;
     }
     if (should_log) {
       rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
@@ -437,10 +447,10 @@ namespace rgw {
     def_args.push_back("--keyring=$rgw_data/keyring");
     def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
-    global_init(&def_args, args,
-		CEPH_ENTITY_TYPE_CLIENT,
-		CODE_ENVIRONMENT_DAEMON,
-		CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+    cct = global_init(&def_args, args,
+		      CEPH_ENTITY_TYPE_CLIENT,
+		      CODE_ENVIRONMENT_DAEMON,
+		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
     Mutex mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);
@@ -457,6 +467,7 @@ namespace rgw {
 
     store = RGWStoreManager::get_storage(g_ceph_context,
 					 g_conf->rgw_enable_gc_threads,
+					 g_conf->rgw_enable_lc_threads,
 					 g_conf->rgw_enable_quota_threads,
 					 g_conf->rgw_run_sync_thread);
 
@@ -485,12 +496,13 @@ namespace rgw {
     const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
     const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
     const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
+    const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
     const string& ldap_dnattr =
       store->ctx()->_conf->rgw_ldap_dnattr;
     std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
     ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
-			      ldap_searchdn, ldap_dnattr);
+			      ldap_searchdn, ldap_searchfilter, ldap_dnattr);
     ldh->init();
     ldh->bind();
 
@@ -546,7 +558,7 @@ namespace rgw {
     rgw_perf_stop(g_ceph_context);
 
     dout(1) << "final shutdown" << dendl;
-    g_ceph_context->put();
+    cct.reset();
 
     ceph::crypto::shutdown();
 

@@ -26,16 +26,19 @@ class SnapshotCreateRequest {
 public:
   static SnapshotCreateRequest* create(ImageCtxT *local_image_ctx,
                                        const std::string &snap_name,
+                                       const cls::rbd::SnapshotNamespace &snap_namespace,
                                        uint64_t size,
                                        const librbd::parent_spec &parent_spec,
                                        uint64_t parent_overlap,
                                        Context *on_finish) {
-    return new SnapshotCreateRequest(local_image_ctx, snap_name, size,
+    return new SnapshotCreateRequest(local_image_ctx, snap_name, snap_namespace, size,
                                      parent_spec, parent_overlap, on_finish);
   }
 
   SnapshotCreateRequest(ImageCtxT *local_image_ctx,
-                        const std::string &snap_name, uint64_t size,
+                        const std::string &snap_name,
+			const cls::rbd::SnapshotNamespace &snap_namespace,
+			uint64_t size,
                         const librbd::parent_spec &parent_spec,
                         uint64_t parent_overlap, Context *on_finish);
 
@@ -70,6 +73,7 @@ private:
 
   ImageCtxT *m_local_image_ctx;
   std::string m_snap_name;
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   uint64_t m_size;
   librbd::parent_spec m_parent_spec;
   uint64_t m_parent_overlap;

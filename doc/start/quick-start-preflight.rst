@@ -24,8 +24,8 @@ Ceph Deploy Setup
 Add Ceph repositories to the ``ceph-deploy`` admin node. Then, install
 ``ceph-deploy``.
 
-Advanced Package Tool (APT)
----------------------------
+Debian/Ubuntu
+-------------
 
 For Debian and Ubuntu distributions, perform the following steps:
 
@@ -37,7 +37,7 @@ For Debian and Ubuntu distributions, perform the following steps:
    with a stable Ceph release (e.g., ``hammer``, ``jewel``, etc.)
    For example::
 
-	echo deb http://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 #. Update your repository and install ``ceph-deploy``::
 
@@ -47,21 +47,22 @@ For Debian and Ubuntu distributions, perform the following steps:
    Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
 
 
-Red Hat Package Manager (RPM)
------------------------------
+RHEL/CentOS
+-----------
 
 For CentOS 7, perform the following steps:
 
-#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repoistory for package dependencies. For example::
+#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repository for package dependencies. For example::
 
         sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
 
 #. Install and enable the Extra Packages for Enterprise Linux (EPEL)
-   repository. Please see the `EPEL wiki`_ page for more information.
+   repository::
 
-#. On CentOS, you can execute the following command chain::
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
-        sudo yum install -y yum-utils && sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/7/x86_64/ && sudo yum install --nogpgcheck -y epel-release && sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7 && sudo rm /etc/yum.repos.d/dl.fedoraproject.org*
+   Please see the `EPEL wiki`_ page for more information.
+
 
 #. Add the package to your repository. Open a text editor and create a
    Yellowdog Updater, Modified (YUM) entry. Use the file path
@@ -77,7 +78,7 @@ For CentOS 7, perform the following steps:
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -91,6 +92,29 @@ For CentOS 7, perform the following steps:
 
 .. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
    Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
+
+
+openSUSE
+--------
+
+The Ceph project does not currently publish release RPMs for openSUSE, but 
+a stable version of Ceph is included in the default update repository, so
+installing it is just a matter of::
+
+	sudo zypper install ceph
+	sudo zypper install ceph-deploy
+
+If the distro version is out-of-date, open a bug at
+https://bugzilla.opensuse.org/index.cgi and possibly try your luck with one of
+the following repositories:
+
+#. Hammer::
+
+        https://software.opensuse.org/download.html?project=filesystems%3Aceph%3Ahammer&package=ceph
+
+#. Jewel::
+
+        https://software.opensuse.org/download.html?project=filesystems%3Aceph%3Ajewel&package=ceph
 
 
 Ceph Node Setup

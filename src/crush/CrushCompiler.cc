@@ -482,7 +482,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	}
       }
     }
-    else assert(0);
+    else ceph_abort();
   }
 
   // now do the items.
@@ -529,7 +529,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	else if (tag == "pos") 
 	  pos = int_node(sub->children[q]);
 	else
-	  assert(0);
+	  ceph_abort();
 
       }
       if (alg == CRUSH_BUCKET_UNIFORM) {
@@ -616,7 +616,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   else if (tname == "erasure")
     type = CEPH_PG_TYPE_ERASURE;
   else 
-    assert(0);    
+    ceph_abort();
 
   int minsize = int_node(i->children[start+4]);
   int maxsize = int_node(i->children[start+6]);
@@ -703,14 +703,14 @@ int CrushCompiler::parse_rule(iter_t const& i)
 	    crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
 	  else if (mode == "indep")
 	    crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	  else assert(0);
+	  else ceph_abort();
 	} else if (choose == "chooseleaf") {
 	  if (mode == "firstn") 
 	    crush.set_rule_step_choose_leaf_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
 	  else if (mode == "indep")
 	    crush.set_rule_step_choose_leaf_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	  else assert(0);
-	} else assert(0);
+	  else ceph_abort();
+	} else ceph_abort();
       }
       break;
 
@@ -746,8 +746,8 @@ int CrushCompiler::parse_crush(iter_t const& i)
 { 
   find_used_bucket_ids(i);
 
-  int r = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    int r = 0;
     switch (p->value.id().to_long()) {
     case crush_grammar::_tunable:
       r = parse_tunable(p);
@@ -765,12 +765,12 @@ int CrushCompiler::parse_crush(iter_t const& i)
       r = parse_rule(p);
       break;
     default:
-      assert(0);
+      ceph_abort();
+    }
+    if (r < 0) {
+      return r;
     }
   }
-
-  if (r < 0)
-    return r;
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
   crush.finalize();
@@ -881,7 +881,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
   while (getline(in, str)) {
     // remove newline
     int l = str.length();
-    if (l && str[l] == '\n')
+    if (l && str[l - 1] == '\n')
       str.erase(l-1, 1);
 
     line_val[line] = str;

@@ -41,7 +41,7 @@ class CryptoHandler;
 namespace ceph {
   class PluginRegistry;
   class HeartbeatMap;
-  namespace log {
+  namespace logging {
     class Log;
   }
 }
@@ -71,7 +71,7 @@ public:
   void put();
 
   md_config_t *_conf;
-  ceph::log::Log *_log;
+  ceph::logging::Log *_log;
 
   /* init ceph::crypto */
   void init_crypto();
@@ -177,6 +177,33 @@ public:
     return _set_gid_string;
   }
 
+  class ForkWatcher {
+   public:
+    virtual ~ForkWatcher() {}
+    virtual void handle_pre_fork() = 0;
+    virtual void handle_post_fork() = 0;
+  };
+
+  void register_fork_watcher(ForkWatcher *w) {
+    ceph_spin_lock(&_fork_watchers_lock);
+    _fork_watchers.push_back(w);
+    ceph_spin_unlock(&_fork_watchers_lock);
+  }
+
+  void notify_pre_fork() {
+    ceph_spin_lock(&_fork_watchers_lock);
+    for (auto &&t : _fork_watchers)
+      t->handle_pre_fork();
+    ceph_spin_unlock(&_fork_watchers_lock);
+  }
+
+  void notify_post_fork() {
+    ceph_spin_lock(&_fork_watchers_lock);
+    for (auto &&t : _fork_watchers)
+      t->handle_post_fork();
+    ceph_spin_unlock(&_fork_watchers_lock);
+  }
+
 private:
   struct SingletonWrapper : boost::noncopyable {
     virtual ~SingletonWrapper() {}
@@ -234,6 +261,9 @@ private:
 
   ceph_spinlock_t _associated_objs_lock;
   std::map<std::string, SingletonWrapper*> _associated_objs;
+
+  ceph_spinlock_t _fork_watchers_lock;
+  std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
   CryptoHandler *_crypto_none;

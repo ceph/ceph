@@ -70,6 +70,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
     t->erase("mkfs", "monmap");
     mon->store->apply_transaction(t);
   }
+
+  check_subs();
 }
 
 void MonmapMonitor::create_pending()
@@ -87,7 +89,7 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
   bufferlist bl;
-  pending_map.encode(bl, mon->get_quorum_features());
+  pending_map.encode(bl, mon->get_quorum_con_features());
 
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
@@ -96,6 +98,55 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.epoch == 1) {
     mon->prepare_new_fingerprint(t);
   }
+}
+
+class C_ApplyFeatures : public Context {
+  MonmapMonitor *svc;
+  mon_feature_t features;
+  public:
+  C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f) :
+    svc(s), features(f) { }
+  void finish(int r) {
+    if (r >= 0) {
+      svc->apply_mon_features(features);
+    } else if (r == -EAGAIN || r == -ECANCELED) {
+      // discard features if we're no longer on the quorum that
+      // established them in the first place.
+      return;
+    } else {
+      assert(0 == "bad C_ApplyFeatures return value");
+    }
+  }
+};
+
+void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
+{
+  if (!is_writeable()) {
+    dout(5) << __func__ << " wait for service to be writeable" << dendl;
+    wait_for_writeable_ctx(new C_ApplyFeatures(this, features));
+    return;
+  }
+
+  assert(is_writeable());
+  assert(features.contains_all(pending_map.persistent_features));
+
+  mon_feature_t new_features =
+    (pending_map.persistent_features ^
+     (features & ceph::features::mon::get_persistent()));
+
+  if (new_features.empty()) {
+    dout(10) << __func__ << " features match current pending: "
+             << features << dendl;
+    return;
+  }
+
+  new_features |= pending_map.persistent_features;
+
+  dout(5) << __func__ << " applying new features to monmap;"
+          << " had " << pending_map.persistent_features
+          << ", will have " << new_features << dendl;
+  pending_map.persistent_features = new_features;
+  propose_pending();
 }
 
 void MonmapMonitor::on_active()
@@ -118,6 +169,8 @@ void MonmapMonitor::on_active()
 
   if (mon->is_leader())
     mon->clog->info() << "monmap " << *mon->monmap << "\n";
+
+  apply_mon_features(mon->get_quorum_mon_features());
 }
 
 bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
@@ -130,7 +183,7 @@ bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_JOIN:
     return preprocess_join(op);
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -258,7 +311,7 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_JOIN:
     return prepare_join(op);
   default:
-    assert(0);
+    ceph_abort();
   }
 
   return false;
@@ -406,7 +459,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     ss << "adding mon." << name << " at " << addr;
     propose = true;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
-    goto reply;
 
   } else if (prefix == "mon remove" ||
              prefix == "mon rm") {
@@ -459,7 +511,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     ss << "removing mon." << name << " at " << addr
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
-    goto reply;
+    err = 0;
 
   } else {
     ss << "unknown command " << prefix;
@@ -573,4 +625,30 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
     return err;
   }
   return 0;
+}
+
+void MonmapMonitor::check_subs()
+{
+  const string type = "monmap";
+  auto subs = mon->session_map.subs.find(type);
+  if (subs == mon->session_map.subs.end())
+    return;
+  for (auto sub : *subs->second) {
+    check_sub(sub);
+  }
+}
+
+void MonmapMonitor::check_sub(Subscription *sub)
+{
+  const auto epoch = mon->monmap->get_epoch();
+  dout(10) << __func__
+	   << " monmap next " << sub->next
+	   << " have " << epoch << dendl;
+  if (sub->next <= epoch) {
+    mon->send_latest_monmap(sub->session->con.get());
+    if (sub->onetime)
+      mon->session_map.remove_sub(sub);
+    else
+      sub->next = epoch + 1;
+  }
 }

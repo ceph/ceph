@@ -770,6 +770,79 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   comp->release();
 }
 
+TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
+  notify_oid = "foo";
+  notify_ioctx = &ioctx;
+  notify_cookies.clear();
+  uint32_t timeout = 12; // configured timeout
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
+  uint64_t handle;
+  WatchNotifyTestCtx2 ctx;
+  ASSERT_EQ(0, ioctx.watch3(notify_oid, &handle, &ctx, timeout));
+  ASSERT_GT(ioctx.watch_check(handle), 0);
+  std::list<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
+  ASSERT_EQ(watches.size(), 1u);
+  std::cout << "List watches" << std::endl;
+  for (std::list<obj_watch_t>::iterator it = watches.begin();
+    it != watches.end(); ++it) {
+    ASSERT_EQ(it->timeout_seconds, timeout);
+  }
+  bufferlist bl2, bl_reply;
+  ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
+  bufferlist::iterator p = bl_reply.begin();
+  std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
+  std::set<std::pair<uint64_t,uint64_t> > missed_map;
+  ::decode(reply_map, p);
+  ::decode(missed_map, p);
+  ASSERT_EQ(1u, notify_cookies.size());
+  ASSERT_EQ(1u, notify_cookies.count(handle));
+  ASSERT_EQ(1u, reply_map.size());
+  ASSERT_EQ(5u, reply_map.begin()->second.length());
+  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  ASSERT_EQ(0u, missed_map.size());
+  ASSERT_GT(ioctx.watch_check(handle), 0);
+  ioctx.unwatch2(handle);
+}
+
+TEST_F(LibRadosWatchNotify, AioWatchDelete2) {
+  notify_io = ioctx;
+  notify_oid = "foo";
+  notify_err = 0;
+  char buf[128];
+  uint32_t timeout = 3;
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
+
+
+  rados_completion_t comp;
+  uint64_t handle;
+  ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
+  rados_aio_watch2(ioctx, notify_oid, comp, &handle,
+                  watch_notify2_test_cb, watch_notify2_test_errcb, timeout, NULL);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rados_aio_get_return_value(comp));
+  rados_aio_release(comp);
+  ASSERT_EQ(0, rados_remove(ioctx, notify_oid));
+  int left = 30;
+  std::cout << "waiting up to " << left << " for disconnect notification ..."
+      << std::endl;
+  while (notify_err == 0 && --left) {
+    sleep(1);
+  }
+  ASSERT_TRUE(left > 0);
+  ASSERT_EQ(-ENOTCONN, notify_err);
+  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &comp));
+  rados_aio_unwatch(ioctx, handle, comp);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
+  ASSERT_EQ(-ENOENT, rados_aio_get_return_value(comp));
+  rados_aio_release(comp);
+}
 // --
 
 INSTANTIATE_TEST_CASE_P(LibRadosWatchNotifyPPTests, LibRadosWatchNotifyPP,

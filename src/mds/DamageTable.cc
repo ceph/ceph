@@ -22,6 +22,103 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".damage " << __func__ << " "
 
+namespace {
+/**
+ * Record damage to a particular dirfrag, implicitly affecting
+ * any dentries within it.
+ */
+class DirFragDamage : public DamageEntry
+{
+  public:
+  inodeno_t ino;
+  frag_t frag;
+
+  DirFragDamage(inodeno_t ino_, frag_t frag_)
+    : ino(ino_), frag(frag_)
+  {}
+
+  virtual damage_entry_type_t get_type() const
+  {
+    return DAMAGE_ENTRY_DIRFRAG;
+  }
+
+  void dump(Formatter *f) const
+  {
+    f->open_object_section("dir_frag_damage");
+    f->dump_string("damage_type", "dir_frag");
+    f->dump_int("id", id);
+    f->dump_int("ino", ino);
+    f->dump_stream("frag") << frag;
+    f->close_section();
+  }
+};
+
+
+/**
+ * Record damage to a particular dname within a particular dirfrag
+ */
+class DentryDamage : public DamageEntry
+{
+  public:
+  inodeno_t ino;
+  frag_t frag;
+  std::string dname;
+  snapid_t snap_id;
+
+  DentryDamage(
+      inodeno_t ino_,
+      frag_t frag_,
+      std::string dname_,
+      snapid_t snap_id_)
+    : ino(ino_), frag(frag_), dname(dname_), snap_id(snap_id_)
+  {}
+
+  virtual damage_entry_type_t get_type() const
+  {
+    return DAMAGE_ENTRY_DENTRY;
+  }
+
+  void dump(Formatter *f) const
+  {
+    f->open_object_section("dentry_damage");
+    f->dump_string("damage_type", "dentry");
+    f->dump_int("id", id);
+    f->dump_int("ino", ino);
+    f->dump_stream("frag") << frag;
+    f->dump_string("dname", dname);
+    f->dump_stream("snap_id") << snap_id;
+    f->close_section();
+  }
+};
+
+
+/**
+ * Record damage to our ability to look up an ino by number
+ */
+class BacktraceDamage : public DamageEntry
+{
+  public:
+  inodeno_t ino;
+
+  BacktraceDamage(inodeno_t ino_)
+    : ino(ino_)
+  {}
+
+  virtual damage_entry_type_t get_type() const
+  {
+    return DAMAGE_ENTRY_BACKTRACE;
+  }
+
+  void dump(Formatter *f) const
+  {
+    f->open_object_section("backtrace_damage");
+    f->dump_string("damage_type", "backtrace");
+    f->dump_int("id", id);
+    f->dump_int("ino", ino);
+    f->close_section();
+  }
+};
+}
 
 DamageEntry::~DamageEntry()
 {}
@@ -46,10 +143,13 @@ bool DamageTable::notify_dentry(
     return true;
   }
 
-  DamageEntryRef entry = std::make_shared<DentryDamage>(
-      ino, frag, dname, snap_id);
-  dentries[DirFragIdent(ino, frag)][DentryIdent(dname, snap_id)] = entry;
-  by_id[entry->id] = entry;
+  auto key = DirFragIdent(ino, frag);
+  if (dentries.count(key) == 0) {
+    DamageEntryRef entry = std::make_shared<DentryDamage>(
+        ino, frag, dname, snap_id);
+    dentries[key][DentryIdent(dname, snap_id)] = entry;
+    by_id[entry->id] = std::move(entry);
+  }
 
   return false;
 }
@@ -72,9 +172,12 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag)
     return true;
   }
 
-  DamageEntryRef entry = std::make_shared<DirFragDamage>(ino, frag);
-  dirfrags[DirFragIdent(ino, frag)] = entry;
-  by_id[entry->id] = entry;
+  auto key = DirFragIdent(ino, frag);
+  if (dirfrags.count(key) == 0) {
+    DamageEntryRef entry = std::make_shared<DirFragDamage>(ino, frag);
+    dirfrags[key] = entry;
+    by_id[entry->id] = std::move(entry);
+  }
 
   return false;
 }
@@ -85,9 +188,11 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino)
     return true;
   }
 
-  auto entry = std::make_shared<BacktraceDamage>(ino);
-  remotes[ino] = entry;
-  by_id[entry->id] = entry;
+  if (remotes.count(ino) == 0) {
+    auto entry = std::make_shared<BacktraceDamage>(ino);
+    remotes[ino] = entry;
+    by_id[entry->id] = std::move(entry);
+  }
 
   return false;
 }
@@ -139,11 +244,12 @@ void DamageTable::dump(Formatter *f) const
 
 void DamageTable::erase(damage_entry_id_t damage_id)
 {
-  if (by_id.count(damage_id) == 0) {
+  auto by_id_entry = by_id.find(damage_id);
+  if (by_id_entry == by_id.end()) {
     return;
   }
 
-  DamageEntryRef entry = by_id.at(damage_id);
+  DamageEntryRef entry = by_id_entry->second;
   assert(entry->id == damage_id);  // Sanity
 
   const auto type = entry->get_type();
@@ -158,9 +264,9 @@ void DamageTable::erase(damage_entry_id_t damage_id)
     remotes.erase(backtrace_entry->ino);
   } else {
     derr << "Invalid type " << type << dendl;
-    assert(0);
+    ceph_abort();
   }
 
-  by_id.erase(damage_id);
+  by_id.erase(by_id_entry);
 }
 

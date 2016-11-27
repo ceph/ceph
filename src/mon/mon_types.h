@@ -18,6 +18,7 @@
 #include "include/utime.h"
 #include "include/util.h"
 #include "common/Formatter.h"
+#include "common/bit_str.h"
 #include "include/Context.h"
 #include "mon/MonOpRequest.h"
 
@@ -27,7 +28,8 @@
 #define PAXOS_LOG        3
 #define PAXOS_MONMAP     4
 #define PAXOS_AUTH       5
-#define PAXOS_NUM        6
+#define PAXOS_MGR        6
+#define PAXOS_NUM        7
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
@@ -37,7 +39,8 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_PGMAP: return "pgmap";
   case PAXOS_LOG: return "logm";
   case PAXOS_AUTH: return "auth";
-  default: assert(0); return 0;
+  case PAXOS_MGR: return "mgr";
+  default: ceph_abort(); return 0;
   }
 }
 
@@ -233,5 +236,271 @@ struct C_MonOp : public Context
 
   virtual void _finish(int r) = 0;
 };
+
+namespace ceph {
+  namespace features {
+    namespace mon {
+      /**
+       * Get a feature's name based on its value.
+       *
+       * @param b raw feature value
+       *
+       * @remarks
+       *    Consumers should not assume this interface will never change.
+       * @remarks
+       *    As the number of features increase, so may the internal representation
+       *    of the raw features. When this happens, this interface will change
+       *    accordingly. So should consumers of this interface.
+       */
+      static inline const char *get_feature_name(uint64_t b);
+    }
+  }
+}
+
+
+inline const char *ceph_mon_feature_name(uint64_t b)
+{
+  return ceph::features::mon::get_feature_name(b);
+};
+
+class mon_feature_t {
+
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
+
+  // mon-specific features
+  uint64_t features;
+
+public:
+
+  explicit constexpr
+  mon_feature_t(const uint64_t f) : features(f) { }
+
+  mon_feature_t() :
+    features(0) { }
+
+  constexpr
+  mon_feature_t(const mon_feature_t &o) :
+    features(o.features) { }
+
+  mon_feature_t& operator&=(const mon_feature_t other) {
+    features &= other.features;
+    return (*this);
+  }
+
+  /**
+   * Obtain raw features
+   *
+   * @remarks
+   *    Consumers should not assume this interface will never change.
+   * @remarks
+   *    As the number of features increase, so may the internal representation
+   *    of the raw features. When this happens, this interface will change
+   *    accordingly. So should consumers of this interface.
+   */
+  uint64_t get_raw() const {
+    return features;
+  }
+
+  constexpr
+  friend mon_feature_t operator&(const mon_feature_t a,
+                                 const mon_feature_t b) {
+    return mon_feature_t(a.features & b.features);
+  }
+
+  mon_feature_t& operator|=(const mon_feature_t other) {
+    features |= other.features;
+    return (*this);
+  }
+
+  constexpr
+  friend mon_feature_t operator|(const mon_feature_t a,
+                                 const mon_feature_t b) {
+    return mon_feature_t(a.features | b.features);
+  }
+
+  constexpr
+  friend mon_feature_t operator^(const mon_feature_t a,
+                                 const mon_feature_t b) {
+    return mon_feature_t(a.features ^ b.features);
+  }
+
+  mon_feature_t& operator^=(const mon_feature_t other) {
+    features ^= other.features;
+    return (*this);
+  }
+
+  bool operator==(const mon_feature_t other) const {
+    return (features == other.features);
+  }
+
+  bool operator!=(const mon_feature_t other) const {
+    return (features != other.features);
+  }
+
+  bool empty() const {
+    return features == 0;
+  }
+
+  /**
+   * Set difference of our features in respect to @p other
+   *
+   * Returns all the elements in our features that are not in @p other
+   *
+   * @returns all the features not in @p other
+   */
+  mon_feature_t diff(const mon_feature_t other) const {
+    return mon_feature_t((features ^ other.features) & features);
+  }
+
+  /**
+   * Set intersection of our features and @p other
+   *
+   * Returns all the elements common to both our features and the
+   * features of @p other
+   *
+   * @returns the features common to @p other and us
+   */
+  mon_feature_t intersection(const mon_feature_t other) const {
+    return mon_feature_t((features & other.features));
+  }
+
+  /**
+   * Checks whether we have all the features in @p other
+   *
+   * Returns true if we have all the features in @p other
+   *
+   * @returns true if we contain all the features in @p other
+   * @returns false if we do not contain some of the features in @p other
+   */
+  bool contains_all(const mon_feature_t other) const {
+    mon_feature_t d = intersection(other);
+    return d == other;
+  }
+
+  /**
+   * Checks whether we contain any of the features in @p other.
+   *
+   * @returns true if we contain any of the features in @p other
+   * @returns false if we don't contain any of the features in @p other
+   */
+  bool contains_any(const mon_feature_t other) const {
+    mon_feature_t d = intersection(other);
+    return !d.empty();
+  }
+
+  void set_feature(const mon_feature_t f) {
+    features |= f.features;
+  }
+
+  void unset_feature(const mon_feature_t f) {
+    features &= ~(f.features);
+  }
+
+  void print(ostream& out) const {
+    out << "[";
+    print_bit_str(features, out, ceph::features::mon::get_feature_name);
+    out << "]";
+  }
+
+  void print_with_value(ostream& out) const {
+    out << "[";
+    print_bit_str(features, out, ceph::features::mon::get_feature_name, true);
+    out << "]";
+  }
+
+  void dump(Formatter *f, const char *sec_name = NULL) const {
+    f->open_array_section((sec_name ? sec_name : "features"));
+    dump_bit_str(features, f, ceph::features::mon::get_feature_name);
+    f->close_section();
+  }
+
+  void dump_with_value(Formatter *f, const char *sec_name = NULL) const {
+    f->open_array_section((sec_name ? sec_name : "features"));
+    dump_bit_str(features, f, ceph::features::mon::get_feature_name, true);
+    f->close_section();
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(HEAD_VERSION, COMPAT_VERSION, bl);
+    ::encode(features, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(COMPAT_VERSION, p);
+    ::decode(features, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(mon_feature_t)
+
+namespace ceph {
+  namespace features {
+    namespace mon {
+      constexpr mon_feature_t FEATURE_KRAKEN(      (1ULL << 0));
+      constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
+      constexpr mon_feature_t FEATURE_NONE(       (0ULL));
+
+      /**
+       * All the features this monitor supports
+       *
+       * If there's a feature above, it should be OR'ed to this list.
+       */
+      constexpr mon_feature_t get_supported() {
+        return (
+            FEATURE_KRAKEN |
+            FEATURE_NONE
+            );
+      }
+      /**
+       * All the features that, once set, cannot be removed.
+       *
+       * Features should only be added to this list if you want to make
+       * sure downgrades are not possible after a quorum supporting all
+       * these features has been formed.
+       *
+       * Any feature in this list will be automatically set on the monmap's
+       * features once all the monitors in the quorum support it.
+       */
+      constexpr mon_feature_t get_persistent() {
+        return (
+            FEATURE_KRAKEN |
+            FEATURE_NONE
+            );
+      }
+
+      static inline mon_feature_t get_feature_by_name(std::string n);
+    }
+  }
+}
+
+static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
+  mon_feature_t f(b);
+
+  if (f == FEATURE_KRAKEN) {
+    return "kraken";
+  } else if (f == FEATURE_RESERVED) {
+    return "reserved";
+  }
+  return "unknown";
+}
+
+static inline
+mon_feature_t ceph::features::mon::get_feature_by_name(std::string n) {
+
+  if (n == "kraken") {
+    return FEATURE_KRAKEN;
+  } else if (n == "reserved") {
+    return FEATURE_RESERVED;
+  }
+  return FEATURE_NONE;
+}
+
+static inline ostream& operator<<(ostream& out, const mon_feature_t& f) {
+  out << "mon_feature_t(";
+  f.print(out);
+  out << ")";
+  return out;
+}
 
 #endif

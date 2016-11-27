@@ -34,15 +34,9 @@
 #include "MDSDaemon.h"
 #include "Server.h"
 #include "Locker.h"
-#include "MDCache.h"
-#include "MDLog.h"
-#include "MDBalancer.h"
-#include "Migrator.h"
 
 #include "SnapServer.h"
 #include "SnapClient.h"
-
-#include "InoTable.h"
 
 #include "common/HeartbeatMap.h"
 
@@ -54,7 +48,6 @@
 #include "events/ESubtreeMap.h"
 
 #include "messages/MMDSMap.h"
-#include "messages/MMDSBeacon.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -98,6 +91,19 @@ class C_VoidFn : public Context
   }
 };
 
+class MDSDaemon::C_MDS_Tick : public Context {
+  protected:
+    MDSDaemon *mds_daemon;
+public:
+  explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
+  void finish(int r) {
+    assert(mds_daemon->mds_lock.is_locked_by_me());
+
+    mds_daemon->tick_event = 0;
+    mds_daemon->tick();
+  }
+};
+
 // cons/des
 MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
@@ -116,7 +122,7 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   name(n),
   messenger(m),
   monc(mc),
-  objecter(new Objecter(m->cct, m, mc, NULL, 0, 0)),
+  mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
   tick_event(0),
@@ -130,8 +136,6 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   monc->set_messenger(messenger);
 
   mdsmap = new MDSMap;
-
-  objecter->unset_honor_osdmap_full();
 }
 
 MDSDaemon::~MDSDaemon() {
@@ -139,8 +143,6 @@ MDSDaemon::~MDSDaemon() {
 
   delete mds_rank;
   mds_rank = NULL;
-  delete objecter;
-  objecter = NULL;
   delete mdsmap;
   mdsmap = NULL;
 
@@ -189,9 +191,6 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
 
 void MDSDaemon::dump_status(Formatter *f)
 {
-  const epoch_t osd_epoch = objecter->with_osdmap(
-    std::mem_fn(&OSDMap::get_epoch));
-
   f->open_object_section("status");
   f->dump_stream("cluster_fsid") << monc->get_fsid();
   if (mds_rank) {
@@ -200,6 +199,7 @@ void MDSDaemon::dump_status(Formatter *f)
     f->dump_unsigned("whoami", MDS_RANK_NONE);
   }
 
+  f->dump_int("id", monc->get_global_id());
   f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
   f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
 	    monc->get_global_id()))));
@@ -209,10 +209,11 @@ void MDSDaemon::dump_status(Formatter *f)
   }
 
   f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
-  f->dump_unsigned("osdmap_epoch", osd_epoch);
   if (mds_rank) {
+    f->dump_unsigned("osdmap_epoch", mds_rank->get_osd_epoch());
     f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
   } else {
+    f->dump_unsigned("osdmap_epoch", 0);
     f->dump_unsigned("osdmap_epoch_barrier", 0);
   }
   f->close_section(); // status
@@ -272,6 +273,13 @@ void MDSDaemon::set_up_admin_socket()
                                      "dump cache name=path,type=CephString,req=false",
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
+  assert(r == 0);
+  r = admin_socket->register_command("dump tree",
+				     "dump tree "
+				     "name=root,type=CephString,req=true "
+				     "name=depth,type=CephInt,req=false ",
+				     asok_hook,
+				     "dump metadata cache for subtree");
   assert(r == 0);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
@@ -339,6 +347,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("flush_path");
   admin_socket->unregister_command("export dir");
   admin_socket->unregister_command("dump cache");
+  admin_socket->unregister_command("dump tree");
   admin_socket->unregister_command("session evict");
   admin_socket->unregister_command("osdmap barrier");
   admin_socket->unregister_command("session ls");
@@ -457,16 +466,14 @@ int MDSDaemon::init()
   dout(10) << sizeof(Capability) << "\tCapability " << dendl;
   dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
 
-  objecter->init();
-  messenger->add_dispatcher_tail(objecter);
-
   messenger->add_dispatcher_tail(&beacon);
   messenger->add_dispatcher_tail(this);
 
   // get monmap
   monc->set_messenger(messenger);
 
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD |
+                      CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_MGR);
   int r = 0;
   r = monc->init();
   if (r < 0) {
@@ -505,7 +512,8 @@ int MDSDaemon::init()
     return -ETIMEDOUT;
   }
 
-  objecter->start();
+  mgrc.init();
+  messenger->add_dispatcher_head(&mgrc);
 
   mds_lock.Lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
@@ -515,30 +523,10 @@ int MDSDaemon::init()
   }
 
   monc->sub_want("mdsmap", 0, 0);
+  monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
   mds_lock.Unlock();
-
-  // verify that osds support tmap2omap
-  while (true) {
-    objecter->maybe_request_map();
-    objecter->wait_for_osd_map();
-    if (objecter->with_osdmap([&](const OSDMap& o) {
-	  uint64_t osd_features = o.get_up_osd_features();
-	  if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP)
-	    return true;
-	  if (o.get_num_up_osds() > 0) {
-	    derr << "*** one or more OSDs do not support TMAP2OMAP; upgrade "
-		 << "OSDs before starting MDS (or downgrade MDS) ***" << dendl;
-	  } else {
-	    derr << "*** no OSDs are up as of epoch " << o.get_epoch()
-		 << ", waiting" << dendl;
-	  }
-	  return false;
-	}))
-      break;
-    sleep(10);
-  }
 
   // Set up admin socket before taking mds_lock, so that ordering
   // is consistent (later we take mds_lock within asok callbacks)
@@ -587,37 +575,12 @@ void MDSDaemon::tick()
   }
 }
 
-/* This function DOES put the passed message before returning*/
-void MDSDaemon::handle_command(MCommand *m)
+void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
+				   int r, bufferlist outbl,
+				   const std::string& outs)
 {
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   assert(session != NULL);
-
-  int r = 0;
-  cmdmap_t cmdmap;
-  std::stringstream ss;
-  std::string outs;
-  bufferlist outbl;
-  Context *run_after = NULL;
-
-
-  if (!session->auth_caps.allow_all()) {
-    dout(1) << __func__
-      << ": received command from client without `tell` capability: "
-      << m->get_connection()->peer_addr << dendl;
-
-    ss << "permission denied";
-    r = -EPERM;
-  } else if (m->cmd.empty()) {
-    ss << "no command given";
-    outs = ss.str();
-  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    r = -EINVAL;
-    outs = ss.str();
-  } else {
-    r = _handle_command(cmdmap, m->get_data(), &outbl, &outs, &run_after);
-  }
-
   // If someone is using a closed session for sending commands (e.g.
   // the ceph CLI) then we should feel free to clean up this connection
   // as soon as we've sent them a response.
@@ -637,6 +600,43 @@ void MDSDaemon::handle_command(MCommand *m)
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
   m->get_connection()->send_message(reply);
+}
+
+/* This function DOES put the passed message before returning*/
+void MDSDaemon::handle_command(MCommand *m)
+{
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  assert(session != NULL);
+
+  int r = 0;
+  cmdmap_t cmdmap;
+  std::stringstream ss;
+  std::string outs;
+  bufferlist outbl;
+  Context *run_after = NULL;
+  bool need_reply = true;
+
+  if (!session->auth_caps.allow_all()) {
+    dout(1) << __func__
+      << ": received command from client without `tell` capability: "
+      << m->get_connection()->peer_addr << dendl;
+
+    ss << "permission denied";
+    r = -EPERM;
+  } else if (m->cmd.empty()) {
+    r = -EINVAL;
+    ss << "no command given";
+    outs = ss.str();
+  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    r = -EINVAL;
+    outs = ss.str();
+  } else {
+    r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
+  }
+
+  if (need_reply) {
+    send_command_reply(m, mds_rank, r, outbl, outs);
+  }
 
   if (run_after) {
     run_after->complete(0);
@@ -703,10 +703,11 @@ void MDSDaemon::handle_command(MMonCommand *m)
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
-    bufferlist const &inbl,
+    MCommand *m,
     bufferlist *outbl,
     std::string *outs,
-    Context **run_later)
+    Context **run_later,
+    bool *need_reply)
 {
   assert(outbl != NULL);
   assert(outs != NULL);
@@ -760,7 +761,7 @@ int MDSDaemon::_handle_command(
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability);
+			   cp->module, cp->perm, cp->availability, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
@@ -799,11 +800,9 @@ int MDSDaemon::_handle_command(
     int64_t session_id = 0;
     bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
     assert(got);
-    const bool killed = mds_rank->kill_session(session_id);
-    if (!killed) {
+    bool killed = mds_rank->kill_session(session_id, false, ss);
+    if (!killed)
       r = -ENOENT;
-      ss << "session '" << session_id << "' not found";
-    }
   } else if (prefix == "heap") {
     if (!ceph_using_tcmalloc()) {
       r = -EOPNOTSUPP;
@@ -824,7 +823,8 @@ int MDSDaemon::_handle_command(
   } else {
     // Give MDSRank a shot at the command
     if (mds_rank) {
-      bool handled = mds_rank->handle_command(cmdmap, inbl, &r, &ds, &ss);
+      bool handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
+					      need_reply);
       if (handled) {
         goto out;
       }
@@ -997,7 +997,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
       mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
-          timer, beacon, mdsmap, messenger, monc, objecter,
+          timer, beacon, mdsmap, messenger, monc,
           new C_VoidFn(this, &MDSDaemon::respawn),
           new C_VoidFn(this, &MDSDaemon::suicide));
       dout(10) <<  __func__ << ": initializing MDS rank "
@@ -1092,12 +1092,9 @@ void MDSDaemon::suicide()
   if (mds_rank) {
     mds_rank->shutdown();
   } else {
-
-    if (objecter->initialized.read()) {
-      objecter->shutdown();
-    }
     timer.shutdown();
 
+    mgrc.shutdown();
     monc->shutdown();
     messenger->shutdown();
   }
@@ -1115,12 +1112,12 @@ void MDSDaemon::respawn()
   }
   new_argv[orig_argc] = NULL;
 
-  /* Determine the path to our executable, try to read
-   * linux-specific /proc/ path first */
-  char exe_path[PATH_MAX];
-  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
-				    sizeof(exe_path) - 1);
-  if (exe_path_bytes < 0) {
+  /* Determine the path to our executable, test if Linux /proc/self/exe exists.
+   * This allows us to exec the same executable even if it has since been
+   * unlinked.
+   */
+  char exe_path[PATH_MAX] = "";
+  if (readlink("/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1128,9 +1125,10 @@ void MDSDaemon::respawn()
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
-    strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
+    strncpy(exe_path, orig_argv[0], PATH_MAX-1);
   } else {
-    exe_path[exe_path_bytes] = '\0';
+    dout(1) << "respawning with exe " << exe_path << dendl;
+    strcpy(exe_path, "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
@@ -1143,7 +1141,7 @@ void MDSDaemon::respawn()
 
   // We have to assert out here, because suicide() returns, and callers
   // to respawn expect it never to return.
-  assert(0);
+  ceph_abort();
 }
 
 
@@ -1291,6 +1289,12 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
     }
     session->put();
   }
+}
+
+bool MDSDaemon::ms_handle_refused(Connection *con)
+{
+  // do nothing for now
+  return false;
 }
 
 bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,

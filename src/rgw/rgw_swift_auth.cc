@@ -4,13 +4,7 @@
 #include <array>
 
 #include <boost/utility/string_ref.hpp>
-/* TODO(rzarzynski): we want to use static_vector when it will be available
- * also on RHEL/Centos 7. At the moment std::vetor is being used instead. */
-#if 0
-#  include <boost/container/static_vector.hpp>
-#else
-#  include <vector>
-#endif
+#include <boost/container/static_vector.hpp>
 
 #include "rgw_swift_auth.h"
 #include "rgw_rest.h"
@@ -229,12 +223,7 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  /* TODO(rzarzynski): switch to static_vector when possible. */
-#if 0
   boost::container::static_vector<boost::string_ref, 3> allowed_methods;
-#else
-  std::vector<boost::string_ref> allowed_methods;
-#endif
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
@@ -387,9 +376,7 @@ static int encode_token(CephContext *cct, string& swift_user, string& key,
   utime_t expiration = ceph_clock_now(cct);
   expiration += cct->_conf->rgw_swift_token_expiration;
 
-  ret = build_token(swift_user, key, nonce, expiration, bl);
-
-  return ret;
+  return build_token(swift_user, key, nonce, expiration, bl);
 }
 
 
@@ -586,18 +573,22 @@ void RGW_SWIFT_Auth_Get::execute()
     tenant_path.append(info.user_id.to_str());
   }
 
-  STREAM_IO(s)->print("X-Storage-Url: %s%s/v1%s\r\n", swift_url.c_str(),
-	        swift_prefix.c_str(), tenant_path.c_str());
+  dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
+              tenant_path);
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
 
   {
-    char buf[bl.length() * 2 + 1];
-    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
+    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
+    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
 
-    STREAM_IO(s)->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
-    STREAM_IO(s)->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
+    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
+    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
+	       token_val + PREFIX_LEN);
+
+    dump_header(s, "X-Storage-Token", token_val);
+    dump_header(s, "X-Auth-Token", token_val);
   }
 
   ret = STATUS_NO_CONTENT;
@@ -609,7 +600,7 @@ done:
 }
 
 int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
-				RGWClientIO *cio)
+				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;

@@ -50,12 +50,12 @@ TEST_F(LibRadosIo, ReadTimeout) {
     // set up a second client
     rados_t cluster;
     rados_ioctx_t ioctx;
-    rados_create(&cluster, "admin");
-    rados_conf_read_file(cluster, NULL);
-    rados_conf_parse_env(cluster, NULL);
-    rados_conf_set(cluster, "rados_osd_op_timeout", "0.00001"); // use any small value that will result in a timeout
-    rados_connect(cluster);
-    rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+    ASSERT_EQ(0, rados_create(&cluster, "admin"));
+    ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
+    ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
+    ASSERT_EQ(0, rados_conf_set(cluster, "rados_osd_op_timeout", "0.00001")); // use any small value that will result in a timeout
+    ASSERT_EQ(0, rados_connect(cluster));
+    ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
     rados_ioctx_set_namespace(ioctx, nspace.c_str());
 
     // then we show that the buffer is changed after rados_read returned

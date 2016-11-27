@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
 #include <iostream>
@@ -19,6 +20,7 @@
 std::string TestFixture::_pool_name;
 librados::Rados TestFixture::_rados;
 uint64_t TestFixture::_image_number = 0;
+std::string TestFixture::_data_pool;
 
 TestFixture::TestFixture() : m_image_size(0) {
 }
@@ -26,9 +28,22 @@ TestFixture::TestFixture() : m_image_size(0) {
 void TestFixture::SetUpTestCase() {
   _pool_name = get_temp_pool_name("test-librbd-");
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
+
+  bool created = false;
+  ASSERT_EQ(0, create_image_data_pool(_rados, _data_pool, &created));
+  if (!_data_pool.empty()) {
+    printf("using image data pool: %s\n", _data_pool.c_str());
+    if (!created) {
+      _data_pool.clear();
+    }
+  }
 }
 
 void TestFixture::TearDownTestCase() {
+  if (!_data_pool.empty()) {
+    ASSERT_EQ(0, _rados.pool_delete(_data_pool.c_str()));
+  }
+
   ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
 }
 
@@ -65,7 +80,8 @@ int TestFixture::open_image(const std::string &image_name,
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
                              const std::string &snap_name) {
-  return ictx.operations->snap_create(snap_name.c_str());
+  return ictx.operations->snap_create(snap_name.c_str(),
+				      cls::rbd::UserSnapshotNamespace());
 }
 
 int TestFixture::snap_protect(librbd::ImageCtx &ictx,

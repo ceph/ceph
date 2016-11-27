@@ -922,10 +922,11 @@ struct ObjectOperation {
   }
 
   // watch/notify
-  void watch(uint64_t cookie, __u8 op) {
+  void watch(uint64_t cookie, __u8 op, uint32_t timeout = 0) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_WATCH);
     osd_op.op.watch.cookie = cookie;
     osd_op.op.watch.op = op;
+    osd_op.op.watch.timeout = timeout;
   }
 
   void notify(uint64_t cookie, uint32_t prot_ver, uint32_t timeout,
@@ -1153,13 +1154,7 @@ private:
   void tick();
   void update_crush_location();
 
-  class RequestStateHook : public AdminSocketHook {
-    Objecter *m_objecter;
-  public:
-    explicit RequestStateHook(Objecter *objecter);
-    bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	      bufferlist& out);
-  };
+  class RequestStateHook;
 
   RequestStateHook *m_request_state_hook;
 
@@ -1951,12 +1946,13 @@ private:
     op_throttle_bytes(cct, "objecter_bytes",
 		      cct->_conf->objecter_inflight_op_bytes),
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
-    epoch_barrier(0)
+    epoch_barrier(0),
+    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
   { }
   ~Objecter();
 
   void init();
-  void start();
+  void start(const OSDMap *o = nullptr);
   void shutdown();
 
   // These two templates replace osdmap_(get)|(put)_read. Simply wrap
@@ -2928,6 +2924,7 @@ public:
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
+  bool ms_handle_refused(Connection *con);
   bool ms_get_authorizer(int dest_type,
 			 AuthAuthorizer **authorizer,
 			 bool force_new);
@@ -2936,6 +2933,7 @@ public:
 
 private:
   epoch_t epoch_barrier;
+  bool retry_writes_after_first_reply;
 public:
   void set_epoch_barrier(epoch_t epoch);
 };

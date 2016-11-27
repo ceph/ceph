@@ -1,0 +1,2 @@
+include rados.pyx
+include rados.pxd

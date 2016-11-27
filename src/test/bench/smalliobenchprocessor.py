@@ -2,12 +2,13 @@ import json
 import sys
 from pylab import hist
 import gzip
+import io
 
 def get_next_line(line, output):
     val = json.loads(line)
     if val['type'] not in output:
         output[val['type']] = {}
-    for (name, value) in val.iteritems():
+    for (name, value) in val.items():
         if name == "type":
             continue
         if name == "seq":
@@ -17,11 +18,10 @@ def get_next_line(line, output):
         output[val['type']][name] += [float(value)]
 
 def wrapgz(gfilename):
-    def retval():
-        gfile = gzip.open(gfilename, 'rb')
-        gfile.__exit__ = lambda: gfile.close()
-        return gfile
-    return (gfilename, retval)
+    gfile = gzip.open(gfilename, 'rb')
+    if sys.version_info[0] >= 3:
+        gfile = io.TextIOWrapper(gfile)
+    return gfile
 
 def read_all_input(filename):
     cur = {}
@@ -30,7 +30,7 @@ def read_all_input(filename):
         openfn = wrapgz
     with openfn(filename) as fh:
         for line in fh:
-            get_next_line(line, cur);
+            get_next_line(line, cur)
     return cur
 
 def write_committed_latency(out, bins, **kwargs):

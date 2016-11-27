@@ -49,7 +49,7 @@ function TEST_scrub_snaps() {
     poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
 
     dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
-    for i in `seq 1 14`
+    for i in `seq 1 15`
     do
         rados -p $poolname put obj${i} $TESTDATA
     done
@@ -97,8 +97,8 @@ function TEST_scrub_snaps() {
 
     # Don't need to ceph_objectstore_tool function because osd stopped
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj1 | grep \"snapid\":-2)"
-    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj1)"
+    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" --force remove
 
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj5 | grep \"snapid\":2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
@@ -111,14 +111,14 @@ function TEST_scrub_snaps() {
     dd if=/dev/urandom of=$TESTDATA bs=256 count=18
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-bytes $TESTDATA
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj3 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj3)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=15
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-bytes $TESTDATA
 
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj4 | grep \"snapid\":7)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj2 | grep \"snapid\":-1)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" rm-attr snapset
 
     # Create a clone which isn't in snapset and doesn't have object info
@@ -128,24 +128,29 @@ function TEST_scrub_snaps() {
 
     rm -f $TESTDATA
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj6 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj6)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj7 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj7)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset corrupt
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj8 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj8)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset seq
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj9 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj9)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset clone_size
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj10 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj10)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset clone_overlap
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj11 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj11)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset clones
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj12 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj12)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset head
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj13 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj13)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset snaps
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj14 | grep \"snapid\":-2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj14)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset size
+
+    echo "garbage" > $dir/bad
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj15)"
+    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-attr snapset $dir/bad
+    rm -f $dir/bad
 
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
@@ -164,38 +169,242 @@ function TEST_scrub_snaps() {
     test $(jq -r '.[0]' $dir/json) = $pgid || return 1
 
     rados list-inconsistent-snapset $pgid > $dir/json || return 1
-    test $(jq '.inconsistents | length' $dir/json) = "20" || return 1
+    test $(jq '.inconsistents | length' $dir/json) = "21" || return 1
 
-    jq -c '.inconsistents | sort' > $dir/checkcsjson << EOF
-{"epoch":18,"inconsistents":[{"name":"obj1","nspace":"","locator":"","snap":1,
-"errors":["headless"]},{"name":"obj10","nspace":"","locator":"","snap":1,
-"errors":["size_mismatch"]},{"name":"obj11","nspace":"","locator":"","snap":1,
-"errors":["headless"]},{"name":"obj14","nspace":"","locator":"","snap":1,
-"errors":["size_mismatch"]},{"name":"obj6","nspace":"","locator":"","snap":1,
-"errors":["headless"]},{"name":"obj7","nspace":"","locator":"","snap":1,
-"errors":["headless"]},{"name":"obj9","nspace":"","locator":"","snap":1,
-"errors":["size_mismatch"]},{"name":"obj2","nspace":"","locator":"","snap":4,
-"errors":["headless"]},{"name":"obj5","nspace":"","locator":"","snap":4,
-"errors":["size_mismatch"]},{"name":"obj2","nspace":"","locator":"","snap":7,
-"errors":["headless"]},{"name":"obj5","nspace":"","locator":"","snap":7,
-"errors":["oi_attr_missing","headless"]},{"name":"obj11","nspace":"",
-"locator":"","snap":"head","errors":["extra_clones"],"extra clones":[1]},
-{"name":"obj12","nspace":"","locator":"","snap":"head",
-"errors":["head_mismatch"]},{"name":"obj3","nspace":"","locator":"",
-"snap":"head","errors":["size_mismatch"]},{"name":"obj5","nspace":"",
-"locator":"","snap":"head","errors":["extra_clones","clone_missing"],
-"extra clones":[7],"missing":[2,1]},{"name":"obj6","nspace":"","locator":"",
-"snap":"head","errors":["extra_clones"],"extra clones":[1]},{"name":"obj7",
-"nspace":"","locator":"","snap":"head","errors":["head_mismatch",
-"extra_clones"],"extra clones":[1]},{"name":"obj8","nspace":"","locator":"",
-"snap":"head","errors":["snapset_mismatch"]},{"name":"obj2","nspace":"",
-"locator":"","snap":"snapdir","errors":["ss_attr_missing","extra_clones"],
-"extra clones":[7,4]},{"name":"obj4","nspace":"","locator":"","snap":"snapdir",
-"errors":["clone_missing"],"missing":[7]}]}
+    local jqfilter='.inconsistents'
+    local sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+
+    jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
+{
+  "inconsistents": [
+    {
+      "errors": [
+        "headless"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj1"
+    },
+    {
+      "errors": [
+        "size_mismatch"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj10"
+    },
+    {
+      "errors": [
+        "headless"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj11"
+    },
+    {
+      "errors": [
+        "size_mismatch"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj14"
+    },
+    {
+      "errors": [
+        "headless"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj6"
+    },
+    {
+      "errors": [
+        "headless"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj7"
+    },
+    {
+      "errors": [
+        "size_mismatch"
+      ],
+      "snap": 1,
+      "locator": "",
+      "nspace": "",
+      "name": "obj9"
+    },
+    {
+      "errors": [
+        "headless"
+      ],
+      "snap": 4,
+      "locator": "",
+      "nspace": "",
+      "name": "obj2"
+    },
+    {
+      "errors": [
+        "size_mismatch"
+      ],
+      "snap": 4,
+      "locator": "",
+      "nspace": "",
+      "name": "obj5"
+    },
+    {
+      "errors": [
+        "headless"
+      ],
+      "snap": 7,
+      "locator": "",
+      "nspace": "",
+      "name": "obj2"
+    },
+    {
+      "errors": [
+        "oi_attr_missing",
+        "headless"
+      ],
+      "snap": 7,
+      "locator": "",
+      "nspace": "",
+      "name": "obj5"
+    },
+    {
+      "extra clones": [
+        1
+      ],
+      "errors": [
+        "extra_clones"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj11"
+    },
+    {
+      "errors": [
+        "head_mismatch"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj12"
+    },
+    {
+      "errors": [
+        "ss_attr_corrupted"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj15"
+    },
+    {
+      "errors": [
+        "size_mismatch"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj3"
+    },
+    {
+      "missing": [
+        2,
+        1
+      ],
+      "extra clones": [
+        7
+      ],
+      "errors": [
+        "extra_clones",
+        "clone_missing"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj5"
+    },
+    {
+      "extra clones": [
+        1
+      ],
+      "errors": [
+        "extra_clones"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj6"
+    },
+    {
+      "extra clones": [
+        1
+      ],
+      "errors": [
+        "head_mismatch",
+        "extra_clones"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj7"
+    },
+    {
+      "errors": [
+        "snapset_mismatch"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj8"
+    },
+    {
+      "extra clones": [
+        7,
+        4
+      ],
+      "errors": [
+        "ss_attr_missing",
+        "extra_clones"
+      ],
+      "snap": "snapdir",
+      "locator": "",
+      "nspace": "",
+      "name": "obj2"
+    },
+    {
+      "missing": [
+        7
+      ],
+      "errors": [
+        "clone_missing"
+      ],
+      "snap": "snapdir",
+      "locator": "",
+      "nspace": "",
+      "name": "obj4"
+    }
+  ],
+  "epoch": 20
+}
 EOF
 
-    jq -c '.inconsistents | sort' $dir/json > $dir/csjson
-    diff $dir/csjson $dir/checkcsjson || return 1
+    jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
+    diff -y $dir/checkcsjson $dir/csjson || return 1
+
+    if which jsonschema > /dev/null;
+    then
+      jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-snap.json || return 1
+    fi
 
     for i in `seq 1 7`
     do
@@ -238,7 +447,8 @@ EOF
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj9:1 is missing in clone_size"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 is an unexpected clone"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 size 1032 != clone_size 1033"
-    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 21 errors"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 22 errors"
+    err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head can't decode 'snapset' attr buffer"
 
     for i in `seq 0 ${#err_strings[@]}`
     do

@@ -29,6 +29,24 @@
   *_dout << "client." << cl->whoami << " "
 
 /* C_Block_Sync */
+class C_Block_Sync : public Context {
+private:
+  Client *cl;
+  uint64_t ino;
+  barrier_interval iv;
+  enum CBlockSync_State state;
+  Barrier *barrier;
+  int *rval; /* see Cond.h */
+
+public:
+  boost::intrusive::list_member_hook<> intervals_hook;
+  C_Block_Sync(Client *c, uint64_t i, barrier_interval iv, int *r);
+  void finish(int rval);
+
+  friend class Barrier;
+  friend class BarrierContext;
+};
+
 C_Block_Sync::C_Block_Sync(Client *c, uint64_t i, barrier_interval iv,
 			   int *r=0) :
   cl(c), ino(i), iv(iv), rval(r)

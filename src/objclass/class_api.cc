@@ -415,7 +415,6 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   string start_after;
   string filter_prefix;
   uint64_t max = (uint64_t)-1;
-  bufferlist inbl;
 
   ::encode(start_after, op.indata);
   ::encode(max, op.indata);
@@ -470,8 +469,6 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   vector<OSDOp> ops(1);
   OSDOp& op = ops[0];
   int ret;
-
-  bufferlist inbl;
 
   ::encode(start_obj, op.indata);
   ::encode(max_to_get, op.indata);
@@ -681,6 +678,12 @@ uint64_t cls_get_features(cls_method_context_t hctx)
 {
   ReplicatedPG::OpContext *ctx = *(ReplicatedPG::OpContext **)hctx;
   return ctx->pg->get_osdmap()->get_up_osd_features();
+}
+
+uint64_t cls_get_client_features(cls_method_context_t hctx)
+{
+  ReplicatedPG::OpContext *ctx = *(ReplicatedPG::OpContext **)hctx;
+  return ctx->op->get_req()->get_connection()->get_features();
 }
 
 void cls_cxx_subop_version(cls_method_context_t hctx, string *s)

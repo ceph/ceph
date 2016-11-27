@@ -14,6 +14,8 @@
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 #include "librbd/parent_types.h"
+#include "cls/rbd/cls_rbd_types.h"
+#include "common/WorkQueue.h"
 
 enum {
   l_librbd_first = 26000,
@@ -106,13 +108,6 @@ namespace librbd {
 	     ImageOptions& opts,
              const std::string &non_primary_global_image_id,
              const std::string &primary_mirror_uuid);
-  int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
-                int order, uint64_t features, uint64_t stripe_unit,
-                uint64_t stripe_count, uint8_t journal_order,
-                uint8_t journal_splay_width,
-                const std::string &journal_pool,
-                const std::string &non_primary_global_image_id,
-                const std::string &primary_mirror_uuid);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
@@ -128,20 +123,26 @@ namespace librbd {
   int get_old_format(ImageCtx *ictx, uint8_t *old);
   int get_size(ImageCtx *ictx, uint64_t *size);
   int get_features(ImageCtx *ictx, uint64_t *features);
-  int update_features(ImageCtx *ictx, uint64_t features, bool enabled);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
   int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
 		      std::string *parent_name, std::string *parent_snap_name);
   int get_flags(ImageCtx *ictx, uint64_t *flags);
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
+  int lock_acquire(ImageCtx *ictx, rbd_lock_mode_t lock_mode);
+  int lock_release(ImageCtx *ictx);
 
-  int remove(librados::IoCtx& io_ctx, const char *imgname,
-	     ProgressContext& prog_ctx, bool force=false);
+  int remove(librados::IoCtx& io_ctx, const std::string &image_name,
+             const std::string &image_id, ProgressContext& prog_ctx,
+             bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
   int snap_set_limit(ImageCtx *ictx, uint64_t limit);
+  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
+  int get_snap_namespace(ImageCtx *ictx,
+			 const char *snap_name,
+			 cls::rbd::SnapshotNamespace *snap_namespace);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
@@ -191,8 +192,6 @@ namespace librbd {
   int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
-  int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
-  int metadata_remove(ImageCtx *ictx, const std::string &key);
 
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
@@ -220,10 +219,6 @@ namespace librbd {
   int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
 			      size_t status_size);
 
-  // Consistency groups functions
-  int group_create(librados::IoCtx& io_ctx, const char *imgname);
-  int group_remove(librados::IoCtx& io_ctx, const char *group_name);
-  int group_list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
 }
 
 #endif

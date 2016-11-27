@@ -93,6 +93,7 @@ class StrayManager
   void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
 
   friend class StrayManagerIOContext;
+  friend class StrayManagerLogContext;
   friend class StrayManagerContext;
 
   friend class C_StraysFetched;
@@ -169,6 +170,8 @@ class StrayManager
   void set_logger(PerfCounters *l) {logger = l;}
 
   bool eval_stray(CDentry *dn, bool delay=false);
+
+  uint64_t get_num_strays() const { return num_strays; }
 
   /**
    * Where eval_stray was previously invoked with delay=true, call

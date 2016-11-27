@@ -7,13 +7,14 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
-#include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadataListener.h"
+#include "journal/Settings.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
@@ -44,7 +45,7 @@ public:
 
   JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                   librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &client_id, double commit_interval);
+                  const std::string &client_id, const Settings &settings);
   ~JournalMetadata();
 
   void init(Context *on_init);
@@ -70,9 +71,13 @@ public:
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
                     Tag *tag, Context *on_finish);
   void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
-  void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
+  void get_tags(uint64_t start_after_tag_tid,
+                const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 
+  inline const Settings &get_settings() const {
+    return m_settings;
+  }
   inline const std::string &get_client_id() const {
     return m_client_id;
   }
@@ -91,6 +96,10 @@ public:
 
   inline void queue(Context *on_finish, int r) {
     m_work_queue->queue(on_finish, r);
+  }
+
+  inline ContextWQ *get_work_queue() {
+    return m_work_queue;
   }
 
   inline SafeTimer &get_timer() {
@@ -142,7 +151,9 @@ public:
   void committed(uint64_t commit_tid, const CreateContext &create_context);
 
   void notify_update();
-  void async_notify_update();
+  void async_notify_update(Context *on_safe);
+
+  void wait_for_ops();
 
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
@@ -211,9 +222,10 @@ private:
 
   struct C_AioNotify : public Context {
     JournalMetadata* journal_metadata;
+    Context *on_safe;
 
-    C_AioNotify(JournalMetadata *_journal_metadata)
-      : journal_metadata(_journal_metadata) {
+    C_AioNotify(JournalMetadata *_journal_metadata, Context *_on_safe)
+      : journal_metadata(_journal_metadata), on_safe(_on_safe) {
       journal_metadata->m_async_op_tracker.start_op();
     }
     virtual ~C_AioNotify() {
@@ -221,6 +233,9 @@ private:
     }
     virtual void finish(int r) {
       journal_metadata->handle_notified(r);
+      if (on_safe != nullptr) {
+        on_safe->complete(0);
+      }
     }
   };
 
@@ -237,7 +252,8 @@ private:
     }
     virtual void finish(int r) {
       if (r == 0) {
-        journal_metadata->async_notify_update();
+        journal_metadata->async_notify_update(on_safe);
+        return;
       }
       if (on_safe != NULL) {
         on_safe->complete(r);
@@ -287,7 +303,7 @@ private:
   CephContext *m_cct;
   std::string m_oid;
   std::string m_client_id;
-  double m_commit_interval;
+  Settings m_settings;
 
   uint8_t m_order;
   uint8_t m_splay_width;
@@ -339,6 +355,8 @@ private:
   void handle_watch_notify(uint64_t notify_id, uint64_t cookie);
   void handle_watch_error(int err);
   void handle_notified(int r);
+
+  Context *schedule_laggy_clients_disconnect(Context *on_finish);
 
   friend std::ostream &operator<<(std::ostream &os,
 				  const JournalMetadata &journal_metadata);

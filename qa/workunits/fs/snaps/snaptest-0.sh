@@ -1,10 +1,7 @@
 #!/bin/sh -x
 
 expect_failure() {
-    if [ `"$@"` -e 0 ]; then
-	return 1
-    fi
-    return 0
+	if "$@"; then return 1; else return 0; fi
 }
 set -e
 

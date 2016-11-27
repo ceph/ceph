@@ -71,7 +71,7 @@ void MutationImpl::finish_locking(SimpleLock *lock)
 
 
 // auth pins
-bool MutationImpl::is_auth_pinned(MDSCacheObject *object)
+bool MutationImpl::is_auth_pinned(MDSCacheObject *object) const
 { 
   return auth_pins.count(object) || remote_auth_pins.count(object); 
 }
@@ -192,7 +192,7 @@ MDRequestImpl::More* MDRequestImpl::more()
   return _more;
 }
 
-bool MDRequestImpl::has_more()
+bool MDRequestImpl::has_more() const
 {
   return _more != nullptr;
 }
@@ -207,7 +207,7 @@ bool MDRequestImpl::slave_did_prepare()
   return has_more() && more()->slave_commit;
 }
 
-bool MDRequestImpl::did_ino_allocation()
+bool MDRequestImpl::did_ino_allocation() const
 {
   return alloc_ino || used_prealloc_ino || prealloc_inos.size();
 }      
@@ -314,6 +314,11 @@ void MDRequestImpl::print(ostream &out) const
 }
 
 void MDRequestImpl::dump(Formatter *f) const
+{
+  _dump(f);
+}
+
+void MDRequestImpl::_dump(Formatter *f) const
 {
   f->dump_string("flag_point", state_string());
   f->dump_stream("reqid") << reqid;

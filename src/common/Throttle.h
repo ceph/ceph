@@ -105,6 +105,11 @@ public:
    * @returns number of requests being hold after this
    */
   int64_t put(int64_t c = 1);
+   /**
+   * reset the zero to the stock
+   */
+  void reset();
+
   bool should_wait(int64_t c) const {
     return _should_wait(c);
   }
@@ -138,7 +143,7 @@ public:
  *
  * delay = 0, r \in [0, l)
  * delay = (r - l) * (e / (h - l)), r \in [l, h)
- * delay = h + (r - h)((m - e)/(1 - h))
+ * delay = e + (r - h)((m - e)/(1 - h))
  */
 class BackoffThrottle {
   std::mutex lock;
@@ -242,17 +247,6 @@ private:
   bool m_ignore_enoent;
 };
 
-class C_SimpleThrottle : public Context {
-public:
-  C_SimpleThrottle(SimpleThrottle *throttle) : m_throttle(throttle) {
-    m_throttle->start_op();
-  }
-  virtual void finish(int r) {
-    m_throttle->end_op(r);
-  }
-private:
-  SimpleThrottle *m_throttle;
-};
 
 class OrderedThrottle;
 

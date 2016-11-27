@@ -6,7 +6,7 @@ import time
 import sys
 
 from nose import with_setup, SkipTest
-from nose.tools import eq_ as eq, assert_raises
+from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
@@ -133,6 +133,10 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
             rados.conf_set('rbd_default_stripe_count', str(stripe_count or 0))
         if stripe_unit is not None:
             rados.conf_set('rbd_default_stripe_unit', str(stripe_unit or 0))
+        feature_data_pool = 0
+        datapool = rados.conf_get('rbd_default_data_pool')
+        if not len(datapool) == 0:
+            feature_data_pool = 128
         image_name = get_temp_image_name()
         if exception is None:
             RBD().create(ioctx, image_name, IMG_SIZE)
@@ -145,8 +149,12 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
                     eq(expected_order, actual_order)
 
                     expected_features = features
-                    if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 61
+                    if format == 1:
+                        expected_features = 0
+                    elif expected_features is None:
+                        expected_features = 61 | feature_data_pool
+                    else:
+                        expected_features |= feature_data_pool
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
@@ -191,14 +199,14 @@ def test_create_defaults():
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 1, 1 << 16)
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 20)
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 16)
-    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 0, 0)
+    check_default_params(2, 20, 0, 0, 0)
     # make sure invalid combinations of stripe unit and order are still invalid
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 1 << 50, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 100, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 1, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 1, 0, exception=InvalidArgument)
     # 0 stripe unit and count are still ignored
-    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 0)
+    check_default_params(2, 22, 0, 0, 0)
 
 def test_context_manager():
     with Rados(conffile='') as cluster:
@@ -316,6 +324,13 @@ class TestImage(object):
         eq(image.stripe_count(), stripe_count)
         image.close()
         RBD().remove(ioctx, image_name)
+
+    @require_new_format()
+    def test_id(self):
+        assert_not_equal(b'', self.image.id())
+
+    def test_block_name_prefix(self):
+        assert_not_equal(b'', self.image.block_name_prefix())
 
     def test_invalidate_cache(self):
         self.image.write(b'abc', 0)
@@ -1205,6 +1220,7 @@ class TestExclusiveLock(object):
                 image1.remove_snap('snap')
 
     def test_follower_discard(self):
+        global rados
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             data = rand_data(256)
             image1.write(data, 0)
@@ -1212,7 +1228,10 @@ class TestExclusiveLock(object):
             eq(image1.is_exclusive_lock_owner(), False)
             eq(image2.is_exclusive_lock_owner(), True)
             read = image2.read(0, 256)
-            eq(256 * b'\0', read)
+            if rados.conf_get('rbd_skip_partial_discard') == 'false':
+                eq(256 * b'\0', read)
+            else:
+                eq(data, read)
 
     def test_follower_write(self):
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:

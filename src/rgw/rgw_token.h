@@ -62,7 +62,6 @@ namespace rgw {
       default:
 	return "none";
       };
-      return "none";
     }
 
     token_type type;
@@ -71,7 +70,7 @@ namespace rgw {
 
     virtual uint32_t version() const { return 1; };
 
-    bool valid() {
+    bool valid() const{
       return ((type != TOKEN_NONE) &&
 	      (! id.empty()) &&
 	      (! key.empty()));
@@ -145,7 +144,7 @@ namespace rgw {
       encode_json(f);
       std::ostringstream os;
       f->flush(os);
-      return std::move(to_base64(std::move(os.str())));
+      return to_base64(std::move(os.str()));
     }
 
     friend inline ostream& operator<<(ostream& os, const RGWToken& token);

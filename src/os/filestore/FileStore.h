@@ -52,13 +52,13 @@ using namespace std;
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-#define BTRFS_SUPER_MAGIC 0x9123683E
+#define BTRFS_SUPER_MAGIC 0x9123683EL
 # endif
 # ifndef XFS_SUPER_MAGIC
-#define XFS_SUPER_MAGIC 0x58465342
+#define XFS_SUPER_MAGIC 0x58465342L
 # endif
 # ifndef ZFS_SUPER_MAGIC
-#define ZFS_SUPER_MAGIC 0x2fc12fc1
+#define ZFS_SUPER_MAGIC 0x2fc12fc1L
 # endif
 #endif
 
@@ -66,6 +66,31 @@ using namespace std;
 class FileStoreBackend;
 
 #define CEPH_FS_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(1, "sharded objects")
+
+enum {
+  l_filestore_first = 84000,
+  l_filestore_journal_queue_ops,
+  l_filestore_journal_queue_bytes,
+  l_filestore_journal_ops,
+  l_filestore_journal_bytes,
+  l_filestore_journal_latency,
+  l_filestore_journal_wr,
+  l_filestore_journal_wr_bytes,
+  l_filestore_journal_full,
+  l_filestore_committing,
+  l_filestore_commitcycle,
+  l_filestore_commitcycle_interval,
+  l_filestore_commitcycle_latency,
+  l_filestore_op_queue_max_ops,
+  l_filestore_op_queue_ops,
+  l_filestore_ops,
+  l_filestore_op_queue_max_bytes,
+  l_filestore_op_queue_bytes,
+  l_filestore_bytes,
+  l_filestore_apply_latency,
+  l_filestore_queue_transaction_latency_avg,
+  l_filestore_last,
+};
 
 class FSSuperblock {
 public:
@@ -104,8 +129,8 @@ public:
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.filestore_commit_latency = os_commit_latency.avg();
-      ret.filestore_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency = os_commit_latency.avg();
+      ret.os_apply_latency = os_apply_latency.avg();
       return ret;
     }
 
@@ -357,7 +382,7 @@ private:
       return true;
     }
     void _dequeue(OpSequencer *o) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty() {
       return store->op_queue.empty();
@@ -497,7 +522,8 @@ public:
 				const SequencerPosition &spos);
 
   /// close a replay guard opened with in_progress=true
-  void _close_replay_guard(int fd, const SequencerPosition& spos);
+  void _close_replay_guard(int fd, const SequencerPosition& spos,
+			   const ghobject_t *oid=0);
   void _close_replay_guard(const coll_t& cid, const SequencerPosition& spos);
 
   /**
@@ -534,6 +560,10 @@ public:
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false);
+  using ObjectStore::set_collection_opts;
+  int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts);
   using ObjectStore::read;
   int read(
     const coll_t& cid,
@@ -557,7 +587,7 @@ public:
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 	     const SequencerPosition& spos);
-  int _clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+  int _clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
@@ -625,7 +655,7 @@ public:
   int list_collections(vector<coll_t>& ls, bool include_temp);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
   // omap (see ObjectStore.h for documentation)
   using ObjectStore::omap_get;
@@ -677,6 +707,8 @@ public:
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
+
+  virtual int apply_layout_settings(const coll_t &cid);
 
 private:
   void _inject_failure();

@@ -23,9 +23,10 @@ if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/git \
         devel/gmake \
-        devel/automake \
+        devel/cmake \
         devel/yasm \
         devel/boost-all \
+        devel/boost-python-libs \
         devel/valgrind \
         devel/pkgconf \
         devel/libatomic_ops \
@@ -41,9 +42,11 @@ if [ x`uname`x = xFreeBSDx ]; then
         archivers/snappy \
         ftp/curl \
         misc/e2fsprogs-libuuid \
+        misc/getopt \
         textproc/expat2 \
         textproc/libxml2 \
         textproc/xmlstarlet \
+	textproc/jq \
         emulators/fuse \
         java/junit \
         lang/python27 \
@@ -54,22 +57,12 @@ if [ x`uname`x = xFreeBSDx ]; then
         sysutils/flock \
 
     exit
-fi
-
-if test -f /etc/redhat-release ; then
-    $SUDO yum install -y redhat-lsb-core
-fi
-
-if type apt-get > /dev/null 2>&1 ; then
-    $SUDO apt-get install -y lsb-release devscripts equivs
-fi
-
-if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
-fi
-
-case $(lsb_release -si) in
-Ubuntu|Debian|Devuan)
+else
+    source /etc/os-release
+    case $ID in
+    debian|ubuntu|devuan)
+        echo "Using apt-get to install dependencies"
+        $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
@@ -94,10 +87,20 @@ Ubuntu|Debian|Devuan)
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-CentOS|Fedora|RedHatEnterpriseServer)
+    centos|fedora|rhel)
+        yumdnf="yum"
+        builddepcmd="yum-builddep -y"
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            yumdnf="dnf"
+            builddepcmd="dnf -y builddep --allowerasing"
+        fi
+        echo "Using $yumdnf to install dependencies"
+        $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
-                $SUDO yum install -y yum-utils
+                if test $yumdnf = yum; then
+                    $SUDO $yumdnf install -y yum-utils
+                fi
                 ;;
             CentOS|RedHatEnterpriseServer)
                 $SUDO yum install -y yum-utils
@@ -116,17 +119,21 @@ CentOS|Fedora|RedHatEnterpriseServer)
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-*SUSE*)
+    opensuse|suse|sles)
+        echo "Using zypper to install dependencies"
+        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
-*)
-        echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
+    *)
+        echo "$ID is unknown, dependencies will have to be installed manually."
+	exit 1
         ;;
-esac
+    esac
+fi
 
 function populate_wheelhouse() {
     local install=$1
@@ -146,7 +153,14 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-$interpreter
 
     if ! test -d $env_dir ; then
-        virtualenv --python $interpreter $env_dir
+        # Make a temporary virtualenv to get a fresh version of virtualenv
+        # because CentOS 7 has a buggy old version (v1.10.1)
+        # https://github.com/pypa/virtualenv/issues/463
+        virtualenv ${env_dir}_tmp
+        ${env_dir}_tmp/bin/pip install --upgrade virtualenv
+        ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
+        rm -rf ${env_dir}_tmp
+
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir

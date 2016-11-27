@@ -77,7 +77,24 @@ public:
 
 class MDSIOContextBase : public MDSContext
 {
-    void complete(int r);
+public:
+  void complete(int r);
+};
+
+/**
+ * Completion for an log operation, takes big MDSRank lock
+ * before executing finish function. Update log's safe pos
+ * after finish functuon return.
+ */
+class MDSLogContextBase : public MDSIOContextBase
+{
+protected:
+  uint64_t write_pos;
+public:
+  MDSLogContextBase() : write_pos(0) {}
+  void complete(int r) final;
+  void set_write_pos(uint64_t wp) { write_pos = wp; }
+  virtual void pre_finish(int r) {}
 };
 
 /**
@@ -116,7 +133,7 @@ public:
  */
 class C_MDSInternalNoop : public MDSInternalContextBase
 {
-  virtual MDSRank* get_mds() {assert(0);}
+  virtual MDSRank* get_mds() {ceph_abort();}
 public:
   void finish(int r) {}
   void complete(int r) {}
@@ -129,10 +146,16 @@ public:
  */
 class C_IO_Wrapper : public MDSIOContext
 {
-private:
+protected:
+  bool async;
   MDSInternalContextBase *wrapped;
+  virtual void finish(int r) {
+    wrapped->complete(r);
+    wrapped = nullptr;
+  }
 public:
-  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) : MDSIOContext(mds_), wrapped(wrapped_) {
+  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
+    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
     assert(wrapped != NULL);
   }
 
@@ -142,11 +165,7 @@ public:
       wrapped = nullptr;
     }
   }
-
-  virtual void finish(int r) {
-    wrapped->complete(r);
-    wrapped = nullptr;
-  }
+  virtual void complete(int r) final;
 };
 
 

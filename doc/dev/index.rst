@@ -163,21 +163,26 @@ All newcomers are encouraged to read that file carefully.
 Building from source
 --------------------
 
-See instructions at :doc:`/dev/quick_guide` and :doc:`/install/build-ceph`.
+See instructions at :doc:`/install/build-ceph`.
 
 Development-mode cluster
 ------------------------
 
-You can start a development-mode Ceph cluster, after compiling the source,
-with::
+See :doc:`/dev/quick_guide`.
 
-    cd src
-    install -d -m0755 out dev/osd0
-    ./vstart.sh -n -x -l
-    # check that it's there
-    ./ceph health
+Backporting
+-----------
 
-For more ``vstart.sh`` examples, see :doc:`/dev/quick_guide`.
+All bugfixes should be merged to the ``master`` branch before being backported.
+To flag a bugfix for backporting, make sure it has a `tracker issue`_
+associated with it and set the ``Backport`` field to a comma-separated list of
+previous releases (e.g. "hammer,jewel") that you think need the backport.
+The rest (including the actual backporting) will be taken care of by the
+`Stable Releases and Backports`_ team.
+
+.. _`tracker issue`: http://tracker.ceph.com/
+.. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
+
 
 What is merged where and when ?
 ===============================
@@ -570,6 +575,7 @@ hardware. Tests designed for this purpose live in the `ceph-qa-suite
 repository`_ and are run via the `teuthology framework`_.
 
 .. _`ceph-qa-suite repository`: https://github.com/ceph/ceph-qa-suite/
+.. _`teuthology repository`: https://github.com/ceph/teuthology
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
 If you have access to an OpenStack tenant, you are encouraged to run the
@@ -659,11 +665,8 @@ command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
-When you fix a bug, it's a good idea to add a test. See the `Writing make
-check tests`_ chapter.
-
-Further sections
-----------------
+Future sections
+---------------
 
 * Principles of make check tests
 * Where to find test results
@@ -814,7 +817,7 @@ cause regressions, or to analyze test failures when they do occur.
 
 Every teuthology cluster, whether bare-metal or cloud-provisioned, has a
 so-called "teuthology machine" from which tests suites are triggered using the
-`teuthology-suite`_ command.
+``teuthology-suite`` command.
 
 A detailed and up-to-date description of each `teuthology-suite`_ option is
 available by running the following command on the teuthology machine::
@@ -899,7 +902,7 @@ exit code zero).
 
 This test can be run with::
 
-    $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml
+    $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
 Test descriptions 
 -----------------
@@ -1132,12 +1135,29 @@ We assume that:
 1. you are the only person using the tenant
 2. you have the credentials
 3. the tenant supports the ``nova`` and ``cinder`` APIs
-4. you have not tried to use ``ceph-workbench`` with this tenant before
 
-Caveat: be aware that, as of this writing (March 2016), testing in
+Caveat: be aware that, as of this writing (July 2016), testing in
 OpenStack clouds is a new feature. Things may not work as advertised.
 If you run into trouble, ask for help on `IRC`_ or the `Mailing list`_, or
-open a bug report at `ceph-workbench bug tracker URL`_.
+open a bug report at the `ceph-workbench bug tracker`_.
+
+.. _`ceph-workbench bug tracker`: http://ceph-workbench.dachary.org/root/ceph-workbench/issues
+
+Prepare tenant
+--------------
+
+If you have not tried to use ``ceph-workbench`` with this tenant before,
+proceed to the next step.
+
+To start with a clean slate, login to your tenant via the Horizon dashboard and
+delete all of the following:
+
+* ``teuthology`` and ``packages-repository`` instances, if any
+* ``teuthology`` security group
+* ``teuthology`` and ``teuthology-myself`` key pairs
+
+Also do the above if you ever get key-related errors ("invalid key", etc.) when
+trying to schedule suites.
 
 Getting ceph-workbench
 ----------------------
@@ -1198,7 +1218,7 @@ Subsequent runs of the same command will complete faster.
 
 Although ``dummy`` suite does not run any tests, in all other respects it
 behaves just like a teuthology suite and produces some of the same
-artifacts (see `Artifacts produced by teuthology-suite`_).
+artifacts.
 
 The last bit of output should look something like this::
 
@@ -1258,6 +1278,25 @@ there::
 
 This will keep the teuthology machine, the logs and the packages-repository
 instance but nuke everything else.
+
+Upload logs to archive server
+-----------------------------
+
+Since the teuthology instance in OpenStack is only semi-permanent, with limited
+space for storing logs, ``teuthology-openstack`` provides an ``--upload``
+option which, if included in the ``ceph-workbench ceph-qa-suite`` command,
+will cause logs from all failed jobs to be uploaded to the log archive server
+maintained by the Ceph project. The logs will appear at the URL::
+
+    http://teuthology-logs.public.ceph.com/$RUN
+
+where ``$RUN`` is the name of the run. It will be a string like this::
+
+    ubuntu-2016-07-23_16:08:12-rados-hammer-backports---basic-openstack
+
+Even if you don't providing the ``--upload`` option, however, all the logs can
+still be found on the teuthology machine in the directory
+``/usr/share/nginx/html``.
 
 Deploy a cluster for manual testing
 -----------------------------------
@@ -1320,16 +1359,6 @@ testing is required. Use the teuthology machine as jump host.
 
 .. WIP
 .. ===
-..
-.. Artifacts produced by teuthology-suite
-.. --------------------------------------
-.. 
-.. This section examines the files (artifacts) produced by
-.. ``teuthology-suite``. These files are FIXME
-.. 
-..
-.. Backporting
-.. -----------
 ..
 .. Building RPM packages
 .. ---------------------

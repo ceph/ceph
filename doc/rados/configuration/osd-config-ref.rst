@@ -265,7 +265,7 @@ scrubbing operations.
 
 ``osd scrub min interval`` 
 
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
+:Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
@@ -486,7 +486,7 @@ priority than requests to read or write data.
 
 :Description: The maximum number of backfills allowed to or from a single OSD.
 :Type: 64-bit Unsigned Integer
-:Default: ``10``
+:Default: ``1``
 
 
 ``osd backfill scan min`` 
@@ -714,6 +714,17 @@ Miscellaneous
 :Description: Preserves trimmed log files, but uses more disk space.
 :Type: Boolean
 :Default: ``false``
+
+
+``osd fast fail on connection refused``
+
+:Description: If this option is enabled, crashed OSDs are marked down
+              immediately by connected peers and MONs (assuming that the
+              crashed OSD host survives). Disable it to restore old
+              behavior, at the expense of possible long I/O stalls when
+              OSDs crash in the middle of I/O operations.
+:Type: Boolean
+:Default: ``true``
 
 
 

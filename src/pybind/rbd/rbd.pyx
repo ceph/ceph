@@ -53,6 +53,7 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_FEATURE_FAST_DIFF "RBD_FEATURE_FAST_DIFF"
         _RBD_FEATURE_DEEP_FLATTEN "RBD_FEATURE_DEEP_FLATTEN"
         _RBD_FEATURE_JOURNALING "RBD_FEATURE_JOURNALING"
+        _RBD_FEATURE_DATA_POOL "RBD_FEATURE_DATA_POOL"
 
         _RBD_FEATURES_INCOMPATIBLE "RBD_FEATURES_INCOMPATIBLE"
         _RBD_FEATURES_RW_INCOMPATIBLE "RBD_FEATURES_RW_INCOMPATIBLE"
@@ -68,6 +69,7 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_IMAGE_OPTION_ORDER "RBD_IMAGE_OPTION_ORDER"
         _RBD_IMAGE_OPTION_STRIPE_UNIT "RBD_IMAGE_OPTION_STRIPE_UNIT"
         _RBD_IMAGE_OPTION_STRIPE_COUNT "RBD_IMAGE_OPTION_STRIPE_COUNT"
+        _RBD_IMAGE_OPTION_DATA_POOL "RBD_IMAGE_OPTION_DATA_POOL"
 
         RBD_MAX_BLOCK_NAME_SIZE
         RBD_MAX_IMAGE_NAME_SIZE
@@ -198,6 +200,9 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
     int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
     int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
+    int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
+    int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
+                                  size_t prefix_len)
     int rbd_get_parent_info(rbd_image_t image,
                             char *parent_poolname, size_t ppoolnamelen,
                             char *parent_name, size_t pnamelen,
@@ -216,6 +221,8 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
     int rbd_snap_create(rbd_image_t image, const char *snapname)
     int rbd_snap_remove(rbd_image_t image, const char *snapname)
+    int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags,
+			 librbd_progress_fn_t cb, void *cbdata)
     int rbd_snap_rollback(rbd_image_t image, const char *snapname)
     int rbd_snap_rename(rbd_image_t image, const char *snapname,
                         const char* dstsnapsname)
@@ -290,6 +297,7 @@ RBD_FEATURE_OBJECT_MAP = _RBD_FEATURE_OBJECT_MAP
 RBD_FEATURE_FAST_DIFF = _RBD_FEATURE_FAST_DIFF
 RBD_FEATURE_DEEP_FLATTEN = _RBD_FEATURE_DEEP_FLATTEN
 RBD_FEATURE_JOURNALING = _RBD_FEATURE_JOURNALING
+RBD_FEATURE_DATA_POOL = _RBD_FEATURE_DATA_POOL
 
 RBD_FEATURES_INCOMPATIBLE = _RBD_FEATURES_INCOMPATIBLE
 RBD_FEATURES_RW_INCOMPATIBLE = _RBD_FEATURES_RW_INCOMPATIBLE
@@ -320,7 +328,7 @@ RBD_IMAGE_OPTION_FEATURES = _RBD_IMAGE_OPTION_FEATURES
 RBD_IMAGE_OPTION_ORDER = _RBD_IMAGE_OPTION_ORDER
 RBD_IMAGE_OPTION_STRIPE_UNIT = _RBD_IMAGE_OPTION_STRIPE_UNIT
 RBD_IMAGE_OPTION_STRIPE_COUNT = _RBD_IMAGE_OPTION_STRIPE_COUNT
-
+RBD_IMAGE_OPTION_DATA_POOL = _RBD_IMAGE_OPTION_DATA_POOL
 
 class Error(Exception):
     pass
@@ -598,7 +606,8 @@ class RBD(object):
         return (major, minor, extra)
 
     def create(self, ioctx, name, size, order=None, old_format=True,
-               features=None, stripe_unit=0, stripe_count=0):
+               features=None, stripe_unit=None, stripe_count=None,
+               data_pool=None):
         """
         Create an rbd image.
 
@@ -616,10 +625,12 @@ class RBD(object):
         :type old_format: bool
         :param features: bitmask of features to enable
         :type features: int
-        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
         :type stripe_unit: int
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
         :raises: :class:`ImageExists`
         :raises: :class:`TypeError`
         :raises: :class:`InvalidArgument`
@@ -635,9 +646,13 @@ class RBD(object):
         if order is not None:
             _order = order
         if old_format:
-            if features or stripe_unit != 0 or stripe_count != 0:
-                raise InvalidArgument('format 1 images do not support feature'
-                                      ' masks or non-default striping')
+            if (features or
+                ((stripe_unit is not None) and stripe_unit != 0) or
+                ((stripe_count is not None) and stripe_count != 0) or
+                data_pool):
+                raise InvalidArgument('format 1 images do not support feature '
+                                      'masks, non-default striping, nor data '
+                                      'pool')
             with nogil:
                 ret = rbd_create(_ioctx, _name, _size, &_order)
         else:
@@ -649,13 +664,20 @@ class RBD(object):
                     rbd_image_options_set_uint64(opts,
                                                  RBD_IMAGE_OPTION_FEATURES,
                                                  features)
-                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
-                                             _order)
-                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
-                                             stripe_unit)
-                rbd_image_options_set_uint64(opts,
-                                             RBD_IMAGE_OPTION_STRIPE_COUNT,
-                                             stripe_count)
+                if order is not None:
+                    rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                                 _order)
+                if stripe_unit is not None:
+                    rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                                 stripe_unit)
+                if stripe_count is not None:
+                    rbd_image_options_set_uint64(opts,
+                                                 RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                                 stripe_count)
+                if data_pool is not None:
+                    rbd_image_options_set_string(opts,
+                                                 RBD_IMAGE_OPTION_DATA_POOL,
+                                                 data_pool)
                 with nogil:
                     ret = rbd_create4(_ioctx, _name, _size, opts)
             finally:
@@ -664,7 +686,8 @@ class RBD(object):
             raise make_ex(ret, 'error creating image')
 
     def clone(self, p_ioctx, p_name, p_snapname, c_ioctx, c_name,
-              features=None, order=None, stripe_unit=0, stripe_count=0):
+              features=None, order=None, stripe_unit=None, stripe_count=None,
+              data_pool=None):
         """
         Clone a parent rbd snapshot into a COW sparse child.
 
@@ -682,10 +705,12 @@ class RBD(object):
         :type features: int
         :param order: the image is split into (2**order) byte objects
         :type order: int
-        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
         :type stripe_unit: int
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
         :raises: :class:`TypeError`
         :raises: :class:`InvalidArgument`
         :raises: :class:`ImageExists`
@@ -702,20 +727,24 @@ class RBD(object):
             char *_p_snapname = p_snapname
             char *_c_name = c_name
             rbd_image_options_t opts
-        if order is None:
-            order = 0
 
         rbd_image_options_create(&opts)
         try:
             if features is not None:
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
                                              features)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
-                                         order)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
-                                         stripe_unit)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
-                                         stripe_count)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
             with nogil:
                 ret = rbd_clone3(_p_ioctx, _p_name, _p_snapname,
                                  _c_ioctx, _c_name, opts)
@@ -745,7 +774,7 @@ class RBD(object):
                     break
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error listing images')
-            return [decode_cstr(name) for name in c_names[:ret].split('\0')
+            return [decode_cstr(name) for name in c_names[:ret].split(b'\0')
                     if name]
         finally:
             free(c_names)
@@ -1287,6 +1316,54 @@ cdef class Image(object):
             'parent_name'       : info.parent_name
             }
 
+    def id(self):
+        """
+        Get the RBD v2 internal image id
+
+        :returns: str - image id
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *image_id = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                image_id =  <char *>realloc_chk(image_id, size)
+                with nogil:
+                    ret = rbd_get_id(self.image, image_id, size)
+                if ret == -errno.ERANGE:
+                    size *= 2
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting id for image %s' % (self.name,))
+            return decode_cstr(image_id)
+        finally:
+            free(image_id)
+
+    def block_name_prefix(self):
+        """
+        Get the RBD block name prefix
+
+        :returns: str - block name prefix
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *prefix = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                prefix =  <char *>realloc_chk(prefix, size)
+                with nogil:
+                    ret = rbd_get_block_name_prefix(self.image, prefix, size)
+                if ret == -errno.ERANGE:
+                    size *= 2
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting block name prefix for image %s' % (self.name,))
+            return decode_cstr(prefix)
+        finally:
+            free(prefix)
+
     def parent_info(self):
         """
         Get information about a cloned image's parent (if any)
@@ -1424,7 +1501,7 @@ cdef class Image(object):
         return owner == 1
 
     def copy(self, dest_ioctx, dest_name, features=None, order=None,
-             stripe_unit=0, stripe_count=0):
+             stripe_unit=None, stripe_count=None, data_pool=None):
         """
         Copy the image to another location.
 
@@ -1436,18 +1513,18 @@ cdef class Image(object):
         :type features: int
         :param order: the image is split into (2**order) byte objects
         :type order: int
-        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
         :type stripe_unit: int
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
         :raises: :class:`TypeError`
         :raises: :class:`InvalidArgument`
         :raises: :class:`ImageExists`
         :raises: :class:`FunctionNotSupported`
         :raises: :class:`ArgumentOutOfRange`
         """
-        if order is None:
-            order = 0
         dest_name = cstr(dest_name, 'dest_name')
         cdef:
             rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
@@ -1459,12 +1536,18 @@ cdef class Image(object):
             if features is not None:
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
                                              features)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
-                                         order)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
-                                         stripe_unit)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
-                                         stripe_count)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
             with nogil:
                 ret = rbd_copy3(self.image, _dest_ioctx, _dest_name, opts)
         finally:
@@ -1529,6 +1612,25 @@ cdef class Image(object):
             ret = rbd_snap_remove(self.image, _name)
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s' % (name, self.name))
+
+    def remove_snap2(self, name, flags):
+        """
+        Delete a snapshot of the image.
+
+        :param name: the name of the snapshot
+        :param flags: the flags for removal
+        :type name: str
+        :raises: :class:`IOError`, :class:`ImageBusy`
+        """
+        name = cstr(name, 'name')
+        cdef:
+            char *_name = name
+            uint32_t _flags = flags
+            librbd_progress_fn_t prog_cb = &no_op_progress_callback
+        with nogil:
+            ret = rbd_snap_remove2(self.image, _name, _flags, prog_cb, NULL)
+        if ret != 0:
+            raise make_ex(ret, 'error removing snapshot %s from %s with flags %llx' % (name, self.name, flags))
 
     def rollback_to_snap(self, name):
         """
@@ -1687,7 +1789,7 @@ cdef class Image(object):
             if ret < 0:
                 raise make_ex(ret, 'error reading %s %ld~%ld' % (self.name, offset, length))
 
-            if ret != length:
+            if ret != <ssize_t>length:
                 _PyBytes_Resize(&ret_s, ret)
 
             return <object>ret_s
@@ -1780,11 +1882,11 @@ cdef class Image(object):
         with nogil:
             ret = rbd_write2(self.image, _offset, length, _data, _fadvise_flags)
 
-        if ret == length:
+        if ret == <ssize_t>length:
             return ret
         elif ret < 0:
             raise make_ex(ret, "error writing to %s" % (self.name,))
-        elif ret < length:
+        elif ret < <ssize_t>length:
             raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % (ret, length))
         else:
             raise LogicError("logic error: rbd_write(%s) \
@@ -1885,8 +1987,8 @@ written." % (self.name, ret, length))
                     raise make_ex(ret, 'error listing images')
             if ret == 0:
                 return []
-            pools = map(decode_cstr, c_pools[:pools_size - 1].split('\0'))
-            images = map(decode_cstr, c_images[:images_size - 1].split('\0'))
+            pools = map(decode_cstr, c_pools[:pools_size - 1].split(b'\0'))
+            images = map(decode_cstr, c_images[:images_size - 1].split(b'\0'))
             return list(zip(pools, images))
         finally:
             free(c_pools)
@@ -1933,9 +2035,9 @@ written." % (self.name, ret, length))
                     raise make_ex(ret, 'error listing images')
             if ret == 0:
                 return []
-            clients = map(decode_cstr, c_clients[:clients_size - 1].split('\0'))
-            cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split('\0'))
-            addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split('\0'))
+            clients = map(decode_cstr, c_clients[:clients_size - 1].split(b'\0'))
+            cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split(b'\0'))
+            addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split(b'\0'))
             return {
                 'tag'       : decode_cstr(c_tag),
                 'exclusive' : exclusive == 1,

@@ -18,17 +18,22 @@ if [ -z "$id"  ]; then
 fi
 
 data="/var/lib/ceph/osd/${cluster:-ceph}-$id"
+
+# assert data directory exists - see http://tracker.ceph.com/issues/17091
+if [ ! -d "$data" ]; then
+    echo "OSD data directory $data does not exist; bailing out." 1>&2
+    exit 1
+fi
+
 journal="$data/journal"
 
 if [ -L "$journal" -a ! -e "$journal" ]; then
     udevadm settle --timeout=5 || :
     if [ -L "$journal" -a ! -e "$journal" ]; then
-        echo "ceph-osd($UPSTART_INSTANCE): journal not present, not starting yet." 1>&2
-        stop
+        echo "ceph-osd(${cluster:-ceph}-$id): journal not present, not starting yet." 1>&2
         exit 0
     fi
 fi
-
 
 # ensure ownership is correct
 owner=`stat -c %U $data/.`

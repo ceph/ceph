@@ -101,6 +101,7 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
     librados::snap_t local_snap_id = *snap_id_it;
 
     m_local_image_ctx->snap_lock.get_read();
+
     bool local_unprotected;
     int r = m_local_image_ctx->is_snap_unprotected(local_snap_id,
                                                    &local_unprotected);
@@ -200,6 +201,21 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
   for (; snap_id_it != m_local_snap_ids.end(); ++snap_id_it) {
     librados::snap_t local_snap_id = *snap_id_it;
 
+    cls::rbd::SnapshotNamespace snap_namespace;
+    m_local_image_ctx->snap_lock.get_read();
+    int r = m_local_image_ctx->get_snap_namespace(local_snap_id, &snap_namespace);
+    m_local_image_ctx->snap_lock.put_read();
+    if (r < 0) {
+      derr << ": failed to retrieve local snap namespace: " << m_snap_name
+	   << dendl;
+      finish(r);
+      return;
+    }
+
+    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) == nullptr) {
+      continue;
+    }
+
     // if the local snapshot isn't in our mapping table, remove it
     auto snap_seq_it = std::find_if(
       m_snap_seqs.begin(), m_snap_seqs.end(),
@@ -261,8 +277,20 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   for (; snap_id_it != m_remote_snap_ids.end(); ++snap_id_it) {
     librados::snap_t remote_snap_id = *snap_id_it;
 
+    cls::rbd::SnapshotNamespace snap_namespace;
+    m_remote_image_ctx->snap_lock.get_read();
+    int r = m_remote_image_ctx->get_snap_namespace(remote_snap_id, &snap_namespace);
+    m_remote_image_ctx->snap_lock.put_read();
+    if (r < 0) {
+      derr << ": failed to retrieve remote snap namespace: " << m_snap_name
+	   << dendl;
+      finish(r);
+      return;
+    }
+
     // if the remote snapshot isn't in our mapping table, create it
-    if (m_snap_seqs.find(remote_snap_id) == m_snap_seqs.end()) {
+    if (m_snap_seqs.find(remote_snap_id) == m_snap_seqs.end() &&
+	boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) != nullptr) {
       break;
     }
   }
@@ -288,6 +316,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   }
 
   uint64_t size = snap_info_it->second.size;
+  m_snap_namespace = snap_info_it->second.snap_namespace;
   librbd::parent_spec parent_spec;
   uint64_t parent_overlap = 0;
   if (snap_info_it->second.parent.spec.pool_id != -1) {
@@ -311,7 +340,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
       this);
   SnapshotCreateRequest<I> *req = SnapshotCreateRequest<I>::create(
-    m_local_image_ctx, m_snap_name, size, parent_spec, parent_overlap, ctx);
+    m_local_image_ctx, m_snap_name, m_snap_namespace, size, parent_spec, parent_overlap, ctx);
   req->send();
 }
 
@@ -354,6 +383,7 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     librados::snap_t remote_snap_id = *snap_id_it;
 
     m_remote_image_ctx->snap_lock.get_read();
+
     bool remote_protected;
     int r = m_remote_image_ctx->is_snap_protected(remote_snap_id,
                                                   &remote_protected);

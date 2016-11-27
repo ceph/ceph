@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_JOURNAL_TYPES_H
 #define CEPH_LIBRBD_JOURNAL_TYPES_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -22,32 +23,35 @@ namespace librbd {
 namespace journal {
 
 enum EventType {
-  EVENT_TYPE_AIO_DISCARD    = 0,
-  EVENT_TYPE_AIO_WRITE      = 1,
-  EVENT_TYPE_AIO_FLUSH      = 2,
-  EVENT_TYPE_OP_FINISH      = 3,
-  EVENT_TYPE_SNAP_CREATE    = 4,
-  EVENT_TYPE_SNAP_REMOVE    = 5,
-  EVENT_TYPE_SNAP_RENAME    = 6,
-  EVENT_TYPE_SNAP_PROTECT   = 7,
-  EVENT_TYPE_SNAP_UNPROTECT = 8,
-  EVENT_TYPE_SNAP_ROLLBACK  = 9,
-  EVENT_TYPE_RENAME         = 10,
-  EVENT_TYPE_RESIZE         = 11,
-  EVENT_TYPE_FLATTEN        = 12,
-  EVENT_TYPE_DEMOTE         = 13,
-  EVENT_TYPE_SNAP_LIMIT     = 14
+  EVENT_TYPE_AIO_DISCARD     = 0,
+  EVENT_TYPE_AIO_WRITE       = 1,
+  EVENT_TYPE_AIO_FLUSH       = 2,
+  EVENT_TYPE_OP_FINISH       = 3,
+  EVENT_TYPE_SNAP_CREATE     = 4,
+  EVENT_TYPE_SNAP_REMOVE     = 5,
+  EVENT_TYPE_SNAP_RENAME     = 6,
+  EVENT_TYPE_SNAP_PROTECT    = 7,
+  EVENT_TYPE_SNAP_UNPROTECT  = 8,
+  EVENT_TYPE_SNAP_ROLLBACK   = 9,
+  EVENT_TYPE_RENAME          = 10,
+  EVENT_TYPE_RESIZE          = 11,
+  EVENT_TYPE_FLATTEN         = 12,
+  EVENT_TYPE_DEMOTE          = 13,
+  EVENT_TYPE_SNAP_LIMIT      = 14,
+  EVENT_TYPE_UPDATE_FEATURES = 15,
+  EVENT_TYPE_METADATA_SET    = 16,
+  EVENT_TYPE_METADATA_REMOVE = 17,
 };
 
 struct AioDiscardEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_DISCARD;
 
   uint64_t offset;
-  size_t length;
+  uint64_t length;
 
   AioDiscardEvent() : offset(0), length(0) {
   }
-  AioDiscardEvent(uint64_t _offset, size_t _length)
+  AioDiscardEvent(uint64_t _offset, uint64_t _length)
     : offset(_offset), length(_length) {
   }
 
@@ -69,7 +73,7 @@ struct AioWriteEvent {
 
   AioWriteEvent() : offset(0), length(0) {
   }
-  AioWriteEvent(uint64_t _offset, size_t _length, const bufferlist &_data)
+  AioWriteEvent(uint64_t _offset, uint64_t _length, const bufferlist &_data)
     : offset(_offset), length(_length), data(_data) {
   }
 
@@ -132,16 +136,17 @@ protected:
 
 struct SnapCreateEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_CREATE;
+  cls::rbd::SnapshotNamespace snap_namespace;
 
   SnapCreateEvent() {
   }
-  SnapCreateEvent(uint64_t op_tid, const std::string &snap_name)
-    : SnapEventBase(op_tid, snap_name) {
+  SnapCreateEvent(uint64_t op_tid, const std::string &snap_name, const cls::rbd::SnapshotNamespace &_snap_namespace)
+    : SnapEventBase(op_tid, snap_name), snap_namespace(_snap_namespace) {
   }
 
-  using SnapEventBase::encode;
-  using SnapEventBase::decode;
-  using SnapEventBase::dump;
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 };
 
 struct SnapRemoveEvent : public SnapEventBase {
@@ -162,12 +167,15 @@ struct SnapRenameEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_RENAME;
 
   uint64_t snap_id;
+  std::string src_snap_name;
 
   SnapRenameEvent() : snap_id(CEPH_NOSNAP) {
   }
   SnapRenameEvent(uint64_t op_tid, uint64_t src_snap_id,
+                  const std::string &src_snap_name,
                   const std::string &dest_snap_name)
-    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id) {
+    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id),
+      src_snap_name(src_snap_name) {
   }
 
   void encode(bufferlist& bl) const;
@@ -285,6 +293,56 @@ struct DemoteEvent {
   void dump(Formatter *f) const;
 };
 
+struct UpdateFeaturesEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_UPDATE_FEATURES;
+
+  uint64_t features;
+  bool enabled;
+
+  UpdateFeaturesEvent() : features(0), enabled(false) {
+  }
+  UpdateFeaturesEvent(uint64_t op_tid, uint64_t _features, bool _enabled)
+    : OpEventBase(op_tid), features(_features), enabled(_enabled) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct MetadataSetEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_METADATA_SET;
+
+  string key;
+  string value;
+
+  MetadataSetEvent() {
+  }
+  MetadataSetEvent(uint64_t op_tid, const string &_key, const string &_value)
+    : OpEventBase(op_tid), key(_key), value(_value) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct MetadataRemoveEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_METADATA_REMOVE;
+
+  string key;
+
+  MetadataRemoveEvent() {
+  }
+  MetadataRemoveEvent(uint64_t op_tid, const string &_key)
+    : OpEventBase(op_tid), key(_key) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownEvent {
   static const EventType TYPE = static_cast<EventType>(-1);
 
@@ -308,6 +366,9 @@ typedef boost::variant<AioDiscardEvent,
                        FlattenEvent,
                        DemoteEvent,
 		       SnapLimitEvent,
+                       UpdateFeaturesEvent,
+                       MetadataSetEvent,
+                       MetadataRemoveEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {
@@ -460,15 +521,38 @@ struct ClientData {
 
 // Journal Tag data structures
 
+struct TagPredecessor {
+  std::string mirror_uuid; // empty if local
+  bool commit_valid = false;
+  uint64_t tag_tid = 0;
+  uint64_t entry_tid = 0;
+
+  TagPredecessor() {
+  }
+  TagPredecessor(const std::string &mirror_uuid, bool commit_valid,
+                 uint64_t tag_tid, uint64_t entry_tid)
+    : mirror_uuid(mirror_uuid), commit_valid(commit_valid), tag_tid(tag_tid),
+      entry_tid(entry_tid) {
+  }
+
+  inline bool operator==(const TagPredecessor &rhs) const {
+    return (mirror_uuid == rhs.mirror_uuid &&
+            commit_valid == rhs.commit_valid &&
+            tag_tid == rhs.tag_tid &&
+            entry_tid == rhs.entry_tid);
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct TagData {
   // owner of the tag (exclusive lock epoch)
   std::string mirror_uuid; // empty if local
 
   // mapping to last committed record of previous tag
-  std::string predecessor_mirror_uuid; // empty if local
-  bool predecessor_commit_valid = false;
-  uint64_t predecessor_tag_tid = 0;
-  uint64_t predecessor_entry_tid = 0;
+  TagPredecessor predecessor;
 
   TagData() {
   }
@@ -479,10 +563,8 @@ struct TagData {
           bool predecessor_commit_valid,
           uint64_t predecessor_tag_tid, uint64_t predecessor_entry_tid)
     : mirror_uuid(mirror_uuid),
-      predecessor_mirror_uuid(predecessor_mirror_uuid),
-      predecessor_commit_valid(predecessor_commit_valid),
-      predecessor_tag_tid(predecessor_tag_tid),
-      predecessor_entry_tid(predecessor_entry_tid) {
+      predecessor(predecessor_mirror_uuid, predecessor_commit_valid,
+                  predecessor_tag_tid, predecessor_entry_tid) {
   }
 
   void encode(bufferlist& bl) const;
@@ -498,19 +580,22 @@ std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerState &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta);
+std::ostream &operator<<(std::ostream &out, const TagPredecessor &predecessor);
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
 
-enum class ListenerType : int8_t {
-  RESYNC
-};
+struct Listener {
+  virtual ~Listener() {
+  }
 
-struct ResyncListener {
-  virtual ~ResyncListener() {}
+  /// invoked when journal close is requested
+  virtual void handle_close() = 0;
+
+  /// invoked when journal is promoted to primary
+  virtual void handle_promoted() = 0;
+
+  /// invoked when journal resync is requested
   virtual void handle_resync() = 0;
 };
-
-typedef boost::variant<ResyncListener *> JournalListenerPtr;
-
 
 } // namespace journal
 } // namespace librbd

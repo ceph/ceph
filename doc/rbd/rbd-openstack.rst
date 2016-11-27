@@ -176,7 +176,7 @@ Save the uuid of the secret for configuring ``nova-compute`` later.
    However from a platform consistency perspective, it's better to keep the
    same UUID.
 
-.. _cephx authentication: ../../rados/operations/authentication
+.. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
 
 
 Configure OpenStack to use Ceph
@@ -215,21 +215,47 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
     rbd_store_ceph_conf = /etc/ceph/ceph.conf
     rbd_store_chunk_size = 8
 
-
-For more information about the configuration options available in Glance please see: http://docs.openstack.org/trunk/config-reference/content/section_glance-api.conf.html.
-
 .. important:: Glance has not completely moved to 'store' yet.
-    So we still need to configure the store in the DEFAULT section.
+    So we still need to configure the store in the DEFAULT section until Kilo.
 
-Any OpenStack version
-~~~~~~~~~~~~~~~~~~~~~
+Kilo and after
+~~~~~~~~~~~~~~
+
+Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
+
+    [glance_store]
+    stores = rbd
+    default_store = rbd
+    rbd_store_pool = images
+    rbd_store_user = glance
+    rbd_store_ceph_conf = /etc/ceph/ceph.conf
+    rbd_store_chunk_size = 8
+
+For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
+
+Enable copy-on-write cloning of images
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Note that this exposes the back end location via Glance's API, so the endpoint
+with this option enabled should not be publicly accessible.
+
+Any OpenStack version except Mitaka
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
 
     show_image_direct_url = True
 
-Note that this exposes the back end location via Glance's API, so the endpoint
-with this option enabled should not be publicly accessible.
+For Mitaka only
+^^^^^^^^^^^^^^^
+
+To enable image locations and take advantage of copy-on-write cloning for images, add under the ``[DEFAULT]`` section::
+
+    show_multiple_locations = True
+    show_image_direct_url = True
+
+Disable cache management (any OpenStack version)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Disable the Glance cache management to avoid images getting cached under ``/var/lib/glance/image-cache/``,
 assuming your configuration file has ``flavor = keystone+cachemanagement``::

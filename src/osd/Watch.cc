@@ -238,7 +238,7 @@ public:
   void cancel() {
     canceled = true;
   }
-  void finish(int) { assert(0); /* not used */ }
+  void finish(int) { ceph_abort(); /* not used */ }
   void complete(int) {
     dout(10) << "HandleWatchTimeout" << dendl;
     boost::intrusive_ptr<ReplicatedPG> pg(watch->pg);
@@ -422,7 +422,7 @@ void Watch::discard_state()
   obc = ObjectContextRef();
 }
 
-bool Watch::is_discarded()
+bool Watch::is_discarded() const
 {
   return discarded;
 }

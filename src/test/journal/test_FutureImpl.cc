@@ -154,14 +154,17 @@ TEST_F(TestFutureImpl, FlushChain) {
                                                  future1);
   journal::FutureImplPtr future3 = create_future(235, 1, 458,
                                                  future2);
+
+  FlushHandler flush_handler;
   ASSERT_FALSE(future1->attach(&m_flush_handler));
-  ASSERT_FALSE(future2->attach(&m_flush_handler));
+  ASSERT_FALSE(future2->attach(&flush_handler));
   ASSERT_FALSE(future3->attach(&m_flush_handler));
 
   C_SaferCond cond;
   future3->flush(&cond);
 
-  ASSERT_EQ(3U, m_flush_handler.flushes);
+  ASSERT_EQ(1U, m_flush_handler.flushes);
+  ASSERT_EQ(1U, flush_handler.flushes);
 
   future3->safe(0);
   ASSERT_FALSE(future3->is_complete());

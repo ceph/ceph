@@ -21,6 +21,7 @@
 
 #include "mds/CInode.h"
 #include "mds/CDir.h"
+#include "mds/mdstypes.h"
 
 // sent from replica to auth
 
@@ -38,7 +39,7 @@ class MMDSCacheRejoin : public Message {
     case OP_WEAK: return "weak";
     case OP_STRONG: return "strong";
     case OP_ACK: return "ack";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -163,7 +164,7 @@ class MMDSCacheRejoin : public Message {
   map<vinodeno_t, inode_strong> strong_inodes;
 
   // open
-  map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
+  map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
   map<client_t, entity_inst_t> client_map;
   bufferlist imported_caps;
 

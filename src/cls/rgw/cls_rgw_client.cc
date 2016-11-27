@@ -138,6 +138,17 @@ int CLSRGWIssueSetTagTimeout::issue_op(int shard_id, const string& oid)
   return issue_bucket_set_tag_timeout_op(io_ctx, oid, tag_timeout, &manager);
 }
 
+void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o, bool absolute,
+                                 const map<uint8_t, rgw_bucket_category_stats>& stats)
+{
+  struct rgw_cls_bucket_update_stats_op call;
+  call.absolute = absolute;
+  call.stats = stats;
+  bufferlist in;
+  ::encode(call, in);
+  o.exec("rgw", "bucket_update_stats", in);
+}
+
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                const cls_rgw_obj_key& key, const string& locator, bool log_op,
                                uint16_t bilog_flags)
@@ -275,6 +286,15 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, rgw_cls_bi_entry& 
     return r;
 
   return 0;
+}
+
+void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, rgw_cls_bi_entry& entry)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_put_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  op.exec("rgw", "bi_put", in);
 }
 
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
@@ -649,4 +669,106 @@ void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const list<string>& t
   call.tags = tags;
   ::encode(call, in);
   op.exec("rgw", "gc_remove", in);
+}
+
+int cls_rgw_lc_get_head(IoCtx& io_ctx, string& oid, cls_rgw_lc_obj_head& head)
+{
+  bufferlist in, out;
+  int r = io_ctx.exec(oid, "rgw", "lc_get_head", in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_lc_get_head_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  head = ret.head;
+
+ return r;
+}
+
+int cls_rgw_lc_put_head(IoCtx& io_ctx, string& oid, cls_rgw_lc_obj_head& head)
+{
+  bufferlist in, out;
+  cls_rgw_lc_put_head_op call;
+  call.head = head;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "lc_put_head", in, out);
+  return r;
+}
+
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_get_next_entry_op call;
+  call.marker = marker;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "lc_get_next_entry", in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_lc_get_next_entry_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  entry = ret.entry;
+
+ return r;
+}
+
+int cls_rgw_lc_rm_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_rm_entry_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "lc_rm_entry", in, out);
+ return r;
+}
+
+int cls_rgw_lc_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_set_entry_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "lc_set_entry", in, out);
+  return r;
+}
+
+int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
+                    const string& marker,
+                    uint32_t max_entries,
+                    map<string, int>& entries)
+{
+  bufferlist in, out;
+  cls_rgw_lc_list_entries_op op;
+
+  entries.clear();
+
+  op.marker = marker;
+  op.max_entries = max_entries;
+
+  ::encode(op, in);
+
+  int r = io_ctx.exec(oid, "rgw", "lc_list_entries", in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_lc_list_entries_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  entries.insert(ret.entries.begin(),ret.entries.end());
+
+ return r;
 }

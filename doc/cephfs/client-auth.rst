@@ -33,6 +33,7 @@ for example, to restrict client ``foo`` to ``bar`` directory, we will use. ::
 
 ./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/bar' osd 'allow rw pool=data'
 
+See `User Management - Add a User to a Keyring`_. for additional details on user management
 
 To restrict a client to the specfied sub-directory only, we mention the specified
 directory while mounting following the undermentioned syntax. ::
@@ -77,6 +78,12 @@ restricts access to the CephFS data pool(s):
         caps: [mon] allow r
         caps: [osd] allow rw pool=data1, allow rw pool=data2
 
+.. note::
+
+    Without a corresponding MDS path restriction, the OSD capabilities above do
+    **not** restrict file deletions outside of the ``data1`` and ``data2``
+    pools.
+
 You may also restrict clients from writing data by using 'r' instead of
 'rw' in OSD capabilities.  This does not affect the ability of the client
 to update filesystem metadata for these files, but it will prevent them
@@ -105,3 +112,5 @@ for files, but client.1 cannot.
         caps: [mon] allow r
         caps: [osd] allow rw pool=data
 
+
+.. _User Management - Add a User to a Keyring: ../rados/operations/user-management/#add-a-user-to-a-keyring

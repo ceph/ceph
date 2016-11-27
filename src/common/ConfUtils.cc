@@ -297,6 +297,8 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
   size_t rem = sz;
   while (1) {
     b += line_len + 1;
+    if ((line_len + 1) > rem)
+      break;
     rem -= line_len + 1;
     if (rem == 0)
       break;
@@ -586,7 +588,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  comment += c;
 	break;
       default:
-	assert(0);
+	ceph_abort();
 	break;
     }
     assert(c != '\0'); // We better not go past the end of the input string.

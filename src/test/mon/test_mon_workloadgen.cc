@@ -218,6 +218,10 @@ class ClientStub : public TestStub
     return false;
   }
 
+  bool ms_handle_refused(Connection *con) {
+    return false;
+  }
+
   const string get_name() {
     return "client";
   }
@@ -357,7 +361,7 @@ class OSDStub : public TestStub
     stringstream ss;
     ss << "client-osd" << whoami;
     messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::OSD(whoami),
-				      ss.str().c_str(), getpid()));
+				      ss.str().c_str(), getpid(), 0));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
 	g_conf->osd_client_message_size_cap);
@@ -903,6 +907,10 @@ class OSDStub : public TestStub
     return true;
   }
 
+  bool ms_handle_refused(Connection *con) {
+    return false;
+  }
+
   const string get_name() {
     stringstream ss;
     ss << "osd." << whoami;
@@ -995,9 +1003,9 @@ int main(int argc, const char *argv[])
   our_name = argv[0];
   argv_to_vec(argc, argv, args);
 
-  global_init(&def_args, args,
-	      CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
-	      0);
+  auto cct = global_init(&def_args, args,
+			 CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
+			 0);
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);

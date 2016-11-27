@@ -174,13 +174,13 @@ your new OSD before it can begin receiving data. You may use
 ``service ceph`` from your admin host or start the OSD from its host
 machine.
 
-For Debian/Ubuntu use Upstart. ::
+For Ubuntu Trusty use Upstart. ::
 
 	sudo start ceph-osd id={osd-num}
 
-For CentOS/RHEL, use sysvinit. ::
+For all other distros use systemd. ::
 
-	sudo /etc/init.d/ceph start osd.{osd-num}
+	sudo systemctl start ceph-osd@{osd-num}
 
 
 Once you start your OSD, it is ``up`` and ``in``.
@@ -274,7 +274,7 @@ That is, the OSD may be ``up`` and ``out``. You must stop
 your OSD before you remove it from the configuration. :: 
 
 	ssh {osd-host}
-	sudo /etc/init.d/ceph stop osd.{osd-num}
+	sudo systemctl stop ceph-osd@{osd-num}
 
 Once you stop your OSD, it is ``down``. 
 

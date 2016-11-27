@@ -4,15 +4,14 @@
 #include <set>
 #include <boost/scoped_ptr.hpp>
 #include <sys/types.h>
+#include <cstdlib>
 
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
+#include "test/unit.h"
 
 #include "gtest/gtest.h"
-#include "stdlib.h"
 
 using namespace std;
 
@@ -512,34 +511,37 @@ public:
       rand_choose(snap_to_hobject);
     set<hobject_t, hobject_t::BitwiseComparator> hobjects = snap->second;
 
-    hobject_t hoid;
-    while (mapper->get_next_object_to_trim(snap->first, &hoid) == 0) {
-      assert(!hoid.is_max());
-      assert(hobjects.count(hoid));
-      hobjects.erase(hoid);
+    vector<hobject_t> hoids;
+    while (mapper->get_next_objects_to_trim(
+	     snap->first, rand() % 5 + 1, &hoids) == 0) {
+      for (auto &&hoid: hoids) {
+	assert(!hoid.is_max());
+	assert(hobjects.count(hoid));
+	hobjects.erase(hoid);
 
-      map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
-	hobject_to_snap.find(hoid);
-      assert(j->second.count(snap->first));
-      set<snapid_t> old_snaps(j->second);
-      j->second.erase(snap->first);
+	map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
+	  hobject_to_snap.find(hoid);
+	assert(j->second.count(snap->first));
+	set<snapid_t> old_snaps(j->second);
+	j->second.erase(snap->first);
 
-      {
-	PausyAsyncMap::Transaction t;
-	mapper->update_snaps(
-	  hoid,
-	  j->second,
-	  &old_snaps,
-	  &t);
-	driver->submit(&t);
+	{
+	  PausyAsyncMap::Transaction t;
+	  mapper->update_snaps(
+	    hoid,
+	    j->second,
+	    &old_snaps,
+	    &t);
+	  driver->submit(&t);
+	}
+	if (j->second.empty()) {
+	  hobject_to_snap.erase(j);
+	}
+	hoid = hobject_t::get_max();
       }
-      if (j->second.empty()) {
-	hobject_to_snap.erase(j);
-      }
-      hoid = hobject_t::get_max();
+      hoids.clear();
     }
     assert(hobjects.empty());
-
     snap_to_hobject.erase(snap);
   }
 
@@ -656,15 +658,4 @@ TEST_F(SnapMapperTest, More) {
 TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

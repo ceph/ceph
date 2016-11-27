@@ -130,9 +130,12 @@ int RGWRealmWatcher::watch_restart()
         << " with " << cpp_strerror(-r) << dendl;
   }
   r = pool_ctx.watch2(watch_oid, &watch_handle, this);
-  if (r < 0)
+  if (r < 0) {
     lderr(cct) << "Failed to restart watch on " << watch_oid
         << " with " << cpp_strerror(-r) << dendl;
+    pool_ctx.close();
+    watch_oid.clear();
+  }
   return r;
 }
 

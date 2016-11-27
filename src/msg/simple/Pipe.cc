@@ -58,6 +58,70 @@ ostream& operator<<(ostream &out, const Pipe &pipe) {
   return pipe._pipe_prefix(out);
 }
 
+/**
+ * The DelayedDelivery is for injecting delays into Message delivery off
+ * the socket. It is only enabled if delays are requested, and if they
+ * are then it pulls Messages off the DelayQueue and puts them into the
+ * in_q (SimpleMessenger::dispatch_queue).
+ * Please note that this probably has issues with Pipe shutdown and
+ * replacement semantics. I've tried, but no guarantees.
+ */
+class Pipe::DelayedDelivery: public Thread {
+  Pipe *pipe;
+  std::deque< pair<utime_t,Message*> > delay_queue;
+  Mutex delay_lock;
+  Cond delay_cond;
+  int flush_count;
+  bool active_flush;
+  bool stop_delayed_delivery;
+  bool delay_dispatching; // we are in fast dispatch now
+  bool stop_fast_dispatching_flag; // we need to stop fast dispatching
+
+public:
+  explicit DelayedDelivery(Pipe *p)
+    : pipe(p),
+      delay_lock("Pipe::DelayedDelivery::delay_lock"), flush_count(0),
+      active_flush(false),
+      stop_delayed_delivery(false),
+      delay_dispatching(false),
+      stop_fast_dispatching_flag(false) { }
+  ~DelayedDelivery() {
+    discard();
+  }
+  void *entry();
+  void queue(utime_t release, Message *m) {
+    Mutex::Locker l(delay_lock);
+    delay_queue.push_back(make_pair(release, m));
+    delay_cond.Signal();
+  }
+  void discard();
+  void flush();
+  bool is_flushing() {
+    Mutex::Locker l(delay_lock);
+    return flush_count > 0 || active_flush;
+  }
+  void wait_for_flush() {
+    Mutex::Locker l(delay_lock);
+    while (flush_count > 0 || active_flush)
+      delay_cond.Wait(delay_lock);
+  }
+  void stop() {
+    delay_lock.Lock();
+    stop_delayed_delivery = true;
+    delay_cond.Signal();
+    delay_lock.Unlock();
+  }
+  void steal_for_pipe(Pipe *new_owner) {
+    Mutex::Locker l(delay_lock);
+    pipe = new_owner;
+  }
+  /**
+   * We need to stop fast dispatching before we need to stop putting
+   * normal messages into the DispatchQueue.
+   */
+  void stop_fast_dispatching();
+};
+
 /**************************************
  * Pipe
  */
@@ -613,7 +677,7 @@ int Pipe::accept()
       existing = NULL;
       goto open;
     }
-    assert(0);
+    ceph_abort();
 
   retry_session:
     assert(existing->pipe_lock.is_locked());
@@ -887,7 +951,7 @@ int Pipe::connect()
   __u32 cseq = connect_seq;
   __u32 gseq = msgr->get_global_seq();
 
-  // stop reader thrad
+  // stop reader thread
   join_reader();
 
   pipe_lock.Unlock();
@@ -912,7 +976,7 @@ int Pipe::connect()
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     rc = -errno;
-    lderr(msgr->cct) << "connect couldn't created socket " << cpp_strerror(rc) << dendl;
+    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(rc) << dendl;
     goto fail;
   }
 
@@ -924,9 +988,13 @@ int Pipe::connect()
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, peer_addr.get_sockaddr(), peer_addr.get_sockaddr_len());
   if (rc < 0) {
-    rc = -errno;
+    int stored_errno = errno;
     ldout(msgr->cct,2) << "connect error " << peer_addr
-	     << ", " << cpp_strerror(rc) << dendl;
+	     << ", " << cpp_strerror(stored_errno) << dendl;
+    if (stored_errno == ECONNREFUSED) {
+      ldout(msgr->cct, 2) << "connection refused!" << dendl;
+      msgr->dispatch_queue.queue_refused(connection_state.get());
+    }
     goto fail;
   }
 
@@ -1736,7 +1804,7 @@ void Pipe::writer()
       state = STATE_CLOSED;
       state_closed.set(1);
       pipe_lock.Unlock();
-      if (sd) {
+      if (sd >= 0) {
 	// we can ignore return value, actually; we don't care if this succeeds.
 	int r = ::write(sd, &tag, 1);
 	(void)r;
@@ -2554,7 +2622,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 
   /* nothing left in the prefetch buffer */
 
-  if (len > (size_t)recv_max_prefetch) {
+  if (left > recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     ssize_t ret = do_recv(buf, left, flags );
     if (ret < 0) {

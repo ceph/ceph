@@ -58,7 +58,7 @@ public:
     RecoveryHandle *h
     );
 
-  void check_recovery_sources(const OSDMapRef osdmap);
+  void check_recovery_sources(const OSDMapRef& osdmap);
 
   /// @see PGBackend::delay_message_until_active
   bool can_handle_while_inactive(OpRequestRef op);
@@ -340,15 +340,22 @@ private:
   };
   map<ceph_tid_t, InProgressOp> in_progress_ops;
 public:
-  PGTransaction *get_transaction();
   friend class C_OSD_OnOpCommit;
   friend class C_OSD_OnOpApplied;
+
+  void call_write_ordered(std::function<void(void)> &&cb) override {
+    // ReplicatedBackend submits writes inline in submit_transaction, so
+    // we can just call the callback.
+    cb();
+  }
+
   void submit_transaction(
     const hobject_t &hoid,
+    const object_stat_sum_t &delta_stats,
     const eversion_t &at_version,
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
-    const eversion_t &trim_rollback_to,
+    const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     Context *on_local_applied_sync,
@@ -366,12 +373,11 @@ private:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
-    eversion_t pg_trim_rollback_to,
+    eversion_t pg_roll_forward_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
-    InProgressOp *op,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
     const pg_info_t &pinfo);
@@ -381,7 +387,7 @@ private:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
-    eversion_t pg_trim_rollback_to,
+    eversion_t pg_roll_forward_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const vector<pg_log_entry_t> &log_entries,
@@ -407,24 +413,9 @@ private:
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 
-  struct C_OSD_RepModifyApply : public Context {
-    ReplicatedBackend *pg;
-    RepModifyRef rm;
-    C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
-      : pg(pg), rm(r) {}
-    void finish(int r) {
-      pg->sub_op_modify_applied(rm);
-    }
-  };
-  struct C_OSD_RepModifyCommit : public Context {
-    ReplicatedBackend *pg;
-    RepModifyRef rm;
-    C_OSD_RepModifyCommit(ReplicatedBackend *pg, RepModifyRef r)
-      : pg(pg), rm(r) {}
-    void finish(int r) {
-      pg->sub_op_modify_commit(rm);
-    }
-  };
+  struct C_OSD_RepModifyApply;
+  struct C_OSD_RepModifyCommit;
+
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }

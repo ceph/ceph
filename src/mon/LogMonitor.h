@@ -31,7 +31,7 @@ class MLog;
 static const string LOG_META_CHANNEL = "$channel";
 
 namespace ceph {
-namespace log {
+namespace logging {
   class Graylog;
 }
 }
@@ -54,7 +54,7 @@ private:
     map<string,string> log_to_graylog_host;
     map<string,string> log_to_graylog_port;
 
-    map<string, shared_ptr<ceph::log::Graylog>> graylogs;
+    map<string, shared_ptr<ceph::logging::Graylog>> graylogs;
     uuid_d fsid;
     string host;
 
@@ -125,7 +125,7 @@ private:
 			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
     }
 
-    shared_ptr<ceph::log::Graylog> get_graylog(const string &channel);
+    shared_ptr<ceph::logging::Graylog> get_graylog(const string &channel);
   } channels;
 
   void update_log_channels();
@@ -151,17 +151,7 @@ private:
     return true;
   }
 
-  struct C_Log : public C_MonOp {
-    LogMonitor *logmon;
-    C_Log(LogMonitor *p, MonOpRequestRef o) : 
-      C_MonOp(o), logmon(p) {}
-    void _finish(int r) {
-      if (r == -ECANCELED) {
-	return;
-      }
-      logmon->_updated_log(op);
-    }    
-  };
+  struct C_Log;
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
