@@ -358,7 +358,7 @@ int CrushCompiler::parse_device(iter_t const& i)
     err << "item " << name << " defined twice" << std::endl;
     return -1;
   }    
-  item_id[name] = id;
+  item_id[name] = id;//
   id_item[id] = name;
 
   if (verbose) err << "device " << id << " '" << name << "'" << std::endl;
@@ -419,14 +419,14 @@ int CrushCompiler::parse_bucket_type(iter_t const& i)
 //bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}'
 int CrushCompiler::parse_bucket(iter_t const& i)
 {
-  string tname = string_node(i->children[0]);//类型名称
+  string tname = string_node(i->children[0]);//桶类型名称
   if (!type_id.count(tname)) {
     err << "bucket type '" << tname << "' is not defined" << std::endl;
     return -1;
   }
   int type = type_id[tname];
 
-  string name = string_node(i->children[1]);//device名称
+  string name = string_node(i->children[1]);//桶名称不能是device已定义的名称.桶名不能是之前已定义的桶名称
   if (item_id.count(name)) {
     err << "bucket or device '" << name << "' is already defined" << std::endl;
     return -1;
@@ -442,13 +442,14 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   //bucket_alg = str_p("alg") >> name;
   //bucket_hash = str_p("hash") >> ( integer | str_p("rjenkins1") );
   //bucket_item = str_p("item") >> name >> !( str_p("weight") >> real_p ) >> !( str_p("pos") >> posint );
+  //pos关键字用于定义位置
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
     //err << "tag " << tag << std::endl;
-    if (tag == "id") 
+    if (tag == "id") //桶的id字段
       id = int_node(sub->children[1]);//处理bucket_id
-    else if (tag == "alg") {
+    else if (tag == "alg") {//桶的算法字段
       string a = string_node(sub->children[1]);//处理bucket_alg
       if (a == "uniform")
 	alg = CRUSH_BUCKET_UNIFORM;
@@ -465,16 +466,17 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	return -EINVAL;
       }
     }
-    else if (tag == "hash") {//处理bucket_hash
+    else if (tag == "hash") {//处理bucket　hash字段
       string a = string_node(sub->children[1]);
       if (a == "rjenkins1")
-	hash = CRUSH_HASH_RJENKINS1;
+	hash = CRUSH_HASH_RJENKINS1;//注：rjenkins1与a=='0'是等价的
       else
 	hash = atoi(a.c_str());
     }
-    else if (tag == "item") {//处理bucket_item
+    else if (tag == "item") {//处理bucket_item（处理桶的子项）
+    	//但这里我们仅关注pos格式的情况
       // first, just determine which item pos's are already used
-      size++;
+      size++;//对item数进行计数。
       for (unsigned q = 2; q < sub->children.size(); q++) {
 	string tag = string_node(sub->children[q++]);
 	if (tag == "pos") {//仅考虑pos情况
@@ -506,27 +508,27 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     string tag = string_node(sub->children[0]);
     if (tag == "item") {
 
-      string iname = string_node(sub->children[1]);
-      if (!item_id.count(iname)) {
+      string iname = string_node(sub->children[1]);//取出子项的名称（bucket或device中已定义）
+      if (!item_id.count(iname)) {//规则需要保证item指定的项已定义。所以bucket,device在定义时需要与树根方向反着定义。
 	err << "item '" << iname << "' in bucket '" << name << "' is not defined" << std::endl;
 	return -1;
       }
-      int itemid = item_id[iname];//item <item_name>
+      int itemid = item_id[iname];//item <item_name>　//找出子项对应的id
 
-      unsigned weight = 0x10000;
-      if (item_weight.count(itemid))
-	weight = item_weight[itemid];//如果item_weight已有权重，否则默认为0x10000
+      unsigned weight = 0x10000;//默认权重
+      if (item_weight.count(itemid))//取出子项指定的权重
+	weight = item_weight[itemid];//如果item_weight已有权重，否则默认为0x10000（这种事先为子项配置了权重）
 
       int pos = -1;
       for (unsigned q = 2; q < sub->children.size(); q++) {//完成bucket_item解析
 	string tag = string_node(sub->children[q++]);
 	if (tag == "weight") {//weight配置
-	  weight = float_node(sub->children[q]) * (float)0x10000;//配置的值不能超过１００
-	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {//weight过大
+	  weight = float_node(sub->children[q]) * (float)0x10000;//配置的值不能超过１００（这里更改了子项的权重）
+	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {//weight过大（device　id均为>=0)
 	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
 	    return -ERANGE;
 	  }
-	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
+	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {//bucket　id均为<0，权重不得大于１００
 	    err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT / 0x10000
 	        << " to prevent overflow" << std::endl;
 	    return -ERANGE;
@@ -537,8 +539,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	else
 	  ceph_abort();
 
-      }
-      if (alg == CRUSH_BUCKET_UNIFORM) {//uniform要求权重相同
+      }//一行item解析完成
+      if (alg == CRUSH_BUCKET_UNIFORM) {//uniform要求多个item的权重是相同的
 	if (!have_uniform_weight) {
 	  have_uniform_weight = true;
 	  uniform_weight = weight;
@@ -552,7 +554,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	}
       }
 
-      if (pos >= size) {//pos指定超过size值，说明定位有误
+      if (pos >= size) {//pos指定超过size值，说明定位有误（pos不能大于等于item的数目)
 	err << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
 	return -1;
       }
@@ -562,30 +564,30 @@ int CrushCompiler::parse_bucket(iter_t const& i)
       }
       //err << " item " << iname << " (" << itemid << ") pos " << pos << " weight " << weight << std::endl;
       items[pos] = itemid;
-      weights[pos] = weight;
+      weights[pos] = weight;//记录每一个item的weights
 
-      if (crush_addition_is_unsafe(bucketweight, weight)) {
+      if (crush_addition_is_unsafe(bucketweight, weight)) {//检查bucketweight 加上weight后是否会发生uint32溢出
         err << "oh no! our bucket weights are overflowing all over the place, better lower the item weights" << std::endl;
-        return -ERANGE;
+        return -ERANGE;//将发生溢出
       }
 
-      bucketweight += weight;
+      bucketweight += weight;//计算桶出权重数
     }
-  }
+  }//第二次处理item完成
 
   if (id == 0) {
-    for (id=-1; id_item.count(id); id--) ;
+    for (id=-1; id_item.count(id); id--) ;//如果id设置为０，则为bucket探测id
     //err << "assigned id " << id << std::endl;
   }
 
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
-		   << (float)bucketweight / (float)0x10000 << std::endl;
+		   << (float)bucketweight / (float)0x10000 << std::endl;//显示bucket名称，id,item数目，item总权重
   id_item[id] = name;
-  item_id[name] = id;
+  item_id[name] = id;//填充item
   item_weight[id] = bucketweight;
   
   assert(id != 0);
-  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);//添加桶（size是item的大小）
+  int r = crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0], NULL);//添加桶（size是item的大小，items中记录各item数据，weights记录各item对应权重）
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;
@@ -632,6 +634,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   int steps = i->children.size() - start - 8;//steps是语法树上'step'需要解析大小。我们一会就会解析这段数据
   //err << "num steps " << steps << std::endl;
   
+  //这里应该用for循环处理下steps的size数再传入，作者这样处理太简洁，size过大。
   int ruleno = crush.add_rule(steps, ruleset, type, minsize, maxsize, -1);//提前告诉rule,我们后面最多有steps个step{最大值,肯定不超过这个值}
   if (rname.length()) {//有名称的规则
     crush.set_rule_name(ruleno, rname.c_str());//设置规则名称
@@ -753,6 +756,128 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
   }
 }
 
+/*
+ *
+device 0 osd.0
+device 1 osd.1
+device 2 osd.2
+device 3 osd.3
+device 4 osd.4
+device 5 osd.5
+device 6 osd.6
+device 7 osd.7
+
+      host ceph-osd-ssd-server-1 {
+              id -1
+              alg straw
+              hash 0
+              item osd.0 weight 1.00
+              item osd.1 weight 1.00
+      }
+
+      host ceph-osd-ssd-server-2 {
+              id -2
+              alg straw
+              hash 0
+              item osd.2 weight 1.00
+              item osd.3 weight 1.00
+      }
+
+      host ceph-osd-platter-server-1 {
+              id -3
+              alg straw
+              hash 0
+              item osd.4 weight 1.00
+              item osd.5 weight 1.00
+      }
+
+      host ceph-osd-platter-server-2 {
+              id -4
+              alg straw
+              hash 0
+              item osd.6 weight 1.00
+              item osd.7 weight 1.00
+      }
+
+      root platter {
+              id -5
+              alg straw
+              hash 0
+              item ceph-osd-platter-server-1 weight 2.00
+              item ceph-osd-platter-server-2 weight 2.00
+      }
+
+      root ssd {
+              id -6
+              alg straw
+              hash 0
+              item ceph-osd-ssd-server-1 weight 2.00
+              item ceph-osd-ssd-server-2 weight 2.00
+      }
+
+      rule data {
+              ruleset 0
+              type replicated
+              min_size 2
+              max_size 2
+              step take platter
+              step chooseleaf firstn 0 type host
+              step emit
+      }
+
+      rule metadata {
+              ruleset 1
+              type replicated
+              min_size 0
+              max_size 10
+              step take platter
+              step chooseleaf firstn 0 type host
+              step emit
+      }
+
+      rule rbd {
+              ruleset 2
+              type replicated
+              min_size 0
+              max_size 10
+              step take platter
+              step chooseleaf firstn 0 type host
+              step emit
+      }
+
+      rule platter {
+              ruleset 3
+              type replicated
+              min_size 0
+              max_size 10
+              step take platter
+              step chooseleaf firstn 0 type host
+              step emit
+      }
+
+      rule ssd {
+              ruleset 4
+              type replicated
+              min_size 0
+              max_size 4
+              step take ssd
+              step chooseleaf firstn 0 type host
+              step emit
+      }
+
+      rule ssd-primary {
+              ruleset 5
+              type replicated
+              min_size 5
+              max_size 10
+              step take ssd
+              step chooseleaf firstn 1 type host
+              step emit
+              step take platter
+              step chooseleaf firstn -1 type host
+              step emit
+      }
+ */
 int CrushCompiler::parse_crush(iter_t const& i) 
 { 
   find_used_bucket_ids(i);
@@ -764,7 +889,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
       r = parse_tunable(p);//定义可调整的一些参数“实际上没有必要，这些不可以做为配置项吗？
       break;
     case crush_grammar::_device: //device = str_p("device") >> posint >> name;
-      r = parse_device(p);//定义item项，起提前声明作用
+      r = parse_device(p);//定义device项，起提前声明作用,用于说明哪些是osd
       break;
     case crush_grammar::_bucket_type: //bucket_type = str_p("type") >> posint >> name;
       r = parse_bucket_type(p);//定义type项，起提前声明作用

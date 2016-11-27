@@ -1202,7 +1202,7 @@ struct pg_pool_t {
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_* //类型
   __u8 size, min_size;      ///< number of osds in each pg //pg中需要的osd数量
-  __u8 crush_ruleset;       ///< crush placement rule set //crush规则集
+  __u8 crush_ruleset;       ///< crush placement rule set //crush规则集.
   __u8 object_hash;         ///< hash mapping object name to ps
 private:
   __u32 pg_num, pgp_num;    ///< number of pgs

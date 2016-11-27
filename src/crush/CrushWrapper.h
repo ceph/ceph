@@ -52,11 +52,11 @@ using namespace std;
 class CrushWrapper {
 public:
   std::map<int32_t, string> type_map; /* bucket/device type names */ //类型名称，这些类型定义了层次关系（region,datacenter,host,osd)，
-  std::map<int32_t, string> name_map; /* bucket/device names */
-  std::map<int32_t, string> rule_name_map;
+  std::map<int32_t, string> name_map; /* bucket/device names id到名字映射　*/
+  std::map<int32_t, string> rule_name_map;//规则id到规则名称索引
 
 private:
-  struct crush_map *crush;
+  struct crush_map *crush;//crush表(前面为内置数的类型及符号表，这些与compiler中定义的内容有重复，不好）
   /* reverse maps */
   mutable bool have_rmaps;//是否有反向map
   mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
@@ -1092,7 +1092,7 @@ public:
   //x pg对应的hash值
   //out 输出的结果集
   //maxout 需要的结果集大小
-  //weight 权重，暂不清楚
+  //weight 权重，暂不清楚（来源于osdmap)
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     int rawout[maxout];

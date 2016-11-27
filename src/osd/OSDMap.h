@@ -221,7 +221,7 @@ private:
   };
   ceph::shared_ptr<addrs_s> osd_addrs;
 
-  vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
+  vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"　//用于标记in,out±±
   vector<osd_info_t> osd_info;
   ceph::shared_ptr< map<pg_t,vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
   ceph::shared_ptr< map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)

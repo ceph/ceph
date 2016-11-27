@@ -1527,6 +1527,11 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
   }
 }
 
+//pool pg对应的pool
+//pg 对应的pg
+//osds 结果集
+//primary 结果集中的主（第一个）
+//ppps 出参，返回pg对应的pps,暂时未知
 int OSDMap::_pg_to_raw_osds(
   const pg_pool_t& pool, pg_t pg,
   vector<int> *osds, int *primary,

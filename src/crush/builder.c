@@ -55,10 +55,10 @@ void crush_finalize(struct crush_map *map)
 	/* calc max_devices */
 	map->max_devices = 0;
 	for (b=0; b<map->max_buckets; b++) {
-		if (map->buckets[b] == 0)
+		if (map->buckets[b] == 0)//未赋值的跳过，一般到尾部会如此或者用户定义不连续
 			continue;
 		for (i=0; i<map->buckets[b]->size; i++)
-			if (map->buckets[b]->items[i] >= map->max_devices)
+			if (map->buckets[b]->items[i] >= map->max_devices)//bucket编号小于０
 				map->max_devices = map->buckets[b]->items[i] + 1;
 
 		switch (map->buckets[b]->alg) {
@@ -76,7 +76,7 @@ void crush_finalize(struct crush_map *map)
 
 
 /** rules **/
-
+//将一条规则插入
 int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 {
 	__u32 r;

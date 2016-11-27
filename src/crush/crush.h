@@ -30,6 +30,8 @@
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
+//从undef用来标记出来，还没有处理过，none用来标记处理过了，还没有选择出来，所以需要两个。（第一眼看，觉得仅需要一个）
+//但我还是认为仅需要一个就能搞定（用一层循环来保证？）
 #define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
 #define CRUSH_ITEM_NONE   0x7fffffff  /* no result */
 
@@ -173,12 +175,12 @@ struct crush_bucket_straw2 {
  * CRUSH map includes all buckets, rules, etc.
  */
 struct crush_map {
-	struct crush_bucket **buckets;
-	struct crush_rule **rules;
+	struct crush_bucket **buckets;//保存bucket(按id索引）
+	struct crush_rule **rules;//保存规则（按id索引）
 
-	__s32 max_buckets;
-	__u32 max_rules;
-	__s32 max_devices;
+	__s32 max_buckets;//buckets内存当前最大容量
+	__u32 max_rules;//规则最大容量
+	__s32 max_devices;//最大的osd数目
 
 	/* choose local retries before re-descent */
 	__u32 choose_local_tries;
@@ -215,7 +217,7 @@ struct crush_map {
 
 	   Nothing stops the caller from allocating both in one swell
 	   foop and passing in two points, though. */
-	size_t working_size;
+	size_t working_size;//工作所需要的内存大小
 
 #ifndef __KERNEL__
 	/*
