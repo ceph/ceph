@@ -606,8 +606,7 @@ void Replayer::set_sources(const ImageIds &image_ids)
   for (auto image_it = m_image_replayers.begin();
        image_it != m_image_replayers.end();) {
     auto image_id_it = image_ids.find(image_it->first);
-    if (image_id_it == image_ids.end() ||
-        image_id_it->id != image_it->second->get_remote_image_id()) {
+    if (image_id_it == image_ids.end()) {
       if (image_it->second->is_running()) {
         dout(20) << "stop image replayer for remote image "
                  << image_it->second->get_global_image_id() << dendl;
@@ -647,14 +646,13 @@ void Replayer::set_sources(const ImageIds &image_ids)
     if (it == m_image_replayers.end()) {
       unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
         m_threads, m_image_deleter, m_image_sync_throttler, m_local_rados,
-        m_remote_rados, local_mirror_uuid, remote_mirror_uuid, m_local_pool_id,
-        m_remote_pool_id, image_id.id, image_id.global_id));
+        local_mirror_uuid, m_local_pool_id, image_id.global_id));
       it = m_image_replayers.insert(
         std::make_pair(image_id.global_id, std::move(image_replayer))).first;
-    } else if (image_id.id != it->second->get_remote_image_id()) {
-      // mismatched replayer in progress of stopping
-      continue;
     }
+
+    it->second->add_remote_image(remote_mirror_uuid, image_id.id,
+                                 m_remote_io_ctx);
     if (!it->second->is_running()) {
       dout(20) << "starting image replayer for remote image "
                << image_id.global_id << dendl;
