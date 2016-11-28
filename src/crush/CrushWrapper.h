@@ -1136,7 +1136,7 @@ public:
     return bl.write_file(fn);
   }
 
-  void encode(bufferlist &bl, bool lean=false) const;
+  void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
