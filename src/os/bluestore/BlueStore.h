@@ -1677,7 +1677,10 @@ private:
       kv_cond.notify_all();
     }
     kv_sync_thread.join();
-    kv_stop = false;
+    {
+      std::lock_guard<std::mutex> l(kv_lock);
+      kv_stop = false;
+    }
   }
 
   bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
