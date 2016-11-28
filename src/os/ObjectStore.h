@@ -1176,7 +1176,8 @@ public:
      * The source range *must* overlap with the source object data. If it does
      * not the result is undefined.
      */
-    void clone_range(const coll_t& cid, const ghobject_t& oid, ghobject_t noid,
+    void clone_range(const coll_t& cid, const ghobject_t& oid,
+		     const ghobject_t& noid,
 		     uint64_t srcoff, uint64_t srclen, uint64_t dstoff) {
       Op* _op = _get_next_op();
       _op->op = OP_CLONERANGE2;
