@@ -5519,7 +5519,7 @@ int BlueStore::collection_list(
 }
 
 int BlueStore::_collection_list(
-  Collection* c, ghobject_t start, ghobject_t end,
+  Collection* c, const ghobject_t& start, const ghobject_t& end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {

@@ -1703,7 +1703,8 @@ private:
     txc->shared_blobs_written.insert(b->shared_blob);
   }
 
-  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+  int _collection_list(
+    Collection *c, const ghobject_t& start, const ghobject_t& end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
