@@ -301,15 +301,6 @@ namespace crimson {
 	  last_tick = _tick;
 	}
 
-	inline double get_prev_prop_tag() const {
-	  return prev_tag.proportion;
-	}
-
-	inline void set_prev_prop_tag(double value,
-				      bool adjust_by_inc = false) {
-	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
-	}
-
 	inline void add_request(const RequestTag& tag,
 				const C&          client_id,
 				RequestRef&&      request) {
