@@ -603,9 +603,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_filestore_first, l_filestore_last);
 
   plb.add_u64(l_filestore_journal_queue_ops, "journal_queue_ops", "Operations in journal queue");
-  plb.add_u64_counter(l_filestore_journal_ops, "journal_ops", "Total journal entries written");
+  plb.add_u64(l_filestore_journal_ops, "journal_ops", "Active journal entries to be applied");
   plb.add_u64(l_filestore_journal_queue_bytes, "journal_queue_bytes", "Size of journal queue");
-  plb.add_u64_counter(l_filestore_journal_bytes, "journal_bytes", "Total operations size in journal");
+  plb.add_u64(l_filestore_journal_bytes, "journal_bytes", "Active journal operation size to be applied");
   plb.add_time_avg(l_filestore_journal_latency, "journal_latency", "Average journal queue completing latency");
   plb.add_u64_counter(l_filestore_journal_wr, "journal_wr", "Journal write IOs");
   plb.add_u64_avg(l_filestore_journal_wr_bytes, "journal_wr_bytes", "Journal data written");
