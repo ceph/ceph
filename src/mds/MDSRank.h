@@ -43,6 +43,7 @@ enum {
   l_mds_dir_fetch,
   l_mds_dir_commit,
   l_mds_dir_split,
+  l_mds_dir_merge,
   l_mds_inode_max,
   l_mds_inodes,
   l_mds_inodes_top,

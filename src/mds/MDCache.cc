@@ -10729,15 +10729,17 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
 
 void MDCache::split_dir(CDir *dir, int bits)
 {
-  dout(7) << "split_dir " << *dir << " bits " << bits << dendl;
+  dout(7) << __func__ << " " << *dir << " bits " << bits << dendl;
   assert(dir->is_auth());
   CInode *diri = dir->inode;
 
   list<CDir*> dirs;
   dirs.push_back(dir);
 
-  if (!can_fragment(diri, dirs))
+  if (!can_fragment(diri, dirs)) {
+    dout(7) << __func__ << " cannot fragment right now, dropping" << dendl;
     return;
+  }
 
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
   mdr->more()->fragment_base = dir->dirfrag();
@@ -11092,7 +11094,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     dout(10) << " can't auth_pin " << *diri << ", requeuing dir "
 	     << info.dirs.front()->dirfrag() << dendl;
     if (info.bits > 0)
-      mds->balancer->queue_split(info.dirs.front());
+      mds->balancer->queue_split(info.dirs.front(), false);
     else
       mds->balancer->queue_merge(info.dirs.front());
     fragment_unmark_unfreeze_dirs(info.dirs);
@@ -11303,15 +11305,30 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
 
 void MDCache::_fragment_finish(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
 {
-  dout(10) << "fragment_finish " << basedirfrag << dendl;
+  dout(10) << "fragment_finish " << basedirfrag << "resultfrags.size="
+           << resultfrags.size() << dendl;
   map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
   assert(it != uncommitted_fragments.end());
   ufragment &uf = it->second;
 
   // unmark & auth_unpin
-  for (list<CDir*>::iterator p = resultfrags.begin(); p != resultfrags.end(); ++p) {
-    (*p)->state_clear(CDir::STATE_FRAGMENTING);
-    (*p)->auth_unpin(this);
+  for (const auto &dir : resultfrags) {
+    dir->state_clear(CDir::STATE_FRAGMENTING);
+    dir->auth_unpin(this);
+
+    // In case the resulting fragments are beyond the split size,
+    // we might need to split them again right away (they could
+    // have been taking inserts between unfreezing and getting
+    // here)
+    mds->balancer->maybe_fragment(dir, false);
+  }
+
+  if (mds->logger) {
+    if (resultfrags.size() > 1) {
+      mds->logger->inc(l_mds_dir_split);
+    } else {
+      mds->logger->inc(l_mds_dir_merge);
+    }
   }
 
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_FINISH, basedirfrag, uf.bits);

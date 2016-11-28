@@ -122,6 +122,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
   if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
+  if (dir.state_test(CDir::STATE_FRAGMENTING)) out << "|fragmenting";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -912,8 +913,6 @@ void CDir::init_fragment_pins()
 void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
-
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_split);
 
   assert(replay || is_complete() || !is_auth());
 
@@ -3117,5 +3116,34 @@ std::string CDir::get_path() const
   std::string path;
   get_inode()->make_path_string(path, true);
   return path;
+}
+
+bool CDir::should_split_fast() const
+{
+  // Max size a fragment can be before trigger fast splitting
+  int fast_limit = g_conf->mds_bal_split_size * g_conf->mds_bal_fragment_fast_factor;
+
+  // Fast path: the sum of accounted size and null dentries does not
+  // exceed threshold: we definitely are not over it.
+  if (get_frag_size() + get_num_head_null() <= fast_limit) {
+    return false;
+  }
+
+  // Fast path: the accounted size of the frag exceeds threshold: we
+  // definitely are over it
+  if (get_frag_size() > fast_limit) {
+    return true;
+  }
+
+  int64_t effective_size = 0;
+
+  for (const auto &p : items) {
+    const CDentry *dn = p.second;
+    if (!dn->get_projected_linkage()->is_null()) {
+      effective_size++;
+    }
+  }
+
+  return effective_size > fast_limit;
 }
 
