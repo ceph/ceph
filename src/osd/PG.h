@@ -228,7 +228,7 @@ protected:
   void update_osdmap_ref(OSDMapRef newmap) {
     assert(_lock.is_locked_by_me());
     Mutex::Locker l(map_lock);
-    osdmap_ref = newmap;
+    osdmap_ref = std::move(newmap);
   }
 
   OSDMapRef get_osdmap_with_maplock() const {
