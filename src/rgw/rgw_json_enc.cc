@@ -81,6 +81,12 @@ void RGWObjManifestRule::dump(Formatter *f) const
   encode_json("override_prefix", override_prefix, f);
 }
 
+void rgw_bucket_placement::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("placement_rule", placement_rule, f);
+}
+
 void RGWObjManifest::dump(Formatter *f) const
 {
   map<uint64_t, RGWObjManifestPart>::const_iterator iter = objs.begin();
@@ -97,9 +103,9 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("head_size", head_size, f);
   ::encode_json("max_head_size", max_head_size, f);
   ::encode_json("prefix", prefix, f);
-  ::encode_json("tail_bucket", tail_bucket, f);
   ::encode_json("rules", rules, f);
   ::encode_json("tail_instance", tail_instance, f);
+  ::encode_json("tail_placement", tail_placement, f);
 }
 
 void rgw_log_entry::dump(Formatter *f) const
@@ -800,7 +806,6 @@ void rgw_obj::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
   encode_json("key", key, f);
-  encode_json("placement_id", placement_id, f);
 }
 
 void RGWDefaultSystemMetaObjInfo::dump(Formatter *f) const {

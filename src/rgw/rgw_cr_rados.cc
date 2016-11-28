@@ -572,7 +572,7 @@ int RGWAsyncRemoveObj::_send_request()
 
   RGWObjState *state;
 
-  int ret = store->get_obj_state(&obj_ctx, obj, &state);
+  int ret = store->get_obj_state(&obj_ctx, bucket_info, obj, &state);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
@@ -728,17 +728,17 @@ int RGWRadosTimelogTrimCR::request_complete()
 int RGWAsyncStatObj::_send_request()
 {
   rgw_raw_obj raw_obj;
-  store->obj_to_raw(obj, &raw_obj);
+  store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
   return store->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
                              nullptr, nullptr, objv_tracker);
 }
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
-                           const rgw_obj& obj, uint64_t *psize,
+                           const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize,
                            real_time* pmtime, uint64_t *pepoch,
                            RGWObjVersionTracker *objv_tracker)
   : RGWSimpleCoroutine(store->ctx()), store(store), async_rados(async_rados),
-    obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),
+    bucket_info(_bucket_info), obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),
     objv_tracker(objv_tracker)
 {
 }
@@ -754,7 +754,7 @@ void RGWStatObjCR::request_cleanup()
 int RGWStatObjCR::send_request()
 {
   req = new RGWAsyncStatObj(this, stack->create_completion_notifier(),
-                            store, obj, psize, pmtime, pepoch, objv_tracker);
+                            store, bucket_info, obj, psize, pmtime, pepoch, objv_tracker);
   async_rados->queue(req);
   return 0;
 }

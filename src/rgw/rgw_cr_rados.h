@@ -1091,6 +1091,7 @@ class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
 
 class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   RGWRados *store;
+  RGWBucketInfo bucket_info;
   rgw_obj obj;
   uint64_t *psize;
   real_time *pmtime;
@@ -1100,7 +1101,7 @@ protected:
   int _send_request() override;
 public:
   RGWAsyncStatObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *store,
-                  const rgw_obj& obj, uint64_t *psize = nullptr,
+                  const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
                   real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
                   RGWObjVersionTracker *objv_tracker = nullptr)
 	  : RGWAsyncRadosRequest(caller, cn), store(store), obj(obj), psize(psize),
@@ -1110,6 +1111,7 @@ public:
 class RGWStatObjCR : public RGWSimpleCoroutine {
   RGWRados *store;
   RGWAsyncRadosProcessor *async_rados;
+  RGWBucketInfo bucket_info;
   rgw_obj obj;
   uint64_t *psize;
   real_time *pmtime;
@@ -1118,7 +1120,7 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   RGWAsyncStatObj *req = nullptr;
  public:
   RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
-	  const rgw_obj& obj, uint64_t *psize = nullptr,
+	  const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
 	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
 	  RGWObjVersionTracker *objv_tracker = nullptr);
   ~RGWStatObjCR() {

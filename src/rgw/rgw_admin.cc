@@ -1379,7 +1379,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   string status = (needs_fixing ? "needs_fixing" : "ok");
 
   if ((needs_fixing || remove_bad) && fix) {
-    ret = store->fix_head_obj_locator(obj.bucket, needs_fixing, remove_bad, key);
+    ret = store->fix_head_obj_locator(bucket_info, needs_fixing, remove_bad, key);
     if (ret < 0) {
       cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
       goto done;
@@ -1406,7 +1406,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   bool needs_fixing;
   string status;
 
-  int ret = store->fix_tail_obj_locator(obj.bucket, key, fix, &needs_fixing);
+  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing);
   if (ret < 0) {
     cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
     status = "failed";
@@ -5147,9 +5147,15 @@ next:
   }
 
   if (opt_cmd == OPT_OLH_GET) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
     RGWOLHInfo olh;
     rgw_obj obj(bucket, object);
-    int ret = store->get_olh(obj, &olh);
+    ret = store->get_olh(bucket_info, obj, &olh);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5159,6 +5165,12 @@ next:
   }
 
   if (opt_cmd == OPT_OLH_READLOG) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
     map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
     bool is_truncated;
 
@@ -5167,12 +5179,12 @@ next:
 
     RGWObjState *state;
 
-    int ret = store->get_obj_state(&rctx, obj, &state, false); /* don't follow olh */
+    ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false); /* don't follow olh */
     if (ret < 0) {
       return -ret;
     }
 
-    ret = store->bucket_index_read_olh_log(*state, obj, 0, &log, &is_truncated);
+    ret = store->bucket_index_read_olh_log(bucket_info, *state, obj, 0, &log, &is_truncated);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;

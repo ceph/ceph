@@ -172,6 +172,7 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
 
   if (!cur_part_id) {
     if (ofs < max_head_size) {
+      location->set_placement_rule(head_placement_rule);
       *location = obj;
       return;
     } else {
@@ -193,8 +194,8 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
     }
   }
 
-  if (!tail_bucket.name.empty()) {
-    loc.bucket = tail_bucket;
+  if (!tail_placement.bucket.name.empty()) {
+    loc.bucket = tail_placement.bucket;
   } else {
     loc.bucket = obj.bucket;
   }
@@ -203,6 +204,7 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
   // to get the right shadow object location
   loc.key.set_instance(tail_instance);
 
+  location->set_placement_rule(tail_placement.placement_rule);
   *location = loc;
 }
 
