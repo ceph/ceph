@@ -140,7 +140,8 @@ The actual dump is similar to the schema, except that average values are grouped
       "get_or_fail_success" : 0,
       "wait" : {
          "avgcount" : 0,
-         "sum" : 0
+         "sum" : 0,
+         "avglat": 0.000000
       },
       "get" : 0,
       "take_sum" : 0,
@@ -156,7 +157,8 @@ The actual dump is similar to the schema, except that average values are grouped
       "get_or_fail_success" : 0,
       "wait" : {
          "avgcount" : 0,
-         "sum" : 0
+         "sum" : 0,
+         "avglat": 0.000000
       },
       "get" : 2637,
       "take_sum" : 0,
