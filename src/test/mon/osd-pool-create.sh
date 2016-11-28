@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -44,6 +45,7 @@ function TEST_default_deprectated_0() {
     run_mon $dir a --public-addr 127.0.0.1 \
         --osd_pool_default_crush_replicated_ruleset $expected
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     ! grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
@@ -54,6 +56,7 @@ function TEST_default_deprectated_1() {
     run_mon $dir a --public-addr 127.0.0.1 \
         --osd_pool_default_crush_rule $expected
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
@@ -66,6 +69,7 @@ function TEST_default_deprectated_2() {
         --osd_pool_default_crush_replicated_ruleset $unexpected
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
     ! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
@@ -101,6 +105,12 @@ function TEST_erasure_crush_rule() {
     ./ceph osd erasure-code-profile set myprofile
     ./ceph osd pool create $poolname 12 12 erasure myprofile
     ./ceph osd crush rule ls | grep $poolname || return 1
+    #
+    # a non existent crush ruleset given in argument is an error
+    # http://tracker.ceph.com/issues/9304
+    #
+    poolname=pool_erasure3
+    ! ./ceph osd pool create $poolname 12 12 erasure myprofile INVALIDRULESET || return 1
 }
 
 function TEST_erasure_crush_rule_pending() {
@@ -112,6 +122,7 @@ function TEST_erasure_crush_rule_pending() {
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-erasure","name":"'$crush_ruleset'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
     test $result = true || return 1
     ./ceph osd pool create pool_erasure 12 12 erasure default $crush_ruleset || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep "$crush_ruleset try again" $dir/a/log || return 1
 }
 
@@ -126,7 +137,7 @@ function TEST_simple_crush_rule_pending() {
     test $result = true || return 1
     ./ceph osd pool create pool_simple 12 12 replicated $crush_ruleset || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep "$crush_ruleset is pending, try again" $dir/a/log || return 1
+    grep "$crush_ruleset try again" $dir/a/log || return 1
 }
 
 function TEST_erasure_code_profile_default() {
@@ -220,10 +231,11 @@ function TEST_replicated_pool_with_ruleset() {
 function TEST_replicated_pool() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
-    ./ceph osd pool create replicated 12 12 replicated 2>&1 | \
+    ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
         grep "pool 'replicated' created" || return 1
-    ./ceph osd pool create replicated 12 12 replicated 2>&1 | \
+    ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
         grep 'already exists' || return 1
+    ! ./ceph osd pool create replicated0 12 12 replicated INVALIDRULESET
     # default is replicated
     ./ceph osd pool create replicated1 12 12 2>&1 | \
         grep "pool 'replicated1' created" || return 1

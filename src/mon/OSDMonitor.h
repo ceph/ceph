@@ -259,6 +259,9 @@ private:
 				   const string &profile,
 				   int *ruleset,
 				   stringstream &ss);
+  int get_crush_ruleset(const string &ruleset_name,
+			int *crush_ruleset,
+			stringstream &ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
 		       stringstream &ss) const;

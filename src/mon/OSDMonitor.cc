@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -3261,22 +3262,31 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 		      erasure_code_profile_map);
   if (r)
     return r;
-  (*erasure_code_profile_map)["directory"] =
-    g_conf->osd_pool_default_erasure_code_directory;
-
+  assert((*erasure_code_profile_map).count("plugin"));
+  string default_plugin = (*erasure_code_profile_map)["plugin"];
+  map<string,string> user_map;
   for (vector<string>::const_iterator i = erasure_code_profile.begin();
        i != erasure_code_profile.end();
        ++i) {
     size_t equal = i->find('=');
-    if (equal == string::npos)
+    if (equal == string::npos) {
+      user_map[*i] = string();
       (*erasure_code_profile_map)[*i] = string();
-    else {
+    } else {
       const string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
+      user_map[key] = value;
       (*erasure_code_profile_map)[key] = value;
     }
   }
+
+  if (user_map.count("plugin") && user_map["plugin"] != default_plugin)
+    (*erasure_code_profile_map) = user_map;
+
+  if ((*erasure_code_profile_map).count("directory") == 0)
+    (*erasure_code_profile_map)["directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
 
   return 0;
 }
@@ -3358,27 +3368,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	    return *crush_ruleset;
 	  }
 	} else {
-	  int ret;
-	  ret = osdmap.crush->get_rule_id(ruleset_name);
-	  if (ret != -ENOENT) {
-	    // found it, use it
-	    *crush_ruleset = ret;
-	  } else {
-	    CrushWrapper newcrush;
-	    _get_pending_crush(newcrush);
-
-	    ret = newcrush.get_rule_id(ruleset_name);
-	    if (ret != -ENOENT) {
-	      // found it, wait for it to be proposed
-	      dout(20) << "prepare_pool_crush_ruleset: ruleset "
-		   << ruleset_name << " is pending, try again" << dendl;
-	      return -EAGAIN;
-	    } else {
-	      //Cannot find it , return error
-	      ss << "Specified ruleset " << ruleset_name << " doesn't exist";
-	      return ret;
-	    }
-	  }
+	  return get_crush_ruleset(ruleset_name, crush_ruleset, ss);
 	}
       }
       break;
@@ -3417,6 +3407,35 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 
   return 0;
 }
+
+int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
+				  int *crush_ruleset,
+				  stringstream &ss)
+{
+  int ret;
+  ret = osdmap.crush->get_rule_id(ruleset_name);
+  if (ret != -ENOENT) {
+    // found it, use it
+    *crush_ruleset = ret;
+  } else {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    ret = newcrush.get_rule_id(ruleset_name);
+    if (ret != -ENOENT) {
+      // found it, wait for it to be proposed
+      dout(20) << __func__ << ": ruleset " << ruleset_name
+	       << " try again" << dendl;
+      return -EAGAIN;
+    } else {
+      //Cannot find it , return error
+      ss << "specified ruleset " << ruleset_name << " doesn't exist";
+      return ret;
+    }
+  }
+  return 0;
+}
+
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
@@ -5155,6 +5174,7 @@ done:
       goto reply;
     }
 
+    bool implicit_ruleset_creation = false;
     string ruleset_name;
     cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
     string erasure_code_profile;
@@ -5183,6 +5203,7 @@ done:
 	}
       }
       if (ruleset_name == "") {
+	implicit_ruleset_creation = true;
 	if (erasure_code_profile == "default") {
 	  ruleset_name = "erasure-code";
 	} else {
@@ -5194,6 +5215,17 @@ done:
     } else {
       //NOTE:for replicated pool,cmd_map will put ruleset_name to erasure_code_profile field
       ruleset_name = erasure_code_profile;
+    }
+
+    if (!implicit_ruleset_creation && ruleset_name != "") {
+      int ruleset;
+      err = get_crush_ruleset(ruleset_name, &ruleset, ss);
+      if (err == -EAGAIN) {
+	wait_for_finished_proposal(new C_RetryMessage(this, m));
+	return true;
+      }
+      if (err)
+	goto reply;
     }
 
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
