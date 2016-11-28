@@ -153,6 +153,18 @@ UserPerm *ceph_userperm_new(uid_t uid, gid_t gid, int ngids, gid_t *gidlist);
 void ceph_userperm_destroy(UserPerm *perm);
 
 /**
+ * Get a pointer to the default UserPerm object for the mount.
+ *
+ * @param cmount the mount info handle
+ *
+ * Every cmount has a default set of credentials. This returns a pointer to
+ * that object.
+ *
+ * Unlike with ceph_userperm_new, this object should not be freed.
+ */
+struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
+
+/**
  * @defgroup libcephfs_h_init Setup and Teardown
  * These are the first and last functions that should be called
  * when using libcephfs.
@@ -229,9 +241,6 @@ int ceph_init(struct ceph_mount_info *cmount);
  * @returns 0 on success, negative error code on failure
  */
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
-
-
-struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
 
 /**
  * Execute a management command remotely on an MDS.
