@@ -9022,7 +9022,6 @@ struct C_CompleteSplits : public Context {
     if (osd->is_stopping())
       return;
     PG::RecoveryCtx rctx = osd->create_context();
-    set<spg_t> to_complete;
     for (set<boost::intrusive_ptr<PG> >::iterator i = pgs.begin();
 	 i != pgs.end();
 	 ++i) {
@@ -9030,15 +9029,14 @@ struct C_CompleteSplits : public Context {
       (*i)->lock();
       osd->add_newly_split_pg(&**i, &rctx);
       if (!((*i)->deleting)) {
+        set<spg_t> to_complete;
         to_complete.insert((*i)->info.pgid);
         osd->service.complete_split(to_complete);
       }
       osd->pg_map_lock.put_write();
       osd->dispatch_context_transaction(rctx, &**i);
-	to_complete.insert((*i)->info.pgid);
       (*i)->unlock();
       osd->wake_pg_waiters((*i)->info.pgid);
-      to_complete.clear();
     }
 
     osd->dispatch_context(rctx, 0, osd->service.get_osdmap());
