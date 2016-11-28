@@ -262,12 +262,14 @@ void KernelDevice::_aio_thread()
 	  std::lock_guard<std::mutex> l(debug_queue_lock);
 	  debug_aio_unlink(*aio[i]);
 	}
-	int left = --ioc->num_running;
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
 		 << " with " << left << " aios left" << dendl;
 	assert(r >= 0);
+	int left = --ioc->num_running;
+	// NOTE: once num_running is decremented we can no longer
+	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
 	if (left == 0) {
 	  // check waiting count before doing callback (which may
 	  // destroy this ioc).
