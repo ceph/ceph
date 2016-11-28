@@ -393,7 +393,8 @@ private:
 			uint64_t offset, bufferlist& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
 
-  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+  int _collection_list(
+    Collection *c, const ghobject_t& start, const ghobject_t& end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
 public:
@@ -471,12 +472,14 @@ public:
   bool collection_exists(const coll_t& c);
   int collection_empty(const coll_t& c, bool *empty);
 
-  int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
-	      bool sort_bitwise, int max,
-	      vector<ghobject_t> *ls, ghobject_t *next) override;
-  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
-	      bool sort_bitwise, int max,
-	      vector<ghobject_t> *ls, ghobject_t *next) override;
+  int collection_list(
+    const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
+    bool sort_bitwise, int max,
+    vector<ghobject_t> *ls, ghobject_t *next) override;
+  int collection_list(
+    CollectionHandle &c, const ghobject_t& start, const ghobject_t& end,
+    bool sort_bitwise, int max,
+    vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(

@@ -1829,11 +1829,12 @@ public:
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
+  virtual int collection_list(const coll_t& c,
+			      const ghobject_t& start, const ghobject_t& end,
 			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
   virtual int collection_list(CollectionHandle &c,
-			      ghobject_t start, ghobject_t end,
+			      const ghobject_t& start, const ghobject_t& end,
 			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) {
     return collection_list(c->get_cid(), start, end, sort_bitwise, max, ls, next);

@@ -1817,10 +1817,14 @@ public:
   int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
-  int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
+  int collection_list(const coll_t& cid,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
-  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
+  int collection_list(CollectionHandle &c,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
