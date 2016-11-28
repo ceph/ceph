@@ -683,10 +683,11 @@ int MemStore::queue_transactions(Sequencer *osr,
 
   std::unique_lock<std::mutex> lock;
   if (osr) {
-    auto seq = reinterpret_cast<OpSequencer**>(&osr->p);
-    if (*seq == nullptr)
-      *seq = new OpSequencer;
-    lock = std::unique_lock<std::mutex>((*seq)->mutex);
+    if (!osr->p) {
+      osr->p = new OpSequencer();
+    }
+    auto seq = static_cast<OpSequencer*>(osr->p.get());
+    lock = std::unique_lock<std::mutex>(seq->mutex);
   }
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
