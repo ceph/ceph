@@ -93,10 +93,15 @@ static inline bool rgw_raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_ob
   return true;
 }
 
-bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                    const rgw_obj& obj, rgw_raw_obj *raw_obj);
+struct rgw_bucket_placement {
+  string placement_rule;
+  rgw_bucket bucket;
+
+  void dump(Formatter *f) const;
+};
 
 class rgw_obj_select {
+  string placement_rule;
   rgw_obj obj;
   rgw_raw_obj raw_obj;
   bool is_raw;
@@ -127,6 +132,10 @@ public:
     raw_obj = rhs;
     is_raw = true;
     return *this;
+  }
+
+  void set_placement_rule(const string& rule) {
+    placement_rule = rule;
   }
 };
 
@@ -360,7 +369,6 @@ struct RGWObjManifestRule {
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
-
 class RGWObjManifest {
 protected:
   bool explicit_objs; /* old manifest? */
@@ -370,11 +378,12 @@ protected:
 
   rgw_obj obj;
   uint64_t head_size;
+  string head_placement_rule;
 
   uint64_t max_head_size;
   string prefix;
-  rgw_bucket tail_bucket; /* might be different than the original bucket,
-                             as object might have been copied across pools */
+  rgw_bucket_placement tail_placement; /* might be different than the original bucket,
+                                       as object might have been copied across pools */
   map<uint64_t, RGWObjManifestRule> rules;
 
   string tail_instance; /* tail object's instance */
@@ -402,7 +411,7 @@ public:
     head_size = rhs.head_size;
     max_head_size = rhs.max_head_size;
     prefix = rhs.prefix;
-    tail_bucket = rhs.tail_bucket;
+    tail_placement = rhs.tail_placement;
     rules = rhs.rules;
     tail_instance = rhs.tail_instance;
 
@@ -442,7 +451,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     ::encode(obj_size, bl);
     ::encode(objs, bl);
     ::encode(explicit_objs, bl);
@@ -451,21 +460,23 @@ public:
     ::encode(max_head_size, bl);
     ::encode(prefix, bl);
     ::encode(rules, bl);
-    bool encode_tail_bucket = !(tail_bucket == obj.bucket);
+    bool encode_tail_bucket = !(tail_placement.bucket == obj.bucket);
     ::encode(encode_tail_bucket, bl);
     if (encode_tail_bucket) {
-      ::encode(tail_bucket, bl);
+      ::encode(tail_placement.bucket, bl);
     }
     bool encode_tail_instance = (tail_instance != obj.key.instance);
     ::encode(encode_tail_instance, bl);
     if (encode_tail_instance) {
       ::encode(tail_instance, bl);
     }
+    ::encode(head_placement_rule, bl);
+    ::encode(tail_placement.placement_rule, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(6, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
     ::decode(obj_size, bl);
     ::decode(objs, bl);
     if (struct_v >= 3) {
@@ -500,14 +511,14 @@ public:
 
     if (struct_v >= 4) {
       if (struct_v < 6) {
-        ::decode(tail_bucket, bl);
+        ::decode(tail_placement.bucket, bl);
       } else {
         bool need_to_decode;
         ::decode(need_to_decode, bl);
         if (need_to_decode) {
-          ::decode(tail_bucket, bl);
+          ::decode(tail_placement.bucket, bl);
         } else {
-          tail_bucket = obj.bucket;
+          tail_placement.bucket = obj.bucket;
         }
       }
     }
@@ -526,6 +537,11 @@ public:
       }
     } else { // old object created before 'tail_instance' field added to manifest
       tail_instance = obj.key.instance;
+    }
+
+    if (struct_v >= 7) {
+      ::decode(head_placement_rule, bl);
+      ::decode(tail_placement.placement_rule, bl);
     }
 
     update_iterators();
@@ -562,7 +578,8 @@ public:
     return (obj_size > head_size);
   }
 
-  void set_head(const rgw_obj& _o, uint64_t _s) {
+  void set_head(const string& placement_rule, const rgw_obj& _o, uint64_t _s) {
+    head_placement_rule = placement_rule;
     obj = _o;
     head_size = _s;
 
@@ -576,12 +593,17 @@ public:
     return obj;
   }
 
-  void set_tail_bucket(const rgw_bucket& _b) {
-    tail_bucket = _b;
+  void set_tail_placement(const string& placement_rule, const rgw_bucket& _b) {
+    tail_placement.placement_rule = placement_rule;
+    tail_placement.bucket = _b;
   }
 
-  rgw_bucket& get_tail_bucket() {
-    return tail_bucket;
+  const rgw_bucket_placement& get_tail_placement() {
+    return tail_placement;
+  }
+
+  const string& get_head_placement_rule() {
+    return head_placement_rule;
   }
 
   void set_prefix(const string& _p) {
@@ -755,7 +777,7 @@ public:
   public:
     generator() : manifest(NULL), last_ofs(0), cur_part_ofs(0), cur_part_id(0), 
 		  cur_stripe(0), cur_stripe_size(0) {}
-    int create_begin(CephContext *cct, RGWObjManifest *manifest, rgw_bucket& bucket, rgw_obj& obj);
+    int create_begin(CephContext *cct, RGWObjManifest *manifest, const string& placement_rule, rgw_bucket& bucket, rgw_obj& obj);
 
     int create_next(uint64_t ofs);
 
@@ -1233,23 +1255,10 @@ struct RGWZoneParams : RGWSystemMetaObj {
     return true;
   }
 
-  bool get_index_pool(const rgw_obj& obj, rgw_pool *pool) {
-    if (!obj.bucket.explicit_placement.index_pool.empty()) {
-      *pool = obj.bucket.explicit_placement.index_pool;
-      return true;
-    }
-    if (obj.placement_id.empty()) {
-      return false;
-    }
-    auto iter = placement_pools.find(obj.placement_id);
-    if (iter == placement_pools.end()) {
-      return false;
-    }
-    pool->init(iter->second.index_pool);
-    return true;
-  }
-
-  bool get_data_pool(const rgw_obj& obj, rgw_pool *pool) const {
+  /*
+   * return data pool of the head object
+   */
+  bool get_head_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
     const rgw_data_placement_target& explicit_placement = obj.bucket.explicit_placement;
     if (!explicit_placement.data_pool.empty()) {
       if (!obj.in_extra_data) {
@@ -1259,10 +1268,10 @@ struct RGWZoneParams : RGWSystemMetaObj {
       }
       return true;
     }
-    if (obj.placement_id.empty()) {
+    if (placement_id.empty()) {
       return false;
     }
-    auto iter = placement_pools.find(obj.placement_id);
+    auto iter = placement_pools.find(placement_id);
     if (iter == placement_pools.end()) {
       return false;
     }
@@ -2198,16 +2207,17 @@ class RGWRados
   // This field represents the number of bucket index object shards
   uint32_t bucket_index_max_shards;
 
-  int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
-  int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref);
+  int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
+  int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool = NULL);
   uint64_t max_bucket_id;
 
-  int get_olh_target_state(RGWObjectCtx& rctx, const rgw_obj& obj, RGWObjState *olh_state,
-                           RGWObjState **target_state);
+  int get_olh_target_state(RGWObjectCtx& rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                           RGWObjState *olh_state, RGWObjState **target_state);
   int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state_impl(RGWObjectCtx *rctx, const rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
-  int append_atomic_test(RGWObjectCtx *rctx, const rgw_obj& obj,
+  int get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
+                         bool follow_olh, bool assume_noent = false);
+  int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
 
   int update_placement_map();
@@ -2412,7 +2422,7 @@ public:
 
   int get_required_alignment(const rgw_pool& pool, uint64_t *alignment);
   int get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size);
-  int get_max_chunk_size(const rgw_obj& obj, uint64_t *max_chunk_size);
+  int get_max_chunk_size(const string& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size);
 
   uint32_t get_max_bucket_shards() {
     return MAX_BUCKET_INDEX_SHARDS_PRIME;
@@ -2495,8 +2505,8 @@ public:
   int select_bucket_location_by_rule(const string& location_rule, rgw_bucket& bucket, RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
 
-  bool get_obj_data_pool(const rgw_obj& obj, rgw_pool *pool);
-  bool obj_to_raw(const rgw_obj& obj, rgw_raw_obj *raw_obj);
+  bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
+  bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
   int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
@@ -2608,7 +2618,7 @@ public:
     int complete_atomic_modification();
 
   public:
-    Object(RGWRados *_store, RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
+    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
                                                                                                ctx(_ctx), obj(_obj), bs(store),
                                                                                                state(NULL), versioning_disabled(false),
                                                                                                bs_initialized(false) {}
@@ -2787,7 +2797,7 @@ public:
     int shard_id;
 
   public:
-    Bucket(RGWRados *_store, RGWBucketInfo& _bucket_info) : store(_store), bucket_info(_bucket_info), bucket(bucket_info.bucket),
+    Bucket(RGWRados *_store, const RGWBucketInfo& _bucket_info) : store(_store), bucket_info(_bucket_info), bucket(bucket_info.bucket),
                                                             shard_id(RGW_NO_SHARD) {}
     RGWRados *get_store() { return store; }
     rgw_bucket& get_bucket() { return bucket; }
@@ -3069,7 +3079,7 @@ public:
 
   /** Delete an object.*/
   int delete_obj(RGWObjectCtx& obj_ctx,
-                         RGWBucketInfo& bucket_owner,
+                         const RGWBucketInfo& bucket_owner,
                          const rgw_obj& src_obj,
                          int versioning_status,
                          uint16_t bilog_flags = 0,
@@ -3109,16 +3119,17 @@ public:
    * bl: the contents of the attr
    * Returns: 0 on success, -ERR# otherwise.
    */
-  int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
+  int set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj, const char *name, bufferlist& bl);
 
-  int set_attrs(void *ctx, rgw_obj& obj,
+  int set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs);
 
   int get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state(RGWObjectCtx *rctx, const rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
-  int get_obj_state(RGWObjectCtx *rctx, const rgw_obj& obj, RGWObjState **state) {
-    return get_obj_state(rctx, obj, state, true);
+  int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
+                    bool follow_olh, assume_noent = false);
+  int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state) {
+    return get_obj_state(rctx, bucket_info, obj, state, true);
   }
 
   virtual int stat_system_obj(RGWObjectCtx& obj_ctx,
@@ -3138,16 +3149,17 @@ public:
   virtual void register_chained_cache(RGWChainedCache *cache) {}
   virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
-  int iterate_obj(RGWObjectCtx& ctx, rgw_obj& obj,
+  int iterate_obj(RGWObjectCtx& ctx,
+                  const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                   off_t ofs, off_t end,
                   uint64_t max_chunk_size,
-                  int (*iterate_obj_cb)(const rgw_obj& obj, const rgw_raw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
+                  int (*iterate_obj_cb)(const RGWBucketInfo& bucket_info, const rgw_obj& obj, const rgw_raw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
                   void *arg);
 
   int flush_read_list(struct get_obj_data *d);
 
   int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
-                         const rgw_obj& obj,
+                         const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          const rgw_raw_obj& read_obj,
                          off_t obj_ofs, off_t read_ofs, off_t len,
                          bool is_head_obj, void *arg);
@@ -3162,34 +3174,35 @@ public:
                        map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker);
 
-  int obj_operate(const rgw_obj& obj, librados::ObjectWriteOperation *op);
-  int obj_operate(const rgw_obj& obj, librados::ObjectReadOperation *op);
+  int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
+  int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
 
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
-  int olh_init_modification(RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
-  int olh_init_modification_impl(RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
-  int bucket_index_link_olh(RGWObjState& olh_state, const rgw_obj& obj_instance, bool delete_marker,
+  int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
+  int olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
+  int bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state,
+                            const rgw_obj& obj_instance, bool delete_marker,
                             const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
                             ceph::real_time unmod_since, bool high_precision_time);
-  int bucket_index_unlink_instance(const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch);
-  int bucket_index_read_olh_log(RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
+  int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch);
+  int bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
-  int bucket_index_trim_olh_log(RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
-  int bucket_index_clear_olh(RGWObjState& state, const rgw_obj& obj_instance);
-  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, RGWBucketInfo& bucket_info, const rgw_obj& obj,
+  int bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
+  int bucket_index_clear_olh(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
+  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver);
-  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw_obj& obj);
+  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
   int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time);
   int unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
                           uint64_t olh_epoch);
 
   void check_pending_olh_entries(map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
-  int remove_olh_pending_entries(RGWObjState& state, const rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs);
-  int follow_olh(RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target);
-  int get_olh(const rgw_obj& obj, RGWOLHInfo *olh);
+  int remove_olh_pending_entries(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs);
+  int follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target);
+  int get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh);
 
   void gen_rand_obj_instance_name(rgw_obj *target);
 
@@ -3280,7 +3293,7 @@ public:
   int trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& marker, string& end_marker);
   int get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id, map<int, string>& max_marker);
 
-  int bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent);
+  int bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
   void bi_put(librados::ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry);
   int bi_put(BucketShard& bs, rgw_cls_bi_entry& entry);
@@ -3352,7 +3365,7 @@ public:
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   int process_gc();
   int process_expire_objects();
-  int defer_gc(void *ctx, rgw_obj& obj);
+  int defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
 
   int process_lc();
   int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
@@ -3366,8 +3379,8 @@ public:
 		     const string& src_oid, const string& src_locator,
 	             librados::IoCtx& dst_ioctx,
 		     const string& dst_oid, const string& dst_locator);
-  int fix_head_obj_locator(rgw_bucket& bucket, bool copy_obj, bool remove_bad, rgw_obj_key& key);
-  int fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fix, bool *need_fix);
+  int fix_head_obj_locator(const RGWBucketInfo& bucket_info, bool copy_obj, bool remove_bad, rgw_obj_key& key);
+  int fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key& key, bool fix, bool *need_fix);
 
   int cls_user_get_header(const string& user_id, cls_user_header *header);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);
@@ -3491,7 +3504,7 @@ public:
    * will encode that info as a suggested update.)
    */
   int check_disk_state(librados::IoCtx io_ctx,
-                       rgw_bucket& bucket,
+                       const RGWBucketInfo& bucket_info,
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates);

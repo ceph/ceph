@@ -647,7 +647,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
       RGWObjState *astate = NULL;
       rgw_obj obj(bucket, (*it).key);
 
-      ret = store->get_obj_state(&obj_ctx, obj, &astate, false);
+      ret = store->get_obj_state(&obj_ctx, info, obj, &astate, false);
       if (ret == -ENOENT) {
         dout(1) << "WARNING: cannot find obj state for obj " << obj.get_oid() << dendl;
         continue;
@@ -662,7 +662,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
         RGWObjManifest::obj_iterator miter = manifest.obj_begin();
         rgw_obj head_obj = manifest.get_obj();
         rgw_raw_obj raw_head_obj;
-        store->obj_to_raw(head_obj, &raw_head_obj);
+        store->obj_to_raw(info.placement_rule, head_obj, &raw_head_obj);
 
 
         for (; miter != manifest.obj_end() && max_aio--; ++miter) {

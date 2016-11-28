@@ -268,7 +268,7 @@ int seed::save_torrent_file()
   rgw_obj obj(s->bucket, s->object.name);    
 
   rgw_raw_obj raw_obj;
-  store->obj_to_raw(obj, &raw_obj);
+  store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
 
   op_ret = store->omap_set(raw_obj, key, bl);
   if (op_ret < 0)
