@@ -266,27 +266,23 @@ void ThreadPool::unpause()
 void ThreadPool::drain(WorkQueue_* wq)
 {
   ldout(cct,10) << "drain" << dendl;
-  _lock.Lock();
-  _draining++;
-  while (processing || (wq != NULL && !wq->_empty()))
-    _wait_cond.Wait(_lock);
-  _draining--;
-  _lock.Unlock();
-}
-
-void ThreadPool::drain2(WorkQueue_* wq)
-{
-  ldout(cct,10) << "drain2" << dendl;
-  if (!wq)
-    return drain();
-  auto ret = _wq_processing.find(wq);
-  assert(ret != _wq_processing.end());
-  _lock.Lock();
-  _draining++;
-  while (ret->second || !wq->_empty())
-    _wait_cond.Wait(_lock);
-  _draining--;
-  _lock.Unlock();
+  if(!wq) {
+    _lock.Lock();
+    _draining++;
+    while (processing)
+      _wait_cond.Wait(_lock);
+    _draining--;
+    _lock.Unlock();
+  } else {
+    auto ret = _wq_processing.find(wq);
+    assert(ret != _wq_processing.end());
+    _lock.Lock();
+    _draining++;
+    while (ret->second || !wq->_empty())
+      _wait_cond.Wait(_lock);
+    _draining--;
+    _lock.Unlock();
+  }
 }
 
 void ThreadPool::set_ioprio(int cls, int priority)

@@ -530,11 +530,6 @@ public:
    * If it is not NULL, blocks until the given work queue does not have
    * any items left to process. */
   void drain(WorkQueue_* wq = 0);
-  /** @brief Wait until work completes, extend for drain.
-   * If the parameter is NULL, blocks until all threads are idle.
-   * If it is not NULL, blocks until the given work queue has all
-   * the items completely processed. */
-  void drain2(WorkQueue_* wq = 0);
 
   /// set io priority
   void set_ioprio(int cls, int priority);
