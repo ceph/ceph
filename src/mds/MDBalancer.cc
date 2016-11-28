@@ -98,14 +98,6 @@ void MDBalancer::tick()
     send_heartbeat();
     num_bal_times--;
   }
-
-  // hash?
-  if ((g_conf->mds_bal_frag || g_conf->mds_thrash_fragments) &&
-      g_conf->mds_bal_fragment_interval > 0 &&
-      now.sec() - last_fragment.sec() > g_conf->mds_bal_fragment_interval) {
-    last_fragment = now;
-    do_fragmenting();
-  }
 }
 
 
@@ -301,7 +293,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     beat_epoch = m->get_beat();
     send_heartbeat();
 
-    show_imports();
+    mds->mdcache->show_subtrees();
   }
 
   {
@@ -385,94 +377,120 @@ double MDBalancer::try_match(mds_rank_t ex, double& maxex,
   return howmuch;
 }
 
-void MDBalancer::queue_split(CDir *dir)
+void MDBalancer::queue_split(const CDir *dir, bool fast)
 {
+  dout(10) << __func__ << " enqueuing " << *dir
+                       << " (fast=" << fast << ")" << dendl;
+
   assert(mds->mdsmap->allows_dirfrags());
-  split_queue.insert(dir->dirfrag());
+  const dirfrag_t frag = dir->dirfrag();
+
+  auto callback = [this, frag](int r) {
+    if (split_pending.erase(frag) == 0) {
+      // Someone beat me to it.  This can happen in the fast splitting
+      // path, because we spawn two contexts, one with mds->timer and
+      // one with mds->queue_waiter.  The loser can safely just drop
+      // out.
+      return;
+    }
+
+    CDir *split_dir = mds->mdcache->get_dirfrag(frag);
+    if (!split_dir) {
+      dout(10) << "drop split on " << frag << " because not in cache" << dendl;
+      return;
+    }
+
+    // Pass on to MDCache: note that the split might still not
+    // happen if the checks in MDCache::can_fragment fail.
+    dout(10) << __func__ << " splitting " << *split_dir << dendl;
+    mds->mdcache->split_dir(split_dir, g_conf->mds_bal_split_bits);
+  };
+
+  bool is_new = false;
+  if (split_pending.count(frag) == 0) {
+    split_pending.insert(frag);
+    is_new = true;
+  }
+
+  if (fast) {
+    // Do the split ASAP: enqueue it in the MDSRank waiters which are
+    // run at the end of dispatching the current request
+    mds->queue_waiter(new MDSInternalContextWrapper(mds, 
+          new FunctionContext(callback)));
+  } else if (is_new) {
+    // Set a timer to really do the split: we don't do it immediately
+    // so that bursts of ops on a directory have a chance to go through
+    // before we freeze it.
+    mds->timer.add_event_after(g_conf->mds_bal_fragment_interval,
+                               new FunctionContext(callback));
+  }
 }
 
 void MDBalancer::queue_merge(CDir *dir)
 {
-  merge_queue.insert(dir->dirfrag());
-}
+  const auto frag = dir->dirfrag();
+  auto callback = [this, frag](int r) {
+    assert(frag.frag != frag_t());
 
-void MDBalancer::do_fragmenting()
-{
-  if (split_queue.empty() && merge_queue.empty()) {
-    dout(20) << "do_fragmenting has nothing to do" << dendl;
-    return;
-  }
+    // frag must be in this set because only one context is in flight
+    // for a given frag at a time (because merge_pending is checked before
+    // starting one), and this context is the only one that erases it.
+    merge_pending.erase(frag);
 
-  if (!split_queue.empty()) {
-    dout(10) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << dendl;
-
-    set<dirfrag_t> q;
-    q.swap(split_queue);
-
-    for (set<dirfrag_t>::iterator i = q.begin();
-	 i != q.end();
-	 ++i) {
-      CDir *dir = mds->mdcache->get_dirfrag(*i);
-      if (!dir ||
-	  !dir->is_auth())
-	continue;
-
-      dout(10) << "do_fragmenting splitting " << *dir << dendl;
-      mds->mdcache->split_dir(dir, g_conf->mds_bal_split_bits);
+    CDir *dir = mds->mdcache->get_dirfrag(frag);
+    if (!dir) {
+      dout(10) << "drop merge on " << frag << " because not in cache" << dendl;
+      return;
     }
-  }
+    assert(dir->dirfrag() == frag);
 
-  if (!merge_queue.empty()) {
-    dout(10) << "do_fragmenting " << merge_queue.size() << " dirs marked for possible merging" << dendl;
+    if(!dir->is_auth()) {
+      dout(10) << "drop merge on " << *dir << " because lost auth" << dendl;
+      return;
+    }
 
-    set<dirfrag_t> q;
-    q.swap(merge_queue);
+    dout(10) << "merging " << *dir << dendl;
 
-    for (set<dirfrag_t>::iterator i = q.begin();
-	 i != q.end();
-	 ++i) {
-      CDir *dir = mds->mdcache->get_dirfrag(*i);
-      if (!dir ||
-	  !dir->is_auth() ||
-	  dir->get_frag() == frag_t())  // ok who's the joker?
-	continue;
+    CInode *diri = dir->get_inode();
 
-      dout(10) << "do_fragmenting merging " << *dir << dendl;
-
-      CInode *diri = dir->get_inode();
-
-      frag_t fg = dir->get_frag();
-      while (fg != frag_t()) {
-	frag_t sibfg = fg.get_sibling();
-	list<CDir*> sibs;
-	bool complete = diri->get_dirfrags_under(sibfg, sibs);
-	if (!complete) {
-	  dout(10) << "  not all sibs under " << sibfg << " in cache (have " << sibs << ")" << dendl;
-	  break;
-	}
-	bool all = true;
-	for (list<CDir*>::iterator p = sibs.begin(); p != sibs.end(); ++p) {
-	  CDir *sib = *p;
-	  if (!sib->is_auth() || !sib->should_merge()) {
-	    all = false;
-	    break;
-	  }
-	}
-	if (!all) {
-	  dout(10) << "  not all sibs under " << sibfg << " " << sibs << " should_merge" << dendl;
-	  break;
-	}
-	dout(10) << "  all sibs under " << sibfg << " " << sibs << " should merge" << dendl;
-	fg = fg.parent();
+    frag_t fg = dir->get_frag();
+    while (fg != frag_t()) {
+      frag_t sibfg = fg.get_sibling();
+      list<CDir*> sibs;
+      bool complete = diri->get_dirfrags_under(sibfg, sibs);
+      if (!complete) {
+        dout(10) << "  not all sibs under " << sibfg << " in cache (have " << sibs << ")" << dendl;
+        break;
       }
-
-      if (fg != dir->get_frag())
-	mds->mdcache->merge_dir(diri, fg);
+      bool all = true;
+      for (list<CDir*>::iterator p = sibs.begin(); p != sibs.end(); ++p) {
+        CDir *sib = *p;
+        if (!sib->is_auth() || !sib->should_merge()) {
+          all = false;
+          break;
+        }
+      }
+      if (!all) {
+        dout(10) << "  not all sibs under " << sibfg << " " << sibs << " should_merge" << dendl;
+        break;
+      }
+      dout(10) << "  all sibs under " << sibfg << " " << sibs << " should merge" << dendl;
+      fg = fg.parent();
     }
+
+    if (fg != dir->get_frag())
+      mds->mdcache->merge_dir(diri, fg);
+  };
+
+  if (merge_pending.count(frag) == 0) {
+    dout(20) << __func__ << " enqueued dir " << *dir << dendl;
+    merge_pending.insert(frag);
+    mds->timer.add_event_after(g_conf->mds_bal_fragment_interval,
+        new FunctionContext(callback));
+  } else {
+    dout(20) << __func__ << " dir already in queue " << *dir << dendl;
   }
 }
-
-
 
 void MDBalancer::prep_rebalance(int beat)
 {
@@ -545,7 +563,7 @@ void MDBalancer::prep_rebalance(int beat)
     if (my_load < target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
       dout(5) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
       last_epoch_under = beat_epoch;
-      show_imports();
+      mds->mdcache->show_subtrees();
       return;
     }
 
@@ -762,7 +780,7 @@ void MDBalancer::try_rebalance()
     double have = 0.0;
 
 
-    show_imports();
+    mds->mdcache->show_subtrees();
 
     // search imports from target
     if (import_from_map.count(target)) {
@@ -854,7 +872,7 @@ void MDBalancer::try_rebalance()
   }
 
   dout(5) << "rebalance done" << dendl;
-  show_imports();
+  mds->mdcache->show_subtrees();
 }
 
 
@@ -1043,37 +1061,50 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
     hit_dir(now, in->get_parent_dn()->get_dir(), type, who);
 }
 
-void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
+void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 {
-  // hit me
-  double v = dir->pop_me.get(type).hit(now, amount);
-
   // split/merge
   if (g_conf->mds_bal_frag && g_conf->mds_bal_fragment_interval > 0 &&
       !dir->inode->is_base() &&        // not root/base (for now at least)
       dir->is_auth()) {
 
-    dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
-	     << " size " << dir->get_frag_size() << dendl;
-
     // split
     if (g_conf->mds_bal_split_size > 0 &&
 	mds->mdsmap->allows_dirfrags() &&
-	(dir->should_split() ||
-	 (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
-	 (v > g_conf->mds_bal_split_wr && type == META_POP_IWR)) &&
-	split_queue.count(dir->dirfrag()) == 0) {
-      dout(10) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << dendl;
-      split_queue.insert(dir->dirfrag());
+	(dir->should_split() || hot))
+    {
+      if (split_pending.count(dir->dirfrag()) == 0) {
+        queue_split(dir, false);
+      } else {
+        if (dir->should_split_fast()) {
+          queue_split(dir, true);
+        } else {
+          dout(10) << __func__ << ": fragment already enqueued to split: "
+                   << *dir << dendl;
+        }
+      }
     }
 
     // merge?
     if (dir->get_frag() != frag_t() && dir->should_merge() &&
-	merge_queue.count(dir->dirfrag()) == 0) {
-      dout(10) << "hit_dir " << type << " pop is " << v << ", putting in merge_queue: " << *dir << dendl;
-      merge_queue.insert(dir->dirfrag());
+	merge_pending.count(dir->dirfrag()) == 0) {
+      queue_merge(dir);
     }
   }
+}
+
+void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
+{
+  // hit me
+  double v = dir->pop_me.get(type).hit(now, amount);
+
+  const bool hot = (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
+                   (v > g_conf->mds_bal_split_wr && type == META_POP_IWR);
+
+  dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
+           << " size " << dir->get_frag_size() << dendl;
+
+  maybe_fragment(dir, hot);
 
   // replicate?
   if (type == META_POP_IRD && who >= 0) {
@@ -1193,12 +1224,3 @@ void MDBalancer::add_import(CDir *dir, utime_t now)
   }
 }
 
-
-
-
-
-
-void MDBalancer::show_imports(bool external)
-{
-  mds->mdcache->show_subtrees();
-}

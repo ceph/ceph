@@ -97,6 +97,7 @@ authentication keyring.
     Disaster recovery <disaster-recovery>
     Client authentication <client-auth>
     Upgrading old filesystems <upgrading>
+    Configuring directory fragmentation <dirfrags>
 
 .. raw:: html
 

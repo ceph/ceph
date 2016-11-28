@@ -194,6 +194,13 @@ public:
       return &projected.back();
     return &linkage;
   }
+
+  const linkage_t *get_projected_linkage() const {
+    if (!projected.empty())
+      return &projected.back();
+    return &linkage;
+  }
+
   CInode *get_projected_inode() {
     return get_projected_linkage()->inode;
   }
