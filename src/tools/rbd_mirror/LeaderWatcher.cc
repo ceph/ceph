@@ -25,7 +25,7 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-LeaderWatcher<I>::LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx,
+LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
                                 Listener *listener)
   : Watcher(io_ctx, threads->work_queue, RBD_MIRROR_LEADER),
     m_threads(threads), m_listener(listener),

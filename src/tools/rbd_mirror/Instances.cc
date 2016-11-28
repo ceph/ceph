@@ -25,7 +25,7 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-Instances<I>::Instances(Threads *threads, librados::IoCtx &ioctx) :
+Instances<I>::Instances(Threads<I> *threads, librados::IoCtx &ioctx) :
   m_threads(threads), m_ioctx(ioctx),
   m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
   m_lock("rbd::mirror::Instances " + ioctx.get_pool_name()) {

@@ -27,7 +27,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 class ReplayerAdminSocketHook;
 template <typename> class InstanceWatcher;
 
@@ -36,7 +36,8 @@ template <typename> class InstanceWatcher;
  */
 class Replayer {
 public:
-  Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+  Replayer(Threads<librbd::ImageCtx> *threads,
+           std::shared_ptr<ImageDeleter> image_deleter,
            ImageSyncThrottlerRef<> image_sync_throttler,
            int64_t local_pool_id, const peer_t &peer,
            const std::vector<const char*> &args);
@@ -70,7 +71,7 @@ private:
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
 
-  Threads *m_threads;
+  Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   mutable Mutex m_lock;
