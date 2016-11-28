@@ -241,7 +241,7 @@ configuration file, restart your gateway. On Red Hat Enteprise Linux execute::
 
 On Ubuntu execute::
 
- sudo service radosgw restart id=rgw.<short-hostname>sudo service radosgw restart id=rgw.<short-hostname>
+ sudo service radosgw restart id=rgw.<short-hostname>
 
 For federated configurations, each zone may have a different ``index_pool``
 setting for failover. To make the value consistent for a region's zones, you
