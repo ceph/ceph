@@ -1156,7 +1156,8 @@ public:
      * The destination named object may already exist, in
      * which case its previous contents are discarded.
      */
-    void clone(const coll_t& cid, const ghobject_t& oid, ghobject_t noid) {
+    void clone(const coll_t& cid, const ghobject_t& oid,
+	       const ghobject_t& noid) {
       Op* _op = _get_next_op();
       _op->op = OP_CLONE;
       _op->cid = _get_coll_id(cid);
