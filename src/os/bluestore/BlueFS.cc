@@ -1178,7 +1178,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   new_log_writer->append(bl);
 
   // 3. flush
-  _flush(new_log_writer, true);
+  r = _flush(new_log_writer, true);
+  assert(r == 0);
   lock.unlock();
 
   // 4. wait
