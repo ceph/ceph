@@ -112,7 +112,7 @@ public:
 				false, features, &order, 0, 0));
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
 
-    m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
+    m_threads = new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
 
     m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_threads->work_queue,
@@ -360,7 +360,7 @@ public:
 
   static int _image_number;
 
-  rbd::mirror::Threads *m_threads = nullptr;
+  rbd::mirror::Threads<> *m_threads = nullptr;
   std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
   std::shared_ptr<librados::Rados> m_local_cluster;
   librados::Rados m_remote_cluster;

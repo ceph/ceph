@@ -17,10 +17,12 @@
 #include "ImageDeleter.h"
 #include "types.h"
 
+namespace librbd { struct ImageCtx; }
+
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 class MirrorAdminSocketHook;
 
 /**
@@ -55,7 +57,7 @@ private:
 
   CephContext *m_cct;
   std::vector<const char*> m_args;
-  Threads *m_threads = nullptr;
+  Threads<librbd::ImageCtx> *m_threads = nullptr;
   Mutex m_lock;
   Cond m_cond;
   RadosRef m_local;

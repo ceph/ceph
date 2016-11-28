@@ -21,7 +21,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
@@ -34,7 +34,8 @@ public:
     virtual void pre_release_handler(Context *on_finish) = 0;
   };
 
-  LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx, Listener *listener);
+  LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
+                Listener *listener);
   ~LeaderWatcher() override;
 
   int init();
@@ -176,7 +177,7 @@ private:
     }
   };
 
-  Threads *m_threads;
+  Threads<ImageCtxT> *m_threads;
   Listener *m_listener;
 
   Mutex m_lock;
