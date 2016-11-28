@@ -22,6 +22,7 @@ extern "C" {
 
 #include "include/err.h"
 #include "include/encoding.h"
+#include "include/ceph_features.h"
 
 
 #include "common/Mutex.h"
@@ -1132,11 +1133,11 @@ public:
   }
   int write_to_file(const char *fn) {
     bufferlist bl;
-    encode(bl);
+    encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
     return bl.write_file(fn);
   }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
@@ -1156,6 +1157,6 @@ public:
   static bool is_valid_crush_loc(CephContext *cct,
 				 const map<string,string>& loc);
 };
-WRITE_CLASS_ENCODER(CrushWrapper)
+WRITE_CLASS_ENCODER_FEATURES(CrushWrapper)
 
 #endif
