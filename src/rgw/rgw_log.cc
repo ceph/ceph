@@ -381,7 +381,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   } else
     entry.http_status = "200"; // default
 
-  entry.error_code = s->err.s3_code;
+  entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
 
   bufferlist bl;
