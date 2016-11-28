@@ -10860,12 +10860,13 @@ int RGWRados::omap_get_all(rgw_obj& obj, bufferlist& header,
     return r;
   }
 
-  const int count = 1024;  // ?
+#define MAX_OMAP_GET_ENTRIES 1024
+  const int count = MAX_OMAP_GET_ENTRIES;
   string start_after;
 
   while (true) {
     std::map<string, bufferlist> t;
-    r = ref.ioctx.omap_get_vals(ref.oid, start_after, count, &m);
+    r = ref.ioctx.omap_get_vals(ref.oid, start_after, count, &t);
     if (r < 0) {
       return r;
     }
