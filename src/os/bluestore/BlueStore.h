@@ -1542,15 +1542,15 @@ private:
 
   std::atomic<int> csum_type;
 
-  uint64_t block_size;     ///< block size of block device (power of 2)
-  uint64_t block_mask;     ///< mask to get just the block offset
-  size_t block_size_order; ///< bits to shift to get block size
+  uint64_t block_size = 0;     ///< block size of block device (power of 2)
+  uint64_t block_mask = 0;     ///< mask to get just the block offset
+  size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
-  uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
+  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
