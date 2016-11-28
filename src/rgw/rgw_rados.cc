@@ -3057,7 +3057,8 @@ class RGWSyncLogTrimThread : public RGWSyncProcessorThread
   void stop_process() override { crs.stop(); }
 public:
   RGWSyncLogTrimThread(RGWRados *store, int interval)
-    : RGWSyncProcessorThread(store), crs(store->ctx(), nullptr), store(store),
+    : RGWSyncProcessorThread(store),
+      crs(store->ctx(), store->get_cr_registry()), store(store),
       http(store->ctx(), crs.get_completion_mgr()),
       trim_interval(interval, 0)
   {}
@@ -3066,9 +3067,9 @@ public:
     return http.set_threaded();
   }
   int process() override {
-    crs.run(new RGWDataLogTrimCR(store, &http,
-                                 cct->_conf->rgw_data_log_num_shards,
-                                 trim_interval));
+    crs.run(create_data_log_trim_cr(store, &http,
+                                    cct->_conf->rgw_data_log_num_shards,
+                                    trim_interval));
     return 0;
   }
 };
