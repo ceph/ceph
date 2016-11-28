@@ -690,6 +690,7 @@ public:
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
+	break;
 
       case OP_SPLIT_COLLECTION2:
         assert(op->cid < cm.size());
