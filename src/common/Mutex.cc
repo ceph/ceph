@@ -92,6 +92,8 @@ Mutex::~Mutex() {
 void Mutex::Lock(bool no_lockdep) {
   int r;
 
+  r = 0;
+  
   if (lockdep && g_lockdep && !no_lockdep) _will_lock();
 
   if (logger && cct && cct->_conf->mutex_perf_counter) {
