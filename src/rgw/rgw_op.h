@@ -387,6 +387,8 @@ inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
 
 
 class RGWBulkUploadOp : public RGWOp {
+  boost::optional<RGWObjectCtx> dir_ctx;
+
 protected:
   class StreamGetter;
   class DecoratedStreamGetter;
@@ -407,7 +409,15 @@ protected:
 
   int handle_dir_verify_permission();
   int handle_dir(boost::string_ref path);
+
 public:
+  void init(RGWRados* const store,
+            struct req_state* const s,
+            RGWHandler* const h) override {
+    RGWOp::init(store, s, h);
+    dir_ctx.emplace(store);
+  }
+
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
