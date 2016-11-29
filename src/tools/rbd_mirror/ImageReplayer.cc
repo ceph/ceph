@@ -429,6 +429,9 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     dout(5) << "remote image is non-primary or local image is primary" << dendl;
     on_start_fail(0, "remote image is non-primary or local image is primary");
     return;
+  } else if (r == -EEXIST) {
+    on_start_fail(r, "split-brain detected");
+    return;
   } else if (r < 0) {
     on_start_fail(r, "error bootstrapping replay");
     return;
