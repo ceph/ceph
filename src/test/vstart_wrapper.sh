@@ -16,6 +16,18 @@
 # GNU Library Public License for more details.
 #
 
+if [ -z "$CEPH_ROOT" ] ; then
+    CEPH_ROOT=`readlink -f $(dirname $0)/../..`
+    if [ -d $CEPH_ROOT/build ] ; then
+       # asume we are in Cmake build environment
+        CEPH_BIN=$CEPH_ROOT/build/bin
+        CEPH_LIB=$CEPH_ROOT/build/lib
+    else
+        CEPH_BIN=$CEPH_ROOT/src
+        CEPH_LIB=$CEPH_ROOT/.libs/src
+    fi
+fi
+
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
