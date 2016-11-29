@@ -5486,7 +5486,7 @@ int BlueStore::collection_bits(const coll_t& cid)
 }
 
 int BlueStore::collection_list(
-  const coll_t& cid, ghobject_t start, ghobject_t end,
+  const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
@@ -5497,7 +5497,7 @@ int BlueStore::collection_list(
 }
 
 int BlueStore::collection_list(
-  CollectionHandle &c_, ghobject_t start, ghobject_t end,
+  CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
@@ -5519,7 +5519,7 @@ int BlueStore::collection_list(
 }
 
 int BlueStore::_collection_list(
-  Collection* c, ghobject_t start, ghobject_t end,
+  Collection* c, const ghobject_t& start, const ghobject_t& end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {

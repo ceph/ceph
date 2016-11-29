@@ -1542,15 +1542,15 @@ private:
 
   std::atomic<int> csum_type;
 
-  uint64_t block_size;     ///< block size of block device (power of 2)
-  uint64_t block_mask;     ///< mask to get just the block offset
-  size_t block_size_order; ///< bits to shift to get block size
+  uint64_t block_size = 0;     ///< block size of block device (power of 2)
+  uint64_t block_mask = 0;     ///< mask to get just the block offset
+  size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
-  uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
+  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
@@ -1677,7 +1677,10 @@ private:
       kv_cond.notify_all();
     }
     kv_sync_thread.join();
-    kv_stop = false;
+    {
+      std::lock_guard<std::mutex> l(kv_lock);
+      kv_stop = false;
+    }
   }
 
   bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
@@ -1703,7 +1706,8 @@ private:
     txc->shared_blobs_written.insert(b->shared_blob);
   }
 
-  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+  int _collection_list(
+    Collection *c, const ghobject_t& start, const ghobject_t& end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
@@ -1816,10 +1820,14 @@ public:
   int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
-  int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
+  int collection_list(const coll_t& cid,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
-  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
+  int collection_list(CollectionHandle &c,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
