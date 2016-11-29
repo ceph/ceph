@@ -99,8 +99,6 @@ public:
     const string& path,
     uuid_d *fsid);
 
-  Logger *logger;
-
   /**
    * Fetch Object Store statistics.
    *
@@ -1487,8 +1485,7 @@ public:
 
  public:
   ObjectStore(CephContext* cct,
-	      const std::string& path_) : path(path_), cct(cct),
-					  logger(nullptr) {}
+	      const std::string& path_) : path(path_), cct(cct) {}
   virtual ~ObjectStore() {}
 
   // no copying
