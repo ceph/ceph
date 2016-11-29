@@ -210,3 +210,10 @@ if(WITH_CEPHFS)
   add_ceph_unittest(unittest_global_doublefree ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_global_doublefree)
   target_link_libraries(unittest_global_doublefree cephfs librados)
 endif(WITH_CEPHFS)
+
+add_executable(unittest_dns_resolve
+  dns_resolve.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_dns_resolve global)
+add_ceph_unittest(unittest_dns_resolve
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_dns_resolve)
