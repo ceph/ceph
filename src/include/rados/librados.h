@@ -1342,6 +1342,24 @@ CEPH_RADOS_API int rados_write(rados_ioctx_t io, const char *oid,
                                const char *buf, size_t len, uint64_t off);
 
 /**
+ * Write *len* bytes from *buf* into the *oid* object, starting at
+ * offset *off*. The value of *len* must be <= UINT_MAX/2.
+ *
+ * This function is not thread-safe, i.e. contents of buf must remain
+ * the same during entire function call.
+ *
+ * @note This will never return a positive value not equal to len.
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_write2(rados_ioctx_t io, const char *oid,
+                                char *buf, size_t len, uint64_t off);
+
+/**
  * Write *len* bytes from *buf* into the *oid* object. The value of
  * *len* must be <= UINT_MAX/2.
  *
@@ -1356,6 +1374,25 @@ CEPH_RADOS_API int rados_write(rados_ioctx_t io, const char *oid,
  */
 CEPH_RADOS_API int rados_write_full(rados_ioctx_t io, const char *oid,
                                     const char *buf, size_t len);
+
+/**
+ * Write *len* bytes from *buf* into the *oid* object. The value of
+ * *len* must be <= UINT_MAX/2.
+ *
+ * The object is filled with the provided data. If the object exists,
+ * it is atomically truncated and then written.
+ *
+ * This function is not thread-safe, i.e. contents of buf must remain
+ * the same during entire function call.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_write_full2(rados_ioctx_t io, const char *oid,
+                                     char *buf, size_t len);
 
 /**
  * Write the same *data_len* bytes from *buf* multiple times into the
@@ -1374,6 +1411,27 @@ CEPH_RADOS_API int rados_write_full(rados_ioctx_t io, const char *oid,
 CEPH_RADOS_API int rados_writesame(rados_ioctx_t io, const char *oid,
                                    const char *buf, size_t data_len,
                                    size_t write_len, uint64_t off);
+
+/**
+ * Write the same *data_len* bytes from *buf* multiple times into the
+ * *oid* object. *write_len* bytes are written in total, which must be
+ * a multiple of *data_len*. The value of *write_len* and *data_len*
+ * must be <= UINT_MAX/2.
+ *
+ * This function is not thread-safe, i.e. contents of buf must remain
+ * the same during entire function call.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param data_len length of the data, in bytes
+ * @param write_len the total number of bytes to write
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_writesame2(rados_ioctx_t io, const char *oid,
+                                    char *buf, size_t data_len,
+                                    size_t write_len, uint64_t off);
 
 /**
  * Efficiently copy a portion of one object to another
@@ -1409,6 +1467,22 @@ CEPH_RADOS_API int rados_clone_range(rados_ioctx_t io, const char *dst,
  */
 CEPH_RADOS_API int rados_append(rados_ioctx_t io, const char *oid,
                                 const char *buf, size_t len);
+
+/**
+ * Append *len* bytes from *buf* into the *oid* object. The value of
+ * *len* must be <= UINT_MAX/2.
+ *
+ * This function is not thread-safe, i.e. contents of buf must remain
+ * the same during entire function call.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param buf the data to append
+ * @param len length of buf (in bytes)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_append2(rados_ioctx_t io, const char *oid,
+                                 char *buf, size_t len);
 
 /**
  * Read data from an object
@@ -1488,6 +1562,23 @@ CEPH_RADOS_API int rados_getxattr(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_setxattr(rados_ioctx_t io, const char *o,
                                   const char *name, const char *buf,
                                   size_t len);
+
+/**
+ * Set an extended attribute on an object.
+ *
+ * This function is not thread-safe, i.e. contents of buf must remain
+ * the same during entire function call.
+ *
+ * @param io the context in which xattr is set
+ * @param o name of the object
+ * @param name which extended attribute to set
+ * @param buf what to store in the xattr
+ * @param len the number of bytes in buf
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_setxattr2(rados_ioctx_t io, const char *o,
+                                   const char *name, char *buf,
+                                   size_t len);
 
 /**
  * Delete an extended attribute from an object.
