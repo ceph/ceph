@@ -402,14 +402,14 @@ public:
                                     remote_mirror_uuid,
                                     &mock_journaler,
                                     &m_mirror_peer_client_meta,
-                                    on_finish);
+                                    on_finish, &m_do_resync);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx = nullptr;
   librbd::MockTestImageCtx *m_local_test_image_ctx = nullptr;
   librbd::journal::MirrorPeerClientMeta m_mirror_peer_client_meta;
-
+  bool m_do_resync;
 };
 
 TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
