@@ -759,8 +759,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 {
   Mutex::Locker lock(stat_lock);
 
-  osd_stat.hb_in.swap(hb_peers);
-  osd_stat.hb_out.clear();
+  osd_stat.hb_peers.swap(hb_peers);
 
   osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
