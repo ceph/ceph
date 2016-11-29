@@ -1473,6 +1473,8 @@ public:
 
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
+          yield lease_cr->go_down();
+          drain_all();
           return retcode;
         }
       }
