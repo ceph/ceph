@@ -5605,8 +5605,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
    * specific request */
   RGWBucketInfo binfo;
   std::map<std::string, ceph::bufferlist> battrs;
-  RGWObjectCtx obj_ctx(store); // = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  op_ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, bucket_name,
+  op_ret = store->get_bucket_info(*dir_ctx, s->bucket_tenant, bucket_name,
                                   binfo, NULL, &battrs);
   if (op_ret < 0 && op_ret != -ENOENT) {
     return op_ret;
