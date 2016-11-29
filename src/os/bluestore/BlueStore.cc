@@ -643,7 +643,8 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
                << " expected4release=" << blob_expected_for_release
                << " expected_allocations=" << bi.expected_allocations
                << dendl;
-      if (blob_expected_for_release >= bi.expected_allocations) {
+      int64_t benefit = blob_expected_for_release - bi.expected_allocations;
+      if (benefit >= g_conf->bluestore_gc_enable_blob_threshold) {
         if (bi.collect_candidate) {
           auto it = bi.first_lextent;
           bool bExit = false;
@@ -8724,10 +8725,10 @@ void BlueStore::_do_garbage_collection(
   GarbageCollector gc(c->store->cct);
   int64_t benefit = gc.estimate(offset,
                                 length,
-                                o->extent_map,
-                                wctx->old_extents, 
-                                min_alloc_size);
-  if (benefit > 0) {
+				o->extent_map,
+				wctx->old_extents,
+				min_alloc_size);
+  if (benefit > g_conf->bluestore_gc_enable_total_threshold) {
     auto& extents_to_collect = gc.get_extents_to_collect();
     for (auto it = extents_to_collect.begin();
          it != extents_to_collect.end();
