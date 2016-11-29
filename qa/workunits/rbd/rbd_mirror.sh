@@ -357,4 +357,16 @@ test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnected'
 
+testlog "TEST: split-brain"
+image=split-brain
+create_image ${CLUSTER2} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+demote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+promote_image ${CLUSTER1} ${POOL} ${image}
+write_image ${CLUSTER1} ${POOL} ${image} 10
+demote_image ${CLUSTER1} ${POOL} ${image}
+promote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
+
 echo OK
