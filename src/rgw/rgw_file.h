@@ -837,7 +837,13 @@ namespace rgw {
       } else {
 	/* try external authenticators (ldap for now) */
 	rgw::LDAPHelper* ldh = rgwlib.get_ldh(); /* !nullptr */
-	RGWToken token{from_base64(key.id)};
+	RGWToken token;
+	/* boost filters and/or string_ref may throw on invalid input */
+	try {
+	  token = rgw::from_base64(key.id);
+	} catch(...) {
+	  token = std::string("");
+	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
 	  if (rgw_get_user_info_by_uid(store, token.id, user) < 0) {
