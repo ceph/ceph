@@ -274,7 +274,7 @@ function test_tiering_agent()
   done
   $evicted # assert
   ceph osd tier remove-overlay $slow
-  ceph osd tier remove $slow $fast
+  ceph osd tier remove $slow $fast --force-nonempty
   ceph osd pool delete $fast $fast --yes-i-really-really-mean-it
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
@@ -352,7 +352,8 @@ function test_tiering()
   done
   expect_false ceph osd tier add slow cache2
   ceph osd tier add slow cache2 --force-nonempty
-  ceph osd tier remove slow cache2
+  expect_false ceph osd tier remove slow cache2
+  ceph osd tier remove slow cache2 --force-nonempty
 
   ceph osd pool ls | grep cache2
   ceph osd pool ls -f json-pretty | grep cache2
@@ -362,11 +363,18 @@ function test_tiering()
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
-  # make sure we can't clobber snapshot state
+  # clobber snapshot state when tier change
   ceph osd pool create snap_base 2
   ceph osd pool create snap_cache 2
   ceph osd pool mksnap snap_cache snapname
-  expect_false ceph osd tier add snap_base snap_cache
+  rados -p snap_cache lssnap | grep snapname
+  ceph osd tier add snap_base snap_cache
+  rados -p snap_cache lssnap | grep snapname && false || true
+  ceph osd pool mksnap snap_base snapname
+  rados -p snap_base lssnap | grep snapname
+  rados -p snap_cache lssnap | grep snapname && false || true
+  ceph osd tier remove snap_base snap_cache
+  rados -p snap_cache lssnap | grep snapname && false || true
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
 

@@ -118,7 +118,7 @@ void RadosTestParamPPNS::TearDownTestCase()
       inbl, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+      "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
       inbl, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +
@@ -373,7 +373,7 @@ void RadosTestParamPP::TearDownTestCase()
       inbl, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+      "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
       inbl, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +

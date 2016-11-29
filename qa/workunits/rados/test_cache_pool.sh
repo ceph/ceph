@@ -79,9 +79,9 @@ expect_false diff -q tmp.txt empty.txt
 
 # cleanup
 ceph osd tier remove-overlay base_pool
-ceph osd tier remove base_pool wrong_cache
-ceph osd tier remove base_pool partial_wrong
-ceph osd tier remove base_pool empty_cache
+ceph osd tier remove base_pool wrong_cache --force-nonempty
+ceph osd tier remove base_pool partial_wrong  --force-nonempty
+ceph osd tier remove base_pool empty_cache  --force-nonempty
 ceph osd pool delete base_pool base_pool --yes-i-really-really-mean-it
 ceph osd pool delete empty_cache empty_cache --yes-i-really-really-mean-it
 ceph osd pool delete wrong_cache wrong_cache --yes-i-really-really-mean-it
@@ -160,7 +160,7 @@ diff -q testclone2.txt /etc/hosts
 
 # cleanup
 ceph osd tier remove-overlay base
-ceph osd tier remove base cache
+ceph osd tier remove base cache --force-nonempty
 
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete base base --yes-i-really-really-mean-it
