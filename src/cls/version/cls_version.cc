@@ -20,13 +20,6 @@
 CLS_VER(1,0)
 CLS_NAME(version)
 
-cls_handle_t h_class;
-cls_method_handle_t h_version_set;
-cls_method_handle_t h_version_inc;
-cls_method_handle_t h_version_inc_conds;
-cls_method_handle_t h_version_read;
-cls_method_handle_t h_version_check_conds;
-
 
 #define VERSION_ATTR "ceph.objclass.version"
 
@@ -223,9 +216,16 @@ static int cls_version_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(version)
 {
   CLS_LOG(1, "Loaded version class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_version_set;
+  cls_method_handle_t h_version_inc;
+  cls_method_handle_t h_version_inc_conds;
+  cls_method_handle_t h_version_read;
+  cls_method_handle_t h_version_check_conds;
 
   cls_register("version", &h_class);
 

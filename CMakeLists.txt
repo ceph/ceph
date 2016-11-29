@@ -234,6 +234,13 @@ option(WITH_KVS "Key value store is here" ON)
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
 
+# embedded ceph daemon static library
+# NOTE: Ceph is mostly LGPL (see COPYING), which means that
+# static linking brings with it restrictions. Please be sure
+# to look at the LGPL license carefully before linking this library to
+# your code. See http://www.gnu.org/licenses/gpl-faq.html#LGPLStaticVsDynamic.
+option(WITH_EMBEDDED "build the embedded ceph daemon library" ON)
+
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(WITH_LEVELDB)
   if(LEVELDB_PREFIX)
