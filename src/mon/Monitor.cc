@@ -4136,7 +4136,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {
-      check_sub(s->sub_map["monmap"]);
+      monmon()->check_sub(s->sub_map[p->first]);
     } else if (logmon()->sub_name_to_id(p->first) >= 0) {
       logmon()->check_sub(s->sub_map[p->first]);
     }
@@ -4226,32 +4226,6 @@ bool Monitor::ms_handle_reset(Connection *con)
   s->put();
   return true;
 }
-
-void Monitor::check_subs()
-{
-  string type = "monmap";
-  if (session_map.subs.count(type) == 0)
-    return;
-  xlist<Subscription*>::iterator p = session_map.subs[type]->begin();
-  while (!p.end()) {
-    Subscription *sub = *p;
-    ++p;
-    check_sub(sub);
-  }
-}
-
-void Monitor::check_sub(Subscription *sub)
-{
-  dout(10) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
-  if (sub->next <= monmap->get_epoch()) {
-    send_latest_monmap(sub->session->con.get());
-    if (sub->onetime)
-      session_map.remove_sub(sub);
-    else
-      sub->next = monmap->get_epoch() + 1;
-  }
-}
-
 
 // -----
 
