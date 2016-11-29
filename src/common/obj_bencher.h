@@ -38,6 +38,7 @@ struct bench_data {
   bool done; //is the benchmark is done
   uint64_t object_size; //the size of the objects
   uint64_t op_size;     // the size of the read/write ops
+  bool hints;
   // same as object_size for write tests
   int in_flight; //number of reads/writes being waited on
   int started;
@@ -110,7 +111,7 @@ public:
   int aio_bench(
     int operation, int secondsToRun,
     int concurrentios, uint64_t op_size, uint64_t object_size, unsigned max_objects,
-    bool cleanup, const std::string& run_name, bool no_verify=false);
+    bool cleanup, bool hints, const std::string& run_name, bool no_verify=false);
   int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
   void set_show_time(bool dt) {

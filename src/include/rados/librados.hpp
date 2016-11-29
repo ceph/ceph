@@ -286,8 +286,8 @@ namespace librados
    * Alloc hint flags for the alloc_hint operation.
    */
   enum AllocHintFlags {
-    ALLOC_HINT_SEQUENTIAL_WRITE = 1,
-    ALLOC_HINT_RANDOM_WRITE = 2,
+    ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
+    ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
     ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
     ALLOC_HINT_FLAG_RANDOM_READ = 8,
     ALLOC_HINT_FLAG_APPEND_ONLY = 16,
