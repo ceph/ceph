@@ -66,7 +66,7 @@ void handle_osd_signal(int signum)
     osd->handle_signal(signum);
 }
 
-void usage() 
+static void usage()
 {
   cout << "usage: ceph-osd -i <osdid>\n"
        << "  --osd-data PATH data directory\n"
@@ -90,7 +90,13 @@ void usage()
   generic_server_usage();
 }
 
-int main(int argc, const char **argv) 
+#ifdef BUILDING_FOR_EMBEDDED
+void cephd_preload_embedded_plugins();
+void cephd_preload_rados_classes(OSD *osd);
+extern "C" int cephd_osd(int argc, const char **argv)
+#else
+int main(int argc, const char **argv)
+#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -248,6 +254,10 @@ int main(int argc, const char **argv)
     derr << "unable to create object store" << dendl;
     return -ENODEV;
   }
+
+#ifdef BUILDING_FOR_EMBEDDED
+  cephd_preload_embedded_plugins();
+#endif
 
   if (mkfs) {
     common_init_finish(g_ceph_context);
@@ -565,8 +575,10 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
+#ifndef BUILDING_FOR_EMBEDDED
   if (global_init_preload_erasure_code(g_ceph_context) < 0)
     return -1;
+#endif
 
   osd = new OSD(g_ceph_context,
                 store,
@@ -602,6 +614,10 @@ int main(int argc, const char **argv)
          << TEXT_NORMAL << dendl;
     return 1;
   }
+
+#ifdef BUILDING_FOR_EMBEDDED
+  cephd_preload_rados_classes(osd);
+#endif
 
   // install signal handlers
   init_async_signal_handler();

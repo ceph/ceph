@@ -629,6 +629,8 @@ endif(${WITH_RADOSGW})
 if(WITH_RBD)
   set(DENCODER_EXTRALIBS
       ${DENCODER_EXTRALIBS}
+      rbd_types
+      cls_rbd_client
       rbd_replay_types)
   if(LINUX)
     list(APPEND dencoder_srcs
@@ -966,3 +968,7 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 add_subdirectory(script)
+
+if(WITH_EMBEDDED)
+  add_subdirectory(libcephd)
+endif()

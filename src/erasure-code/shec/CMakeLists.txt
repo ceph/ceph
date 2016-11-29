@@ -2,12 +2,14 @@
 
 include_directories(.)
 
-add_library(shec_utils OBJECT
+set(shec_utils_srcs
   ${CMAKE_SOURCE_DIR}/src/erasure-code/ErasureCode.cc 
   ErasureCodePluginShec.cc 
   ErasureCodeShec.cc 
   ErasureCodeShecTableCache.cc 
   determinant.c)
+
+add_library(shec_utils OBJECT ${shec_utils_srcs})
 add_dependencies(shec_utils ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 
 set(ec_shec_objs
@@ -27,3 +29,9 @@ foreach(flavor ${jerasure_legacy_flavors})
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
   add_dependencies(ec_shec ${plugin_name})
 endforeach()
+
+if(WITH_EMBEDDED)
+  # note we rely on the fact this will always be statically linked with jerasure
+  add_library(cephd_ec_shec STATIC ${shec_utils_srcs})
+  set_target_properties(cephd_ec_shec PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
+endif()

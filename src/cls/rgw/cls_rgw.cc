@@ -22,42 +22,6 @@
 CLS_VER(1,0)
 CLS_NAME(rgw)
 
-cls_handle_t h_class;
-cls_method_handle_t h_rgw_bucket_init_index;
-cls_method_handle_t h_rgw_bucket_set_tag_timeout;
-cls_method_handle_t h_rgw_bucket_list;
-cls_method_handle_t h_rgw_bucket_check_index;
-cls_method_handle_t h_rgw_bucket_rebuild_index;
-cls_method_handle_t h_rgw_bucket_update_stats;
-cls_method_handle_t h_rgw_bucket_prepare_op;
-cls_method_handle_t h_rgw_bucket_complete_op;
-cls_method_handle_t h_rgw_bucket_link_olh;
-cls_method_handle_t h_rgw_bucket_unlink_instance_op;
-cls_method_handle_t h_rgw_bucket_read_olh_log;
-cls_method_handle_t h_rgw_bucket_trim_olh_log;
-cls_method_handle_t h_rgw_bucket_clear_olh;
-cls_method_handle_t h_rgw_obj_remove;
-cls_method_handle_t h_rgw_obj_store_pg_ver;
-cls_method_handle_t h_rgw_obj_check_attrs_prefix;
-cls_method_handle_t h_rgw_obj_check_mtime;
-cls_method_handle_t h_rgw_bi_get_op;
-cls_method_handle_t h_rgw_bi_put_op;
-cls_method_handle_t h_rgw_bi_list_op;
-cls_method_handle_t h_rgw_bi_log_list_op;
-cls_method_handle_t h_rgw_dir_suggest_changes;
-cls_method_handle_t h_rgw_user_usage_log_add;
-cls_method_handle_t h_rgw_user_usage_log_read;
-cls_method_handle_t h_rgw_user_usage_log_trim;
-cls_method_handle_t h_rgw_gc_set_entry;
-cls_method_handle_t h_rgw_gc_list;
-cls_method_handle_t h_rgw_gc_remove;
-cls_method_handle_t h_rgw_lc_set_entry;
-cls_method_handle_t h_rgw_lc_rm_entry;
-cls_method_handle_t h_rgw_lc_get_next_entry;
-cls_method_handle_t h_rgw_lc_put_head;
-cls_method_handle_t h_rgw_lc_get_head;
-cls_method_handle_t h_rgw_lc_list_entries;
-
 
 #define BI_PREFIX_CHAR 0x80
 
@@ -3507,9 +3471,45 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(rgw)
 {
   CLS_LOG(1, "Loaded rgw class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_rgw_bucket_init_index;
+  cls_method_handle_t h_rgw_bucket_set_tag_timeout;
+  cls_method_handle_t h_rgw_bucket_list;
+  cls_method_handle_t h_rgw_bucket_check_index;
+  cls_method_handle_t h_rgw_bucket_rebuild_index;
+  cls_method_handle_t h_rgw_bucket_update_stats;
+  cls_method_handle_t h_rgw_bucket_prepare_op;
+  cls_method_handle_t h_rgw_bucket_complete_op;
+  cls_method_handle_t h_rgw_bucket_link_olh;
+  cls_method_handle_t h_rgw_bucket_unlink_instance_op;
+  cls_method_handle_t h_rgw_bucket_read_olh_log;
+  cls_method_handle_t h_rgw_bucket_trim_olh_log;
+  cls_method_handle_t h_rgw_bucket_clear_olh;
+  cls_method_handle_t h_rgw_obj_remove;
+  cls_method_handle_t h_rgw_obj_store_pg_ver;
+  cls_method_handle_t h_rgw_obj_check_attrs_prefix;
+  cls_method_handle_t h_rgw_obj_check_mtime;
+  cls_method_handle_t h_rgw_bi_get_op;
+  cls_method_handle_t h_rgw_bi_put_op;
+  cls_method_handle_t h_rgw_bi_list_op;
+  cls_method_handle_t h_rgw_bi_log_list_op;
+  cls_method_handle_t h_rgw_dir_suggest_changes;
+  cls_method_handle_t h_rgw_user_usage_log_add;
+  cls_method_handle_t h_rgw_user_usage_log_read;
+  cls_method_handle_t h_rgw_user_usage_log_trim;
+  cls_method_handle_t h_rgw_gc_set_entry;
+  cls_method_handle_t h_rgw_gc_list;
+  cls_method_handle_t h_rgw_gc_remove;
+  cls_method_handle_t h_rgw_lc_set_entry;
+  cls_method_handle_t h_rgw_lc_rm_entry;
+  cls_method_handle_t h_rgw_lc_get_next_entry;
+  cls_method_handle_t h_rgw_lc_put_head;
+  cls_method_handle_t h_rgw_lc_get_head;
+  cls_method_handle_t h_rgw_lc_list_entries;
 
   cls_register("rgw", &h_class);
 

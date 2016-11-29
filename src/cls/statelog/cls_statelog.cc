@@ -19,12 +19,6 @@
 CLS_VER(1,0)
 CLS_NAME(statelog)
 
-cls_handle_t h_class;
-cls_method_handle_t h_statelog_add;
-cls_method_handle_t h_statelog_list;
-cls_method_handle_t h_statelog_remove;
-cls_method_handle_t h_statelog_check_state;
-
 static string statelog_index_by_client_prefix = "1_";
 static string statelog_index_by_object_prefix = "2_";
 
@@ -301,9 +295,15 @@ static int cls_statelog_check_state(cls_method_context_t hctx, bufferlist *in, b
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(statelog)
 {
   CLS_LOG(1, "Loaded log class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_statelog_add;
+  cls_method_handle_t h_statelog_list;
+  cls_method_handle_t h_statelog_remove;
+  cls_method_handle_t h_statelog_check_state;
 
   cls_register("statelog", &h_class);
 

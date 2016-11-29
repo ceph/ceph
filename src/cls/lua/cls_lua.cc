@@ -15,10 +15,6 @@
 CLS_VER(1,0)
 CLS_NAME(lua)
 
-cls_handle_t h_class;
-cls_method_handle_t h_eval_json;
-cls_method_handle_t h_eval_bufferlist;
-
 /*
  * Jump point for recovering from Lua panic.
  */
@@ -1036,9 +1032,13 @@ static int eval_bufferlist(cls_method_context_t hctx, bufferlist *in, bufferlist
   return eval_generic(hctx, in, out, BUFFERLIST_ENC);
 }
 
-void __cls_init()
+CLS_INIT(lua)
 {
   CLS_LOG(20, "Loaded lua class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_eval_json;
+  cls_method_handle_t h_eval_bufferlist;
 
   cls_register("lua", &h_class);
 

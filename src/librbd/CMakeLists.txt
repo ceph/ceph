@@ -119,3 +119,8 @@ if(ENABLE_SHARED)
     LINK_FLAGS "-Wl,--exclude-libs,ALL")
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(WITH_EMBEDDED)
+  add_library(cephd_rbd_base STATIC librbd.cc ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
+  merge_static_libraries(cephd_rbd cephd_rbd_base rbd_internal rbd_types journal)
+endif()

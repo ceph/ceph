@@ -126,8 +126,21 @@
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
 
+
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
+
+/* define if embedded enabled */
+#cmakedefine WITH_EMBEDDED
+
+/* define if cephfs enabled */
+#cmakedefine WITH_CEPHFS
+
+/* define if rbd enabled */
+#cmakedefine WITH_RBD
+
+/* define if key-value-store is enabled */
+#cmakedefine WITH_KVS
 
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
