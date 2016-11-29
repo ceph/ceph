@@ -73,7 +73,7 @@ public:
         lock("librbd::Journal::SafeTimerSingleton::lock") {
     init();
   }
-  virtual ~SafeTimerSingleton() {
+  ~SafeTimerSingleton() {
     Mutex::Locker locker(lock);
     shutdown();
   }
