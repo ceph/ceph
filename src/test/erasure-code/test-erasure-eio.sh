@@ -88,12 +88,12 @@ function rados_get() {
     local dir=$1
     local poolname=$2
     local objname=${3:-SOMETHING}
-    local expect=${4:-0}
+    local expect=${4:-ok}
 
     #
     # Expect a failure to get object
     #
-    if [ $expect = "1" ];
+    if [ $expect = "fail" ];
     then
         ! rados --pool $poolname get $objname $dir/COPY
         return
@@ -117,22 +117,24 @@ function rados_put_get() {
     #
     rados_put $dir $poolname $objname || return 1
     # We can read even though caller injected read error on one of the shards
-    rados_get $dir $poolname $objname 0 || return 1
+    rados_get $dir $poolname $objname || return 1
 
     if [ -n "$recovery" ];
     then
         #
-        # take out the first OSD used to store the object and
-        # check the object can still be retrieved, which implies
-        # recovery
+        # take out the last OSD used to store the object,
+        # bring it back, and check for clean PGs which means
+        # recovery didn't crash the primary.
         #
         local -a initial_osds=($(get_osds $poolname $objname))
         local last=$((${#initial_osds[@]} - 1))
+        # Kill OSD
+        kill_daemons $dir TERM osd.${initial_osds[$last]} >&2 < /dev/null || return 1
         ceph osd out ${initial_osds[$last]} || return 1
         ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
-        # This will fail since one shard is out and one shard has injected read error
-        rados_get $dir $poolname $objname 1 || return 1
         ceph osd in ${initial_osds[$last]} || return 1
+        run_osd $dir ${initial_osds[$last]} || return 1
+        wait_for_clean || return 1
     fi
 
     rm $dir/ORIGINAL
@@ -172,7 +174,7 @@ function rados_get_data_eio() {
     shard_id=$(expr $shard_id + 1)
     inject_eio $objname $dir $shard_id || return 1
     # Now 2 out of 3 shards get EIO, so should fail
-    rados_get $dir $poolname $objname 1 || return 1
+    rados_get $dir $poolname $objname fail || return 1
 }
 
 # Change the size of speificied shard
@@ -224,12 +226,12 @@ function rados_get_data_bad_size() {
     #
     set_size $objname $dir $shard_id $bytes $mode || return 1
 
-    rados_get $dir $poolname $objname 0 || return 1
+    rados_get $dir $poolname $objname || return 1
 
     # Leave objname and modify another shard
     shard_id=$(expr $shard_id + 1)
     set_size $objname $dir $shard_id $bytes $mode || return 1
-    rados_get $dir $poolname $objname 1 || return 1
+    rados_get $dir $poolname $objname fail || return 1
 }
 
 #
@@ -298,7 +300,6 @@ function TEST_rados_get_bad_size_shard_1() {
     delete_pool $poolname
 }
 
-: <<'DISABLED_TESTS'
 function TEST_rados_get_with_subreadall_eio_shard_0() {
     local dir=$1
     local shard_id=0
@@ -328,7 +329,6 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
 
     delete_pool $poolname
 }
-DISABLED_TESTS
 
 main test-erasure-eio "$@"
 
