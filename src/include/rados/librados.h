@@ -2214,7 +2214,30 @@ CEPH_RADOS_API int rados_aio_write(rados_ioctx_t io, const char *oid,
 		                   const char *buf, size_t len, uint64_t off);
 
 /**
- * Asynchronously append data to an object
+ * Write data to an object asynchronously
+ *
+ * Queues the write and returns. The return value of the completion
+ * will be 0 on success, negative error code on failure.
+ * 
+ * buf is assumed to not change before entire write is complete,
+ * in other words, attempts to modify/free buf before operation is
+ * complete will result in undefined behavior. 
+ *
+ * @param io the context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the write is safe and complete
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBRADOS_SNAP_HEAD
+ */
+CEPH_RADOS_API int rados_aio_write2(rados_ioctx_t io, const char *oid,
+		                   rados_completion_t completion,
+		                   char *buf, size_t len, uint64_t off);
+
+/**
+ * Asychronously append data to an object
  *
  * Queues the append and returns.
  *
@@ -2234,7 +2257,31 @@ CEPH_RADOS_API int rados_aio_append(rados_ioctx_t io, const char *oid,
 		                    const char *buf, size_t len);
 
 /**
- * Asynchronously write an entire object
+ * Asychronously append data to an object
+ *
+ * Queues the append and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ * 
+ * buf is assumed to not change before entire append is complete,
+ * in other words, attempts to modify/free buf before operation is
+ * complete will result in undefined behavior.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param completion what to do when the append is safe and complete
+ * @param buf the data to append
+ * @param len length of buf (in bytes)
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBRADOS_SNAP_HEAD
+ */
+CEPH_RADOS_API int rados_aio_append2(rados_ioctx_t io, const char *oid,
+		                    rados_completion_t completion,
+		                    char *buf, size_t len);
+
+/**
+ * Asychronously write an entire object
  *
  * The object is filled with the provided data. If the object exists,
  * it is atomically truncated and then written.
@@ -2256,7 +2303,33 @@ CEPH_RADOS_API int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			                const char *buf, size_t len);
 
 /**
- * Asynchronously write the same buffer multiple times
+ * Asychronously write an entire object
+ *
+ * The object is filled with the provided data. If the object exists,
+ * it is atomically truncated and then written.
+ * Queues the write_full and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * buf is assumed to not change before entire write is complete,
+ * in other words, attempts to modify/free buf before operation is
+ * complete will result in undefined behavior.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the write_full is safe and complete
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBRADOS_SNAP_HEAD
+ */
+CEPH_RADOS_API int rados_aio_write_full2(rados_ioctx_t io, const char *oid,
+			                rados_completion_t completion,
+			                char *buf, size_t len);
+
+/**
+ * Asychronously write the same buffer multiple times
  *
  * Queues the writesame and returns.
  *
@@ -2279,7 +2352,34 @@ CEPH_RADOS_API int rados_aio_writesame(rados_ioctx_t io, const char *oid,
 				       size_t write_len, uint64_t off);
 
 /**
- * Asynchronously remove an object
+ * Asychronously write the same buffer multiple times
+ *
+ * Queues the writesame and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * buf is assumed to not change before entire write is complete,
+ * in other words, attempts to modify/free buf before operation is
+ * complete will result in undefined behavior.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the writesame is safe and complete
+ * @param buf data to write
+ * @param data_len length of the data, in bytes
+ * @param write_len the total number of bytes to write
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBRADOS_SNAP_HEAD
+ */
+CEPH_RADOS_API int rados_aio_writesame2(rados_ioctx_t io, const char *oid,
+			               rados_completion_t completion,
+			               char *buf, size_t data_len,
+				       size_t write_len, uint64_t off);
+
+/**
+ * Asychronously remove an object
  *
  * Queues the remove and returns.
  *
@@ -2455,6 +2555,26 @@ CEPH_RADOS_API int rados_aio_getxattr(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_aio_setxattr(rados_ioctx_t io, const char *o,
 				      rados_completion_t completion,
 				      const char *name, const char *buf,
+				      size_t len);
+
+/**
+ * Asynchronously set an extended attribute on an object.
+ *
+ * buf is assumed to not change before entire operation is complete,
+ * in other words, attempts to modify/free buf before operation is
+ * complete will result in undefined behavior.
+ *
+ * @param io the context in which xattr is set
+ * @param o name of the object
+ * @param completion what to do when the setxattr completes
+ * @param name which extended attribute to set
+ * @param buf what to store in the xattr
+ * @param len the number of bytes in buf
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_setxattr2(rados_ioctx_t io, const char *o,
+				      rados_completion_t completion,
+				      const char *name, char *buf,
 				      size_t len);
 
 /**

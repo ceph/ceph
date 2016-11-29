@@ -2230,6 +2230,24 @@ extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
   return retval;
 }
 
+extern "C" int rados_aio_write2(rados_ioctx_t io, const char *o,
+				rados_completion_t completion,
+				char *buf, size_t len, uint64_t off)
+{
+  tracepoint(librados, rados_aio_write_enter, io, o, completion, buf, len, off);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);  
+  int retval = ctx->aio_write(oid, (librados::AioCompletionImpl*)completion,
+			bl, len, off);
+  tracepoint(librados, rados_aio_write_exit, retval);
+  return retval;
+}
+
 #ifdef WITH_BLKIN
 extern "C" int rados_aio_write_traced(rados_ioctx_t io, const char *o,
                                       rados_completion_t completion,
@@ -2267,6 +2285,24 @@ extern "C" int rados_aio_append(rados_ioctx_t io, const char *o,
   return retval;
 }
 
+extern "C" int rados_aio_append2(rados_ioctx_t io, const char *o,
+				rados_completion_t completion,
+				char *buf, size_t len)
+{
+  tracepoint(librados, rados_aio_append_enter, io, o, completion, buf, len);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);  
+  int retval = ctx->aio_append(oid, (librados::AioCompletionImpl*)completion,
+			 bl, len);
+  tracepoint(librados, rados_aio_append_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
 				    rados_completion_t completion,
 				    const char *buf, size_t len)
@@ -2283,6 +2319,23 @@ extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
   return retval;
 }
 
+extern "C" int rados_aio_write_full2(rados_ioctx_t io, const char *o,
+				    rados_completion_t completion,
+				    char *buf, size_t len)
+{
+  tracepoint(librados, rados_aio_write_full_enter, io, o, completion, buf, len);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);  
+  int retval = ctx->aio_write_full(oid, (librados::AioCompletionImpl*)completion, bl);
+  tracepoint(librados, rados_aio_write_full_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_aio_writesame(rados_ioctx_t io, const char *o,
 				   rados_completion_t completion,
 				   const char *buf, size_t data_len,
@@ -2294,6 +2347,24 @@ extern "C" int rados_aio_writesame(rados_ioctx_t io, const char *o,
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, data_len);
+  int retval = ctx->aio_writesame(o, (librados::AioCompletionImpl*)completion,
+				  bl, write_len, off);
+  tracepoint(librados, rados_aio_writesame_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_writesame2(rados_ioctx_t io, const char *o,
+				   rados_completion_t completion,
+				   char *buf, size_t data_len,
+				   size_t write_len, uint64_t off)
+{
+  tracepoint(librados, rados_aio_writesame_enter, io, o, completion, buf,
+						data_len, write_len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(data_len, buf);
+  bl.push_back(bp);  
   int retval = ctx->aio_writesame(o, (librados::AioCompletionImpl*)completion,
 				  bl, write_len, off);
   tracepoint(librados, rados_aio_writesame_exit, retval);
@@ -2438,6 +2509,21 @@ extern "C" int rados_aio_setxattr(rados_ioctx_t io, const char *o,
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
+  int retval = ctx->aio_setxattr(oid, (librados::AioCompletionImpl*)completion, name, bl);
+  tracepoint(librados, rados_aio_setxattr_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_setxattr2(rados_ioctx_t io, const char *o,
+				  rados_completion_t completion,
+				  const char *name, char *buf, size_t len)
+{
+  tracepoint(librados, rados_aio_setxattr_enter, io, o, completion, name, buf, len);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);  
   int retval = ctx->aio_setxattr(oid, (librados::AioCompletionImpl*)completion, name, bl);
   tracepoint(librados, rados_aio_setxattr_exit, retval);
   return retval;
