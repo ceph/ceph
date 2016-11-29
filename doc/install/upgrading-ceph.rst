@@ -682,12 +682,12 @@ Upgrading a Client
 
 Once you have upgraded the packages and restarted daemons on your Ceph
 cluster, we recommend upgrading ``ceph-common`` and client libraries
-(``librbd1`` and ``librados2``) on your client nodes too.
+(``librbd1`` and ``librados3``) on your client nodes too.
 
 #. Upgrade the package:: 
 
 	ssh {client-host}
-	apt-get update && sudo apt-get install ceph-common librados2 librbd1 python-rados python-rbd
+	apt-get update && sudo apt-get install ceph-common librados3 librbd1 python-rados python-rbd
 
 #. Ensure that you have the latest version::
 

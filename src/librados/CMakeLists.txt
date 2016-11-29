@@ -23,8 +23,8 @@ if(ENABLE_SHARED)
     ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados
-    VERSION 2.0.0
-    SOVERSION 2
+    VERSION 3.0.0
+    SOVERSION 3
     # use COMPILE_FLAGS for the backward compatibility with cmake 2.8.11, should have been:
     #  CXX_VISIBILITY_PRESET hidden
     #  VISIBILITY_INLINES_HIDDEN ON
