@@ -112,6 +112,10 @@ void _usage()
   cout << "  zonegroup remove           remove a zone from a zonegroup\n";
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
+  cout << "  zonegroup placement list   list zonegroup's placement targets\n";
+  cout << "  zonegroup placement add    add a placment target id to a zonegroup\n";
+  cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
+  cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
   cout << "  zonegroup-map get          show zonegroup-map\n";
   cout << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cout << "  zone create                create a new zone\n";
@@ -213,6 +217,10 @@ void _usage()
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
+  cout << "   --placement-id            placement id for zonegroup placement commands\n";
+  cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
+  cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
+  cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
@@ -346,6 +354,10 @@ enum {
   OPT_ZONEGROUP_LIST,
   OPT_ZONEGROUP_REMOVE,
   OPT_ZONEGROUP_RENAME,
+  OPT_ZONEGROUP_PLACEMENT_ADD,
+  OPT_ZONEGROUP_PLACEMENT_MODIFY,
+  OPT_ZONEGROUP_PLACEMENT_RM,
+  OPT_ZONEGROUP_PLACEMENT_LIST,
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
@@ -433,6 +445,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "opstate") == 0 ||
       strcmp(cmd, "orphans") == 0 ||
       strcmp(cmd, "period") == 0 ||
+      strcmp(cmd, "placement") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "quota") == 0 ||
@@ -617,6 +630,16 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REALM_DEFAULT;
     if (strcmp(cmd, "pull") == 0)
       return OPT_REALM_PULL;
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "zonegroup") == 0) &&
+	     (strcmp(prev_cmd, "placement") == 0)) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_ADD;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_MODIFY;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_RM;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_LIST;
   } else if (strcmp(prev_cmd, "zonegroup") == 0 ||
 	     strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "add") == 0)
@@ -2278,6 +2301,10 @@ int main(int argc, char **argv)
   string op_mask_str;
   string quota_scope;
   string object_version;
+  string placement_id;
+  list<string> tags;
+  list<string> tags_add;
+  list<string> tags_rm;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -2579,6 +2606,14 @@ int main(int argc, char **argv)
       zonegroup_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
+      placement_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
+      get_str_list(val, tags);
+    } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
+      get_str_list(val, tags_add);
+    } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
+      get_str_list(val, tags_rm);
     } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
@@ -2695,25 +2730,30 @@ int main(int argc, char **argv)
   // not a raw op if 'period pull' needs to look up remotes
   bool raw_period_pull = opt_cmd == OPT_PERIOD_PULL && remote.empty() && !url.empty();
 
-  bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_ADD || opt_cmd == OPT_ZONEGROUP_CREATE || opt_cmd == OPT_ZONEGROUP_DELETE ||
-			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||
-                         opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
-			 opt_cmd == OPT_ZONEGROUP_RENAME || opt_cmd == OPT_ZONEGROUP_MODIFY ||
-			 opt_cmd == OPT_ZONEGROUP_REMOVE ||
-                         opt_cmd == OPT_ZONEGROUPMAP_GET || opt_cmd == OPT_ZONEGROUPMAP_SET ||
-                         opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
-			 opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
-                         opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
-                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY || opt_cmd == OPT_ZONE_DEFAULT ||
-			 opt_cmd == OPT_REALM_CREATE ||
-			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
-			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
-                         raw_period_update || raw_period_pull ||
-			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
-			 opt_cmd == OPT_REALM_LIST_PERIODS ||
-			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
-			 opt_cmd == OPT_REALM_RENAME || opt_cmd == OPT_REALM_SET ||
-			 opt_cmd == OPT_REALM_DEFAULT || opt_cmd == OPT_REALM_PULL);
+  std::set<int> raw_storage_ops_list = {OPT_ZONEGROUP_ADD, OPT_ZONEGROUP_CREATE, OPT_ZONEGROUP_DELETE,
+			 OPT_ZONEGROUP_GET, OPT_ZONEGROUP_LIST,
+                         OPT_ZONEGROUP_SET, OPT_ZONEGROUP_DEFAULT,
+			 OPT_ZONEGROUP_RENAME, OPT_ZONEGROUP_MODIFY,
+			 OPT_ZONEGROUP_REMOVE,
+			 OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
+			 OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
+                         OPT_ZONEGROUPMAP_GET, OPT_ZONEGROUPMAP_SET,
+                         OPT_ZONEGROUPMAP_UPDATE,
+			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
+                         OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
+                         OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
+			 OPT_REALM_CREATE,
+			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
+			 OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
+			 OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
+			 OPT_REALM_LIST_PERIODS,
+			 OPT_REALM_GET_DEFAULT, OPT_REALM_REMOVE,
+			 OPT_REALM_RENAME, OPT_REALM_SET,
+			 OPT_REALM_DEFAULT, OPT_REALM_PULL};
+
+
+  bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
+                         raw_period_update || raw_period_pull);
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
@@ -3448,6 +3488,73 @@ int main(int argc, char **argv)
 	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+      }
+      break;
+    case OPT_ZONEGROUP_PLACEMENT_LIST:
+      {
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	encode_json("placement_targets", zonegroup.placement_targets, formatter);
+	formatter->flush(cout);
+	cout << std::endl;
+      }
+      break;
+    case OPT_ZONEGROUP_PLACEMENT_ADD:
+    case OPT_ZONEGROUP_PLACEMENT_MODIFY:
+    case OPT_ZONEGROUP_PLACEMENT_RM:
+      {
+        if (placement_id.empty()) {
+          cerr << "ERROR: --placement-id not specified" << std::endl;
+          return EINVAL;
+        }
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
+          RGWZoneGroupPlacementTarget target;
+          target.name = placement_id;
+          for (auto& t : tags) {
+            target.tags.insert(t);
+          }
+          zonegroup.placement_targets[placement_id] = target;
+        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
+          RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
+          if (!tags.empty()) {
+            target.tags.clear();
+            for (auto& t : tags) {
+              target.tags.insert(t);
+            }
+          }
+          target.name = placement_id;
+          for (auto& t : tags_rm) {
+            target.tags.erase(t);
+          }
+          for (auto& t : tags_add) {
+            target.tags.insert(t);
+          }
+        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
+          zonegroup.placement_targets.erase(placement_id);
+        }
+
+        zonegroup.post_process_params();
+        ret = zonegroup.update();
+        if (ret < 0) {
+          cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        encode_json("placement_targets", zonegroup.placement_targets, formatter);
+        formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUPMAP_GET:

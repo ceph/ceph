@@ -62,6 +62,10 @@
     zonegroup remove           remove a zone from a zonegroup
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
+    zonegroup placement list   list zonegroup's placement targets
+    zonegroup placement add    add a placment target id to a zonegroup
+    zonegroup placement modify modify a placement target of a specific zonegroup
+    zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup-map get          show zonegroup-map
     zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
@@ -163,6 +167,10 @@
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
+     --placement-id            placement id for zonegroup placement commands
+     --tags=<list>             list of tags for zonegroup placement add and modify commands
+     --tags-add=<list>         list of tags to add for zonegroup placement modify command
+     --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
      --endpoints=<list>        zone endpoints
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]
