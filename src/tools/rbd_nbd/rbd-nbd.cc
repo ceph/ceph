@@ -520,8 +520,9 @@ static int do_map()
     }
 
     if (forker.is_parent()) {
+      global_init_postfork_start(g_ceph_context);
       if (forker.parent_wait(err) != 0) {
-	return -ENXIO;
+        return -ENXIO;
       }
       return 0;
     }
