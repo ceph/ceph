@@ -1236,6 +1236,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     return;
   g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->set_val("bluestore_min_alloc_size", "65536");
+ 
+ // just a big number to disble gc
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "100000");
   g_ceph_context->_conf->apply_changes(NULL);
   int r = store->umount();
   ASSERT_EQ(r, 0);
@@ -1474,6 +1477,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.compressed);
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_min_alloc_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
