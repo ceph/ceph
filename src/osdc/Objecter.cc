@@ -3841,7 +3841,7 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   unique_lock wl(rwlock);
   ldout(cct, 10) << "create_pool name=" << name << dendl;
 
-  if (osdmap->lookup_pg_pool_name(name.c_str()) >= 0)
+  if (osdmap->lookup_pg_pool_name(name) >= 0)
     return -EEXIST;
 
   PoolOp *op = new PoolOp;
