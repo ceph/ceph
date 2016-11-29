@@ -109,6 +109,14 @@ public:
   virtual objectstore_perf_stat_t get_cur_stats() = 0;
 
   /**
+   * Fetch Object Store performance counters.
+   *
+   *
+   * This appears to be called with nothing locked.
+   */
+  virtual const PerfCounters* get_perf_counters() const = 0;
+
+  /**
    * a sequencer orders transactions
    *
    * Any transactions queued under a given sequencer will be applied in

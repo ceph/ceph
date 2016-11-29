@@ -385,6 +385,11 @@ public:
 
   objectstore_perf_stat_t get_cur_stats() override;
 
+  const PerfCounters* get_perf_counters() const {
+    return nullptr;
+  }
+
+
   int queue_transactions(
     Sequencer *osr, vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
