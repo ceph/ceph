@@ -1083,6 +1083,8 @@ function test_is_clean() {
 # @return a list of sleep delays
 #
 function get_timeout_delays() {
+    local saved_state=$(set +o)
+    set +x
     local timeout=$1
     local first_step=${2:-1}
 
@@ -1097,6 +1099,7 @@ function get_timeout_delays() {
     if test "$(echo $total \< $timeout | bc -l)" = "1"; then
         echo -n $(echo $timeout - $total | bc -l)
     fi
+    eval "$saved_state"
 }
 
 function test_get_timeout_delays() {
