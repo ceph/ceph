@@ -390,7 +390,7 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
   m->put();
 }
@@ -492,10 +492,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       }
       mds->sessionmap.remove_session(session);
     } else {
-      assert(0);
+      ceph_abort();
     }
   } else {
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1802,7 +1802,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
   
   // done with reply.
@@ -1833,7 +1833,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
 
       if (!lock) {
 	dout(10) << "don't have object, dropping" << dendl;
-	assert(0); // can this happen, if we auth pinned properly.
+	ceph_abort(); // can this happen, if we auth pinned properly.
       }
       if (op == MMDSSlaveRequest::OP_XLOCK && !lock->get_parent()->is_auth()) {
 	dout(10) << "not auth for remote xlock attempt, dropping on " 
@@ -1928,7 +1928,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     break;
 
   default: 
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1996,7 +1996,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(*p)) {
 	  dir = dn->get_dir();
 	} else {
-	  assert(0);
+	  ceph_abort();
 	}
 	if (dir) {
 	  if (dir->is_freezing_dir())
@@ -2309,7 +2309,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     mds->clog->error() << mdr->client_request->get_source()
        << " specified ino " << useino
        << " but mds." << mds->get_nodeid() << " allocated " << in->inode.ino << "\n";
-    //assert(0); // just for now.
+    //ceph_abort(); // just for now.
   }
     
   int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
@@ -3183,9 +3183,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     // file would have inherited anyway from its parent.
     CDir *parent = dn->get_dir();
     CInode *parent_in = parent->get_inode();
-    int64_t parent_pool = parent_in->inode.layout.pool_id;
-
-    if (layout.pool_id != parent_pool) {
+    if (layout.pool_id != parent_in->inode.layout.pool_id
+        || layout.pool_ns != parent_in->inode.layout.pool_ns) {
       access |= MAY_SET_POOL;
     }
 
@@ -3286,6 +3285,11 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   journal_and_reply(mdr, in, dn, le, fin);
+
+  // We hit_dir (via hit_inode) in our finish callback, but by then we might
+  // have overshot the split size (multiple opencs in flight), so here is
+  // an early chance to split the dir if this openc makes it oversized.
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 
@@ -3515,8 +3519,6 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	   << " complete=" << (int)complete
 	   << dendl;
   mdr->reply_extra_bl = dirbl;
-  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
-	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(now, dir, META_POP_IRD, -1, numfiles);
@@ -4297,7 +4299,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    if (cur->inode.layout.pool_id != layout.pool_id) {
+    if (cur->inode.layout.pool_id != layout.pool_id
+        || cur->inode.layout.pool_ns != layout.pool_ns) {
       if (!check_access(mdr, cur, MAY_SET_POOL)) {
         return;
       }
@@ -4324,7 +4327,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    if (cur->inode.layout.pool_id != layout.pool_id) {
+    if (cur->inode.layout.pool_id != layout.pool_id
+        || cur->inode.layout.pool_ns != layout.pool_ns) {
       if (!check_access(mdr, cur, MAY_SET_POOL)) {
         return;
       }
@@ -4379,12 +4383,16 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 }
 
 void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
+				  file_layout_t *dir_layout,
 				  set<SimpleLock*> rdlocks,
 				  set<SimpleLock*> wrlocks,
 				  set<SimpleLock*> xlocks)
 {
   MClientRequest *req = mdr->client_request;
   string name(req->get_path2());
+
+  dout(10) << __func__ << " " << name << " on " << *cur << dendl;
+
   if (name == "ceph.dir.layout") {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -ENODATA);
@@ -4418,6 +4426,14 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
     mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
     journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
+    return;
+  } else if (name == "ceph.dir.layout.pool_namespace"
+          || name == "ceph.file.layout.pool_namespace") {
+    // Namespace is the only layout field that has a meaningful
+    // null/none value (empty string, means default layout).  Is equivalent
+    // to a setxattr with empty string: pass through the empty payload of
+    // the rmxattr request to do this.
+    handle_set_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
     return;
   }
 
@@ -4539,7 +4555,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   }
 
   if (name.compare(0, 5, "ceph.") == 0) {
-    handle_remove_vxattr(mdr, cur, rdlocks, wrlocks, xlocks);
+    handle_remove_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
     return;
   }
 
@@ -5164,7 +5180,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 
   mdr->auth_pin(targeti);
 
-  //assert(0);  // test hack: make sure master can handle a slave that fails to prepare...
+  //ceph_abort();  // test hack: make sure master can handle a slave that fails to prepare...
   assert(g_conf->mds_kill_link_at != 5);
 
   // journal it

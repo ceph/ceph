@@ -116,7 +116,7 @@ public:
         }
       } else if (key.first == CEPH_ENTITY_TYPE_OSD) {
       } else {
-        assert(0);
+        ceph_abort();
       }
     } else {
       dout(1) << "mon failed to return metadata for "
@@ -136,7 +136,7 @@ void Mgr::background_init()
 
   finisher.start();
 
-  finisher.queue(new C_StdFunction([this](){
+  finisher.queue(new FunctionContext([this](int r){
     init();
   }));
 }
@@ -148,7 +148,11 @@ void Mgr::init()
   assert(!initialized);
 
   // Start communicating with daemons to learn statistics etc
-  server.init(monc->get_global_id(), client_messenger->get_myaddr());
+  int r = server.init(monc->get_global_id(), client_messenger->get_myaddr());
+  if (r < 0) {
+    derr << "Initialize server fail"<< dendl;
+    return;
+  }
   dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
 
   // Preload all daemon metadata (will subsequently keep this
@@ -431,7 +435,7 @@ bool Mgr::ms_dispatch(Message *m)
       // from monclient anyway), but we don't see notifications.  Hook
       // into MonClient to get notifications instead of messing
       // with message delivery to achieve it?
-      assert(0);
+      ceph_abort();
 
       py_modules.notify_all("mon_map", "");
       break;

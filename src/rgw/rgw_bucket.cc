@@ -650,7 +650,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
       rgw_obj obj(bucket, (*it).key.name);
       obj.set_instance((*it).key.instance);
 
-      ret = store->get_obj_state(&obj_ctx, obj, &astate, NULL);
+      ret = store->get_obj_state(&obj_ctx, obj, &astate, false);
       if (ret == -ENOENT) {
         dout(1) << "WARNING: cannot find obj state for obj " << obj.get_object() << dendl;
         continue;
@@ -976,11 +976,7 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
     RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
-    formatter->dump_int("size", s.size);
-    formatter->dump_int("size_actual", s.size_rounded);
-    formatter->dump_int("size_kb", rgw_rounded_kb(s.size));
-    formatter->dump_int("size_kb_actual", rgw_rounded_kb(s.size_rounded));
-    formatter->dump_int("num_objects", s.num_objects);
+    s.dump(formatter);
     formatter->close_section();
   }
   formatter->close_section();
@@ -2150,7 +2146,6 @@ public:
       bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
       bci.info.bucket.data_extra_pool = old_bci.info.bucket.data_extra_pool;
-      bci.info.index_type = old_bci.info.index_type;
     }
 
     // are we actually going to perform this put, or is it too old?

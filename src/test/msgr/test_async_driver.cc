@@ -54,8 +54,10 @@
 #include "msg/async/EventKqueue.h"
 #endif
 #include "msg/async/EventSelect.h"
+#include "test/unit.h"
 
 #include <gtest/gtest.h>
+
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -76,7 +78,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
 #endif
     if (strcmp(GetParam(), "select"))
       driver = new SelectDriver(g_ceph_context);
-    driver->init(100);
+    driver->init(NULL, 100);
   }
   virtual void TearDown() {
     delete driver;
@@ -115,7 +117,7 @@ TEST_P(EventDriverTest, PipeTest) {
   r = driver->event_wait(fired_events, &tv);
   ASSERT_EQ(r, 0);
 
-  char c;
+  char c = 'A';
   r = write(fds[1], &c, sizeof(c));
   ASSERT_EQ(r, 1);
   r = driver->event_wait(fired_events, &tv);
@@ -353,17 +355,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
 
 /*
  * Local Variables:

@@ -15,11 +15,11 @@ namespace client {
 namespace {
 
 struct C_AioExec : public Context {
-  librados::IoCtx ioctx;
+  librados::IoCtx &ioctx;
   std::string oid;
 
-  C_AioExec(librados::IoCtx &_ioctx, const std::string &_oid) : oid(_oid) {
-    ioctx.dup(_ioctx);
+  C_AioExec(librados::IoCtx &_ioctx, const std::string &_oid)
+    : ioctx(_ioctx), oid(_oid) {
   }
 
   static void rados_callback(rados_completion_t c, void *arg) {

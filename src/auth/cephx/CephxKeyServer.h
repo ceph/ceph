@@ -173,7 +173,7 @@ struct KeyServerData {
       break;
 
     default:
-      assert(0);
+      ceph_abort();
     }
   }
 

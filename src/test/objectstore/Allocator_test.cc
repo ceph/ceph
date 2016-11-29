@@ -4,18 +4,18 @@
  * In memory space allocator test cases.
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
-#include "os/bluestore/Allocator.h"
-#include "global/global_init.h"
 #include <iostream>
-#include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
+#include <gtest/gtest.h>
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
-#include <gtest/gtest.h>
-#include <os/bluestore/BitAllocator.h>
+#include "include/Context.h"
+#include "os/bluestore/Allocator.h"
+#include "os/bluestore/BitAllocator.h"
+#include "test/unit.h"
+
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -67,7 +67,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
   {
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
-    std::vector<AllocExtent> extents = std::vector<AllocExtent> 
+    AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
     EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
@@ -84,7 +84,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     alloc->init_add_free(0, block_size * 2);
     alloc->init_add_free(3 * block_size, block_size * 2);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
-    std::vector<AllocExtent> extents = std::vector<AllocExtent> 
+    AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
     EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
@@ -112,7 +112,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
-    std::vector<AllocExtent> extents = std::vector<AllocExtent> 
+    AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
     EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
@@ -131,7 +131,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
-    std::vector<AllocExtent> extents = std::vector<AllocExtent> 
+    AllocExtentVector extents = AllocExtentVector 
                         (2, AllocExtent(0, 0));
   
     EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
@@ -148,7 +148,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 16);
     EXPECT_EQ(alloc->reserve(block_size * 16), 0);
-    std::vector<AllocExtent> extents = std::vector<AllocExtent> 
+    AllocExtentVector extents = AllocExtentVector 
                         (8, AllocExtent(0, 0));
   
     EXPECT_EQ(alloc->alloc_extents(16 * (uint64_t)block_size, (uint64_t) block_size, 
@@ -174,7 +174,7 @@ TEST_P(AllocTest, test_alloc_failure)
     alloc->init_add_free(block_size * 512, block_size * 256);
 
     EXPECT_EQ(alloc->reserve(block_size * 512), 0);
-    std::vector<AllocExtent> extents = std::vector<AllocExtent> 
+    AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
     EXPECT_EQ(alloc->alloc_extents(512 * (uint64_t)block_size, (uint64_t) block_size * 256, 
@@ -201,7 +201,7 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   init_alloc(blocks, 1);
   alloc->init_add_free(0, blocks);
 
-  auto extents = std::vector<AllocExtent>
+  auto extents = AllocExtentVector
           (zone_size * 4, AllocExtent(-1, -1));
   alloc->reserve(blocks);
 
@@ -239,15 +239,3 @@ INSTANTIATE_TEST_CASE_P(
 
 TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 #endif
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -594,6 +594,14 @@ static int do_map()
   }
 
   size = info.size;
+
+  if (size > (1UL << 32) * 512) {
+    r = -EFBIG;
+    cerr << "rbd-nbd: image is too large (" << prettybyte_t(size) << ", max is "
+         << prettybyte_t((1UL << 32) * 512) << ")" << std::endl;
+    goto close_nbd;
+  }
+
   r = ioctl(nbd, NBD_SET_SIZE, size);
   if (r < 0) {
     r = -errno;
@@ -746,8 +754,9 @@ static int rbd_nbd(int argc, const char *argv[])
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-              CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_DAEMON,
+			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
   g_ceph_context->_conf->set_val_or_die("pid_file", "");
 
   std::vector<const char*>::iterator i;

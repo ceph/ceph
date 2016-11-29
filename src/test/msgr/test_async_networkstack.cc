@@ -25,11 +25,11 @@
 
 #include "acconfig.h"
 #include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
+#include "test/unit.h"
+
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -41,8 +41,21 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
   NetworkWorkerTest() {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
-    addr = "127.0.0.1:15000";
-    port_addr = "127.0.0.1:15001";
+    if (strncmp(GetParam(), "dpdk", 4)) {
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "posix", false, false);
+      addr = "127.0.0.1:15000";
+      port_addr = "127.0.0.1:15001";
+    } else {
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_debug_allow_loopback", "true", false, false);
+      g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_coremask", "0x7", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.3", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
+      addr = "172.16.218.3:15000";
+      port_addr = "172.16.218.3:15001";
+    }
     stack = NetworkStack::create(g_ceph_context, GetParam());
     stack->start();
   }
@@ -163,7 +176,7 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
     }
 
     if (is_my_accept) {
-      r = bind_socket.accept(&srv_socket, options, &cli_addr);
+      r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
       ASSERT_EQ(0, r);
       ASSERT_TRUE(srv_socket.fd() > 0);
     }
@@ -198,6 +211,7 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
         while (r == -EAGAIN) {
           ASSERT_TRUE(cb.poll(500));
           r = srv_socket.read(buf, sizeof(buf));
+          cb.reset();
         }
         ASSERT_EQ(len, r);
         ASSERT_EQ(0, memcmp(buf, message, len));
@@ -268,7 +282,7 @@ TEST_P(NetworkWorkerTest, ConnectFailedTest) {
       center->create_file_event(cli_socket2.fd(), EVENT_READABLE, &cb);
       r = cli_socket2.is_connected();
       if (r == 0) {
-        ASSERT_FALSE(cb.poll(500));
+        cb.poll(500);
         r = cli_socket2.is_connected();
       }
       ASSERT_TRUE(r != 1);
@@ -310,7 +324,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
 
       ConnectedSocket srv_socket, cli_socket;
       if (bind_socket) {
-        r = bind_socket.accept(&srv_socket, options, &cli_addr);
+        r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
         ASSERT_EQ(-EAGAIN, r);
       }
 
@@ -327,7 +341,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
         cb.poll(500);
         ConnectedSocket srv_socket2;
         do {
-          r = bind_socket.accept(&srv_socket2, options, &cli_addr);
+          r = bind_socket.accept(&srv_socket2, options, &cli_addr, worker);
           usleep(100);
         } while (r == -EAGAIN && !*accepted_p);
         if (r == 0)
@@ -365,7 +379,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
 
       if (bind_socket) {
         do {
-          r = bind_socket.accept(&srv_socket, options, &cli_addr);
+          r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
           usleep(100);
         } while (r == -EAGAIN && !*accepted_p);
         if (r == 0)
@@ -398,12 +412,14 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
 
 TEST_P(NetworkWorkerTest, ComplexTest) {
   entity_addr_t bind_addr;
+  std::atomic_bool listen_done(false);
+  std::atomic_bool *listen_p = &listen_done;
   std::atomic_bool accepted(false);
   std::atomic_bool *accepted_p = &accepted;
   std::atomic_bool done(false);
   std::atomic_bool *done_p = &done;
   ASSERT_TRUE(bind_addr.parse(get_addr().c_str()));
-  exec_events([this, bind_addr, accepted_p, done_p](Worker *worker) mutable {
+  exec_events([this, bind_addr, listen_p, accepted_p, done_p](Worker *worker) mutable {
     entity_addr_t cli_addr;
     EventCenter *center = &worker->center;
     SocketOptions options;
@@ -412,20 +428,28 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
     if (stack->support_local_listen_table() || worker->id == 0) {
       r = worker->listen(bind_addr, options, &bind_socket);
       ASSERT_EQ(0, r);
+      *listen_p = true;
     }
     ConnectedSocket cli_socket, srv_socket;
     if (worker->id == 1) {
-      r = worker->connect(bind_addr, options, &cli_socket);
-      ASSERT_EQ(0, r);
+      while (!*listen_p) {
+        usleep(50);
+        r = worker->connect(bind_addr, options, &cli_socket);
+        ASSERT_EQ(0, r);
+      }
     }
 
     if (bind_socket) {
       C_poll cb(center);
       center->create_file_event(bind_socket.fd(), EVENT_READABLE, &cb);
-      if (cb.poll(500)) {
-        r = bind_socket.accept(&srv_socket, options, &cli_addr);
-        ASSERT_EQ(0, r);
-        *accepted_p = true;
+      int count = 3;
+      while (count--) {
+        if (cb.poll(500)) {
+          r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
+          ASSERT_EQ(0, r);
+          *accepted_p = true;
+          break;
+        }
       }
       ASSERT_TRUE(*accepted_p);
       center->delete_file_event(bind_socket.fd(), EVENT_READABLE);
@@ -440,7 +464,7 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
         r = cli_socket.is_connected();
       }
       ASSERT_EQ(1, r);
-      center->delete_file_event(cli_socket.fd(), EVENT_READABLE);
+      center->delete_file_event(cli_socket.fd(), EVENT_WRITABLE);
     }
 
     const size_t message_size = 10240;
@@ -875,16 +899,17 @@ class StressFactory {
     StressFactory *factory;
     ServerSocket bind_socket;
     ThreadData *t_data;
+    Worker *worker;
 
    public:
-    C_accept(StressFactory *f, ServerSocket s, ThreadData *data)
-        : factory(f), bind_socket(std::move(s)), t_data(data) {}
+    C_accept(StressFactory *f, ServerSocket s, ThreadData *data, Worker *w)
+        : factory(f), bind_socket(std::move(s)), t_data(data), worker(w) {}
     void do_request(int id) {
       while (true) {
         entity_addr_t cli_addr;
         ConnectedSocket srv_socket;
         SocketOptions options;
-        int r = bind_socket.accept(&srv_socket, options, &cli_addr);
+        int r = bind_socket.accept(&srv_socket, options, &cli_addr, worker);
         if (r == -EAGAIN) {
           break;
         }
@@ -906,6 +931,7 @@ class StressFactory {
   const size_t client_num, queue_depth, max_message_length;
   atomic_int message_count, message_left;
   entity_addr_t bind_addr;
+  std::atomic_bool already_bind = {false};
   bool zero_copy_read;
   SocketOptions options;
 
@@ -955,12 +981,15 @@ class StressFactory {
     if (stack->support_local_listen_table() || worker->id == 0) {
       r = worker->listen(bind_addr, options, &bind_socket);
       ASSERT_EQ(0, r);
+      already_bind = true;
     }
+    while (!already_bind)
+      usleep(50);
     C_accept *accept_handler = nullptr;
     int bind_fd = 0;
     if (bind_socket) {
       bind_fd = bind_socket.fd();
-      accept_handler = new C_accept(this, std::move(bind_socket), &t_data);
+      accept_handler = new C_accept(this, std::move(bind_socket), &t_data, worker);
       ASSERT_EQ(0, worker->center.create_file_event(
                   bind_fd, EVENT_READABLE, accept_handler));
     }
@@ -996,7 +1025,8 @@ class StressFactory {
 };
 
 TEST_P(NetworkWorkerTest, StressTest) {
-  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024, false);
+  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024,
+                        strncmp(GetParam(), "dpdk", 4) == 0);
   StressFactory *f = &factory;
   exec_events([f](Worker *worker) mutable {
     f->start(worker);
@@ -1009,6 +1039,9 @@ INSTANTIATE_TEST_CASE_P(
   NetworkStack,
   NetworkWorkerTest,
   ::testing::Values(
+#ifdef HAVE_DPDK
+    "dpdk",
+#endif
     "posix"
   )
 );
@@ -1025,17 +1058,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
 
 /*
  * Local Variables:

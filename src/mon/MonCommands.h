@@ -141,21 +141,21 @@ COMMAND("pg dump_stuck " \
 	"pg", "r", "cli,rest")
 COMMAND("pg ls-by-pool " \
         "name=poolstr,type=CephString " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with pool = [poolname | poolid]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-primary " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with primary = [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-osd " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg on osd [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
@@ -398,7 +398,7 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags " \
+        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags|balancer " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
@@ -438,6 +438,22 @@ COMMAND("mon remove " \
 COMMAND("mon rm " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
+COMMAND("mon debug set_feature" \
+        "name=feature_type,type=CephChoices,strings=persistent|optional " \
+        "name=feature_name,type=CephString " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "set provided feature on mon map", \
+        "mon", "rw", "cli")
+COMMAND("mon debug list_features " \
+        "name=feature_type,type=CephString,req=false", \
+        "list available mon map features to be set/unset", \
+        "mon", "rw", "cli")
+COMMAND("mon debug unset_feature " \
+        "name=feature_type,type=CephChoices,strings=persistent|optional " \
+        "name=feature_name,type=CephString " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "unset provided feature from monmap", \
+        "mon", "rw", "cli")
 
 /*
  * OSD commands
@@ -723,7 +739,7 @@ COMMAND("osd pool get " \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|debug_white_box_testing_ec_overwrites " \
 	"name=val,type=CephString " \
 	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")

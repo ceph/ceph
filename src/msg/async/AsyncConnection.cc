@@ -324,7 +324,7 @@ void AsyncConnection::process()
 {
   ssize_t r = 0;
   int prev_state = state;
-  bool already_dispatch_writer = false;
+  bool need_dispatch_writer = false;
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
   do {
@@ -378,10 +378,11 @@ void AsyncConnection::process()
           t = (ceph_timespec*)state_buffer;
           utime_t kp_t = utime_t(*t);
           write_lock.lock();
-          _send_keepalive_or_ack(true, &kp_t);
+          _append_keepalive_or_ack(true, &kp_t);
 	  write_lock.unlock();
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
 	  set_last_keepalive(ceph_clock_now(NULL));
+          need_dispatch_writer = true;
           state = STATE_OPEN;
           break;
         }
@@ -746,13 +747,7 @@ void AsyncConnection::process()
 				    << " " << *message << dendl;
 
           ack_left.inc();
-          // if send_message always send inline, it may have no
-          // opportunity to send seq ack.
-          if (!already_dispatch_writer) {
-            center->dispatch_event_external(write_handler);
-            already_dispatch_writer = true;
-          }
-
+          need_dispatch_writer = true;
           state = STATE_OPEN;
 
           logger->inc(l_msgr_recv_messages);
@@ -821,6 +816,8 @@ void AsyncConnection::process()
     }
   } while (prev_state != state);
 
+  if (need_dispatch_writer && is_connected())
+    center->dispatch_event_external(write_handler);
   return;
 
  fail:
@@ -885,7 +882,8 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
         } else if (r == 0) {
           ldout(async_msgr->cct, 10) << __func__ << " nonblock connect inprogress" << dendl;
-          center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
+          if (async_msgr->get_stack()->nonblock_connect_need_writable_event())
+            center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
           break;
         }
 
@@ -1350,7 +1348,7 @@ ssize_t AsyncConnection::_process_connection()
     default:
       {
         lderr(async_msgr->cct) << __func__ << " bad state: " << state << dendl;
-        assert(0);
+        ceph_abort();
       }
   }
 
@@ -1626,7 +1624,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     existing = NULL;
     goto open;
   }
-  assert(0);
+  ceph_abort();
 
  replace:
   ldout(async_msgr->cct, 10) << __func__ << " accept replacing " << existing << dendl;
@@ -1697,7 +1695,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
           cs.close();
           return ;
         } else {
-          assert(0);
+          ceph_abort();
         }
       }
 
@@ -2369,8 +2367,9 @@ void AsyncConnection::mark_down()
   _stop();
 }
 
-void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
+void AsyncConnection::_append_keepalive_or_ack(bool ack, utime_t *tp)
 {
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (ack) {
     assert(tp);
     struct ceph_timespec ts;
@@ -2386,8 +2385,6 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
   } else {
     outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE);
   }
-
-  ldout(async_msgr->cct, 10) << __func__ << " try send keepalive or ack" << dendl;
 }
 
 void AsyncConnection::handle_write()
@@ -2398,7 +2395,7 @@ void AsyncConnection::handle_write()
   write_lock.lock();
   if (can_write == WriteStatus::CANWRITE) {
     if (keepalive) {
-      _send_keepalive_or_ack();
+      _append_keepalive_or_ack();
       keepalive = false;
     }
 

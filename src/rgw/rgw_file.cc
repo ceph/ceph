@@ -436,7 +436,8 @@ namespace rgw {
       rgw_fh->set_times(real_clock::now());
       /* save attrs */
       rgw_fh->encode_attrs(ux_key, ux_attrs);
-      rgw_fh->stat(st);
+      if (st)
+        rgw_fh->stat(st);
       get<0>(mkr) = rgw_fh;
     } else {
       get<1>(mkr) = -EIO;
@@ -553,7 +554,8 @@ namespace rgw {
 	  rgw_fh->set_times(real_clock::now());
 	  rgw_fh->open_for_create(); // XXX needed?
 	}
-	(void) rgw_fh->stat(st);
+        if (st)
+          (void) rgw_fh->stat(st);
 	get<0>(mkr) = rgw_fh;
       } else
 	rc = -EIO;
@@ -972,9 +974,8 @@ namespace rgw {
     if (need_to_wait) {
       orig_data = data;
     }
-
+    hash.Update((const byte *)data.c_str(), data.length());
     op_ret = put_data_and_throttle(processor, data, ofs,
-				   (true /* md5 */ ? &hash : NULL),
 				   need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
@@ -1005,7 +1006,7 @@ namespace rgw {
 	goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+      op_ret = put_data_and_throttle(processor, data, ofs, false);
       if (op_ret < 0) {
 	goto done;
       }
@@ -1033,7 +1034,6 @@ namespace rgw {
       goto done;
     }
 
-    processor->complete_hash(&hash);
     hash.Final(m);
 
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -1068,7 +1068,7 @@ namespace rgw {
       emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
     }
 
-    op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
+    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs, delete_at,
 				 if_match, if_nomatch);
     if (! op_ret) {
       /* update stats */
@@ -1087,6 +1087,16 @@ namespace rgw {
 
 /* librgw */
 extern "C" {
+
+void rgwfile_version(int *major, int *minor, int *extra)
+{
+  if (major)
+    *major = LIBRGW_FILE_VER_MAJOR;
+  if (minor)
+    *minor = LIBRGW_FILE_VER_MINOR;
+  if (extra)
+    *extra = LIBRGW_FILE_VER_EXTRA;
+}
 
 /*
  attach rgw namespace

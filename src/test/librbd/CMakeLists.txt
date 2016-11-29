@@ -5,8 +5,9 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
-  test_MirroringWatcher.cc 
+  test_MirroringWatcher.cc
   test_ObjectMap.cc
+  test_Operations.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})
@@ -34,7 +35,10 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
   image_watcher/test_mock_RewatchRequest.cc
+  journal/test_mock_OpenRequest.cc
+  journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
+  mirror/test_mock_DisableRequest.cc
   object_map/test_mock_InvalidateRequest.cc
   object_map/test_mock_LockRequest.cc
   object_map/test_mock_RefreshRequest.cc
@@ -56,7 +60,6 @@ set(unittest_librbd_srcs
   )
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
 set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
@@ -84,7 +87,6 @@ target_link_libraries(unittest_librbd
 
 add_executable(ceph_test_librbd
   test_main.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd
   rbd_test

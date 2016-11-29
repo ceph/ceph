@@ -577,7 +577,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
     if (!oid.match(cnode.bits, pgid.ps())) {
       derr << __func__ << " oid " << oid << " not part of " << pgid
 	   << " bits " << cnode.bits << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -631,6 +631,7 @@ KStore::KStore(CephContext *cct, const string& path)
     fsid_fd(-1),
     mounted(false),
     coll_lock("KStore::coll_lock"),
+    nid_last(0),
     nid_max(0),
     throttle_ops(cct, "kstore_max_ops", cct->_conf->kstore_max_ops),
     throttle_bytes(cct, "kstore_max_bytes", cct->_conf->kstore_max_bytes),
@@ -973,7 +974,7 @@ int KStore::mount()
   dout(1) << __func__ << " path " << path << dendl;
 
   if (g_conf->kstore_fsck_on_mount) {
-    int rc = fsck();
+    int rc = fsck(g_conf->kstore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
   }
@@ -1044,7 +1045,7 @@ int KStore::umount()
   return 0;
 }
 
-int KStore::fsck()
+int KStore::fsck(bool deep)
 {
   dout(1) << __func__ << dendl;
   int errors = 0;
@@ -1498,7 +1499,7 @@ int KStore::_collection_list(
   }
   dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
   while (true) {
-    if (!it->valid() || it->key() > pend) {
+    if (!it->valid() || it->key() >= pend) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
@@ -2397,16 +2398,6 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
-    case Transaction::OP_MERGE_DELETE:
-      {
-        const ghobject_t& boid = i.get_oid(op->dest_oid);
-        OnodeRef bo = c->get_onode(boid, true);
-        vector<std::pair<uint64_t, uint64_t>> move_info;
-        i.decode_move_info(move_info);
-        r = _move_ranges_destroy_src(txc, c, o, cvec[op->dest_cid], bo, move_info);
-      }
-      break;
-
     case Transaction::OP_COLL_ADD:
       assert(0 == "not implemented");
       break;
@@ -2489,7 +2480,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     default:
       derr << "bad op " << op->op << dendl;
-      assert(0);
+      ceph_abort();
     }
 
   endop:
@@ -3215,44 +3206,6 @@ int KStore::_clone_range(TransContext *txc,
 	   << " = " << r << dendl;
   return r;
 }
-
-/* Move contents of src object according to move_info to base object.
- * Once the move_info is traversed completely, delete the src object.
- */
-int KStore::_move_ranges_destroy_src(
-  TransContext *txc,
-  CollectionRef& c,
-  OnodeRef& srco,
-  CollectionRef& basec,
-  OnodeRef& baseo,
-  vector<std::pair<uint64_t, uint64_t>> move_info)
-{
-  int r = 0;
-  bufferlist bl;
-  baseo->exists = true;
-  _assign_nid(txc, baseo);
-
-  // Traverse move_info completely, move contents from src to base object.
-  for (unsigned i = 0; i < move_info.size(); ++i) {
-    uint64_t off = move_info[i].first;
-    uint64_t len = move_info[i].second;
-
-    r = _do_read(srco, off, len, bl, 0);
-    if (r < 0)
-    goto out;
-
-    r = _do_write(txc, baseo, off, bl.length(), bl, 0);
-    txc->write_onode(baseo);
-    r = 0;
-  }
-
-  // After for loop ends, remove src obj
-  r = _do_remove(txc, srco);
-
-  out:
-  return r;
-}
-
 
 int KStore::_rename(TransContext *txc,
 		    CollectionRef& c,

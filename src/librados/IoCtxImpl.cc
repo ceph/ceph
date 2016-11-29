@@ -974,7 +974,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
   return 0;
 }
 
-int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
+int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, int flags)
 {
   auto ut = ceph::real_clock::now(client->cct);
 
@@ -990,7 +990,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
 
   Objecter::Op *o = objecter->prepare_remove_op(
     oid, oloc,
-    snapc, ut, 0,
+    snapc, ut, flags,
     onack, onsafe, &c->objver);
   objecter->op_submit(o, &c->tid);
 
@@ -1024,6 +1024,73 @@ int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
+}
+
+int librados::IoCtxImpl::aio_getxattr(const object_t& oid, AioCompletionImpl *c,
+				      const char *name, bufferlist& bl)
+{
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getxattr(name, &bl, NULL);
+  int r = aio_operate_read(oid, &rd, c, 0, &bl);
+  return r;
+}
+
+int librados::IoCtxImpl::aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
+				     const char *name)
+{
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.rmxattr(name);
+  return aio_operate(oid, &op, c, snapc, 0);
+}
+
+int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
+				      const char *name, bufferlist& bl)
+{
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.setxattr(name, bl);
+  return aio_operate(oid, &op, c, snapc, 0);
+}
+
+struct AioGetxattrsData {
+  AioGetxattrsData(librados::AioCompletionImpl *c, map<string, bufferlist>* attrset,
+		   librados::RadosClient *_client) :
+    user_completion(c), user_attrset(attrset), client(_client) {}
+  struct librados::C_AioCompleteAndSafe user_completion;
+  map<string, bufferlist> result_attrset;
+  map<std::string, bufferlist>* user_attrset;
+  librados::RadosClient *client;
+};
+
+static void aio_getxattrs_complete(rados_completion_t c, void *arg) {
+  AioGetxattrsData *cdata = reinterpret_cast<AioGetxattrsData*>(arg);
+  int rc = rados_aio_get_return_value(c);
+  cdata->user_attrset->clear();
+  if (rc >= 0) {
+    for (map<string,bufferlist>::iterator p = cdata->result_attrset.begin();
+	 p != cdata->result_attrset.end();
+	 ++p) {
+      ldout(cdata->client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
+      (*cdata->user_attrset)[p->first] = p->second;
+    }
+  }
+  cdata->user_completion.finish(rc);
+  ((librados::AioCompletionImpl*)c)->put();
+  delete cdata;
+}
+
+int librados::IoCtxImpl::aio_getxattrs(const object_t& oid, AioCompletionImpl *c,
+				       map<std::string, bufferlist>& attrset)
+{
+  AioGetxattrsData *cdata = new AioGetxattrsData(c, &attrset, client);
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getxattrs(&cdata->result_attrset, NULL);
+  librados::AioCompletionImpl *comp = new librados::AioCompletionImpl;
+  comp->set_complete_callback(cdata, aio_getxattrs_complete);
+  return aio_operate_read(oid, &rd, comp, 0, NULL);
 }
 
 int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
@@ -1187,6 +1254,28 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   rd.call(cls, method, inbl);
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc, rd, snap_seq, outbl, 0, onack, &c->objver);
+  objecter->op_submit(o, &c->tid);
+  return 0;
+}
+
+int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
+				  const char *cls, const char *method,
+				  bufferlist& inbl, char *buf, size_t out_len)
+{
+  Context *onack = new C_aio_Ack(c);
+
+  c->is_read = true;
+  c->io = this;
+  c->bl.clear();
+  c->bl.push_back(buffer::create_static(out_len, buf));
+  c->blp = &c->bl;
+  c->out_buf = buf;
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.call(cls, method, inbl);
+  Objecter::Op *o = objecter->prepare_read_op(
+    oid, oloc, rd, snap_seq, &c->bl, 0, onack, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
@@ -1418,6 +1507,15 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
                                librados::WatchCtx2 *ctx2,
                                bool internal)
 {
+  return watch(oid, handle, ctx, ctx2, 0, internal);
+}
+
+int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
+                               librados::WatchCtx *ctx,
+                               librados::WatchCtx2 *ctx2,
+                               uint32_t timeout,
+                               bool internal)
+{
   ::ObjectOperation wr;
   version_t objver;
   C_SaferCond onfinish;
@@ -1428,7 +1526,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
 					   oid, ctx, ctx2, internal);
 
   prepare_assert_ops(&wr);
-  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
+  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH, timeout);
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
 			 snapc, ceph::real_clock::now(), bl,
@@ -1452,6 +1550,16 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
                                    uint64_t *handle,
                                    librados::WatchCtx *ctx,
                                    librados::WatchCtx2 *ctx2,
+                                   bool internal) {
+  return aio_watch(oid, c, handle, ctx, ctx2, 0, internal);
+}
+
+int librados::IoCtxImpl::aio_watch(const object_t& oid,
+                                   AioCompletionImpl *c,
+                                   uint64_t *handle,
+                                   librados::WatchCtx *ctx,
+                                   librados::WatchCtx2 *ctx2,
+                                   uint32_t timeout,
                                    bool internal)
 {
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
@@ -1463,7 +1571,7 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
   linger_op->watch_context = new WatchInfo(this, oid, ctx, ctx2, internal);
 
   prepare_assert_ops(&wr);
-  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
+  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH, timeout);
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
                          snapc, ceph::real_clock::now(), bl,

@@ -43,7 +43,6 @@
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/operation/TrimRequest.h"
-#include "include/util.h"
 
 #include "journal/Journaler.h"
 
@@ -900,10 +899,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {
-    CephContext *cct = (CephContext *)io_ctx.cct();
-    bool old_format = cct->_conf->rbd_default_format == 1;
-    uint64_t features = old_format ? 0 : librbd::util::parse_rbd_default_features(cct);
-    return create(io_ctx, imgname, size, old_format, features, order, 0, 0);
+    uint64_t order_ = *order;
+    ImageOptions opts;
+
+    int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
+    assert(r == 0);
+
+    r = create(io_ctx, imgname, size, opts, "", "");
+
+    int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
+    assert(r1 == 0);
+    *order = order_;
+
+    return r;
   }
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -1554,8 +1562,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
 
       cls::rbd::GroupSpec s;
-      r = cls_client::image_get_group(&io_ctx, header_oid, s);
-      if (s.is_valid()) {
+      r = cls_client::image_get_group(&io_ctx, header_oid, &s);
+      if (r < 0 && r != -EOPNOTSUPP) {
+        lderr(cct) << "error querying consistency group" << dendl;
+        ictx->owner_lock.put_read();
+        ictx->state->close();
+        return r;
+      } else if (s.is_valid()) {
 	lderr(cct) << "image is in a consistency group - not removing" << dendl;
 	ictx->owner_lock.put_read();
 	ictx->state->close();
@@ -1756,7 +1769,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
       if (is_protected) {
 	lderr(ictx->cct) << "snapshot is still protected after unprotection" << dendl;
-	assert(0);
+	ceph_abort();
       }
     }
 
@@ -1769,8 +1782,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
   {
-    return cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
-					  limit);
+    int r = cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
+                                           limit);
+    if (r == -EOPNOTSUPP) {
+      *limit = UINT64_MAX;
+      r = 0;
+    }
+    return r;
   }
 
   int snap_set_limit(ImageCtx *ictx, uint64_t limit)
@@ -2577,6 +2595,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       lderr(cct) << "failed to acquire exclusive lock" << dendl;
       return -EROFS;
     }
+
+    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
+      C_SaferCond lock_ctx;
+      ictx->exclusive_lock->release_lock(&lock_ctx);
+      lock_ctx.wait();
+    };
 
     RWLock::RLocker snap_locker(ictx->snap_lock);
     if (ictx->journal == nullptr) {

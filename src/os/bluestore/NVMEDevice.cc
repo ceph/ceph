@@ -370,7 +370,7 @@ void SharedDriverData::_aio_thread()
 {
   dout(1) << __func__ << " start" << dendl;
   if (spdk_nvme_register_io_thread() != 0) {
-    assert(0);
+    ceph_abort();
   }
 
   if (data_buf_mempool.empty()) {
@@ -421,7 +421,7 @@ void SharedDriverData::_aio_thread()
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             delete t;
             derr << __func__ << " failed to do write command" << dendl;
-            assert(0);
+            ceph_abort();
           }
           cur = ceph::coarse_real_clock::now(g_ceph_context);
           auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
@@ -550,7 +550,7 @@ class NVMEManager {
     ns = spdk_nvme_ctrlr_get_ns(c, 1);
     if (!ns) {
       derr << __func__ << " failed to get namespace at 1" << dendl;
-      assert(0);
+      ceph_abort();
     }
     dout(1) << __func__ << " successfully attach nvme device at" << name
             << " " << spdk_pci_device_get_bus(pci_dev) << ":" << spdk_pci_device_get_dev(pci_dev) << ":" << spdk_pci_device_get_func(pci_dev) << dendl;
@@ -581,7 +581,7 @@ static bool probe_cb(void *cb_ctx, struct spdk_pci_device *pci_dev)
   }
 
   if (ctx->sn_tag.compare(string(serial_number, 16))) {
-    dout(0) << __func__ << " device serial number not match " << serial_number << dendl;
+    dout(0) << __func__ << " device serial number (" << ctx->sn_tag << ") not match " << serial_number << dendl;
     return false;
   }
 
@@ -652,7 +652,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
         if (r < 0) {
           derr << __func__ << " failed to do rte_eal_init" << dendl;
-          assert(0);
+          ceph_abort();
         }
 
         request_mempool = rte_mempool_create("nvme_request", 512,
@@ -661,7 +661,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
                                              SOCKET_ID_ANY, 0);
         if (request_mempool == NULL) {
           derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
-          assert(0);
+          ceph_abort();
         }
 
         pci_system_init();
@@ -762,7 +762,11 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 #define dout_prefix *_dout << "bdev(" << name << ") "
 
 NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
-    : buffer_lock("NVMEDevice::buffer_lock"),
+    : driver(NULL),
+      size(0),
+      block_size(0),
+      aio_stop(false),
+      buffer_lock("NVMEDevice::buffer_lock"),
       aio_callback(cb),
       aio_callback_priv(cbpriv)
 {
@@ -794,6 +798,9 @@ int NVMEDevice::open(string p)
     }
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
     return r;
+  }
+  while (r > 0 && !isalpha(buf[r-1])) {
+    --r;
   }
   serial_number = string(buf, r);
   r = manager.try_get(serial_number, &driver);

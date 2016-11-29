@@ -107,7 +107,6 @@ private:
   bool m_writes_blocked = false;
   bool m_snap_lock_acquired = false;
   bool m_requests_blocked = false;
-  bool m_disabling_journal = false;
 
   uint64_t m_new_features = 0;
   uint64_t m_disable_flags = 0;

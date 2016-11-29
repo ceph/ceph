@@ -101,7 +101,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
   fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
-  if (mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL) {
+  if (mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL) {
     fs->fscid = fsm.next_filesystem_id++;
     // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
     // have initialized next_filesystem_id such that it's never used here.
@@ -196,7 +196,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // apply to paxos
   assert(get_last_committed() + 1 == pending_fsmap.epoch);
   bufferlist fsmap_bl;
-  pending_fsmap.encode(fsmap_bl, mon->get_quorum_features());
+  pending_fsmap.encode(fsmap_bl, mon->get_quorum_con_features());
 
   /* put everything in the transaction */
   put_version(t, pending_fsmap.epoch, fsmap_bl);
@@ -274,7 +274,7 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_offload_targets(op);
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -474,30 +474,10 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     return prepare_offload_targets(op);
   
   default:
-    assert(0);
+    ceph_abort();
   }
 
   return true;
-}
-
-
-namespace {
-class C_Updated : public Context {
-  MDSMonitor *mm;
-  MonOpRequestRef op;
-public:
-  C_Updated(MDSMonitor *a, MonOpRequestRef c) :
-    mm(a), op(c) {}
-  void finish(int r) {
-    if (r >= 0)
-      mm->_updated(op);   // success
-    else if (r == -ECANCELED) {
-      mm->mon->no_reply(op);
-    } else {
-      mm->dispatch(op);        // try again
-    }
-  }
-};
 }
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
@@ -699,7 +679,15 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   dout(7) << "prepare_beacon pending map now:" << dendl;
   print_map(pending_fsmap);
   
-  wait_for_finished_proposal(op, new C_Updated(this, op));
+  wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+    if (r >= 0)
+      _updated(op);   // success
+    else if (r == -ECANCELED) {
+      mon->no_reply(op);
+    } else {
+      dispatch(op);        // try again
+    }
+  }));
 
   return true;
 }
@@ -1545,7 +1533,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL;
+      bool jewel = mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL;
       if (flag_bool && !jewel) {
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
@@ -1911,6 +1899,15 @@ public:
           fs->mds_map.set_inline_data_enabled(false);
         });
       }
+    } else if (var == "balancer") {
+      ss << "setting the metadata load balancer to " << val;
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [val](std::shared_ptr<Filesystem> fs)
+        {
+          fs->mds_map.set_balancer(val);
+        });
+      return true;
     } else if (var == "max_file_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";
@@ -2968,8 +2965,25 @@ void MDSMonitor::tick()
     do_propose |= maybe_expand_cluster(i.second);
   }
 
+  const auto now = ceph_clock_now(g_ceph_context);
+  if (last_tick.is_zero()) {
+    last_tick = now;
+  }
+
+  if (now - last_tick > (g_conf->mds_beacon_grace - g_conf->mds_beacon_interval)) {
+    // This case handles either local slowness (calls being delayed
+    // for whatever reason) or cluster election slowness (a long gap
+    // between calls while an election happened)
+    dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
+            "(slow election?) of " << now - last_tick << " seconds" << dendl;
+    for (auto &i : last_beacon) {
+      i.second.stamp = now;
+    }
+  }
+
+  last_tick = now;
+
   // check beacon timestamps
-  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t cutoff = now;
   cutoff -= g_conf->mds_beacon_grace;
 
@@ -2977,7 +2991,7 @@ void MDSMonitor::tick()
   for (const auto &p : pending_fsmap.mds_roles) {
     auto &gid = p.first;
     if (last_beacon.count(gid) == 0) {
-      last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
+      last_beacon[gid].stamp = now;
       last_beacon[gid].seq = 0;
     }
   }
@@ -3057,5 +3071,12 @@ MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
         "mds remove_data_pool"));
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds rm_data_pool"));
+}
+
+void MDSMonitor::on_restart()
+{
+  // Clear out the leader-specific state.
+  last_tick = utime_t();
+  last_beacon.clear();
 }
 

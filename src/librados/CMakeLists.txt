@@ -34,3 +34,9 @@ else(ENABLE_SHARED)
   add_library(librados ALIAS rados_a)
 endif(ENABLE_SHARED)
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(WITH_EMBEDDED)
+  add_library(cephd_rados STATIC
+    $<TARGET_OBJECTS:librados_api_obj>
+    $<TARGET_OBJECTS:librados_objs>)
+endif()

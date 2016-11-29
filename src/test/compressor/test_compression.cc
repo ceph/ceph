@@ -17,13 +17,12 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <gtest/gtest.h>
-#include "global/global_init.h"
 #include "compressor/Compressor.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "compressor/CompressionPlugin.h"
+#include "test/unit.h"
 
 class CompressorTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
@@ -387,18 +386,69 @@ TEST(CompressionPlugin, all)
   }
 }
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
+TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
+{
+  g_conf->set_val("compressor_zlib_isal", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
+  CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
+  g_conf->set_val("compressor_zlib_isal", "false");
+  g_ceph_context->_conf->apply_changes(NULL);
+  CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
+  for (int cnt=0; cnt<1000; cnt++)
+  {
+    srand(cnt + 1000);
+    int log2 = (rand()%18) + 1;
+    int size = (rand() % (1 << log2)) + 1;
 
-  const char* env = getenv("CEPH_LIB");
-  if (env)
-    g_conf->set_val("plugin_dir", env, false, false);
+    char test[size];
+    for (int i=0; i<size; ++i)
+      test[i] = rand()%256;
+    bufferlist in, out;
+    in.append(test, size);
 
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+    int res = isal->compress(in, out);
+    EXPECT_EQ(res, 0);
+    bufferlist after;
+    res = zlib->decompress(out, after);
+    EXPECT_EQ(res, 0);
+    bufferlist exp;
+    exp.append(test, size);
+    EXPECT_TRUE(exp.contents_equal(after));
+  }
+}
+
+TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
+{
+  g_conf->set_val("compressor_zlib_isal", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
+  CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
+  g_conf->set_val("compressor_zlib_isal", "false");
+  g_ceph_context->_conf->apply_changes(NULL);
+  CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
+
+  for (int cnt=0; cnt<1000; cnt++)
+  {
+    srand(cnt + 1000);
+    int log2 = (rand()%18) + 1;
+    int size = (rand() % (1 << log2)) + 1;
+
+    int range = 1;
+
+    char test[size];
+    test[0] = rand()%256;
+    for (int i=1; i<size; ++i)
+      test[i] = test[i-1] + rand()%(range*2+1) - range;
+    bufferlist in, out;
+    in.append(test, size);
+
+    int res = isal->compress(in, out);
+    EXPECT_EQ(res, 0);
+    bufferlist after;
+    res = zlib->decompress(out, after);
+    EXPECT_EQ(res, 0);
+    bufferlist exp;
+    exp.append(test, size);
+    EXPECT_TRUE(exp.contents_equal(after));
+  }
 }

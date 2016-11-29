@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include "include/unordered_map.h"
+#include "global/global_init.h"
 #include "rgw_common.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
@@ -29,6 +30,7 @@ namespace rgw {
     rgw::LDAPHelper* ldh;
     RGWREST rest; // XXX needed for RGWProcessEnv
     RGWRados* store;
+    boost::intrusive_ptr<CephContext> cct;
 
   public:
     RGWLib() : fec(nullptr), fe(nullptr), olog(nullptr), store(nullptr)
@@ -50,9 +52,11 @@ namespace rgw {
 
 /* request interface */
 
-  class RGWLibIO : public RGWClientIO
+  class RGWLibIO : public rgw::io::BasicClient,
+                   public rgw::io::Accounter
   {
     RGWUserInfo user_info;
+    RGWEnv env;
   public:
     RGWLibIO() {
       get_env().set("HTTP_HOST", "");
@@ -60,7 +64,7 @@ namespace rgw {
     RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    virtual void init_env(CephContext *cct) {}
+    virtual void init_env(CephContext *cct) override {}
 
     const RGWUserInfo& get_user() {
       return user_info;
@@ -75,9 +79,25 @@ namespace rgw {
     int complete_header();
     int send_content_length(uint64_t len);
 
-    int complete_request() { /* XXX */
+    RGWEnv& get_env() noexcept override {
+      return env;
+    }
+
+    size_t complete_request() override { /* XXX */
       return 0;
     };
+
+    void set_account(bool) override {
+      return;
+    }
+
+    uint64_t get_bytes_sent() const override {
+      return 0;
+    }
+
+    uint64_t get_bytes_received() const override {
+      return 0;
+    }
 
   }; /* RGWLibIO */
 

@@ -12,7 +12,7 @@ function install() {
 function install_one() {
     case $(lsb_release -si) in
         Ubuntu|Debian|Devuan)
-            sudo apt-get install -y "$@"
+            sudo apt-get install -y --force-yes "$@"
             ;;
         CentOS|Fedora|RedHatEnterpriseServer)
             sudo yum install -y "$@"

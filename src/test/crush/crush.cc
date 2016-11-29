@@ -12,12 +12,10 @@
 #include <gtest/gtest.h>
 
 #include "include/stringify.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
+#include "test/unit.h"
 
 #include <set>
 
@@ -67,6 +65,8 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
   ret = c->set_rule_step(ruleno, 3, CRUSH_RULE_EMIT, 0, 0);
   assert(ret == 0);
   c->set_rule_name(ruleno, "data");
+
+  c->finalize();
 
   if (false) {
     Formatter *f = Formatter::create("json-pretty");
@@ -291,6 +291,8 @@ TEST(CRUSH, straw_zero) {
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(1, ruleset1);
 
+  c->finalize();
+
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
@@ -382,6 +384,8 @@ TEST(CRUSH, straw_same) {
     jf.flush(cout);
   }
 
+  c->finalize();
+
   vector<int> sum0(n, 0), sum1(n, 0);
   vector<unsigned> reweight(n, 0x10000);
   int different = 0;
@@ -450,6 +454,8 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   }
   totalweight /= (double)0x10000;
   double avgweight = totalweight / n;
+
+  c->finalize();
 
   int total = 1000000;
   for (int i=0; i<total; ++i) {
@@ -591,6 +597,8 @@ TEST(CRUSH, straw2_reweight) {
   totalweight /= (double)0x10000;
   double avgweight = totalweight / n;
 
+  c->finalize();
+
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
@@ -634,17 +642,4 @@ TEST(CRUSH, straw2_reweight) {
     double estddev = sqrt((double)total * p * (1.0 - p));
     cout << "     vs " << estddev << std::endl;
   }
-}
-
-
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

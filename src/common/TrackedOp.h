@@ -150,7 +150,7 @@ protected:
   { }
 
   /// output any type-specific data you want to get when dump() is called
-  virtual void _dump(utime_t now, Formatter *f) const {}
+  virtual void _dump(Formatter *f) const {}
   /// if you want something else to happen when events are marked, implement
   virtual void _event_marked() {}
   /// return a unique descriptor of the Op; eg the message it's attached to

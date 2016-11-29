@@ -50,7 +50,6 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
 
 using namespace std;
 class CrushWrapper {
-  mutable Mutex mapper_lock;
 public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
@@ -78,8 +77,7 @@ public:
   CrushWrapper(const CrushWrapper& other);
   const CrushWrapper& operator=(const CrushWrapper& other);
 
-  CrushWrapper() : mapper_lock("CrushWrapper::mapper_lock"),
-		   crush(0), have_rmaps(false) {
+  CrushWrapper() : crush(0), have_rmaps(false) {
     create();
   }
   ~CrushWrapper() {
@@ -1026,9 +1024,13 @@ public:
 
   void start_choose_profile() {
     free(crush->choose_tries);
-    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * crush->choose_total_tries);
+    /*
+     * the original choose_total_tries value was off by one (it
+     * counted "retries" and not "tries").  add one to alloc.
+     */
+    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
     memset(crush->choose_tries, 0,
-	   sizeof(*crush->choose_tries) * crush->choose_total_tries);
+	   sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
   }
   void stop_choose_profile() {
     free(crush->choose_tries);
@@ -1084,26 +1086,26 @@ public:
 
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
-    Mutex::Locker l(mapper_lock);
     int rawout[maxout];
-    int scratch[maxout * 3];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
+    char work[crush_work_size(crush, maxout)];
+    crush_init_workspace(crush, work);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
+			       weight.size(), work);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
-  
+
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
-   
-    assert(crush);    
+    assert(crush);
 
     __u32 i;
     for (i = 0; i < crush->max_rules; i++) {
       if (crush->rules[i] &&
-          crush->rules[i]->mask.ruleset == ruleset &&
-          crush->rules[i]->mask.type == type) {
+	  crush->rules[i]->mask.ruleset == ruleset &&
+	  crush->rules[i]->mask.type == type) {
 
         if (crush->rules[i]->mask.min_size <= size &&
             crush->rules[i]->mask.max_size >= size) {

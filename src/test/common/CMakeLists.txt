@@ -6,7 +6,7 @@ add_executable(get_command_descriptions
 target_link_libraries(get_command_descriptions
   mon
   global
-  leveldb
+  ${LEVELDB_LIBRARIES}
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -163,6 +163,13 @@ add_executable(unittest_async_compressor
 target_link_libraries(unittest_async_compressor global ${UNITTEST_LIBS})
 add_dependencies(unittest_async_compressor ceph_snappy)
 set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# unittest_interval_map
+add_executable(unittest_interval_map
+  test_interval_map.cc
+)
+add_ceph_unittest(unittest_interval_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_interval_map)
+target_link_libraries(unittest_interval_map global)
 
 # unittest_interval_set
 add_executable(unittest_interval_set

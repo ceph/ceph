@@ -800,11 +800,9 @@ int MDSDaemon::_handle_command(
     int64_t session_id = 0;
     bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
     assert(got);
-    const bool killed = mds_rank->kill_session(session_id);
-    if (!killed) {
+    bool killed = mds_rank->kill_session(session_id, false, ss);
+    if (!killed)
       r = -ENOENT;
-      ss << "session '" << session_id << "' not found";
-    }
   } else if (prefix == "heap") {
     if (!ceph_using_tcmalloc()) {
       r = -EOPNOTSUPP;
@@ -1143,7 +1141,7 @@ void MDSDaemon::respawn()
 
   // We have to assert out here, because suicide() returns, and callers
   // to respawn expect it never to return.
-  assert(0);
+  ceph_abort();
 }
 
 

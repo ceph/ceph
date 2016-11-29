@@ -12,6 +12,7 @@
  *
  */
 
+#include <random>
 #include "Compressor.h"
 #include "CompressionPlugin.h"
 #include "common/dout.h"
@@ -59,6 +60,24 @@ boost::optional<Compressor::CompressionMode> Compressor::get_comp_mode_type(cons
 
 CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 {
+  // support "random" for teuthology testing
+  if (type == "random") {
+    static std::random_device seed;
+    static std::default_random_engine engine(seed());
+    static Spinlock mutex;
+
+    int alg = COMP_ALG_NONE;
+    std::uniform_int_distribution<> dist(0, COMP_ALG_LAST - 1);
+    {
+      std::lock_guard<Spinlock> lock(mutex);
+      alg = dist(engine);
+    }
+    if (alg == COMP_ALG_NONE) {
+      return nullptr;
+    }
+    return create(cct, alg);
+  }
+
   CompressorRef cs_impl = NULL;
   std::stringstream ss;
   PluginRegistry *reg = cct->get_plugin_registry();

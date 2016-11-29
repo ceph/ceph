@@ -599,7 +599,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
           << std::dec << " in journal";
       mds->clog->error() << oss.str();
       mds->damaged();
-      assert(0);  // Should be unreachable because damaged() calls respawn()
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
   }
 }
@@ -1215,7 +1215,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
           mds->clog->error() << "failure replaying journal (EMetaBlob)";
           mds->damaged();
-          assert(0);  // Should be unreachable because damaged() calls respawn()
+          ceph_abort();  // Should be unreachable because damaged() calls respawn()
 	}
       }
 
@@ -1961,7 +1961,7 @@ void ETableServer::replay(MDSRank *mds)
   default:
     mds->clog->error() << "invalid tableserver op in ETableServer";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
   
   assert(version == server->get_version());
@@ -2527,7 +2527,7 @@ void ESlaveUpdate::replay(MDSRank *mds)
   default:
     mds->clog->error() << "invalid op in ESlaveUpdate";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 }
 
@@ -2745,8 +2745,7 @@ void EFragment::replay(MDSRank *mds)
   switch (op) {
   case OP_PREPARE:
     mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags, _segment, &rollback);
-    // fall-thru
-  case OP_ONESHOT:
+
     if (in)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
     break;
@@ -2771,7 +2770,7 @@ void EFragment::replay(MDSRank *mds)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   metablob.replay(mds, _segment);
@@ -2798,8 +2797,6 @@ void EFragment::decode(bufferlist::iterator &bl) {
     ::decode(stamp, bl);
   if (struct_v >= 3)
     ::decode(op, bl);
-  else
-    op = OP_ONESHOT;
   ::decode(ino, bl);
   ::decode(basefrag, bl);
   ::decode(bits, bl);
@@ -3034,7 +3031,7 @@ void EImportFinish::replay(MDSRank *mds)
 	     << dendl;
     mds->clog->error() << "failure replaying journal (EImportFinish)";
     mds->damaged();
-    assert(0);  // Should be unreachable because damaged() calls respawn()
+    ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 }
 

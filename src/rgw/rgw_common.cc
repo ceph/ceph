@@ -175,9 +175,9 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
     info(_cct, e)
 {
-  enable_ops_log = e->conf->enable_ops_log;
-  enable_usage_log = e->conf->enable_usage_log;
-  defer_to_bucket_acls = e->conf->defer_to_bucket_acls;
+  enable_ops_log = e->conf.enable_ops_log;
+  enable_usage_log = e->conf.enable_usage_log;
+  defer_to_bucket_acls = e->conf.defer_to_bucket_acls;
   content_started = false;
   format = 0;
   formatter = NULL;
@@ -733,7 +733,12 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  if (str[pos] == '?') pos++;
+
+  if (str.empty())
+    return 0;
+
+  if (str[pos] == '?')
+    pos++;
 
   while (!end) {
     int fpos = str.find('&', pos);
@@ -899,6 +904,10 @@ bool verify_requester_payer_permission(struct req_state *s)
 
   if (s->auth_identity->is_owner_of(s->bucket_info.owner))
     return true;
+  
+  if (s->auth_identity->is_anonymous()) {
+    return false;
+  }
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
   if (!request_payer) {

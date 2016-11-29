@@ -60,7 +60,10 @@ private:
    * |               |                   v
    * |               |          ADD IMAGE TO DIRECTORY
    * |               |               /   |
-   * |      REMOVE ID OBJECT<-------/    v         (stripingv2 disabled)
+   * |      REMOVE ID OBJECT<-------/    v
+   * |               |           NEGOTIATE FEATURES (when using default features)
+   * |               |                   |
+   * |               |                   v         (stripingv2 disabled)
    * |               |              CREATE IMAGE. . . . > . . . .
    * v               |               /   |                      .
    * |      REMOVE FROM DIR<--------/    v                      .
@@ -112,6 +115,7 @@ private:
   int64_t m_data_pool_id = -1;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
+  bool m_negotiate_features = false;
 
   ContextWQ *m_op_work_queue;
   Context *m_on_finish;
@@ -134,6 +138,9 @@ private:
 
   void add_image_to_directory();
   Context *handle_add_image_to_directory(int *result);
+
+  void negotiate_features();
+  Context *handle_negotiate_features(int *result);
 
   void create_image();
   Context *handle_create_image(int *result);

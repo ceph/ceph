@@ -831,7 +831,7 @@ void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
       }
       break;
     default:
-      assert(0);
+      ceph_abort();
       break;
   }
 }
@@ -1170,7 +1170,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
 
-  int ret = read_op.prepare(NULL, NULL);
+  int ret = read_op.prepare();
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1232,7 +1232,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  int ret = read_op.prepare(NULL, NULL);
+  int ret = read_op.prepare();
   bool needs_fixing = (ret == -ENOENT);
 
   f->dump_bool("needs_fixing", needs_fixing);
@@ -2190,7 +2190,8 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   rgw_user user_id;
@@ -4396,7 +4397,7 @@ int main(int argc, char **argv)
         formatter->open_array_section("log_entries");
 
       do {
-	uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+	uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
 
         agg_time += total_time;
         agg_bytes_sent += entry.bytes_sent;
@@ -5106,7 +5107,7 @@ next:
     read_op.params.attrs = &attrs;
     read_op.params.obj_size = &obj_size;
 
-    ret = read_op.prepare(NULL, NULL);
+    ret = read_op.prepare();
     if (ret < 0) {
       cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -6155,7 +6156,7 @@ next:
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
-      assert(0);
+      ceph_abort();
     }
     encode_json("bounds", bounds, formatter);
     formatter->flush(cout);

@@ -436,22 +436,6 @@ for name in $what; do
 		continue
 	    fi
 
-	    if [ "$type" = "mon" ]; then
-		# this will only work if we are using default paths
-		# for the mon data and admin socket.  if so, run
-		# ceph-create-keys.  this is the case for (normal)
-		# chef and ceph-deploy clusters, which is who needs
-		# these keys.  it's also true for legacy installs
-		# via mkcephfs, which is fine too; there is no harm
-		# in creating these keys.
-		get_conf mon_data "/var/lib/ceph/mon/$cluster-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/$cluster-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
-		    echo Starting ceph-create-keys on $host...
-		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
-		    do_cmd "$cmd2"
-		fi
-	    fi
-
 	    [ -n "$post_start" ] && do_cmd "$post_start"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && touch $lockfile
 	    ;;

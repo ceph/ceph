@@ -151,33 +151,6 @@ static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<stri
   }
 }
 
-static bool lsb_release_parse(map<string, string> *m, CephContext *cct)
-{
-  static const map<string, string> kvm = {
-      { "distro", "Distributor ID:" },
-      { "distro_description", "Description:" },
-      { "distro_codename", "Codename:", },
-      { "distro_version", "Release:" }
-  };
-
-  FILE *fp = popen("lsb_release -idrc", "r");
-  if (!fp) {
-    int ret = -errno;
-    lderr(cct) << "lsb_release_parse - failed to call lsb_release binary with error: " << cpp_strerror(ret) << dendl;
-    return false;
-  }
-
-  file_values_parse(kvm, fp, m, cct);
-
-  if (pclose(fp)) {
-    int ret = -errno;
-    lderr(cct) << "lsb_release_parse - pclose failed: " << cpp_strerror(ret) << dendl;
-    return false;
-  }
-
-  return true;
-}
-
 static bool os_release_parse(map<string, string> *m, CephContext *cct)
 {
   static const map<string, string> kvm = {
@@ -202,8 +175,8 @@ static bool os_release_parse(map<string, string> *m, CephContext *cct)
 
 static void distro_detect(map<string, string> *m, CephContext *cct)
 {
-  if (!lsb_release_parse(m, cct) && !os_release_parse(m, cct)) {
-    lderr(cct) << "distro_detect - lsb_release or /etc/os-release is required" << dendl;
+  if (!os_release_parse(m, cct)) {
+    lderr(cct) << "distro_detect - /etc/os-release is required" << dendl;
   }
 
   for (const char* rk: {"distro", "distro_version"}) {
@@ -293,4 +266,40 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
     f->close_section();
   }
   f->close_section();
+}
+
+
+// If non-printable characters found then convert bufferlist to
+// base64 encoded string indicating whether it did.
+string cleanbin(bufferlist &bl, bool &base64)
+{
+  bufferlist::iterator it;
+  for (it = bl.begin(); it != bl.end(); ++it) {
+    if (iscntrl(*it))
+      break;
+  }
+  if (it == bl.end()) {
+    base64 = false;
+    string result(bl.c_str(), bl.length());
+    return result;
+  }
+
+  bufferlist b64;
+  bl.encode_base64(b64);
+  string encoded(b64.c_str(), b64.length());
+  base64 = true;
+  return encoded;
+}
+
+// If non-printable characters found then convert to "Base64:" followed by
+// base64 encoding
+string cleanbin(string &str)
+{
+  bool base64;
+  bufferlist bl;
+  bl.append(str);
+  string result = cleanbin(bl, base64);
+  if (base64)
+    result = "Base64:" + result;
+  return result;
 }

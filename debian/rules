@@ -5,7 +5,7 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
@@ -55,7 +55,6 @@ override_dh_installinit:
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph-base/etc/init
 	install -m0644 src/upstart/ceph-all.conf debian/ceph-base/etc/init
-	install -m0644 src/upstart/ceph-create-keys.conf debian/ceph-base/etc/init
 	install -d -m0755 debian/ceph-osd/etc/init
 	install -m0644 src/upstart/ceph-osd*.conf debian/ceph-osd/etc/init
 	install -m0644 src/upstart/ceph-disk.conf debian/ceph-osd/etc/init
@@ -83,12 +82,10 @@ override_dh_installinit:
 	install -d -m0755 debian/ceph-mon/lib/systemd/system
 	install -d -m0755 debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-mon@.service debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-create-keys@.service debian/ceph-base/lib/systemd/system
 	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-base/lib/systemd/system/ceph-create-keys@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
 	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
@@ -133,7 +130,7 @@ override_dh_strip:
 	dh_strip -plibrados2 --dbg-package=librados2-dbg
 	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
-	dh_strip -plibcephfs1 --dbg-package=libcephfs1-dbg
+	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg

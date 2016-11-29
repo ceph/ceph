@@ -6,12 +6,10 @@
 
 #include "common/Thread.h"
 
-#include <pthread.h>
-
 #include "EntryQueue.h"
 
 namespace ceph {
-namespace log {
+namespace logging {
 
 class Graylog;
 class SubsystemMap;
@@ -96,6 +94,7 @@ public:
 
   /// induce a segv on the next log event
   void inject_segv();
+  void reset_segv();
 };
 
 }

@@ -460,9 +460,6 @@ public:
     return identify_osd(addr) >= 0;
   }
   int find_osd_on_ip(const entity_addr_t& ip) const;
-  bool have_inst(int osd) const {
-    return exists(osd) && is_up(osd); 
-  }
   const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
     return osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank;
@@ -481,9 +478,13 @@ public:
     assert(exists(osd));
     return osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank;
   }
+  entity_inst_t get_most_recent_inst(int osd) const {
+    assert(exists(osd));
+    return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
+  }
   entity_inst_t get_inst(int osd) const {
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
+    return get_most_recent_inst(osd);
   }
   entity_inst_t get_cluster_inst(int osd) const {
     assert(is_up(osd));

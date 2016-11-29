@@ -14,11 +14,12 @@
 #ifndef RADOS_RGW_FILE_H
 #define RADOS_RGW_FILE_H
 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "include/rados/librgw.h"
+#include "librgw.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -81,6 +82,9 @@ struct rgw_statvfs {
     uint64_t     f_flag;     /* mount flags */
     uint64_t     f_namemax;  /* maximum filename length */
 };
+
+
+void rgwfile_version(int *major, int *minor, int *extra);
 
 /*
   lookup object by name (POSIX style)

@@ -21,12 +21,12 @@
 #include "crush/CrushWrapper.h"
 #include "common/config.h"
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "erasure-code/lrc/ErasureCodeLrc.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
+#include "test/unit.h"
+
 
 TEST(ErasureCodeLrc, parse_ruleset)
 {
@@ -129,6 +129,8 @@ TEST(ErasureCodeTest, create_ruleset)
       }
     }
   }
+
+  c->finalize();
 
   ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   EXPECT_EQ(0, lrc.create_ruleset("rule1", *c, &cerr));
@@ -906,22 +908,6 @@ TEST(ErasureCodeLrc, encode_decode_2)
     map<int, bufferlist> decoded;
     EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
   }
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

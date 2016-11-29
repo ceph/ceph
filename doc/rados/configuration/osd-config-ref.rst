@@ -237,6 +237,17 @@ scrubbing operations.
 :Type: Integer in the range of 0 to 24
 :Default: ``24``
 
+
+``osd scrub during recovery``
+
+:Description: Allow scrub during recovery. Setting this to ``false`` will disable
+              scheduling new scrub (and deep--scrub) while there is active recovery.
+              Already running scrubs will be continued. This might be useful to reduce
+              load on busy clusters.
+:Type: Boolean
+:Default: ``true``
+
+
 ``osd scrub thread timeout`` 
 
 :Description: The maximum time in seconds before timing out a scrub thread.
@@ -279,6 +290,32 @@ scrubbing operations.
 
 :Type: Float
 :Default: Once per week. ``7*60*60*24``
+
+
+``osd scrub chunk min``
+
+:Description: The minimal number of object store chunks to scrub during single operation.
+              Ceph blocks writes to single chunk during scrub.
+
+:Type: 32-bit Integer
+:Default: 5
+
+
+``osd scrub chunk max``
+
+:Description: The maximum number of object store chunks to scrub during single operation.
+
+:Type: 32-bit Integer
+:Default: 25
+
+
+``osd scrub sleep``
+
+:Description: Time to sleep before scrubbing next group of chunks. Increasing this value will slow
+              down whole scrub operation while client operations will be less impacted.
+
+:Type: Float
+:Default: 0
 
 
 ``osd deep scrub interval``
@@ -486,7 +523,7 @@ priority than requests to read or write data.
 
 :Description: The maximum number of backfills allowed to or from a single OSD.
 :Type: 64-bit Unsigned Integer
-:Default: ``10``
+:Default: ``1``
 
 
 ``osd backfill scan min`` 
@@ -714,6 +751,17 @@ Miscellaneous
 :Description: Preserves trimmed log files, but uses more disk space.
 :Type: Boolean
 :Default: ``false``
+
+
+``osd fast fail on connection refused``
+
+:Description: If this option is enabled, crashed OSDs are marked down
+              immediately by connected peers and MONs (assuming that the
+              crashed OSD host survives). Disable it to restore old
+              behavior, at the expense of possible long I/O stalls when
+              OSDs crash in the middle of I/O operations.
+:Type: Boolean
+:Default: ``true``
 
 
 

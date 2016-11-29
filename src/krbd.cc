@@ -118,12 +118,14 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   if (r < 0)
     return r;
 
-  for (map<string, entity_addr_t>::const_iterator it = monmap.mon_addr.begin();
-       it != monmap.mon_addr.end();
-       ++it) {
-    if (it != monmap.mon_addr.begin())
+  list<entity_addr_t> mon_addr;
+  monmap.list_addrs(mon_addr);
+
+  for (const auto &p : mon_addr) {
+    if (oss.tellp() > 0) {
       oss << ",";
-    oss << it->second.get_sockaddr();
+    }
+    oss << p.get_sockaddr();
   }
 
   oss << " name=" << cct->_conf->name.get_id();

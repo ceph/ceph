@@ -236,7 +236,7 @@ void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ::encode(v, bl);
   vector<Incremental>::iterator p;
   for (p = pending_auth.begin(); p != pending_auth.end(); ++p)
-    p->encode(bl, mon->get_quorum_features());
+    p->encode(bl, mon->get_quorum_con_features());
 
   version_t version = get_last_committed() + 1;
   put_version(t, version, bl);
@@ -291,7 +291,7 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
     return false;
 
   default:
-    assert(0);
+    ceph_abort();
     return true;
   }
 }
@@ -308,7 +308,7 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   case CEPH_MSG_AUTH:
     return prep_auth(op, true);
   default:
-    assert(0);
+    ceph_abort();
     return false;
   }
 }

@@ -313,7 +313,7 @@ struct entity_addr_t {
       u.sin6.sin6_port = htons(port);
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
   int get_port() const {

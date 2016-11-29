@@ -137,7 +137,7 @@ void RGWFormatter_Plain::dump_string(const char *name, const std::string& s)
 std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
 {
   // TODO: implement this!
-  assert(0);
+  ceph_abort();
 }
 
 void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)

@@ -39,13 +39,12 @@ class DeterministicOpSequence : public TestObjectStoreState {
     DSOP_CLONE = 2,
     DSOP_CLONE_RANGE = 3,
     DSOP_OBJ_REMOVE = 4,
-    DSOP_COLL_MOVE = 5,
-    DSOP_SET_ATTRS = 6,
-    DSOP_COLL_CREATE = 7,
-    DSOP_MERGE_DELETE = 8,
+    DSOP_COLL_MOVE = 6,
+    DSOP_SET_ATTRS = 7,
+    DSOP_COLL_CREATE = 8,
 
     DSOP_FIRST = DSOP_TOUCH,
-    DSOP_LAST = DSOP_MERGE_DELETE,
+    DSOP_LAST = DSOP_COLL_CREATE,
   };
 
   int32_t txn;
@@ -67,7 +66,6 @@ class DeterministicOpSequence : public TestObjectStoreState {
   bool do_coll_move(rngen_t& gen);
   bool do_set_attrs(rngen_t& gen);
   bool do_coll_create(rngen_t& gen);
-  bool do_move_ranges_delete_srcobj(rngen_t& gen);
 
   virtual void _do_touch(coll_t coll, hobject_t& obj);
   virtual void _do_remove(coll_t coll, hobject_t& obj);
@@ -82,10 +80,6 @@ class DeterministicOpSequence : public TestObjectStoreState {
   virtual void _do_write_and_clone_range(coll_t coll, hobject_t& orig_obj,
       hobject_t& new_obj, uint64_t srcoff, uint64_t srclen,
       uint64_t dstoff, bufferlist& bl);
-  virtual void _do_write_and_merge_delete(
-    coll_t coll, hobject_t& orig_obj,
-    hobject_t& new_obj, vector<std::pair<uint64_t, uint64_t>> move_info,
-    bufferlist& bl);
   virtual void _do_coll_move(coll_t orig_coll, coll_t new_coll, hobject_t& obj);
   virtual void _do_coll_create(coll_t cid, uint32_t pg_num, uint64_t num_objs);
 

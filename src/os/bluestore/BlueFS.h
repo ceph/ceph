@@ -52,6 +52,8 @@ public:
   };
 
   struct File : public RefCountedObject {
+    MEMPOOL_CLASS_HELPERS();
+
     bluefs_fnode_t fnode;
     int refs;
     uint64_t dirty_seq;
@@ -96,7 +98,9 @@ public:
 	&File::dirty_item> > dirty_file_list_t;
 
   struct Dir : public RefCountedObject {
-    map<string,FileRef> file_map;
+    MEMPOOL_CLASS_HELPERS();
+
+    mempool::bluefs::map<string,FileRef> file_map;
 
     Dir() : RefCountedObject(NULL, 0) {}
 
@@ -110,6 +114,8 @@ public:
   typedef boost::intrusive_ptr<Dir> DirRef;
 
   struct FileWriter {
+    MEMPOOL_CLASS_HELPERS();
+
     FileRef file;
     uint64_t pos;           ///< start offset for buffer
     bufferlist buffer;      ///< new data to write (at end of file)
@@ -150,6 +156,8 @@ public:
   };
 
   struct FileReaderBuffer {
+    MEMPOOL_CLASS_HELPERS();
+
     uint64_t bl_off;        ///< prefetch buffer logical offset
     bufferlist bl;          ///< prefetch buffer
     uint64_t pos;           ///< current logical offset
@@ -178,6 +186,8 @@ public:
   };
 
   struct FileReader {
+    MEMPOOL_CLASS_HELPERS();
+
     FileRef file;
     FileReaderBuffer buf;
     bool random;
@@ -196,6 +206,8 @@ public:
   };
 
   struct FileLock {
+    MEMPOOL_CLASS_HELPERS();
+
     FileRef file;
     explicit FileLock(FileRef f) : file(f) {}
   };
@@ -206,8 +218,8 @@ private:
   PerfCounters *logger = nullptr;
 
   // cache
-  map<string, DirRef> dir_map;                    ///< dirname -> Dir
-  ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
+  mempool::bluefs::map<string, DirRef> dir_map;              ///< dirname -> Dir
+  mempool::bluefs::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
 
   // map of dirty files, files of same dirty_seq are grouped into list.
   map<uint64_t, dirty_file_list_t> dirty_files;
@@ -251,7 +263,8 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _allocate(uint8_t bdev, uint64_t len, vector<bluefs_extent_t> *ev);
+  int _allocate(uint8_t bdev, uint64_t len,
+		mempool::bluefs::vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
   int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);

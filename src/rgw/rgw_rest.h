@@ -6,6 +6,8 @@
 
 #define TIME_BUF_SIZE 128
 
+#include <boost/utility/string_ref.hpp>
+
 #include "common/ceph_json.h"
 #include "include/assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
@@ -27,13 +29,6 @@ extern void rgw_flush_formatter(struct req_state *s,
 
 extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen,
 				   int max_len);
-
-/* type conversions to work around lack of req_state type
- * hierarchy matching (e.g.) REST backends (may be replaced w/dynamic
- * typed req_state) */
-static inline RGWStreamIO* STREAM_IO(struct req_state* s) {
-  return static_cast<RGWStreamIO*>(s->cio);
-}
 
 template <class T>
 int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
@@ -149,8 +144,6 @@ public:
     set_formatter(s->formatter);
   }
 };
-
-class RGWStreamIO;
 
 class RGWGetObj_ObjStore : public RGWGetObj
 {
@@ -448,8 +441,18 @@ class RGWRESTMgr {
   bool should_log;
 protected:
   std::map<std::string, RGWRESTMgr*> resource_mgrs;
-  std::multimap<std::size_t, std::string> resources_by_size;
+  std::multimap<size_t, std::string> resources_by_size;
   RGWRESTMgr* default_mgr;
+
+  virtual RGWRESTMgr* get_resource_mgr(struct req_state* s,
+                                       const std::string& uri,
+                                       std::string* out_uri);
+
+  virtual RGWRESTMgr* get_resource_mgr_as_default(struct req_state* const s,
+                                                  const std::string& uri,
+                                                  std::string* our_uri) {
+    return this;
+  }
 
 public:
   RGWRESTMgr()
@@ -458,37 +461,51 @@ public:
   }
   virtual ~RGWRESTMgr();
 
-  void register_resource(string resource, RGWRESTMgr *mgr);
-  void register_default_mgr(RGWRESTMgr *mgr);
+  void register_resource(std::string resource, RGWRESTMgr* mgr);
+  void register_default_mgr(RGWRESTMgr* mgr);
 
-  virtual RGWRESTMgr* get_resource_mgr(struct req_state *s,
-                                       const std::string& uri,
-                                       std::string* out_uri);
-
-  virtual RGWRESTMgr* get_resource_mgr_as_default(struct req_state* s,
-                                                  const std::string& uri,
-                                                  std::string* our_uri) {
-    return this;
+  virtual RGWRESTMgr* get_manager(struct req_state* const s,
+                                  /* Prefix to be concatenated with @uri
+                                   * during the lookup. */
+                                  const std::string& frontend_prefix,
+                                  const std::string& uri,
+                                  std::string* out_uri) final {
+    return get_resource_mgr(s, frontend_prefix + uri, out_uri);
   }
 
-  virtual RGWHandler_REST *get_handler(struct req_state *s) { return NULL; }
-  virtual void put_handler(RGWHandler_REST *handler) { delete handler; }
+  virtual RGWHandler_REST* get_handler(struct req_state* const s,
+                                       const std::string& frontend_prefix) {
+    return nullptr;
+  }
 
-  void set_logging(bool _should_log) { should_log = _should_log; }
-  bool get_logging() { return should_log; }
+  virtual void put_handler(RGWHandler_REST* const handler) {
+    delete handler;
+  }
+
+  void set_logging(bool _should_log) {
+    should_log = _should_log;
+  }
+
+  bool get_logging() const {
+    return should_log;
+  }
 };
 
 class RGWLibIO;
+class RGWRestfulIO;
 
 class RGWREST {
   RGWRESTMgr mgr;
 
-  static int preprocess(struct req_state *s, RGWClientIO *sio);
+  static int preprocess(struct req_state *s, rgw::io::BasicClient* rio);
 public:
   RGWREST() {}
-  RGWHandler_REST *get_handler(RGWRados *store, struct req_state *s,
-			      RGWStreamIO *sio,
-			      RGWRESTMgr **pmgr, int *init_error);
+  RGWHandler_REST *get_handler(RGWRados *store,
+                               struct req_state *s,
+                               const std::string& frontend_prefix,
+                               RGWRestfulIO *rio,
+                               RGWRESTMgr **pmgr,
+                               int *init_error);
 #if 0
   RGWHandler *get_handler(RGWRados *store, struct req_state *s,
 			  RGWLibIO *io, RGWRESTMgr **pmgr,
@@ -511,6 +528,7 @@ public:
 };
 
 static constexpr int64_t NO_CONTENT_LENGTH = -1;
+static constexpr int64_t CHUNKED_TRANSFER_ENCODING = -2;
 
 extern void set_req_state_err(struct rgw_err &err, int err_no, int prot_flags);
 extern void set_req_state_err(struct req_state *s, int err_no);
@@ -529,10 +547,60 @@ extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, rgw_user& id, string& name,
 		       const char *section = NULL);
-extern void dump_string_header(struct req_state *s, const char *name,
-			       const char *val);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        const boost::string_ref& val);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        ceph::buffer::list& bl);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        long long val);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        const utime_t& val);
+template <class... Args>
+static inline void dump_header_prefixed(struct req_state* s,
+                                        const boost::string_ref& name_prefix,
+                                        const boost::string_ref& name,
+                                        Args&&... args) {
+  char full_name_buf[name_prefix.size() + name.size() + 1];
+  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
+                            static_cast<int>(name_prefix.length()),
+                            name_prefix.data(),
+                            static_cast<int>(name.length()),
+                            name.data());
+  boost::string_ref full_name(full_name_buf, len);
+  return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
+}
+
+template <class... Args>
+static inline void dump_header_quoted(struct req_state* s,
+                                      const boost::string_ref& name,
+                                      const boost::string_ref& val) {
+  /* We need two extra bytes for quotes. */
+  char qvalbuf[val.size() + 2 + 1];
+  const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
+                            static_cast<int>(val.length()), val.data());
+  return dump_header(s, name, boost::string_ref(qvalbuf, len));
+}
+
+template <class ValueT>
+static inline void dump_header_if_nonempty(struct req_state* s,
+                                           const boost::string_ref& name,
+                                           const ValueT& value) {
+  if (name.length() > 0 && value.length() > 0) {
+    return dump_header(s, name, value);
+  }
+}
+
 extern void dump_content_length(struct req_state *s, uint64_t len);
-extern void dump_etag(struct req_state *s, const char *etag);
+extern void dump_etag(struct req_state *s,
+                      const boost::string_ref& etag,
+                      bool quoted = false);
+extern void dump_etag(struct req_state *s,
+                      ceph::buffer::list& bl_etag,
+                      bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
 extern void dump_last_modified(struct req_state *s, real_time t);
@@ -547,12 +615,17 @@ extern std::string dump_time_to_str(const real_time& t);
 extern void dump_bucket_from_state(struct req_state *s);
 extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);
-extern void dump_pair(struct req_state *s, const char *key, const char *value);
 extern bool is_valid_url(const char *url);
 extern void dump_access_control(struct req_state *s, const char *origin,
 				const char *meth,
 				const char *hdr, const char *exp_hdr,
 				uint32_t max_age);
 extern void dump_access_control(req_state *s, RGWOp *op);
+
+extern int dump_body(struct req_state* s, const char* buf, size_t len);
+extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
+extern int dump_body(struct req_state* s, const std::string& str);
+
+extern int recv_body(struct req_state* s, char* buf, size_t max);
 
 #endif /* CEPH_RGW_REST_H */

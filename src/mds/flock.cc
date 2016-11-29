@@ -28,9 +28,9 @@ ceph_lock_state_t::~ceph_lock_state_t()
   }
 }
 
-bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl)
+bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const
 {
-  multimap<uint64_t, ceph_filelock>::iterator p = waiting_locks.find(fl.start);
+  multimap<uint64_t, ceph_filelock>::const_iterator p = waiting_locks.find(fl.start);
   while (p != waiting_locks.end()) {
     if (p->second.start > fl.start)
       return false;
@@ -77,7 +77,7 @@ void ceph_lock_state_t::remove_waiting(const ceph_filelock& fl)
 bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
 				    list<multimap<uint64_t, ceph_filelock>::iterator>&
 				      overlapping_locks,
-				    const ceph_filelock *first_fl, unsigned depth)
+				    const ceph_filelock *first_fl, unsigned depth) const
 {
   ldout(cct,15) << "is_deadlock " << fl << dendl;
 
@@ -442,12 +442,12 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
       if (0 == new_lock.length) {
         if (old_lock->start + old_lock->length == new_lock.start) {
           new_lock.start = old_lock->start;
-        } else assert(0); /* if there's no end to new_lock, the neighbor
+        } else ceph_abort(); /* if there's no end to new_lock, the neighbor
                              HAS TO be to left side */
       } else if (0 == old_lock->length) {
         if (new_lock.start + new_lock.length == old_lock->start) {
           new_lock.length = 0;
-        } else assert(0); //same as before, but reversed
+        } else ceph_abort(); //same as before, but reversed
       } else {
         if (old_lock->start + old_lock->length == new_lock.start) {
           new_lock.start = old_lock->start;

@@ -73,7 +73,7 @@ public:
    *
    * @param m The Message to fast dispatch.
    */
-  virtual void ms_fast_dispatch(Message *m) { assert(0); }
+  virtual void ms_fast_dispatch(Message *m) { ceph_abort(); }
   /**
    * Let the Dispatcher preview a Message before it is dispatched. This
    * function is called on *every* Message, prior to the fast/regular dispatch

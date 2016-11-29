@@ -27,6 +27,7 @@
 #include <string.h>
 #include <string>
 #include <map>
+#include <boost/utility/string_ref.hpp>
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
@@ -82,6 +83,7 @@ using ceph::crypto::MD5;
 /* Information whether an object is SLO or not must be exposed to
  * user through custom HTTP header named X-Static-Large-Object. */
 #define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
+#define RGW_ATTR_X_ROBOTS_TAG	RGW_ATTR_PREFIX "x-robots-tag"
 
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
@@ -106,6 +108,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_VER        RGW_ATTR_OLH_PREFIX "ver"
 #define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
+
+#define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -344,20 +348,37 @@ class RGWHTTPArgs
       val_map[iter->first] = iter->second;
     }
   }
+  const string& get_str() {
+    return str;
+  }
 };
 
-class RGWConf;
+class RGWEnv;
+
+class RGWConf {
+  friend class RGWEnv;
+protected:
+  void init(CephContext *cct, RGWEnv* env);
+public:
+  RGWConf()
+    : enable_ops_log(1),
+      enable_usage_log(1),
+      defer_to_bucket_acls(0) {
+  }
+
+  int enable_ops_log;
+  int enable_usage_log;
+  uint8_t defer_to_bucket_acls;
+};
 
 class RGWEnv {
   std::map<string, string, ltstr_nocase> env_map;
 public:
-  RGWConf *conf; 
+  RGWConf conf;
 
-  RGWEnv();
-  ~RGWEnv();
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
-  void set(const char *name, const char *val);
+  void set(const boost::string_ref& name, const boost::string_ref& val);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
@@ -368,19 +389,6 @@ public:
   void remove(const char *name);
 
   std::map<string, string, ltstr_nocase>& get_map() { return env_map; }
-};
-
-class RGWConf {
-  friend class RGWEnv;
-protected:
-  void init(CephContext *cct, RGWEnv * env);
-public:
-  RGWConf() :
-    enable_ops_log(1), enable_usage_log(1), defer_to_bucket_acls(0) {}
-
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
 };
 
 enum http_op {
@@ -1114,6 +1122,7 @@ struct RGWStorageStats
   RGWObjCategory category;
   uint64_t size;
   uint64_t size_rounded;
+  uint64_t size_utilized{0}; //< size after compression, encryption
   uint64_t num_objects;
 
   RGWStorageStats()
@@ -1129,7 +1138,11 @@ struct req_state;
 
 class RGWEnv;
 
-class RGWClientIO;
+namespace rgw {
+namespace io {
+class BasicClient;
+}
+}
 
 struct req_info {
   RGWEnv *env;
@@ -1263,7 +1276,7 @@ class RGWRequest;
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
-  RGWClientIO *cio;
+  rgw::io::BasicClient *cio;
   RGWRequest *req; /// XXX: re-remove??
   http_op op;
   RGWOpType op_type;
@@ -1367,7 +1380,8 @@ struct RGWObjEnt {
   std::string ns;
   rgw_user owner;
   std::string owner_display_name;
-  uint64_t size;
+  uint64_t size{0};
+  uint64_t accounted_size{0};
   ceph::real_time mtime;
   string etag;
   string content_type;
@@ -1375,7 +1389,7 @@ struct RGWObjEnt {
   uint32_t flags;
   uint64_t versioned_epoch;
 
-  RGWObjEnt() : size(0), flags(0), versioned_epoch(0) {}
+  RGWObjEnt() : flags(0), versioned_epoch(0) {}
 
   void dump(Formatter *f) const;
 

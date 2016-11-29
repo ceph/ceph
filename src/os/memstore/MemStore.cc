@@ -683,10 +683,11 @@ int MemStore::queue_transactions(Sequencer *osr,
 
   std::unique_lock<std::mutex> lock;
   if (osr) {
-    auto seq = reinterpret_cast<OpSequencer**>(&osr->p);
-    if (*seq == nullptr)
-      *seq = new OpSequencer;
-    lock = std::unique_lock<std::mutex>((*seq)->mutex);
+    if (!osr->p) {
+      osr->p = new OpSequencer();
+    }
+    auto seq = static_cast<OpSequencer*>(osr->p.get());
+    lock = std::unique_lock<std::mutex>(seq->mutex);
   }
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
@@ -844,17 +845,6 @@ void MemStore::_do_transaction(Transaction& t)
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
 	r = _clone_range(cid, oid, noid, srcoff, len, dstoff);
-      }
-      break;
-
-    case Transaction::OP_MERGE_DELETE:
-      {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-        ghobject_t noid = i.get_oid(op->dest_oid);
-        vector<std::pair<uint64_t, uint64_t>> move_info;
-        i.decode_move_info(move_info);
-        r = _move_ranges_destroy_src(cid, oid, noid, move_info);
       }
       break;
 
@@ -1019,7 +1009,7 @@ void MemStore::_do_transaction(Transaction& t)
 
     default:
       derr << "bad op " << op->op << dendl;
-      assert(0);
+      ceph_abort();
     }
 
     if (r < 0) {
@@ -1253,42 +1243,6 @@ int MemStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid,
   used_bytes += (no->get_size() - old_size);
 
   return len;
-}
-
-/* Move contents of src object according to move_info to base object.
- * Once the move_info is traversed completely, delete the src object.
- */
-int MemStore::_move_ranges_destroy_src(
-  const coll_t& cid, const ghobject_t& srcoid,
-  const ghobject_t& baseoid,
-  const vector<std::pair<uint64_t, uint64_t> > move_info)
-{
-  dout(10) << __func__ << " " << cid << " "  << srcoid << " -> "
-	   << baseoid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
-  ObjectRef oo = c->get_object(srcoid);
-  if (!oo)
-    return -ENOENT;
-  ObjectRef no = c->get_or_create_object(baseoid);
-
-  for (unsigned i = 0; i < move_info.size(); ++i) {
-    uint64_t off = move_info[i].first;
-    uint64_t len = move_info[i].second;
-    if (off >= oo->get_size())
-      return 0;
-    if (off + len >= oo->get_size())
-      len = oo->get_size() - off;
-    const ssize_t old_size = no->get_size();
-    no->clone(oo.get(), off, len, off);
-    used_bytes += (no->get_size() - old_size);
-  }
-
-  // delete the src object
-  _remove(cid, srcoid);
-  return 0;
 }
 
 int MemStore::_omap_clear(const coll_t& cid, const ghobject_t &oid)

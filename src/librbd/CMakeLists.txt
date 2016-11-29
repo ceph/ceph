@@ -1,6 +1,6 @@
 add_library(rbd_types STATIC
   journal/Types.cc
-  mirroring_watcher/Types.cc 
+  mirroring_watcher/Types.cc
   WatchNotifyTypes.cc)
 
 set(librbd_internal_srcs
@@ -22,9 +22,9 @@ set(librbd_internal_srcs
   Journal.cc
   LibrbdAdminSocketHook.cc
   LibrbdWriteback.cc
-  MirroringWatcher.cc 
+  MirroringWatcher.cc
   ObjectMap.cc
-  ObjectWatcher.cc 
+  ObjectWatcher.cc
   Operations.cc
   Utils.cc
   cache/ImageWriteback.cc
@@ -45,8 +45,11 @@ set(librbd_internal_srcs
   image_watcher/RewatchRequest.cc
   journal/RemoveRequest.cc
   journal/CreateRequest.cc
+  journal/OpenRequest.cc
+  journal/PromoteRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
+  journal/Utils.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
   object_map/CreateRequest.cc
@@ -79,41 +82,32 @@ set(librbd_internal_srcs
   operation/SnapshotRollbackRequest.cc
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
-  operation/TrimRequest.cc)
+  operation/TrimRequest.cc
+  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
-  add_dependencies(rbd_api librbd-tp)
+  add_dependencies(rbd_internal librbd-tp)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
-  $<TARGET_OBJECTS:osdc_rbd_objs>
-  $<TARGET_OBJECTS:common_util_obj>
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
-if(LINUX)
-  list(APPEND librbd 
-    $<TARGET_OBJECTS:parse_secret_objs>  
-    $<TARGET_OBJECTS:krbd_objs>
-    )
-endif(LINUX)
 
 target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types
   journal
   librados 
-  common 
   osdc
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
+  common
   pthread
   udev
-  keyutils
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(ENABLE_SHARED)
@@ -125,3 +119,8 @@ if(ENABLE_SHARED)
     LINK_FLAGS "-Wl,--exclude-libs,ALL")
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(WITH_EMBEDDED)
+  add_library(cephd_rbd_base STATIC librbd.cc ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
+  merge_static_libraries(cephd_rbd cephd_rbd_base rbd_internal rbd_types journal)
+endif()

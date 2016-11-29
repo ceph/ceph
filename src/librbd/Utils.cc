@@ -64,7 +64,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   return id;
 }
 
-uint64_t parse_rbd_default_features(CephContext* cct) 
+uint64_t parse_rbd_default_features(CephContext* cct)
 {
   int ret = 0;
   uint64_t value = 0;
@@ -72,7 +72,7 @@ uint64_t parse_rbd_default_features(CephContext* cct)
   try {
       value = boost::lexical_cast<decltype(value)>(str_val);
   } catch (const boost::bad_lexical_cast& ) {
-    map<std::string, int> conf_vals = {{RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING}, 
+    map<std::string, int> conf_vals = {{RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING},
                                        {RBD_FEATURE_NAME_STRIPINGV2, RBD_FEATURE_STRIPINGV2},
                                        {RBD_FEATURE_NAME_EXCLUSIVE_LOCK, RBD_FEATURE_EXCLUSIVE_LOCK},
                                        {RBD_FEATURE_NAME_OBJECT_MAP, RBD_FEATURE_OBJECT_MAP},
@@ -89,7 +89,7 @@ uint64_t parse_rbd_default_features(CephContext* cct)
         value += conf_vals[feature];
       } else {
         ret = -EINVAL;
-        ldout(cct, 1) << "Warning: unknown rbd feature " << feature << dendl;
+        lderr(cct) << "ignoring unknown feature " << feature << dendl;
       }
     }
     if (value == 0 && ret == -EINVAL)

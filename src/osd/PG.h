@@ -24,6 +24,7 @@
 #include <boost/statechart/event_base.hpp>
 #include <boost/scoped_ptr.hpp>
 #include "include/memory.h"
+#include "include/mempool.h"
 
 // re-include our assert to clobber boost's
 #include "include/assert.h" 
@@ -83,7 +84,7 @@ void intrusive_ptr_release(PG *pg);
   typedef boost::intrusive_ptr<PG> PGRef;
 #endif
 
-struct PGRecoveryStats {
+class PGRecoveryStats {
   struct per_state_info {
     uint64_t enter, exit;     // enter/exit counts
     uint64_t events;
@@ -97,6 +98,7 @@ struct PGRecoveryStats {
   map<const char *,per_state_info> info;
   Mutex lock;
 
+  public:
   PGRecoveryStats() : lock("PGRecoverStats::lock") {}
 
   void reset() {
@@ -191,7 +193,7 @@ struct PGPool {
  *
  */
 
-class PG : DoutPrefixProvider {
+class PG : protected DoutPrefixProvider {
 protected:
   OSDService *osd;
   CephContext *cct;
@@ -226,7 +228,7 @@ protected:
   void update_osdmap_ref(OSDMapRef newmap) {
     assert(_lock.is_locked_by_me());
     Mutex::Locker l(map_lock);
-    osdmap_ref = newmap;
+    osdmap_ref = std::move(newmap);
   }
 
   OSDMapRef get_osdmap_with_maplock() const {
@@ -498,7 +500,6 @@ public:
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
   xlist<PG*>::item stat_queue_item;
-  bool snap_trim_queued;
   bool scrub_queued;
   bool recovery_queued;
 
@@ -940,89 +941,30 @@ public:
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &info, epoch_t send_epoch);
 
-
-  struct LogEntryTrimmer : public ObjectModDesc::Visitor {
-    const hobject_t &soid;
-    PG *pg;
-    ObjectStore::Transaction *t;
-    LogEntryTrimmer(const hobject_t &soid, PG *pg, ObjectStore::Transaction *t)
-      : soid(soid), pg(pg), t(t) {}
-    void rmobject(version_t old_version) {
-      pg->get_pgbackend()->trim_stashed_object(
-	soid,
-	old_version,
-	t);
-    }
-  };
-
-  struct SnapRollBacker : public ObjectModDesc::Visitor {
-    const hobject_t &soid;
-    PG *pg;
-    ObjectStore::Transaction *t;
-    SnapRollBacker(const hobject_t &soid, PG *pg, ObjectStore::Transaction *t)
-      : soid(soid), pg(pg), t(t) {}
-    void update_snaps(set<snapid_t> &snaps) {
-      pg->update_object_snap_mapping(t, soid, snaps);
-    }
-    void create() {
-      pg->clear_object_snap_mapping(
-	t,
-	soid);
-    }
-  };
-
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
-    list<pg_log_entry_t> to_rollback;
-    set<hobject_t, hobject_t::BitwiseComparator> to_remove;
-    list<pg_log_entry_t> to_trim;
-    list<pair<hobject_t, version_t> > to_stash;
-    
+    PG *pg;
+    ObjectStore::Transaction *t;
+    PGLogEntryHandler(PG *pg, ObjectStore::Transaction *t) : pg(pg), t(t) {}
+
     // LogEntryHandler
     void remove(const hobject_t &hoid) {
-      to_remove.insert(hoid);
+      pg->get_pgbackend()->remove(hoid, t);
     }
     void try_stash(const hobject_t &hoid, version_t v) {
-      to_stash.push_back(make_pair(hoid, v));
+      pg->get_pgbackend()->try_stash(hoid, v, t);
     }
     void rollback(const pg_log_entry_t &entry) {
-      to_rollback.push_back(entry);
+      assert(entry.can_rollback());
+      pg->get_pgbackend()->rollback(entry, t);
+    }
+    void rollforward(const pg_log_entry_t &entry) {
+      pg->get_pgbackend()->rollforward(entry, t);
     }
     void trim(const pg_log_entry_t &entry) {
-      to_trim.push_back(entry);
-    }
-
-    void apply(PG *pg, ObjectStore::Transaction *t) {
-      for (list<pg_log_entry_t>::iterator j = to_rollback.begin();
-	   j != to_rollback.end();
-	   ++j) {
-	assert(j->mod_desc.can_rollback());
-	pg->get_pgbackend()->rollback(j->soid, j->mod_desc, t);
-	SnapRollBacker rollbacker(j->soid, pg, t);
-	j->mod_desc.visit(&rollbacker);
-      }
-      for (list<pair<hobject_t, version_t> >::iterator i = to_stash.begin();
-	   i != to_stash.end();
-	   ++i) {
-	pg->get_pgbackend()->try_stash(i->first, i->second, t);
-      }
-      for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_remove.begin();
-	   i != to_remove.end();
-	   ++i) {
-	pg->get_pgbackend()->rollback_create(*i, t);
-	pg->remove_snap_mapped_object(*t, *i);
-      }
-      for (list<pg_log_entry_t>::reverse_iterator i = to_trim.rbegin();
-	   i != to_trim.rend();
-	   ++i) {
-	LogEntryTrimmer trimmer(i->soid, pg, t);
-	i->mod_desc.visit(&trimmer);
-      }
+      pg->get_pgbackend()->trim(entry, t);
     }
   };
   
-  friend struct SnapRollBacker;
-  friend struct PGLogEntryHandler;
-  friend struct LogEntryTrimmer;
   void update_object_snap_mapping(
     ObjectStore::Transaction *t, const hobject_t &soid,
     const set<snapid_t> &snaps);
@@ -1312,7 +1254,7 @@ public:
    */
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) = 0;
-  virtual void _scrub(
+  virtual void scrub_snapshot_metadata(
     ScrubMap &map,
     const std::map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest) { }
   virtual void _scrub_clear_state() { }
@@ -1368,6 +1310,7 @@ public:
     boost::intrusive_ptr< const boost::statechart::event_base > evt;
     string desc;
   public:
+    MEMPOOL_CLASS_HELPERS();
     template <class T>
     CephPeeringEvt(epoch_t epoch_sent,
 		   epoch_t epoch_requested,
@@ -1604,7 +1547,6 @@ public:
       explicit Crashed(my_context ctx);
     };
 
-    struct Started;
     struct Reset;
 
     struct Initial : boost::statechart::state< Initial, RecoveryMachine >, NamedState {
@@ -1992,7 +1934,6 @@ public:
       boost::statechart::result react(const MNotifyRec& infoevt);
     };
 
-    struct GetMissing;
     struct GotLog : boost::statechart::event< GotLog > {
       GotLog() : boost::statechart::event< GotLog >() {}
     };
@@ -2249,19 +2190,28 @@ public:
     PerfCounters *logger = NULL);
   void write_if_dirty(ObjectStore::Transaction& t);
 
+  PGLog::IndexedLog projected_log;
+  bool check_in_progress_op(
+    const osd_reqid_t &r,
+    eversion_t *replay_version,
+    version_t *user_version,
+    int *return_code) const;
+  eversion_t projected_last_update;
   eversion_t get_next_version() const {
-    eversion_t at_version(get_osdmap()->get_epoch(),
-			  pg_log.get_head().version+1);
+    eversion_t at_version(
+      get_osdmap()->get_epoch(),
+      projected_last_update.version+1);
     assert(at_version > info.last_update);
     assert(at_version > pg_log.get_head());
+    assert(at_version > projected_last_update);
     return at_version;
   }
 
-  void add_log_entry(const pg_log_entry_t& e);
+  void add_log_entry(const pg_log_entry_t& e, bool applied);
   void append_log(
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
-    eversion_t trim_rollback_to,
+    eversion_t roll_forward_to,
     ObjectStore::Transaction &t,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
@@ -2284,7 +2234,8 @@ public:
 
   void log_weirdness();
 
-  void queue_snap_trim();
+  virtual void kick_snap_trim() = 0;
+  virtual void snap_trimmer_scrub_complete() = 0;
   bool requeue_scrub();
   void queue_recovery(bool front = false);
   bool queue_scrub();
@@ -2295,7 +2246,7 @@ public:
 
 
   bool append_log_entries_update_missing(
-    const list<pg_log_entry_t> &entries,
+    const mempool::osd::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
   /**
@@ -2303,7 +2254,7 @@ public:
    * actingbackfill logs and missings (also missing_loc)
    */
   void merge_new_log_entries(
-    const list<pg_log_entry_t> &entries,
+    const mempool::osd::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
   void reset_interval_flush();

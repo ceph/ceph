@@ -17,6 +17,12 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "PosixStack.h"
+#ifdef HAVE_RDMA
+#include "rdma/RDMAStack.h"
+#endif
+#ifdef HAVE_DPDK
+#include "dpdk/DPDKStack.h"
+#endif
 
 #include "common/dout.h"
 #include "include/assert.h"
@@ -25,13 +31,12 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
 
-void NetworkStack::add_thread(unsigned i, std::function<void ()> &thread)
+std::function<void ()> NetworkStack::add_thread(unsigned i)
 {
   Worker *w = workers[i];
-  thread = std::move(
-    [this, w]() {
-      const uint64_t EventMaxWaitUs = 30000000;
-      w->center.set_owner();
+  return [this, w]() {
+    const uint64_t EventMaxWaitUs = 30000000;
+    w->center.set_owner();
       ldout(cct, 10) << __func__ << " starting" << dendl;
       w->initialize();
       w->init_done();
@@ -46,14 +51,22 @@ void NetworkStack::add_thread(unsigned i, std::function<void ()> &thread)
         }
       }
       w->reset();
-    }
-  );
+      w->destroy();
+  };
 }
 
 std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
 {
   if (t == "posix")
     return std::make_shared<PosixNetworkStack>(c, t);
+#ifdef HAVE_RDMA
+  else if (t == "rdma")
+    return std::make_shared<RDMAStack>(c, t);
+#endif
+#ifdef HAVE_DPDK
+  else if (t == "dpdk")
+    return std::make_shared<DPDKStack>(c, t);
+#endif
 
   return nullptr;
 }
@@ -62,6 +75,14 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
 {
   if (type == "posix")
     return new PosixWorker(c, i);
+#ifdef HAVE_RDMA
+  else if (type == "rdma")
+    return new RDMAWorker(c, i);
+#endif
+#ifdef HAVE_DPDK
+  else if (type == "dpdk")
+    return new DPDKWorker(c, i);
+#endif
   return nullptr;
 }
 
@@ -96,8 +117,7 @@ void NetworkStack::start()
   for (unsigned i = 0; i < num_workers; ++i) {
     if (workers[i]->is_init())
       continue;
-    std::function<void ()> thread;
-    add_thread(i, thread);
+    std::function<void ()> thread = add_thread(i);
     spawn_worker(i, std::move(thread));
   }
   started = true;

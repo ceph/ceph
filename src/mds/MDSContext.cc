@@ -100,6 +100,6 @@ void C_IO_Wrapper::complete(int r)
 MDSRank *MDSInternalContextGather::get_mds()
 {
   derr << "Forbidden call to MDSInternalContextGather::get_mds by " << typeid(*this).name() << dendl;
-  assert(0);
+  ceph_abort();
 }
 

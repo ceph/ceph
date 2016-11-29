@@ -281,7 +281,7 @@ struct SignalHandler : public Thread {
 	char v;
 
 	// consume byte from signal socket, if any.
-	r = read(pipefd[0], &v, 1);
+	TEMP_FAILURE_RETRY(read(pipefd[0], &v, 1));
 
 	lock.Lock();
 	for (unsigned signum=0; signum<32; signum++) {

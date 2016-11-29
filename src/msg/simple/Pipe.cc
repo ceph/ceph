@@ -58,6 +58,70 @@ ostream& operator<<(ostream &out, const Pipe &pipe) {
   return pipe._pipe_prefix(out);
 }
 
+/**
+ * The DelayedDelivery is for injecting delays into Message delivery off
+ * the socket. It is only enabled if delays are requested, and if they
+ * are then it pulls Messages off the DelayQueue and puts them into the
+ * in_q (SimpleMessenger::dispatch_queue).
+ * Please note that this probably has issues with Pipe shutdown and
+ * replacement semantics. I've tried, but no guarantees.
+ */
+class Pipe::DelayedDelivery: public Thread {
+  Pipe *pipe;
+  std::deque< pair<utime_t,Message*> > delay_queue;
+  Mutex delay_lock;
+  Cond delay_cond;
+  int flush_count;
+  bool active_flush;
+  bool stop_delayed_delivery;
+  bool delay_dispatching; // we are in fast dispatch now
+  bool stop_fast_dispatching_flag; // we need to stop fast dispatching
+
+public:
+  explicit DelayedDelivery(Pipe *p)
+    : pipe(p),
+      delay_lock("Pipe::DelayedDelivery::delay_lock"), flush_count(0),
+      active_flush(false),
+      stop_delayed_delivery(false),
+      delay_dispatching(false),
+      stop_fast_dispatching_flag(false) { }
+  ~DelayedDelivery() {
+    discard();
+  }
+  void *entry();
+  void queue(utime_t release, Message *m) {
+    Mutex::Locker l(delay_lock);
+    delay_queue.push_back(make_pair(release, m));
+    delay_cond.Signal();
+  }
+  void discard();
+  void flush();
+  bool is_flushing() {
+    Mutex::Locker l(delay_lock);
+    return flush_count > 0 || active_flush;
+  }
+  void wait_for_flush() {
+    Mutex::Locker l(delay_lock);
+    while (flush_count > 0 || active_flush)
+      delay_cond.Wait(delay_lock);
+  }
+  void stop() {
+    delay_lock.Lock();
+    stop_delayed_delivery = true;
+    delay_cond.Signal();
+    delay_lock.Unlock();
+  }
+  void steal_for_pipe(Pipe *new_owner) {
+    Mutex::Locker l(delay_lock);
+    pipe = new_owner;
+  }
+  /**
+   * We need to stop fast dispatching before we need to stop putting
+   * normal messages into the DispatchQueue.
+   */
+  void stop_fast_dispatching();
+};
+
 /**************************************
  * Pipe
  */
@@ -613,7 +677,7 @@ int Pipe::accept()
       existing = NULL;
       goto open;
     }
-    assert(0);
+    ceph_abort();
 
   retry_session:
     assert(existing->pipe_lock.is_locked());
@@ -829,7 +893,8 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: "
+                         << cpp_strerror(r) << dendl;
     }
   }
   if (msgr->cct->_conf->ms_tcp_rcvbuf) {
@@ -837,7 +902,8 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size
+                         << ": " << cpp_strerror(r) << dendl;
     }
   }
 
@@ -847,7 +913,8 @@ void Pipe::set_socket_options()
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
     r = -errno;
-    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
+    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: "
+                       << cpp_strerror(r) << dendl;
   }
 #endif
 
@@ -858,8 +925,9 @@ void Pipe::set_socket_options()
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
     if (r < 0) {
+      r = -errno;
       ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                         << ": " << cpp_strerror(errno) << dendl;
+                         << ": " << cpp_strerror(r) << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 
@@ -870,8 +938,9 @@ void Pipe::set_socket_options()
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
 #endif
     if (r < 0) {
+      r = -errno;
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
-                         << ": " << cpp_strerror(errno) << dendl;
+                         << ": " << cpp_strerror(r) << dendl;
     }
 #endif
   }
@@ -912,7 +981,7 @@ int Pipe::connect()
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     rc = -errno;
-    lderr(msgr->cct) << "connect couldn't created socket " << cpp_strerror(rc) << dendl;
+    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(rc) << dendl;
     goto fail;
   }
 

@@ -43,6 +43,7 @@ enum {
   l_mds_dir_fetch,
   l_mds_dir_commit,
   l_mds_dir_split,
+  l_mds_dir_merge,
   l_mds_inode_max,
   l_mds_inodes,
   l_mds_inodes_top,
@@ -208,7 +209,7 @@ class MDSRank {
       Cond cond;
       public:
       explicit ProgressThread(MDSRank *mds_) : mds(mds_) {}
-      void * entry(); 
+      void * entry() override;
       void shutdown();
       void signal() {cond.Signal();}
     } progress_thread;
@@ -227,7 +228,7 @@ class MDSRank {
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
     void heartbeat_reset();
 
-    bool is_stale_message(Message *m);
+    bool is_stale_message(Message *m) const;
 
     map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
@@ -280,7 +281,11 @@ class MDSRank {
         MonClient *monc_,
         Context *respawn_hook_,
         Context *suicide_hook_);
+
+  protected:
     ~MDSRank();
+
+  public:
 
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
@@ -362,7 +367,7 @@ class MDSRank {
 
     MDSMap *get_mds_map() { return mdsmap; }
 
-    int get_req_rate() { return logger->get(l_mds_request); }
+    int get_req_rate() const { return logger->get(l_mds_request); }
   
     int get_mds_slow_req_count() const { return mds_slow_req_count; }
 
@@ -492,7 +497,7 @@ public:
                            Formatter *f, std::ostream& ss);
   void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
   void handle_osd_map();
-  bool kill_session(int64_t session_id);
+  bool kill_session(int64_t session_id, bool wait, std::stringstream& ss);
   void update_log_config();
   bool handle_command_legacy(std::vector<std::string> args);
 

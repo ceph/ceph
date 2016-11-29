@@ -594,9 +594,11 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
 void RGWStorageStats::dump(Formatter *f) const
 {
   encode_json("size", size, f);
-  encode_json("size_rounded", size_rounded, f);
-  encode_json("num_kb", rgw_rounded_kb(size), f);
-  encode_json("num_kb_rounded", rgw_rounded_kb(size_rounded), f);
+  encode_json("size_actual", size_rounded, f);
+  encode_json("size_utilized", size_utilized, f);
+  encode_json("size_kb", rgw_rounded_kb(size), f);
+  encode_json("size_kb_actual", rgw_rounded_kb(size_rounded), f);
+  encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
   encode_json("num_objects", num_objects, f);
 }
 
@@ -694,6 +696,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   }
   encode_json("swift_versioning", swift_versioning, f);
   encode_json("swift_ver_location", swift_ver_location, f);
+  encode_json("index_type", (uint32_t)index_type, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -722,6 +725,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   }
   JSONDecoder::decode_json("swift_versioning", swift_versioning, obj);
   JSONDecoder::decode_json("swift_ver_location", swift_ver_location, obj);
+  uint32_t it;
+  JSONDecoder::decode_json("index_type", it, obj);
+  index_type = (RGWBucketIndexType)it;
 }
 
 void rgw_obj_key::dump(Formatter *f) const

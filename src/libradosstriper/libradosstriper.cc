@@ -269,13 +269,48 @@ int libradosstriper::RadosStriper::stat(const std::string& soid, uint64_t *psize
   return rados_striper_impl->stat(soid, psize, pmtime);
 }
 
+int libradosstriper::RadosStriper::aio_stat(const std::string& soid,
+					    librados::AioCompletion *c,
+					    uint64_t *psize,
+					    time_t *pmtime)
+{
+  return rados_striper_impl->aio_stat(soid, c->pc, psize, pmtime);
+}
+
+int libradosstriper::RadosStriper::stat2(const std::string& soid, uint64_t *psize, struct timespec *pts)
+{
+  return rados_striper_impl->stat2(soid, psize, pts);
+}
+
+int libradosstriper::RadosStriper::aio_stat2(const std::string& soid,
+					    librados::AioCompletion *c,
+					    uint64_t *psize,
+					    struct timespec *pts)
+{
+  return rados_striper_impl->aio_stat2(soid, c->pc, psize, pts);
+}
+
 int libradosstriper::RadosStriper::remove(const std::string& soid)
 {
   return rados_striper_impl->remove(soid);
 }
+
+int libradosstriper::RadosStriper::aio_remove(const std::string& soid,
+					      librados::AioCompletion *c)
+{
+  return rados_striper_impl->aio_remove(soid, c->pc);
+}
+
 int libradosstriper::RadosStriper::remove(const std::string& soid, int flags)
 {
   return rados_striper_impl->remove(soid, flags); 
+}
+
+int libradosstriper::RadosStriper::aio_remove(const std::string& soid,
+					      librados::AioCompletion *c,
+					      int flags)
+{
+  return rados_striper_impl->aio_remove(soid, c->pc, flags);
 }
 
 int libradosstriper::RadosStriper::trunc(const std::string& soid, uint64_t size)
@@ -610,8 +645,26 @@ extern "C" int rados_striper_aio_read(rados_striper_t striper,
   return impl->aio_read(soid, (librados::AioCompletionImpl*)completion, buf, len, off);
 }
 
+extern "C" int rados_striper_aio_remove(rados_striper_t striper,
+					const char* soid,
+					rados_completion_t completion)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->aio_remove(soid, (librados::AioCompletionImpl*)completion);
+}
+
 extern "C" void rados_striper_aio_flush(rados_striper_t striper)
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
   impl->aio_flush();
+}
+
+extern "C" int rados_striper_aio_stat(rados_striper_t striper,
+				      const char* soid,
+				      rados_completion_t completion,
+				      uint64_t *psize,
+				      time_t *pmtime)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->aio_stat(soid, (librados::AioCompletionImpl*)completion, psize, pmtime);
 }

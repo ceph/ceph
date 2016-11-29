@@ -24,7 +24,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "SelectDriver."
 
-int SelectDriver::init(int nevent)
+int SelectDriver::init(EventCenter *c, int nevent)
 {
   ldout(cct, 0) << "Select isn't suitable for production env, just avoid "
                 << "compiling error or special purpose" << dendl;

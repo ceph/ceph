@@ -136,6 +136,7 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
 
   if (image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
     m_features = util::parse_rbd_default_features(m_cct);
+    m_negotiate_features = true;
   }
 
   uint64_t features_clear = 0;
@@ -205,11 +206,12 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
                    << "id=" << m_image_id << ", "
                    << "size=" << m_size << ", "
                    << "features=" << m_features << ", "
-                   << "order=" << m_order << ", "
+                   << "order=" << (uint64_t)m_order << ", "
                    << "stripe_unit=" << m_stripe_unit << ", "
                    << "stripe_count=" << m_stripe_count << ", "
-                   << "journal_order=" << m_journal_order << ", "
-                   << "journal_splay_width=" << m_journal_splay_width << ", "
+                   << "journal_order=" << (uint64_t)m_journal_order << ", "
+                   << "journal_splay_width="
+                   << (uint64_t)m_journal_splay_width << ", "
                    << "journal_pool=" << m_journal_pool << ", "
                    << "data_pool=" << m_data_pool << dendl;
 }
@@ -315,7 +317,7 @@ Context* CreateRequest<I>::handle_validate_pool(int *result) {
 
   r = m_ioctx.selfmanaged_snap_remove(snap_id);
   if (r < 0) {
-    // we've already switced to self-managed snapshots -- no need to
+    // we've already switched to self-managed snapshots -- no need to
     // error out in case of failure here.
     ldout(m_cct, 10) << "failed to release self-managed snapshot " << snap_id
                      << ": " << cpp_strerror(r) << dendl;
@@ -379,6 +381,48 @@ Context *CreateRequest<I>::handle_add_image_to_directory(int *result) {
     m_r_saved = *result;
     remove_id_object();
     return nullptr;
+  }
+
+  negotiate_features();
+  return nullptr;
+}
+
+template<typename I>
+void CreateRequest<I>::negotiate_features() {
+  if (!m_negotiate_features) {
+    create_image();
+    return;
+  }
+
+  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_all_features_start(&op);
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_ack_callback<klass, &klass::handle_negotiate_features>(this);
+  int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_outbl);
+  assert(r == 0);
+  comp->release();
+}
+
+template<typename I>
+Context *CreateRequest<I>::handle_negotiate_features(int *result) {
+  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+
+  uint64_t all_features;
+  if (*result == 0) {
+    bufferlist::iterator it = m_outbl.begin();
+    *result = cls_client::get_all_features_finish(&it, &all_features);
+  }
+  if (*result < 0) {
+    ldout(m_cct, 10) << "error retrieving server supported features set: "
+                     << cpp_strerror(*result) << dendl;
+  } else if ((m_features & all_features) != m_features) {
+    m_features &= all_features;
+    ldout(m_cct, 10) << "limiting default features set to server supported: "
+		     << m_features << dendl;
   }
 
   create_image();
@@ -471,7 +515,6 @@ void CreateRequest<I>::object_map_resize() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
-  op.create(true);
   cls_client::object_map_resize(&op, Striper::get_num_objects(m_layout, m_size),
                                 OBJECT_NONEXISTENT);
 
@@ -706,7 +749,7 @@ void CreateRequest<I>::send_watcher_notification() {
       handle_watcher_notify(r);
     });
 
-    m_op_work_queue->queue(ctx, 0);
+  m_op_work_queue->queue(ctx, 0);
 }
 
 template<typename I>

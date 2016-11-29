@@ -1,5 +1,16 @@
 #!/bin/sh -ex
 
+# returns data pool for a given image
+get_image_data_pool () {
+    image=$1
+    data_pool=$(rbd info $image | grep "data_pool: " | awk -F':' '{ print $NF }')
+    if [ -z $data_pool ]; then
+       data_pool='rbd'
+    fi
+
+    echo $data_pool
+}
+
 # return list of object numbers populated in image
 objects () {
    image=$1
@@ -8,7 +19,7 @@ objects () {
    # strip off prefix and leading zeros from objects; sort, although
    # it doesn't necessarily make sense as they're hex, at least it makes
    # the list repeatable and comparable
-   objects=$(rados ls -p rbd | grep $prefix | \
+   objects=$(rados ls -p $(get_image_data_pool $image) | grep $prefix | \
        sed -e 's/'$prefix'\.//' -e 's/^0*\([0-9a-f]\)/\1/' | sort -u)
    echo $objects
 }
@@ -140,7 +151,8 @@ echo "zeros export to sparse file"
 rbd create $RBD_CREATE_ARGS sparse --size 4
 prefix=$(rbd info sparse | grep block_name_prefix | awk '{print $NF;}')
 # drop in 0 object directly
-dd if=/dev/zero bs=4M count=1 | rados -p rbd put ${prefix}.000000000000 -
+dd if=/dev/zero bs=4M count=1 | rados -p $(get_image_data_pool sparse) \
+                                      put ${prefix}.000000000000 -
 [ $tiered -eq 1 -o "$(objects sparse)" = '0' ]
 # 1 object full of zeros; export should still create 0-disk-usage file
 rm ${TMPDIR}/sparse || true

@@ -241,7 +241,7 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
       // gap
       return false;
     } else
-      assert(0);
+      ceph_abort();
   }
 
   return true;
@@ -320,7 +320,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         errors[cur] = e;
         ldout(oc->cct, 20) << "map_read error " << *e << dendl;
       } else {
-        assert(0);
+        ceph_abort();
       }
       
       loff_t lenfromcur = MIN(e->end() - cur, left);
@@ -349,7 +349,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
       left -= MIN(left, n->length());
       continue;    // more?
     } else {
-      assert(0);
+      ceph_abort();
     }
   }
   return 0;
@@ -1114,6 +1114,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
       }
     }
 
+    vector<pair<loff_t, BufferHead*>> hit;
     // apply to bh's!
     for (map<loff_t, BufferHead*>::const_iterator p = ob->data_lower_bound(start);
 	 p != ob->data.end();
@@ -1148,6 +1149,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 	bh->set_journal_tid(0);
 	if (bh->get_nocache())
 	  bh_lru_rest.lru_bottouch(bh);
+	hit.push_back(make_pair(bh->start(), bh));
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
 	mark_dirty(bh);
@@ -1155,6 +1157,12 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 		       << *bh << " r = " << r << " " << cpp_strerror(-r)
 		       << dendl;
       }
+    }
+
+    for (auto& p : hit) {
+      //p.second maybe merged and deleted in merge_left
+      if (ob->data.count(p.first))
+	ob->try_merge_bh(p.second);
     }
   }
 
@@ -2427,7 +2435,7 @@ void ObjectCacher::verify_stats() const
 	  error += bh->length();
 	  break;
 	default:
-	  assert(0);
+	  ceph_abort();
 	}
       }
     }

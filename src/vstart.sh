@@ -71,7 +71,7 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
 
-if (( $CEPH_NUM_OSD > 3 )); then
+if [ $CEPH_NUM_OSD -gt 3 ]; then
     OSD_POOL_DEFAULT_SIZE=3
 else
     OSD_POOL_DEFAULT_SIZE=$CEPH_NUM_OSD
@@ -97,6 +97,7 @@ cephx=1 #turn cephx on by default
 cache=""
 memstore=0
 bluestore=0
+rgw_frontend="civetweb"
 lockdep=${LOCKDEP:-1}
 
 VSTART_SEC="client.vstart.sh"
@@ -130,6 +131,7 @@ usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
+usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
@@ -216,6 +218,10 @@ case $1 in
             ;;
     --rgw_port )
             CEPH_RGW_PORT=$2
+            shift
+            ;;
+    --rgw_frontend )
+            rgw_frontend=$2
             shift
             ;;
     mon )
@@ -509,7 +515,7 @@ if [ "$start_mon" -eq 1 ]; then
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
-        rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
+        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
         rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
@@ -576,6 +582,7 @@ $DAEMONOPTS
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
+        osd copyfrom max chunk = 524288
 	bluestore fsck on mount = true
 	bluestore block create = true
 	bluestore block db size = 67108864
@@ -592,6 +599,7 @@ $extra_conf
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool
+        mon allow pool delete = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -661,7 +669,9 @@ if [ "$start_osd" -eq 1 ]; then
 EOF
 
 	    rm -rf $CEPH_DEV_DIR/osd$osd || true
-	    for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
+            if command -v btrfs > /dev/null; then
+	        for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
+            fi
 	    mkdir -p $CEPH_DEV_DIR/osd$osd
 
 	    uuid=`uuidgen`

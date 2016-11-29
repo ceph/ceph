@@ -55,7 +55,7 @@
 # include <assert.h>
 #endif
 
-#include "include/inline_memory.h"
+#include "inline_memory.h"
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
@@ -67,6 +67,7 @@
 struct xio_reg_mem;
 class XioDispatchHook;
 #endif
+class deleter;
 
 namespace ceph {
 
@@ -135,6 +136,7 @@ namespace buffer CEPH_BUFFER_API {
   class raw_pipe;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
+  class raw_claim_buffer;
 
 
   class xio_mempool;
@@ -153,7 +155,8 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
-  raw* create_dummy();
+  raw* create_static(unsigned len, char *buf);
+  raw* claim_buffer(unsigned len, char *buf, deleter del);
 
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
@@ -387,8 +390,8 @@ namespace buffer CEPH_BUFFER_API {
 	//return off == bl->length();
       }
 
-      void advance(ssize_t o);
-      void seek(size_t o);
+      void advance(int o);
+      void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
@@ -431,8 +434,8 @@ namespace buffer CEPH_BUFFER_API {
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
-      void advance(ssize_t o);
-      void seek(size_t o);
+      void advance(int o);
+      void seek(unsigned o);
       char operator*();
       iterator& operator++();
       ptr get_current_ptr();
@@ -828,6 +831,7 @@ namespace buffer CEPH_BUFFER_API {
     void append(const list& bl);
     void append(std::istream& in);
     void append_zero(unsigned len);
+    void prepend_zero(unsigned len);
     
     /*
      * get a char

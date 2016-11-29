@@ -51,10 +51,11 @@ public:
 
 class RGWRESTMgr_Config : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Config() {}
-  virtual ~RGWRESTMgr_Config() {}
+  RGWRESTMgr_Config() = default;
+  virtual ~RGWRESTMgr_Config() = default;
 
-  virtual RGWHandler_REST* get_handler(struct req_state *s){
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_Config;
   }
 };

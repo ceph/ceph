@@ -12,6 +12,7 @@
 #include <memory>
 #include <boost/scoped_ptr.hpp>
 #include "rocksdb/write_batch.h"
+#include "rocksdb/perf_context.h"
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
@@ -34,6 +35,10 @@ enum {
   l_rocksdb_compact_range,
   l_rocksdb_compact_queue_merge,
   l_rocksdb_compact_queue_len,
+  l_rocksdb_write_wal_time,
+  l_rocksdb_write_memtable_time,
+  l_rocksdb_write_delay_time,
+  l_rocksdb_write_pre_and_post_process_time,
   l_rocksdb_last,
 };
 
@@ -110,7 +115,6 @@ public:
   void compact_range_async(const string& prefix, const string& start, const string& end) {
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
-  int get_info_log_level(string info_log_level);
 
   RocksDBStore(CephContext *c, const string &path, void *p) :
     cct(c),
@@ -298,17 +302,6 @@ public:
     int status();
   };
 
-  class RocksDBSnapshotIteratorImpl : public RocksDBWholeSpaceIteratorImpl {
-    rocksdb::DB *db;
-    const rocksdb::Snapshot *snapshot;
-  public:
-    RocksDBSnapshotIteratorImpl(rocksdb::DB *db, const rocksdb::Snapshot *s,
-				rocksdb::Iterator *iter) :
-      RocksDBWholeSpaceIteratorImpl(iter), db(db), snapshot(s) { }
-
-    ~RocksDBSnapshotIteratorImpl();
-  };
-
   /// Utility
   static string combine_strings(const string &prefix, const string &value);
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
@@ -390,9 +383,6 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator();
-
-  WholeSpaceIterator _get_snapshot_iterator();
-
 };
 
 

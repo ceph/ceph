@@ -20,6 +20,7 @@
 
 #include <iosfwd>
 #include <sstream>
+#include <atomic>
 
 class LogClient;
 class MLog;
@@ -33,7 +34,7 @@ struct Connection;
 class LogChannel;
 
 namespace ceph {
-namespace log {
+namespace logging {
   class Graylog;
 }
 }
@@ -182,7 +183,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
-  shared_ptr<ceph::log::Graylog> graylog;
+  shared_ptr<ceph::logging::Graylog> graylog;
 
 
   friend class LogClientTemp;
@@ -233,6 +234,8 @@ public:
     channels.clear();
   }
 
+  uint64_t get_next_seq();
+  const entity_inst_t& get_myinst();
   version_t queue(LogEntry &entry);
 
 private:
@@ -245,7 +248,7 @@ private:
   bool is_mon;
   Mutex log_lock;
   version_t last_log_sent;
-  version_t last_log;
+  std::atomic<uint64_t> last_log;
   std::deque<LogEntry> log_queue;
 
   std::map<std::string, LogChannelRef> channels;

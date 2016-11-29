@@ -80,7 +80,6 @@ TEST(Transaction, Swap)
 ObjectStore::Transaction generate_transaction()
 {
   auto a = ObjectStore::Transaction{};
-  a.set_use_tbl(false);
   a.nop();
 
   coll_t cid;
@@ -116,7 +115,6 @@ ObjectStore::Transaction generate_transaction()
 TEST(Transaction, MoveRangesDelSrcObj)
 {
   auto t = ObjectStore::Transaction{};
-  t.set_use_tbl(false);
   t.nop();
 
   coll_t c(spg_t(pg_t(1,2), shard_id_t::NO_SHARD));
@@ -137,14 +135,11 @@ TEST(Transaction, MoveRangesDelSrcObj)
   t.clone(c, o1, o2);
   bl.append("some other data");
   t.write(c, o2, 1, bl.length(), bl);
-
-  t.move_ranges_destroy_src(c, o1, o2, move_info);
 }
 
 TEST(Transaction, GetNumBytes)
 {
   auto a = ObjectStore::Transaction{};
-  a.set_use_tbl(false);
   a.nop();
   ASSERT_TRUE(a.get_encoded_bytes() == a.get_encoded_bytes_test());
 

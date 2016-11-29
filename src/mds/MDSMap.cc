@@ -184,6 +184,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("metadata_pool", metadata_pool);
   f->dump_bool("enabled", enabled);
   f->dump_string("fs_name", fs_name);
+  f->dump_string("balancer", balancer);
 }
 
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
@@ -226,6 +227,7 @@ void MDSMap::print(ostream& out) const
   out << "data_pools\t" << data_pools << "\n";
   out << "metadata_pool\t" << metadata_pool << "\n";
   out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
+  out << "balancer\t" << balancer << "\n";
 
   multimap< pair<mds_rank_t, unsigned>, mds_gid_t > foo;
   for (const auto &p : mds_info) {
@@ -556,7 +558,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 10;
+  __u16 ev = 11;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -575,6 +577,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
   ::encode(damaged, bl);
+  ::encode(balancer, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -678,6 +681,10 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   if (ev >= 9) {
     ::decode(damaged, p);
+  }
+
+  if (ev >= 11) {
+  ::decode(balancer, p);
   }
   DECODE_FINISH(p);
 }

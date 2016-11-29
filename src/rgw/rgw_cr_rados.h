@@ -22,11 +22,9 @@ public:
   RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn), retcode(0),
                                                                                done(false), lock("RGWAsyncRadosRequest::lock") {
     notifier->get();
-    caller->get();
   }
   virtual ~RGWAsyncRadosRequest() {
     notifier->put();
-    caller->put();
   }
 
   void send_request() {
@@ -68,7 +66,7 @@ protected:
 
     bool _enqueue(RGWAsyncRadosRequest *req);
     void _dequeue(RGWAsyncRadosRequest *req) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty();
     RGWAsyncRadosRequest *_dequeue();
@@ -492,6 +490,13 @@ public:
 
   int send_request();
   int request_complete();
+
+  static std::string gen_random_cookie(CephContext* cct) {
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    return buf;
+  }
 };
 
 class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
@@ -591,7 +596,7 @@ class RGWWaitCR : public RGWSimpleCoroutine {
 public:
   RGWWaitCR(RGWAsyncRadosProcessor *_async_rados, CephContext *_cct,
 	    Mutex *_lock, Cond *_cond,
-            int _secs) : RGWSimpleCoroutine(cct), cct(_cct),
+            int _secs) : RGWSimpleCoroutine(_cct), cct(_cct),
                          async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs), req(NULL) {
   }
   ~RGWWaitCR() {
@@ -1010,33 +1015,30 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   RGWRados *store;
 
   const rgw_bucket& pool;
-  string oid;
+  const string oid;
 
-  string lock_name;
-  string cookie;
+  const string lock_name;
+  const string cookie;
 
   int interval;
 
   Mutex lock;
   atomic_t going_down;
-  bool locked;
+  bool locked{false};
 
   RGWCoroutine *caller;
 
-  bool aborted;
+  bool aborted{false};
 
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                        const rgw_bucket& _pool, const string& _oid,
-                       const string& _lock_name, int _interval, RGWCoroutine *_caller) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-                                        pool(_pool), oid(_oid), lock_name(_lock_name), interval(_interval),
-                                        lock("RGWContimuousLeaseCR"), locked(false), caller(_caller), aborted(false) {
-#define COOKIE_LEN 16
-    char buf[COOKIE_LEN + 1];
-
-    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-    cookie = buf;
-  }
+                       const string& _lock_name, int _interval, RGWCoroutine *_caller)
+    : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+    pool(_pool), oid(_oid), lock_name(_lock_name),
+    cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
+    interval(_interval), lock("RGWContinuousLeaseCR"), caller(_caller)
+  {}
 
   int operate();
 

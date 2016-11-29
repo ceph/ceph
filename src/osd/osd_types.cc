@@ -275,23 +275,23 @@ void request_redirect_t::generate_test_instances(list<request_redirect_t*>& o)
 
 void objectstore_perf_stat_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("commit_latency_ms", filestore_commit_latency);
-  f->dump_unsigned("apply_latency_ms", filestore_apply_latency);
+  f->dump_unsigned("commit_latency_ms", os_commit_latency);
+  f->dump_unsigned("apply_latency_ms", os_apply_latency);
 }
 
 void objectstore_perf_stat_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(filestore_commit_latency, bl);
-  ::encode(filestore_apply_latency, bl);
+  ::encode(os_commit_latency, bl);
+  ::encode(os_apply_latency, bl);
   ENCODE_FINISH(bl);
 }
 
 void objectstore_perf_stat_t::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(filestore_commit_latency, bl);
-  ::decode(filestore_apply_latency, bl);
+  ::decode(os_commit_latency, bl);
+  ::decode(os_apply_latency, bl);
   DECODE_FINISH(bl);
 }
 
@@ -299,8 +299,8 @@ void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf
 {
   o.push_back(new objectstore_perf_stat_t());
   o.push_back(new objectstore_perf_stat_t());
-  o.back()->filestore_commit_latency = 20;
-  o.back()->filestore_apply_latency = 30;
+  o.back()->os_commit_latency = 20;
+  o.back()->os_apply_latency = 30;
 }
 
 // -- osd_stat_t --
@@ -322,8 +322,8 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_object_section("op_queue_age_hist");
   op_queue_age_hist.dump(f);
   f->close_section();
-  f->open_object_section("fs_perf_stat");
-  fs_perf_stat.dump(f);
+  f->open_object_section("perf_stat");
+  os_perf_stat.dump(f);
   f->close_section();
 }
 
@@ -338,7 +338,7 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode(hb_in, bl);
   ::encode(hb_out, bl);
   ::encode(op_queue_age_hist, bl);
-  ::encode(fs_perf_stat, bl);
+  ::encode(os_perf_stat, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -355,7 +355,7 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 3)
     ::decode(op_queue_age_hist, bl);
   if (struct_v >= 4)
-    ::decode(fs_perf_stat, bl);
+    ::decode(os_perf_stat, bl);
   DECODE_FINISH(bl);
 }
 
@@ -476,10 +476,10 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
 
   bool split = false;
   if (true) {
-    int old_bits = cbits(old_pg_num);
-    int old_mask = (1 << old_bits) - 1;
-    for (int n = 1; ; n++) {
-      int next_bit = (n << (old_bits-1));
+    unsigned old_bits = cbits(old_pg_num);
+    unsigned old_mask = (1 << old_bits) - 1;
+    for (unsigned n = 1; ; n++) {
+      unsigned next_bit = (n << (old_bits-1));
       unsigned s = next_bit | m_seed;
 
       if (s < old_pg_num || s == m_seed)
@@ -801,8 +801,6 @@ std::string pg_state_string(int state)
     oss << "down+";
   if (state & PG_STATE_REPLAY)
     oss << "replay+";
-  if (state & PG_STATE_SPLITTING)
-    oss << "splitting+";
   if (state & PG_STATE_UNDERSIZED)
     oss << "undersized+";
   if (state & PG_STATE_DEGRADED)
@@ -849,8 +847,6 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_DOWN;
   else if (state == "replay")
     type = PG_STATE_REPLAY;
-  else if (state == "splitting")
-    type = PG_STATE_SPLITTING;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
   else if (state == "degraded")
@@ -3262,7 +3258,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
   bufferlist::iterator bp = bl.begin();
   try {
     while (!bp.end()) {
-      DECODE_START(1, bp);
+      DECODE_START(max_required_version, bp);
       uint8_t code;
       ::decode(code, bp);
       switch (code) {
@@ -3300,6 +3296,14 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	visitor->try_rmobject(old_version);
 	break;
       }
+      case ROLLBACK_EXTENTS: {
+	vector<pair<uint64_t, uint64_t> > extents;
+	version_t gen;
+	::decode(gen, bp);
+	::decode(extents, bp);
+	visitor->rollback_extents(gen,extents);
+	break;
+      }
       default:
 	assert(0 == "Invalid rollback code");
       }
@@ -3313,13 +3317,13 @@ void ObjectModDesc::visit(Visitor *visitor) const
 struct DumpVisitor : public ObjectModDesc::Visitor {
   Formatter *f;
   explicit DumpVisitor(Formatter *f) : f(f) {}
-  void append(uint64_t old_size) {
+  void append(uint64_t old_size) override {
     f->open_object_section("op");
     f->dump_string("code", "APPEND");
     f->dump_unsigned("old_size", old_size);
     f->close_section();
   }
-  void setattrs(map<string, boost::optional<bufferlist> > &attrs) {
+  void setattrs(map<string, boost::optional<bufferlist> > &attrs) override {
     f->open_object_section("op");
     f->dump_string("code", "SETATTRS");
     f->open_array_section("attrs");
@@ -3331,21 +3335,36 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->close_section();
     f->close_section();
   }
-  void rmobject(version_t old_version) {
+  void rmobject(version_t old_version) override {
     f->open_object_section("op");
     f->dump_string("code", "RMOBJECT");
     f->dump_unsigned("old_version", old_version);
     f->close_section();
   }
-  void create() {
+  void try_rmobject(version_t old_version) override {
+    f->open_object_section("op");
+    f->dump_string("code", "TRY_RMOBJECT");
+    f->dump_unsigned("old_version", old_version);
+    f->close_section();
+  }
+  void create() override {
     f->open_object_section("op");
     f->dump_string("code", "CREATE");
     f->close_section();
   }
-  void update_snaps(set<snapid_t> &snaps) {
+  void update_snaps(const set<snapid_t> &snaps) override {
     f->open_object_section("op");
     f->dump_string("code", "UPDATE_SNAPS");
     f->dump_stream("snaps") << snaps;
+    f->close_section();
+  }
+  void rollback_extents(
+    version_t gen,
+    const vector<pair<uint64_t, uint64_t> > &extents) override {
+    f->open_object_section("op");
+    f->dump_string("code", "ROLLBACK_EXTENTS");
+    f->dump_unsigned("gen", gen);
+    f->dump_stream("snaps") << extents;
     f->close_section();
   }
 };
@@ -3387,7 +3406,7 @@ void ObjectModDesc::generate_test_instances(list<ObjectModDesc*>& o)
 
 void ObjectModDesc::encode(bufferlist &_bl) const
 {
-  ENCODE_START(1, 1, _bl);
+  ENCODE_START(max_required_version, max_required_version, _bl);
   ::encode(can_local_rollback, _bl);
   ::encode(rollback_info_completed, _bl);
   ::encode(bl, _bl);
@@ -3395,7 +3414,8 @@ void ObjectModDesc::encode(bufferlist &_bl) const
 }
 void ObjectModDesc::decode(bufferlist::iterator &_bl)
 {
-  DECODE_START(1, _bl);
+  DECODE_START(2, _bl);
+  max_required_version = struct_v;
   ::decode(can_local_rollback, _bl);
   ::decode(rollback_info_completed, _bl);
   ::decode(bl, _bl);
@@ -5145,7 +5165,8 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 2, bl);
+  bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
+  ENCODE_START(8, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5155,16 +5176,19 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(snapcolls, bl);
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
-  ::encode(read_error, bl);
+  ::encode(compat_read_error, bl);
   ::encode(stat_error, bl);
+  ::encode(read_error, bl);
+  ::encode(ec_hash_mismatch, bl);
+  ::encode(ec_size_mismatch, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
   ::decode(size, bl);
-  bool tmp;
+  bool tmp, compat_read_error = false;
   ::decode(tmp, bl);
   negative = tmp;
   ::decode(attrs, bl);
@@ -5187,13 +5211,23 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
     omap_digest_present = tmp;
   }
   if (struct_v >= 6) {
-    ::decode(tmp, bl);
-    read_error = tmp;
+    ::decode(compat_read_error, bl);
   }
   if (struct_v >= 7) {
     ::decode(tmp, bl);
     stat_error = tmp;
   }
+  if (struct_v >= 8) {
+    ::decode(tmp, bl);
+    read_error = tmp;
+    ::decode(tmp, bl);
+    ec_hash_mismatch = tmp;
+    ::decode(tmp, bl);
+    ec_size_mismatch = tmp;
+  }
+  // If older encoder found a read_error, set read_error
+  if (compat_read_error && !read_error && !ec_hash_mismatch && !ec_size_mismatch)
+    read_error = true;
   DECODE_FINISH(bl);
 }
 

@@ -22,42 +22,6 @@
 CLS_VER(1,0)
 CLS_NAME(rgw)
 
-cls_handle_t h_class;
-cls_method_handle_t h_rgw_bucket_init_index;
-cls_method_handle_t h_rgw_bucket_set_tag_timeout;
-cls_method_handle_t h_rgw_bucket_list;
-cls_method_handle_t h_rgw_bucket_check_index;
-cls_method_handle_t h_rgw_bucket_rebuild_index;
-cls_method_handle_t h_rgw_bucket_update_stats;
-cls_method_handle_t h_rgw_bucket_prepare_op;
-cls_method_handle_t h_rgw_bucket_complete_op;
-cls_method_handle_t h_rgw_bucket_link_olh;
-cls_method_handle_t h_rgw_bucket_unlink_instance_op;
-cls_method_handle_t h_rgw_bucket_read_olh_log;
-cls_method_handle_t h_rgw_bucket_trim_olh_log;
-cls_method_handle_t h_rgw_bucket_clear_olh;
-cls_method_handle_t h_rgw_obj_remove;
-cls_method_handle_t h_rgw_obj_store_pg_ver;
-cls_method_handle_t h_rgw_obj_check_attrs_prefix;
-cls_method_handle_t h_rgw_obj_check_mtime;
-cls_method_handle_t h_rgw_bi_get_op;
-cls_method_handle_t h_rgw_bi_put_op;
-cls_method_handle_t h_rgw_bi_list_op;
-cls_method_handle_t h_rgw_bi_log_list_op;
-cls_method_handle_t h_rgw_dir_suggest_changes;
-cls_method_handle_t h_rgw_user_usage_log_add;
-cls_method_handle_t h_rgw_user_usage_log_read;
-cls_method_handle_t h_rgw_user_usage_log_trim;
-cls_method_handle_t h_rgw_gc_set_entry;
-cls_method_handle_t h_rgw_gc_list;
-cls_method_handle_t h_rgw_gc_remove;
-cls_method_handle_t h_rgw_lc_set_entry;
-cls_method_handle_t h_rgw_lc_rm_entry;
-cls_method_handle_t h_rgw_lc_get_next_entry;
-cls_method_handle_t h_rgw_lc_put_head;
-cls_method_handle_t h_rgw_lc_get_head;
-cls_method_handle_t h_rgw_lc_list_entries;
-
 
 #define BI_PREFIX_CHAR 0x80
 
@@ -536,6 +500,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
       stats.num_entries++;
       stats.total_size += entry.meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+      stats.actual_size += entry.meta.size;
 
       start_obj = kiter->first;
     }
@@ -652,7 +617,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_set_tag_timeout(): failed to read header\n");
     return rc;
   }
 
@@ -713,7 +678,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   struct rgw_bucket_dir_header header;
   rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to read header\n");
     return rc;
   }
 
@@ -740,6 +705,7 @@ static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_buc
   stats.num_entries--;
   stats.total_size -= entry.meta.accounted_size;
   stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
+  stats.actual_size -= entry.meta.size;
 }
 
 static void log_entry(const char *func, const char *str, struct rgw_bucket_dir_entry *entry)
@@ -925,6 +891,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       stats.num_entries++;
       stats.total_size += meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+      stats.actual_size += meta.size;
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
       int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1955,6 +1922,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
         old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
+        old_stats.actual_size -= cur_disk.meta.size;
         header_changed = true;
       }
       struct rgw_bucket_category_stats& stats =
@@ -1982,6 +1950,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
+        stats.actual_size += cur_change.meta.size;
         header_changed = true;
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
@@ -2516,9 +2485,9 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   string filter = op.name;
 #define MAX_BI_LIST_ENTRIES 1000
-  int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
+  int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES) + 1; /* one extra entry for identifying truncation */
   string start_key = op.marker;
-  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries) + 1; /* one extra entry for identifying truncation */
+  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries); 
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_plain_entries retured ret=%d", __func__, ret);
     return ret;
@@ -3502,9 +3471,45 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(rgw)
 {
   CLS_LOG(1, "Loaded rgw class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_rgw_bucket_init_index;
+  cls_method_handle_t h_rgw_bucket_set_tag_timeout;
+  cls_method_handle_t h_rgw_bucket_list;
+  cls_method_handle_t h_rgw_bucket_check_index;
+  cls_method_handle_t h_rgw_bucket_rebuild_index;
+  cls_method_handle_t h_rgw_bucket_update_stats;
+  cls_method_handle_t h_rgw_bucket_prepare_op;
+  cls_method_handle_t h_rgw_bucket_complete_op;
+  cls_method_handle_t h_rgw_bucket_link_olh;
+  cls_method_handle_t h_rgw_bucket_unlink_instance_op;
+  cls_method_handle_t h_rgw_bucket_read_olh_log;
+  cls_method_handle_t h_rgw_bucket_trim_olh_log;
+  cls_method_handle_t h_rgw_bucket_clear_olh;
+  cls_method_handle_t h_rgw_obj_remove;
+  cls_method_handle_t h_rgw_obj_store_pg_ver;
+  cls_method_handle_t h_rgw_obj_check_attrs_prefix;
+  cls_method_handle_t h_rgw_obj_check_mtime;
+  cls_method_handle_t h_rgw_bi_get_op;
+  cls_method_handle_t h_rgw_bi_put_op;
+  cls_method_handle_t h_rgw_bi_list_op;
+  cls_method_handle_t h_rgw_bi_log_list_op;
+  cls_method_handle_t h_rgw_dir_suggest_changes;
+  cls_method_handle_t h_rgw_user_usage_log_add;
+  cls_method_handle_t h_rgw_user_usage_log_read;
+  cls_method_handle_t h_rgw_user_usage_log_trim;
+  cls_method_handle_t h_rgw_gc_set_entry;
+  cls_method_handle_t h_rgw_gc_list;
+  cls_method_handle_t h_rgw_gc_remove;
+  cls_method_handle_t h_rgw_lc_set_entry;
+  cls_method_handle_t h_rgw_lc_rm_entry;
+  cls_method_handle_t h_rgw_lc_get_next_entry;
+  cls_method_handle_t h_rgw_lc_put_head;
+  cls_method_handle_t h_rgw_lc_get_head;
+  cls_method_handle_t h_rgw_lc_list_entries;
 
   cls_register("rgw", &h_class);
 

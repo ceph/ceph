@@ -204,6 +204,7 @@ class Ptype(object):
                 return True
         return False
 
+
 DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
@@ -1775,6 +1776,13 @@ class Prepare(object):
             default='/etc/ceph/dmcrypt-keys',
             help='directory where dm-crypt keys are stored',
         )
+        parser.add_argument(
+            '--prepare-key',
+            metavar='PATH',
+            help='bootstrap-osd keyring path template (%(default)s)',
+            default='{statedir}/bootstrap-osd/{cluster}.keyring',
+            dest='prepare_key_template',
+        )
         return parser
 
     @staticmethod
@@ -2381,9 +2389,14 @@ class Lockbox(object):
         key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
         key = open('/dev/urandom', 'rb').read(key_size / 8)
         base64_key = base64.b64encode(key)
+        cluster = self.args.cluster
+        bootstrap = self.args.prepare_key_template.format(cluster=cluster,
+                                                          statedir=STATEDIR)
         command_check_call(
             [
                 'ceph',
+                '--name', 'client.bootstrap-osd',
+                '--keyring', bootstrap,
                 'config-key',
                 'put',
                 'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
@@ -2393,6 +2406,8 @@ class Lockbox(object):
         keyring, stderr, ret = command(
             [
                 'ceph',
+                '--name', 'client.bootstrap-osd',
+                '--keyring', bootstrap,
                 'auth',
                 'get-or-create',
                 'client.osd-lockbox.' + self.args.osd_uuid,
@@ -4427,6 +4442,8 @@ def main_trigger(args):
         )
         return
 
+    if get_ceph_user() == 'ceph':
+        command_check_call(['chown', 'ceph:ceph', args.dev])
     parttype = get_partition_type(args.dev)
     partid = get_partition_uuid(args.dev)
 
@@ -5140,6 +5157,7 @@ def main_catch(func, args):
 
 def run():
     main(sys.argv[1:])
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])

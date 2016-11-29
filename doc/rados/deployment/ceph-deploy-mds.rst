@@ -8,7 +8,7 @@ command.
 
 .. important:: You must deploy at least one metadata server to use CephFS.
     There is experimental support for running multiple metadata servers.
-    Do not run multiple metadata servers in production.
+    Do not run multiple active metadata servers in production.
 
 See `MDS Config Reference`_ for details on configuring metadata servers.
 

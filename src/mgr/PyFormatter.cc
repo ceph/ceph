@@ -86,7 +86,7 @@ std::ostream& PyFormatter::dump_stream(const char *name)
 void PyFormatter::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   // TODO
-  assert(0);
+  ceph_abort();
 }
 
 /**
@@ -103,7 +103,7 @@ void PyFormatter::dump_pyobject(const char *name, PyObject *p)
     Py_DECREF(key);
     Py_DECREF(p);
   } else {
-    assert(0);
+    ceph_abort();
   }
 }
 

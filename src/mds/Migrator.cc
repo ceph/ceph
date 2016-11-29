@@ -244,8 +244,7 @@ void Migrator::find_stale_export_freeze()
     CDir* dir = p->first;
     export_state_t& stat = p->second;
     ++p;
-    if (p->second.state != EXPORT_DISCOVERING &&
-	p->second.state != EXPORT_FREEZING)
+    if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
     if (stat.last_cum_auth_pins != dir->get_cum_auth_pins()) {
       stat.last_cum_auth_pins = dir->get_cum_auth_pins();
@@ -340,7 +339,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     break;
 
   default:
-    assert(0);
+    ceph_abort();
   }
 
   // finish clean-up?
@@ -536,8 +535,9 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	break;
       }
     } else {
-      if (q->second.bystanders.count(who)) {
-	q->second.bystanders.erase(who);
+      auto bystanders_entry = q->second.bystanders.find(who);
+      if (bystanders_entry != q->second.bystanders.end()) {
+	q->second.bystanders.erase(bystanders_entry);
 	if (q->second.state == IMPORT_ABORTING) {
 	  assert(dir);
 	  dout(10) << "faking export_notify_ack from mds." << who
@@ -752,7 +752,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   }
   if (dir->inode->is_system()) {
     dout(7) << "i won't export system dirs (root, mdsdirs, stray, /.ceph, etc.)" << dendl;
-    //assert(0);
+    //ceph_abort();
     return;
   }
 
@@ -1745,8 +1745,9 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
   assert(dir);
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
-  if (export_state.count(dir)) {
-    export_state_t& stat = export_state[dir];
+  auto export_state_entry = export_state.find(dir);
+  if (export_state_entry != export_state.end()) {
+    export_state_t& stat = export_state_entry->second;
     if (stat.state == EXPORT_WARNING) {
       // exporting. process warning.
       dout(7) << "handle_export_notify_ack from " << m->get_source()
@@ -1765,16 +1766,19 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
 	export_finish(dir);
     }
   }
-  else if (import_state.count(dir->dirfrag())) {
-    import_state_t& stat = import_state[dir->dirfrag()];
-    if (stat.state == IMPORT_ABORTING) {
-      // reversing import
-      dout(7) << "handle_export_notify_ack from " << m->get_source()
-	      << ": aborting import on " << *dir << dendl;
-      assert(stat.bystanders.count(from));
-      stat.bystanders.erase(from);
-      if (stat.bystanders.empty())
-	import_reverse_unfreeze(dir);
+  else {
+    auto import_state_entry = import_state.find(dir->dirfrag());
+    if (import_state_entry != import_state.end()) {
+      import_state_t& stat = import_state_entry->second;
+      if (stat.state == IMPORT_ABORTING) {
+	// reversing import
+	dout(7) << "handle_export_notify_ack from " << m->get_source()
+	  << ": aborting import on " << *dir << dendl;
+	assert(stat.bystanders.count(from));
+	stat.bystanders.erase(from);
+	if (stat.bystanders.empty())
+	  import_reverse_unfreeze(dir);
+      }
     }
   }
 
@@ -1918,10 +1922,10 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
-      assert(0);    // this shouldn't happen if the auth pins its path properly!!!!
+      ceph_abort();    // this shouldn't happen if the auth pins its path properly!!!!
     }
 
-    assert(0); // this shouldn't happen; the get_inode above would have succeeded.
+    ceph_abort(); // this shouldn't happen; the get_inode above would have succeeded.
   }
 
   // yay

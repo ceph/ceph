@@ -122,6 +122,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
   if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
+  if (dir.state_test(CDir::STATE_FRAGMENTING)) out << "|fragmenting";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -912,8 +913,6 @@ void CDir::init_fragment_pins()
 void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
-
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_split);
 
   assert(replay || is_complete() || !is_auth());
 
@@ -1891,7 +1890,7 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
       inode->ino(), frag, last, dname);
   if (fatal) {
     cache->mds->damaged();
-    assert(0);  // unreachable, damaged() respawns us
+    ceph_abort();  // unreachable, damaged() respawns us
   }
 }
 
@@ -1900,7 +1899,7 @@ void CDir::go_bad(bool complete)
   const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
   if (fatal) {
     cache->mds->damaged();
-    assert(0);  // unreachable, damaged() respawns us
+    ceph_abort();  // unreachable, damaged() respawns us
   }
 
   if (complete)
@@ -2616,7 +2615,7 @@ void CDir::verify_fragstat()
       c.nfiles != fnode.fragstat.nfiles) {
     dout(0) << "verify_fragstat failed " << fnode.fragstat << " on " << *this << dendl;
     dout(0) << "               i count " << c << dendl;
-    assert(0);
+    ceph_abort();
   } else {
     dout(0) << "verify_fragstat ok " << fnode.fragstat << " on " << *this << dendl;
   }
@@ -2736,7 +2735,7 @@ CDir *CDir::get_frozen_tree_root()
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else
-      assert(0);
+      ceph_abort();
   }
 }
 
@@ -2995,7 +2994,7 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
       } else {
 	dout(5) << " we lost dentry " << dnkey.name
 		<< ", bailing out because that's impossible!" << dendl;
-	assert(0);
+	ceph_abort();
       }
     }
     // okay, we got a  dentry
@@ -3115,7 +3114,36 @@ bool CDir::scrub_local()
 std::string CDir::get_path() const
 {
   std::string path;
-  get_inode()->make_path_string_projected(path);
+  get_inode()->make_path_string(path, true);
   return path;
+}
+
+bool CDir::should_split_fast() const
+{
+  // Max size a fragment can be before trigger fast splitting
+  int fast_limit = g_conf->mds_bal_split_size * g_conf->mds_bal_fragment_fast_factor;
+
+  // Fast path: the sum of accounted size and null dentries does not
+  // exceed threshold: we definitely are not over it.
+  if (get_frag_size() + get_num_head_null() <= fast_limit) {
+    return false;
+  }
+
+  // Fast path: the accounted size of the frag exceeds threshold: we
+  // definitely are over it
+  if (get_frag_size() > fast_limit) {
+    return true;
+  }
+
+  int64_t effective_size = 0;
+
+  for (const auto &p : items) {
+    const CDentry *dn = p.second;
+    if (!dn->get_projected_linkage()->is_null()) {
+      effective_size++;
+    }
+  }
+
+  return effective_size > fast_limit;
 }
 

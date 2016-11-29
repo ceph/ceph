@@ -906,6 +906,8 @@ int Rados::ioctx_create(const char *name, IoCtx &io) {
   if (ret) {
     return ret;
   }
+
+  io.close();
   io.io_ctx_impl = reinterpret_cast<IoCtxImpl*>(p);
   return 0;
 }
@@ -917,6 +919,8 @@ int Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   if (ret) {
     return ret;
   }
+
+  io.close();
   io.io_ctx_impl = reinterpret_cast<IoCtxImpl*>(p);
   return 0;
 }

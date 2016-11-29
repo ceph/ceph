@@ -349,9 +349,9 @@ private:
     int upper_bound(const string &after) { return 0; }
     int lower_bound(const string &to) { return 0; }
     bool valid() { return false; }
-    int next(bool validate=true) { assert(0); return 0; }
-    string key() { assert(0); return ""; }
-    bufferlist value() { assert(0); return bufferlist(); }
+    int next(bool validate=true) { ceph_abort(); return 0; }
+    string key() { ceph_abort(); return ""; }
+    bufferlist value() { ceph_abort(); return bufferlist(); }
     int status() { return 0; }
   };
 

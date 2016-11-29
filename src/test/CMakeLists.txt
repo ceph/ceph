@@ -25,6 +25,9 @@ add_subdirectory(erasure-code)
 add_subdirectory(filestore)
 add_subdirectory(fs)
 add_subdirectory(journal)
+if(WITH_EMBEDDED)
+  add_subdirectory(libcephd)
+endif(WITH_EMBEDDED)
 add_subdirectory(libcephfs)
 add_subdirectory(librados)
 add_subdirectory(librados_test_stub)
@@ -584,14 +587,14 @@ add_executable(unittest_encoding
   encoding.cc
   )
 add_ceph_unittest(unittest_encoding ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_encoding)
-target_link_libraries(unittest_encoding common librados pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_encoding common librados ${XIO_LIBRARY} pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_addrs
 add_executable(unittest_addrs
   test_addrs.cc
   )
 add_ceph_unittest(unittest_addrs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_addrs)
-target_link_libraries(unittest_addrs common librados pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_addrs common librados ${XIO_LIBRARY} pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_workqueue
 add_executable(unittest_workqueue
@@ -689,7 +692,7 @@ add_executable(unittest_xlist
   test_xlist.cc
   )
 add_ceph_unittest(unittest_xlist ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_xlist)
-target_link_libraries(unittest_xlist common)
+target_link_libraries(unittest_xlist common ${XIO_LIBRARY})
 
 # unittest_arch
 add_executable(unittest_arch
@@ -704,6 +707,13 @@ add_executable(unittest_denc
   )
 add_ceph_unittest(unittest_denc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_denc)
 target_link_libraries(unittest_denc os global)
+
+# unittest_mempool
+add_executable(unittest_mempool
+  test_mempool.cc
+  )
+add_ceph_unittest(unittest_mempool ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mempool)
+target_link_libraries(unittest_mempool global)
 
 # unittest_crypto
 add_executable(unittest_crypto

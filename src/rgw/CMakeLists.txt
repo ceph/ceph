@@ -17,6 +17,13 @@ install(TARGETS
   DESTINATION bin)
 endif(WITH_TESTS)
 
+add_custom_target(civetweb_h
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+  "${CMAKE_BINARY_DIR}/src/include/civetweb"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+  "${CMAKE_SOURCE_DIR}/src/civetweb/include/civetweb.h"
+  "${CMAKE_BINARY_DIR}/src/include/civetweb"
+  COMMENT "keep civetweb.h up-to-date")
 
 set(rgw_a_srcs
   rgw_acl.cc
@@ -29,6 +36,7 @@ set(rgw_a_srcs
   rgw_cache.cc
   rgw_client_io.cc
   rgw_common.cc
+  rgw_compression.cc
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_dencoder.cc
@@ -94,7 +102,13 @@ set(rgw_a_srcs
   rgw_torrent.cc)
 
 add_library(rgw_a STATIC ${rgw_a_srcs})
-target_include_directories(rgw_a PUBLIC ${FCGI_INCLUDE_DIR})
+
+add_dependencies(rgw_a civetweb_h)
+
+target_include_directories(rgw_a PUBLIC
+  "../Beast/include"
+  ${FCGI_INCLUDE_DIR})
+
 target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
   cls_replica_log_client cls_user_client common common_utf8 global
@@ -109,6 +123,13 @@ set(radosgw_srcs
   rgw_civetweb_frontend.cc
   rgw_civetweb_log.cc
   rgw_main.cc)
+
+if (WITH_RADOSGW_ASIO_FRONTEND)
+  list(APPEND radosgw_srcs
+    rgw_asio_client.cc
+    rgw_asio_frontend.cc)
+endif (WITH_RADOSGW_ASIO_FRONTEND)
+
 add_executable(radosgw ${radosgw_srcs}  $<TARGET_OBJECTS:civetweb_common_objs>)
 target_link_libraries(radosgw rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client

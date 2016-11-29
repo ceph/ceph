@@ -239,7 +239,7 @@ public:
   }
 
   void check_remove_image(rbd_mirror_mode_t mirror_mode, uint64_t features,
-                          bool enable_mirroring) {
+                          bool enable_mirroring, bool demote = false) {
 
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
 
@@ -251,6 +251,11 @@ public:
 
     if (enable_mirroring) {
       ASSERT_EQ(0, image.mirror_image_enable());
+    }
+
+    if (demote) {
+      ASSERT_EQ(0, image.mirror_image_demote());
+      ASSERT_EQ(0, image.mirror_image_disable(true));
     }
 
     image.close();
@@ -606,6 +611,12 @@ TEST_F(TestMirroring, RemoveImage_With_ImageWithoutJournal) {
   check_remove_image(RBD_MIRROR_MODE_IMAGE,
                      RBD_FEATURE_EXCLUSIVE_LOCK,
                      false);
+}
+
+TEST_F(TestMirroring, RemoveImage_With_MirrorImageDemoted) {
+  check_remove_image(RBD_MIRROR_MODE_IMAGE,
+                     RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING,
+                     true, true);
 }
 
 TEST_F(TestMirroring, MirrorStatusList) {

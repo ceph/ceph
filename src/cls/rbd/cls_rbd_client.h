@@ -35,8 +35,7 @@ namespace librbd {
                                     std::map<rados::cls::lock::locker_id_t,
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
-				    ::SnapContext *snapc, parent_info *parent,
-				    cls::rbd::GroupSpec *uplink);
+				    ::SnapContext *snapc, parent_info *parent);
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     bool read_only, uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
@@ -45,8 +44,7 @@ namespace librbd {
 			     bool *exclusive_lock,
 			     std::string *lock_tag,
 			     ::SnapContext *snapc,
-			     parent_info *parent,
-			     cls::rbd::GroupSpec *uplink);
+			     parent_info *parent);
 
     // low-level interface (mainly for testing)
     void create_image(librados::ObjectWriteOperation *op, uint64_t size,
@@ -136,6 +134,12 @@ namespace librbd {
     int snap_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
 			    const std::vector<snapid_t> &ids,
 			    std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+
+    void get_all_features_start(librados::ObjectReadOperation *op);
+    int get_all_features_finish(bufferlist::iterator *it,
+                                uint64_t *all_features);
+    int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
+                         uint64_t *all_features);
 
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data);
@@ -346,15 +350,18 @@ namespace librbd {
     int group_image_list(librados::IoCtx *ioctx, const std::string &oid,
 			 const cls::rbd::GroupImageSpec &start,
 			 uint64_t max_return,
-			 std::vector<cls::rbd::GroupImageStatus>& images);
+			 std::vector<cls::rbd::GroupImageStatus> *images);
     int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
 			const cls::rbd::GroupImageStatus &st);
     int image_add_group(librados::IoCtx *ioctx, const std::string &oid,
 	                const cls::rbd::GroupSpec &group_spec);
     int image_remove_group(librados::IoCtx *ioctx, const std::string &oid,
 			   const cls::rbd::GroupSpec &group_spec);
+    void image_get_group_start(librados::ObjectReadOperation *op);
+    int image_get_group_finish(bufferlist::iterator *iter,
+                               cls::rbd::GroupSpec *group_spec);
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
-			cls::rbd::GroupSpec &s);
+			cls::rbd::GroupSpec *group_spec);
 
   } // namespace cls_client
 } // namespace librbd

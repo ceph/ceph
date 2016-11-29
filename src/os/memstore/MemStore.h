@@ -45,6 +45,7 @@ public:
     friend void intrusive_ptr_add_ref(Object *o) { o->get(); }
     friend void intrusive_ptr_release(Object *o) { o->put(); }
 
+    Object() : RefCountedObject(nullptr, 0) {}
     // interface for object data
     virtual size_t get_size() const = 0;
     virtual int read(uint64_t offset, uint64_t len, bufferlist &bl) = 0;
@@ -216,9 +217,6 @@ private:
   int _clone_range(const coll_t& cid, const ghobject_t& oldoid,
 		   const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff);
-  int _move_ranges_destroy_src(const coll_t& cid, const ghobject_t& oldoid,
-			       const ghobject_t& newoid,
-			       const vector<pair<uint64_t, uint64_t> > move_info);
   int _omap_clear(const coll_t& cid, const ghobject_t &oid);
   int _omap_setkeys(const coll_t& cid, const ghobject_t &oid, bufferlist& aset_bl);
   int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, bufferlist& keys_bl);

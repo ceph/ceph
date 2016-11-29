@@ -31,7 +31,7 @@ import re
 import logging
 import json
 import tempfile
-import io
+import platform
 
 try:
     from subprocess import DEVNULL
@@ -395,7 +395,7 @@ if not CEPH_BUILD_DIR:
     CEPH_LIB=os.path.join(CEPH_BIN, '.libs')
     os.putenv('CEPH_LIB', CEPH_LIB)
 
-CEPH_DIR = CEPH_BUILD_DIR + "/ceph_objectstore_tool_dir"
+CEPH_DIR = CEPH_BUILD_DIR + "/cot_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 def kill_daemons():
@@ -1966,6 +1966,8 @@ def main(argv):
 
 
 def remove_btrfs_subvolumes(path):
+    if platform.system() == "FreeBSD":
+        return
     result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
     for line in result.stdout:
         filesystem = decode(line).rstrip('\n')

@@ -33,7 +33,7 @@ int hex_to_int(char c)
     return c - '0';
   if (c >= 'A' && c <= 'F')
     return c - 'A' + 10;
-  assert(0);
+  ceph_abort();
 }
 
 /// int value to hex digit
@@ -1065,7 +1065,7 @@ int HashIndex::list_by_hash_bitwise(
 	}
 	if (cmp_bitwise(j->second, end) >= 0) {
 	  if (next)
-	    *next = ghobject_t::get_max();
+	    *next = j->second;
 	  return 0;
 	}
 	if (!next || cmp_bitwise(j->second, *next) >= 0) {
@@ -1131,7 +1131,7 @@ int HashIndex::list_by_hash_nibblewise(
 	}
 	if (cmp_nibblewise(j->second, end) >= 0) {
 	  if (next)
-	    *next = ghobject_t::get_max();
+	    *next = j->second;
 	  return 0;
 	}
 	if (!next || cmp_nibblewise(j->second, *next) >= 0) {

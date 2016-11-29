@@ -118,8 +118,8 @@ void MgrStandby::send_beacon()
                                  available);
                                  
   monc->send_mon_message(m);
-  timer.add_event_after(g_conf->mgr_beacon_period, new C_StdFunction(
-        [this](){
+  timer.add_event_after(g_conf->mgr_beacon_period, new FunctionContext(
+        [this](int r){
           send_beacon();
         }
   )); 
@@ -129,6 +129,7 @@ void MgrStandby::handle_signal(int signum)
 {
   Mutex::Locker l(lock);
   assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
 

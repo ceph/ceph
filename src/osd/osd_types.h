@@ -26,6 +26,7 @@
 #include <boost/variant.hpp>
 
 #include "include/rados/rados_types.hpp"
+#include "include/mempool.h"
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -813,24 +814,24 @@ inline ostream& operator<<(ostream& out, const eversion_t& e) {
  */
 struct objectstore_perf_stat_t {
   // cur_op_latency is in ms since double add/sub are not associative
-  uint32_t filestore_commit_latency;
-  uint32_t filestore_apply_latency;
+  uint32_t os_commit_latency;
+  uint32_t os_apply_latency;
 
   objectstore_perf_stat_t() :
-    filestore_commit_latency(0), filestore_apply_latency(0) {}
+    os_commit_latency(0), os_apply_latency(0) {}
 
   bool operator==(const objectstore_perf_stat_t &r) const {
-    return filestore_commit_latency == r.filestore_commit_latency &&
-      filestore_apply_latency == r.filestore_apply_latency;
+    return os_commit_latency == r.os_commit_latency &&
+      os_apply_latency == r.os_apply_latency;
   }
 
   void add(const objectstore_perf_stat_t &o) {
-    filestore_commit_latency += o.filestore_commit_latency;
-    filestore_apply_latency += o.filestore_apply_latency;
+    os_commit_latency += o.os_commit_latency;
+    os_apply_latency += o.os_apply_latency;
   }
   void sub(const objectstore_perf_stat_t &o) {
-    filestore_commit_latency -= o.filestore_commit_latency;
-    filestore_apply_latency -= o.filestore_apply_latency;
+    os_commit_latency -= o.os_commit_latency;
+    os_apply_latency -= o.os_apply_latency;
   }
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
@@ -849,7 +850,7 @@ struct osd_stat_t {
 
   pow2_hist_t op_queue_age_hist;
 
-  objectstore_perf_stat_t fs_perf_stat;
+  objectstore_perf_stat_t os_perf_stat;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
@@ -861,7 +862,7 @@ struct osd_stat_t {
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
-    fs_perf_stat.add(o.fs_perf_stat);
+    os_perf_stat.add(o.os_perf_stat);
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -870,7 +871,7 @@ struct osd_stat_t {
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
     op_queue_age_hist.sub(o.op_queue_age_hist);
-    fs_perf_stat.sub(o.fs_perf_stat);
+    os_perf_stat.sub(o.os_perf_stat);
   }
 
   void dump(Formatter *f) const;
@@ -889,7 +890,7 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.hb_in == r.hb_in &&
     l.hb_out == r.hb_out &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.fs_perf_stat == r.fs_perf_stat;
+    l.os_perf_stat == r.os_perf_stat;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -916,7 +917,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
 #define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
 //#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
-#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
+//#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
 //#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
 #define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
@@ -1075,7 +1076,7 @@ struct pg_pool_t {
   enum {
     FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
     FLAG_FULL       = 1<<1, // pool is full
-    FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    FLAG_EC_OVERWRITES = 1<<2, // enables overwrites, once enabled, cannot be disabled
     FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
     FLAG_NODELETE = 1<<4, // pool can't be deleted
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
@@ -1089,7 +1090,7 @@ struct pg_pool_t {
     switch (f) {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
-    case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
+    case FLAG_EC_OVERWRITES: return "ec_overwrites";
     case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
     case FLAG_NODELETE: return "nodelete";
     case FLAG_NOPGCHANGE: return "nopgchange";
@@ -1119,8 +1120,8 @@ struct pg_pool_t {
       return FLAG_HASHPSPOOL;
     if (name == "full")
       return FLAG_FULL;
-    if (name == "require_local_rollback")
-      return FLAG_DEBUG_FAKE_EC_POOL;
+    if (name == "ec_overwrites")
+      return FLAG_EC_OVERWRITES;
     if (name == "incomplete_clones")
       return FLAG_INCOMPLETE_CLONES;
     if (name == "nodelete")
@@ -1364,7 +1365,7 @@ public:
     return type == TYPE_ERASURE;
   }
   bool require_rollback() const {
-    return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
+    return ec_pool();
   }
 
   /// true if incomplete clones may be present
@@ -1397,11 +1398,17 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return !(get_type() == TYPE_ERASURE || has_flag(FLAG_DEBUG_FAKE_EC_POOL));
+    return !(get_type() == TYPE_ERASURE);
   }
 
-  bool requires_aligned_append() const { return is_erasure(); }
+  bool requires_aligned_append() const {
+    return is_erasure() && !has_flag(FLAG_EC_OVERWRITES);
+  }
   uint64_t required_alignment() const { return stripe_width; }
+
+  bool is_hacky_ecoverwrites() const {
+    return has_flag(FLAG_EC_OVERWRITES);
+  }
 
   bool can_shift_osds() const {
     switch (get_type()) {
@@ -2585,6 +2592,9 @@ class PGBackend;
 class ObjectModDesc {
   bool can_local_rollback;
   bool rollback_info_completed;
+
+  // version required to decode, reflected in encode/decode version
+  __u8 max_required_version = 1;
 public:
   class Visitor {
   public:
@@ -2601,7 +2611,10 @@ public:
       rmobject(old_version);
     }
     virtual void create() {}
-    virtual void update_snaps(set<snapid_t> &old_snaps) {}
+    virtual void update_snaps(const set<snapid_t> &old_snaps) {}
+    virtual void rollback_extents(
+      version_t gen,
+      const vector<pair<uint64_t, uint64_t> > &extents) {}
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
@@ -2612,7 +2625,8 @@ public:
     DELETE = 3,
     CREATE = 4,
     UPDATE_SNAPS = 5,
-    TRY_DELETE = 6
+    TRY_DELETE = 6,
+    ROLLBACK_EXTENTS = 7
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
   void claim(ObjectModDesc &other) {
@@ -2634,13 +2648,9 @@ public:
   void swap(ObjectModDesc &other) {
     bl.swap(other.bl);
 
-    bool temp = other.can_local_rollback;
-    other.can_local_rollback = can_local_rollback;
-    can_local_rollback = temp;
-
-    temp = other.rollback_info_completed;
-    other.rollback_info_completed = rollback_info_completed;
-    rollback_info_completed = temp;
+    ::swap(other.can_local_rollback, can_local_rollback);
+    ::swap(other.rollback_info_completed, rollback_info_completed);
+    ::swap(other.max_required_version, max_required_version);
   }
   void append_id(ModID id) {
     uint8_t _id(id);
@@ -2690,12 +2700,24 @@ public:
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
-  void update_snaps(set<snapid_t> &old_snaps) {
+  void update_snaps(const set<snapid_t> &old_snaps) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);
     ::encode(old_snaps, bl);
+    ENCODE_FINISH(bl);
+  }
+  void rollback_extents(
+    version_t gen, const vector<pair<uint64_t, uint64_t> > &extents) {
+    assert(can_local_rollback);
+    assert(!rollback_info_completed);
+    if (max_required_version < 2)
+      max_required_version = 2;
+    ENCODE_START(2, 2, bl);
+    append_id(ROLLBACK_EXTENTS);
+    ::encode(gen, bl);
+    ::encode(extents, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -2709,6 +2731,10 @@ public:
   }
   bool empty() const {
     return can_local_rollback && (bl.length() == 0);
+  }
+
+  bool requires_kraken() const {
+    return max_required_version >= 2;
   }
 
   /**
@@ -2822,6 +2848,18 @@ struct pg_log_entry_t {
     return op == DELETE || op == LOST_DELETE;
   }
 
+  bool can_rollback() const {
+    return mod_desc.can_rollback();
+  }
+
+  void mark_unrollbackable() {
+    mod_desc.mark_unrollbackable();
+  }
+
+  bool requires_kraken() const {
+    return mod_desc.requires_kraken();
+  }
+
   // Errors are only used for dup detection, whereas
   // the index by objects is used by recovery, copy_get,
   // and other facilities that don't expect or need to
@@ -2866,6 +2904,7 @@ struct pg_log_t {
   eversion_t head;    // newest entry
   eversion_t tail;    // version prior to oldest
 
+protected:
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
 
@@ -2873,14 +2912,105 @@ struct pg_log_t {
   // data can be found
   eversion_t rollback_info_trimmed_to;
 
-  list<pg_log_entry_t> log;  // the actual log.
+public:
+  mempool::osd::list<pg_log_entry_t> log;  // the actual log.
   
-  pg_log_t() {}
+  pg_log_t() = default;
+  pg_log_t(const eversion_t &last_update,
+	   const eversion_t &log_tail,
+	   const eversion_t &can_rollback_to,
+	   const eversion_t &rollback_info_trimmed_to,
+	   mempool::osd::list<pg_log_entry_t> &&entries)
+    : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_info_trimmed_to(rollback_info_trimmed_to),
+      log(std::move(entries)) {}
+  pg_log_t(const eversion_t &last_update,
+	   const eversion_t &log_tail,
+	   const eversion_t &can_rollback_to,
+	   const eversion_t &rollback_info_trimmed_to,
+	   const std::list<pg_log_entry_t> &entries)
+    : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_info_trimmed_to(rollback_info_trimmed_to) {
+    for (auto &&entry: entries) {
+      log.push_back(entry);
+    }
+  }
 
   void clear() {
     eversion_t z;
-    can_rollback_to = head = tail = z;
+    rollback_info_trimmed_to = can_rollback_to = head = tail = z;
     log.clear();
+  }
+
+  eversion_t get_rollback_info_trimmed_to() const {
+    return rollback_info_trimmed_to;
+  }
+  eversion_t get_can_rollback_to() const {
+    return can_rollback_to;
+  }
+
+
+  pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
+    mempool::osd::list<pg_log_entry_t> oldlog, childlog;
+    oldlog.swap(log);
+
+    eversion_t old_tail;
+    unsigned mask = ~((~0)<<split_bits);
+    for (auto i = oldlog.begin();
+	 i != oldlog.end();
+      ) {
+      if ((i->soid.get_hash() & mask) == child_pgid.m_seed) {
+	childlog.push_back(*i);
+      } else {
+	log.push_back(*i);
+      }
+      oldlog.erase(i++);
+    }
+
+    return pg_log_t(
+      head,
+      tail,
+      can_rollback_to,
+      rollback_info_trimmed_to,
+      std::move(childlog));
+  }
+
+  mempool::osd::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+    assert(newhead >= tail);
+
+    mempool::osd::list<pg_log_entry_t>::iterator p = log.end();
+    mempool::osd::list<pg_log_entry_t> divergent;
+    while (true) {
+      if (p == log.begin()) {
+	// yikes, the whole thing is divergent!
+	::swap(divergent, log);
+	break;
+      }
+      --p;
+      if (p->version.version <= newhead.version) {
+	/*
+	 * look at eversion.version here.  we want to avoid a situation like:
+	 *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  lower_bound = 100'9
+	 * i.e, same request, different version.  If the eversion.version is > the
+	 * lower_bound, we it is divergent.
+	 */
+	++p;
+	divergent.splice(divergent.begin(), log, p, log.end());
+	break;
+      }
+      assert(p->version > newhead);
+    }
+    head = newhead;
+
+    if (can_rollback_to > newhead)
+      can_rollback_to = newhead;
+
+    if (rollback_info_trimmed_to > newhead)
+      rollback_info_trimmed_to = newhead;
+
+    return divergent;
   }
 
   bool empty() const {
@@ -2936,7 +3066,7 @@ WRITE_CLASS_ENCODER(pg_log_t)
 inline ostream& operator<<(ostream& out, const pg_log_t& log) 
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
-      << log.can_rollback_to << ")";
+      << log.get_can_rollback_to() << ")";
   return out;
 }
 
@@ -4010,21 +4140,6 @@ public:
   // attr cache
   map<string, bufferlist> attr_cache;
 
-  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
-    map<string, boost::optional<bufferlist> > to_set;
-    for (set<string>::const_iterator i = changing.begin();
-	 i != changing.end();
-	 ++i) {
-      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
-      if (iter != attr_cache.end()) {
-	to_set[*i] = iter->second;
-      } else {
-	to_set[*i];
-      }
-    }
-    mod->setattrs(to_set);
-  }
-  
   struct RWState {
     enum State {
       RWNONE,
@@ -4207,11 +4322,12 @@ public:
   bool get_write_greedy(OpRequestRef op) {
     return rwstate.get_write(op, true);
   }
-  bool get_snaptrimmer_write() {
+  bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
     if (rwstate.get_write_lock()) {
       return true;
     } else {
-      rwstate.snaptrimmer_write_marker = true;
+      if (mark_if_unsuccessful)
+	rwstate.snaptrimmer_write_marker = true;
       return false;
     }
   }
@@ -4414,9 +4530,10 @@ public:
   /// Get write lock for snap trim
   bool get_snaptrimmer_write(
     const hobject_t &hoid,
-    ObjectContextRef obc) {
+    ObjectContextRef obc,
+    bool mark_if_unsuccessful) {
     assert(locks.find(hoid) == locks.end());
-    if (obc->get_snaptrimmer_write()) {
+    if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
       locks.insert(
 	make_pair(
 	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
@@ -4588,12 +4705,14 @@ struct ScrubMap {
     bool omap_digest_present:1;
     bool read_error:1;
     bool stat_error:1;
+    bool ec_hash_mismatch:1;
+    bool ec_size_mismatch:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0), nlinks(0), 
       negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false), stat_error(false) {}
+      read_error(false), stat_error(false), ec_hash_mismatch(false), ec_size_mismatch(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
@@ -4894,12 +5013,6 @@ struct obj_list_snap_response_t {
 };
 
 WRITE_CLASS_ENCODER(obj_list_snap_response_t)
-
-enum scrub_error_type {
-  CLEAN,
-  DEEP_ERROR,
-  SHALLOW_ERROR
-};
 
 // PromoteCounter
 

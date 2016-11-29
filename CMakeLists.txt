@@ -65,11 +65,6 @@ include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${PROJECT_SOURCE_DIR}/src)
 
-if(LEVELDB_PREFIX)
-  include_directories(${LEVELDB_PREFIX}/include)
-  link_directories(${LEVELDB_PREFIX}/lib)
-endif()
-
 if(OFED_PREFIX)
   include_directories(${OFED_PREFIX}/include)
   link_directories(${OFED_PREFIX}/lib)
@@ -117,7 +112,6 @@ CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
 
-CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
@@ -180,6 +174,12 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
+option(WITH_RDMA "Enable RDMA in async messenger" OFF)
+if(WITH_RDMA)
+  find_package(rdma REQUIRED)
+  set(HAVE_RDMA ${RDMA_FOUND})
+endif(WITH_RDMA)
+
 find_package(Backtrace)
 
 if(LINUX)
@@ -234,11 +234,22 @@ option(WITH_KVS "Key value store is here" ON)
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
 
+# embedded ceph daemon static library
+# NOTE: Ceph is mostly LGPL (see COPYING), which means that
+# static linking brings with it restrictions. Please be sure
+# to look at the LGPL license carefully before linking this library to
+# your code. See http://www.gnu.org/licenses/gpl-faq.html#LGPLStaticVsDynamic.
+option(WITH_EMBEDDED "build the embedded ceph daemon library" ON)
+
 option(WITH_LEVELDB "LevelDB is here" ON)
-if(${WITH_LEVELDB})
-find_package(leveldb REQUIRED)
-find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
-endif(${WITH_LEVELDB})
+if(WITH_LEVELDB)
+  if(LEVELDB_PREFIX)
+    include_directories(${LEVELDB_PREFIX}/include)
+    link_directories(${LEVELDB_PREFIX}/lib)
+  endif()
+  find_package(leveldb REQUIRED)
+  find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
+endif(WITH_LEVELDB)
 
 find_package(atomic_ops REQUIRED)
 message(STATUS "${ATOMIC_OPS_LIBRARIES}")
@@ -316,12 +327,20 @@ if(WITH_XIO)
 set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
+option(WITH_DPDK "Enable DPDK messaging" OFF)
+if(WITH_DPDK)
+find_package(dpdk)
+set(HAVE_DPDK ${DPDK_FOUND})
+endif(WITH_DPDK)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
   find_package(fcgi REQUIRED)
 endif(WITH_RADOSGW)
+
+option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
@@ -331,7 +350,7 @@ option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
     set(Python_ADDITIONAL_VERSIONS 2.7)
     find_package(PythonLibs 2.7 REQUIRED)
-    find_package(Boost COMPONENTS python REQUIRED)
+    # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
 option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
@@ -386,16 +405,80 @@ if(LINUX)
   add_definitions(-D__linux__)
 endif(LINUX)
 
-if(ENABLE_SHARED)
-  set(Boost_USE_STATIC_LIBS   OFF)
-else(ENABLE_SHARED)
-  set(Boost_USE_STATIC_LIBS   ON)
-endif(ENABLE_SHARED)
+# Boost
+option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
+
+if (WITH_SYSTEM_BOOST)
+  if(ENABLE_SHARED)
+    set(Boost_USE_STATIC_LIBS OFF)
+  else()
+    set(Boost_USE_STATIC_LIBS ON)
+  endif()
+else()
+  set(BOOST_CFLAGS "-fPIC -w") # check on arm, etc <---XXX
+  set(BOOST_J 1 CACHE STRING
+    "max jobs for Boost build") # override w/-DBOOST_J=<n>
+  message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
+  # 1. prep w/required components
+  set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
+  set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
+  set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
+  set(Boost_USE_STATIC_LIBS ON)
+  execute_process(COMMAND "./bootstrap.sh"
+    "--prefix=${BOOST_PREFIX}"
+    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,python,random,regex,system,thread"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 2. install headers
+  set(BOOST_ROOT "${BOOST_PREFIX}")
+  execute_process(COMMAND "./b2"
+    #"--buildid=ceph" # changes lib names--can omit for static
+    "--variant=release" # could override
+    "--link=static" # avoid library versioning issues
+    "--threading=multi"
+    "--build-dir=${BOOST_BUILD}"
+    "-j${BOOST_J}"
+    "cxxflags=${BOOST_CFLAGS}"
+    "headers"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 3. build and install libs
+  execute_process(COMMAND "./b2"
+    #"--buildid=ceph" # changes lib names--can omit for static
+    "--variant=release" # could override
+    "--link=static" # avoid library versioning issues
+    "--threading=multi"
+    "--build-dir=${BOOST_BUILD}"
+    "-j${BOOST_J}"
+    "cxxflags=${BOOST_CFLAGS}"
+    "install"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 4. set hints for FindBoost.cmake
+  set(Boost_NO_SYSTEM_PATHS ON)
+  include_directories(BEFORE ${BOOST_PREFIX}/include)
+  # fixup for CheckIncludeFileCXX
+  set(HAVE_BOOST_ASIO_COROUTINE ON)
+
+  set(BOOST_ROOT ${BOOST_PREFIX})
+  set(Boost_NO_SYSTEM_PATHS ON)
+endif()
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
-include_directories(${PROJECT_BINARY_DIR}/include)
+
+set(BOOST_COMPONENTS
+	thread system regex random program_options date_time iostreams)
+if(WITH_MGR)
+	list(APPEND BOOST_COMPONENTS python)
+endif()
+
+# require minimally the bundled version
+find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
+
+if (NOT WITH_SYSTEM_BOOST)
+  LIST(APPEND Boost_LIBRARIES "-lz")
+endif()
+
+CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 
 find_package(Threads REQUIRED)
 

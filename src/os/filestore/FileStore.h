@@ -129,8 +129,8 @@ public:
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.filestore_commit_latency = os_commit_latency.avg();
-      ret.filestore_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency = os_commit_latency.avg();
+      ret.os_apply_latency = os_apply_latency.avg();
       return ret;
     }
 
@@ -382,7 +382,7 @@ private:
       return true;
     }
     void _dequeue(OpSequencer *o) {
-      assert(0);
+      ceph_abort();
     }
     bool _empty() {
       return store->op_queue.empty();
@@ -590,11 +590,6 @@ public:
   int _clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
 		   const SequencerPosition& spos);
-  int _move_ranges_destroy_src(
-    const coll_t& temp_cid, const ghobject_t& temp_oid,
-    const coll_t& cid, const ghobject_t& oid,
-    const vector<std::pair<uint64_t, uint64_t> > move_info,
-    const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc=false);

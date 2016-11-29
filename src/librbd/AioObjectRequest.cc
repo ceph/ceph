@@ -240,7 +240,7 @@ bool AioObjectRead<I>::should_complete(int r)
     break;
   default:
     lderr(image_ctx->cct) << "invalid request state: " << m_state << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   return finished;
@@ -420,7 +420,7 @@ bool AbstractAioObjectWrite::should_complete(int r)
 
   default:
     lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   return finished;

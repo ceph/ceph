@@ -354,7 +354,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
     end = write_pos;
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end << " (header had "
 		  << write_pos << "). log was empty. recovered." << dendl;
-    assert(0); // hrm.
+    ceph_abort(); // hrm.
   } else {
     assert(end >= write_pos);
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end

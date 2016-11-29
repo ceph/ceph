@@ -7,13 +7,14 @@
 
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "os/bluestore/BitAllocator.h"
+#include "test/unit.h"
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
 #include <sstream>
 #include <gtest/gtest.h>
+
 
 #define bmap_test_assert(x) ASSERT_EQ(true, (x))
 #define NUM_THREADS 16
@@ -49,7 +50,7 @@ TEST(BitAllocator, test_bmap_iter)
   };
   BmapEntityTmp *obj = NULL;
   int i = 0;
-  std::vector<BmapEntityTmp> *arr = new std::vector<BmapEntityTmp>(num_items);
+  mempool::bluestore_alloc::vector<BmapEntityTmp> *arr = new mempool::bluestore_alloc::vector<BmapEntityTmp>(num_items);
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
@@ -91,7 +92,7 @@ TEST(BitAllocator, test_bmap_iter)
   num_items = 4;
   off = num_items - 1;
 
-  arr = new std::vector<BmapEntityTmp>(num_items);
+  arr = new mempool::bluestore_alloc::vector<BmapEntityTmp>(num_items);
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
@@ -158,7 +159,7 @@ TEST(BitAllocator, test_bmap_iter)
   for (i = 0; i < num_items; i++)
     delete children[i];
 
-  delete children;
+  delete[] children;
   delete area_list;
 }
 
@@ -364,7 +365,7 @@ TEST(BitAllocator, test_zone_alloc)
   }
 
   int64_t blk_size = 1024;
-  std::vector<AllocExtent> extents = std::vector<AllocExtent>
+  AllocExtentVector extents = AllocExtentVector
         (zone->size() / 2, AllocExtent(-1, -1));
 
   ExtentList *block_list = new ExtentList(&extents, blk_size);
@@ -388,7 +389,7 @@ TEST(BitAllocator, test_zone_alloc)
 
   {
     int64_t blk_size = 1024;
-    std::vector<AllocExtent> extents = std::vector<AllocExtent>
+    AllocExtentVector extents = AllocExtentVector
       (zone->size() / 2, AllocExtent(-1, -1));
 
     ExtentList *block_list = new ExtentList(&extents, blk_size);
@@ -486,7 +487,7 @@ TEST(BitAllocator, test_bmap_alloc)
     }
 
     int64_t blk_size = 1024;
-    auto extents = std::vector<AllocExtent>
+    auto extents = AllocExtentVector
           (alloc->size(), AllocExtent(-1, -1));
 
     ExtentList *block_list = new ExtentList(&extents, blk_size);
@@ -584,7 +585,7 @@ bool alloc_extents_max_block(BitAllocator *alloc,
   int64_t allocated = 0;
   int64_t verified = 0;
   int64_t count = 0;
-  std::vector<AllocExtent> extents = std::vector<AllocExtent>
+  AllocExtentVector extents = AllocExtentVector
         (total_alloc, AllocExtent(-1, -1));
 
   ExtentList *block_list = new ExtentList(&extents, blk_size, max_alloc);
@@ -671,7 +672,7 @@ do_work_dis(BitAllocator *alloc)
   int64_t alloced = 0;
   int64_t num_blocks = alloc->size() / NUM_THREADS;
 
-  std::vector<AllocExtent> extents = std::vector<AllocExtent>
+  AllocExtentVector extents = AllocExtentVector
         (num_blocks, AllocExtent(-1, -1));
   ExtentList *block_list = new ExtentList(&extents, 4096);
 
@@ -729,19 +730,4 @@ TEST(BitAllocator, test_bmap_alloc_concurrent)
     }
   }
 
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  int r = RUN_ALL_TESTS();
-  g_ceph_context->put();
-  return r;
 }
