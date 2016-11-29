@@ -125,6 +125,10 @@ void _usage()
   cout << "  zone set                   set zone cluster params (requires infile)\n";
   cout << "  zone list                  list all zones set on this cluster\n";
   cout << "  zone rename                rename a zone\n";
+  cout << "  zone placement list        list zone's placement targets\n";
+  cout << "  zone placement add         add a zone placement target\n";
+  cout << "  zone placement modify      modify a zone placement target\n";
+  cout << "  zone placement rm          remove a zone placement target\n";
   cout << "  pool add                   add an existing pool for data placement\n";
   cout << "  pool rm                    remove an existing pool from data placement set\n";
   cout << "  pools list                 list placement active set\n";
@@ -222,6 +226,11 @@ void _usage()
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
+  cout << "   --index_pool=<pool>       placment target index pool\n";
+  cout << "   --data_pool=<pool>        placment target data pool\n";
+  cout << "   --data_extra_pool=<pool>  placment target data extra (non-ec) pool\n";
+  cout << "   --placement-index-type=<type>\n";
+  cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
   cout << "                             set zone tier config keys, values\n";
@@ -369,6 +378,10 @@ enum {
   OPT_ZONE_LIST,
   OPT_ZONE_RENAME,
   OPT_ZONE_DEFAULT,
+  OPT_ZONE_PLACEMENT_ADD,
+  OPT_ZONE_PLACEMENT_MODIFY,
+  OPT_ZONE_PLACEMENT_RM,
+  OPT_ZONE_PLACEMENT_LIST,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
   OPT_METADATA_GET,
@@ -683,6 +696,16 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUPMAP_SET;
     if (strcmp(cmd, "update") == 0)
       return OPT_ZONEGROUPMAP_UPDATE;
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "zone") == 0) &&
+	     (strcmp(prev_cmd, "placement") == 0)) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_ZONE_PLACEMENT_ADD;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_ZONE_PLACEMENT_MODIFY;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_ZONE_PLACEMENT_RM;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ZONE_PLACEMENT_LIST;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "delete") == 0)
       return OPT_ZONE_DELETE;
@@ -2347,6 +2370,11 @@ int main(int argc, char **argv)
   map<string, string> tier_config_add;
   map<string, string> tier_config_rm;
 
+  string index_pool;
+  string data_pool;
+  string data_extra_pool;
+  RGWBucketIndexType placement_index_type = RGWBIType_Normal;
+  bool index_type_specified = false;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -2638,6 +2666,25 @@ int main(int argc, char **argv)
       parse_tier_config_param(val, tier_config_add);
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*)NULL)) {
       parse_tier_config_param(val, tier_config_rm);
+    } else if (ceph_argparse_witharg(args, i, &val, "--index-pool", (char*)NULL)) {
+      index_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*)NULL)) {
+      data_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*)NULL)) {
+      data_extra_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
+      if (val == "normal") {
+        placement_index_type = RGWBIType_Normal;
+      } else if (val == "indexless") {
+        placement_index_type = RGWBIType_Indexless;
+      } else {
+        placement_index_type = (RGWBucketIndexType)strict_strtol(val.c_str(), 10, &err);
+        if (!err.empty()) {
+          cerr << "ERROR: failed to parse index type index: " << err << std::endl;
+          return EINVAL;
+        }
+      }
+      index_type_specified = true;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -2742,6 +2789,8 @@ int main(int argc, char **argv)
 			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
                          OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
                          OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
+			 OPT_ZONE_PLACEMENT_ADD, OPT_ZONE_PLACEMENT_RM,
+			 OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
 			 OPT_REALM_CREATE,
 			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
 			 OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
@@ -4005,6 +4054,63 @@ int main(int argc, char **argv)
 	    return -ret;
 	  }
 	}
+      }
+      break;
+    case OPT_ZONE_PLACEMENT_ADD:
+    case OPT_ZONE_PLACEMENT_MODIFY:
+    case OPT_ZONE_PLACEMENT_RM:
+      {
+        if (placement_id.empty()) {
+          cerr << "ERROR: --placement-id not specified" << std::endl;
+          return EINVAL;
+        }
+	RGWZoneParams zone(zone_id, zone_name);
+	int ret = zone.init(g_ceph_context, store);
+        if (ret < 0) {
+	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD ||
+            opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
+          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
+
+          if (index_pool.empty() || data_pool.empty()) {
+            cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
+            return EINVAL;
+          }
+
+          info.index_pool = index_pool;
+          info.data_pool = data_pool;
+          info.data_extra_pool = data_extra_pool;
+
+          if (index_type_specified) {
+            info.index_type = placement_index_type;
+          }
+        } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
+          zone.placement_pools.erase(placement_id);
+        }
+
+        ret = zone.update();
+        if (ret < 0) {
+          cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        encode_json("zone", zone, formatter);
+        formatter->flush(cout);
+      }
+      break;
+    case OPT_ZONE_PLACEMENT_LIST:
+      {
+	RGWZoneParams zone(zone_id, zone_name);
+	int ret = zone.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	encode_json("placement_pools", zone.placement_pools, formatter);
+	formatter->flush(cout);
       }
       break;
     }

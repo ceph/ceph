@@ -75,6 +75,10 @@
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
     zone rename                rename a zone
+    zone placement list        list zone's placement targets
+    zone placement add         add a zone placement target
+    zone placement modify      modify a zone placement target
+    zone placement rm          remove a zone placement target
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -172,6 +176,11 @@
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
      --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
      --endpoints=<list>        zone endpoints
+     --index_pool=<pool>       placment target index pool
+     --data_pool=<pool>        placment target data pool
+     --data_extra_pool=<pool>  placment target data extra (non-ec) pool
+     --placement-index-type=<type>
+                               placement target index type (normal, indexless, or #id)
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]
                                set zone tier config keys, values
