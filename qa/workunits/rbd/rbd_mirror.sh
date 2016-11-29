@@ -368,5 +368,7 @@ write_image ${CLUSTER1} ${POOL} ${image} 10
 demote_image ${CLUSTER1} ${POOL} ${image}
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
+request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 
 echo OK
