@@ -1160,8 +1160,8 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 
   // does crush match?
   bufferlist oc, nc;
-  ::encode(*o->crush, oc);
-  ::encode(*n->crush, nc);
+  ::encode(*o->crush, oc, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  ::encode(*n->crush, nc, CEPH_FEATURES_SUPPORTED_DEFAULT);
   if (oc.contents_equal(nc)) {
     n->crush = o->crush;
   }
@@ -1832,7 +1832,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
 
   // crush
   bufferlist cbl;
-  crush->encode(cbl);
+  crush->encode(cbl, 0 /* legacy (no) features */);
   ::encode(cbl, bl);
 }
 
@@ -1867,7 +1867,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
 
   // crush
   bufferlist cbl;
-  crush->encode(cbl);
+  crush->encode(cbl, 0 /* legacy (no) features */);
   ::encode(cbl, bl);
 
   // extended
@@ -1935,7 +1935,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
     // crush
     bufferlist cbl;
-    crush->encode(cbl);
+    crush->encode(cbl, features);
     ::encode(cbl, bl);
     ::encode(erasure_code_profiles, bl);
     ENCODE_FINISH(bl); // client-usable data
