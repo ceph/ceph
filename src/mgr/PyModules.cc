@@ -125,7 +125,7 @@ PyObject *PyModules::get_python(const std::string &what)
   } else if (what == "osdmap_crush_map_text") {
     bufferlist rdata;
     cluster_state.with_osdmap([&rdata](const OSDMap &osd_map){
-      osd_map.crush->encode(rdata);
+	osd_map.crush->encode(rdata, CEPH_FEATURES_SUPPORTED_DEFAULT);
     });
     std::string crush_text = rdata.to_str();
     return PyString_FromString(crush_text.c_str());
