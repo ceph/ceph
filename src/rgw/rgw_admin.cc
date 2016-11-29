@@ -2831,7 +2831,8 @@ next:
           uint8_t category;
           rgw_bucket_category_stats stats;
           bool account = entry.get_info(&cls_key, &category, &stats);
-          rgw_obj_key key(cls_key);
+          rgw_obj_key key;
+          key.set(cls_key);
           rgw_obj obj(new_bucket_info.bucket, key);
           int ret = store->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
           if (ret < 0) {
