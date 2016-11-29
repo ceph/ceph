@@ -3277,6 +3277,8 @@ void BlueStore::_init_logger()
             "Sum for blob splitting due to resharding");
   b.add_u64(l_bluestore_extent_compress, "bluestore_extent_compress",
             "Sum for extents that have been removed due to compression");
+  b.add_u64(l_bluestore_gc_merged, "bluestore_gc_merged",
+            "Sum for extents that have been merged due to garbage collection");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -8728,7 +8730,7 @@ void BlueStore::_do_garbage_collection(
 				o->extent_map,
 				wctx->old_extents,
 				min_alloc_size);
-  if (benefit > g_conf->bluestore_gc_enable_total_threshold) {
+  if (benefit >= g_conf->bluestore_gc_enable_total_threshold) {
     auto& extents_to_collect = gc.get_extents_to_collect();
     for (auto it = extents_to_collect.begin();
          it != extents_to_collect.end();
@@ -8738,6 +8740,7 @@ void BlueStore::_do_garbage_collection(
       assert(r == (int)it->length);
       o->extent_map.fault_range(db, it->offset, it->length);
       _do_write_data(txc, c, o, it->offset, it->length, bl, wctx);
+      logger->inc(l_bluestore_gc_merged, it->length);
     }
   }
 }
