@@ -48,31 +48,6 @@ static void test_rados_log_cb(void *arg,
     std::cerr << "monitor log callback invoked" << std::endl;
 }
 
-TEST(LibRadosMiscConnectFailure, ConnectFailure) {
-  rados_t cluster;
-
-  char *id = getenv("CEPH_CLIENT_ID");
-  if (id)
-    std::cerr << "Client id is: " << id << std::endl;
-
-  ASSERT_EQ(0, rados_create(&cluster, NULL));
-  ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
-  ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
-
-  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000000001"));
-  ASSERT_EQ(0, rados_conf_set(cluster, "debug_monc", "20"));
-  ASSERT_EQ(0, rados_conf_set(cluster, "debug_ms", "1"));
-  ASSERT_EQ(0, rados_conf_set(cluster, "log_to_stderr", "true"));
-
-  ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
-                                         test_rados_log_cb, NULL));
-
-  ASSERT_NE(0, rados_connect(cluster));
-  ASSERT_NE(0, rados_connect(cluster));
-
-  rados_shutdown(cluster);
-}
-
 TEST_F(LibRadosMisc, ClusterFSID) {
   char fsid[37];
   ASSERT_EQ(-ERANGE, rados_cluster_fsid(cluster, fsid, sizeof(fsid) - 1));
