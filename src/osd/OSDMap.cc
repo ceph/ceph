@@ -1720,20 +1720,24 @@ void OSDMap::_pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_prim
   int _up_primary;
   int _acting_primary;
   ps_t pps;
-  _pg_to_raw_osds(*pool, pg, &raw, &_up_primary, &pps);
-  _raw_to_up_osds(*pool, raw, &_up, &_up_primary);
-  _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
-  if (_acting.empty()) {
-    _acting = _up;
-    if (_acting_primary == -1) {
-      _acting_primary = _up_primary;
+  if (_acting.empty() || up || up_primary) {
+    _pg_to_raw_osds(*pool, pg, &raw, &_up_primary, &pps);
+    _raw_to_up_osds(*pool, raw, &_up, &_up_primary);
+    _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
+    if (_acting.empty()) {
+      _acting = _up;
+      if (_acting_primary == -1) {
+        _acting_primary = _up_primary;
+      }
     }
+  
+    if (up)
+      up->swap(_up);
+    if (up_primary)
+      *up_primary = _up_primary;
   }
-  if (up)
-    up->swap(_up);
-  if (up_primary)
-    *up_primary = _up_primary;
+
   if (acting)
     acting->swap(_acting);
   if (acting_primary)
