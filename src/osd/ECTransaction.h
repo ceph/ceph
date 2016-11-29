@@ -55,7 +55,7 @@ namespace ECTransaction {
 	  plan.invalidates_cache = true;
 	}
 
-	if (i.second.is_delete()) {
+	if (i.second.deletes_first()) {
 	  ldpp_dout(dpp, 20) << __func__ << ": delete, setting projected size"
 			     << " to 0" << dendl;
 	  projected_size = 0;
