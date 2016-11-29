@@ -415,6 +415,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("old_oid") << old_oid;
 	f->dump_stream("new_oid") << new_oid;
       }
+      break;
 	
     case Transaction::OP_SETALLOCHINT:
       {

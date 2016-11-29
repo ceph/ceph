@@ -131,6 +131,7 @@ public:
 	pos(0),
 	buffer_appender(buffer.get_page_aligned_appender()) {
       ++file->num_writers;
+      iocv.fill(nullptr);
     }
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
