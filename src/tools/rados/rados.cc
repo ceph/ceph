@@ -101,7 +101,7 @@ void usage(ostream& out)
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
-"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name]\n"
+"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name] [--no-hints]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "                                    default is to clean up after write benchmark\n"
 "                                    default run-name is 'benchmark_last_metadata'\n"
@@ -924,6 +924,12 @@ protected:
     librados::ObjectWriteOperation op;
 
     if (write_destination & OP_WRITE_DEST_OBJ) {
+      if (data.hints)
+	op.set_alloc_hint2(data.object_size, data.op_size,
+			   ALLOC_HINT_FLAG_SEQUENTIAL_WRITE |
+			   ALLOC_HINT_FLAG_SEQUENTIAL_READ |
+			   ALLOC_HINT_FLAG_APPEND_ONLY |
+			   ALLOC_HINT_FLAG_IMMUTABLE);
       op.write(offset, bl);
     }
 
@@ -1615,6 +1621,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool block_size_specified = false;
   int bench_write_dest = 0;
   bool cleanup = true;
+  bool hints = true; // for rados bench
   bool no_verify = false;
   bool use_striper = false;
   bool with_clones = false;
@@ -1787,6 +1794,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("no-cleanup");
   if (i != opts.end()) {
     cleanup = false;
+  }
+  i = opts.find("no-hints");
+  if (i != opts.end()) {
+    hints = false;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -2999,9 +3010,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       object_size = op_size;
     else if (object_size < op_size)
       op_size = object_size;
+    cout << "hints = " << (int)hints << std::endl;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
-			    max_objects, cleanup, run_name, no_verify);
+			    max_objects, cleanup, hints, run_name, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
     if (formatter && output)
@@ -3574,6 +3586,8 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
       opts["no-cleanup"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--no-hints", (char*)NULL)) {
+      opts["no-hints"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)NULL)) {
       opts["no-verify"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {

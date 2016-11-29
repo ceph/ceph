@@ -8056,7 +8056,8 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
-    wctx.csum_order = min_alloc_size_order;
+    wctx.csum_order = std::max(min_alloc_size_order,
+			       (size_t)ctzl(o->onode.expected_write_size));
     if (wctx.compress) {
       wctx.target_blob_size = select_option(
         "compression_max_blob_size",
