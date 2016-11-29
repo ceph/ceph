@@ -6775,8 +6775,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc,
-			      bool scrub_ok)
+void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   dout(20) << __func__ << " " << soid << " " << ctx
@@ -6934,8 +6933,6 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->exists = true;
     ctx->obc->ssc->snapset = ctx->new_snapset;
   }
-
-  apply_ctx_scrub_stats(ctx, scrub_ok);
 }
 
 void ReplicatedPG::apply_stats(
@@ -6954,16 +6951,11 @@ void ReplicatedPG::apply_stats(
     else if (cmp(soid, last_backfill_started, get_sort_bitwise()) <= 0)
       pending_backfill_updates[soid].stats.add(delta_stats);
   }
-}
 
-void ReplicatedPG::apply_ctx_scrub_stats(OpContext *ctx, bool scrub_ok)
-{
-  const hobject_t& soid = ctx->obs->oi.soid;
-  if (!scrub_ok && scrubber.active) {
-    assert(cmp(soid, scrubber.start, get_sort_bitwise()) < 0 ||
-	   cmp(soid, scrubber.end, get_sort_bitwise()) >= 0);
-    if (cmp(soid, scrubber.start, get_sort_bitwise()) < 0)
-      scrub_cstat.add(ctx->delta_stats);
+  if (is_primary() && scrubber.active) {
+    if (cmp(soid, scrubber.start, get_sort_bitwise()) < 0) {
+      scrub_cstat.add(delta_stats);
+    }
   }
 }
 
@@ -11623,7 +11615,6 @@ void ReplicatedPG::hit_set_remove_all()
     utime_t now = ceph_clock_now(cct);
     ctx->mtime = now;
     hit_set_trim(ctx, 0);
-    apply_ctx_scrub_stats(ctx.get());
     simple_opc_submit(std::move(ctx));
   }
 
@@ -11842,7 +11833,6 @@ void ReplicatedPG::hit_set_persist()
 
   hit_set_trim(ctx, max);
 
-  apply_ctx_scrub_stats(ctx.get());
   simple_opc_submit(std::move(ctx));
 }
 
@@ -13012,7 +13002,7 @@ void ReplicatedPG::scrub_snapshot_metadata(
     ctx->mtime = utime_t();      // do not update mtime
     ctx->new_obs.oi.set_data_digest(p->second.first);
     ctx->new_obs.oi.set_omap_digest(p->second.second);
-    finish_ctx(ctx.get(), pg_log_entry_t::MODIFY, true, true);
+    finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
 
     ctx->register_on_success(
       [this]() {
@@ -13265,7 +13255,6 @@ boost::statechart::result ReplicatedPG::AwaitAsyncWork::react(const DoSnapWork&)
 	  pg->snap_trimmer_machine.process_event(RepopsComplete());
       });
 
-    pg->apply_ctx_scrub_stats(ctx.get());
     pg->simple_opc_submit(std::move(ctx));
   }
 
