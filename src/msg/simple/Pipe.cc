@@ -1561,6 +1561,7 @@ void Pipe::stop()
 
 void Pipe::stop_and_wait()
 {
+  assert(pipe_lock.is_locked_by_me());
   if (state != STATE_CLOSED)
     stop();
 
@@ -1574,7 +1575,9 @@ void Pipe::stop_and_wait()
   }
   
   if (delay_thread) {
+    pipe_lock.Unlock();
     delay_thread->stop_fast_dispatching();
+    pipe_lock.Lock();
   }
   while (reader_running &&
 	 reader_dispatching)
