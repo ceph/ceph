@@ -83,6 +83,9 @@ public:
      * ECBackend transaction planning needs this context
      * to figure out how to perform the transaction.
      */
+    bool deletes_first() const {
+      return delete_first;
+    }
     bool is_delete() const {
       return boost::get<Init::None>(&init_type) != nullptr && delete_first;
     }
