@@ -1027,6 +1027,21 @@ extern "C" int rados_write(rados_ioctx_t io, const char *o, const char *buf, siz
   return retval;
 }
 
+extern "C" int rados_write2(rados_ioctx_t io, const char *o, char *buf, size_t len, uint64_t off)
+{
+  tracepoint(librados, rados_write_enter, io, o, buf, len, off);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);
+  int retval = ctx->write(oid, bl, len, off);
+  tracepoint(librados, rados_write_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_append(rados_ioctx_t io, const char *o, const char *buf, size_t len)
 {
   tracepoint(librados, rados_append_enter, io, o, buf, len);
@@ -1036,6 +1051,21 @@ extern "C" int rados_append(rados_ioctx_t io, const char *o, const char *buf, si
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
+  int retval = ctx->append(oid, bl, len);
+  tracepoint(librados, rados_append_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_append2(rados_ioctx_t io, const char *o, char *buf, size_t len)
+{
+  tracepoint(librados, rados_append_enter, io, o, buf, len);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);
   int retval = ctx->append(oid, bl, len);
   tracepoint(librados, rados_append_exit, retval);
   return retval;
@@ -1055,6 +1085,21 @@ extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf
   return retval;
 }
 
+extern "C" int rados_write_full2(rados_ioctx_t io, const char *o, char *buf, size_t len)
+{
+  tracepoint(librados, rados_write_full_enter, io, o, buf, len);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);
+  int retval = ctx->write_full(oid, bl);
+  tracepoint(librados, rados_write_full_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_writesame(rados_ioctx_t io,
 				const char *o,
 				const char *buf,
@@ -1067,6 +1112,24 @@ extern "C" int rados_writesame(rados_ioctx_t io,
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, data_len);
+  int retval = ctx->writesame(oid, bl, write_len, off);
+  tracepoint(librados, rados_writesame_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_writesame2(rados_ioctx_t io,
+				const char *o,
+				char *buf,
+				size_t data_len,
+				size_t write_len,
+				uint64_t off)
+{
+  tracepoint(librados, rados_writesame_enter, io, o, buf, data_len, write_len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(data_len, buf);
+  bl.push_back(bp);
   int retval = ctx->writesame(oid, bl, write_len, off);
   tracepoint(librados, rados_writesame_exit, retval);
   return retval;
@@ -1640,6 +1703,19 @@ extern "C" int rados_setxattr(rados_ioctx_t io, const char *o, const char *name,
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
+  int retval = ctx->setxattr(oid, name, bl);
+  tracepoint(librados, rados_setxattr_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_setxattr2(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len)
+{
+  tracepoint(librados, rados_setxattr_enter, io, o, name, buf, len);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);
   int retval = ctx->setxattr(oid, name, bl);
   tracepoint(librados, rados_setxattr_exit, retval);
   return retval;
