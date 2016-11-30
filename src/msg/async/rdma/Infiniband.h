@@ -260,17 +260,17 @@ class Infiniband {
           ++c;
         }
         if (manager.enabled_huge_page)
-          delete base;
-        else
           manager.free_huge_pages(base);
+        else
+          delete base;
       }
       int add(uint32_t num) {
         uint32_t bytes = chunk_size * num;
         //cihar* base = (char*)malloc(bytes);
-        if (!manager.enabled_huge_page) {
-          base = (char*)memalign(CEPH_PAGE_SIZE, bytes);
-        } else {
+        if (manager.enabled_huge_page) {
           base = (char*)manager.malloc_huge_pages(bytes);
+        } else {
+          base = (char*)memalign(CEPH_PAGE_SIZE, bytes);
         }
         assert(base);
         for (uint32_t offset = 0; offset < bytes; offset += chunk_size){
