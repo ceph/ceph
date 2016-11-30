@@ -8005,6 +8005,7 @@ int BlueStore::_do_write(
 	   << " - have 0x" << o->onode.size
 	   << " (" << std::dec << o->onode.size << ")"
 	   << " bytes"
+	   << " fadvise_flags 0x" << std::hex << fadvise_flags << std::dec
 	   << dendl;
   _dump_onode(o);
 
