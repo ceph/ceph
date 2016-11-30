@@ -8289,7 +8289,10 @@ int BlueStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  o->onode.attrs[name] = val;
+  if (val.is_partial())
+    o->onode.attrs[name] = bufferptr(val.c_str(), val.length());
+  else
+    o->onode.attrs[name] = val;
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
