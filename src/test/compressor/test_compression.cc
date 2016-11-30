@@ -17,12 +17,11 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
-#include "compressor/Compressor.h"
-#include "common/ceph_argparse.h"
-#include "global/global_context.h"
+#include "gtest/gtest.h"
 #include "common/config.h"
+#include "compressor/Compressor.h"
 #include "compressor/CompressionPlugin.h"
-#include "test/unit.h"
+#include "global/global_context.h"
 
 class CompressorTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {

@@ -21,7 +21,6 @@
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 class ErasureCodeTest : public ErasureCode {
 public:

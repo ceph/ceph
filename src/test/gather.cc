@@ -12,7 +12,7 @@
  * 
  */
 #include "include/Context.h"
-#include "test/unit.h"
+#include "gtest/gtest.h"
 
 class C_Checker : public Context {
 public:

@@ -1,6 +1,7 @@
 # ceph_test_async_driver
 add_executable(ceph_test_async_driver
   test_async_driver.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 set_target_properties(ceph_test_async_driver PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -17,6 +18,7 @@ target_link_libraries(ceph_test_msgr os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIB
 # ceph_test_async_networkstack
 add_executable(ceph_test_async_networkstack
   test_async_networkstack.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 set_target_properties(ceph_test_async_networkstack PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -36,7 +38,9 @@ target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
 # test_userspace_event
 if(HAVE_DPDK)
-add_executable(ceph_test_userspace_event test_userspace_event.cc)
+  add_executable(ceph_test_userspace_event
+    test_userspace_event.cc
+    $<TARGET_OBJECTS:unit-main>)
 set_target_properties(ceph_test_userspace_event PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_userspace_event

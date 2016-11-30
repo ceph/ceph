@@ -9,15 +9,14 @@
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "global/global_context.h"
-#include "common/common_init.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include "gtest/gtest.h"
 
 #include <errno.h>
 #include <map>
 #include <sstream>
 #include <string>
-#include "test/unit.h"
 
 
 using namespace librados;

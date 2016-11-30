@@ -19,13 +19,11 @@
 #include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
-#include "common/config.h"
 #include "include/stringify.h"
 #include "erasure-code/lrc/ErasureCodeLrc.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 
 TEST(ErasureCodeLrc, parse_ruleset)

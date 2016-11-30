@@ -15,7 +15,6 @@
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "test/unit.h"
 
 #include <set>
 

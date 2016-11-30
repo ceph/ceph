@@ -15,10 +15,10 @@
 #include "common/ceph_context.h"
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
-#include "test/unit.h"
 
 #include "common/debug.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 #include <sstream>
 

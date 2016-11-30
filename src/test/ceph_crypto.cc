@@ -1,6 +1,6 @@
+#include "gtest/gtest.h"
 #include "common/ceph_crypto.h"
-
-#include "test/unit.h"
+#include "global/global_context.h"
 
 class CryptoEnvironment: public ::testing::Environment {
 public:

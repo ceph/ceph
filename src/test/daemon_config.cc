@@ -12,11 +12,12 @@
  *
  */
 
+#include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
+#include "global/global_context.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
-#include "test/unit.h"
 
 #include <errno.h>
 #include <sstream>

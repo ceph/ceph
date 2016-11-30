@@ -15,7 +15,6 @@
 #include "gtest/gtest.h"
 
 #include "include/stringify.h"
-#include "test/unit.h"
 
 TEST(pgmap, min_last_epoch_clean)
 {
