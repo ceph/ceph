@@ -94,8 +94,14 @@ def fetch_tasks_if_needed(job_config):
         log.info("Tasks not found; will attempt to fetch")
 
     ceph_branch = job_config.get('branch', 'master')
+    suite_repo = job_config.get('suite_repo')
+    if suite_repo:
+        teuth_config.ceph_qa_suite_git_url = suite_repo
     suite_branch = job_config.get('suite_branch', ceph_branch)
-    suite_path = fetch_qa_suite(suite_branch)
+    suite_path = os.path.normpath(os.path.join(
+        fetch_qa_suite(suite_branch),
+        job_config.get('suite_relpath', ''),
+    ))
     sys.path.insert(1, suite_path)
     return suite_path
 
