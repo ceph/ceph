@@ -9,12 +9,18 @@ Upgrade of :term:`Ceph Object Gateway` to older versions of jewel (up to 10.2.3 
 Mixed version of :term:`Ceph Object Gateway` is not supported
 
 Backup of old configuration
-================
+===========================
 rados mkpool .rgw.root.backup
 rados cppool .rgw.root .rgw.root.backup
 
+Non default setting for `rgw region root pool`
+==============================================
+If an existing multisite configuration uses a non-default setting for
+`rgw region root pool`, the new pool settings `rgw zonegroup root pool`,
+`rgw period root pool` and `rgw realm root pool` should be set to match.
+
 Fix confgiuration after upgrade
-================
+===============================
 Stop all :term:`Ceph Object Gateway` running in the cluster.
 
 Run the following commands:::
