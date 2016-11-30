@@ -1,4 +1,5 @@
 os_type: ubuntu
+os_version: trusty
 overrides:
   ceph:
     conf:
