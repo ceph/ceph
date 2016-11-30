@@ -35,6 +35,8 @@ def process_args(args):
         key = rename_args.get(key) or key
         if key == 'suite' and value is not None:
             value = normalize_suite_name(value)
+        if key == 'suite_relpath' and value is None:
+            value = ''
         elif key in ('limit', 'priority', 'num', 'newest'):
             value = int(value)
         elif key == 'subset' and value is not None:

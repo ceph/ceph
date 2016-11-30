@@ -97,6 +97,7 @@ dict_templ = {
     },
     'suite': Placeholder('suite'),
     'suite_repo': Placeholder('suite_repo'),
+    'suite_relpath': Placeholder('suite_relpath'),
     'suite_branch': Placeholder('suite_branch'),
     'suite_sha1': Placeholder('suite_hash'),
     'tasks': [],

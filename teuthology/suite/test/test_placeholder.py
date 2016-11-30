@@ -19,6 +19,7 @@ class TestPlaceholder(object):
             archive_upload='archive_upload',
             archive_upload_key='archive_upload_key',
             suite_repo='https://example.com/ceph/suite.git',
+            suite_relpath='',
         )
         output_dict = substitute_placeholders(dict_templ, input_dict)
         assert output_dict['suite'] == 'suite'
@@ -42,6 +43,7 @@ class TestPlaceholder(object):
             distro=None,
             distro_version=None,
             suite_repo='https://example.com/ceph/suite.git',
+            suite_relpath='',
         )
         output_dict = substitute_placeholders(dict_templ, input_dict)
         assert 'os_type' not in output_dict

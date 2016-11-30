@@ -59,6 +59,9 @@ Standard arguments:
                               Distro version to run against
   --suite-repo <suite_repo>   Use tasks and suite definition in this repository
                               [default: {default_suite_repo}]
+  --suite-relpath <suite_relpath>
+                              Look for tasks and suite definitions in this
+                              subdirectory of the suite repo.
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
   --suite-dir <suite_dir>     Use this alternative directory as-is when

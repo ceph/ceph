@@ -20,6 +20,7 @@ class TestRun(object):
         self.args_dict = dict(
             suite='suite',
             suite_branch='suite_branch',
+            suite_relpath='',
             ceph_branch='ceph_branch',
             ceph_sha1='ceph_sha1',
             email='address@example.com',
@@ -178,6 +179,7 @@ class TestScheduleSuite(object):
     def setup(self):
         self.args_dict = dict(
             suite='suite',
+            suite_relpath='',
             suite_dir='suite_dir',
             suite_branch='master',
             ceph_branch='ceph_branch',

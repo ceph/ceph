@@ -107,6 +107,7 @@ class Run(object):
             archive_upload=config.archive_upload,
             archive_upload_key=config.archive_upload_key,
             suite_repo=config.get_ceph_qa_suite_git_url(),
+            suite_relpath=self.args.suite_relpath,
         )
         return self.build_base_config()
 
@@ -441,9 +442,12 @@ class Run(object):
         name = self.name
         arch = util.get_arch(self.base_config.machine_type)
         suite_name = self.base_config.suite
-        suite_path = os.path.join(
-            self.suite_repo_path, 'suites',
-            self.base_config.suite.replace(':', '/'))
+        suite_path = os.path.normpath(os.path.join(
+            self.suite_repo_path,
+            self.args.suite_relpath,
+            'suites',
+            self.base_config.suite.replace(':', '/'),
+        ))
         log.debug('Suite %s in %s' % (suite_name, suite_path))
         configs = [
             (combine_path(suite_name, item[0]), item[1]) for item in
