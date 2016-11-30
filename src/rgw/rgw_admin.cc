@@ -2109,9 +2109,9 @@ int main(int argc, char **argv)
   string source_zone_name;
   string source_zone; /* zone id */
 
-  string index_pool;
-  string data_pool;
-  string data_extra_pool;
+  boost::optional<string> index_pool;
+  boost::optional<string> data_pool;
+  boost::optional<string> data_extra_pool;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
 
@@ -3785,19 +3785,41 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD ||
-            opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
-          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
-
-          if (index_pool.empty() || data_pool.empty()) {
+        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD) {
+          // pool names are required
+          if (!index_pool || index_pool->empty() ||
+              !data_pool || data_pool->empty()) {
             cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
             return EINVAL;
           }
 
-          info.index_pool = index_pool;
-          info.data_pool = data_pool;
-          info.data_extra_pool = data_extra_pool;
+          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
+          info.index_pool = *index_pool;
+          info.data_pool = *data_pool;
+          if (data_extra_pool) {
+            info.data_extra_pool = *data_extra_pool;
+          }
+          if (index_type_specified) {
+            info.index_type = placement_index_type;
+          }
+        } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
+          auto p = zone.placement_pools.find(placement_id);
+          if (p == zone.placement_pools.end()) {
+            cerr << "ERROR: zone placement target '" << placement_id
+                << "' not found" << std::endl;
+            return -ENOENT;
+          }
+          auto& info = p->second;
+          if (index_pool && !index_pool->empty()) {
+            info.index_pool = *index_pool;
+          }
+          if (data_pool && !data_pool->empty()) {
+            info.data_pool = *data_pool;
+          }
+          if (data_extra_pool) {
+            info.data_extra_pool = *data_extra_pool;
+          }
           if (index_type_specified) {
             info.index_type = placement_index_type;
           }
