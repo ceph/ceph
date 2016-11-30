@@ -182,6 +182,7 @@
      --data_extra_pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
+     --compression=<type>      placement target compression type (plugin name or empty/none)
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]
                                set zone tier config keys, values
