@@ -10,12 +10,20 @@ from teuthology.orchestra.opsys import OS
 from teuthology.suite import util
 
 
+REPO_PROJECTS_AND_URLS = [
+    'ceph',
+    'https://github.com/not_ceph/ceph.git',
+]
+
+
+@pytest.mark.parametrize('project_or_url', REPO_PROJECTS_AND_URLS)
 @patch('subprocess.check_output')
-def test_git_branch_exists(m_check_output):
+def test_git_branch_exists(m_check_output, project_or_url):
     m_check_output.return_value = ''
-    assert False == util.git_branch_exists('ceph', 'nobranchnowaycanthappen')
+    assert False == util.git_branch_exists(
+        project_or_url, 'nobranchnowaycanthappen')
     m_check_output.return_value = 'HHH branch'
-    assert True == util.git_branch_exists('ceph', 'master')
+    assert True == util.git_branch_exists(project_or_url, 'master')
 
 
 @pytest.fixture

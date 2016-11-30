@@ -57,6 +57,8 @@ Standard arguments:
                               Distribution to run against
   -D <distroversion>, --distro-version <distroversion>
                               Distro version to run against
+  --suite-repo <suite_repo>   Use tasks and suite definition in this repository
+                              [default: {default_suite_repo}]
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
   --suite-dir <suite_dir>     Use this alternative directory as-is when
@@ -117,8 +119,11 @@ Scheduler arguments:
                               'fail', 'pass', 'queued', 'running', 'waiting'
                               [default: fail,dead]
 
-""".format(default_machine_type=config.default_machine_type,
-           default_results_timeout=config.results_timeout)
+""".format(
+    default_machine_type=config.default_machine_type,
+    default_results_timeout=config.results_timeout,
+    default_suite_repo=config.get_ceph_qa_suite_git_url(),
+)
 
 
 def main(argv=sys.argv[1:]):
