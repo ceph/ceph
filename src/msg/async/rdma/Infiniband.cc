@@ -75,12 +75,12 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
   assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
   max_recv_wr = device->device_attr->max_srq_wr;
-  if (max_recv_wr < cct->_conf->ms_async_rdma_receive_buffers) {
+  if (max_recv_wr > cct->_conf->ms_async_rdma_receive_buffers) {
     ldout(cct, 0) << __func__ << " max allowed receive buffers is " << max_recv_wr << " use this instead." << dendl;
     max_recv_wr = cct->_conf->ms_async_rdma_receive_buffers;
   }
   max_send_wr = device->device_attr->max_qp_wr;
-  if (max_send_wr < cct->_conf->ms_async_rdma_send_buffers) {
+  if (max_send_wr > cct->_conf->ms_async_rdma_send_buffers) {
     ldout(cct, 0) << __func__ << " max allowed send buffers is " << max_send_wr << " use this instead." << dendl;
     max_send_wr = cct->_conf->ms_async_rdma_send_buffers;
   }
