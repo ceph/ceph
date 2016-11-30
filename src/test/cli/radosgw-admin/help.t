@@ -63,7 +63,7 @@
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup placement list   list zonegroup's placement targets
-    zonegroup placement add    add a placment target id to a zonegroup
+    zonegroup placement add    add a placement target id to a zonegroup
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup-map get          show zonegroup-map
@@ -176,9 +176,9 @@
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
      --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
      --endpoints=<list>        zone endpoints
-     --index_pool=<pool>       placment target index pool
-     --data_pool=<pool>        placment target data pool
-     --data_extra_pool=<pool>  placment target data extra (non-ec) pool
+     --index_pool=<pool>       placement target index pool
+     --data_pool=<pool>        placement target data pool
+     --data_extra_pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
      --tier-type=<type>        zone tier type
