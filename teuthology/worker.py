@@ -164,6 +164,9 @@ def prep_job(job_config, log_file_path, archive_dir):
         # last-in-suite jobs don't have suite_branch or branch set.
         ceph_branch = job_config.get('branch', 'master')
         suite_branch = job_config.get('suite_branch', ceph_branch)
+        suite_repo = job_config.get('suite_repo')
+        if suite_repo:
+            teuth_config.ceph_qa_suite_git_url = suite_repo
         job_config['suite_path'] = fetch_qa_suite(suite_branch)
     except BranchNotFoundError as exc:
         log.exception("Branch not found; marking job as dead")
