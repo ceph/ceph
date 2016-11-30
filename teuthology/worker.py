@@ -167,7 +167,10 @@ def prep_job(job_config, log_file_path, archive_dir):
         suite_repo = job_config.get('suite_repo')
         if suite_repo:
             teuth_config.ceph_qa_suite_git_url = suite_repo
-        job_config['suite_path'] = fetch_qa_suite(suite_branch)
+        job_config['suite_path'] = os.path.normpath(os.path.join(
+            fetch_qa_suite(suite_branch),
+            job_config.get('suite_relpath', ''),
+        ))
     except BranchNotFoundError as exc:
         log.exception("Branch not found; marking job as dead")
         report.try_push_job_info(
