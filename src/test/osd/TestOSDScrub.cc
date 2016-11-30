@@ -27,7 +27,6 @@
 #include "mon/MonClient.h"
 #include "common/ceph_argparse.h"
 #include "msg/Messenger.h"
-#include "test/unit.h"
 
 class TestOSDScrub: public OSD {
 

@@ -21,10 +21,10 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "common/Thread.h"
 #include "common/sharedptr_registry.hpp"
 #include "common/ceph_argparse.h"
-#include "test/unit.h"
 
 class SharedPtrRegistryTest : public SharedPtrRegistry<unsigned int, int> {
 public:

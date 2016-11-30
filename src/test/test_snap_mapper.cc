@@ -9,7 +9,6 @@
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
-#include "test/unit.h"
 
 #include "gtest/gtest.h"
 
