@@ -66,6 +66,7 @@
     zonegroup placement add    add a placement target id to a zonegroup
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
+    zonegroup placement default  set a zonegroup's default placement target
     zonegroup-map get          show zonegroup-map
     zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
