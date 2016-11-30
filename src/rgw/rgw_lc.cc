@@ -417,7 +417,7 @@ int RGWLC::process(int index, int max_lock_secs)
 {
   rados::cls::lock::Lock l(lc_index_lock_name);
   do {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now(cct);
     pair<string, int > entry;//string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
     if (max_lock_secs <= 0)
       return -EAGAIN;
