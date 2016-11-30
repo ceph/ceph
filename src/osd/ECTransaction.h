@@ -157,7 +157,14 @@ namespace ECTransaction {
 	hinfo->set_projected_total_logical_size(
 	  sinfo,
 	  projected_size);
-	assert(plan.to_read[i.first].empty() || !i.second.has_source());
+
+	/* validate post conditions:
+	 * to_read should have an entry for i.first iff it isn't empty
+	 * and if we are reading from i.first, we can't be renaming or
+	 * cloning it */
+	assert(plan.to_read.count(i.first) == 0 ||
+	       (!plan.to_read.at(i.first).empty() &&
+		!i.second.has_source()));
       });
     plan.t = std::move(t);
     return plan;
