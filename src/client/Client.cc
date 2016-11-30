@@ -11927,8 +11927,8 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
 		      const UserPerm& perms)
 {
-  InodeRef in;
   Mutex::Locker lock(client_lock);
+  InodeRef in;
 
   int r = _ll_create(parent, name, mode, flags, &in, CEPH_STAT_CAP_INODE_ALL,
 		      fhp, perms);
@@ -11954,8 +11954,8 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
 			const UserPerm& perms)
 {
   unsigned caps = statx_to_mask(lflags, want);
-  InodeRef in;
   Mutex::Locker lock(client_lock);
+  InodeRef in;
 
   int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
   if (r >= 0) {
