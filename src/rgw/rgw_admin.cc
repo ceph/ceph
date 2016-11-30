@@ -5,6 +5,8 @@
 #include <sstream>
 #include <string>
 
+#include <boost/optional.hpp>
+
 #include "auth/Crypto.h"
 
 #include "common/armor.h"
@@ -225,6 +227,7 @@ void _usage()
   cout << "                             set list of zones to sync from\n";
   cout << "   --sync-from-rm=[zone-name][,...]\n";
   cout << "                             remove zones from list of zones to sync from\n";
+  cout << "   --compression=<type>      zone compression type ('none' or plugin name)\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
   cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
   cout << "                             actual objects state\n";
@@ -2320,6 +2323,7 @@ int main(int argc, char **argv)
   map<string, string> tier_config_add;
   map<string, string> tier_config_rm;
 
+  boost::optional<string> compression_type;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -2603,6 +2607,8 @@ int main(int argc, char **argv)
       parse_tier_config_param(val, tier_config_add);
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*)NULL)) {
       parse_tier_config_param(val, tier_config_rm);
+    } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
+      compression_type = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3552,6 +3558,9 @@ int main(int argc, char **argv)
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
 	zone.realm_id = realm_id;
+        if (compression_type) {
+          zone.compression_type = *compression_type;
+        }
 
 	ret = zone.create();
 	if (ret < 0) {
@@ -3820,6 +3829,10 @@ int main(int argc, char **argv)
           need_zone_update = true;
         }
 
+        if (compression_type) {
+          zone.compression_type = *compression_type;
+          need_zone_update = true;
+        }
         if (need_zone_update) {
           ret = zone.update();
           if (ret < 0) {

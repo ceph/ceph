@@ -865,6 +865,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("placement_pools", placement_pools, f);
   encode_json("metadata_heap", metadata_heap.data_pool, f);
   encode_json("tier_config", tier_config, f);
+  encode_json("compression_type", compression_type, f);
   encode_json("realm_id", realm_id, f);
 }
 
@@ -911,6 +912,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   ::decode_json("metadata_heap", metadata_heap, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
+  JSONDecoder::decode_json("compression_type", compression_type, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
 
 }
