@@ -506,7 +506,8 @@ void Paxos::_sanity_check_store()
 void Paxos::handle_last(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_last");
-  MMonPaxos *last = static_cast<MMonPaxos*>(op->get_req());
+  MMonPaxos *last = dynamic_cast<MMonPaxos*>(op->get_req());
+  assert(last);
   bool need_refresh = false;
   int from = last->get_source().num();
 
