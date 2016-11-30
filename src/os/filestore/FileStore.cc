@@ -1992,7 +1992,6 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
-  apply_manager.op_apply_start(o->op);
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = _do_transactions(o->tls, o->op, &handle);
   apply_manager.op_apply_finish(o->op);
@@ -3849,7 +3848,6 @@ void FileStore::sync_entry()
     fin.swap(sync_waiters);
     lock.Unlock();
 
-    op_tp.pause();
     if (apply_manager.commit_start()) {
       utime_t start = ceph_clock_now(g_ceph_context);
       uint64_t cp = apply_manager.get_committing_seq();
@@ -3888,7 +3886,6 @@ void FileStore::sync_entry()
 
 	snaps.push_back(cp);
 	apply_manager.commit_started();
-	op_tp.unpause();
 
 	if (cid > 0) {
 	  dout(20) << " waiting for checkpoint " << cid << " to complete" << dendl;
@@ -3902,7 +3899,6 @@ void FileStore::sync_entry()
       } else
       {
 	apply_manager.commit_started();
-	op_tp.unpause();
 
 	int err = object_map->sync();
 	if (err < 0) {
@@ -3964,8 +3960,6 @@ void FileStore::sync_entry()
       sync_entry_timeo_lock.Lock();
       timer.cancel_event(sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
-    } else {
-      op_tp.unpause();
     }
 
     lock.Lock();
