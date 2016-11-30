@@ -5498,6 +5498,8 @@ void RGWBulkDelete::execute()
 }
 
 
+constexpr std::initializer_list<int> RGWBulkUploadOp::terminal_errors;
+
 int RGWBulkUploadOp::verify_permission()
 {
   if (s->auth.identity->is_anonymous()) {
@@ -5955,12 +5957,21 @@ void RGWBulkUploadOp::execute()
           op_ret = handle_file(header->get_filename(),
                                header->get_filesize(),
                                body);
+          if (! op_ret) {
+            /* Only regular files counts. */
+            num_created++;
+          } else {
+            failures.emplace_back(op_ret, header->get_filename().to_string());
+          }
           break;
         }
         case rgw::tar::FileType::DIRECTORY: {
           ldout(s->cct, 2) << "bulk upload: handling regular directory" << dendl;
 
           op_ret = handle_dir(header->get_filename());
+          if (op_ret < 0 && op_ret != -ERR_BUCKET_EXISTS) {
+            failures.emplace_back(op_ret, header->get_filename().to_string());
+          }
           break;
         }
         default: {
@@ -5968,6 +5979,15 @@ void RGWBulkUploadOp::execute()
           op_ret = 0;
           break;
         }
+      }
+
+      /* In case of any problems with sub-request authorization Swift simply
+       * terminates whole upload immediately. */
+      if (boost::algorithm::contains(std::initializer_list<int>{ op_ret },
+                                     terminal_errors)) {
+        ldout(s->cct, 2) << "bulk upload: terminating due to ret=" << op_ret
+                         << dendl;
+        break;
       }
     } else {
       ldout(s->cct, 2) << "bulk upload: an empty block" << dendl;

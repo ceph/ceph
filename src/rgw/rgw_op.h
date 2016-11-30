@@ -17,6 +17,7 @@
 #include <string>
 #include <set>
 #include <map>
+#include <vector>
 
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
@@ -390,6 +391,25 @@ class RGWBulkUploadOp : public RGWOp {
   boost::optional<RGWObjectCtx> dir_ctx;
 
 protected:
+  class fail_desc_t {
+  public:
+    fail_desc_t(const int err, std::string path)
+      : err(err),
+        path(std::move(path)) {
+    }
+
+    const int err;
+    const std::string path;
+  };
+
+  static constexpr std::initializer_list<int> terminal_errors = {
+    -EACCES, -EPERM
+  };
+
+  /* FIXME:  boost::container::small_vector<fail_desc_t, 4> failures; */
+  std::vector<fail_desc_t> failures;
+  size_t num_created;
+
   class StreamGetter;
   class DecoratedStreamGetter;
   class AlignedStreamGetter;
@@ -411,6 +431,10 @@ protected:
   int handle_dir(boost::string_ref path);
 
 public:
+  RGWBulkUploadOp()
+    : num_created(0) {
+  }
+
   void init(RGWRados* const store,
             struct req_state* const s,
             RGWHandler* const h) override {
