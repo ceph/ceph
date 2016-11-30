@@ -5209,10 +5209,13 @@ next:
   }
 
   if (opt_cmd == OPT_LC_LIST) {
-    formatter->open_array_section("life cycle progress");
+    formatter->open_array_section("lifecycle list");
     map<string, int> bucket_lc_map;
     string marker;
 #define MAX_LC_LIST_ENTRIES 100
+    if (max_entries < 0) {
+      max_entries = MAX_LC_LIST_ENTRIES;
+    }
     do {
       int ret = store->list_lc_progress(marker, max_entries, &bucket_lc_map);
       if (ret < 0) {
@@ -5230,6 +5233,9 @@ next:
         marker = iter->first;
       }
     } while (!bucket_lc_map.empty());
+   
+    formatter->close_section(); //lifecycle list
+    formatter->flush(cout);
   }
 
 
