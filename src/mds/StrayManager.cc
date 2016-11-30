@@ -808,7 +808,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
  
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
-  CInode *in = dn->get_linkage()->get_inode();
+  CInode *in = dn->get_projected_linkage()->get_inode();
   assert(in);
   CInode *diri = dn->dir->get_inode();
   assert(diri->is_stray());
