@@ -106,7 +106,7 @@ void _usage()
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list   list zonegroup's placement targets\n";
-  cout << "  zonegroup placement add    add a placment target id to a zonegroup\n";
+  cout << "  zonegroup placement add    add a placement target id to a zonegroup\n";
   cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
   cout << "  zonegroup-map get          show zonegroup-map\n";
@@ -214,9 +214,9 @@ void _usage()
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
-  cout << "   --index_pool=<pool>       placment target index pool\n";
-  cout << "   --data_pool=<pool>        placment target data pool\n";
-  cout << "   --data_extra_pool=<pool>  placment target data extra (non-ec) pool\n";
+  cout << "   --index_pool=<pool>       placement target index pool\n";
+  cout << "   --data_pool=<pool>        placement target data pool\n";
+  cout << "   --data_extra_pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
