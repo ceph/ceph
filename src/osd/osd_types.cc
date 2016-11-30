@@ -347,7 +347,7 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   ::decode(snap_trim_queue_len, bl);
   ::decode(num_snap_trimming, bl);
   ::decode(hb_peers, bl);
-  uint32_t num_hb_out;
+  vector<int> num_hb_out;
   ::decode(num_hb_out, bl);
   if (struct_v >= 3)
     ::decode(op_queue_age_hist, bl);
