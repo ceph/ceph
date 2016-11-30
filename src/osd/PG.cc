@@ -7474,7 +7474,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
        ++p) {
     if (*p == pg->pg_whoami) continue;
     pg_info_t& ri = pg->peer_info[*p];
-    if (ri.last_update >= best.log_tail && ri.last_update < request_log_from)
+    if (ri.last_update < pg->info.log_tail && ri.last_update >= best.log_tail &&
+        ri.last_update < request_log_from)
       request_log_from = ri.last_update;
   }
 
