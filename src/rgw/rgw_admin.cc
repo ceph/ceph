@@ -286,12 +286,6 @@ void _usage()
   cout << "                             object deletions by not involving GC\n";
   cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
   cout << "                             ignores bucket index consistency\n";
-  cout << "   --role-name               name of the role to create\n";
-  cout << "   --path                    path to the role\n";
-  cout << "   --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role\n";
-  cout << "   --policy-name             name of the policy document\n";
-  cout << "   --policy-doc              permission policy document\n";
-  cout << "   --path-prefix             path prefix for filtering roles\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -307,6 +301,13 @@ void _usage()
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\nOrphans list-jobs options:\n";
   cout << "   --extra-info              provide extra info in job list\n";
+  cout << "\nRole options:\n";
+  cout << "   --role-name               name of the role to create\n";
+  cout << "   --path                    path to the role\n";
+  cout << "   --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role\n";
+  cout << "   --policy-name             name of the policy document\n";
+  cout << "   --policy-doc              permission policy document\n";
+  cout << "   --path-prefix             path prefix for filtering roles\n";
   cout << "\n";
   generic_client_usage();
 }
