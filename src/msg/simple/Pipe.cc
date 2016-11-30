@@ -1042,12 +1042,17 @@ int Pipe::connect()
     ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << cpp_strerror(rc) << dendl;
     goto fail;
   }
-  {
+  try {
     bufferlist::iterator p = addrbl.begin();
     ::decode(paddr, p);
     ::decode(peer_addr_for_me, p);
-    port = peer_addr_for_me.get_port();
   }
+  catch (buffer::error& e) {
+    ldout(msgr->cct,2) << "connect couldn't decode peer addrs: " << e.what()
+		       << dendl;
+    goto fail;
+  }
+  port = peer_addr_for_me.get_port();
 
   ldout(msgr->cct,20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
   if (peer_addr != paddr) {
