@@ -9917,6 +9917,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   } else {
     assert(in);
     fill_statx(in, mask, stx);
+    _ll_get(in.get());
     *out = in.get();
     return 0;
   }
