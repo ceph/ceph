@@ -1,13 +1,17 @@
 upgrade-sequence:
    sequential:
-   - install.upgrade:
+   - ceph.restart:
+       daemons: [osd.0, osd.1, osd.2, osd.3]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - ceph.restart:
+       daemons: [mon.a, mon.b, mon.c]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - print: "**** done ceph.restart do not wait for healthy"
+   - exec:
        mon.a:
-         branch: jewel
-       mon.b:
-         branch: jewel
-   - print: "**** done install.upgrade mon.a & mon.b to branch: jewel"
-   - ceph.restart: [osd.0, osd.1, osd.2, osd.3]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.a, mon.b, mon.c, mds.a]
-   - print: "**** done ceph.restart all"
+         - sleep 300 # http://tracker.ceph.com/issues/17808
+         - ceph osd set require_jewel_osds
+   - ceph.healthy:
+   - print: "**** done ceph.healthy"
