@@ -232,12 +232,6 @@
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
                                ignores bucket index consistency
-     --role-name               name of the role to create
-     --path                    path to the role
-     --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role
-     --policy-name             name of the policy document
-     --policy-doc              permission policy document
-     --path-prefix             path prefix for filtering roles
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
@@ -256,6 +250,14 @@
   
   Orphans list-jobs options:
      --extra-info              provide extra info in job list
+  
+  Role options:
+     --role-name               name of the role to create
+     --path                    path to the role
+     --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role
+     --policy-name             name of the policy document
+     --policy-doc              permission policy document
+     --path-prefix             path prefix for filtering roles
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
