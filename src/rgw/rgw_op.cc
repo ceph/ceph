@@ -5500,6 +5500,26 @@ void RGWBulkDelete::execute()
 
 int RGWBulkUploadOp::verify_permission()
 {
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (! verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  if (s->user->user_id.tenant != s->bucket_tenant) {
+    ldout(s->cct, 10) << "user cannot create a bucket in a different tenant"
+                      << " (user_id.tenant=" << s->user->user_id.tenant
+                      << " requested=" << s->bucket_tenant << ")"
+                      << dendl;
+    return -EACCES;
+  }
+
+  if (s->user->max_buckets < 0) {
+    return -EPERM;
+  }
+
   return 0;
 }
 
