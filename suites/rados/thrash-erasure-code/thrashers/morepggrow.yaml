@@ -3,9 +3,9 @@ tasks:
 - ceph:
     conf:
       osd:
-        osd max backfills: 1
         osd scrub min interval: 60
         osd scrub max interval: 120
+        osd max backfills: 9
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
