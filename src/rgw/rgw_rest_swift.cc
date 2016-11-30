@@ -1430,8 +1430,8 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
     req_state* const s;
 
   public:
-    SwiftStreamGetter(req_state* const s)
-      : conlen(atoll(s->length)),
+    SwiftStreamGetter(req_state* const s, const size_t conlen)
+      : conlen(conlen),
         curpos(0),
         s(s) {
     }
@@ -1477,10 +1477,16 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
     }
   };
 
-  // FIXME: lack of conlen
-  ldout(s->cct, 20) << "bulk upload: create_stream for length="
-                    << s->length << dendl;
-  return std::unique_ptr<SwiftStreamGetter>(new SwiftStreamGetter(s));
+  if (! s->length) {
+    op_ret = -EINVAL;
+    return nullptr;
+  } else {
+    ldout(s->cct, 20) << "bulk upload: create_stream for length="
+                      << s->length << dendl;
+
+    const size_t conlen = atoll(s->length);
+    return std::unique_ptr<SwiftStreamGetter>(new SwiftStreamGetter(s, conlen));
+  }
 }
 
 void RGWBulkUploadOp_ObjStore_SWIFT::send_response()
