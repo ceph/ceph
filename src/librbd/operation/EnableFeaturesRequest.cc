@@ -180,7 +180,8 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
 
     if ((m_features & RBD_FEATURE_OBJECT_MAP) != 0) {
       if ((m_new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-	lderr(cct) << "cannot enable object map" << dendl;
+	lderr(cct) << "cannot enable object-map. exclusive-lock must be "
+                      "enabled before enabling object-map." << dendl;
 	*result = -EINVAL;
 	break;
       }
@@ -189,7 +190,8 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
     }
     if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
       if ((m_new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-	lderr(cct) << "cannot enable fast diff" << dendl;
+	lderr(cct) << "cannot enable fast-diff. object-map must be "
+                      "enabled before enabling fast-diff." << dendl;
 	*result = -EINVAL;
 	break;
       }
@@ -198,7 +200,8 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
     }
     if ((m_features & RBD_FEATURE_JOURNALING) != 0) {
       if ((m_new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-	lderr(cct) << "cannot enable journaling" << dendl;
+	lderr(cct) << "cannot enable journaling. exclusive-lock must be "
+                      "enabled before enabling journaling." << dendl;
 	*result = -EINVAL;
 	break;
       }
