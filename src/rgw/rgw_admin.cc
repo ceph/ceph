@@ -113,9 +113,10 @@ void _usage()
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list   list zonegroup's placement targets\n";
-  cout << "  zonegroup placement add    add a placment target id to a zonegroup\n";
+  cout << "  zonegroup placement add    add a placement target id to a zonegroup\n";
   cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
+  cout << "  zonegroup placement default  set a zonegroup's default placement target\n";
   cout << "  zonegroup-map get          show zonegroup-map\n";
   cout << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cout << "  zone create                create a new zone\n";
@@ -226,9 +227,9 @@ void _usage()
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
-  cout << "   --index_pool=<pool>       placment target index pool\n";
-  cout << "   --data_pool=<pool>        placment target data pool\n";
-  cout << "   --data_extra_pool=<pool>  placment target data extra (non-ec) pool\n";
+  cout << "   --index_pool=<pool>       placement target index pool\n";
+  cout << "   --data_pool=<pool>        placement target data pool\n";
+  cout << "   --data_extra_pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
@@ -367,6 +368,7 @@ enum {
   OPT_ZONEGROUP_PLACEMENT_MODIFY,
   OPT_ZONEGROUP_PLACEMENT_RM,
   OPT_ZONEGROUP_PLACEMENT_LIST,
+  OPT_ZONEGROUP_PLACEMENT_DEFAULT,
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
@@ -653,6 +655,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_PLACEMENT_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_PLACEMENT_LIST;
+    if (strcmp(cmd, "default") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_DEFAULT;
   } else if (strcmp(prev_cmd, "zonegroup") == 0 ||
 	     strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "add") == 0)
@@ -2370,9 +2374,9 @@ int main(int argc, char **argv)
   map<string, string> tier_config_add;
   map<string, string> tier_config_rm;
 
-  string index_pool;
-  string data_pool;
-  string data_extra_pool;
+  boost::optional<string> index_pool;
+  boost::optional<string> data_pool;
+  boost::optional<string> data_extra_pool;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
 
@@ -2784,6 +2788,7 @@ int main(int argc, char **argv)
 			 OPT_ZONEGROUP_REMOVE,
 			 OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
 			 OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_DEFAULT,
                          OPT_ZONEGROUPMAP_GET, OPT_ZONEGROUPMAP_SET,
                          OPT_ZONEGROUPMAP_UPDATE,
 			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
@@ -3556,6 +3561,7 @@ int main(int argc, char **argv)
     case OPT_ZONEGROUP_PLACEMENT_ADD:
     case OPT_ZONEGROUP_PLACEMENT_MODIFY:
     case OPT_ZONEGROUP_PLACEMENT_RM:
+    case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
       {
         if (placement_id.empty()) {
           cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -3593,6 +3599,13 @@ int main(int argc, char **argv)
           }
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
           zonegroup.placement_targets.erase(placement_id);
+        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
+          if (!zonegroup.placement_targets.count(placement_id)) {
+            cerr << "failed to find a zonegroup placement target named '"
+                << placement_id << "'" << std::endl;
+            return -ENOENT;
+          }
+          zonegroup.default_placement = placement_id;
         }
 
         zonegroup.post_process_params();
@@ -4071,19 +4084,41 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD ||
-            opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
-          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
-
-          if (index_pool.empty() || data_pool.empty()) {
+        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD) {
+          // pool names are required
+          if (!index_pool || index_pool->empty() ||
+              !data_pool || data_pool->empty()) {
             cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
             return EINVAL;
           }
 
-          info.index_pool = index_pool;
-          info.data_pool = data_pool;
-          info.data_extra_pool = data_extra_pool;
+          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
+          info.index_pool = *index_pool;
+          info.data_pool = *data_pool;
+          if (data_extra_pool) {
+            info.data_extra_pool = *data_extra_pool;
+          }
+          if (index_type_specified) {
+            info.index_type = placement_index_type;
+          }
+        } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
+          auto p = zone.placement_pools.find(placement_id);
+          if (p == zone.placement_pools.end()) {
+            cerr << "ERROR: zone placement target '" << placement_id
+                << "' not found" << std::endl;
+            return -ENOENT;
+          }
+          auto& info = p->second;
+          if (index_pool && !index_pool->empty()) {
+            info.index_pool = *index_pool;
+          }
+          if (data_pool && !data_pool->empty()) {
+            info.data_pool = *data_pool;
+          }
+          if (data_extra_pool) {
+            info.data_extra_pool = *data_extra_pool;
+          }
           if (index_type_specified) {
             info.index_type = placement_index_type;
           }
