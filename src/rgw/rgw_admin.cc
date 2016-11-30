@@ -109,6 +109,7 @@ void _usage()
   cout << "  zonegroup placement add    add a placement target id to a zonegroup\n";
   cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
+  cout << "  zonegroup placement default  set a zonegroup's default placement target\n";
   cout << "  zonegroup-map get          show zonegroup-map\n";
   cout << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cout << "  zone create                create a new zone\n";
@@ -332,6 +333,7 @@ enum {
   OPT_ZONEGROUP_PLACEMENT_MODIFY,
   OPT_ZONEGROUP_PLACEMENT_RM,
   OPT_ZONEGROUP_PLACEMENT_LIST,
+  OPT_ZONEGROUP_PLACEMENT_DEFAULT,
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
@@ -611,6 +613,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_PLACEMENT_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_PLACEMENT_LIST;
+    if (strcmp(cmd, "default") == 0)
+      return OPT_ZONEGROUP_PLACEMENT_DEFAULT;
   } else if (strcmp(prev_cmd, "zonegroup") == 0 ||
 	     strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "add") == 0)
@@ -2497,6 +2501,7 @@ int main(int argc, char **argv)
 			 OPT_ZONEGROUP_REMOVE,
 			 OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
 			 OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_DEFAULT,
                          OPT_ZONEGROUPMAP_GET, OPT_ZONEGROUPMAP_SET,
                          OPT_ZONEGROUPMAP_UPDATE,
 			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
@@ -3263,6 +3268,7 @@ int main(int argc, char **argv)
     case OPT_ZONEGROUP_PLACEMENT_ADD:
     case OPT_ZONEGROUP_PLACEMENT_MODIFY:
     case OPT_ZONEGROUP_PLACEMENT_RM:
+    case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
       {
         if (placement_id.empty()) {
           cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -3300,6 +3306,13 @@ int main(int argc, char **argv)
           }
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
           zonegroup.placement_targets.erase(placement_id);
+        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
+          if (!zonegroup.placement_targets.count(placement_id)) {
+            cerr << "failed to find a zonegroup placement target named '"
+                << placement_id << "'" << std::endl;
+            return -ENOENT;
+          }
+          zonegroup.default_placement = placement_id;
         }
 
         zonegroup.post_process_params();
