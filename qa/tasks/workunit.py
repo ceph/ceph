@@ -18,6 +18,111 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+class WorkunitState(object):
+    """
+    Shared state between the workunit task and any other task that
+    might want to observe and/or interact with the data being created,
+    such as creating snapshots of it or copying it out (like the rsync task).
+
+    Usage from workunit:
+        ctx.workunit_state = WorkunitState()
+        # ... Create my directory
+        ctx.workunit_state.started()
+        # ... Do some long running activity
+        ctx.workunit_state.finished()
+        # ... Remove my directory
+
+    Usage from observer:
+
+        # ... wait until hasattr(ctx, "workunit_state") is true...
+        should_stop = ctx.workunit_state.start_observing()
+        while not should_stop:
+            # ... do some work on the workunit directory, it is
+            #     guaranteed to exist until we call stop_observing...
+            finished = ctx.workunit_state.observer_should_stop()
+        ctx.workunit_state.stop_observing()
+
+    """
+    def __init__(self):
+        # Whether some other task may be acting on this
+        # workunit's directory, such as the rsync task.
+        self.observed = False
+
+        # Whether the workunit has created its directory
+        self.workunit_started = Event()
+
+        # Whether the workunit has removed its directory
+        # at the end of execution
+        self.workunit_finished = Event()
+
+        # Whether the observer has stopped accessing the
+        # workunit's directory (i.e. it is safe to remove it)
+        self.observer_finished = Event()
+
+    def started(self):
+        """
+        Call this from the workunit task when the workunit's directory
+        has been created.  This will tell observers that they may
+        proceed.
+        """
+        assert not self.workunit_started.is_set()
+        self.workunit_started.set()
+
+    def finished(self):
+        """
+        Call this from the workunit task when its work is done but
+        it has not yet deleted its directory.  This will tell observers
+        that they should stop touching the directory, clear out anything
+        they put in it.  This function will block until the observers
+        have done that and indicated so by calling stop_observing.
+        """
+        assert self.workunit_started.is_set()
+        assert not self.workunit_finished.is_set()
+        self.workunit_finished.set()
+        if self.observed:
+            self.observer_finished.wait()
+            self.observed = False
+
+    def start_observing(self):
+        """
+        Call this from the observer thread to start observing.
+
+        :return: True if the workunit already finished (observer should
+                 not touch the workunit dir)
+                 False if the workunit has not finished and the observer
+                 is free to proceed as normal.
+        """
+        assert not self.observed
+        self.workunit_started.wait()
+        finished = self.workunit_finished.is_set():
+        if not finished:
+            self.observed = True
+            self.workunit_finished.is_set()
+
+        return finished
+
+    def stop_observing(self):
+        """
+        Call this from the observer thread after a previous call to
+        start_observing, to indicate to the workunit that it may now
+        tear down its directory.
+        """
+        if not self.observed:
+            return
+
+        self.observed = False
+        self.observer_finished.set()
+
+    def observer_should_stop(self):
+        """
+        Call this from the observer to ask whether it should stop.
+        If this returns true, the observer should stop any access
+        to the workunit directory, and then call stop_observing.
+        """
+        return self.workunit_finished.is_set()
+
+
+
 def task(ctx, config):
     """
     Run ceph on all workunits found under the specified path.
@@ -120,9 +225,12 @@ def task(ctx, config):
         created_mnt_dir = _make_scratch_dir(ctx, role, config.get('subdir'))
         created_mountpoint[role] = created_mnt_dir
 
+    ctx.workunit_state = WorkunitState()
+
     # Execute any non-all workunits
     log.info("timeout={}".format(timeout))
     log.info("cleanup={}".format(cleanup))
+    ctx.workunit_state.started()
     with parallel() as p:
         for role, tests in clients.items():
             if role != "all":
@@ -132,6 +240,7 @@ def task(ctx, config):
                         timeout=timeout,
                         cleanup=cleanup,
                         coverage_and_limits=not config.get('no_coverage_and_limits', None))
+    ctx.workunit_state.finished()
 
     if cleanup:
         # Clean up dirs from any non-all workunits
@@ -288,6 +397,8 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
                 client_remotes[role] = remote
                 created_mountpoint[role] = _make_scratch_dir(ctx, role, subdir)
 
+    ctx.workunit_state.started()
+
     for unit in tests:
         with parallel() as p:
             for role, remote in client_remotes.items():
@@ -295,6 +406,8 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
                         basedir,
                         subdir,
                         timeout=timeout)
+
+    ctx.workunit_state.finished()
 
     # cleanup the generated client directories
     if cleanup:
