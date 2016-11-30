@@ -5928,6 +5928,10 @@ void RGWBulkUploadOp::execute()
   /* Create an instance of stream-abstracting class. Having this indirection
    * allows for easy introduction of decompressors like gzip and bzip2. */
   auto stream = create_stream();
+  if (! stream) {
+    return;
+  }
+
   auto status = rgw::tar::StatusIndicator::create();
   do {
     op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
