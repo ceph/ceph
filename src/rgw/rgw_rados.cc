@@ -1654,6 +1654,17 @@ int RGWZoneParams::set_as_default(bool exclusive)
   return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
+const string& RGWZoneParams::get_compression_type(const string& placement_rule) const
+{
+  static const std::string NONE{"none"};
+  auto p = placement_pools.find(placement_rule);
+  if (p == placement_pools.end()) {
+    return NONE;
+  }
+  const auto& type = p->second.compression_type;
+  return !type.empty() ? type : NONE;
+}
+
 void RGWPeriodMap::encode(bufferlist& bl) const {
   ENCODE_START(2, 1, bl);
   ::encode(id, bl);
