@@ -318,9 +318,7 @@ def generate_desc(joinf, result):
     Generates the text description of the test represented by result
     """
     if type(result) is frozenset:
-        ret = []
-        for i in sorted(result):
-            ret.append(generate_desc(joinf, i))
+        ret = sorted([generate_desc(joinf, i) for i in result])
         return '{' + ' '.join(ret) + '}'
     elif type(result) is tuple:
         (item, children) = result
