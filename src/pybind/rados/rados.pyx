@@ -243,6 +243,8 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_exec(rados_ioctx_t io, const char * oid, const char * cls, const char * method,
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
+    int rados_aio_exec(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * cls, const char * method,
+                       const char * in_buf, size_t in_len, char * buf, size_t out_len)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
@@ -2224,6 +2226,75 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error reading %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('cls', str_type), ('method', str_type), ('data', bytes))
+    def aio_execute(self, object_name, cls, method, data,
+                    length=8192, oncomplete=None, onsafe=None):
+        """
+        Asynchronously execute an OSD class method on an object.
+
+        oncomplete and onsafe will be called with the data returned from
+        the plugin as well as the completion:
+
+        oncomplete(completion, data)
+        onsafe(completion, data)
+
+        :param object_name: name of the object
+        :type object_name: str
+        :param cls: name of the object class
+        :type cls: str
+        :param method: name of the method
+        :type method: str
+        :param data: input data
+        :type data: bytes
+        :param length: size of output buffer in bytes (default=8192)
+        :type length: int
+        :param oncomplete: what to do when the execution is complete
+        :type oncomplete: completion
+        :param onsafe:  what to do when the execution is safe and complete
+        :type onsafe: completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        object_name = cstr(object_name, 'object_name')
+        cls = cstr(cls, 'cls')
+        method = cstr(method, 'method')
+        cdef:
+            Completion completion
+            char *_object_name = object_name
+            char *_cls = cls
+            char *_method = method
+            char *_data = data
+            size_t _data_len = len(data)
+
+            char *ref_buf
+            size_t _length = length
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            if return_value > 0 and return_value != length:
+                _PyBytes_Resize(&_completion_v.buf, return_value)
+            return oncomplete(_completion_v, <object>_completion_v.buf if return_value >= 0 else None)
+
+        def onsafe_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            return onsafe(_completion_v, <object>_completion_v.buf if return_value >= 0 else None)
+
+        completion = self.__get_completion(oncomplete_ if oncomplete else None, onsafe_ if onsafe else None)
+        completion.buf = PyBytes_FromStringAndSize(NULL, length)
+        ret_buf = PyBytes_AsString(completion.buf)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_exec(self.io, _object_name, completion.rados_comp,
+                                 _cls, _method, _data, _data_len, ret_buf, _length)
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "error executing %s::%s on %s" % (cls, method, object_name))
+        return completion
+
     def aio_remove(self, object_name, oncomplete=None, onsafe=None):
         """
         Asychronously remove an object
@@ -2541,7 +2612,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type method: str
         :param data: input data
         :type data: bytes
-        :param length: size of output buffer in bytes (default=8291)
+        :param length: size of output buffer in bytes (default=8192)
         :type length: int
 
         :raises: :class:`TypeError`
