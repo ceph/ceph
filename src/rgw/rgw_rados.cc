@@ -1654,6 +1654,17 @@ int RGWZoneParams::set_as_default(bool exclusive)
   return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
+const string& RGWZoneParams::get_compression_type(const string& placement_rule) const
+{
+  static const std::string NONE{"none"};
+  auto p = placement_pools.find(placement_rule);
+  if (p == placement_pools.end()) {
+    return NONE;
+  }
+  const auto& type = p->second.compression_type;
+  return !type.empty() ? type : NONE;
+}
+
 void RGWPeriodMap::encode(bufferlist& bl) const {
   ENCODE_START(2, 1, bl);
   ::encode(id, bl);
@@ -7104,11 +7115,12 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWPutObjDataProcessor *filter = &processor;
 
-  const auto& compression_type = cct->_conf->rgw_compression_type;
+  const auto& compression_type = zone_params.get_compression_type(
+      dest_bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(cct, compression_type);
     if (!plugin) {
-      ldout(cct, 1) << "Cannot load plugin for rgw_compression_type "
+      ldout(cct, 1) << "Cannot load plugin for compression type "
           << compression_type << dendl;
     } else {
       compressor = boost::in_place(cct, plugin, filter);
