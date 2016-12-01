@@ -73,7 +73,7 @@ enum {
   l_mdc_first = 3000,
   // How many inodes currently in stray dentries
   l_mdc_num_strays,
-  // How many stray dentries are currently being purged
+  // How many stray dentries are currently enqueued for purge
   l_mdc_num_strays_purging,
   // How many stray dentries are currently delayed for purge due to refs
   l_mdc_num_strays_delayed,
