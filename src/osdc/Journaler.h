@@ -442,6 +442,7 @@ public:
   void wait_for_flush(Context *onsafe = 0);
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
+  bool have_waiter() const;
 
   // Synchronous setters
   // ===================
