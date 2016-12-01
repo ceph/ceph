@@ -7,6 +7,7 @@ if(${WITH_CEPHFS})
     flock.cc
     recordlock.cc
     acl.cc
+    main.cc
   )
   set_target_properties(ceph_test_libcephfs PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
