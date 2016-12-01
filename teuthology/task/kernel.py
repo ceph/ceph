@@ -596,10 +596,18 @@ def install_and_reboot(ctx, config):
                 'rm',
                 remote_pkg_path(role_remote),
                 run.Raw('&&'),
+                # work around a systemd issue, where network gets shut down
+                # before ssh can close its session
+                run.Raw('('),
+                'sleep',
+                '1',
+                run.Raw('&&'),
                 'sudo',
                 'shutdown',
                 '-r',
                 'now',
+                run.Raw('&'),
+                run.Raw(')'),
                 ],
             wait=False,
             )
