@@ -375,7 +375,7 @@ class TimedOut(Error):
     pass
 
 
-
+# FreeBSD does not have ENODATA
 cdef errno_to_exception = {
     errno.EPERM     : PermissionError,
     errno.ENOENT    : ObjectNotFound,
@@ -383,10 +383,10 @@ cdef errno_to_exception = {
     errno.ENOSPC    : NoSpace,
     errno.EEXIST    : ObjectExists,
     errno.EBUSY     : ObjectBusy,
-    errno.ENODATA   : NoData,
     errno.EINTR     : InterruptedOrTimeoutError,
     errno.ETIMEDOUT : TimedOut,
-    errno.EACCES    : PermissionDeniedError
+    errno.EACCES    : PermissionDeniedError,
+    87              : NoData
 }
 
 
