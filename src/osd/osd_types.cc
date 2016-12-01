@@ -3432,6 +3432,8 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   ::decode(can_local_rollback, _bl);
   ::decode(rollback_info_completed, _bl);
   ::decode(bl, _bl);
+  // ensure bl does not pin a larger buffer in memory
+  bl.rebuild();
   DECODE_FINISH(_bl);
 }
 
