@@ -302,7 +302,7 @@ struct PurgeRange {
   int flags;
   Context *oncommit;
   int uncommitted;
-  PurgeRange(inodeno_t i, file_layout_t& l, const SnapContext& sc,
+  PurgeRange(inodeno_t i, const file_layout_t& l, const SnapContext& sc,
 	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
 	     Context *fin)
     : ino(i), layout(l), snapc(sc), first(fo), num(no), mtime(t), flags(fl),
@@ -310,7 +310,7 @@ struct PurgeRange {
 };
 
 int Filer::purge_range(inodeno_t ino,
-		       file_layout_t *layout,
+		       const file_layout_t *layout,
 		       const SnapContext& snapc,
 		       uint64_t first_obj, uint64_t num_obj,
 		       ceph::real_time mtime,
