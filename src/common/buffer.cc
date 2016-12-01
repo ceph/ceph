@@ -1176,6 +1176,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy(unsigned len, ptr &dest)
+  {
+    copy_deep(len, dest);
+  }
+
+  template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy_deep(unsigned len, ptr &dest)
   {
     if (!len) {
@@ -1348,6 +1354,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::iterator::copy(unsigned len, char *dest)
   {
     return buffer::list::iterator_impl<false>::copy(len, dest);
+  }
+
+  void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  {
+    return buffer::list::iterator_impl<false>::copy_deep(len, dest);
   }
 
   void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
