@@ -5,7 +5,7 @@ meta:
    step one ordering: mon.a, osd.0, osd.1
    step two ordering: mon.b, mon.c, osd.2, osd.3
    ceph expected to be healthy state after each step
-upgrade-sequence:
+upgrade-sequence2:
    sequential:
    - ceph.restart:
        daemons: [mon.a]
