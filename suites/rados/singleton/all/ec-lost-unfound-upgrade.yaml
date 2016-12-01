@@ -1,3 +1,4 @@
+os_type: centos
 roles:
 - - mon.a
   - mon.b
