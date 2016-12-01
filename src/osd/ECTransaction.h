@@ -98,7 +98,7 @@ namespace ECTransaction {
 	  uint64_t head_start =
 	    sinfo.logical_to_prev_stripe_offset(extent.get_off());
 	  uint64_t head_finish =
-	    sinfo.logical_to_next_stripe_offset(extent.get_off());
+	    sinfo.logical_to_next_stripe_offset(extent.get_off() + extent.get_len());
 	  if (head_start > projected_size) {
 	    head_start = projected_size;
 	  }
