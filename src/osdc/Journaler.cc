@@ -946,7 +946,9 @@ void Journaler::_assimilate_prefetch()
 
   if ((got_any && !was_readable && readable) || read_pos == write_pos) {
     // readable!
-    ldout(cct, 10) << "_finish_read now readable (or at journal end)" << dendl;
+    ldout(cct, 10) << "_finish_read now readable (or at journal end) readable="
+                   << readable << " read_pos=" << read_pos << " write_pos="
+                   << write_pos << dendl;
     if (on_readable) {
       C_OnFinisher *f = on_readable;
       on_readable = 0;
@@ -1214,6 +1216,11 @@ void Journaler::wait_for_readable(Context *onreadable)
     // race with OSD reply
     finisher->queue(onreadable, 0);
   }
+}
+
+bool Journaler::have_waiter() const
+{
+  return on_readable != nullptr;
 }
 
 
