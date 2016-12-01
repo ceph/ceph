@@ -385,6 +385,54 @@ int execute_group_snap_remove(const po::variables_map &vm) {
   return r;
 }
 
+int execute_group_snap_rename(const po::variables_map &vm) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string pool_name;
+  std::string source_snap_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name,
+                                      &source_snap_name);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string dest_snap_name;
+  if (vm.count(at::DEST_SNAPSHOT_NAME)) {
+    dest_snap_name = vm[at::DEST_SNAPSHOT_NAME].as<std::string>();
+  }
+
+  if (dest_snap_name.empty()) {
+    dest_snap_name = utils::get_positional_argument(vm, arg_index++);
+  }
+
+  if (dest_snap_name.empty()) {
+    std::cerr << "rbd: destination snapshot name was not specified"
+              << std::endl;
+    return -EINVAL;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  r = rbd.group_snap_rename(io_ctx, group_name.c_str(),
+                            source_snap_name.c_str(), dest_snap_name.c_str());
+
+  if (r < 0) {
+    std::cerr << "rbd: failed to rename snapshot" << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
 int execute_group_snap_list(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string group_name;
@@ -468,7 +516,6 @@ int execute_group_snap_list(const po::variables_map &vm) {
   return 0;
 }
 
-
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
@@ -551,6 +598,17 @@ void get_group_snap_remove_arguments(po::options_description *positional,
                              true);
 }
 
+void get_group_snap_rename_arguments(po::options_description *positional,
+				     po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             true);
+
+  positional->add_options()
+    (at::DEST_SNAPSHOT_NAME.c_str(),
+     "destination snapshot name\n(example: <snapshot-name>)");
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_DEST);
+}
+
 void get_group_snap_list_arguments(po::options_description *positional,
                              po::options_description *options) {
   at::add_format_options(options);
@@ -582,6 +640,9 @@ Shell::Action action_group_snap_create(
 Shell::Action action_group_snap_remove(
   {"group", "snap", "remove"}, {"group", "snap", "rm"}, "Remove a snapshot from a group.",
   "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
+Shell::Action action_group_snap_rename(
+  {"group", "snap", "rename"}, {}, "Rename group's snapshot.",
+  "", &get_group_snap_rename_arguments, &execute_group_snap_rename);
 Shell::Action action_group_snap_list(
   {"group", "snap", "list"}, {}, "List snapshots of a group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
