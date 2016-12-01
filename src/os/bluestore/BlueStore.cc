@@ -3895,35 +3895,6 @@ int BlueStore::mkfs()
     goto out_close_alloc;
   dout(10) << __func__ << " success" << dendl;
 
-  if (bluefs &&
-      g_conf->bluestore_precondition_bluefs > 0) {
-    dout(10) << __func__ << " preconditioning with "
-	     << pretty_si_t(g_conf->bluestore_precondition_bluefs)
-	     << " in blocks of "
-	     << pretty_si_t(g_conf->bluestore_precondition_bluefs_block)
-	     << dendl;
-    unsigned n = g_conf->bluestore_precondition_bluefs /
-      g_conf->bluestore_precondition_bluefs_block;
-    bufferlist bl;
-    int len = g_conf->bluestore_precondition_bluefs_block;
-    char buf[len];
-    get_random_bytes(buf, len);
-    bl.append(buf, len);
-    string key1("a");
-    string key2("b");
-    for (unsigned i=0; i < n; ++i) {
-      KeyValueDB::Transaction t = db->get_transaction();
-      t->set(PREFIX_SUPER, (i & 1) ? key1 : key2, bl);
-      t->rmkey(PREFIX_SUPER, (i & 1) ? key2 : key1);
-      db->submit_transaction_sync(t);
-    }
-    KeyValueDB::Transaction t = db->get_transaction();
-    t->rmkey(PREFIX_SUPER, key1);
-    t->rmkey(PREFIX_SUPER, key2);
-    db->submit_transaction_sync(t);
-    dout(10) << __func__ << " done preconditioning" << dendl;
-  }
-
  out_close_alloc:
   _close_alloc();
  out_close_fm:
