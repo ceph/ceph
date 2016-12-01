@@ -24,7 +24,7 @@
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() \
-  << ".journaler" << (readonly ? "(ro) ":"(rw) ")
+  << ".journaler." << name << (readonly ? "(ro) ":"(rw) ")
 
 using std::chrono::seconds;
 

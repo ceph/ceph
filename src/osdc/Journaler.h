@@ -207,6 +207,7 @@ private:
   // me
   CephContext *cct;
   std::mutex lock;
+  const std::string name;
   typedef std::lock_guard<std::mutex> lock_guard;
   typedef std::unique_lock<std::mutex> unique_lock;
   Finisher *finisher;
@@ -379,10 +380,11 @@ private:
 			 // CEPH_OSD_OP_FADIVSE_*
 
 public:
-  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj,
-	    PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f) :
+  Journaler(const std::string &name_, inodeno_t ino_, int64_t pool,
+      const char *mag, Objecter *obj, PerfCounters *l, int lkey,
+      SafeTimer *tim, Finisher *f) :
     last_committed(mag),
-    cct(obj->cct), finisher(f), last_written(mag),
+    cct(obj->cct), name(name_), finisher(f), last_written(mag),
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),

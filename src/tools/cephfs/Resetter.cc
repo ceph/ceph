@@ -45,7 +45,7 @@ int Resetter::reset(mds_role_t role)
     return jp_load_result;
   }
 
-  Journaler journaler(jp.front,
+  Journaler journaler("resetter", jp.front,
       pool_id,
       CEPH_FS_ONDISK_MAGIC,
       objecter, 0, 0, &timer, &finisher);
@@ -127,7 +127,7 @@ int Resetter::reset_hard(mds_role_t role)
     return r;
   }
 
-  Journaler journaler(jp.front,
+  Journaler journaler("resetter", jp.front,
     pool_id,
     CEPH_FS_ONDISK_MAGIC,
     objecter, 0, 0, &timer, &finisher);
