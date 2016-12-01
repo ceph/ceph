@@ -655,7 +655,7 @@ public:
   std::unique_ptr<Migrator> migrator;
 
  public:
-  explicit MDCache(MDSRank *m);
+  explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
   
   // debug
