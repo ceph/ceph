@@ -970,7 +970,6 @@ void Journaler::_issue_read(uint64_t len)
     if (flush_pos == safe_pos) {
       _flush(NULL);
     }
-    assert(flush_pos > safe_pos);
     waitfor_safe[flush_pos].push_back(new C_RetryRead(this));
     return;
   }
