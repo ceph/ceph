@@ -40,6 +40,7 @@
 #include "Watch.h"
 #include "osdc/Objecter.h"
 
+#include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/io_priority.h"
@@ -1986,6 +1987,14 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->close_section();
   } else if (command == "get_latest_osdmap") {
     get_latest_osdmap();
+  } else if (command == "heap") {
+    auto result = ceph::osd_cmds::admin::heap(*cct, cmdmap, *f, ss);
+
+    // Note: Failed heap profile commands won't necessarily trigger an error:
+    f->open_object_section("result");
+    f->dump_string("error", cpp_strerror(result));
+    f->dump_bool("success", result >= 0);
+    f->close_section();
   } else if (command == "set_heap_property") {
     string property;
     int64_t value = 0;
@@ -2483,6 +2492,14 @@ void OSD::final_init()
 				     asok_hook,
 				     "force osd to update the latest map from "
 				     "the mon");
+  assert(r == 0);
+
+  r = admin_socket->register_command( "heap",
+                                      "heap " \
+                                      "name=heapcmd,type=CephString",
+                                      asok_hook,
+                                      "show heap usage info (available only if "
+                                      "compiled with tcmalloc)");
   assert(r == 0);
 
   r = admin_socket->register_command("set_heap_property",
@@ -9175,8 +9192,6 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
   in_use.insert(out->begin(), out->end());
 }
 
-
-
 // =============================================================
 
 #undef dout_context
@@ -9542,3 +9557,32 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, PGQueueable> item)
   sdata->sdata_cond.SignalOne();
   sdata->sdata_lock.Unlock();
 }
+
+namespace ceph { 
+namespace osd_cmds { 
+namespace admin {
+
+int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os)
+{
+  if (!ceph_using_tcmalloc()) {
+        os << "could not issue heap profiler command -- not using tcmalloc!";
+        return -EOPNOTSUPP;
+  }
+  
+  string cmd;
+  std::vector<std::string> cmd_vec;
+ 
+  if (false == cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
+        os << "unable to get value for command \"" << cmd << "\"";
+       return -EINVAL;
+   }
+  
+  get_str_vec(cmd, cmd_vec);
+  
+  ceph_heap_profiler_handle_command(cmd_vec, os);
+  
+  return 0;
+}
+ 
+}}} // namespace ceph::osd::admin_commands
+
