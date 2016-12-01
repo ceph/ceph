@@ -159,6 +159,8 @@ void MDSRankDispatcher::init()
 
   progress_thread.create("mds_rank_progr");
 
+  mdcache->stray_manager.purge_queue.init();
+
   finisher->start();
 }
 
@@ -238,6 +240,8 @@ void MDSRankDispatcher::shutdown()
 
   // shut down cache
   mdcache->shutdown();
+
+  mdcache->stray_manager.purge_queue.shutdown();
 
   if (objecter->initialized.read())
     objecter->shutdown();

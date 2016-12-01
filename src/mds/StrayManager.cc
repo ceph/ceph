@@ -138,45 +138,27 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     assert(in->last == CEPH_NOSNAP);
   }
 
+  uint64_t to = 0;
   if (in->is_file()) {
-    uint64_t to = in->inode.get_max_size();
+    to = in->inode.get_max_size();
     to = MAX(in->inode.size, to);
     // when truncating a file, the filer does not delete stripe objects that are
     // truncated to zero. so we need to purge stripe objects up to the max size
     // the file has ever been.
     to = MAX(in->inode.max_size_ever, to);
-    if (to > 0) {
-      uint64_t num = Striper::get_num_objects(in->inode.layout, to);
-      dout(10) << __func__ << " 0~" << to << " objects 0~" << num
-	       << " snapc " << snapc << " on " << *in << dendl;
-      filer.purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			0, num, ceph::real_clock::now(), 0,
-			gather.new_sub());
-    }
   }
 
   inode_t *pi = in->get_projected_inode();
-  object_t oid = CInode::get_object_name(pi->ino, frag_t(), "");
-  // remove the backtrace object if it was not purged
-  if (!gather.has_subs() || !pi->layout.pool_ns.empty()) {
-    object_locator_t oloc(pi->layout.pool_id);
-    dout(10) << __func__ << " remove backtrace object " << oid
-	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc,
-			  ceph::real_clock::now(), 0,
-			  gather.new_sub());
-  }
-  // remove old backtrace objects
-  for (compact_set<int64_t>::iterator p = pi->old_pools.begin();
-       p != pi->old_pools.end();
-       ++p) {
-    object_locator_t oloc(*p);
-    dout(10) << __func__ << " remove backtrace object " << oid
-	     << " old pool " << *p << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc,
-			  ceph::real_clock::now(), 0,
-			  gather.new_sub());
-  }
+
+  PurgeItem item;
+  item.ino = in->inode.ino;
+  item.size = to;
+  item.layout = pi->layout;
+  item.old_pools = pi->old_pools;
+  item.snapc = *snapc;
+
+  purge_queue.push(item, gather.new_sub());
+
   assert(gather.has_subs());
   gather.activate();
 }
@@ -862,7 +844,9 @@ StrayManager::StrayManager(MDSRank *mds)
     ops_in_flight(0), files_purging(0),
     max_purge_ops(0), 
     num_strays(0), num_strays_purging(0), num_strays_delayed(0),
-    filer(mds->objecter, mds->finisher)
+    filer(mds->objecter, mds->finisher),
+    purge_queue(g_ceph_context, mds->get_nodeid(),
+        mds->mdsmap->get_metadata_pool(), mds->objecter)
 {
   assert(mds != NULL);
 }

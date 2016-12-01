@@ -461,6 +461,8 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
   mydir->commit(0, gather->new_sub());
 
   myin->store(gather->new_sub());
+
+  stray_manager.purge_queue.create(new C_IO_Wrapper(mds, gather->new_sub()));
 }
 
 struct C_MDC_CreateSystemFile : public MDCacheLogContext {
@@ -584,8 +586,15 @@ void MDCache::open_root_inode(MDSInternalContextBase *c)
 
 void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 {
+  MDSGatherBuilder gather(g_ceph_context);
+
   CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR|0755);  // initially inaccurate!
-  in->fetch(c);
+  in->fetch(gather.new_sub());
+
+  stray_manager.purge_queue.open(new C_IO_Wrapper(mds, gather.new_sub()));
+
+  gather.set_finisher(c);
+  gather.activate();
 }
 
 void MDCache::open_root()
