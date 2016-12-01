@@ -401,6 +401,8 @@ namespace buffer CEPH_BUFFER_API {
       // copy data out.
       // note that these all _append_ to dest!
       void copy(unsigned len, char *dest);
+      // deprecated, use copy_deep()
+      void copy(unsigned len, ptr &dest) __attribute__((deprecated));
       void copy_deep(unsigned len, ptr &dest);
       void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
@@ -442,6 +444,8 @@ namespace buffer CEPH_BUFFER_API {
 
       // copy data out
       void copy(unsigned len, char *dest);
+      // deprecated, use copy_deep()
+      void copy(unsigned len, ptr &dest) __attribute__((deprecated));
       void copy_deep(unsigned len, ptr &dest);
       void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
