@@ -380,16 +380,6 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``-1``
 
 
-``rgw compression type``
-
-:Description: The compression plugin to use when writing object data. Each
-              compressed object remembers which plugin was used, so changing
-              this setting does not hinder the ability to decompress existing
-              objects, not does it force existing objects to be recompressed.
-:Type: String
-:Default: ``none``
-
-
 Regions
 =======
 
