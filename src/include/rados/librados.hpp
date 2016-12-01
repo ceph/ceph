@@ -395,7 +395,6 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
-    void setxattr(const char *name, const bufferlist&& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
     void clone_range(uint64_t dst_off,
