@@ -1736,7 +1736,7 @@ bool ECBackend::try_state_to_reads()
   Op *op = &(waiting_state.front());
   if (op->requires_rmw() && pipeline_state.cache_invalid()) {
     dout(20) << __func__ << ": blocking " << *op
-	     << " because it requires an rmw and the cache is invalid"
+	     << " because it requires an rmw and the cache is invalid "
 	     << pipeline_state
 	     << dendl;
     return false;
