@@ -6,7 +6,6 @@ overrides:
         mon debug unsafe allow tier with nonempty snaps: true
 roles:
 - - mon.a
-  - mds.a
   - osd.0
   - osd.1
 - - mon.b
