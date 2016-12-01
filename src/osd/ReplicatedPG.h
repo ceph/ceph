@@ -829,6 +829,7 @@ protected:
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
   boost::intrusive_ptr<RepGather> new_repop(
+    eversion_t version,
     ObcLockManager &&manager,
     OpRequestRef &&op,
     boost::optional<std::function<void(void)> > &&on_complete);
@@ -908,35 +909,9 @@ protected:
   void agent_choose_mode_restart() override;
 
   /// true if we can send an ondisk/commit for v
-  bool already_complete(eversion_t v) {
-    for (xlist<RepGather*>::iterator i = repop_queue.begin();
-	 !i.end();
-	 ++i) {
-      // skip copy from temp object ops
-      if ((*i)->v == eversion_t())
-	continue;
-      if ((*i)->v > v)
-        break;
-      if (!(*i)->all_committed)
-	return false;
-    }
-    return true;
-  }
+  bool already_complete(eversion_t v);
   /// true if we can send an ack for v
-  bool already_ack(eversion_t v) {
-    for (xlist<RepGather*>::iterator i = repop_queue.begin();
-	 !i.end();
-	 ++i) {
-      // skip copy from temp object ops
-      if ((*i)->v == eversion_t())
-	continue;
-      if ((*i)->v > v)
-        break;
-      if (!(*i)->all_applied)
-	return false;
-    }
-    return true;
-  }
+  bool already_ack(eversion_t v);
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
