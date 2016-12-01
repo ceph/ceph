@@ -5,6 +5,8 @@
 #include <sstream>
 #include <string>
 
+#include <boost/optional.hpp>
+
 #include "auth/Crypto.h"
 
 #include "common/armor.h"
@@ -232,6 +234,7 @@ void _usage()
   cout << "   --data_extra_pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
+  cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
   cout << "                             set zone tier config keys, values\n";
@@ -2380,6 +2383,8 @@ int main(int argc, char **argv)
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
 
+  boost::optional<std::string> compression_type;
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -2689,6 +2694,8 @@ int main(int argc, char **argv)
         }
       }
       index_type_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
+      compression_type = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4102,6 +4109,9 @@ int main(int argc, char **argv)
           if (index_type_specified) {
             info.index_type = placement_index_type;
           }
+          if (compression_type) {
+            info.compression_type = *compression_type;
+          }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
           auto p = zone.placement_pools.find(placement_id);
           if (p == zone.placement_pools.end()) {
@@ -4121,6 +4131,9 @@ int main(int argc, char **argv)
           }
           if (index_type_specified) {
             info.index_type = placement_index_type;
+          }
+          if (compression_type) {
+            info.compression_type = *compression_type;
           }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
           zone.placement_pools.erase(placement_id);
