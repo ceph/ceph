@@ -342,8 +342,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
 int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head,
                                                               pair<string, int >& entry, int& result)
 {
+  utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
+
   rados::cls::lock::Lock l(lc_index_lock_name);
   l.set_cookie(cookie);
+  l.set_duration(lock_duration);
+
   do {
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
@@ -417,7 +421,7 @@ int RGWLC::process(int index, int max_lock_secs)
 {
   rados::cls::lock::Lock l(lc_index_lock_name);
   do {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now(cct);
     pair<string, int > entry;//string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
     if (max_lock_secs <= 0)
       return -EAGAIN;
