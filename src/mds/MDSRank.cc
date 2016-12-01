@@ -67,6 +67,8 @@ MDSRank::MDSRank(
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
     stopping(false),
+    purge_queue(g_ceph_context, whoami_,
+        mdsmap_->get_metadata_pool(), objecter),
     progress_thread(this), dispatch_depth(0),
     hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
     mds_slow_req_count(0),
@@ -82,7 +84,7 @@ MDSRank::MDSRank(
 
   finisher = new Finisher(msgr->cct);
 
-  mdcache = new MDCache(this);
+  mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this, messenger, monc);
 
@@ -159,7 +161,7 @@ void MDSRankDispatcher::init()
 
   progress_thread.create("mds_rank_progr");
 
-  mdcache->stray_manager.purge_queue.init();
+  purge_queue.init();
 
   finisher->start();
 }
@@ -241,7 +243,7 @@ void MDSRankDispatcher::shutdown()
   // shut down cache
   mdcache->shutdown();
 
-  mdcache->stray_manager.purge_queue.shutdown();
+  purge_queue.shutdown();
 
   if (objecter->initialized.read())
     objecter->shutdown();
@@ -977,6 +979,8 @@ void MDSRank::boot_start(BootStep step, int r)
 
         mdcache->open_mydir_inode(gather.new_sub());
 
+        purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
+
         if (is_starting() ||
             whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
           mdcache->open_root_inode(gather.new_sub());
@@ -1358,6 +1362,9 @@ void MDSRank::boot_create()
 
   // write empty sessionmap
   sessionmap.save(fin.new_sub());
+
+  // Create empty purge queue
+  purge_queue.create(new C_IO_Wrapper(this, fin.new_sub()));
 
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {

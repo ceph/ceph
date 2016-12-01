@@ -838,15 +838,14 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   mds->send_message_mds(req, to);
 }
 
-StrayManager::StrayManager(MDSRank *mds)
+StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
-    mds(mds), logger(NULL), started(false), aborted(false),
+    mds(mds), purge_queue(purge_queue_), logger(NULL), started(false),
+    aborted(false),
     ops_in_flight(0), files_purging(0),
     max_purge_ops(0), 
     num_strays(0), num_strays_purging(0), num_strays_delayed(0),
-    filer(mds->objecter, mds->finisher),
-    purge_queue(g_ceph_context, mds->get_nodeid(),
-        mds->mdsmap->get_metadata_pool(), mds->objecter)
+    filer(mds->objecter, mds->finisher)
 {
   assert(mds != NULL);
 }
