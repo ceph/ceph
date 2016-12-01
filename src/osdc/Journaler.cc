@@ -164,7 +164,7 @@ void Journaler::recover(Context *onread)
   assert(readonly);
 
   if (onread)
-    waitfor_recover.push_back(onread);
+    waitfor_recover.push_back(wrap_finisher(onread));
 
   if (state != STATE_UNDEF) {
     ldout(cct, 1) << "recover - already recovering" << dendl;
