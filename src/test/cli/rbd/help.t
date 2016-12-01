@@ -29,6 +29,7 @@
       group snap create           Make a snapshot of a group.
       group snap list             List snapshots of a consistency group.
       group snap remove           Remove a snapshot from a group.
+      group snap rename           Rename consistency group's snapshot.
       image-meta get              Image metadata get the value associated with
                                   the key.
       image-meta list             Image metadata list keys with values.
@@ -565,6 +566,27 @@
     -p [ --pool ] arg    pool name
     --group arg          group name
     --snap arg           snapshot name
+  
+  rbd help group snap rename
+  usage: rbd group snap rename [--pool <pool>] [--group <group>] [--snap <snap>] 
+                               [--dest-snap <dest-snap>] 
+                               <group-spec> <snap> <dest-snap> 
+  
+  Rename consistency group's snapshot.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+    <snap>               source snapshot name
+                         (example: <snapshot-name>)
+    <dest-snap>          destination snapshot name
+                         (example: <snapshot-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+    --snap arg           source snapshot name
+    --dest-snap arg      destination snapshot name
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--image <image>] 

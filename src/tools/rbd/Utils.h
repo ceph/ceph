@@ -60,6 +60,12 @@ std::string get_positional_argument(
 std::string get_pool_name(const boost::program_options::variables_map &vm,
                           size_t *arg_index);
 
+int get_pool_group_snapshot_names(const boost::program_options::variables_map &vm,
+                                  argument_types::ArgumentModifier mod,
+                                  size_t *spec_arg_index,
+                                  std::string *pool_name,
+                                  std::string *group_name,
+                                  std::string *snap_name);
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,

@@ -319,6 +319,43 @@ int get_pool_group_names(const po::variables_map &vm,
   return 0;
 }
 
+int get_pool_group_snapshot_names(const po::variables_map &vm,
+                                  at::ArgumentModifier mod,
+                                  size_t *spec_arg_index,
+                                  std::string *pool_name,
+                                  std::string *group_name,
+                                  std::string *snap_name) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_GROUP_NAME : at::GROUP_NAME);
+  std::string snap_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+	at::DEST_SNAPSHOT_NAME : at::SNAPSHOT_NAME);
+
+  int r = get_pool_group_names(vm, mod, spec_arg_index,
+				      pool_name, group_name);
+
+  if (r < 0) {
+    return r;
+  }
+
+  if (vm.count(snap_key) && snap_name != nullptr) {
+    *snap_name = vm[snap_key].as<std::string>();
+  }
+
+  if (snap_name->empty()) {
+    *snap_name = get_positional_argument(vm, (*spec_arg_index)++);
+  }
+
+  if (snap_name->empty()) {
+    std::cerr << "rbd: "
+	      << "snapshot name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int get_pool_image_snapshot_names(const po::variables_map &vm,
                                   at::ArgumentModifier mod,
                                   size_t *spec_arg_index,

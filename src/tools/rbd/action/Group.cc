@@ -457,6 +457,69 @@ int execute_group_snap_list(const po::variables_map &vm) {
   return 0;
 }
 
+int execute_group_snap_rename(const po::variables_map &vm) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string pool_name;
+
+  std::string source_snap_name;
+  std::string dest_snap_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (vm.count(at::SNAPSHOT_NAME)) {
+    source_snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
+  }
+
+  if (source_snap_name.empty()) {
+    source_snap_name = utils::get_positional_argument(vm, arg_index++);
+  }
+
+  if (source_snap_name.empty()) {
+    std::cerr << "rbd: "
+	      << "source snapshot name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  if (vm.count(at::DEST_SNAPSHOT_NAME)) {
+    dest_snap_name = vm[at::DEST_SNAPSHOT_NAME].as<std::string>();
+  }
+
+  if (dest_snap_name.empty()) {
+    dest_snap_name = utils::get_positional_argument(vm, arg_index++);
+  }
+
+  if (dest_snap_name.empty()) {
+    std::cerr << "rbd: "
+	      << "destination snapshot name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  r = rbd.group_snap_rename(io_ctx,
+			    group_name.c_str(),
+			    source_snap_name.c_str(), dest_snap_name.c_str());
+
+  if (r < 0) {
+    std::cerr << "rbd: "
+	      << "failed to rename snapshot" << std::endl;
+    return r;
+  }
+
+  return 0;
+}
 
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
@@ -550,6 +613,19 @@ void get_group_snap_list_arguments(po::options_description *positional,
   at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
+void get_group_snap_rename_arguments(po::options_description *positional,
+				     po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+
+  positional->add_options()
+    (at::SNAPSHOT_NAME.c_str(), "source snapshot name\n(example: <snapshot-name>)");
+  positional->add_options()
+    (at::DEST_SNAPSHOT_NAME.c_str(), "destination snapshot name\n(example: <snapshot-name>)");
+
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_DEST);
+}
+
 Shell::Action action_create(
   {"group", "create"}, {}, "Create a consistency group.",
   "", &get_create_arguments, &execute_create);
@@ -577,6 +653,9 @@ Shell::Action action_group_snap_remove(
 Shell::Action action_group_snap_list(
   {"group", "snap", "list"}, {}, "List snapshots of a consistency group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
+Shell::Action action_group_snap_rename(
+  {"group", "snap", "rename"}, {}, "Rename consistency group's snapshot.",
+  "", &get_group_snap_rename_arguments, &execute_group_snap_rename);
 } // namespace snap
 } // namespace action
 } // namespace rbd
