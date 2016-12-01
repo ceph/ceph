@@ -1992,6 +1992,7 @@ cdef class Ioctx(object):
         completion_obj.rados_comp = completion
         return completion_obj
 
+    @requires(('object_name', str_type), ('oncomplete', opt(Callable)))
     def aio_stat(self, object_name, oncomplete):
         """
         Asynchronously get object stats (size/mtime)
@@ -2037,6 +2038,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error stating %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('to_write', bytes), ('offset', int),
+              ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_write(self, object_name, to_write, offset=0,
                   oncomplete=None, onsafe=None):
         """
@@ -2080,6 +2083,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error writing object %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('to_write', bytes), ('oncomplete', opt(Callable)),
+              ('onsafe', opt(Callable)))
     def aio_write_full(self, object_name, to_write,
                        oncomplete=None, onsafe=None):
         """
@@ -2123,6 +2128,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error writing object %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('to_append', bytes), ('oncomplete', opt(Callable)),
+              ('onsafe', opt(Callable)))
     def aio_append(self, object_name, to_append, oncomplete=None, onsafe=None):
         """
         Asychronously append data to an object
@@ -2175,6 +2182,8 @@ cdef class Ioctx(object):
         if ret < 0:
             raise make_ex(ret, "error flushing")
 
+    @requires(('object_name', str_type), ('length', int), ('offset', int),
+              ('oncomplete', opt(Callable)))
     def aio_read(self, object_name, length, offset, oncomplete):
         """
         Asychronously read data from an object
@@ -2226,7 +2235,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error reading %s" % object_name)
         return completion
 
-    @requires(('object_name', str_type), ('cls', str_type), ('method', str_type), ('data', bytes))
+    @requires(('object_name', str_type), ('cls', str_type), ('method', str_type), ('data', bytes),
+              ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_execute(self, object_name, cls, method, data,
                     length=8192, oncomplete=None, onsafe=None):
         """
@@ -2295,6 +2305,7 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error executing %s::%s on %s" % (cls, method, object_name))
         return completion
 
+    @requires(('object_name', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_remove(self, object_name, oncomplete=None, onsafe=None):
         """
         Asychronously remove an object
