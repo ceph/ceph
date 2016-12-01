@@ -414,7 +414,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     ss << "adding mon." << name << " at " << addr;
     propose = true;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
-    goto reply;
 
   } else if (prefix == "mon remove" ||
              prefix == "mon rm") {
@@ -467,7 +466,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     ss << "removing mon." << name << " at " << addr
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
-    goto reply;
+    err = 0;
 
   } else {
     ss << "unknown command " << prefix;
