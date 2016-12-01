@@ -1,6 +1,7 @@
 tasks:
 - install:
-   branch: hammer
+    branch: hammer
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "**** done hammer"
 - ceph:
    fs: xfs
@@ -11,4 +12,5 @@ tasks:
 - install.upgrade:
     client.0:
       branch: jewel
+      exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "*** client.0 upgraded to jewel"
