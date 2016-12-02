@@ -132,13 +132,17 @@ Pool specific commands
   List all key/value pairs stored in the object map of object name.
   The values are dumped in hexadecimal.
 
-:command:`getomapval` *name* *key*
+:command:`getomapval` [ --omap-key-file *file* ] *name* *key* [ *out-file* ]
   Dump the hexadecimal value of key in the object map of object name.
+  If the optional *out-file* argument isn't provided, the value will be
+  written to standard output.
 
-:command:`setomapval` *name* *key* *value*
-  Set the value of key in the object map of object name.
+:command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
+  Set the value of key in the object map of object name. If the optional
+  *value* argument isn't provided, the value will be read from standard
+  input.
 
-:command:`rmomapkey` *name* *key*
+:command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*
   Remove key from the object map of object name.
 
 :command:`getomapheader` *name*
