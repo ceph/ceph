@@ -22,6 +22,7 @@ endif
 	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
 
 override_dh_auto_configure:
+	env | sort
 	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
 override_dh_auto_build:
