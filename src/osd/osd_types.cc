@@ -3432,6 +3432,8 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   ::decode(can_local_rollback, _bl);
   ::decode(rollback_info_completed, _bl);
   ::decode(bl, _bl);
+  // ensure bl does not pin a larger buffer in memory
+  bl.rebuild();
   DECODE_FINISH(_bl);
 }
 
@@ -3533,6 +3535,8 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 7 ||  // for v >= 7, this is for all ops.
       op == CLONE) {    // for v < 7, it's only present for CLONE.
     ::decode(snaps, bl);
+    // ensure snaps does not pin a larger buffer in memory
+    snaps.rebuild();
   }
 
   if (struct_v >= 8)

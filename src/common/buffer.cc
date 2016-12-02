@@ -349,14 +349,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
-#ifdef DARWIN
-      data = (char *) valloc (len);
-#else
-      data = 0;
-      int r = ::posix_memalign((void**)(void*)&data, align, len);
-      if (r)
-	throw bad_alloc();
-#endif /* DARWIN */
+      data = mempool::buffer_data::alloc_char.allocate_aligned(len, align);
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
@@ -364,7 +357,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
     ~raw_posix_aligned() {
-      ::free((void*)data);
+      mempool::buffer_data::alloc_char.deallocate_aligned(data, len);
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
