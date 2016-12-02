@@ -1877,12 +1877,12 @@ int RGWFormPost::get_params()
 
   if (! is_non_expired()) {
     err_msg = "FormPost: Form Expired";
-    return -EACCES;
+    return -EPERM;
   }
 
   if (! is_integral()) {
     err_msg = "FormPost: Invalid Signature";
-    return -EACCES;
+    return -EPERM;
   }
 
   return 0;
