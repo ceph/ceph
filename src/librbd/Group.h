@@ -22,6 +22,8 @@ int group_snap_remove(librados::IoCtx& group_ioctx,
 		      const char *group_name, const char *snap_name);
 int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 		    std::vector<group_snap_spec_t> *snaps);
+int group_snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
+		      const char *old_snap_name, const char *new_snap_name);
 }
 
 #endif // CEPH_LIBRBD_GROUP_H

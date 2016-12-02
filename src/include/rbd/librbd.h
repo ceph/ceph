@@ -777,6 +777,8 @@ CEPH_RBD_API int rbd_group_snap_list(rados_ioctx_t group_p, const char *group_na
 CEPH_RBD_API void rbd_group_snap_spec_cleanup(rbd_group_snap_spec_t *group_snap_spec);
 CEPH_RBD_API void rbd_group_snap_spec_list_cleanup(rbd_group_snap_spec_t *snaps,
 						   size_t len);
+CEPH_RBD_API int rbd_group_snap_rename(rados_ioctx_t group_p, const char *group_name,
+				       const char *old_snap_name, const char *new_snap_name);
 #ifdef __cplusplus
 }
 #endif

@@ -570,6 +570,18 @@ namespace librbd {
     return r;
   }
 
+  int RBD::group_snap_rename(IoCtx& group_ioctx, const char *group_name,
+			     const char *old_snap_name, const char *new_snap_name)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_rename_enter, group_ioctx.get_pool_name().c_str(),
+	       group_ioctx.get_id(), group_name, old_snap_name, new_snap_name);
+    int r = librbd::group_snap_rename(group_ioctx, group_name,
+				      old_snap_name, new_snap_name);
+    tracepoint(librbd, group_snap_list_exit, r);
+    return r;
+  }
+
 
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
@@ -3476,14 +3488,32 @@ extern "C" int rbd_group_snap_list(rados_ioctx_t group_p, const char *group_name
   return r;
 }
 
-extern "C" void rbd_group_snap_spec_cleanup(rbd_group_snap_spec_t *group_snap_spec) {
+extern "C" void rbd_group_snap_spec_cleanup(rbd_group_snap_spec_t *group_snap_spec)
+{
   free(group_snap_spec->name);
 }
 
 extern "C" void rbd_group_snap_spec_list_cleanup(rbd_group_snap_spec_t *snaps,
-						 size_t len) {
+						 size_t len)
+{
   for (size_t i = 0; i < len; ++i) {
     rbd_group_snap_spec_cleanup(&snaps[i]);
   }
 }
 
+extern "C" int rbd_group_snap_rename(rados_ioctx_t group_p, const char *group_name,
+				     const char *old_snap_name, const char *new_snap_name)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_rename_enter, group_ioctx.get_pool_name().c_str(),
+	     group_ioctx.get_id(), group_name, old_snap_name, new_snap_name);
+
+  int r = librbd::group_snap_rename(group_ioctx, group_name,
+				    old_snap_name, new_snap_name);
+
+  tracepoint(librbd, group_snap_list_exit, r);
+  return r;
+}

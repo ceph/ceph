@@ -353,6 +353,9 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_group_snap_spec_list_cleanup(rbd_group_snap_spec_t *snaps,
                                           size_t len)
 
+    int rbd_group_snap_rename(rados_ioctx_t group_p, const char *group_name,
+                              const char *old_snap_name, const char *new_snap_name);
+
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
 RBD_FEATURE_EXCLUSIVE_LOCK = _RBD_FEATURE_EXCLUSIVE_LOCK
@@ -1429,6 +1432,26 @@ cdef class Group(object):
         :returns: :class:`GroupSnapIterator`
         """
         return GroupSnapIterator(self)
+
+    def rename_snap(self, old_snap_name, new_snap_name):
+        """
+        Rename group's snapshot.
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`ObjectExists`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+
+        old_snap_name = cstr(old_snap_name, 'old_snap_name')
+        new_snap_name = cstr(new_snap_name, 'new_snap_name')
+        cdef:
+            char *_old_snap_name = old_snap_name
+            char *_new_snap_name = new_snap_name
+        with nogil:
+            ret = rbd_group_snap_rename(self._ioctx, self._name, _old_snap_name, _new_snap_name)
+        if ret != 0:
+            raise make_ex(ret, 'error removing group snapshot', group_errno_to_exception)
 
 cdef class Image(object):
     """
