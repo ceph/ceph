@@ -536,6 +536,31 @@ uint32_t librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
   return objecter->list_nobjects_seek(context, pos);
 }
 
+int librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
+                                    const string& cursor, uint32_t *current_pg)
+{
+  context->list.clear();
+  Objecter::ListCursor c;
+  int ret = c.from_str(cursor);
+  if (ret < 0) {
+    return ret;
+  }
+  uint32_t cur_pg = objecter->list_nobjects_seek(context, c);
+  if (current_pg) {
+    *current_pg = cur_pg;
+  }
+
+  return 0;
+}
+
+string librados::IoCtxImpl::nlist_get_cursor(Objecter::NListContext *context)
+{
+  Objecter::ListCursor c;
+
+  objecter->list_nobjects_get_cursor(context, &c);
+  return c.to_str();
+}
+
 int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
 {
   Cond cond;

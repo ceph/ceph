@@ -1373,6 +1373,14 @@ public:
     }
   };
 
+  struct ListCursor {
+    hobject_t obj;
+    int current_pg;
+
+    string to_str() const;
+    int from_str(const string& s);
+  };
+
 
   // Pools and statistics
   struct NListContext {
@@ -1424,6 +1432,14 @@ public:
 
     uint32_t get_pg_hash_position() const {
       return current_pg;
+    }
+
+    void seek(const Objecter::ListCursor& cursor) {
+      current_pg = cursor.current_pg;
+      cookie = cursor.obj;
+      at_end_of_pg = false;
+      at_end_of_pool = false;
+      current_pg_epoch = 0;
     }
   };
 
@@ -2755,6 +2771,8 @@ public:
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
+  uint32_t list_nobjects_seek(NListContext *list_context, const ListCursor& pos);
+  void list_nobjects_get_cursor(NListContext *list_context, ListCursor *pos);
   void list_objects(ListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 

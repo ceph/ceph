@@ -95,6 +95,12 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /// move the iterator to a given cursor position
+    int seek(const std::string& cursor);
+
+    /// get current cursor position
+    std::string get_cursor();
+
     /**
      * Configure PGLS filter to be applied OSD-side (requires caller
      * to know/understand the format expected by the OSD)
