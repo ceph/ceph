@@ -1964,7 +1964,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " was " << replay_version << dendl;
-      if (return_code < 0 || already_complete(replay_version)) {
+      if (already_complete(replay_version)) {
 	osd->reply_op_error(op, return_code, replay_version, user_version);
       } else {
 	if (m->wants_ack()) {
