@@ -82,12 +82,14 @@ libcommon_internal_la_SOURCES = \
 
 common/PluginRegistry.cc: ./ceph_ver.h
 
+libcommon_internal_la_SOURCES += \
+	common/ceph_json.cc \
+	common/util.cc
+
 if ENABLE_SERVER
 libcommon_internal_la_SOURCES += \
 	common/xattr.c \
 	common/ipaddr.cc \
-	common/ceph_json.cc \
-	common/util.cc \
 	common/pick_address.cc
 endif
 
