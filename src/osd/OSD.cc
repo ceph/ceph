@@ -1934,6 +1934,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
+  } else if (command == "dump_objectstore_kv_stats") {
+    store->get_db_statistics(f);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2393,6 +2395,9 @@ void OSD::final_init()
 				     "get malloc extension heap property");
   assert(r == 0);
 
+  r = admin_socket->register_command("dump_objectstore_kv_stats", "dump_objectstore_kv_stats", asok_hook,
+					 "print statistics of kvdb which used by bluestore");
+  assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
@@ -2714,6 +2719,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("get_latest_osdmap");
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
+  cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   delete asok_hook;
   asok_hook = NULL;
 
