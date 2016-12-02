@@ -114,6 +114,8 @@ void ObjectCopyRequest<I>::send_read_object() {
                << std::get<2>(sync_op) << dendl;
       op.sparse_read(std::get<1>(sync_op), std::get<2>(sync_op), &std::get<4>(sync_op),
                      &std::get<3>(sync_op), nullptr);
+      op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
+                       LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
       break;
     default:
       break;
@@ -182,6 +184,8 @@ void ObjectCopyRequest<I>::send_write_object() {
          bufferlist tmpbl;
          tmpbl.substr_of(std::get<3>(sync_op), buffer_offset, it.second);
          op.write(it.first, tmpbl);
+         op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
+                          LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
          buffer_offset += it.second;
 	 dout(20) << ": write op: " << it.first<< "~" << it.second << dendl;
       }
