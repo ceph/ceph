@@ -1270,7 +1270,6 @@ void PG::calc_replicated_acting(
           cur_info.last_update < primary->second.log_tail) {
         ss << " shard " << acting_cand << " (stray) REJECTED "
                  << cur_info << std::endl;
-	break;
       } else {
         want->push_back(i->second);
         acting_backfill->insert(acting_cand);
@@ -1312,7 +1311,6 @@ void PG::calc_replicated_acting(
           cur_info.last_update < primary->second.log_tail) {
         ss << " shard " << acting_cand << " (stray) REJECTED "
            << cur_info << std::endl;
-	break;
       } else {
         want->push_back(acting_cand.osd);
         acting_backfill->insert(acting_cand);
@@ -1324,6 +1322,7 @@ void PG::calc_replicated_acting(
   }
 
   // async recovery?
+  vector<int> async_recovery_targets;
   if (want->size() > min_size) {
     multimap<eversion_t, int> last_update_to_shard;
     for (vector<int>::iterator it = want->begin(); it != want->end(); ++it) {
@@ -1341,16 +1340,33 @@ void PG::calc_replicated_acting(
         vector<int>::iterator q = find(want->begin(), want->end(), p->second);
         assert(q != want->end());
         want->erase(q);
-	// remove from stray set
-	set<pg_shard_t>::iterator r = strayset.find(pg_shard_t(p->second, shard_id_t::NO_SHARD));
-	if (r != strayset.end())
-	  strayset.erase(r);
+	async_recovery_targets.push_back(*q);
 	// backfill->insert(pg_shard_t(p->second, shard_id_t::NO_SHARD));
         ss << " too many updates for shard " << p->second
 	   << ", switch to async recovery" << std::endl;
       } else {
 	break;
       }
+    }
+  }
+  // when up == acting == want, don't bother to do async recovery
+  if (is_up_or_acting_set_equal_replicated(up, acting) &&
+      is_up_or_acting_set_equal_replicated(acting, *want)) {
+    ss << " up == acting == want, don't bother to do async recovery" << std::endl;
+    assert(backfill->empty());
+    acting_backfill->clear();
+    // remove all async recovery targets
+    for (vector<int>::iterator it = want->begin(); it != want->end(); ++it) {
+      pg_shard_t shard(*it, shard_id_t::NO_SHARD);
+      acting_backfill->insert(shard);
+    }
+  } else {
+    for (vector<int>::iterator it = async_recovery_targets.begin();
+	 it != async_recovery_targets.end(); ++it) {
+      // remove async recovery targets from stray set if any
+      set<pg_shard_t>::iterator r = strayset.find(pg_shard_t(*it, shard_id_t::NO_SHARD));
+      if (r != strayset.end())
+	strayset.erase(r);
     }
   }
 }
