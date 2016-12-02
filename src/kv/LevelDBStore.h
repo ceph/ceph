@@ -175,7 +175,7 @@ public:
     return do_open(out, false);
   }
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out) {
+  int create_and_open(ostream &out) override {
     return do_open(out, true);
   }
 

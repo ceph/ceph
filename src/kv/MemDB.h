@@ -117,7 +117,7 @@ public:
 
   int do_open(ostream &out, bool create);
   int open(ostream &out) { return do_open(out, false); }
-  int create_and_open(ostream &out) { return do_open(out, true); }
+  int create_and_open(ostream &out) override { return do_open(out, true); }
 
   KeyValueDB::Transaction get_transaction() {
     return std::shared_ptr<MDBTransactionImpl>(new MDBTransactionImpl(this));

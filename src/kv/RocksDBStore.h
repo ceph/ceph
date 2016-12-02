@@ -52,7 +52,10 @@ namespace rocksdb{
   class WriteBatch;
   class Iterator;
   class Logger;
+  class ColumnFamilyHandle;
   struct Options;
+  struct DBOptions;
+  struct ColumnFamilyOptions;
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
@@ -68,7 +71,10 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::DB *db;
   rocksdb::Env *env;
   string options_str;
-  int do_open(ostream &out, bool create_if_missing);
+  int create_db_dir();
+  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
+  int do_open(ostream &out, bool create_if_missing,
+	      const vector<ColumnFamily>* cfs = nullptr);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -134,11 +140,16 @@ public:
 
   static bool check_omap_dir(string &omap_dir);
   /// Opens underlying db
-  int open(ostream &out) {
+  int open(ostream &out) override {
     return do_open(out, false);
   }
+  int open_with_cf(ostream &out, const vector<ColumnFamily>& cfs) override {
+    return do_open(out, false, &cfs);
+  }
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out);
+  int create_and_open(ostream &out) override;
+  int create_and_open_with_cf(ostream &out,
+			      const vector<ColumnFamily>& cfs) override;
 
   void close();
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
@@ -302,6 +313,28 @@ public:
     int status();
   };
 
+  class RocksDBCFIteratorImpl :
+    public KeyValueDB::ColumnFamilyIteratorImpl{
+  protected:
+    rocksdb::Iterator *dbiter;
+  public:
+    explicit RocksDBCFIteratorImpl(rocksdb::Iterator *iter) :
+      dbiter(iter) { }
+    ~RocksDBCFIteratorImpl();
+
+    int seek_to_first();
+    int seek_to_last();
+    int upper_bound(const string &after);
+    int lower_bound(const string &to);
+    bool valid();
+    int next();
+    int prev();
+    string key();
+    bufferlist value();
+    bufferptr value_as_ptr();
+    int status();
+  };
+
   /// Utility
   static string combine_strings(const string &prefix, const string &value);
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
@@ -382,7 +415,8 @@ err:
 
 
 protected:
-  WholeSpaceIterator _get_iterator();
+  WholeSpaceIterator _get_iterator() override;
+  ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name) override;
 };
 
 
