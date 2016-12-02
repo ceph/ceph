@@ -5,6 +5,8 @@ os_version: "14.04"
 overrides:
   ceph-fuse:
     disabled: true
+  kclient:
+    disabled: true
 tasks:
 - workunit:
     clients:
