@@ -483,8 +483,8 @@ test_status_in_pool_dir()
     local status_log=${TEMPDIR}/${cluster}-${image}.mirror_status
     rbd --cluster ${cluster} -p ${pool} mirror image status ${image} |
 	tee ${status_log} >&2
-    grep "state: .*${state_pattern}" ${status_log}
-    grep "description: .*${description_pattern}" ${status_log}
+    grep "state: .*${state_pattern}" ${status_log} || return 1
+    grep "description: .*${description_pattern}" ${status_log} || return 1
 }
 
 wait_for_status_in_pool_dir()
