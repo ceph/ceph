@@ -66,17 +66,24 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
 
 
-/// max recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 255u
-
-/// base recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_BASE 230u
-
-/// base backfill priority for MBackfillReserve (degraded PG)
-#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 200u
+/// min recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MIN 0
 
 /// base backfill priority for MBackfillReserve
-#define OSD_BACKFILL_PRIORITY_BASE 1u
+#define OSD_BACKFILL_PRIORITY_BASE 100
+
+/// base backfill priority for MBackfillReserve (degraded PG)
+#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 140
+
+/// base recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_BASE 180
+
+/// base backfill priority for MBackfillReserve (inactive PG)
+#define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
+
+/// max recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 255
+
 
 typedef hobject_t collection_list_handle_t;
 

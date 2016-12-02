@@ -2125,18 +2125,31 @@ unsigned PG::get_recovery_priority()
   int pool_recovery_priority = 0;
   pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-  unsigned ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
-  if (ret > OSD_RECOVERY_PRIORITY_MAX)
+  int ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
+
+  // Clamp to valid range
+  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
     ret = OSD_RECOVERY_PRIORITY_MAX;
-  return ret;
+  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
+    ret = OSD_RECOVERY_PRIORITY_MIN;
+  }
+
+  static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
+  static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
+
+  return static_cast<unsigned>(ret);
 }
 
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  unsigned ret = OSD_BACKFILL_PRIORITY_BASE;
-  if (is_undersized()) {
+  int ret = OSD_BACKFILL_PRIORITY_BASE;
+  if (acting.size() < pool.info.min_size) {
+    // inactive: no. of replicas < min_size, highest priority since it blocks IO
+    ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
+
+  } else if (is_undersized()) {
     // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
     assert(pool.info.size > actingset.size());
     ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
@@ -2145,9 +2158,20 @@ unsigned PG::get_backfill_priority()
     // degraded: baseline degraded
     ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
   }
-  assert (ret < OSD_RECOVERY_PRIORITY_MAX);
 
-  return ret;
+  // Adjust with pool's recovery priority
+  int pool_recovery_priority = 0;
+  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+  ret += pool_recovery_priority;
+
+  // Clamp to valid range
+  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
+    ret = OSD_RECOVERY_PRIORITY_MAX;
+  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
+    ret = OSD_RECOVERY_PRIORITY_MIN;
+  }
+
+  return static_cast<unsigned>(ret);
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
