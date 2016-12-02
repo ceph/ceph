@@ -261,7 +261,7 @@ uint64_t StupidAllocator::get_free()
   return num_free;
 }
 
-void StupidAllocator::dump(ostream& out)
+void StupidAllocator::dump()
 {
   std::lock_guard<std::mutex> l(lock);
   for (unsigned bin = 0; bin < free.size(); ++bin) {

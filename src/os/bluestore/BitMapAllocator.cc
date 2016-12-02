@@ -252,7 +252,7 @@ uint64_t BitMapAllocator::get_free()
     m_block_size);
 }
 
-void BitMapAllocator::dump(ostream& out)
+void BitMapAllocator::dump()
 {
   std::lock_guard<std::mutex> l(m_lock);
   dout(30) << __func__ << " instance " << (uint64_t) this
