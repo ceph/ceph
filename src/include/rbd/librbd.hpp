@@ -231,6 +231,8 @@ public:
 			const char *snap_name);
   int group_snap_remove(IoCtx& io_ctx, const char *group_name,
 			const char *snap_name);
+  int group_snap_rename(IoCtx& group_ioctx, const char *group_name,
+                        const char *old_snap_name, const char *new_snap_name);
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
 		      std::vector<group_snap_spec_t> *snaps);
 
