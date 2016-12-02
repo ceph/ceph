@@ -5,3 +5,10 @@
   is enabled (it's off by default).  This means that a VM using librbd that
   previously would have gotten an EIO and gone read-only will now see a
   blocked/hung IO instead.
+
+* Calculation of recovery priorities has been updated.
+  This could lead to unintuitive recovery prioritization
+  during cluster upgrade. In case of such recovery, OSDs
+  in old version would operate on different priority ranges
+  than new ones. Once upgraded, cluster will operate on
+  consistent values.
