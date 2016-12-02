@@ -821,6 +821,28 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
 
     yield
 
+def configure_compression_in_default_zone(ctx, config):
+    ceph_config = ctx.ceph['ceph'].conf.get('global', {})
+    ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
+    for client, c_config in config.iteritems():
+        ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
+        key = 'rgw compression type'
+        if not key in ceph_config:
+            log.debug('No compression setting to enable')
+            break
+        compression = ceph_config[key]
+        log.debug('Configuring compression type = %s', compression)
+
+        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+        # issue a 'radosgw-admin user list' command to trigger this
+        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+
+        rgwadmin(ctx, client,
+                cmd=['zone', 'placement', 'modify', '--rgw-zone', 'default',
+                     '--placement-id', 'default-placement', '--compression', compression],
+                check_status=True)
+        break # only the first client
+
 @contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
     """
@@ -830,6 +852,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
         log.debug(
             'In rgw.configure_regions_and_zones() and regions is None. '
             'Bailing')
+        configure_compression_in_default_zone(ctx, config)
         yield
         return
 
@@ -837,6 +860,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
         log.debug(
             'In rgw.configure_regions_and_zones() and realm is None. '
             'Bailing')
+        configure_compression_in_default_zone(ctx, config)
         yield
         return
 
