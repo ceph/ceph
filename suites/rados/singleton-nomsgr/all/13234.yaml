@@ -1,7 +1,7 @@
 # we don't have el7 packages for old releases
 # http://tracker.ceph.com/issues/15139
 os_type: ubuntu
-os_version: trusty
+os_version: "14.04"
 overrides:
   ceph:
     conf:
