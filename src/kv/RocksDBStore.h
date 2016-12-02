@@ -13,6 +13,9 @@
 #include <boost/scoped_ptr.hpp>
 #include "rocksdb/write_batch.h"
 #include "rocksdb/perf_context.h"
+#include "rocksdb/iostats_context.h"
+#include "rocksdb/statistics.h"
+#include "rocksdb/table.h"
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
@@ -53,6 +56,7 @@ namespace rocksdb{
   class Iterator;
   class Logger;
   struct Options;
+  struct BlockBasedTableOptions;
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
@@ -67,7 +71,10 @@ class RocksDBStore : public KeyValueDB {
   void *priv;
   rocksdb::DB *db;
   rocksdb::Env *env;
+  std::shared_ptr<rocksdb::Statistics> dbstats;
+  rocksdb::BlockBasedTableOptions bbt_opts;
   string options_str;
+
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -123,6 +130,7 @@ public:
     priv(p),
     db(NULL),
     env(static_cast<rocksdb::Env*>(p)),
+    dbstats(NULL),
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
@@ -141,6 +149,13 @@ public:
   int create_and_open(ostream &out);
 
   void close();
+
+  bool can_dump_stats() {
+    return true;
+  }
+
+  void get_statistics(Formatter *f);
+
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
     int num_seen = 0;

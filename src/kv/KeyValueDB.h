@@ -11,6 +11,7 @@
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
+#include "common/Formatter.h"
 
 using std::string;
 /**
@@ -312,6 +313,12 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual bool can_dump_stats() {
+    return false;
+  }
+  virtual void get_statistics(Formatter *f) {
+    return;
+  }
 protected:
   /// List of matching prefixes and merge operators
   std::vector<std::pair<std::string,
