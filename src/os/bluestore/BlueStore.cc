@@ -8005,6 +8005,7 @@ int BlueStore::_do_write(
 	   << " - have 0x" << o->onode.size
 	   << " (" << std::dec << o->onode.size << ")"
 	   << " bytes"
+	   << " fadvise_flags 0x" << std::hex << fadvise_flags << std::dec
 	   << dendl;
   _dump_onode(o);
 
@@ -8289,7 +8290,10 @@ int BlueStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  o->onode.attrs[name] = val;
+  if (val.is_partial())
+    o->onode.attrs[name] = bufferptr(val.c_str(), val.length());
+  else
+    o->onode.attrs[name] = val;
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
