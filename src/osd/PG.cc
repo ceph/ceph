@@ -842,12 +842,20 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
   map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();
   while (p != peer_info.end()) {
     if (!osdmap->is_up(p->first.osd)) {
-      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
-      peer_missing.erase(p->first);
-      peer_log_requested.erase(p->first);
-      peer_missing_requested.erase(p->first);
+      pg_shard_t shard = p->first;
+      dout(10) << " dropping down osd." << shard << " info " << p->second << dendl;
+      peer_missing.erase(shard);
+      peer_log_requested.erase(shard);
+      peer_missing_requested.erase(shard);
       peer_info.erase(p++);
       removed = true;
+      // if the up and acting don't change, but the async recovery target osd goes down,
+      // remove it from the async recovery targets
+      set<pg_shard_t>::iterator q = actingbackfill.find(shard);
+      if (q != actingbackfill.end()) {
+        dout(10) << " dropping down osd." << shard << " from async recovery targets" << dendl;
+	actingbackfill.erase(q);
+      }
     } else
       ++p;
   }
