@@ -3,7 +3,7 @@
 
 #include "common/SloppyCRCMap.h"
 #include "common/Formatter.h"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 void dump(const SloppyCRCMap& scm)
 {

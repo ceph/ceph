@@ -21,7 +21,7 @@
 #include <string>
 #include <set>
 #include <vector>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "acconfig.h"
 #include "include/Context.h"

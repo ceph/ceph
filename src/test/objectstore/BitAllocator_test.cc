@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <math.h>
 #include <sstream>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 
 #define bmap_test_assert(x) ASSERT_EQ(true, (x))

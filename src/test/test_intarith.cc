@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <iostream>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "include/intarith.h"
 

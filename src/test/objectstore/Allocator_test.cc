@@ -5,7 +5,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 #include <iostream>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"

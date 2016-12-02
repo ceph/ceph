@@ -21,7 +21,7 @@
  */
 
 #include <iostream>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "include/stringify.h"
 #include "common/ceph_argparse.h"

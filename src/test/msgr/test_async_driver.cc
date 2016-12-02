@@ -55,7 +55,7 @@
 #endif
 #include "msg/async/EventSelect.h"
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 
 #if GTEST_HAS_PARAM_TEST

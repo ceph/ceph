@@ -16,7 +16,7 @@
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <curl/curl.h>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 TEST(HTTPManager, SignalThread)
 {

@@ -16,7 +16,7 @@
 
 #include <map>
 #include <random>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "msg/async/dpdk/UserspaceEvent.h"
 #include "global/global_context.h"

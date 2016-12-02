@@ -9,7 +9,7 @@
  */
 
 #include <iostream>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "common/histogram.h"
 #include "include/stringify.h"

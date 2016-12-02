@@ -12,7 +12,7 @@
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "common/errno.h"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "os/bluestore/BlueFS.h"
 

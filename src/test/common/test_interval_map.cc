@@ -12,7 +12,7 @@
  *
  */
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
 #include <boost/mpl/apply.hpp>

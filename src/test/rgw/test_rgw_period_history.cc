@@ -16,7 +16,7 @@
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <boost/lexical_cast.hpp>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 namespace {
 

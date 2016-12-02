@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include "osd/OSD.h"
 #include "os/ObjectStore.h"
 #include "mon/MonClient.h"

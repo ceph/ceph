@@ -6,7 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include <set>
 
 namespace librbd {
