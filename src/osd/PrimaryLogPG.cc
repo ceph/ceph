@@ -3801,7 +3801,7 @@ int PrimaryLogPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
   }
 
   while (write_length) {
-    write_op.indata.append(osd_op.indata.c_str(), op.writesame.data_length);
+    write_op.indata.append(osd_op.indata);
     write_length -= op.writesame.data_length;
   }
 
