@@ -3573,6 +3573,9 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
       uint32_t elength;
       r = alloc->allocate(gift, min_alloc_size, hint, &eoffset, &elength);
       if (r < 0) {
+	derr << __func__ << " allocate failed on 0x" << std::hex << gift
+	     << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+	alloc->dump();
         assert(0 == "allocate failed, wtf");
         return r;
       }
