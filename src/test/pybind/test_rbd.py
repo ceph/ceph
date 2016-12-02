@@ -1790,6 +1790,16 @@ class TestGroups(object):
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
+    def test_group_snap_rename(self):
+        global snap_name
+        new_snap_name = "new" + snap_name
+
+        eq([], list(self.group.list_snaps()))
+        self.group.create_snap(snap_name)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.rename_snap(snap_name, new_snap_name)
+        eq([new_snap_name], [snap['name'] for snap in self.group.list_snaps()])
+
 @with_setup(create_image, remove_image)
 def test_rename():
     rbd = RBD()

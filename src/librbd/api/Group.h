@@ -37,11 +37,13 @@ struct Group {
   static int image_get_group(ImageCtxT *ictx, group_spec_t *group_spec);
 
   static int snap_create(librados::IoCtx& group_ioctx,
-			       const char *group_name, const char *snap_name);
+                         const char *group_name, const char *snap_name);
   static int snap_remove(librados::IoCtx& group_ioctx,
-			       const char *group_name, const char *snap_name);
+                         const char *group_name, const char *snap_name);
+  static int snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
+                         const char *old_snap_name, const char *new_snap_name);
   static int snap_list(librados::IoCtx& group_ioctx, const char *group_name,
-			     std::vector<group_snap_spec_t> *snaps);
+                       std::vector<group_snap_spec_t> *snaps);
 
 };
 

@@ -2611,6 +2611,30 @@ TRACEPOINT_EVENT(librbd, group_snap_remove_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, group_snap_rename_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, old_snap_name,
+        const char*, new_snap_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(old_snap_name, old_snap_name)
+        ctf_string(new_snap_name, new_snap_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_rename_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, group_snap_list_enter,
     TP_ARGS(
         const char*, pool_name,
