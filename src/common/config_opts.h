@@ -866,6 +866,10 @@ OPTION(rocksdb_pin_l0_filter_and_index_blocks_in_cache, OPT_BOOL, true) // Wheth
 OPTION(rocksdb_index_type, OPT_STR, "binary_search") // Type of index for SST files: binary_search, hash_search, two_level
 OPTION(rocksdb_partition_filters, OPT_BOOL, false) // (experimental) partition SST index/filters into smaller blocks
 OPTION(rocksdb_metadata_block_size, OPT_INT, 4*1024) // The block size for index partitions (0 = rocksdb default)
+OPTION(rocksdb_perf, OPT_BOOL, false) // Enabling this will have 5-10% impact on performance for the stats collection
+OPTION(rocksdb_collect_compaction_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_extended_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_memory_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "compaction_readahead_size=2097152")

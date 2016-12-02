@@ -21,6 +21,7 @@ using std::string;
 #include "common/perf_counters.h"
 #include "common/debug.h"
 #include "include/str_list.h"
+#include "include/stringify.h"
 #include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
@@ -181,6 +182,12 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
       return -EINVAL;
     }
   }
+
+  if (g_conf->rocksdb_perf)  {
+    dbstats = rocksdb::CreateDBStatistics();
+    opt.statistics = dbstats;
+  }
+
   opt.create_if_missing = create_if_missing;
   if (g_conf->rocksdb_separate_wal_dir) {
     opt.wal_dir = path + ".wal";
@@ -315,6 +322,47 @@ void RocksDBStore::close()
     cct->get_perfcounters_collection()->remove(logger);
 }
 
+void RocksDBStore::get_statistics(Formatter *f)
+{
+  if (!g_conf->rocksdb_perf)  {
+    dout(20) << __func__ << "RocksDB perf is disabled, can't probe for stats"
+	     << dendl;
+    return;
+  }
+
+  if (g_conf->rocksdb_collect_compaction_stats) {
+    std::string stats;
+    bool status = db->GetProperty("rocksdb.stats", &stats);
+    if (status) {
+      f->open_object_section("rocksdb_statistics");
+      f->dump_string("rocksdb_compaction_statistics", stats);
+      f->close_section();
+    }
+  }
+  if (g_conf->rocksdb_collect_extended_stats) {
+    if (dbstats) {
+      f->open_object_section("rocksdb_extended_statistics");
+      f->dump_string("rocksdb_extended_statistics", dbstats->ToString().c_str());
+      f->close_section();
+    }
+    f->open_object_section("rocksdbstore_perf_counters");
+    logger->dump_formatted(f,0);
+    f->close_section();
+  }
+  if (g_conf->rocksdb_collect_memory_stats) {
+    f->open_object_section("rocksdb_memtable_statistics");
+    std::string str(stringify(bbt_opts.block_cache->GetUsage()));
+    f->dump_string("block_cache_usage", str.data());
+    str.clear();
+    str.append(stringify(bbt_opts.block_cache->GetPinnedUsage()));
+    f->dump_string("block_cache_pinned_blocks_usage", str);
+    str.clear();
+    db->GetProperty("rocksdb.cur-size-all-mem-tables", &str);
+    f->dump_string("rocksdb_memtable_usage", str);
+    f->close_section();
+  }
+}
+
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
   utime_t start = ceph_clock_now(g_ceph_context);
@@ -423,7 +471,6 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   }
 }
 
-ew/delete
 int RocksDBStore::get(
     const string &prefix,
     const std::set<string> &keys,
