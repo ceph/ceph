@@ -72,7 +72,12 @@ def main(args):
 
     if conf.rerun:
         rerun_filters = get_rerun_filters(conf.rerun, conf.rerun_statuses)
-        print rerun_filters
+        if len(rerun_filters['descriptions']) == 0:
+            log.warn(
+                "No jobs matched the status filters: %s",
+                conf.rerun_statuses,
+            )
+            return
         conf.filter_in.extend(rerun_filters['descriptions'])
         conf.suite = normalize_suite_name(rerun_filters['suite'])
 
