@@ -886,7 +886,10 @@ OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default rocksdb cache size
 OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
-OPTION(rocksdb_perf, OPT_BOOL, false) // rocksdb breakdown
+OPTION(rocksdb_perf, OPT_BOOL, false) // Enabling this will have 5-10% impact on performance for the stats collection
+OPTION(rocksdb_collect_compaction_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_extended_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_memory_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
