@@ -652,6 +652,7 @@ public:
 
     bool all_applied;
     bool all_committed;
+    const bool applies_with_commit;
     
     utime_t   start;
     
@@ -664,8 +665,10 @@ public:
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
     
-    RepGather(OpContext *c, ceph_tid_t rt,
-	      eversion_t lc) :
+    RepGather(
+      OpContext *c, ceph_tid_t rt,
+      eversion_t lc,
+      bool applies_with_commit) :
       hoid(c->obc->obs.oi.soid),
       op(c->op),
       queue_item(this),
@@ -673,6 +676,7 @@ public:
       rep_tid(rt), 
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
+      applies_with_commit(applies_with_commit),
       pg_local_last_complete(lc),
       lock_manager(std::move(c->lock_manager)),
       on_applied(std::move(c->on_applied)),
@@ -685,13 +689,15 @@ public:
       OpRequestRef &&o,
       boost::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
-      eversion_t lc) :
+      eversion_t lc,
+      bool applies_with_commit) :
       op(o),
       queue_item(this),
       nref(1),
       rep_tid(rt),
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
+      applies_with_commit(applies_with_commit),
       pg_local_last_complete(lc),
       lock_manager(std::move(manager)) {
       if (on_complete) {
