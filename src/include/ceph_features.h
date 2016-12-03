@@ -68,6 +68,8 @@
 /* ... */
 #define CEPH_FEATURE_HAMMER_0_94_4 (1ULL<<55)
 
+#define CEPH_OSD_PARTIAL_RECOVERY  (1ULL<<59) /* recover partial extents for objects */
+
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
 #define CEPH_FEATURE_RESERVED_BROKEN  (1ULL<<63)  /* DO NOT USE THIS; see below */
@@ -154,6 +156,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
          CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY |		 \
      CEPH_FEATURE_OSD_HITSET_GMT |                       \
 	 CEPH_FEATURE_HAMMER_0_94_4 |		 \
+     CEPH_OSD_PARTIAL_RECOVERY |    \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
