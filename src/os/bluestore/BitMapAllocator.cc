@@ -252,27 +252,27 @@ uint64_t BitMapAllocator::get_free()
     m_block_size);
 }
 
-void BitMapAllocator::dump(ostream& out)
+void BitMapAllocator::dump()
 {
   std::lock_guard<std::mutex> l(m_lock);
-  dout(30) << __func__ << " instance " << (uint64_t) this
+  dout(0) << __func__ << " instance " << (uint64_t) this
            << " committing: " << m_committing.num_intervals() << " extents"
            << dendl;
 
   for (auto p = m_committing.begin();
     p != m_committing.end(); ++p) {
-    dout(30) << __func__ << " instance " << (uint64_t) this
+    dout(0) << __func__ << " instance " << (uint64_t) this
              << " 0x" << std::hex << p.get_start()
              << "~" << p.get_len() << std::dec
              << dendl;
   }
-  dout(30) << __func__ << " instance " << (uint64_t) this
+  dout(0) << __func__ << " instance " << (uint64_t) this
            << " uncommitted: " << m_uncommitted.num_intervals() << " extents"
            << dendl;
 
   for (auto p = m_uncommitted.begin();
     p != m_uncommitted.end(); ++p) {
-    dout(30) << __func__ << " 0x" << std::hex << p.get_start()
+    dout(0) << __func__ << " 0x" << std::hex << p.get_start()
              << "~" << p.get_len() << std::dec
              << dendl;
   }

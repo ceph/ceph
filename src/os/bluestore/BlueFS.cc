@@ -1754,6 +1754,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   r = alloc[id]->alloc_extents(left, min_alloc_size,
                                hint, &extents, &count);
   if (r < 0) {
+    derr << __func__ << " allocate failed on 0x" << std::hex << left
+	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+    alloc[id]->dump();
     assert(0 == "allocate failed... wtf");
     return r;
   }
