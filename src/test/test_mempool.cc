@@ -277,6 +277,18 @@ TEST(mempool, bufferlist)
   ASSERT_GE(after, before + len);
 }
 
+TEST(mempool, string_test)
+{
+  mempool::unittest_2::string s;
+  s.reserve(100);
+  EXPECT_GE(mempool::unittest_2::allocated_items(), s.capacity() + 1u); // +1 for zero-byte termination :
+  for (size_t i = 0; i < 10; ++i) {
+    s += '1';
+    s.append(s);
+    EXPECT_GE(mempool::unittest_2::allocated_items(), s.capacity() + 1u);
+  }
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
