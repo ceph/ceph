@@ -1753,6 +1753,8 @@ public:
     return 0;
   }
 
+  void get_db_statistics(Formatter *f);
+
 public:
   int statfs(struct store_statfs_t *buf) override;
 
