@@ -8520,23 +8520,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	 repop->on_applied.erase(p++)) {
       (*p)();
     }
-
-    // send dup acks, in order
-    if (waiting_for_ack.count(repop->v)) {
-      assert(waiting_for_ack.begin()->first == repop->v);
-      for (list<pair<OpRequestRef, version_t> >::iterator i =
-	     waiting_for_ack[repop->v].begin();
-	   i != waiting_for_ack[repop->v].end();
-	   ++i) {
-	MOSDOp *m = static_cast<MOSDOp*>(i->first->get_req());
-	MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
-	reply->set_reply_versions(repop->v,
-				  i->second);
-	reply->add_flags(CEPH_OSD_FLAG_ACK);
-	osd->send_message_osd_client(reply, m->get_connection());
-      }
-      waiting_for_ack.erase(repop->v);
-    }
   }
 
   // done.
