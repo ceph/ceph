@@ -6162,6 +6162,10 @@ uint64_t BlueStore::_assign_blobid(TransContext *txc)
   return bid;
 }
 
+void BlueStore::get_db_statistics(Formatter *f)
+{
+  db->get_statistics(f);
+}
 
 BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 {
