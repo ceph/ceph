@@ -1741,8 +1741,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   m->finish_decode();
   m->clear_payload();
 
+  dout(20) << __func__ << ": op " << *m << dendl;
+
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
     // not implemented.
+    dout(20) << __func__ << ": PARALLELEXEC not implemented " << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
@@ -1862,6 +1865,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
+      dout(20) << __func__ << ": write to clone not valid " << *m << dendl;
       osd->reply_op_error(op, -EINVAL);
       return;
     }
@@ -1945,6 +1949,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
  
   // asking for SNAPDIR is only ok for reads
   if (m->get_snapid() == CEPH_SNAPDIR && op->may_write()) {
+    dout(20) << __func__ << ": write to snapdir not valid " << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
