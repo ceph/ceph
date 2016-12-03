@@ -3,7 +3,7 @@
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
-arch=$(uname -p)
+arch=$(uname -m)
 
 case $arch in
     i[[3456]]86*|x86_64*|amd64*)
