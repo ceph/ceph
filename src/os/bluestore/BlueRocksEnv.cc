@@ -159,9 +159,9 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   // Indicates if the class makes use of unbuffered I/O
-  /*bool UseOSBuffer() const {
-    return true;
-    }*/
+  bool UseOSBuffer() const {
+    return false;
+  }
 
   // This is needed when you want to allocate
   // AlignedBuffer for use with file I/O classes
