@@ -8373,21 +8373,11 @@ int BlueStore::_rmattrs(TransContext *txc,
 
 void BlueStore::_do_omap_clear(TransContext *txc, uint64_t id)
 {
-  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
   string prefix, tail;
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
-  it->lower_bound(prefix);
-  while (it->valid()) {
-    if (it->key() >= tail) {
-      dout(30) << __func__ << "  stop at " << pretty_binary_string(tail)
-	       << dendl;
-      break;
-    }
-    txc->t->rmkey(PREFIX_OMAP, it->key());
-    dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
-    it->next();
-  }
+
+  txc->t->rm_range_keys(PREFIX_OMAP, prefix, tail);
 }
 
 int BlueStore::_omap_clear(TransContext *txc,
@@ -8495,26 +8485,14 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
 				 const string& first, const string& last)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  KeyValueDB::Iterator it;
   string key_first, key_last;
   int r = 0;
   if (!o->onode.omap_head) {
     goto out;
   }
-  it = db->get_iterator(PREFIX_OMAP);
   get_omap_key(o->onode.omap_head, first, &key_first);
   get_omap_key(o->onode.omap_head, last, &key_last);
-  it->lower_bound(key_first);
-  while (it->valid()) {
-    if (it->key() >= key_last) {
-      dout(30) << __func__ << "  stop at " << pretty_binary_string(key_last)
-	       << dendl;
-      break;
-    }
-    txc->t->rmkey(PREFIX_OMAP, it->key());
-    dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
-    it->next();
-  }
+  txc->t->rm_range_keys(PREFIX_OMAP, key_first, key_last);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
