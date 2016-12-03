@@ -50,7 +50,7 @@ public:
 
   uint64_t get_free();
 
-  void dump(std::ostream& out);
+  void dump() override;
 
   void init_add_free(uint64_t offset, uint64_t length);
   void init_rm_free(uint64_t offset, uint64_t length);
