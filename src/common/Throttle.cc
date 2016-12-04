@@ -18,6 +18,7 @@ enum {
   l_throttle_first = 532430,
   l_throttle_val,
   l_throttle_max,
+  l_throttle_get_started,
   l_throttle_get,
   l_throttle_get_sum,
   l_throttle_get_or_fail_fail,
@@ -45,6 +46,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_
     PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
     b.add_u64(l_throttle_val, "val", "Currently available throttle");
     b.add_u64(l_throttle_max, "max", "Max value for throttle");
+    b.add_u64_counter(l_throttle_get_started, "get_started", "Number of get calls, increased before wait");
     b.add_u64_counter(l_throttle_get, "get", "Gets");
     b.add_u64_counter(l_throttle_get_sum, "get_sum", "Got data");
     b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail", "Get blocked during get_or_fail");
@@ -164,6 +166,9 @@ bool Throttle::get(int64_t c, int64_t m)
 
   assert(c >= 0);
   ldout(cct, 10) << "get " << c << " (" << count.read() << " -> " << (count.read() + c) << ")" << dendl;
+  if (logger) {
+    logger->inc(l_throttle_get_started);
+  }
   bool waited = false;
   {
     Mutex::Locker l(lock);
