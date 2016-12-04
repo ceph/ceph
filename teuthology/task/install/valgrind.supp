@@ -360,3 +360,13 @@
 	fun:*rocksdb*Env*Default*
 	...
 }
+{
+	libstdc++ leak on xenial
+	Memcheck:Leak
+	fun:malloc
+	...
+	fun:call_init.part.0
+	fun:call_init
+	fun:_dl_init
+	...
+}
