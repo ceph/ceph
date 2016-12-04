@@ -76,13 +76,18 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
 
   max_recv_wr = device->device_attr->max_srq_wr;
   if (max_recv_wr > cct->_conf->ms_async_rdma_receive_buffers) {
-    ldout(cct, 0) << __func__ << " max allowed receive buffers is " << max_recv_wr << " use this instead." << dendl;
     max_recv_wr = cct->_conf->ms_async_rdma_receive_buffers;
+    ldout(cct, 0) << __func__ << " assigning: " << max_recv_wr << " receive buffers" << dendl;
+  } else {
+    ldout(cct, 0) << __func__ << " using the max allowed receive buffers: " << max_recv_wr << dendl;
   }
+
   max_send_wr = device->device_attr->max_qp_wr;
   if (max_send_wr > cct->_conf->ms_async_rdma_send_buffers) {
-    ldout(cct, 0) << __func__ << " max allowed send buffers is " << max_send_wr << " use this instead." << dendl;
     max_send_wr = cct->_conf->ms_async_rdma_send_buffers;
+    ldout(cct, 0) << __func__ << " assigning: " << max_send_wr << " send buffers"  << dendl;
+  } else {
+    ldout(cct, 0) << __func__ << " using the max allowed send buffers: " << max_send_wr << dendl;
   }
 
   ldout(cct, 1) << __func__ << " device allow " << device->device_attr->max_cqe
@@ -91,9 +96,7 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
   memory_manager = new MemoryManager(device, pd,
                                      cct->_conf->ms_async_rdma_enable_hugepage);
   memory_manager->register_rx_tx(
-      cct->_conf->ms_async_rdma_buffer_size,
-      cct->_conf->ms_async_rdma_receive_buffers,
-      cct->_conf->ms_async_rdma_send_buffers);
+      cct->_conf->ms_async_rdma_buffer_size, max_recv_wr, max_send_wr);
 
   srq = create_shared_receive_queue(max_recv_wr, MAX_SHARED_RX_SGE_COUNT);
   post_channel_cluster();
@@ -157,6 +160,8 @@ int Infiniband::QueuePair::init()
   qp = ibv_create_qp(pd, &qpia);
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers or"
+	" ms_async_rdma_send_buffers" << dendl;
     return -1;
   }
 
