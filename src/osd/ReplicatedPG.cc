@@ -2353,7 +2353,8 @@ void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 	osd->send_message_osd_client(reply, m->get_connection());
       }
       ),
-    op
+    op,
+    r
   );
 }
 
@@ -8508,7 +8509,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     waiting_for_ondisk[repop->v].begin();
 	   i != waiting_for_ondisk[repop->v].end();
 	   ++i) {
-	osd->reply_op_error(i->first, 0, repop->v,
+	osd->reply_op_error(i->first, repop->r, repop->v,
 			    i->second);
       }
       waiting_for_ondisk.erase(repop->v);
@@ -8657,6 +8658,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
 
 boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
   eversion_t version,
+  int r,
   ObcLockManager &&manager,
   OpRequestRef &&op,
   boost::optional<std::function<void(void)> > &&on_complete)
@@ -8667,7 +8669,8 @@ boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
     std::move(on_complete),
     osd->get_tid(),
     info.last_complete,
-    true);
+    true,
+    r);
   repop->v = version;
 
   repop->start = ceph_clock_now(cct);
@@ -8723,7 +8726,8 @@ void ReplicatedPG::submit_log_entries(
   const mempool::osd::list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&_on_complete,
-  OpRequestRef op)
+  OpRequestRef op,
+  int r)
 {
   dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
@@ -8739,6 +8743,7 @@ void ReplicatedPG::submit_log_entries(
   if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     repop = new_repop(
       version,
+      r,
       std::move(manager),
       std::move(op),
       std::move(_on_complete));

@@ -645,6 +645,7 @@ public:
     int nref;
 
     eversion_t v;
+    int r = 0;
 
     ceph_tid_t rep_tid;
 
@@ -690,10 +691,12 @@ public:
       boost::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
       eversion_t lc,
-      bool applies_with_commit) :
+      bool applies_with_commit,
+      int r) :
       op(o),
       queue_item(this),
       nref(1),
+      r(r),
       rep_tid(rt),
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
@@ -836,6 +839,7 @@ protected:
     ceph_tid_t rep_tid);
   boost::intrusive_ptr<RepGather> new_repop(
     eversion_t version,
+    int r,
     ObcLockManager &&manager,
     OpRequestRef &&op,
     boost::optional<std::function<void(void)> > &&on_complete);
@@ -854,7 +858,8 @@ protected:
     const mempool::osd::list<pg_log_entry_t> &entries,
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete,
-    OpRequestRef op = OpRequestRef());
+    OpRequestRef op = OpRequestRef(),
+    int r = 0);
   struct LogUpdateCtx {
     boost::intrusive_ptr<RepGather> repop;
     set<pg_shard_t> waiting_on;
@@ -1635,8 +1640,9 @@ inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
       << " committed?=" << repop.all_committed
-      << " applied?=" << repop.all_applied;
-  out << ")";
+      << " applied?=" << repop.all_applied
+      << " r=" << repop.r
+      << ")";
   return out;
 }
 
