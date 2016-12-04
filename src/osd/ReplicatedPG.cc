@@ -2342,8 +2342,8 @@ void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
     boost::optional<std::function<void(void)> >(
       [=]() {
 	dout(20) << "finished " << __func__ << " r=" << r << dendl;
-	int flags = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 	MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+	int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	MOSDOpReply *reply = orig_reply;
 	if (reply == nullptr) {
 	  reply = new MOSDOpReply(m, r, get_osdmap()->get_epoch(),
