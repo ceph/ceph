@@ -5496,6 +5496,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  ctx->watch_connects.push_back(make_pair(w, true));
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_PING) {
+	  /* Note: WATCH with PING doesn't cause may_write() to return true,
+	   * so if there is nothing else in the transaction, this is going
+	   * to run do_osd_op_effects, but not write out a log entry */
 	  if (!oi.watchers.count(make_pair(cookie, entity))) {
 	    result = -ENOTCONN;
 	    break;
