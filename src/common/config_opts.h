@@ -222,6 +222,7 @@ OPTION(ms_async_rdma_buffer_size, OPT_INT, 8192)
 OPTION(ms_async_rdma_send_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_receive_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_port_num, OPT_U32, 1)
+OPTION(ms_async_rdma_polling_us, OPT_U32, 1000)
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
 OPTION(ms_dpdk_coremask, OPT_STR, "1")
