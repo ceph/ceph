@@ -19,6 +19,17 @@
  *
  */
 
+#include "include/types.h" // FIXME: ordering shouldn't be important, but right 
+                           // now, this include has to come before the others.
+
+#include "common/ceph_argparse.h"
+#include "common/code_environment.h"
+#include "common/config.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
+#include "gtest/gtest.h"
+
 #include <stdio.h>
 #include <signal.h>
 #include "gtest/gtest.h"
@@ -33,6 +44,8 @@ public:
   virtual void TearDown() {
     clear();
   }
+
+  struct error : public std::exception { };
 
   static hobject_t mk_obj(unsigned id) {
     hobject_t hoid;
@@ -303,10 +316,10 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     log.tail = eversion_t(2, 1);
     TestHandler h(remove_snap);
-    EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
-				      dirty_info, dirty_big_info), "");
+    EXPECT_THROW(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
+				      dirty_info, dirty_big_info),
+		 PGLogTest::error);
   }
-
   /*        +----------------+
             |  log           |
             +--------+-------+
@@ -1250,8 +1263,9 @@ TEST_F(PGLogTest, merge_log) {
     olog.tail = eversion_t(1, 1);
 
     TestHandler h(remove_snap);
-    ASSERT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
+    ASSERT_THROW(merge_log(t, oinfo, olog, fromosd, info, &h,
+			   dirty_info, dirty_big_info),
+		 PGLogTest::error);
   }
 
   /*        +--------------------------+
@@ -1275,6 +1289,7 @@ TEST_F(PGLogTest, merge_log) {
       If the logs do not overlap, throw an exception.
 
   */
+#if 0
   {
     clear();
 
@@ -1317,6 +1332,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
 			   dirty_info, dirty_big_info), "");
   }
+#endif
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
@@ -2154,6 +2170,30 @@ TEST_F(PGLogTest, ErrorNotIndexedByObject) {
   EXPECT_EQ(del.prior_version, entry->prior_version);
   EXPECT_EQ(del.user_version, entry->user_version);
   EXPECT_EQ(del.reqid, entry->reqid);
+}
+
+static void test_pglog_assert(bool status) {
+  if(!status)
+    throw PGLogTest::error();
+}
+
+int main(int argc, char **argv) {
+  PGLog::pglog_assert = test_pglog_assert;
+  std::vector<const char*> args(argv, argv + argc);
+  env_to_vec(args);
+  auto cct = global_init(NULL, args,
+			 CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  const char* env = getenv("CEPH_LIB");
+  if (env) {
+    g_conf->set_val("erasure_code_dir", env, false, false);
+    g_conf->set_val("plugin_dir", env, false, false);
+  }
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
 
 // Local Variables:

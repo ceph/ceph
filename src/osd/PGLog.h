@@ -74,6 +74,9 @@ struct PGLog : DoutPrefixProvider {
   };
 
 public:
+  using assert_function_pointer = void (*)(bool status);
+  static assert_function_pointer pglog_assert;
+
   /**
    * IndexLog - adds in-memory index of the log, by oid.
    * plus some methods to manipulate it all.
@@ -204,8 +207,8 @@ public:
     /****/
     void claim_log_and_clear_rollback_info(const pg_log_t& o) {
       // we must have already trimmed the old entries
-      assert(rollback_info_trimmed_to == head);
-      assert(rollback_info_trimmed_to_riter == log.rbegin());
+      pglog_assert(rollback_info_trimmed_to == head);
+      pglog_assert(rollback_info_trimmed_to_riter == log.rbegin());
 
       *this = IndexedLog(o);
 
@@ -219,8 +222,8 @@ public:
 
     void zero() {
       // we must have already trimmed the old entries
-      assert(rollback_info_trimmed_to == head);
-      assert(rollback_info_trimmed_to_riter == log.rbegin());
+      pglog_assert(rollback_info_trimmed_to == head);
+      pglog_assert(rollback_info_trimmed_to_riter == log.rbegin());
 
       unindex();
       pg_log_t::clear();
@@ -261,9 +264,9 @@ public:
       eversion_t *replay_version,
       version_t *user_version,
       int *return_code) const {
-      assert(replay_version);
-      assert(user_version);
-      assert(return_code);
+      pglog_assert(replay_version);
+      pglog_assert(user_version);
+      pglog_assert(return_code);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
       if (!(indexed_data & PGLOG_INDEXED_CALLER_OPS)) {
         index_caller_ops();
@@ -294,7 +297,7 @@ public:
 	    return true;
 	  }
 	}
-	assert(0 == "in extra_caller_ops but not extra_reqids");
+	pglog_assert(0 == "in extra_caller_ops but not extra_reqids");
       }
       return false;
     }
@@ -436,7 +439,7 @@ public:
     // actors
     void add(const pg_log_entry_t& e, bool applied = true) {
       if (!applied) {
-	assert(get_can_rollback_to() == head);
+	pglog_assert(get_can_rollback_to() == head);
       }
 
       // add to log
@@ -446,8 +449,8 @@ public:
       if (rollback_info_trimmed_to_riter == log.rbegin())
 	++rollback_info_trimmed_to_riter;
 
-      assert(e.version > head);
-      assert(head.version == 0 || e.version.version > head.version);
+      pglog_assert(e.version > head);
+      pglog_assert(head.version == 0 || e.version.version > head.version);
       head = e.version;
 
       // to our index
@@ -684,7 +687,7 @@ public:
       }
     }
 
-    assert(log.get_can_rollback_to() >= v);
+    pglog_assert(log.get_can_rollback_to() >= v);
   }
 
   void activate_not_complete(pg_info_t &info) {
@@ -694,7 +697,7 @@ public:
 	     missing.get_rmissing().begin()->second
 	     ).need)
       ++log.complete_to;
-    assert(log.complete_to != log.log.end());
+    pglog_assert(log.complete_to != log.log.end());
     if (log.complete_to == log.log.begin()) {
       info.last_complete = eversion_t();
     } else {
@@ -759,18 +762,18 @@ protected:
     }
 
     // entries is non-empty
-    assert(!entries.empty());
+    pglog_assert(!entries.empty());
     eversion_t last;
     for (list<pg_log_entry_t>::const_iterator i = entries.begin();
 	 i != entries.end();
 	 ++i) {
       // all entries are on hoid
-      assert(i->soid == hoid);
+      pglog_assert(i->soid == hoid);
       if (i != entries.begin() && i->prior_version != eversion_t()) {
 	// in increasing order of version
-	assert(i->version > last);
+	pglog_assert(i->version > last);
 	// prior_version correct
-	assert(i->prior_version == last);
+	pglog_assert(i->prior_version == last);
       }
       last = i->version;
     }
@@ -795,14 +798,14 @@ protected:
       ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
 			 << *objiter->second << ", already merged" << dendl;
 
-      assert(objiter->second->version > last_divergent_update);
+      pglog_assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
       if (objiter->second->is_update()) {
-	assert(missing.is_missing(hoid) &&
+	pglog_assert(missing.is_missing(hoid) &&
 	       missing.get_items().at(hoid).need == objiter->second->version);
       } else {
-	assert(!missing.is_missing(hoid));
+	pglog_assert(!missing.is_missing(hoid));
       }
       missing.revise_have(hoid, eversion_t());
       if (rollbacker) {
@@ -890,7 +893,7 @@ protected:
       for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	   i != entries.rend();
 	   ++i) {
-	assert(i->can_rollback() && i->version > olog_can_rollback_to);
+	pglog_assert(i->can_rollback() && i->version > olog_can_rollback_to);
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " rolling back " << *i << dendl;
 	if (rollbacker)
@@ -991,7 +994,7 @@ public:
     const DoutPrefixProvider *dpp) {
     bool invalidate_stats = false;
     if (log && !entries.empty()) {
-      assert(log->head < entries.begin()->version);
+      pglog_assert(log->head < entries.begin()->version);
     }
     for (list<pg_log_entry_t>::const_iterator p = entries.begin();
 	 p != entries.end();
@@ -1124,8 +1127,8 @@ public:
     // legacy?
     struct stat st;
     int r = store->stat(log_coll, log_oid, &st);
-    assert(r == 0);
-    assert(st.st_size == 0);
+    pglog_assert(r == 0);
+    pglog_assert(st.st_size == 0);
 
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
@@ -1161,8 +1164,8 @@ public:
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << e << dendl;
 	  if (!entries.empty()) {
 	    pg_log_entry_t last_e(entries.back());
-	    assert(last_e.version.version < e.version.version);
-	    assert(last_e.version.epoch <= e.version.epoch);
+	    pglog_assert(last_e.version.version < e.version.version);
+	    pglog_assert(last_e.version.epoch <= e.version.epoch);
 	  }
 	  entries.push_back(e);
 	  if (log_keys_debug)
@@ -1213,9 +1216,9 @@ public:
 				 << " (have " << oi.version << ")" << dendl;
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
-		assert(miter != missing.get_items().end());
-		assert(miter->second.need == i->version);
-		assert(miter->second.have == oi.version);
+		pglog_assert(miter != missing.get_items().end());
+		pglog_assert(miter->second.need == i->version);
+		pglog_assert(miter->second.have == oi.version);
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version);
@@ -1225,9 +1228,9 @@ public:
 	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
-	      assert(miter != missing.get_items().end());
-	      assert(miter->second.need == i->version);
-	      assert(miter->second.have == eversion_t());
+	      pglog_assert(miter != missing.get_items().end());
+	      pglog_assert(miter->second.need == i->version);
+	      pglog_assert(miter->second.have == eversion_t());
 	      checked.insert(i->soid);
 	    } else {
 	      missing.add(i->soid, i->version, eversion_t());
@@ -1243,7 +1246,7 @@ public:
 	      derr << __func__ << ": invalid missing set entry found "
 		   << i.first
 		   << dendl;
-	      assert(0 == "invalid missing set entry found");
+	      pglog_assert(0 == "invalid missing set entry found");
 	    }
 	    bufferlist bv;
 	    int r = store->getattr(
@@ -1253,13 +1256,13 @@ public:
 	      bv);
 	    if (r >= 0) {
 	      object_info_t oi(bv);
-	      assert(oi.version == i.second.have);
+	      pglog_assert(oi.version == i.second.have);
 	    } else {
-	      assert(eversion_t() == i.second.have);
+	      pglog_assert(eversion_t() == i.second.have);
 	    }
 	  }
 	} else {
-	  assert(has_divergent_priors);
+	  pglog_assert(has_divergent_priors);
 	  for (map<eversion_t, hobject_t>::reverse_iterator i =
 		 divergent_priors.rbegin();
 	       i != divergent_priors.rend();
@@ -1288,7 +1291,7 @@ public:
 		 * version would not have been recovered, and a newer version
 		 * would show up in the log above.
 		 */
-	      assert(oi.version == i->first);
+	      pglog_assert(oi.version == i->first);
 	    } else {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
 	      missing.add(i->second, i->first, eversion_t());

@@ -28,6 +28,12 @@ static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
   return *_dout << pglog->gen_prefix();
 }
 
+static void default_pglog_assert(bool status) {
+  assert(status);
+}
+
+PGLog::assert_function_pointer PGLog::pglog_assert = default_pglog_assert;
+
 //////////////////// PGLog::IndexedLog ////////////////////
 
 PGLog::IndexedLog PGLog::IndexedLog::split_out_child(
@@ -51,7 +57,7 @@ void PGLog::IndexedLog::trim(
 		    << " on " << *this << dendl;
   }
 
-  assert(s <= can_rollback_to);
+  pglog_assert(s <= can_rollback_to);
 
   while (!log.empty()) {
     pg_log_entry_t &e = *log.begin();
@@ -84,7 +90,7 @@ ostream& PGLog::IndexedLog::print(ostream& out) const
        p != log.end();
        ++p) {
     out << *p << " " << (logged_object(p->soid) ? "indexed":"NOT INDEXED") << std::endl;
-    assert(!p->reqid_is_indexed() || logged_req(p->reqid));
+    pglog_assert(!p->reqid_is_indexed() || logged_req(p->reqid));
   }
   return out;
 }
@@ -117,7 +123,7 @@ void PGLog::trim(
   // trim?
   if (trim_to > log.tail) {
     // We shouldn't be trimming the log past last_complete
-    assert(trim_to <= info.last_complete);
+    pglog_assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(trim_to, &trimmed);
@@ -143,7 +149,7 @@ void PGLog::proc_replica_log(
 	     << "for divergent objects" << dendl;
     return;
   }
-  assert(olog.head >= log.tail);
+  pglog_assert(olog.head >= log.tail);
 
   /*
     basically what we're doing here is rewinding the remote log,
@@ -274,9 +280,9 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // Check preconditions
 
   // If our log is empty, the incoming log needs to have not been trimmed.
-  assert(!log.null() || olog.tail == eversion_t());
+  pglog_assert(!log.null() || olog.tail == eversion_t());
   // The logs must overlap.
-  assert(log.head >= olog.tail && olog.head >= log.tail);
+  pglog_assert(log.head >= olog.tail && olog.head >= log.tail);
 
   for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i = missing.get_items().begin();
        i != missing.get_items().end();
@@ -416,11 +422,11 @@ void PGLog::check() {
       derr << "    " << *i << dendl;
     }
   }
-  assert(log.log.size() == log_keys_debug.size());
+  pglog_assert(log.log.size() == log_keys_debug.size());
   for (list<pg_log_entry_t>::iterator i = log.log.begin();
        i != log.log.end();
        ++i) {
-    assert(log_keys_debug.count(i->get_key_name()));
+    pglog_assert(log_keys_debug.count(i->get_key_name()));
   }
 }
 
@@ -511,7 +517,7 @@ void PGLog::_write_log_and_missing_wo_missing(
        ++i) {
     to_remove.insert(i->get_key_name());
     if (log_keys_debug) {
-      assert(log_keys_debug->count(i->get_key_name()));
+      pglog_assert(log_keys_debug->count(i->get_key_name()));
       log_keys_debug->erase(i->get_key_name());
     }
   }
@@ -557,7 +563,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 	 ++i) {
       if (i->first[0] == '_')
 	continue;
-      assert(!log_keys_debug->count(i->first));
+      pglog_assert(!log_keys_debug->count(i->first));
       log_keys_debug->insert(i->first);
     }
   }
@@ -600,7 +606,7 @@ void PGLog::_write_log_and_missing(
        ++i) {
     to_remove.insert(i->get_key_name());
     if (log_keys_debug) {
-      assert(log_keys_debug->count(i->get_key_name()));
+      pglog_assert(log_keys_debug->count(i->get_key_name()));
       log_keys_debug->erase(i->get_key_name());
     }
   }
@@ -645,7 +651,7 @@ void PGLog::_write_log_and_missing(
 	 ++i) {
       if (i->first[0] == '_')
 	continue;
-      assert(!log_keys_debug->count(i->first));
+      pglog_assert(!log_keys_debug->count(i->first));
       log_keys_debug->insert(i->first);
     }
   }
