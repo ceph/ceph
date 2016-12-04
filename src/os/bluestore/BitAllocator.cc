@@ -18,10 +18,15 @@
  * of the interfaces defined in BitMapArea.
  */
 
-#include "common/dout.h"
 #include "BitAllocator.h"
 #include <assert.h>
+#include "bluestore_types.h"
+#include "common/debug.h"
 #include <math.h>
+
+#define dout_subsys ceph_subsys_bluestore
+#undef dout_prefix
+#define dout_prefix *_dout << "bitalloc:"
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(BitMapArea, BitMapArea, bluestore_alloc);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BitMapAreaIN, BitMapAreaIN, bluestore_alloc);
@@ -340,6 +345,11 @@ int BmapEntry::find_any_free_bits(int start_offset, int64_t num_blocks,
   return allocated;
 }
 
+void BmapEntry::dump_state(int& count)
+{
+  dout(0) << count << ":: 0x" << std::hex << m_bits << dendl;
+}
+
 /*
  * Zone related functions.
  */
@@ -630,6 +640,22 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
 
   return allocated;
 }
+
+void BitMapZone::dump_state(int& count)
+{
+  BmapEntry *bmap = NULL;
+  int bmap_idx = 0;
+  BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
+          m_bmap_list, 0);
+  dout(0) << __func__ << " zone " << count << " dump start " << dendl;
+  while ((bmap = (BmapEntry *) iter.next())) {
+    bmap->dump_state(bmap_idx);
+    bmap_idx++;
+  }
+  dout(0) << __func__ << " zone " << count << " dump end " << dendl;
+  count++;
+}
+
 
 /*
  * BitMapArea Leaf and non-Leaf functions.
@@ -1058,6 +1084,18 @@ void BitMapAreaIN::free_blocks(int64_t start_block, int64_t num_blocks)
   (void) sub_used_blocks(num_blocks);
 
   unlock();
+}
+
+void BitMapAreaIN::dump_state(int& count)
+{
+  BitMapArea *child = NULL;
+
+  BmapEntityListIter iter = BmapEntityListIter(
+        m_child_list, 0, false);
+
+  while ((child = (BitMapArea *) iter.next())) {
+    child->dump_state(count);
+  }
 }
 
 /*
@@ -1668,4 +1706,12 @@ void BitAllocator::free_blocks_dis(int64_t num_blocks, ExtentList *block_list)
   sub_used_blocks(num_blocks);
   alloc_assert(get_used_blocks() >= 0);
   unlock();
+}
+
+void BitAllocator::dump()
+{
+  int count = 0;
+  serial_lock(); 
+  dump_state(count);
+  serial_unlock(); 
 }
