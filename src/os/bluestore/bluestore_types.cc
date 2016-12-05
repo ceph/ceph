@@ -572,7 +572,7 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->dump_unsigned("omap_head", omap_head);
+  f->dump_string("flags", get_flags_string());
   f->open_array_section("extent_map_shards");
   for (auto si : extent_map_shards) {
     f->dump_object("shard", si);
@@ -588,18 +588,6 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   o.push_back(new bluestore_onode_t());
   // FIXME
 }
-
-// FIXME: Using this to compute the ctx.csum_order can lead to poor small
-// random read performance when initial writes are large.
-size_t bluestore_onode_t::get_preferred_csum_order() const
-{
-  uint32_t t = expected_write_size;
-  if (!t) {
-    return 0;
-  }
-  return ctz(expected_write_size);
-}
-
 
 // bluestore_wal_op_t
 

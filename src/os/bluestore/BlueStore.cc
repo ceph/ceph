@@ -4478,13 +4478,13 @@ int BlueStore::fsck(bool deep)
 	}
       }
       // omap
-      if (o->onode.omap_head) {
-	if (used_omap_head.count(o->onode.omap_head)) {
-	  derr << __func__ << " " << oid << " omap_head " << o->onode.omap_head
+      if (o->onode.has_omap()) {
+	if (used_omap_head.count(o->onode.nid)) {
+	  derr << __func__ << " " << oid << " omap_head " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	} else {
-	  used_omap_head.insert(o->onode.omap_head);
+	  used_omap_head.insert(o->onode.nid);
 	}
       }
     }
@@ -5643,9 +5643,9 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   : c(c), o(o), it(it)
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head) {
-    get_omap_key(o->onode.omap_head, string(), &head);
-    get_omap_tail(o->onode.omap_head, &tail);
+  if (o->onode.has_omap()) {
+    get_omap_key(o->onode.nid, string(), &head);
+    get_omap_tail(o->onode.nid, &tail);
     it->lower_bound(head);
   }
 }
@@ -5653,7 +5653,7 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
 int BlueStore::OmapIteratorImpl::seek_to_first()
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head) {
+  if (o->onode.has_omap()) {
     it->lower_bound(head);
   } else {
     it = KeyValueDB::Iterator();
@@ -5664,9 +5664,9 @@ int BlueStore::OmapIteratorImpl::seek_to_first()
 int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head) {
+  if (o->onode.has_omap()) {
     string key;
-    get_omap_key(o->onode.omap_head, after, &key);
+    get_omap_key(o->onode.nid, after, &key);
     it->upper_bound(key);
   } else {
     it = KeyValueDB::Iterator();
@@ -5677,9 +5677,9 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
 int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head) {
+  if (o->onode.has_omap()) {
     string key;
-    get_omap_key(o->onode.omap_head, to, &key);
+    get_omap_key(o->onode.nid, to, &key);
     it->lower_bound(key);
   } else {
     it = KeyValueDB::Iterator();
@@ -5690,13 +5690,13 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 bool BlueStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  return o->onode.omap_head && it->valid() && it->raw_key().second <= tail;
+  return o->onode.has_omap() && it->valid() && it->raw_key().second <= tail;
 }
 
 int BlueStore::OmapIteratorImpl::next(bool validate)
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head) {
+  if (o->onode.has_omap()) {
     it->next();
     return 0;
   } else {
@@ -5752,14 +5752,14 @@ int BlueStore::omap_get(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.omap_head)
+  if (!o->onode.has_omap())
     goto out;
   o->flush();
   {
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
-    get_omap_header(o->onode.omap_head, &head);
-    get_omap_tail(o->onode.omap_head, &tail);
+    get_omap_header(o->onode.nid, &head);
+    get_omap_tail(o->onode.nid, &tail);
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() == head) {
@@ -5815,12 +5815,12 @@ int BlueStore::omap_get_header(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.omap_head)
+  if (!o->onode.has_omap())
     goto out;
   o->flush();
   {
     string head;
-    get_omap_header(o->onode.omap_head, &head);
+    get_omap_header(o->onode.nid, &head);
     if (db->get(PREFIX_OMAP, head, header) >= 0) {
       dout(30) << __func__ << "  got header" << dendl;
     } else {
@@ -5862,14 +5862,14 @@ int BlueStore::omap_get_keys(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.omap_head)
+  if (!o->onode.has_omap())
     goto out;
   o->flush();
   {
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
-    get_omap_key(o->onode.omap_head, string(), &head);
-    get_omap_tail(o->onode.omap_head, &tail);
+    get_omap_key(o->onode.nid, string(), &head);
+    get_omap_tail(o->onode.nid, &tail);
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
@@ -5922,10 +5922,10 @@ int BlueStore::omap_get_values(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.omap_head)
+  if (!o->onode.has_omap())
     goto out;
   o->flush();
-  _key_encode_u64(o->onode.omap_head, &final_key);
+  _key_encode_u64(o->onode.nid, &final_key);
   final_key.push_back('.');
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
     final_key.resize(9); // keep prefix
@@ -5975,10 +5975,10 @@ int BlueStore::omap_check_keys(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.omap_head)
+  if (!o->onode.has_omap())
     goto out;
   o->flush();
-  _key_encode_u64(o->onode.omap_head, &final_key);
+  _key_encode_u64(o->onode.nid, &final_key);
   final_key.push_back('.');
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
     final_key.resize(9); // keep prefix
@@ -6029,7 +6029,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
     return ObjectMap::ObjectMapIterator();
   }
   o->flush();
-  dout(10) << __func__ << " header = " << o->onode.omap_head <<dendl;
+  dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
 }
@@ -6533,9 +6533,9 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
       txc->log_state_latency(logger, l_bluestore_state_done_lat);
       delete txc;
       osr->qcond.notify_all();
-      if (osr->q.empty())
-        dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
     }
+    if (osr->q.empty())
+      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
   }
 
   if (c) {
@@ -8262,8 +8262,8 @@ int BlueStore::_do_remove(
   int r = _do_truncate(txc, c, o, 0);
   if (r < 0)
     return r;
-  if (o->onode.omap_head) {
-    _do_omap_clear(txc, o->onode.omap_head);
+  if (o->onode.has_omap()) {
+    _do_omap_clear(txc, o->onode.nid);
   }
   o->exists = false;
   o->onode = bluestore_onode_t();
@@ -8396,9 +8396,9 @@ int BlueStore::_omap_clear(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  if (o->onode.omap_head != 0) {
-    _do_omap_clear(txc, o->onode.omap_head);
-    o->onode.omap_head = 0;
+  if (o->onode.has_omap()) {
+    _do_omap_clear(txc, o->onode.nid);
+    o->onode.clear_omap_flag();
     txc->write_onode(o);
   }
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -8414,12 +8414,12 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   int r;
   bufferlist::iterator p = bl.begin();
   __u32 num;
-  if (!o->onode.omap_head) {
-    o->onode.omap_head = o->onode.nid;
+  if (!o->onode.has_omap()) {
+    o->onode.set_omap_flag();
     txc->write_onode(o);
   }
   string final_key;
-  _key_encode_u64(o->onode.omap_head, &final_key);
+  _key_encode_u64(o->onode.nid, &final_key);
   final_key.push_back('.');
   ::decode(num, p);
   while (num--) {
@@ -8446,11 +8446,11 @@ int BlueStore::_omap_setheader(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r;
   string key;
-  if (!o->onode.omap_head) {
-    o->onode.omap_head = o->onode.nid;
+  if (!o->onode.has_omap()) {
+    o->onode.set_omap_flag();
     txc->write_onode(o);
   }
-  get_omap_header(o->onode.omap_head, &key);
+  get_omap_header(o->onode.nid, &key);
   txc->t->set(PREFIX_OMAP, key, bl);
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -8468,10 +8468,10 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   __u32 num;
   string final_key;
 
-  if (!o->onode.omap_head) {
+  if (!o->onode.has_omap()) {
     goto out;
   }
-  _key_encode_u64(o->onode.omap_head, &final_key);
+  _key_encode_u64(o->onode.nid, &final_key);
   final_key.push_back('.');
   ::decode(num, p);
   while (num--) {
@@ -8498,12 +8498,12 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   KeyValueDB::Iterator it;
   string key_first, key_last;
   int r = 0;
-  if (!o->onode.omap_head) {
+  if (!o->onode.has_omap()) {
     goto out;
   }
   it = db->get_iterator(PREFIX_OMAP);
-  get_omap_key(o->onode.omap_head, first, &key_first);
-  get_omap_key(o->onode.omap_head, last, &key_last);
+  get_omap_key(o->onode.nid, first, &key_first);
+  get_omap_key(o->onode.nid, last, &key_last);
   it->lower_bound(key_first);
   while (it->valid()) {
     if (it->key() >= key_last) {
@@ -8585,19 +8585,19 @@ int BlueStore::_clone(TransContext *txc,
   newo->onode.attrs = oldo->onode.attrs;
 
   // clone omap
-  if (newo->onode.omap_head) {
+  if (newo->onode.has_omap()) {
     dout(20) << __func__ << " clearing old omap data" << dendl;
-    _do_omap_clear(txc, newo->onode.omap_head);
+    _do_omap_clear(txc, newo->onode.nid);
   }
-  if (oldo->onode.omap_head) {
+  if (oldo->onode.has_omap()) {
     dout(20) << __func__ << " copying omap data" << dendl;
-    if (!newo->onode.omap_head) {
-      newo->onode.omap_head = newo->onode.nid;
+    if (!newo->onode.has_omap()) {
+      newo->onode.set_omap_flag();
     }
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
-    get_omap_header(oldo->onode.omap_head, &head);
-    get_omap_tail(oldo->onode.omap_head, &tail);
+    get_omap_header(oldo->onode.nid, &head);
+    get_omap_tail(oldo->onode.nid, &tail);
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
@@ -8607,7 +8607,7 @@ int BlueStore::_clone(TransContext *txc,
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
         string key;
-	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
+	rewrite_omap_key(newo->onode.nid, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
       it->next();
