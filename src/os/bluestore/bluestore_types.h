@@ -722,9 +722,6 @@ struct bluestore_onode_t {
     clear_flag(FLAG_OMAP);
   }
 
-  /// get preferred csum chunk size
-  size_t get_preferred_csum_order() const;
-
   DENC(bluestore_onode_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.nid, p);
