@@ -1596,6 +1596,7 @@ public:
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   bool is_missing_have_old_object(const hobject_t& soid);
+  bool is_degraded_on_async_recovery_target_object(const hobject_t& soid);
 
   void block_write_on_full_cache(
     const hobject_t& oid, OpRequestRef op);
