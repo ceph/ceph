@@ -314,23 +314,6 @@ TEST(bluestore_blob_t, csum_bench)
   }
 }
 
-TEST(bluestore_onode_t, get_preferred_csum_order)
-{
-  bluestore_onode_t on;
-  ASSERT_EQ(0u, on.get_preferred_csum_order());
-  on.expected_write_size = 4096;
-  ASSERT_EQ(12u, on.get_preferred_csum_order());
-  on.expected_write_size = 4096;
-  ASSERT_EQ(12u, on.get_preferred_csum_order());
-  on.expected_write_size = 8192;
-  ASSERT_EQ(13u, on.get_preferred_csum_order());
-  on.expected_write_size = 8192 + 4096;
-  ASSERT_EQ(12u, on.get_preferred_csum_order());
-  on.expected_write_size = 1048576;
-  ASSERT_EQ(20u, on.get_preferred_csum_order());
-}
-
-
 TEST(Blob, put_ref)
 {
   {

@@ -589,18 +589,6 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   // FIXME
 }
 
-// FIXME: Using this to compute the ctx.csum_order can lead to poor small
-// random read performance when initial writes are large.
-size_t bluestore_onode_t::get_preferred_csum_order() const
-{
-  uint32_t t = expected_write_size;
-  if (!t) {
-    return 0;
-  }
-  return ctz(expected_write_size);
-}
-
-
 // bluestore_wal_op_t
 
 void bluestore_wal_op_t::dump(Formatter *f) const
