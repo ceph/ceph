@@ -2912,7 +2912,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   if (opt_cmd != OPT_LIST &&
       opt_cmd != OPT_IMPORT &&
-      opt_cmd != OPT_IMPORT_DIFF &&
       opt_cmd != OPT_UNMAP &&
       opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_MERGE_DIFF && !imgname) {
