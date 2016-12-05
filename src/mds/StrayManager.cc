@@ -78,24 +78,21 @@ class C_IO_PurgeStrayPurged : public StrayManagerIOContext {
   // How many ops_in_flight were allocated to this purge?
   uint32_t ops_allowance;
 public:
-  C_IO_PurgeStrayPurged(StrayManager *sm_, CDentry *d, bool oh, uint32_t ops) : 
-    StrayManagerIOContext(sm_), dn(d), only_head(oh), ops_allowance(ops) { }
+  C_IO_PurgeStrayPurged(StrayManager *sm_, CDentry *d, bool oh) : 
+    StrayManagerIOContext(sm_), dn(d), only_head(oh) { }
   void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
     sm->_purge_stray_purged(dn, ops_allowance, only_head);
   }
 };
 
-void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
+
+void StrayManager::purge(CDentry *dn)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
   dout(10) << __func__ << " " << *dn << " " << *in << dendl;
   assert(!dn->is_replicated());
-
-  num_strays_purging++;
-  logger->set(l_mdc_num_strays_purging, num_strays_purging);
-
 
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
@@ -105,7 +102,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   C_GatherBuilder gather(
     g_ceph_context,
     new C_OnFinisher(new C_IO_PurgeStrayPurged(
-        this, dn, false, op_allowance), mds->finisher));
+        this, dn, false), mds->finisher));
 
   if (in->is_dir()) {
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
@@ -192,6 +189,10 @@ void StrayManager::_purge_stray_purged(
   CInode *in = dn->get_projected_linkage()->get_inode();
   dout(10) << "_purge_stray_purged " << *dn << " " << *in << dendl;
 
+  logger->inc(l_mdc_strays_enqueued);
+  num_strays_enqueuing--;
+  logger->set(l_mdc_num_strays_enqueuing, num_strays_enqueuing);
+
   if (only_head) {
     /* This was a ::truncate */
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
@@ -248,20 +249,7 @@ void StrayManager::_purge_stray_purged(
 
     num_strays--;
     logger->set(l_mdc_num_strays, num_strays);
-    logger->inc(l_mdc_strays_purged);
   }
-
-  num_strays_purging--;
-  logger->set(l_mdc_num_strays_purging, num_strays_purging);
-
-  // Release resources
-  dout(10) << __func__ << ": decrementing op allowance "
-    << ops_allowance << " from " << ops_in_flight << " in flight" << dendl;
-  assert(ops_in_flight >= ops_allowance);
-  ops_in_flight -= ops_allowance;
-  logger->set(l_mdc_num_purge_ops, ops_in_flight);
-  files_purging -= 1;
-  _advance();
 }
 
 void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
@@ -300,11 +288,6 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
 
 void StrayManager::enqueue(CDentry *dn, bool trunc)
 {
-  if (aborted) {
-    dout(10) << __func__ << ": aborted, skip purging: " << *dn << dendl;
-    return;
-  }
-
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   assert(dnl);
   CInode *in = dnl->get_inode();
@@ -323,212 +306,67 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
     }
   }
 
-  const uint32_t ops_required = _calculate_ops_required(in, trunc);
-
-  // Try to purge immediately if there is nothing in the queue, otherwise
-  // we will go to the back of the queue (even if there is allowance available
-  // to run us immediately) in order to be fair to others.
-  bool consumed = false;
-  if (ready_for_purge.empty()) {
-    consumed = _consume(dn, trunc, ops_required);
-  }
-
-  if (consumed) {
-    dout(10) << __func__ << ": purging this dentry immediately: "
-      << *dn << dendl;
-  } else {
-    dout(10) << __func__ << ": enqueuing this dentry for later purge: "
-      << *dn << dendl;
-    if (!dn->state_test(CDentry::STATE_PURGINGPINNED) &&
-        ready_for_purge.size() < g_conf->mds_max_purge_files) {
-      dn->get(CDentry::PIN_PURGING);
-      dn->state_set(CDentry::STATE_PURGINGPINNED);
-    }
-    ready_for_purge.push_back(QueuedStray(dn, trunc, ops_required));
-  }
-}
-
-class C_StraysFetched : public StrayManagerContext {
-public:
-  C_StraysFetched(StrayManager *sm_) :
-    StrayManagerContext(sm_) { }
-  void finish(int r) override {
-    sm->_advance();
-  }
-};
-
-void StrayManager::_advance()
-{
-  if (aborted)
-    return;
-
-  std::map<CDir*, std::set<dentry_key_t> > to_fetch;
-
-  for (auto p = ready_for_purge.begin();
-       p != ready_for_purge.end();) {
-    const QueuedStray &qs = *p;
-    auto q = p++;
-    CDentry *dn = qs.dir->lookup_exact_snap(qs.name, CEPH_NOSNAP);
-    if (!dn) {
-      assert(trimmed_strays.count(qs.name) > 0);
-      if (fetching_strays.size() >= g_conf->mds_max_purge_files) {
-	break;
-      }
-      
-      dout(10) << __func__ << ": fetching stray dentry " << qs.name << dendl;
-
-      auto it = fetching_strays.insert(qs);
-      assert(it.second);
-      to_fetch[qs.dir].insert(dentry_key_t(CEPH_NOSNAP, (it.first)->name.c_str()));
-      ready_for_purge.erase(q);
-      continue;
-    }
-
-    const bool consumed = _consume(dn, qs.trunc, qs.ops_required);
-    if (!consumed) {
-      break;
-    }
-    ready_for_purge.erase(q);
-  }
-
-  MDSGatherBuilder gather(g_ceph_context);
-  for (auto p = to_fetch.begin(); p != to_fetch.end(); ++p)
-    p->first->fetch(gather.new_sub(), p->second);
-
-  if (gather.has_subs()) {
-    gather.set_finisher(new C_StraysFetched(this));
-    gather.activate();
-  }
-}
-
-/*
- * Note that there are compromises to how throttling
- * is implemented here, in the interests of simplicity:
- *  * If insufficient ops are available to execute
- *    the next item on the queue, we block even if
- *    there are items further down the queue requiring
- *    fewer ops which might be executable
- *  * The ops considered "in use" by a purge will be
- *    an overestimate over the period of execution, as
- *    we count filer_max_purge_ops and ops for old backtraces
- *    as in use throughout, even though towards the end
- *    of the purge the actual ops in flight will be
- *    lower.
- *  * The ops limit may be exceeded if the number of ops
- *    required by a single inode is greater than the
- *    limit, for example directories with very many
- *    fragments.
- */
-bool StrayManager::_consume(CDentry *dn, bool trunc, uint32_t ops_required)
-{
-  const int files_avail = g_conf->mds_max_purge_files - files_purging;
-
-  if (!started) {
-    dout(20) << __func__ << ": haven't started purging yet" << dendl;
-    return false;
-  }
-
-  if (files_avail <= 0) {
-    dout(20) << __func__ << ": throttling on max files" << dendl;
-    return false;
-  } else {
-    dout(20) << __func__ << ": purging dn: " << *dn << dendl;
-  }
-
-  // Calculate how much of the ops allowance is available, allowing
-  // for the case where the limit is currently being exceeded.
-  uint32_t ops_avail;
-  if (ops_in_flight <= max_purge_ops) {
-    ops_avail = max_purge_ops - ops_in_flight;
-  } else {
-    ops_avail = 0;
-  }
-
-  /* The ops_in_flight > 0 condition here handles the case where the
-   * ops required by this inode would never fit in the limit: we wait
-   * instead until nothing else is running */
-  if (ops_in_flight > 0 && ops_avail < ops_required) {
-    dout(20) << __func__ << ": throttling on max ops (require "
-             << ops_required << ", " << ops_in_flight << " in flight" << dendl;
-    return false;
-  }
+  dout(20) << __func__ << ": purging dn: " << *dn << dendl;
 
   if (!dn->state_test(CDentry::STATE_PURGINGPINNED)) {
     dn->get(CDentry::PIN_PURGING);
     dn->state_set(CDentry::STATE_PURGINGPINNED);
   }
 
-  // Resources are available, acquire them and execute the purge
-  files_purging += 1;
-  dout(10) << __func__ << ": allocating allowance "
-    << ops_required << " to " << ops_in_flight << " in flight" << dendl;
-  ops_in_flight += ops_required;
-  logger->set(l_mdc_num_purge_ops, ops_in_flight);
+  ++num_strays_enqueuing;
+  logger->set(l_mdc_num_strays_enqueuing, num_strays_enqueuing);
 
-  _process(dn, trunc, ops_required);
-  return true;
+  // Resources are available, acquire them and execute the purge
+  _enqueue(dn, trunc);
+
+  dout(10) << __func__ << ": purging this dentry immediately: "
+    << *dn << dendl;
 }
 
 class C_OpenSnapParents : public StrayManagerContext {
   CDentry *dn;
   bool trunc;
-  uint32_t ops_required;
   public:
-    C_OpenSnapParents(StrayManager *sm_, CDentry *dn_, bool t, uint32_t ops) :
-      StrayManagerContext(sm_), dn(dn_), trunc(t), ops_required(ops) { }
+    C_OpenSnapParents(StrayManager *sm_, CDentry *dn_, bool t) :
+      StrayManagerContext(sm_), dn(dn_), trunc(t) { }
     void finish(int r) override {
-      sm->_process(dn, trunc, ops_required);
+      sm->_enqueue(dn, trunc);
     }
 };
 
-void StrayManager::_process(CDentry *dn, bool trunc, uint32_t ops_required)
+void StrayManager::_enqueue(CDentry *dn, bool trunc)
 {
   CInode *in = dn->get_linkage()->get_inode();
   if (in->snaprealm &&
       !in->snaprealm->have_past_parents_open() &&
-      !in->snaprealm->open_parents(new C_OpenSnapParents(this, dn, trunc,
-							 ops_required))) {
+      !in->snaprealm->open_parents(new C_OpenSnapParents(this, dn, trunc))) {
     // this can happen if the dentry had been trimmed from cache.
     return;
   }
 
+  if (!started) {
+    // If the MDS is not yet active, defer executing this purge
+    // in order to avoid the mdlog writes we do on purge completion.
+    mds->wait_for_active(
+        new MDSInternalContextWrapper(mds,
+          new FunctionContext([this, dn, trunc](int r){
+            // It is safe to hold on to this CDentry* pointer
+            // because the dentry is pinned with PIN_PURGING
+           _enqueue(dn, trunc); 
+            })
+        )
+      );
+
+    return;
+  }
+
   if (trunc) {
-    truncate(dn, ops_required);
+    truncate(dn);
   } else {
-    purge(dn, ops_required);
+    purge(dn);
   }
 }
 
-uint32_t StrayManager::_calculate_ops_required(CInode *in, bool trunc)
-{
-  uint32_t ops_required = 0;
-  if (in->is_dir()) {
-    // Directory, count dirfrags to be deleted
-    std::list<frag_t> ls;
-    if (!in->dirfragtree.is_leaf(frag_t())) {
-      in->dirfragtree.get_leaves(ls);
-    }
-    // One for the root, plus any leaves
-    ops_required = 1 + ls.size();
-  } else {
-    // File, work out concurrent Filer::purge deletes
-    const uint64_t to = MAX(in->inode.max_size_ever,
-            MAX(in->inode.size, in->inode.get_max_size()));
-
-    const uint64_t num = (to > 0) ? Striper::get_num_objects(in->inode.layout, to) : 1;
-    ops_required = MIN(num, g_conf->filer_max_purge_ops);
-
-    // Account for removing (or zeroing) backtrace
-    ops_required += 1;
-
-    // Account for deletions for old pools
-    if (!trunc) {
-      ops_required += in->get_projected_inode()->old_pools.size();
-    }
-  }
-
-  return ops_required;
-}
 
 void StrayManager::advance_delayed()
 {
@@ -589,7 +427,7 @@ struct C_MDC_EvalStray : public StrayManagerContext {
   }
 };
 
-bool StrayManager::__eval_stray(CDentry *dn, bool delay)
+bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -731,7 +569,6 @@ void StrayManager::activate()
 {
   dout(10) << __func__ << dendl;
   started = true;
-  _advance();
 }
 
 bool StrayManager::eval_stray(CDentry *dn, bool delay)
@@ -741,7 +578,7 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
       return false;
 
   dn->state_set(CDentry::STATE_EVALUATINGSTRAY);
-  bool ret = __eval_stray(dn, delay);
+  bool ret = _eval_stray(dn, delay);
   dn->state_clear(CDentry::STATE_EVALUATINGSTRAY);
   return ret;
 }
@@ -840,48 +677,14 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 
 StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
-    mds(mds), purge_queue(purge_queue_), logger(NULL), started(false),
-    aborted(false),
-    ops_in_flight(0), files_purging(0),
-    max_purge_ops(0), 
-    num_strays(0), num_strays_purging(0), num_strays_delayed(0),
-    filer(mds->objecter, mds->finisher)
+    mds(mds), logger(NULL), started(false), num_strays(0),
+    num_strays_delayed(0), num_strays_enqueuing(0),
+    filer(mds->objecter, mds->finisher), purge_queue(purge_queue_)
 {
   assert(mds != NULL);
 }
 
-void StrayManager::abort_queue()
-{
-  for (std::list<QueuedStray>::iterator i = ready_for_purge.begin();
-       i != ready_for_purge.end(); ++i)
-  {
-    const QueuedStray &qs = *i;
-    CDentry *dn = qs.dir->lookup_exact_snap(qs.name, CEPH_NOSNAP);
-    if (!dn)
-      continue;
-
-    dout(10) << __func__ << ": aborting enqueued purge " << *dn << dendl;
-
-    CDentry::linkage_t *dnl = dn->get_projected_linkage();
-    assert(dnl);
-    CInode *in = dnl->get_inode();
-    assert(in);
-
-    // Clear flags set in enqueue
-    if (dn->state_test(CDentry::STATE_PURGINGPINNED))
-      dn->put(CDentry::PIN_PURGING);
-    dn->state_clear(CDentry::STATE_PURGING | CDentry::STATE_PURGINGPINNED);
-    in->state_clear(CInode::STATE_PURGING);
-  }
-  ready_for_purge.clear();
-
-  trimmed_strays.clear();
-  fetching_strays.clear();
-
-  aborted = true;
-}
-
-void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
+void StrayManager::truncate(CDentry *dn)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
@@ -889,12 +692,9 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
   assert(!dn->is_replicated());
 
-  num_strays_purging++;
-  logger->set(l_mdc_num_strays_purging, num_strays_purging);
-
   C_GatherBuilder gather(
     g_ceph_context,
-    new C_OnFinisher(new C_IO_PurgeStrayPurged(this, dn, true, 0),
+    new C_OnFinisher(new C_IO_PurgeStrayPurged(this, dn, true),
 		     mds->finisher));
 
   SnapRealm *realm = in->find_snaprealm();
@@ -943,72 +743,3 @@ void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
   eval_stray(dn);
 }
 
-
-void StrayManager::update_op_limit()
-{
-  uint64_t pg_count = 0;
-  mds->objecter->with_osdmap([&](const OSDMap& o) {
-      // Number of PGs across all data pools
-      const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
-      for (const auto dp : data_pools) {
-	if (o.get_pg_pool(dp) == NULL) {
-	  // It is possible that we have an older OSDMap than MDSMap,
-	  // because we don't start watching every OSDMap until after
-	  // MDSRank is initialized
-	  dout(4) << __func__ << " data pool " << dp
-		  << " not found in OSDMap" << dendl;
-	  continue;
-	}
-	pg_count += o.get_pg_num(dp);
-      }
-    });
-
-  uint64_t mds_count = mds->mdsmap->get_max_mds();
-
-  // Work out a limit based on n_pgs / n_mdss, multiplied by the user's
-  // preference for how many ops per PG
-  max_purge_ops = uint64_t(((double)pg_count / (double)mds_count) *
-			   g_conf->mds_max_purge_ops_per_pg);
-
-  // User may also specify a hard limit, apply this if so.
-  if (g_conf->mds_max_purge_ops) {
-    max_purge_ops = MIN(max_purge_ops, g_conf->mds_max_purge_ops);
-  }
-}
-
-void StrayManager::notify_stray_loaded(CDentry *dn)
-{
-  dout(10) << __func__ << ": " << *dn << dendl;
-
-  dn->state_set(CDentry::STATE_STRAY);
-  CInode *in = dn->get_linkage()->get_inode();
-  if (in->inode.nlink == 0)
-    in->state_set(CInode::STATE_ORPHAN);
-
-  if (aborted)
-    return;
-
-  auto p = trimmed_strays.find(dn->name);
-  if (p != trimmed_strays.end()) {
-    dn->state_set(CDentry::STATE_PURGING);
-    in->state_set(CInode::STATE_PURGING);
-    trimmed_strays.erase(p);
-
-    QueuedStray key(dn, false, 0);
-    auto q = fetching_strays.find(key);
-    if (q != fetching_strays.end()) {
-      ready_for_purge.push_front(*q);
-      fetching_strays.erase(q);
-    }
-  }
-}
-
-void StrayManager::notify_stray_trimmed(CDentry *dn)
-{
-  dout(10) << __func__ << ": " << *dn << dendl;
-
-  if (aborted)
-    return;
-
-  trimmed_strays.insert(dn->name);
-}

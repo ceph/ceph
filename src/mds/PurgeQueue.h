@@ -16,9 +16,16 @@
 #define PURGE_QUEUE_H_
 
 #include "include/compact_set.h"
+#include "mds/MDSMap.h"
 #include "osdc/Journaler.h"
 
 
+/**
+ * Descriptor of the work associated with purging a file.  We record
+ * the minimal amount of information from the inode such as the size
+ * and layout: all other un-needed inode metadata (times, permissions, etc)
+ * has been discarded.
+ */
 class PurgeItem
 {
 public:
@@ -38,6 +45,9 @@ public:
 WRITE_CLASS_ENCODER(PurgeItem)
 
 /**
+ * A persistent queue of PurgeItems.  This class both writes and reads
+ * to the queue.  There is one of these per MDS rank.
+ *
  * Note that this class does not take a reference to MDSRank: we are
  * independent of all the metadata structures and do not need to
  * take mds_lock for anything.
@@ -59,7 +69,15 @@ protected:
   Objecter *objecter;
   Journaler journaler;
 
+  // Map of Journaler offset to PurgeItem
   std::map<uint64_t, PurgeItem> in_flight;
+
+  // Throttled allowances
+  uint64_t ops_in_flight;
+  uint64_t files_purging;
+
+  // Dynamic op limit per MDS based on PG count
+  uint64_t max_purge_ops;
 
   //PerfCounters *logger;
 
@@ -86,6 +104,12 @@ public:
   // Submit one entry to the work queue.  Call back when it is persisted
   // to the queue (there is no callback for when it is executed)
   void push(const PurgeItem &pi, Context *completion);
+
+  void update_op_limit(const MDSMap &mds_map);
+
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed,
+                          const MDSMap &mds_map);
 
   PurgeQueue(
       CephContext *cct_,

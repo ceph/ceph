@@ -64,6 +64,8 @@ void PurgeItem::decode(bufferlist::iterator &p)
 // for this.  Shoudl just give objects a string name with a rank
 // suffix, like we do for MDSTables.  Requires a little refactor
 // of Journaler.
+// TODO: if Objecter has any slow requests, take that as a hint and
+// slow down our rate of purging (keep accepting pushes though)
 PurgeQueue::PurgeQueue(
       CephContext *cct_,
       mds_rank_t rank_,
@@ -159,10 +161,59 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
   // and passing the PurgeItem straight into _execute_item
 }
 
+#if 0
+uint32_t StrayManager::_calculate_ops_required(CInode *in, bool trunc)
+{
+  uint32_t ops_required = 0;
+  if (in->is_dir()) {
+    // Directory, count dirfrags to be deleted
+    std::list<frag_t> ls;
+    if (!in->dirfragtree.is_leaf(frag_t())) {
+      in->dirfragtree.get_leaves(ls);
+    }
+    // One for the root, plus any leaves
+    ops_required = 1 + ls.size();
+  } else {
+    // File, work out concurrent Filer::purge deletes
+    const uint64_t to = MAX(in->inode.max_size_ever,
+            MAX(in->inode.size, in->inode.get_max_size()));
+
+    const uint64_t num = (to > 0) ? Striper::get_num_objects(in->inode.layout, to) : 1;
+    ops_required = MIN(num, g_conf->filer_max_purge_ops);
+
+    // Account for removing (or zeroing) backtrace
+    ops_required += 1;
+
+    // Account for deletions for old pools
+    if (!trunc) {
+      ops_required += in->get_projected_inode()->old_pools.size();
+    }
+  }
+
+  return ops_required;
+}
+#endif
+
 bool PurgeQueue::can_consume()
 {
+#if 0
+  // Calculate how much of the ops allowance is available, allowing
+  // for the case where the limit is currently being exceeded.
+  uint32_t ops_avail;
+  if (ops_in_flight <= max_purge_ops) {
+    ops_avail = max_purge_ops - ops_in_flight;
+  } else {
+    ops_avail = 0;
+  }
+
+  dout(10) << __func__ << ": allocating allowance "
+    << ops_required << " to " << ops_in_flight << " in flight" << dendl;
+
+  logger->set(l_mdc_num_purge_ops, ops_in_flight);
+#endif
+
   // TODO: enforce limits (currently just allowing one in flight)
-  if (in_flight.size() > 0) {
+  if (in_flight.size() > cct->_conf->mds_max_purge_files) {
     return false;
   } else {
     return true;
@@ -279,6 +330,57 @@ void PurgeQueue::execute_item_complete(
 
   in_flight.erase(iter);
 
+#if 0
+  // Release resources
+  dout(10) << __func__ << ": decrementing op allowance "
+    << ops_allowance << " from " << ops_in_flight << " in flight" << dendl;
+  assert(ops_in_flight >= ops_allowance);
+  ops_in_flight -= ops_allowance;
+  logger->set(l_mdc_num_purge_ops, ops_in_flight);
+  files_purging -= 1;
+#endif
+
   _consume();
+}
+
+void PurgeQueue::update_op_limit(const MDSMap &mds_map)
+{
+  Mutex::Locker l(lock);
+
+  uint64_t pg_count = 0;
+  objecter->with_osdmap([&](const OSDMap& o) {
+    // Number of PGs across all data pools
+    const std::set<int64_t> &data_pools = mds_map.get_data_pools();
+    for (const auto dp : data_pools) {
+      if (o.get_pg_pool(dp) == NULL) {
+        // It is possible that we have an older OSDMap than MDSMap,
+        // because we don't start watching every OSDMap until after
+        // MDSRank is initialized
+        dout(4) << " data pool " << dp << " not found in OSDMap" << dendl;
+        continue;
+      }
+      pg_count += o.get_pg_num(dp);
+    }
+  });
+
+  // Work out a limit based on n_pgs / n_mdss, multiplied by the user's
+  // preference for how many ops per PG
+  max_purge_ops = uint64_t(((double)pg_count / (double)mds_map.get_max_mds()) *
+			   cct->_conf->mds_max_purge_ops_per_pg);
+
+  // User may also specify a hard limit, apply this if so.
+  if (cct->_conf->mds_max_purge_ops) {
+    max_purge_ops = MIN(max_purge_ops, cct->_conf->mds_max_purge_ops);
+  }
+}
+
+void PurgeQueue::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed,
+                             const MDSMap &mds_map)
+{
+  if (changed.count("mds_max_purge_ops")
+      || changed.count("mds_max_purge_ops_per_pg")) {
+    update_op_limit(mds_map);
+  }
 }
 

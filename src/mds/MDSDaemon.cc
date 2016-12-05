@@ -415,7 +415,7 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
   }
 
   if (mds_rank) {
-    mds_rank->mdcache->handle_conf_change(conf, changed);
+    mds_rank->handle_conf_change(conf, changed);
   }
 
   if (!initially_locked) {
