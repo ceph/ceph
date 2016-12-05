@@ -1730,6 +1730,7 @@ bool ECBackend::try_state_to_reads()
 
   Op *op = &(waiting_state.front());
   if (op->requires_rmw() && pipeline_state.cache_invalid()) {
+    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
     dout(20) << __func__ << ": blocking " << *op
 	     << " because it requires an rmw and the cache is invalid"
 	     << pipeline_state
@@ -1780,6 +1781,7 @@ bool ECBackend::try_state_to_reads()
   dout(10) << __func__ << ": " << *op << dendl;
 
   if (!op->remote_read.empty()) {
+    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
       [this, op](hobject_t::bitwisemap<pair<int, extent_map> > &&results) {
