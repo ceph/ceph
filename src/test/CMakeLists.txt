@@ -751,7 +751,6 @@ target_link_libraries(unittest_perf_counters global)
 # unittest_ceph_crypto
 add_executable(unittest_ceph_crypto
   ceph_crypto.cc
-  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_ceph_crypto ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_ceph_crypto)
 target_link_libraries(unittest_ceph_crypto global)
