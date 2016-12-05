@@ -1,0 +1,11 @@
+tasks:
+- install:
+    branch: firefly
+    exclude_packages: ['ceph-mgr']
+- print: "**** done install firefly"
+- install.upgrade:
+   exclude_packages: ['ceph-test', 'ceph-test-dbg']
+   client.0:
+- print: "**** done install.upgrade client.0"
+- ceph: 
+- print: "**** done ceph"

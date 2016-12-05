@@ -1,0 +1,19 @@
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    conf:
+      mon:
+        mon osd pool ec fast read: 1
+      osd:
+        osd debug reject backfill probability: .3
+        osd max backfills: 1
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgpnum_fix: 1
+    min_in: 4

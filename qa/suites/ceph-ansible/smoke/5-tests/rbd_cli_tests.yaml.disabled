@@ -1,0 +1,8 @@
+meta:
+- desc: "Run the rbd cli tests"
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/run_cli_tests.sh
+
