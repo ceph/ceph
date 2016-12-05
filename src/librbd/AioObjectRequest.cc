@@ -112,6 +112,7 @@ bool AioObjectRequest<I>::compute_parent_extents() {
     lderr(m_ictx->cct) << this << " compute_parent_extents: failed to "
                        << "retrieve parent overlap: " << cpp_strerror(r)
                        << dendl;
+    m_has_parent = false;
     m_parent_extents.clear();
     return false;
   }
@@ -122,6 +123,7 @@ bool AioObjectRequest<I>::compute_parent_extents() {
     ldout(m_ictx->cct, 20) << this << " compute_parent_extents: "
                            << "overlap " << parent_overlap << " "
                            << "extents " << m_parent_extents << dendl;
+    m_has_parent = !m_parent_extents.empty();
     return true;
   }
   return false;

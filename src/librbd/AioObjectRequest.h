@@ -80,7 +80,7 @@ public:
   virtual void send() = 0;
 
   bool has_parent() const {
-    return !m_parent_extents.empty();
+    return m_has_parent;
   }
 
 protected:
@@ -93,6 +93,9 @@ protected:
   Context *m_completion;
   Extents m_parent_extents;
   bool m_hide_enoent;
+
+private:
+  bool m_has_parent = false;
 };
 
 template <typename ImageCtxT = ImageCtx>
