@@ -6526,9 +6526,9 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
       txc->log_state_latency(logger, l_bluestore_state_done_lat);
       delete txc;
       osr->qcond.notify_all();
-      if (osr->q.empty())
-        dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
     }
+    if (osr->q.empty())
+      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
   }
 
   if (c) {
