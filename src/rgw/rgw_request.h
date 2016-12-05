@@ -9,8 +9,9 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
+#if defined(WITH_RADOSGW_FCGI_FRONTEND)
 #include "rgw_fcgi.h"
-
+#endif
 #include "common/QueueRing.h"
 
 struct RGWRequest
@@ -34,6 +35,7 @@ struct RGWRequest
   void log(struct req_state *s, const char *msg);
 }; /* RGWRequest */
 
+#if defined(WITH_RADOSGW_FCGI_FRONTEND)
 struct RGWFCGXRequest : public RGWRequest {
   FCGX_Request *fcgx;
   QueueRing<FCGX_Request *> *qr;
@@ -48,6 +50,7 @@ struct RGWFCGXRequest : public RGWRequest {
     qr->enqueue(fcgx);
   }
 };
+#endif
 
 struct RGWLoadGenRequest : public RGWRequest {
 	string method;

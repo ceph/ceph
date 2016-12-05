@@ -145,6 +145,9 @@
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 
+/* define if radosgw enabled */
+#cmakedefine WITH_RADOSGW_FCGI_FRONTEND
+
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB
 

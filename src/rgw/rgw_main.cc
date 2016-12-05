@@ -110,7 +110,9 @@ static void signal_fd_finalize()
 static void handle_sigterm(int signum)
 {
   dout(1) << __func__ << dendl;
+#if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_ShutdownPending();
+#endif
 
   // send a signal to make fcgi's accept(2) wake up.  unfortunately the
   // initial signal often isn't sufficient because we race with accept's
@@ -319,7 +321,9 @@ int main(int argc, const char **argv)
   
   curl_global_init(CURL_GLOBAL_ALL);
   
+#if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
+#endif
 
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_lc_threads, g_conf->rgw_enable_quota_threads,
@@ -453,7 +457,7 @@ int main(int argc, const char **argv)
        fiter != fe_map.end(); ++fiter) {
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
-    RGWFrontend *fe;
+    RGWFrontend *fe = NULL;
 #if defined(WITH_RADOSGW_ASIO_FRONTEND)
     if ((framework == "asio") &&
 	cct->check_experimental_feature_enabled("rgw-asio-frontend")) {
@@ -463,23 +467,28 @@ int main(int argc, const char **argv)
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix };
       fe = new RGWAsioFrontend(env);
-    } else if (framework == "fastcgi" || framework == "fcgi") {
-#else
-    if (framework == "fastcgi" || framework == "fcgi") {
+    }
 #endif /* WITH_RADOSGW_ASIO_FRONTEND */
+#if defined(WITH_RADOSGW_FCGI_FRONTEND)
+    if (framework == "fastcgi" || framework == "fcgi") {
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix };
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
-    } else if (framework == "civetweb" || framework == "mongoose") {
+    }
+#endif /* WITH_RADOSGW_FCGI_FRONTEND */
+    if (framework == "civetweb" || framework == "mongoose") {
+      int port;
+      config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix };
 
       fe = new RGWCivetWebFrontend(env, config);
-    } else if (framework == "loadgen") {
+    }
+    if (framework == "loadgen") {
       int port;
       config->get_val("port", 80, &port);
       std::string uri_prefix;
@@ -488,7 +497,8 @@ int main(int argc, const char **argv)
       RGWProcessEnv env = { store, &rest, olog, port, uri_prefix };
 
       fe = new RGWLoadGenFrontend(env, config);
-    } else {
+    }
+    if (fe == NULL) {
       dout(0) << "WARNING: skipping unknown framework: " << framework << dendl;
       continue;
     }
