@@ -130,7 +130,7 @@ objects.
 
 Finally, you can regenerate metadata objects for missing files
 and directories based on the contents of a data pool.  This is
-a two-phase process.  First, scanning *all* objects to calculate
+a two-phase process. First, scanning *all* objects to calculate
 size and mtime metadata for inodes.  Second, scanning the first
 object from every file to collect this metadata and inject
 it into the metadata pool.
@@ -160,6 +160,13 @@ the range 0-(N_workers - 1), like so:
 
 It is important to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
+
+After completing the metadata recovery, you may want to run cleanup
+operation to delete ancillary data geneated during recovery.
+
+::
+
+    cephfs-data-scan cleanup <data pool>
 
 Finding files affected by lost data PGs
 ---------------------------------------
