@@ -75,6 +75,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
         ::journal::MockJournalerProxy *journaler,
         librbd::journal::MirrorPeerClientMeta *client_meta,
         Context *on_finish,
+        bool *do_resync,
         rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

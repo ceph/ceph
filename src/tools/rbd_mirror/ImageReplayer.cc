@@ -398,7 +398,7 @@ void ImageReplayer<I>::bootstrap() {
     &m_local_image_ctx, m_local_image_name, m_remote_image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_mirror_uuid,
-    m_remote_journaler, &m_client_meta, ctx, &m_progress_cxt);
+    m_remote_journaler, &m_client_meta, ctx, &m_do_resync, &m_progress_cxt);
 
   {
     Mutex::Locker locker(m_lock);
@@ -429,13 +429,15 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     dout(5) << "remote image is non-primary or local image is primary" << dendl;
     on_start_fail(0, "remote image is non-primary or local image is primary");
     return;
+  } else if (r == -EEXIST) {
+    on_start_fail(r, "split-brain detected");
+    return;
   } else if (r < 0) {
     on_start_fail(r, "error bootstrapping replay");
     return;
   } else if (on_start_interrupted()) {
     return;
   }
-
 
   assert(m_local_journal == nullptr);
   {
@@ -453,13 +455,8 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-    bool do_resync = false;
-    r = m_local_image_ctx->journal->is_resync_requested(&do_resync);
-    if (r < 0) {
-      derr << "failed to check if a resync was requested" << dendl;
-    }
 
-    if (do_resync) {
+    if (m_do_resync) {
       Context *on_finish = m_on_start_finish;
       m_stopping_for_resync = true;
       FunctionContext *ctx = new FunctionContext([this, on_finish](int r) {

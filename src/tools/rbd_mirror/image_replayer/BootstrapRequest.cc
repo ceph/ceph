@@ -52,6 +52,7 @@ BootstrapRequest<I>::BootstrapRequest(
         Journaler *journaler,
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
+        bool *do_resync,
         rbd::mirror::ProgressContext *progress_ctx)
   : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
@@ -63,6 +64,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
     m_client_meta(client_meta), m_progress_ctx(progress_ctx),
+    m_do_resync(do_resync),
     m_lock(unique_lock_name("BootstrapRequest::m_lock", this)) {
 }
 
@@ -73,6 +75,8 @@ BootstrapRequest<I>::~BootstrapRequest() {
 
 template <typename I>
 void BootstrapRequest<I>::send() {
+  *m_do_resync = false;
+
   get_local_image_id();
 }
 
@@ -372,7 +376,33 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     m_ret_val = r;
     close_remote_image();
     return;
-  } if (m_client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+  }
+
+  I *local_image_ctx = (*m_local_image_ctx);
+  {
+    RWLock::RLocker snap_locker(local_image_ctx->snap_lock);
+    if (local_image_ctx->journal == nullptr) {
+      derr << ": local image does not support journaling" << dendl;
+      m_ret_val = -EINVAL;
+      close_local_image();
+      return;
+    }
+
+    r = (*m_local_image_ctx)->journal->is_resync_requested(m_do_resync);
+    if (r < 0) {
+      derr << ": failed to check if a resync was requested" << dendl;
+      m_ret_val = r;
+      close_local_image();
+      return;
+    }
+  }
+
+  if (*m_do_resync) {
+    close_remote_image();
+    return;
+  }
+
+  if (m_client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
     dout(10) << ": client flagged disconnected -- skipping bootstrap" << dendl;
     // The caller is expected to detect disconnect initializing remote journal.
     m_ret_val = 0;
