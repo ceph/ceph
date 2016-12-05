@@ -140,8 +140,8 @@ override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
 
 override_dh_python2:
-	for binding in rados cephfs rbd; do                                \
-	  dh_python2 -p python-$$binding; \
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python2 -p python-$$binding;       \
 	done
 	dh_python2 -p ceph-common
 	dh_python2 -p ceph-base
@@ -149,8 +149,8 @@ override_dh_python2:
 	dh_python2 -p ceph-mgr
 
 override_dh_python3:
-	for binding in rados cephfs rbd; do                                \
-	  dh_python3 -p python3-$$binding; \
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python3 -p python3-$$binding;      \
 	done
 	dh_python3 -p python3-ceph-argparse
 
