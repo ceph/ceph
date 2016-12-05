@@ -73,16 +73,22 @@ enum {
   l_mdc_first = 3000,
   // How many inodes currently in stray dentries
   l_mdc_num_strays,
-  // How many stray dentries are currently enqueued for purge
-  l_mdc_num_strays_purging,
   // How many stray dentries are currently delayed for purge due to refs
   l_mdc_num_strays_delayed,
+  // How many stray dentries are currently being enqueued for purge
+  l_mdc_num_strays_enqueuing,
+
+  // >> TODO populate from PurgeQueue
+  // How many stray dentries are currently enqueued for purge
+  l_mdc_num_strays_purging,
   // How many purge RADOS ops might currently be in flight?
   l_mdc_num_purge_ops,
+  // << TODO
+
   // How many dentries have ever been added to stray dir
   l_mdc_strays_created,
-  // How many dentries have ever finished purging from stray dir
-  l_mdc_strays_purged,
+  // How many dentries have been passed on to PurgeQueue
+  l_mdc_strays_enqueued,
   // How many strays have been reintegrated?
   l_mdc_strays_reintegrated,
   // How many strays have been migrated?
@@ -155,13 +161,6 @@ public:
     assert(dn->get_dir()->get_inode()->is_stray());
     stray_manager.eval_stray(dn);
   }
-
-  void notify_stray_loaded(CDentry *dn) {
-    stray_manager.notify_stray_loaded(dn);
-  }
-
-  void handle_conf_change(const struct md_config_t *conf,
-                          const std::set <std::string> &changed);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   bool is_readonly() { return readonly; }
@@ -1128,9 +1127,6 @@ public:
   void handle_cache_expire(MCacheExpire *m);
   void process_delayed_expire(CDir *dir);
   void discard_delayed_expire(CDir *dir);
-
-  void notify_mdsmap_changed();
-  void notify_osdmap_changed();
 
 protected:
   void dump_cache(const char *fn, Formatter *f,

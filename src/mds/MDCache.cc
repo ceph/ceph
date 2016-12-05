@@ -6587,11 +6587,7 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
     assert(dnl->is_null());
   }
 
-  if (dn->is_auth()) {
-    if (dn->state_test(CDentry::STATE_PURGING)) {
-      stray_manager.notify_stray_trimmed(dn);
-    }
-  } else {
+  if (!dn->is_auth()) {
     // notify dentry authority.
     mds_authority_t auth = dn->authority();
     
@@ -7629,8 +7625,6 @@ bool MDCache::shutdown_export_strays()
     strays[i]->get_dirfrags(dfs);
   }
 
-  stray_manager.abort_queue();
-  
   for (std::list<CDir*>::iterator dfs_i = dfs.begin();
        dfs_i != dfs.end(); ++dfs_i)
   {
@@ -12308,12 +12302,15 @@ void MDCache::register_perfcounters()
     /* Stray/purge statistics */
     pcb.add_u64(l_mdc_num_strays, "num_strays",
         "Stray dentries", "stry");
-    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging", "Stray dentries purging");
     pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
+    pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing", "Stray dentries enqueuing for purge");
+
+    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging", "Stray dentries purging");
     pcb.add_u64(l_mdc_num_purge_ops, "num_purge_ops", "Purge operations");
+
     pcb.add_u64_counter(l_mdc_strays_created, "strays_created", "Stray dentries created");
-    pcb.add_u64_counter(l_mdc_strays_purged, "strays_purged",
-        "Stray dentries purged", "purg");
+    pcb.add_u64_counter(l_mdc_strays_enqueued, "strays_enqueued",
+        "Stray dentries enqueued for purge", "purg");
     pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated", "Stray dentries reintegrated");
     pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated", "Stray dentries migrated");
 
@@ -12362,23 +12359,3 @@ void MDCache::maybe_eval_stray(CInode *in, bool delay) {
   }
 }
 
-void MDCache::notify_mdsmap_changed()
-{
-  stray_manager.update_op_limit();
-}
-
-void MDCache::notify_osdmap_changed()
-{
-  stray_manager.update_op_limit();
-}
-
-void MDCache::handle_conf_change(const struct md_config_t *conf,
-			     const std::set <std::string> &changed)
-{
-  assert(mds->mds_lock.is_locked_by_me());
-
-  if (changed.count("mds_max_purge_ops")
-      || changed.count("mds_max_purge_ops_per_pg")) {
-    stray_manager.update_op_limit();
-  }
-}

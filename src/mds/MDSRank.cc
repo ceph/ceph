@@ -80,6 +80,8 @@ MDSRank::MDSRank(
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
+  purge_queue.update_op_limit(*mdsmap);
+
   objecter->unset_honor_osdmap_full();
 
   finisher = new Finisher(msgr->cct);
@@ -1635,7 +1637,9 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  mdcache->notify_mdsmap_changed();
+  if (oldmap->get_max_mds() != mdsmap->get_max_mds()) {
+    purge_queue.update_op_limit(*mdsmap);
+  }
 }
 
 void MDSRank::handle_mds_recovery(mds_rank_t who)
@@ -2435,7 +2439,7 @@ void MDSRankDispatcher::handle_osd_map()
 
   server->handle_osd_map();
 
-  mdcache->notify_osdmap_changed();
+  purge_queue.update_op_limit(*mdsmap);
 
   // By default the objecter only requests OSDMap updates on use,
   // we would like to always receive the latest maps in order to
