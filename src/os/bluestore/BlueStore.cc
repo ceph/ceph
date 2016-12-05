@@ -30,6 +30,7 @@
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
+#include "common/FuncTrace.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -2470,6 +2471,7 @@ void *BlueStore::MempoolThread::entry()
 
 static void aio_cb(void *priv, void *priv2)
 {
+  FUNCTRACE();
   BlueStore *store = static_cast<BlueStore*>(priv);
   store->_txc_aio_finish(priv2);
 }
@@ -4892,6 +4894,7 @@ int BlueStore::read(
   uint32_t op_flags,
   bool allow_eio)
 {
+  FUNCTRACE();
   Collection *c = static_cast<Collection*>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -4963,6 +4966,7 @@ int BlueStore::_do_read(
   bufferlist& bl,
   uint32_t op_flags)
 {
+  FUNCTRACE();
   boost::intrusive::set<Extent>::iterator ep, eend;
   int r = 0;
 
@@ -6332,6 +6336,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
+  FUNCTRACE();
   dout(20) << __func__ << " txc " << txc
 	   << " onodes " << txc->onodes
 	   << " shared_blobs " << txc->shared_blobs
@@ -6855,6 +6860,7 @@ int BlueStore::queue_transactions(
     TrackedOpRef op,
     ThreadPool::TPHandle *handle)
 {
+  FUNCTRACE();
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;
@@ -6937,6 +6943,7 @@ void BlueStore::_txc_aio_submit(TransContext *txc)
 
 void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
+  FUNCTRACE();
   Transaction::iterator i = t->begin();
 
   _dump_transaction(t);
@@ -7979,6 +7986,7 @@ int BlueStore::_do_write(
   bufferlist& bl,
   uint32_t fadvise_flags)
 {
+  FUNCTRACE();
   int r = 0;
 
   dout(20) << __func__
@@ -8124,6 +8132,7 @@ int BlueStore::_write(TransContext *txc,
 		     bufferlist& bl,
 		     uint32_t fadvise_flags)
 {
+  FUNCTRACE();
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;

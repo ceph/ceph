@@ -53,6 +53,7 @@ using namespace std;
 #include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
+#include "common/FuncTrace.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -1854,6 +1855,7 @@ private:
     };
 
     void dequeue(PG *pg) {
+      FUNCTRACE();
       return dequeue_and_get_ops(pg, nullptr);
     }
 

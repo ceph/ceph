@@ -1,0 +1,35 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(oidtrace, oid_event,
+    TP_ARGS(
+        const char*, oid,
+        const char*, tag,
+        const char*, file,
+        const char*, func,
+        uint32_t, line),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_string(tag, tag)
+        ctf_string(file, file)
+        ctf_string(func, func)
+        ctf_integer(uint32_t, line, line)
+    )
+)
+
+TRACEPOINT_EVENT(oidtrace, oid_elapsed,
+    TP_ARGS(
+        const char*, oid,
+        double, elapsed,
+        const char*, tag,
+        const char*, file,
+        const char*, func,
+        uint32_t, line),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_float(double, elapsed, elapsed)
+        ctf_string(tag, tag)
+        ctf_string(file, file)
+        ctf_string(func, func)
+        ctf_integer(uint32_t, line, line)
+    )
+)

@@ -48,6 +48,7 @@
 #include "common/scrub_types.h"
 #include "include/str_list.h"
 #include "common/errno.h"
+#include "common/FuncTrace.h"
 
 using ceph::real_time;
 using ceph::real_clock;
@@ -963,6 +964,7 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 
 bool Objecter::ms_dispatch(Message *m)
 {
+  FUNCTRACE();
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
   if (!initialized.read())
     return false;
@@ -1132,6 +1134,7 @@ void Objecter::_scan_requests(OSDSession *s,
 
 void Objecter::handle_osd_map(MOSDMap *m)
 {
+  FUNCTRACE();
   shunique_lock sul(rwlock, acquire_unique);
   if (!initialized.read())
     return;
@@ -2166,6 +2169,7 @@ void Objecter::resend_mon_ops()
 
 void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
+  FUNCTRACE();
   shunique_lock rl(rwlock, ceph::acquire_shared);
   ceph_tid_t tid = 0;
   if (!ptid)
@@ -2177,6 +2181,7 @@ void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
 				      ceph_tid_t *ptid,
 				      int *ctx_budget)
 {
+  FUNCTRACE();
   assert(initialized.read());
 
   assert(op->ops.size() == op->out_bl.size());
@@ -2288,6 +2293,7 @@ void Objecter::_send_op_account(Op *op)
 
 void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 {
+  FUNCTRACE();
   // rwlock is locked
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
@@ -2851,6 +2857,7 @@ int Objecter::_map_session(op_target_t *target, OSDSession **s,
 
 void Objecter::_session_op_assign(OSDSession *to, Op *op)
 {
+  FUNCTRACE();
   // to->lock is locked
   assert(op->session == NULL);
   assert(op->tid);
@@ -3001,6 +3008,7 @@ void Objecter::_cancel_linger_op(Op *op)
 
 void Objecter::_finish_op(Op *op, int r)
 {
+  FUNCTRACE();
   ldout(cct, 15) << "finish_op " << op->tid << dendl;
 
   // op->session->lock is locked unique
@@ -3089,6 +3097,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
 void Objecter::_send_op(Op *op, MOSDOp *m)
 {
+  FUNCTRACE();
   // rwlock is locked
   // op->session->lock is locked
 
@@ -3186,6 +3195,7 @@ void Objecter::unregister_op(Op *op)
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
+  FUNCTRACE();
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
   // get pio
@@ -3970,6 +3980,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
+  FUNCTRACE();
   shunique_lock sul(rwlock, acquire_shared);
   if (!initialized.read()) {
     sul.unlock();
@@ -4303,6 +4314,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents,
 
 void Objecter::ms_handle_connect(Connection *con)
 {
+  FUNCTRACE();
   ldout(cct, 10) << "ms_handle_connect " << con << dendl;
   if (!initialized.read())
     return;

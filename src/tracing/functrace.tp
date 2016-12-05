@@ -1,0 +1,23 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(functrace, func_enter,
+    TP_ARGS(
+        const char*, file,
+        const char*, func,
+        uint32_t, line),
+    TP_FIELDS(
+        ctf_string(file, file)
+        ctf_string(func, func)
+        ctf_integer(uint32_t, line, line)
+    )
+)
+
+TRACEPOINT_EVENT(functrace, func_exit,
+    TP_ARGS(
+        const char*, file,
+        const char*, func),
+    TP_FIELDS(
+        ctf_string(file, file)
+        ctf_string(func, func)
+    )
+)

@@ -21,6 +21,8 @@
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
+#include "common/FuncTrace.h"
+#include "common/OIDTrace.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -613,6 +615,18 @@ void ReplicatedBackend::submit_transaction(
 void ReplicatedBackend::op_applied(
   InProgressOp *op)
 {
+  FUNCTRACE();
+#ifdef WITH_LTTNG
+  Message *m = op->op->get_req();
+  if (m && m->get_type() == CEPH_MSG_OSD_OP)  {
+    ostringstream buf;
+    buf << m->get_source() << "!" << m->get_source_addr() << "!"
+        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type() <<","
+        << ((MOSDOp *)m)->get_oid().name.c_str();
+    OID_EVENT_TRACE(buf.str().c_str(), "OP_APPLIED_BEGIN");
+  }
+#endif
+
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op)
     op->op->mark_event("op_applied");
@@ -633,6 +647,7 @@ void ReplicatedBackend::op_applied(
 void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
+  FUNCTRACE();
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op)
     op->op->mark_event("op_commit");

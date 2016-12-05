@@ -47,6 +47,7 @@
 #include "RadosClient.h"
 
 #include "include/assert.h"
+#include "common/FuncTrace.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -225,6 +226,7 @@ int librados::RadosClient::ping_monitor(const string mon_id, string *result)
 
 int librados::RadosClient::connect()
 {
+  FUNCTRACE();
   common_init_finish(cct);
 
   int err;
@@ -437,6 +439,7 @@ librados::RadosClient::~RadosClient()
 
 int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 {
+  FUNCTRACE();
   int64_t poolid = lookup_pool(name);
   if (poolid < 0) {
     // Make sure we have the latest map

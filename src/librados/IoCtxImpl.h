@@ -160,6 +160,9 @@ struct librados::IoCtxImpl {
 		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
+#ifdef WITH_LTTNG
+    object_t oid;
+#endif
     librados::AioCompletionImpl *c;
     explicit C_aio_Ack(AioCompletionImpl *_c);
     void finish(int r);

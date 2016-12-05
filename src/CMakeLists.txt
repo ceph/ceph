@@ -413,6 +413,8 @@ set(libcommon_files
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
+  common/FuncTrace.cc
+  common/OIDTrace.cc
   common/ConfUtils.cc
   common/MemoryModel.cc
   common/fd.cc
