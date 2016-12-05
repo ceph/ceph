@@ -516,6 +516,12 @@ elseif(FREEBSD OR APPLE)
   message(STATUS " Using EventKqueue for events.")
 endif(LINUX)
 
+if(WITH_LTTNG AND WITH_EVENTTRACE)
+  message(STATUS " Using EventTrace class.")
+  add_definitions("-DWITH_EVENTTRACE")
+  list(APPEND libcommon_files common/EventTrace.cc)
+endif()
+
 set(mon_common_files
   auth/AuthSessionHandler.cc
   auth/cephx/CephxSessionHandler.cc
