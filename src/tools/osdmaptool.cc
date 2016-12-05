@@ -269,7 +269,7 @@ int main(int argc, const char **argv)
 
   if (!export_crush.empty()) {
     bufferlist cbl;
-    osdmap.crush->encode(cbl);
+    osdmap.crush->encode(cbl, CEPH_FEATURES_SUPPORTED_DEFAULT);
     r = cbl.write_file(export_crush.c_str());
     if (r < 0) {
       cerr << me << ": error writing crush map to " << import_crush << std::endl;

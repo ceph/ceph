@@ -879,7 +879,7 @@ int main(int argc, const char **argv)
       cout << me << " successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
     } else {
       bufferlist bl;
-      crush.encode(bl);
+      crush.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       int r = bl.write_file(outfn.c_str());
       if (r < 0) {
 	cerr << me << ": error writing '" << outfn << "': " << cpp_strerror(r) << std::endl;
