@@ -2283,6 +2283,7 @@ protected:
 
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
+  bool is_recovery_active();
   void do_recovery(PG *pg, ThreadPool::TPHandle &handle);
   bool _recover_now();
 
