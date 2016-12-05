@@ -1933,6 +1933,8 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 void CInode::_finish_frag_update(CDir *dir, MutationRef& mut)
 {
   dout(10) << "_finish_frag_update on " << *dir << dendl;
+  if (!mut->ls || mdcache->mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mdcache->mds->mdlog->get_current_segment();
   mut->apply();
   mut->cleanup();
 }

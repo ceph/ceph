@@ -1725,6 +1725,8 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
 				Capability *cap, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   in->pop_and_dirty_projected_inode(mut->ls);
   in->put(CInode::PIN_PTRWAITER);
 
@@ -4255,6 +4257,8 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   in->pop_and_dirty_projected_inode(mut->ls);
 
   lock->finish_flush();
