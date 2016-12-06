@@ -7945,8 +7945,7 @@ void BlueStore::_wctx_finish(
     if (b->is_spanning() && b->get_ref_map().empty()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
-      auto it = o->extent_map.spanning_blob_map.find(b->id);
-      o->extent_map.spanning_blob_map.erase(it);
+      o->extent_map.spanning_blob_map.erase(b->id);
     }
   }
 }
