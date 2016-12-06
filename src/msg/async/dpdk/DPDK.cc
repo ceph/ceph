@@ -385,7 +385,7 @@ void DPDKDevice::set_hw_flow_control()
   if (ret < 0) {
     lderr(cct) << __func__ << " port " << int(_port_idx)
                << ": failed to get hardware flow control settings: " << ret << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   if (_enable_fc) {
@@ -404,7 +404,7 @@ void DPDKDevice::set_hw_flow_control()
   if (ret < 0) {
     lderr(cct) << __func__ << " port " << int(_port_idx)
                << ": failed to set hardware flow control settings: " << ret << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   ldout(cct, 1) << __func__ << " port " << int(_port_idx) << ":  HW FC " << _enable_fc << dendl;
@@ -613,7 +613,7 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
 {
   if (!init_rx_mbuf_pool()) {
     lderr(cct) << __func__ << " cannot initialize mbuf pools" << dendl;
-    assert(0);
+    ceph_abort();
   }
 
   static_assert(offsetof(tx_buf, private_end) -
@@ -931,13 +931,13 @@ DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c,
 
     if (!_pool) {
       lderr(cct) << __func__ << " Failed to create mempool for Tx" << dendl;
-      assert(0);
+      ceph_abort();
     }
     if (rte_eth_tx_queue_setup(dev->port_idx(), qid, default_ring_size,
                                rte_eth_dev_socket_id(dev->port_idx()),
                                dev->def_tx_conf()) < 0) {
       lderr(cct) << __func__ << " cannot initialize tx queue" << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 
