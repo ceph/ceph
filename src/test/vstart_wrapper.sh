@@ -19,7 +19,7 @@
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
-export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
+export CEPH_DIR="$PWD/td/t-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
 

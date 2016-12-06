@@ -1442,7 +1442,7 @@ function test_wait_background() {
 # @return 0 on success, 1 on error
 #
 function main() {
-    local dir=testdir/$1
+    local dir=td/$1
     shift
 
     shopt -s -o xtrace
@@ -1481,7 +1481,7 @@ function run_tests() {
     export CEPH_CONF=/dev/null
 
     local funcs=${@:-$(set | sed -n -e 's/^\(test_[0-9a-z_]*\) .*/\1/p')}
-    local dir=testdir/ceph-helpers
+    local dir=td/ceph-helpers
 
     for func in $funcs ; do
         $func $dir || return 1
