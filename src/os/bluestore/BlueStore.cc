@@ -8751,17 +8751,19 @@ int BlueStore::_clone_range(TransContext *txc,
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  if (g_conf->bluestore_clone_cow) {
-    _do_zero(txc, c, newo, dstoff, length);
-    _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
-  } else {
-    bufferlist bl;
-    r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
-    if (r < 0)
-      goto out;
-    r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
-    if (r < 0)
-      goto out;
+  if (length > 0) {
+    if (g_conf->bluestore_clone_cow) {
+      _do_zero(txc, c, newo, dstoff, length);
+      _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
+    } else {
+      bufferlist bl;
+      r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
+      if (r < 0)
+	goto out;
+      r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+      if (r < 0)
+	goto out;
+    }
   }
 
   txc->write_onode(newo);
