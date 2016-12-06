@@ -109,7 +109,7 @@ void DPDKWorker::initialize()
   } else {
     // auto master = qid % sdev->hw_queues_count();
     // sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
-    assert(0);
+    ceph_abort();
   }
   if (i == 0) {
     {
@@ -120,7 +120,7 @@ void DPDKWorker::initialize()
 
     if (sdev->init_port_fini() < 0) {
       lderr(cct) << __func__ << " init_port_fini failed " << dendl;
-      assert(0);
+      ceph_abort();
     }
     Mutex::Locker l(lock);
     create_stage = DONE;
@@ -189,7 +189,7 @@ DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared
                << cct->_conf->ms_dpdk_gateway_ipv4_addr << ", "
                << cct->_conf->ms_dpdk_netmask_ipv4_addr << ", "
                << dendl;
-    assert(0);
+    ceph_abort();
   }
   _inet.set_host_address(ipv4_address(std::get<0>(tuples[0])));
   _inet.set_gw_address(ipv4_address(std::get<1>(tuples[0])));
@@ -244,7 +244,7 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
   r = dpdk::eal::init(cct);
   if (r < 0) {
     lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
-    assert(0);
+    ceph_abort();
   }
   // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
   // cores
@@ -253,7 +253,7 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
     r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[i]), i+1);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
-      assert(0);
+      ceph_abort();
     }
   });
 }
