@@ -251,6 +251,7 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<uint64_t> block_total;               ///< sum of block_all
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+  vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   void _init_logger();
   void _shutdown_logger();
