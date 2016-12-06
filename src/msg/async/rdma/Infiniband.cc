@@ -343,8 +343,8 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
   } else if (r == 0) { // valid disconnect message of length 0
     ldout(cct, 10) << __func__ << " got disconnect message " << dendl;
   } else if ((size_t)r != sizeof(msg)) { // invalid message
+    ldout(cct, 1) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
     r = -EINVAL;
-    lderr(cct) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
   } else { // valid message
     sscanf(msg, "%x:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
     wire_gid_to_gid(gid, &(im.gid));
