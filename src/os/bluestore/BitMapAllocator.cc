@@ -239,8 +239,7 @@ int BitMapAllocator::release(
   dout(10) << __func__ << " 0x"
            << std::hex << offset << "~" << length << std::dec
            << dendl;
-  m_uncommitted.insert(offset, length);
-  m_num_uncommitted += length;
+  insert_free(offset, length);
   return 0;
 }
 
