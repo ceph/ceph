@@ -29,8 +29,6 @@ using namespace std;
 #define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
 #define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | PGLOG_INDEXED_CALLER_OPS | PGLOG_INDEXED_EXTRA_CALLER_OPS)
 
-#define dout_context g_ceph_context
-
 class CephContext;
 
 struct PGLog : DoutPrefixProvider {
@@ -477,6 +475,7 @@ public:
     }
 
     void trim(
+      CephContext* cct,
       eversion_t s,
       set<eversion_t> *trimmed);
 
@@ -1242,9 +1241,9 @@ public:
 	      continue;
 	    if (i.second.need > log.tail ||
 	      cmp(i.first, info.last_backfill, info.last_backfill_bitwise) > 0) {
-	      derr << __func__ << ": invalid missing set entry found "
-		   << i.first
-		   << dendl;
+	      lderr(dpp->get_cct()) << __func__ << ": invalid missing set entry found "
+				    << i.first
+				    << dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
 	    bufferlist bv;
@@ -1310,7 +1309,5 @@ public:
     ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
   }
 };
-
-#undef dout_context
 
 #endif // CEPH_PG_LOG_H

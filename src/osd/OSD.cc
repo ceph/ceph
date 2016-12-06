@@ -149,7 +149,7 @@
 #define tracepoint(...)
 #endif
 
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
@@ -549,14 +549,14 @@ void OSDService::agent_entry()
 	     << ", top is " << level
 	     << " with pgs " << top.size()
 	     << ", ops " << agent_ops << "/"
-	     << g_conf->osd_agent_max_ops
+	     << cct->_conf->osd_agent_max_ops
 	     << (agent_active ? " active" : " NOT ACTIVE")
 	     << dendl;
     dout(20) << __func__ << " oids " << agent_oids << dendl;
-    int max = g_conf->osd_agent_max_ops - agent_ops;
+    int max = cct->_conf->osd_agent_max_ops - agent_ops;
     int agent_flush_quota = max;
     if (!flush_mode_high_count)
-      agent_flush_quota = g_conf->osd_agent_max_low_ops - agent_ops;
+      agent_flush_quota = cct->_conf->osd_agent_max_low_ops - agent_ops;
     if (agent_flush_quota <= 0 || top.empty() || !agent_active) {
       agent_cond.Wait(agent_lock);
       continue;
@@ -573,14 +573,14 @@ void OSDService::agent_entry()
     agent_lock.Unlock();
     if (!pg->agent_work(max, agent_flush_quota)) {
       dout(10) << __func__ << " " << pg->get_pgid()
-	<< " no agent_work, delay for " << g_conf->osd_agent_delay_time
+	<< " no agent_work, delay for " << cct->_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
       osd->logger->inc(l_osd_tier_delay);
       // Queue a timer to call agent_choose_mode for this pg in 5 seconds
       agent_timer_lock.Lock();
       Context *cb = new AgentTimeoutCB(pg);
-      agent_timer.add_event_after(g_conf->osd_agent_delay_time, cb);
+      agent_timer.add_event_after(cct->_conf->osd_agent_delay_time, cb);
       agent_timer_lock.Unlock();
     }
     agent_lock.Lock();
@@ -618,8 +618,8 @@ void OSDService::promote_throttle_recalibrate()
   last_recalibrate = now;
   unsigned prob = promote_probability_millis;
 
-  uint64_t target_obj_sec = g_conf->osd_tier_promote_max_objects_sec;
-  uint64_t target_bytes_sec = g_conf->osd_tier_promote_max_bytes_sec;
+  uint64_t target_obj_sec = cct->_conf->osd_tier_promote_max_objects_sec;
+  uint64_t target_bytes_sec = cct->_conf->osd_tier_promote_max_bytes_sec;
 
   unsigned min_prob = 1;
 
@@ -1494,7 +1494,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
-  store->set_cache_shards(g_conf->osd_op_num_shards);
+  store->set_cache_shards(cct->_conf->osd_op_num_shards);
 
   ret = store->mount();
   if (ret) {
@@ -1718,6 +1718,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &command_tp),
   replay_queue_lock("OSD::replay_queue_lock"),
   remove_wq(
+    cct,
     store,
     cct->_conf->osd_remove_thread_timeout,
     cct->_conf->osd_remove_thread_suicide_timeout,
@@ -1984,8 +1985,8 @@ int OSD::enable_disable_fuse(bool stop)
 {
 #ifdef HAVE_LIBFUSE
   int r;
-  string mntpath = g_conf->osd_data + "/fuse";
-  if (fuse_store && (stop || !g_conf->osd_objectstore_fuse)) {
+  string mntpath = cct->_conf->osd_data + "/fuse";
+  if (fuse_store && (stop || !cct->_conf->osd_objectstore_fuse)) {
     dout(1) << __func__ << " disabling" << dendl;
     fuse_store->stop();
     delete fuse_store;
@@ -1999,7 +2000,7 @@ int OSD::enable_disable_fuse(bool stop)
     }
     return 0;
   }
-  if (!fuse_store && g_conf->osd_objectstore_fuse) {
+  if (!fuse_store && cct->_conf->osd_objectstore_fuse) {
     dout(1) << __func__ << " enabling" << dendl;
     r = ::mkdir(mntpath.c_str(), 0700);
     if (r < 0)
@@ -2038,7 +2039,7 @@ int OSD::init()
 	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
   assert(store);  // call pre_init() first!
 
-  store->set_cache_shards(g_conf->osd_op_num_shards);
+  store->set_cache_shards(cct->_conf->osd_op_num_shards);
 
   int r = store->mount();
   if (r < 0) {
@@ -2065,19 +2066,19 @@ int OSD::init()
   // sanity check long object name handling
   {
     hobject_t l;
-    l.oid.name = string(g_conf->osd_max_object_name_len, 'n');
-    l.set_key(string(g_conf->osd_max_object_name_len, 'k'));
-    l.nspace = string(g_conf->osd_max_object_namespace_len, 's');
+    l.oid.name = string(cct->_conf->osd_max_object_name_len, 'n');
+    l.set_key(string(cct->_conf->osd_max_object_name_len, 'k'));
+    l.nspace = string(cct->_conf->osd_max_object_namespace_len, 's');
     r = store->validate_hobject_key(l);
     if (r < 0) {
       derr << "backend (" << store->get_type() << ") is unable to support max "
 	   << "object name[space] len" << dendl;
       derr << "   osd max object name len = "
-	   << g_conf->osd_max_object_name_len << dendl;
+	   << cct->_conf->osd_max_object_name_len << dendl;
       derr << "   osd max object namespace len = "
-	   << g_conf->osd_max_object_namespace_len << dendl;
+	   << cct->_conf->osd_max_object_namespace_len << dendl;
       derr << cpp_strerror(r) << dendl;
-      if (g_conf->osd_check_max_object_name_len_on_startup) {
+      if (cct->_conf->osd_check_max_object_name_len_on_startup) {
 	goto out;
       }
       derr << "osd_check_max_object_name_len_on_startup = false, starting anyway"
@@ -2832,7 +2833,7 @@ int OSD::shutdown()
   dout(10) << "syncing store" << dendl;
   enable_disable_fuse(true);
 
-  if (g_conf->osd_journal_flush_on_shutdown) {
+  if (cct->_conf->osd_journal_flush_on_shutdown) {
     dout(10) << "flushing journal" << dendl;
     store->flush_journal();
   }
@@ -2865,14 +2866,14 @@ int OSD::shutdown()
 
 int OSD::update_crush_location()
 {
-  if (!g_conf->osd_crush_update_on_start) {
+  if (!cct->_conf->osd_crush_update_on_start) {
     dout(10) << __func__ << " osd_crush_update_on_start = false" << dendl;
     return 0;
   }
 
   char weight[32];
-  if (g_conf->osd_crush_initial_weight >= 0) {
-    snprintf(weight, sizeof(weight), "%.4lf", g_conf->osd_crush_initial_weight);
+  if (cct->_conf->osd_crush_initial_weight >= 0) {
+    snprintf(weight, sizeof(weight), "%.4lf", cct->_conf->osd_crush_initial_weight);
   } else {
     struct store_statfs_t st;
     int r = store->statfs(&st);
@@ -3023,7 +3024,9 @@ void OSD::clear_temp_objects()
   }
 }
 
-void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp)
+void OSD::recursive_remove_collection(CephContext* cct,
+				      ObjectStore *store, spg_t pgid,
+				      coll_t tmp)
 {
   OSDriver driver(
     store,
@@ -3033,7 +3036,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
   ceph::shared_ptr<ObjectStore::Sequencer> osr (std::make_shared<
                                       ObjectStore::Sequencer>("rm"));
   ObjectStore::Transaction t;
-  SnapMapper mapper(&driver, 0, 0, 0, pgid.shard);
+  SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
   store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), true,
@@ -3049,7 +3052,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     if (r != 0 && r != -ENOENT)
       ceph_abort();
     t.remove(tmp, *p);
-    if (removed > g_conf->osd_target_transaction_size) {
+    if (removed > cct->_conf->osd_target_transaction_size) {
       int r = store->apply_transaction(osr.get(), std::move(t));
       assert(r == 0);
       t = ObjectStore::Transaction();
@@ -3078,7 +3081,7 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
     ceph_abort();
   }
 
-  PGPool p = PGPool(createmap, id);
+  PGPool p = PGPool(cct, createmap, id);
 
   dout(10) << "_get_pool " << p.id << dendl;
   return p;
@@ -3310,7 +3313,7 @@ void OSD::load_pgs()
     if (it->is_temp(&pgid) ||
        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
-      recursive_remove_collection(store, pgid, *it);
+      recursive_remove_collection(cct, store, pgid, *it);
       continue;
     }
 
@@ -4422,7 +4425,7 @@ void OSD::tick_without_osd_lock()
     bool report = false;
     utime_t now = ceph_clock_now();
     pg_stat_queue_lock.Lock();
-    double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
+    double backoff = stats_ack_timeout / cct->_conf->osd_mon_ack_timeout;
     double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
     // note: we shouldn't adjust max because it must remain < the
     // mon's mon_osd_report_timeout (which defaults to 1.5x our
@@ -4437,8 +4440,8 @@ void OSD::tick_without_osd_lock()
       last_pg_stats_ack = now;  // reset clock
       last_pg_stats_sent = utime_t();
       stats_ack_timeout =
-	MAX(g_conf->osd_mon_ack_timeout,
-	    stats_ack_timeout * g_conf->osd_stats_ack_timeout_factor);
+	MAX(cct->_conf->osd_mon_ack_timeout,
+	    stats_ack_timeout * cct->_conf->osd_stats_ack_timeout_factor);
       outstanding_pg_stats.clear();
     }
     if (now - last_pg_stats_sent > max) {
@@ -4790,7 +4793,7 @@ void OSD::RemoveWQ::_process(
   ObjectStore::Transaction t;
   PGLog::clear_info_log(pg->info.pgid, &t);
 
-  if (g_conf->osd_inject_failure_on_pg_removal) {
+  if (cct->_conf->osd_inject_failure_on_pg_removal) {
     generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
     exit(1);
   }
@@ -5109,10 +5112,10 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
 
   // backend
-  (*pm)["osd_objectstore"] = g_conf->osd_objectstore;
+  (*pm)["osd_objectstore"] = cct->_conf->osd_objectstore;
   store->collect_metadata(pm);
 
-  collect_sys_info(pm, g_ceph_context);
+  collect_sys_info(pm, cct);
 
   dout(10) << __func__ << " " << *pm << dendl;
 }
@@ -5319,8 +5322,8 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
   // decay timeout slowly (analogous to TCP)
   stats_ack_timeout =
-    MAX(g_conf->osd_mon_ack_timeout,
-	stats_ack_timeout * g_conf->osd_stats_ack_timeout_decay);
+    MAX(cct->_conf->osd_mon_ack_timeout,
+	stats_ack_timeout * cct->_conf->osd_stats_ack_timeout_decay);
   dout(20) << __func__ << "  timeout now " << stats_ack_timeout << dendl;
 
   if (ack->get_tid() > pg_stat_tid_flushed) {
@@ -5671,14 +5674,14 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     ceph::shared_ptr<ObjectStore::Sequencer> osr (std::make_shared<
                                         ObjectStore::Sequencer>("bench"));
 
-    uint32_t duration = g_conf->osd_bench_duration;
+    uint32_t duration = cct->_conf->osd_bench_duration;
 
-    if (bsize > (int64_t) g_conf->osd_bench_max_block_size) {
+    if (bsize > (int64_t) cct->_conf->osd_bench_max_block_size) {
       // let us limit the block size because the next checks rely on it
       // having a sane value.  If we allow any block size to be set things
       // can still go sideways.
       ss << "block 'size' values are capped at "
-         << prettybyte_t(g_conf->osd_bench_max_block_size) << ". If you wish to use"
+         << prettybyte_t(cct->_conf->osd_bench_max_block_size) << ". If you wish to use"
          << " a higher value, please adjust 'osd_bench_max_block_size'";
       r = -EINVAL;
       goto out;
@@ -5688,11 +5691,11 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       // IOPS and duration, so that the OSD doesn't get hung up on this,
       // preventing timeouts from going off
       int64_t max_count =
-        bsize * duration * g_conf->osd_bench_small_size_max_iops;
+        bsize * duration * cct->_conf->osd_bench_small_size_max_iops;
       if (count > max_count) {
         ss << "'count' values greater than " << max_count
            << " for a block size of " << prettybyte_t(bsize) << ", assuming "
-           << g_conf->osd_bench_small_size_max_iops << " IOPS,"
+           << cct->_conf->osd_bench_small_size_max_iops << " IOPS,"
            << " for " << duration << " seconds,"
            << " can cause ill effects on osd. "
            << " Please adjust 'osd_bench_small_size_max_iops' with a higher"
@@ -5711,11 +5714,11 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       //       way too big.  Given we already check how big the block size
       //       is, it's safe to assume everything will check out.
       int64_t max_count =
-        g_conf->osd_bench_large_size_max_throughput * duration;
+        cct->_conf->osd_bench_large_size_max_throughput * duration;
       if (count > max_count) {
         ss << "'count' values greater than " << max_count
            << " for a block size of " << prettybyte_t(bsize) << ", assuming "
-           << prettybyte_t(g_conf->osd_bench_large_size_max_throughput) << "/s,"
+           << prettybyte_t(cct->_conf->osd_bench_large_size_max_throughput) << "/s,"
            << " for " << duration << " seconds,"
            << " can cause ill effects on osd. "
            << " Please adjust 'osd_bench_large_size_max_throughput'"
@@ -6524,24 +6527,26 @@ bool OSD::scrub_random_backoff()
   return false;
 }
 
-OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
+OSDService::ScrubJob::ScrubJob(CephContext* cct,
+			       const spg_t& pg, const utime_t& timestamp,
 			       double pool_scrub_min_interval,
 			       double pool_scrub_max_interval, bool must)
-  : pgid(pg),
+  : cct(cct),
+    pgid(pg),
     sched_time(timestamp),
     deadline(timestamp)
 {
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
     double scrub_min_interval = pool_scrub_min_interval > 0 ?
-      pool_scrub_min_interval : g_conf->osd_scrub_min_interval;
+      pool_scrub_min_interval : cct->_conf->osd_scrub_min_interval;
     double scrub_max_interval = pool_scrub_max_interval > 0 ?
-      pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
+      pool_scrub_max_interval : cct->_conf->osd_scrub_max_interval;
 
     sched_time += scrub_min_interval;
     double r = rand() / (double)RAND_MAX;
     sched_time +=
-      scrub_min_interval * g_conf->osd_scrub_interval_randomize_ratio * r;
+      scrub_min_interval * cct->_conf->osd_scrub_interval_randomize_ratio * r;
     deadline += scrub_max_interval;
   }
 }
@@ -6925,8 +6930,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
 
       bool injected_failure = false;
-      if (g_conf->osd_inject_bad_map_crc_probability > 0 &&
-	  (rand() % 10000) < g_conf->osd_inject_bad_map_crc_probability*10000.0) {
+      if (cct->_conf->osd_inject_bad_map_crc_probability > 0 &&
+	  (rand() % 10000) < cct->_conf->osd_inject_bad_map_crc_probability*10000.0) {
 	derr << __func__ << " injecting map crc failure" << dendl;
 	injected_failure = true;
       }
@@ -7153,17 +7158,17 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
 	//add markdown log
 	utime_t now = ceph_clock_now();
-	utime_t grace = utime_t(g_conf->osd_max_markdown_period, 0);
+	utime_t grace = utime_t(cct->_conf->osd_max_markdown_period, 0);
 	osd_markdown_log.push_back(now);
 	//clear all out-of-date log
 	while (!osd_markdown_log.empty() &&
 	       osd_markdown_log.front() + grace < now)
 	  osd_markdown_log.pop_front();
-	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
+	if ((int)osd_markdown_log.size() > cct->_conf->osd_max_markdown_count) {
 	  dout(0) << __func__ << " marked down "
 		  << osd_markdown_log.size()
 		  << " > osd_max_markdown_count "
-		  << g_conf->osd_max_markdown_count
+		  << cct->_conf->osd_max_markdown_count
 		  << " in last " << grace << " seconds, shutting down"
 		  << dendl;
 	  do_restart = false;
@@ -7339,9 +7344,9 @@ bool OSD::advance_pg(
   epoch_t min_epoch = service.get_min_pg_epoch();
   epoch_t max;
   if (min_epoch) {
-    max = min_epoch + g_conf->osd_map_max_advance;
+    max = min_epoch + cct->_conf->osd_map_max_advance;
   } else {
-    max = next_epoch + g_conf->osd_map_max_advance;
+    max = next_epoch + cct->_conf->osd_map_max_advance;
   }
 
   for (;
@@ -7352,7 +7357,7 @@ bool OSD::advance_pg(
       dout(20) << __func__ << " missing map " << next_epoch << dendl;
       // make sure max is bumped up so that we can get past any
       // gap in maps
-      max = MAX(max, next_epoch + g_conf->osd_map_max_advance);
+      max = MAX(max, next_epoch + cct->_conf->osd_map_max_advance);
       continue;
     }
 
@@ -8532,11 +8537,11 @@ void OSD::do_recovery(
   ThreadPool::TPHandle &handle)
 {
   uint64_t started = 0;
-  if (g_conf->osd_recovery_sleep > 0) {
+  if (cct->_conf->osd_recovery_sleep > 0) {
     handle.suspend_tp_timeout();
     pg->unlock();
     utime_t t;
-    t.set_from_double(g_conf->osd_recovery_sleep);
+    t.set_from_double(cct->_conf->osd_recovery_sleep);
     t.sleep();
     dout(20) << __func__ << " slept for " << t << dendl;
     pg->lock();
@@ -8762,7 +8767,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   }
 
   // ok, we didn't have the PG.
-  if (!g_conf->osd_debug_misdirected_ops) {
+  if (!cct->_conf->osd_debug_misdirected_ops) {
     return;
   }
   // let's see if it's our fault or the client's.  note that this might
@@ -9255,7 +9260,7 @@ void OSD::update_log_config()
   uuid_d fsid;
   string host;
 
-  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+  if (parse_log_client_options(cct, log_to_monitors, log_to_syslog,
 			       log_channel, log_prio, log_to_graylog,
 			       log_to_graylog_host, log_to_graylog_port,
 			       fsid, host) == 0)
@@ -9269,15 +9274,15 @@ void OSD::update_log_config()
 void OSD::check_config()
 {
   // some sanity checks
-  if (g_conf->osd_map_cache_size <= g_conf->osd_map_max_advance + 2) {
-    clog->warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+  if (cct->_conf->osd_map_cache_size <= cct->_conf->osd_map_max_advance + 2) {
+    clog->warn() << "osd_map_cache_size (" << cct->_conf->osd_map_cache_size << ")"
 		<< " is not > osd_map_max_advance ("
-		<< g_conf->osd_map_max_advance << ")";
+		<< cct->_conf->osd_map_max_advance << ")";
   }
-  if (g_conf->osd_map_cache_size <= (int)g_conf->osd_pg_epoch_persisted_max_stale + 2) {
-    clog->warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
-		<< " is not > osd_pg_epoch_persisted_max_stale ("
-		<< g_conf->osd_pg_epoch_persisted_max_stale << ")";
+  if (cct->_conf->osd_map_cache_size <= (int)cct->_conf->osd_pg_epoch_persisted_max_stale + 2) {
+    clog->warn() << "osd_map_cache_size (" << cct->_conf->osd_map_cache_size << ")"
+		 << " is not > osd_pg_epoch_persisted_max_stale ("
+		 << cct->_conf->osd_pg_epoch_persisted_max_stale << ")";
   }
 }
 

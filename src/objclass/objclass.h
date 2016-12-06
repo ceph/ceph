@@ -117,6 +117,7 @@ typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
 				     class buffer::list *inbl, class buffer::list *outbl);
 
 class PGLSFilter {
+  CephContext* cct;
 protected:
   string xattr;
 public:

@@ -28,7 +28,7 @@
 #include "PGLog.h"
 #include "common/LogClient.h"
 
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
@@ -410,7 +410,7 @@ PGBackend *PGBackend::build_pg_backend(
     stringstream ss;
     ceph::ErasureCodePluginRegistry::instance().factory(
       profile.find("plugin")->second,
-      g_conf->erasure_code_dir,
+      cct->_conf->erasure_code_dir,
       profile,
       &ec_impl,
       &ss);
@@ -837,9 +837,9 @@ void PGBackend::be_compare_scrubmaps(
 	update = MAYBE;
       }
       if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  g_conf->osd_debug_scrub_chance_rewrite_digest &&
+	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
 	  (((unsigned)rand() % 100) >
-	   g_conf->osd_debug_scrub_chance_rewrite_digest)) {
+	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
 	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
 	update = MAYBE;
       }
@@ -869,13 +869,13 @@ void PGBackend::be_compare_scrubmaps(
       if (update != NO) {
 	utime_t age = now - auth_oi.local_mtime;
 	if (update == FORCE ||
-	    age > g_conf->osd_deep_scrub_update_digest_min_age) {
+	    age > cct->_conf->osd_deep_scrub_update_digest_min_age) {
 	  dout(20) << __func__ << " will update digest on " << *k << dendl;
 	  missing_digest[*k] = make_pair(auth_object.digest,
 					 auth_object.omap_digest);
 	} else {
 	  dout(20) << __func__ << " missing digest but age " << age
-		   << " < " << g_conf->osd_deep_scrub_update_digest_min_age
+		   << " < " << cct->_conf->osd_deep_scrub_update_digest_min_age
 		   << " on " << *k << dendl;
 	}
       }
