@@ -318,6 +318,7 @@ void BlueFS::_init_alloc()
 {
   dout(20) << __func__ << dendl;
   alloc.resize(MAX_BDEV);
+  pending_release.resize(MAX_BDEV);
   for (unsigned id = 0; id < bdev.size(); ++id) {
     if (!bdev[id]) {
       continue;
@@ -812,7 +813,7 @@ void BlueFS::_drop_link(FileRef file)
     assert(file->num_reading.load() == 0);
     log_t.op_file_remove(file->fnode.ino);
     for (auto& r : file->fnode.extents) {
-      alloc[r.bdev]->release(r.offset, r.length);
+      pending_release[r.bdev].insert(r.offset, r.length);
     }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
@@ -1098,7 +1099,7 @@ void BlueFS::_compact_log_sync()
 
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
   for (auto& r : old_extents) {
-    alloc[r.bdev]->release(r.offset, r.length);
+    pending_release[r.bdev].insert(r.offset, r.length);
   }
 
   logger->inc(l_bluefs_log_compactions);
@@ -1240,7 +1241,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   // 8. release old space
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
   for (auto& r : old_extents) {
-    alloc[r.bdev]->release(r.offset, r.length);
+    pending_release[r.bdev].insert(r.offset, r.length);
   }
 
   // delete the new log, remove from the dirty files list
@@ -1814,6 +1815,8 @@ void BlueFS::sync_metadata()
   }
   dout(10) << __func__ << dendl;
   utime_t start = ceph_clock_now(NULL);
+  vector<interval_set<uint64_t>> to_release(pending_release.size());
+  to_release.swap(pending_release);
   for (auto p : alloc) {
     if (p) {
       p->commit_start();
@@ -1823,6 +1826,11 @@ void BlueFS::sync_metadata()
   for (auto p : alloc) {
     if (p) {
       p->commit_finish();
+    }
+  }
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
+      alloc[i]->release(p.get_start(), p.get_len());
     }
   }
 
@@ -1887,7 +1895,7 @@ int BlueFS::open_for_write(
 	       << " already exists, truncate + overwrite" << dendl;
       file->fnode.size = 0;
       for (auto& p : file->fnode.extents) {
-        alloc[p.bdev]->release(p.offset, p.length);
+	pending_release[p.bdev].insert(p.offset, p.length);
       }
       file->fnode.extents.clear();
     }
