@@ -4,7 +4,6 @@
 #include "CreateImageRequest.h"
 #include "CloseImageRequest.h"
 #include "OpenImageRequest.h"
-#include "Utils.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -13,6 +12,7 @@
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/image/CreateRequest.h"
+#include "librbd/image/CloneRequest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -281,23 +281,20 @@ template <typename I>
 void CreateImageRequest<I>::clone_image() {
   dout(20) << dendl;
 
-  // TODO: librbd should provide an AIO image clone method -- this is
-  //       blocking so we execute in our worker thread
-  Context *ctx = new FunctionContext([this](int r) {
-      RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
+  librbd::ImageOptions opts;
+  opts.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
+  opts.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
+  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, m_remote_image_ctx->stripe_unit);
+  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, m_remote_image_ctx->stripe_count);
 
-      librbd::ImageOptions opts;
-      opts.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
-      opts.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
-      opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, m_remote_image_ctx->stripe_unit);
-      opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, m_remote_image_ctx->stripe_count);
+  using klass = CreateImageRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_clone_image>(this);
 
-      r = utils::clone_image(m_local_parent_image_ctx, m_local_io_ctx,
-                             m_local_image_name.c_str(), opts,
-                             m_global_image_id, m_remote_mirror_uuid);
-      handle_clone_image(r);
-    });
-  m_work_queue->queue(ctx, 0);
+  librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
+    m_local_parent_image_ctx, m_local_io_ctx, m_local_image_name, opts,
+    m_global_image_id, m_remote_mirror_uuid,
+    m_remote_image_ctx->op_work_queue, ctx);
+  req->send();
 }
 
 template <typename I>
