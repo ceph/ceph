@@ -1245,7 +1245,7 @@ int tcp<InetTraits>::tcb::send(Packet p) {
   auto len = p.len();
   if (!_snd.user_queue_space.get_or_fail(len)) {
     // note: caller must ensure enough queue space to send
-    assert(0);
+    ceph_abort();
   }
   // TODO: Handle p.len() > max user_queue_space case
   _snd.queued_len += len;
