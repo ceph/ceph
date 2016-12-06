@@ -982,6 +982,7 @@ OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this bi
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
 OPTION(bluefs_allocator, OPT_STR, "bitmap")     // stupid | bitmap
+OPTION(bluefs_preextend_wal_files, OPT_BOOL, true)  // this *requires* that rocksdb has recycling enabled
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
@@ -1006,8 +1007,6 @@ OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL, false)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate space if block/db_path/wal_path is file rather that block device.
-OPTION(bluestore_precondition_bluefs, OPT_U64, 512*1024*1024)  // write this much data at mkfs
-OPTION(bluestore_precondition_bluefs_block, OPT_U64, 1048576)
 OPTION(bluestore_csum_type, OPT_STR, "crc32c") // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
 OPTION(bluestore_csum_min_block, OPT_U32, 4096)
 OPTION(bluestore_csum_max_block, OPT_U32, 64*1024)
