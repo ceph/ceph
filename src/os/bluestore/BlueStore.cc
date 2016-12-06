@@ -8651,11 +8651,12 @@ int BlueStore::_do_clone_range(
   }
   int n = 0;
   bool dirtied_oldo = false;
+  uint64_t end = srcoff + length;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
     auto& e = *ep;
-    if (e.logical_offset >= srcoff + length) {
+    if (e.logical_offset >= end) {
       break;
     }
     dout(20) << __func__ << "  src " << e << dendl;
@@ -8696,8 +8697,8 @@ int BlueStore::_do_clone_range(
     } else {
       skip_front = 0;
     }
-    if (e.logical_offset + e.length > srcoff + length) {
-      skip_back = e.logical_offset + e.length - (srcoff + length);
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
     } else {
       skip_back = 0;
     }
