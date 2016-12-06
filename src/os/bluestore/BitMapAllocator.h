@@ -13,13 +13,9 @@
 class BitMapAllocator : public Allocator {
   std::mutex m_lock;
 
-  int64_t m_num_uncommitted;
-  int64_t m_num_committing;
   int64_t m_block_size;
   int64_t m_num_reserved;
 
-  btree_interval_set<uint64_t> m_uncommitted; ///< released but not yet usable
-  btree_interval_set<uint64_t> m_committing;  ///< released but not yet usable
   BitAllocator *m_bit_alloc; // Bit allocator instance
 
   void insert_free(uint64_t offset, uint64_t len);
@@ -48,9 +44,6 @@ public:
 
   int release(
     uint64_t offset, uint64_t length);
-
-  void commit_start();
-  void commit_finish();
 
   uint64_t get_free();
 

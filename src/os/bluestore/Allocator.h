@@ -62,9 +62,6 @@ public:
     return res;
   }
 
-  virtual void commit_start() = 0;
-  virtual void commit_finish() = 0;
-
   virtual void dump() = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;

@@ -4,8 +4,6 @@
  * Bitmap based in-memory allocator.
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  *
- * TBD list:
- *  1. Make commiting and un commiting lists concurrent.
  */
 
 #include "BitAllocator.h"
@@ -20,8 +18,6 @@
 
 
 BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
-  : m_num_uncommitted(0),
-    m_num_committing(0)
 {
   assert(ISP2(block_size));
   if (!ISP2(block_size)) {
@@ -254,32 +250,8 @@ uint64_t BitMapAllocator::get_free()
 void BitMapAllocator::dump()
 {
   std::lock_guard<std::mutex> l(m_lock);
-
-  dout(0) << __func__ << " instance " << (uint64_t) this
-           << " Allocator Status dump : " << dendl;
-
+  dout(0) << __func__ << " instance " << this << dendl;
   m_bit_alloc->dump();
-  dout(0) << __func__ << " instance " << (uint64_t) this
-           << " committing: " << m_committing.num_intervals() << " extents"
-           << dendl;
-
-  for (auto p = m_committing.begin();
-    p != m_committing.end(); ++p) {
-    dout(0) << __func__ << " instance " << (uint64_t) this
-             << " 0x" << std::hex << p.get_start()
-             << "~" << p.get_len() << std::dec
-             << dendl;
-  }
-  dout(0) << __func__ << " instance " << (uint64_t) this
-           << " uncommitted: " << m_uncommitted.num_intervals() << " extents"
-           << dendl;
-
-  for (auto p = m_uncommitted.begin();
-    p != m_uncommitted.end(); ++p) {
-    dout(0) << __func__ << " 0x" << std::hex << p.get_start()
-             << "~" << p.get_len() << std::dec
-             << dendl;
-  }
 }
 
 void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
@@ -332,32 +304,3 @@ void BitMapAllocator::shutdown()
   m_bit_alloc->shutdown();
 }
 
-void BitMapAllocator::commit_start()
-{
-  std::lock_guard<std::mutex> l(m_lock);
-
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " releasing " << m_num_uncommitted
-           << " in extents " << m_uncommitted.num_intervals()
-           << dendl;
-  assert(m_committing.empty());
-  m_committing.swap(m_uncommitted);
-  m_num_committing = m_num_uncommitted;
-  m_num_uncommitted = 0;
-}
-
-void BitMapAllocator::commit_finish()
-{
-  std::lock_guard<std::mutex> l(m_lock);
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " released " << m_num_committing
-           << " in extents " << m_committing.num_intervals()
-           << dendl;
-  for (auto p = m_committing.begin();
-    p != m_committing.end();
-    ++p) {
-    insert_free(p.get_start(), p.get_len());
-  }
-  m_committing.clear();
-  m_num_committing = 0;
-}
