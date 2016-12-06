@@ -627,7 +627,7 @@ void RGW_SWIFT_Auth_Get::execute()
   ret = STATUS_NO_CONTENT;
 
 done:
-  s->set_req_state_err(ret);
+  set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
 }

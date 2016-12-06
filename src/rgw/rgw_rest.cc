@@ -19,7 +19,6 @@
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
 #include "rgw_cors_s3.h"
-// #include "rgw_lib.h"	// XXX mdw is this necessary?
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
@@ -223,8 +222,10 @@ string camelcase_dash_http_attr(const string& orig)
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
 
-void rgw_rest_init(CephContext *cct)
+void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
 {
+  store->init_host_id();
+
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }
@@ -254,12 +255,6 @@ void rgw_rest_init(CephContext *cct)
   }
 
   hostnames_set.insert(cct->_conf->rgw_dns_name);
-}
-
-void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
-{
-  store->init_host_id();
-  rgw_rest_init(cct);
   hostnames_set.insert(zone_group.hostnames.begin(), zone_group.hostnames.end());
   hostnames_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
@@ -373,7 +368,7 @@ void dump_errno(const struct rgw_err &err, string& out) {
 
 void dump_errno(struct req_state *s)
 {
-  dump_status(s, s->err->http_ret, http_status_names[s->err->http_ret]);
+  dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
 }
 
 void dump_errno(struct req_state *s, int http_ret)
@@ -662,9 +657,9 @@ void dump_trans_id(req_state *s)
   }
 }
 
-void end_header(struct req_state* s, boost::function<void()> dump_more,
-		const char *content_type, const int64_t proposed_content_length,
-		bool force_content_type, bool force_no_error)
+void end_header(struct req_state* s, RGWOp* op, const char *content_type,
+		const int64_t proposed_content_length, bool force_content_type,
+		bool force_no_error)
 {
   string ctype;
 
@@ -676,8 +671,8 @@ void end_header(struct req_state* s, boost::function<void()> dump_more,
     dump_header(s, "x-amz-request-charged", "requester");
   }
 
-  if (dump_more) {
-    dump_more();
+  if (op) {
+    dump_access_control(s, op);
   }
 
   if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
@@ -708,7 +703,7 @@ void end_header(struct req_state* s, boost::function<void()> dump_more,
   }
   if (!force_no_error && s->is_err()) {
     dump_start(s);
-    s->err->dump();
+    dump(s);
     dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length == CHUNKED_TRANSFER_ENCODING) {
@@ -733,38 +728,43 @@ void end_header(struct req_state* s, boost::function<void()> dump_more,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void end_header(struct req_state* s, RGWOp* op, const char *content_type,
-		const int64_t proposed_content_length, bool force_content_type,
-		bool force_no_error)
+void abort_early(struct req_state *s, RGWOp* op, int err_no,
+		RGWHandler* handler)
 {
-  boost::function<void()> dump_more;
-
-  if (op) dump_more = op->dump_access_control_f();
-  end_header(s, dump_more, content_type,
-	proposed_content_length, force_content_type, force_no_error);
-}
-
-void abort_early(struct req_state *s, boost::function<void()> dump_more,
-		string& error_content, int err_no)
-{
+  string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
     s->format = RGW_FORMAT_JSON;
+  }
+
+  // op->error_handler is responsible for calling it's handler error_handler
+  if (op != NULL) {
+    int new_err_no;
+    new_err_no = op->error_handler(err_no, &error_content);
+    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no
+		      << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
+  } else if (handler != NULL) {
+    int new_err_no;
+    new_err_no = handler->error_handler(err_no, &error_content);
+    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no
+		      << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
   }
 
   // If the error handler(s) above dealt with it completely, they should have
   // returned 0. If non-zero, we need to continue here.
   if (err_no) {
     // Watch out, we might have a custom error state already set!
-    if (!s->err->http_ret || s->err->http_ret == 200) {
-      s->set_req_state_err(err_no);
+    if (!s->err.http_ret || s->err.http_ret == 200) {
+      set_req_state_err(s, err_no);
     }
     dump_errno(s);
     dump_bucket_from_state(s);
     if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
       string dest_uri;
       if (!s->redirect.empty()) {
-	dest_uri = s->redirect;
+        dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
         dest_uri = s->zonegroup_endpoint;
         /*
@@ -793,37 +793,13 @@ void abort_early(struct req_state *s, boost::function<void()> dump_more,
        *   x-amz-error-message: The specified key does not exist.
        *   x-amz-error-detail-Key: foo
        */
-      end_header(s, dump_more, NULL, error_content.size(), false, true);
+      end_header(s, op, NULL, error_content.size(), false, true);
       RESTFUL_IO(s)->send_body(error_content.c_str(), error_content.size());
     } else {
-      end_header(s, dump_more);
+      end_header(s, op);
     }
   }
   perfcounter->inc(l_rgw_failed_req);
-}
-
-void abort_early(struct req_state *s, RGWOp* op, int err_no,
-		RGWHandler* handler)
-{
-  string error_content("");
-  boost::function<void()> dump_more;
-
-  // op->error_handler is responsible for calling it's handler error_handler
-  if (op != NULL) {
-    int new_err_no;
-    new_err_no = op->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no
-		      << " new_err_no=" << new_err_no << dendl;
-    err_no = new_err_no;
-  } else if (handler != NULL) {
-    int new_err_no;
-    new_err_no = handler->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no
-		      << " new_err_no=" << new_err_no << dendl;
-    err_no = new_err_no;
-  }
-  if (op) dump_more = op->dump_access_control_f();
-  abort_early(s, dump_more, error_content, err_no);
 }
 
 void dump_continue(struct req_state * const s)
@@ -1105,7 +1081,7 @@ int RESTArgs::get_bool(struct req_state *s, const string& name, bool def_val, bo
 
 void RGWRESTFlusher::do_start(int ret)
 {
-  s->set_req_state_err(ret); /* no going back from here */
+  set_req_state_err(s, ret); /* no going back from here */
   dump_errno(s);
   dump_start(s);
   end_header(s, op);
@@ -1799,7 +1775,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
 void RGWRESTOp::send_response()
 {
   if (!flusher.did_start()) {
-    s->set_req_state_err(http_ret);
+    set_req_state_err(s, http_ret);
     dump_errno(s);
     end_header(s, this);
   }

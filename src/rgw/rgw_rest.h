@@ -20,7 +20,6 @@ extern std::map<std::string, std::string> rgw_to_http_attrs;
 extern string camelcase_dash_http_attr(const string& orig);
 extern string lowercase_dash_http_attr(const string& orig);
 
-extern void rgw_rest_init(CephContext *cct);
 extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
@@ -131,16 +130,16 @@ public:
 
 class RGWRESTFlusher : public RGWFormatterFlusher {
   struct req_state *s;
-  boost::function<void()> op;
+  RGWOp *op;
 protected:
   void do_flush() override;
   void do_start(int ret) override;
 public:
-  RGWRESTFlusher(struct req_state *_s, boost::function<void()> _op) :
+  RGWRESTFlusher(struct req_state *_s, RGWOp *_op) :
     RGWFormatterFlusher(_s->formatter), s(_s), op(_op) {}
   RGWRESTFlusher() : RGWFormatterFlusher(NULL), s(NULL), op(NULL) {}
 
-  void init(struct req_state *_s, boost::function<void()> _op) {
+  void init(struct req_state *_s, RGWOp *_op) {
     s = _s;
     op = _op;
     set_formatter(s->formatter);
@@ -463,7 +462,7 @@ public:
   void init(RGWRados *store, struct req_state *s,
             RGWHandler *dialect_handler) override {
     RGWOp::init(store, s, dialect_handler);
-    flusher.init(s, dump_access_control_f());
+    flusher.init(s, this);
   }
   void send_response() override;
   virtual int check_caps(RGWUserCaps& caps)
@@ -638,13 +637,6 @@ extern void end_header(struct req_state *s,
 		       NO_CONTENT_LENGTH,
 		       bool force_content_type = false,
 		       bool force_no_error = false);
-extern void end_header(struct req_state *s,
-                       boost::function<void()> dump_more,
-                       const char *content_type = nullptr,
-                       const int64_t proposed_content_length =
-		       NO_CONTENT_LENGTH,
-		       bool force_content_type = false,
-		       bool force_no_error = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, const rgw_user& id, string& name,
@@ -708,8 +700,6 @@ extern void dump_time_header(struct req_state *s, const char *name, real_time t)
 extern void dump_last_modified(struct req_state *s, real_time t);
 extern void abort_early(struct req_state* s, RGWOp* op, int err,
 			RGWHandler* handler);
-extern void abort_early(struct req_state* s, boost::function<void()> dump_more,
-			string& error_content, int err);
 extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
 extern void dump_continue(struct req_state *s);

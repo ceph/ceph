@@ -254,7 +254,6 @@ static int modify_obj_attr(RGWRados *store, struct req_state *s, rgw_obj& obj, c
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
-  read_op.params.perr = &s->err;
   
   int r = read_op.prepare();
   if (r < 0) {
@@ -791,15 +790,6 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   get_cors_response_headers(rule, req_hdrs, headers, exp_headers, max_age);
 
   return true;
-}
-
-/**
- * Return a callable that can invoke dump_access_control().
- */
-
-boost::function<void()> RGWOp::dump_access_control_f()
-{
-  return boost::bind(dump_access_control, s, this);
 }
 
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
