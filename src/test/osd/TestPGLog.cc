@@ -260,7 +260,8 @@ public:
     for (list<pg_log_entry_t>::const_iterator i = tcase.auth.begin();
 	 i != tcase.auth.end();
 	 ++i) {
-      omissing.add_next_event(*i);
+      if (i->version > oinfo.last_update)
+	omissing.add_next_event(*i);
     }
     verify_missing(tcase, omissing);
   }
@@ -1944,6 +1945,34 @@ TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
   t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
   t.set_auth_bounds(mk_evt(15, 160), mk_evt(9, 77));
   t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, olog_tail_gt_log_tail_split) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(15, 153), mk_evt(15, 151));
+  t.set_auth_bounds(mk_evt(15, 156), mk_evt(10, 99));
+  t.final.add(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150));
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, olog_tail_gt_log_tail_split2) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(16, 155), mk_evt(15, 150)));
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 153), mk_evt(15, 150)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(15, 153), mk_evt(15, 151));
+  t.set_auth_bounds(mk_evt(16, 156), mk_evt(10, 99));
+  t.final.add(mk_obj(1), mk_evt(16, 155), mk_evt(0, 0));
+  t.toremove.insert(mk_obj(1));
   run_test_case(t);
 }
 
