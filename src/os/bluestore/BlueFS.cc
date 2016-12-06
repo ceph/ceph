@@ -1444,6 +1444,17 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
            << dendl;
       return r;
     }
+    if (g_conf->bluefs_preextend_wal_files &&
+	h->writer_type == WRITER_WAL) {
+      // NOTE: this *requires* that rocksdb also has log recycling
+      // enabled and is therefore doing robust CRCs on the log
+      // records.  otherwise, we will fail to reply the rocksdb log
+      // properly due to garbage on the device.
+      h->file->fnode.size = h->file->fnode.get_allocated();
+      dout(10) << __func__ << " extending WAL size to 0x" << std::hex
+	       << h->file->fnode.size << std::dec << " to include allocated"
+	       << dendl;
+    }
     must_dirty = true;
   }
   if (h->file->fnode.size < offset + length) {
