@@ -297,6 +297,8 @@ int main(int argc, const char **argv, const char *envp[]) {
     //cout << "child done" << std::endl;
     return r;
   } else {
+    if (restart_log)
+      g_ceph_context->_log->start();
     // i am the parent
     //cout << "parent, waiting for signal" << std::endl;
     ::close(fd[1]);
