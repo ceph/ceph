@@ -94,6 +94,7 @@ public:
   virtual int authorize() = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
+  virtual void dump(const string& code, const string& message) const {}
 };
 
 
@@ -173,8 +174,6 @@ public:
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
-
-  boost::function<void()> dump_access_control_f();
 };
 
 class RGWGetObj : public RGWOp {
