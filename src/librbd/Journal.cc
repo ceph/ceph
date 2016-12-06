@@ -53,25 +53,29 @@ public:
 
 template <typename I>
 struct C_IsTagOwner : public Context {
-  I *image_ctx;
+  librados::IoCtx &io_ctx;
+  std::string image_id;
   bool *is_tag_owner;
+  ContextWQ *op_work_queue;
   Context *on_finish;
 
+  CephContext *cct = nullptr;
   Journaler *journaler;
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
   uint64_t tag_tid;
   journal::TagData tag_data;
 
-  C_IsTagOwner(I *image_ctx, bool *is_tag_owner, Context *on_finish)
-    : image_ctx(image_ctx), is_tag_owner(is_tag_owner), on_finish(on_finish),
-      journaler(new Journaler(image_ctx->md_ctx, image_ctx->id,
-                              Journal<>::IMAGE_CLIENT_ID, {})) {
+  C_IsTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
+               bool *is_tag_owner, ContextWQ *op_work_queue, Context *on_finish)
+    : io_ctx(io_ctx), image_id(image_id), is_tag_owner(is_tag_owner),
+      op_work_queue(op_work_queue), on_finish(on_finish),
+      cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
+      journaler(new Journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID,
+                              {})) {
   }
 
   virtual void finish(int r) {
-    CephContext *cct = image_ctx->cct;
-
     ldout(cct, 20) << this << " C_IsTagOwner::" << __func__ << ": r=" << r
 		   << dendl;
     if (r < 0) {
@@ -88,7 +92,7 @@ struct C_IsTagOwner : public Context {
 	on_finish->complete(r);
 	delete journaler;
       });
-    image_ctx->op_work_queue->queue(ctx, r);
+    op_work_queue->queue(ctx, r);
   }
 };
 
@@ -432,7 +436,8 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
 
 template <typename I>
 int Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner) {
-  return Journal<>::is_tag_owner(image_ctx->md_ctx, image_ctx->id, is_tag_owner);
+  return Journal<>::is_tag_owner(image_ctx->md_ctx, image_ctx->id,
+                                 is_tag_owner);
 }
 
 template <typename I>
@@ -449,13 +454,21 @@ int Journal<I>::is_tag_owner(IoCtx& io_ctx, std::string& image_id,
 }
 
 template <typename I>
-void Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner,
+void Journal<I>::is_tag_owner(I *image_ctx, bool *owner,
                               Context *on_finish) {
-  CephContext *cct = image_ctx->cct;
+  is_tag_owner(image_ctx->md_ctx, image_ctx->id, owner,
+               image_ctx->op_work_queue, on_finish);
+}
+
+template <typename I>
+void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+                              bool *is_tag_owner, ContextWQ *op_work_queue,
+                              Context *on_finish) {
+  CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
   ldout(cct, 20) << __func__ << dendl;
 
   C_IsTagOwner<I> *is_tag_owner_ctx =  new C_IsTagOwner<I>(
-    image_ctx, is_tag_owner, on_finish);
+    io_ctx, image_id, is_tag_owner, op_work_queue, on_finish);
   get_tags(cct, is_tag_owner_ctx->journaler, &is_tag_owner_ctx->client,
 	   &is_tag_owner_ctx->client_meta, &is_tag_owner_ctx->tag_tid,
 	   &is_tag_owner_ctx->tag_data, is_tag_owner_ctx);

@@ -40,9 +40,13 @@ struct CreateRequest<librbd::MockTestImageCtx> {
                                const librbd::ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
+                               bool skip_mirror_enable,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {
     assert(s_instance != nullptr);
+    EXPECT_FALSE(non_primary_global_image_id.empty());
+    EXPECT_FALSE(primary_mirror_uuid.empty());
+    EXPECT_FALSE(skip_mirror_enable);
     s_instance->on_finish = on_finish;
     s_instance->construct(ioctx);
     return s_instance;
