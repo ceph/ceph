@@ -3,7 +3,6 @@ os_type: ubuntu
 os_version: "14.04"
 
 tasks:
-- chef: null
 - pexec:
     clients:
       - cd $TESTDIR
