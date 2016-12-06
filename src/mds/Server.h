@@ -145,7 +145,7 @@ public:
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    file_layout_t *layout=NULL);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
-  void apply_allocated_inos(MDRequestRef& mdr);
+  void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
 			      bool no_want_auth=false,

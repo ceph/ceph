@@ -1119,6 +1119,8 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 
   mdr->mark_event("replying");
 
+  Session *session = mdr->session;
+
   // note successful request in session map?
   //
   // setfilelock requests are special, they only modify states in MDS memory.
@@ -1126,16 +1128,16 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   // setfilelock request, it means that client did not receive corresponding
   // setfilelock reply.  So MDS should re-execute the setfilelock request.
   if (req->may_write() && req->get_op() != CEPH_MDS_OP_SETFILELOCK &&
-      reply->get_result() == 0 && mdr->session) {
+      reply->get_result() == 0 && session) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
-    mdr->session->add_completed_request(mdr->reqid.tid, created);
+    session->add_completed_request(mdr->reqid.tid, created);
     if (mdr->ls) {
-      mdr->ls->touched_sessions.insert(mdr->session->info.inst.name);
+      mdr->ls->touched_sessions.insert(session->info.inst.name);
     }
   }
 
   // give any preallocated inos to the session
-  apply_allocated_inos(mdr);
+  apply_allocated_inos(mdr, session);
 
   // get tracei/tracedn from mdr?
   snapid_t snapid = mdr->snapid;
@@ -1144,7 +1146,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 
   bool is_replay = mdr->client_request->is_replay();
   bool did_early_reply = mdr->did_early_reply;
-  Session *session = mdr->session;
   entity_inst_t client_inst = req->get_source_inst();
   int dentry_wanted = req->get_dentry_wanted();
 
@@ -1161,14 +1162,11 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
   }
 
-  // note client connection to direct my reply
-  ConnectionRef client_con = req->get_connection();
-
   // drop non-rdlocks before replying, so that we can issue leases
   mdcache->request_drop_non_rdlocks(mdr);
 
   // reply at all?
-  if (client_inst.name.is_mds()) {
+  if (client_inst.name.is_mds() || !session) {
     reply->put();   // mds doesn't need a reply
     reply = 0;
   } else {
@@ -1191,7 +1189,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     reply->set_extra_bl(mdr->reply_extra_bl);
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-    client_con->send_message(reply);
+    req->get_connection()->send_message(reply);
   }
 
   const bool completed = mdr->has_completed;
@@ -1469,14 +1467,19 @@ void Server::handle_osd_map()
 
 void Server::dispatch_client_request(MDRequestRef& mdr)
 {
+  // we shouldn't be waiting on anyone.
+  assert(!mdr->has_more() || mdr->more()->waiting_on_slave.empty());
+
+  if (mdr->killed) {
+    dout(10) << "request " << *mdr << " was killed" << dendl;
+    return;
+  }
+
   MClientRequest *req = mdr->client_request;
 
   if (logger) logger->inc(l_mdss_dispatch_client_request);
 
   dout(7) << "dispatch_client_request " << *req << dendl;
-
-  // we shouldn't be waiting on anyone.
-  assert(!mdr->has_more() || mdr->more()->waiting_on_slave.empty());
 
   if (req->may_write()) {
     if (mdcache->is_readonly()) {
@@ -1675,6 +1678,17 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     } else if (mdr->slave_to_mds != from) {
       dout(10) << "local request " << *mdr << " not slave to mds." << from << dendl;
       m->put();
+      return;
+    }
+
+    if (m->get_op() == MMDSSlaveRequest::OP_FINISH && m->is_abort()) {
+      mdr->aborted = true;
+      if (mdr->slave_request) {
+	// only abort on-going xlock, wrlock and auth pin
+	assert(!mdr->slave_did_prepare());
+      } else {
+	mdcache->request_finish(mdr);
+      }
       return;
     }
   }
@@ -2395,9 +2409,8 @@ void Server::journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob)
 		      mds->inotable->get_projected_version());
 }
 
-void Server::apply_allocated_inos(MDRequestRef& mdr)
+void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
 {
-  Session *session = mdr->session;
   dout(10) << "apply_allocated_inos " << mdr->alloc_ino
 	   << " / " << mdr->prealloc_inos
 	   << " / " << mdr->used_prealloc_ino << dendl;
