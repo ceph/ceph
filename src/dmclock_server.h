@@ -36,6 +36,7 @@
 #include <condition_variable>
 #include <thread>
 #include <iostream>
+#include <sstream>
 #include <limits>
 
 #include <boost/variant.hpp>
@@ -94,11 +95,11 @@ namespace crimson {
 				      const ClientInfo& client) {
 	out <<
 	  "{ ClientInfo:: r:" << client.reservation <<
-	  " w:" << client.weight <<
-	  " l:" << client.limit <<
-	  " 1/r:" << client.reservation_inv <<
-	  " 1/w:" << client.weight_inv <<
-	  " 1/l:" << client.limit_inv <<
+	  " w:" << std::fixed << client.weight <<
+	  " l:" << std::fixed << client.limit <<
+	  " 1/r:" << std::fixed << client.reservation_inv <<
+	  " 1/w:" << std::fixed << client.weight_inv <<
+	  " 1/l:" << std::fixed << client.limit_inv <<
 	  " }";
 	return out;
       }
@@ -166,6 +167,26 @@ namespace crimson {
 	// empty
       }
 
+      static std::string format_tag_change(double before, double after) {
+	if (before == after) {
+	  return std::string("same");
+	} else {
+	  std::stringstream ss;
+	  ss << format_tag(before) << "=>" << format_tag(after);
+	  return ss.str();
+	}
+      }
+
+      static std::string format_tag(double value) {
+	if (max_tag == value) {
+	  return std::string("max");
+	} else if (min_tag == value) {
+	  return std::string("min");
+	} else {
+	  return format_time(value, tag_modulo);
+	}
+      }
+
     private:
 
       static double tag_calc(const Time& time,
@@ -181,12 +202,6 @@ namespace crimson {
 	  }
 	  return std::max(time, prev + increment);
 	}
-      }
-
-      static std::string format_tag(double value) {
-	if (max_tag == value) return std::string("max");
-	else if (min_tag == value) return std::string("min");
-	else return format_time(value);
       }
 
       friend std::ostream& operator<<(std::ostream& out,
