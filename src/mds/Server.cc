@@ -6628,13 +6628,11 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
            mds->mdsmap->get_up_features());
   prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
 
-  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
+  list<ScatterLock*> updated_scatterlocks;
   mdcache->migrator->decode_import_inode(srcdn, blp, 
 					 srcdn->authority().first,
 					 mdr->ls, 0,
 					 mdr->more()->cap_imports, updated_scatterlocks);
-  srcdnl->get_inode()->filelock.remove_dirty();  
-  srcdnl->get_inode()->nestlock.remove_dirty();  
 
   // hack: force back to !auth and clean, temporarily
   srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);
