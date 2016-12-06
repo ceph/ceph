@@ -1817,17 +1817,7 @@ void BlueFS::sync_metadata()
   utime_t start = ceph_clock_now(NULL);
   vector<interval_set<uint64_t>> to_release(pending_release.size());
   to_release.swap(pending_release);
-  for (auto p : alloc) {
-    if (p) {
-      p->commit_start();
-    }
-  }
   _flush_and_sync_log(l);
-  for (auto p : alloc) {
-    if (p) {
-      p->commit_finish();
-    }
-  }
   for (unsigned i = 0; i < to_release.size(); ++i) {
     for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
       alloc[i]->release(p.get_start(), p.get_len());
