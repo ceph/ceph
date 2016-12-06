@@ -255,6 +255,11 @@ uint64_t BitMapAllocator::get_free()
 void BitMapAllocator::dump()
 {
   std::lock_guard<std::mutex> l(m_lock);
+
+  dout(0) << __func__ << " instance " << (uint64_t) this
+           << " Allocator Status dump : " << dendl;
+
+  m_bit_alloc->dump();
   dout(0) << __func__ << " instance " << (uint64_t) this
            << " committing: " << m_committing.num_intervals() << " extents"
            << dendl;
