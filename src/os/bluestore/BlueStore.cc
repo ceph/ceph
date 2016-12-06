@@ -8680,9 +8680,6 @@ int BlueStore::_do_clone_range(
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
-      if (cb->id >= 0) {
-	newo->extent_map.spanning_blob_map[cb->id] = cb;
-      }
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.extents) {
 	if (p.is_valid()) {
