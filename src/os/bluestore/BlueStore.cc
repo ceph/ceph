@@ -8234,6 +8234,7 @@ int BlueStore::_do_remove(
   if (r < 0)
     return r;
   if (o->onode.has_omap()) {
+    o->flush();
     _do_omap_clear(txc, o->onode.nid);
   }
   o->exists = false;
@@ -8368,6 +8369,7 @@ int BlueStore::_omap_clear(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
   if (o->onode.has_omap()) {
+    o->flush();
     _do_omap_clear(txc, o->onode.nid);
     o->onode.clear_omap_flag();
     txc->write_onode(o);
@@ -8472,6 +8474,7 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   if (!o->onode.has_omap()) {
     goto out;
   }
+  o->flush();
   it = db->get_iterator(PREFIX_OMAP);
   get_omap_key(o->onode.nid, first, &key_first);
   get_omap_key(o->onode.nid, last, &key_last);
@@ -8558,6 +8561,7 @@ int BlueStore::_clone(TransContext *txc,
   // clone omap
   if (newo->onode.has_omap()) {
     dout(20) << __func__ << " clearing old omap data" << dendl;
+    newo->flush();
     _do_omap_clear(txc, newo->onode.nid);
   }
   if (oldo->onode.has_omap()) {
