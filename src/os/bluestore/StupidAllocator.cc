@@ -250,8 +250,8 @@ int StupidAllocator::release(
   std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  uncommitted.insert(offset, length);
-  num_uncommitted += length;
+  _insert_free(offset, length);
+  num_free += length;
   return 0;
 }
 
