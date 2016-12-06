@@ -298,9 +298,7 @@ void MDCache::remove_inode(CInode *o)
   if (o->is_dirty_parent())
     o->clear_dirty_parent();
 
-  o->filelock.remove_dirty();
-  o->nestlock.remove_dirty();
-  o->dirfragtreelock.remove_dirty();
+  o->clear_scatter_dirty();
 
   o->item_open_file.remove_myself();
 

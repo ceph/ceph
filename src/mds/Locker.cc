@@ -5055,6 +5055,9 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCKFLUSHED:
     (static_cast<ScatterLock *>(lock))->finish_flush();
     (static_cast<ScatterLock *>(lock))->clear_flushed();
+    // wake up scatter_nudge waiters
+    if (lock->is_stable())
+      lock->finish_waiters(SimpleLock::WAIT_STABLE);
     break;
     
   case LOCK_AC_MIX:
