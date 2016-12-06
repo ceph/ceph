@@ -58,14 +58,14 @@ class Port {
     int r = ibv_query_port(ctxt, port_num, port_attr);
     if (r == -1) {
       lderr(cct) << __func__  << " query port failed  " << cpp_strerror(errno) << dendl;
-      assert(0);
+      ceph_abort();
     }
 
     lid = port_attr->lid;
     r = ibv_query_gid(ctxt, port_num, 0, &gid);
     if (r) {
       lderr(cct) << __func__  << " query gid failed  " << cpp_strerror(errno) << dendl;
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -107,7 +107,7 @@ class DeviceList {
   DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
     if (device_list == NULL || num == 0) {
       lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
-      assert(0);
+      ceph_abort();
     }
     devices = new Device*[num];
 
@@ -144,7 +144,7 @@ class Infiniband {
     {
       if (pd == NULL) {
         lderr(cct) << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno) << dendl;
-        assert(0);
+        ceph_abort();
       }
     }
     ~ProtectionDomain() {

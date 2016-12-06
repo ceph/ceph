@@ -31,18 +31,18 @@ Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_
 {
   if (device == NULL) {
     lderr(cct) << __func__ << "device == NULL" << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
   name = ibv_get_device_name(device);
   ctxt = ibv_open_device(device);
   if (ctxt == NULL) {
     lderr(cct) << __func__ << "open rdma device failed. " << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
   int r = ibv_query_device(ctxt, device_attr);
   if (r == -1) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -190,7 +190,7 @@ int Infiniband::QueuePair::init()
     case IBV_QPT_RAW_PACKET:
       break;
     default:
-      assert(0);
+      ceph_abort();
   }
 
   int ret = ibv_modify_qp(qp, &qpa, mask);
@@ -317,7 +317,7 @@ Infiniband::QueuePair::QueuePair(
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
     lderr(cct) << __func__ << "invalid queue pair type" << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
   pd = infiniband.pd->pd;
 }
