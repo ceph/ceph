@@ -10,10 +10,11 @@
 #include "common/ceph_context.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/Journal.h"
+#include "librbd/MirroringWatcher.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/mirror/EnableRequest.h"
 #include "journal/Journaler.h"
-#include "librbd/MirroringWatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -122,10 +123,12 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
                                 const ImageOptions &image_options,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
+                                bool skip_mirror_enable,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_image_name(image_name), m_image_id(image_id), m_size(size),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
+    m_skip_mirror_enable(skip_mirror_enable),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
@@ -639,86 +642,25 @@ Context* CreateRequest<I>::handle_journal_create(int *result) {
     return nullptr;
   }
 
-  fetch_mirror_image();
-  return nullptr;
-}
-
-template<typename I>
-void CreateRequest<I>::fetch_mirror_image() {
-  if ((m_mirror_mode != RBD_MIRROR_MODE_POOL) && !m_force_non_primary) {
-    complete(0);
-    return;
-  }
-
-  ldout(m_cct, 20) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_id);
-
-  using klass = CreateRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_fetch_mirror_image>(this);
-  m_outbl.clear();
-  int r = m_ioctx.aio_operate(RBD_MIRRORING, comp, &op, &m_outbl);
-  assert(r == 0);
-  comp->release();
-}
-
-template<typename I>
-Context *CreateRequest<I>::handle_fetch_mirror_image(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
-
-  if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "cannot enable mirroring: " << cpp_strerror(*result) << dendl;
-
-    m_r_saved = *result;
-    journal_remove();
-    return nullptr;
-  }
-
-  if (*result == 0) {
-    bufferlist::iterator it = m_outbl.begin();
-    *result = cls_client::mirror_image_get_finish(&it, &m_mirror_image_internal);
-    if (*result < 0) {
-      lderr(m_cct) << "cannot enable mirroring: " << cpp_strerror(*result) << dendl;
-
-      m_r_saved = *result;
-      journal_remove();
-      return nullptr;
-    }
-
-    if (m_mirror_image_internal.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-      return m_on_finish;
-    }
-  }
-
-  // enable image mirroring (-ENOENT or disabled earlier)
   mirror_image_enable();
   return nullptr;
 }
 
 template<typename I>
 void CreateRequest<I>::mirror_image_enable() {
-  ldout(m_cct, 20) << this << " " << __func__ << dendl;
-
-  m_mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
-  if (m_non_primary_global_image_id.empty()) {
-    uuid_d uuid_gen;
-    uuid_gen.generate_random();
-    m_mirror_image_internal.global_image_id = uuid_gen.to_string();
-  } else {
-    m_mirror_image_internal.global_image_id = m_non_primary_global_image_id;
+  if (((m_mirror_mode != RBD_MIRROR_MODE_POOL) && !m_force_non_primary) ||
+      m_skip_mirror_enable) {
+    complete(0);
+    return;
   }
 
-  librados::ObjectWriteOperation op;
-  cls_client::mirror_image_set(&op, m_image_id, m_mirror_image_internal);
-
-  using klass = CreateRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_mirror_image_enable>(this);
-  int r = m_ioctx.aio_operate(RBD_MIRRORING, comp, &op);
-  assert(r == 0);
-  comp->release();
+  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+  auto ctx = create_context_callback<
+    CreateRequest<I>, &CreateRequest<I>::handle_mirror_image_enable>(this);
+  auto req = mirror::EnableRequest<I>::create(m_ioctx, m_image_id,
+                                              m_non_primary_global_image_id,
+                                              m_op_work_queue, ctx);
+  req->send();
 }
 
 template<typename I>
@@ -726,47 +668,14 @@ Context *CreateRequest<I>::handle_mirror_image_enable(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "cannot enable mirroring: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "cannot enable mirroring: " << cpp_strerror(*result)
+                 << dendl;
 
     m_r_saved = *result;
     journal_remove();
     return nullptr;
   }
-
-  send_watcher_notification();
-  return nullptr;
-}
-
-// TODO: make this *really* async
-template<typename I>
-void CreateRequest<I>::send_watcher_notification() {
-  ldout(m_cct, 20) << this << " " << __func__ << dendl;
-
-  Context *ctx = new FunctionContext([this](int r) {
-      r = MirroringWatcher<>::notify_image_updated(
-        m_ioctx, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-        m_image_id, m_mirror_image_internal.global_image_id);
-      handle_watcher_notify(r);
-    });
-
-  m_op_work_queue->queue(ctx, 0);
-}
-
-template<typename I>
-void CreateRequest<I>::handle_watcher_notify(int r) {
-  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
-
-  if (r < 0) {
-    // non fatal error -- watchers would cope up upon noticing missing
-    // updates. just log and move on...
-    ldout(m_cct, 10) << "failed to send update notification: " << cpp_strerror(r)
-                     << dendl;
-  } else {
-    ldout(m_cct, 20) << "image mirroring is enabled: global_id=" <<
-      m_mirror_image_internal.global_image_id << dendl;
-  }
-
-  complete(0);
+  return m_on_finish;
 }
 
 template<typename I>

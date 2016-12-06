@@ -77,7 +77,7 @@ void CreateImageRequest<I>::create_image() {
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, id, m_remote_image_ctx->size,
-    image_options, m_global_image_id, m_remote_mirror_uuid,
+    image_options, m_global_image_id, m_remote_mirror_uuid, false,
     m_remote_image_ctx->op_work_queue, ctx);
   req->send();
 }
