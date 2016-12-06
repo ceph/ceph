@@ -1512,6 +1512,7 @@ private:
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
+  interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
   std::mutex wal_lock;
   std::atomic<uint64_t> wal_seq = {0};
