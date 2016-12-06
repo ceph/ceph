@@ -58,8 +58,13 @@ namespace crimson {
 
     namespace c = crimson;
 
-    constexpr double max_tag = std::numeric_limits<double>::max();
-    constexpr double min_tag = std::numeric_limits<double>::lowest();
+    constexpr double max_tag = std::numeric_limits<double>::is_iec559 ?
+      std::numeric_limits<double>::infinity() :
+      std::numeric_limits<double>::max();
+    constexpr double min_tag = std::numeric_limits<double>::is_iec559 ?
+      -1 * std::numeric_limits<double>::infinity() :
+      std::numeric_limits<double>::lowest();
+    constexpr uint tag_modulo = 1000000;
 
     struct ClientInfo {
       const double reservation;  // minimum
@@ -295,9 +300,17 @@ namespace crimson {
 	  return prev_tag;
 	}
 
+	static inline void assign_unpinned_tag(double& lhs, const double rhs) {
+	  if (rhs != max_tag && rhs != min_tag) {
+	    lhs = rhs;
+	  }
+	}
+
 	inline void update_req_tag(const RequestTag& _prev,
 				   const Counter& _tick) {
-	  prev_tag = _prev;
+	  assign_unpinned_tag(prev_tag.reservation, _prev.reservation);
+	  assign_unpinned_tag(prev_tag.limit, _prev.limit);
+	  assign_unpinned_tag(prev_tag.proportion, _prev.proportion);
 	  last_tick = _tick;
 	}
 
