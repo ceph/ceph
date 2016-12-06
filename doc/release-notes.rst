@@ -1,16 +1,16 @@
 ===============
  Release Notes
 ===============
-v11.0.1 Kraken
-==============
 
-This development release of introduces a lot of changes and
-improvements to Kraken. This is the first release including a new
-daemon ceph-mgr, which provides additional monitoring & interfaces to
-external monitoring/management systems. There are also many
-improvements to bluestore, RGW introduces sync modules, copy part for
-multipart uploads and metadata search via elastic search as a tech
-preview.
+v11.0.2
+=======
+
+This development checkpoint release includes a lot of changes and improvements
+to Kraken. This is the first release introducing ceph-mgr, a new daemon which
+provides additional monitoring & interfaces to external monitoring/management
+systems. There are also many improvements to bluestore, RGW introduces sync
+modules, copy part for multipart uploads and metadata search via elastic search
+as a tech preview.
 
 Notable Changes
 ---------------
@@ -351,6 +351,7 @@ Notable Changes
 * cmake: use PERF_LOCAL_FLAGS only if defined (`issue#17104 <http://tracker.ceph.com/issues/17104>`_, `pr#10828 <http://github.com/ceph/ceph/pull/10828>`_, Michel Normand)
 * cmake: use stock Find* modules. (`pr#10178 <http://github.com/ceph/ceph/pull/10178>`_, Kefu Chai)
 * cmake: work to get inital FreeBSD stuff (`pr#10352 <http://github.com/ceph/ceph/pull/10352>`_, Willem Jan Withagen)
+* cmake: find GIT_VER variables if there is no .git dir (`pr#11499 <http://github.com/ceph/ceph/pull/11499>`_, Ali Maredia)
 * common,bluestore: Isa-l extention for zlib compression plugin (`pr#10158 <http://github.com/ceph/ceph/pull/10158>`_, Alyona Kiseleva, Dan Mick)
 * common,bluestore: compressor/zlib: zlib wrapper fix (`pr#11079 <http://github.com/ceph/ceph/pull/11079>`_, Igor Fedotov)
 * common: auth/cephx: misc fixes (`pr#9679 <http://github.com/ceph/ceph/pull/9679>`_, xie xingguo)
