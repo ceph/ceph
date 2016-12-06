@@ -3630,8 +3630,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
       assert(r >= 0);
 
       bluefs_extents.erase(offset, length);
-
-      alloc->release(offset, length);
+      bluefs_extents_reclaiming.insert(offset, length);
 
       reclaim -= length;
     }
@@ -6740,6 +6739,15 @@ void BlueStore::_kv_sync_thread()
 	if (!bluefs_gift_extents.empty()) {
 	  _commit_bluefs_freespace(bluefs_gift_extents);
 	}
+	for (auto p = bluefs_extents_reclaiming.begin();
+	     p != bluefs_extents_reclaiming.end();
+	     ++p) {
+	  dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
+		   << p.get_start() << "~" << p.get_len() << std::dec
+		   << dendl;
+	  alloc->release(p.get_start(), p.get_len());
+	}
+	bluefs_extents_reclaiming.clear();
       }
 
       l.lock();
