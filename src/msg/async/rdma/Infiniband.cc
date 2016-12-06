@@ -77,17 +77,17 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
   max_recv_wr = device->device_attr->max_srq_wr;
   if (max_recv_wr > cct->_conf->ms_async_rdma_receive_buffers) {
     max_recv_wr = cct->_conf->ms_async_rdma_receive_buffers;
-    ldout(cct, 0) << __func__ << " assigning: " << max_recv_wr << " receive buffers" << dendl;
+    ldout(cct, 1) << __func__ << " assigning: " << max_recv_wr << " receive buffers" << dendl;
   } else {
-    ldout(cct, 0) << __func__ << " using the max allowed receive buffers: " << max_recv_wr << dendl;
+    ldout(cct, 1) << __func__ << " using the max allowed receive buffers: " << max_recv_wr << dendl;
   }
 
   max_send_wr = device->device_attr->max_qp_wr;
   if (max_send_wr > cct->_conf->ms_async_rdma_send_buffers) {
     max_send_wr = cct->_conf->ms_async_rdma_send_buffers;
-    ldout(cct, 0) << __func__ << " assigning: " << max_send_wr << " send buffers"  << dendl;
+    ldout(cct, 1) << __func__ << " assigning: " << max_send_wr << " send buffers"  << dendl;
   } else {
-    ldout(cct, 0) << __func__ << " using the max allowed send buffers: " << max_send_wr << dendl;
+    ldout(cct, 1) << __func__ << " using the max allowed send buffers: " << max_send_wr << dendl;
   }
 
   ldout(cct, 1) << __func__ << " device allow " << device->device_attr->max_cqe
