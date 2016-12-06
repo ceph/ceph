@@ -63,7 +63,8 @@ static void usage()
             << "Options:\n"
             << "  --device <device path>                    Specify nbd device path\n"
             << "  --read-only                               Map readonly\n"
-            << "  --nbds_max <limit>                        Override for module param\n"
+            << "  --nbds_max <limit>                        Override for module param nbds_max\n"
+            << "  --max_part <limit>                        Override for module param max_part\n"
             << "  --exclusive                               Forbid other clients write\n"
             << std::endl;
   generic_server_usage();
@@ -72,6 +73,7 @@ static void usage()
 static std::string devpath, poolname("rbd"), imgname, snapname;
 static bool readonly = false;
 static int nbds_max = 0;
+static int max_part = 255;
 static bool exclusive = false;
 
 #ifdef CEPH_BIG_ENDIAN
@@ -446,14 +448,15 @@ static int open_device(const char* path, bool try_load_moudle = false)
 {
   int nbd = open(path, O_RDWR);
   if (nbd < 0 && try_load_moudle && access("/sys/module/nbd", F_OK) != 0) {
+    ostringstream param;
     int r;
     if (nbds_max) {
-      ostringstream param;
       param << "nbds_max=" << nbds_max;
-      r = module_load("nbd", param.str().c_str());
-    } else {
-      r = module_load("nbd", NULL);
     }
+    if (max_part) {
+        param << " max_part=" << max_part;
+    }
+    r = module_load("nbd", param.str().c_str());
     if (r < 0) {
       cerr << "rbd-nbd: failed to load nbd kernel module: " << cpp_strerror(-r) << std::endl;
       return r;
@@ -775,6 +778,15 @@ static int rbd_nbd(int argc, const char *argv[])
       }
       if (nbds_max < 0) {
         cerr << "rbd-nbd: Invalid argument for nbds_max!" << std::endl;
+        return EXIT_FAILURE;
+      }
+    } else if (ceph_argparse_witharg(args, i, &max_part, err, "--max_part", (char *)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if ((max_part < 0) || (max_part > 255)) {
+        cerr << "rbd-nbd: Invalid argument for max_part(0~255)!" << std::endl;
         return EXIT_FAILURE;
       }
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
