@@ -294,7 +294,7 @@ void RDMADispatcher::polling()
           if (r < 0) {
             r = -errno;
             lderr(cct) << __func__ << " poll failed " << r << dendl;
-            assert(0);
+            ceph_abort();
           }
         }
         if (r > 0 && rx_cc->get_cq_event())
