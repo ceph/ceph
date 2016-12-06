@@ -277,7 +277,8 @@ class WatchConState {
   Mutex lock;
   std::set<WatchRef> watches;
 public:
-  WatchConState() : lock("WatchConState") {}
+  CephContext* cct;
+  WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
 
   /// Add a watch
   void addWatch(

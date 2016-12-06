@@ -16,7 +16,7 @@ struct CancelableContext : public Context {
   virtual void cancel() = 0;
 };
 
-#define dout_context g_ceph_context
+#define dout_context osd->cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -241,9 +241,9 @@ public:
   }
   void finish(int) { ceph_abort(); /* not used */ }
   void complete(int) {
-    dout(10) << "HandleWatchTimeout" << dendl;
-    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     OSDService *osd(watch->osd);
+    ldout(osd->cct, 10) << "HandleWatchTimeout" << dendl;
+    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     osd->watch_lock.Unlock();
     pg->lock();
     watch->cb = NULL;
@@ -264,6 +264,7 @@ public:
     canceled = true;
   }
   void finish(int) {
+    OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
     assert(watch->pg->is_locked());
     watch->cb = NULL;
@@ -530,7 +531,7 @@ void WatchConState::reset(Connection *con)
       if ((*i)->is_connected(con)) {
 	(*i)->disconnect();
       } else {
-	generic_derr << __func__ << " not still connected to " << (*i) << dendl;
+	lgeneric_derr(cct) << __func__ << " not still connected to " << (*i) << dendl;
       }
     }
     pg->unlock();

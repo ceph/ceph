@@ -97,6 +97,7 @@ public:
  */
 class SnapMapper {
 public:
+  CephContext* cct;
   struct object_snaps {
     hobject_t oid;
     std::set<snapid_t> snaps;
@@ -165,13 +166,14 @@ public:
   const shard_id_t shard;
   const string shard_prefix;
   SnapMapper(
+    CephContext* cct,
     MapCacher::StoreDriver<std::string, bufferlist> *driver,
     uint32_t match,  ///< [in] pgid
     uint32_t bits,   ///< [in] current split bits
     int64_t pool,    ///< [in] pool
     shard_id_t shard ///< [in] shard
     )
-    : backend(driver), mask_bits(bits), match(match), pool(pool),
+    : cct(cct), backend(driver), mask_bits(bits), match(match), pool(pool),
       shard(shard), shard_prefix(make_shard_prefix(shard)) {
     update_bits(mask_bits);
   }

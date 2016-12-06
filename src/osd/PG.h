@@ -163,6 +163,7 @@ class PGRecoveryStats {
 };
 
 struct PGPool {
+  CephContext* cct;
   epoch_t cached_epoch;
   int64_t id;
   string name;
@@ -174,8 +175,9 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(OSDMapRef map, int64_t i)
-    : cached_epoch(map->get_epoch()),
+  PGPool(CephContext* cct, OSDMapRef map, int64_t i)
+    : cct(cct),
+      cached_epoch(map->get_epoch()),
       id(i),
       name(map->get_pool_name(id)),
       auid(map->get_pg_pool(id)->auid) {
@@ -557,6 +559,7 @@ public:
   // [primary only] content recovery state
  protected:
   struct PriorSet {
+    CephContext* cct;
     const bool ec_pool;
     set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
     set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
@@ -564,14 +567,15 @@ public:
 
     bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
     boost::scoped_ptr<IsPGRecoverablePredicate> pcontdec;
-    PriorSet(bool ec_pool,
+    PriorSet(CephContext* cct,
+	     bool ec_pool,
 	     IsPGRecoverablePredicate *c,
 	     const OSDMap &osdmap,
 	     const map<epoch_t, pg_interval_t> &past_intervals,
 	     const vector<int> &up,
 	     const vector<int> &acting,
 	     const pg_info_t &info,
-	     const PG *debug_pg=NULL);
+	     const PG *debug_pg = nullptr);
 
     bool affected_by_map(const OSDMapRef osdmap, const PG *debug_pg=0) const;
   };
@@ -2189,6 +2193,7 @@ private:
 
 public:
   static int _prepare_write_info(
+    CephContext* cct,
     map<string,bufferlist> *km,
     epoch_t epoch,
     pg_info_t &info,
@@ -2197,7 +2202,7 @@ public:
     bool dirty_big_info,
     bool dirty_epoch,
     bool try_fast_info,
-    PerfCounters *logger = NULL);
+    PerfCounters *logger = nullptr);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   PGLog::IndexedLog projected_log;
