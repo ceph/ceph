@@ -254,6 +254,85 @@ class CephAnsible(Task):
             log.error("Failed during ceph-ansible execution")
             raise CephAnsibleError("Failed during ceph-ansible execution")
 
+    def run_playbook(self):
+        # setup ansible on first mon node
+        ceph_installer = self.ceph_installer
+        args = self.args
+        if ceph_installer.os.package_type == 'rpm':
+            # install crypto packages for ansible
+            ceph_installer.run(args=[
+                'sudo',
+                'yum',
+                'install',
+                '-y',
+                'libffi-devel',
+                'python-devel',
+                'openssl-devel'
+            ])
+        else:
+            ceph_installer.run(args=[
+                'sudo',
+                'apt-get',
+                'install',
+                '-y',
+                'libssl-dev',
+                'libffi-dev',
+                'python-dev'
+            ])
+        ansible_repo = self.config['repo']
+        branch = 'master'
+        if self.config.get('branch'):
+            branch = self.config.get('branch')
+        ansible_ver = 'ansible==2.1'
+        if self.config.get('ansible-version'):
+            ansible_ver = 'ansible==' + self.config.get('ansible-version')
+        ceph_installer.run(
+            args=[
+                'rm',
+                '-rf',
+                run.Raw('~/ceph-ansible'),
+                ],
+            check_status=False
+        )
+        ceph_installer.run(args=[
+            'mkdir',
+            run.Raw('~/ceph-ansible'),
+            run.Raw(';'),
+            'git',
+            'clone',
+            run.Raw('-b %s' % branch),
+            run.Raw(ansible_repo),
+        ])
+        # copy the inventory file to installer node
+        ceph_installer.put_file(self.inventory, 'ceph-ansible/inven.yml')
+        # copy the site file
+        ceph_installer.put_file(self.playbook_file, 'ceph-ansible/site.yml')
+        # copy extra vars to groups/all
+        ceph_installer.put_file(self.extra_vars_file, 'ceph-ansible/group_vars/all')
+        # print for debug info
+        ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
+        ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
+        ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
+        str_args = ' '.join(args)
+        ceph_installer.run(args=[
+            run.Raw('cd ~/ceph-ansible'),
+            run.Raw(';'),
+            'virtualenv',
+            'venv',
+            run.Raw(';'),
+            run.Raw('source venv/bin/activate'),
+            run.Raw(';'),
+            'pip',
+            'install',
+            'setuptools>=11.3',
+            run.Raw(ansible_ver),
+            run.Raw(';'),
+            run.Raw(str_args)
+        ])
+        wait_for_health = self.config.get('wait-for-health', True)
+        if wait_for_health:
+            self.wait_for_ceph_health()
+
 
 
 class CephAnsibleError(Exception):
