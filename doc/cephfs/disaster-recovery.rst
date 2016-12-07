@@ -149,14 +149,14 @@ the range 0-(N_workers - 1), like so:
 ::
 
     # Worker 0
-    cephfs-data-scan scan_extents <data pool> 0 1
+    cephfs-data-scan scan_extents --worker_n 0 --worker_m 1 <data pool>
     # Worker 1
-    cephfs-data-scan scan_extents <data pool> 1 1
+    cephfs-data-scan scan_extents --worker_n 1 --worker_m 1<data pool> 1 1
 
     # Worker 0
-    cephfs-data-scan scan_inodes <data pool> 0 1
+    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 1 <data pool>
     # Worker 1
-    cephfs-data-scan scan_inodes <data pool> 1 1
+    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 1 <data pool>
 
 It is important to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
