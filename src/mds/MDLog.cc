@@ -297,6 +297,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   le->update_segment();
   le->set_stamp(ceph_clock_now(g_ceph_context));
 
+  mdsmap_up_features = mds->mdsmap->get_up_features();
   pending_events[ls->seq].push_back(PendingEvent(le, c));
   num_events++;
 
@@ -376,6 +377,7 @@ void MDLog::_submit_thread()
       continue;
     }
 
+    int64_t features = mdsmap_up_features;
     PendingEvent data = it->second.front();
     it->second.pop_front();
 
@@ -386,7 +388,7 @@ void MDLog::_submit_thread()
       LogSegment *ls = le->_segment;
       // encode it, with event type
       bufferlist bl;
-      le->encode_with_header(bl, mds->mdsmap->get_up_features());
+      le->encode_with_header(bl, features);
 
       uint64_t write_pos = journaler->get_write_pos();
 
