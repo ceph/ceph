@@ -1,6 +1,1 @@
-tasks:
-- ceph-fuse:
-- workunit:
-    clients:
-      all:
-        - suites/blogbench.sh
+../../../../cephfs/tasks/cfuse_workunit_suites_blogbench.yaml

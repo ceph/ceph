@@ -5,7 +5,6 @@ overrides:
         fuse set user groups: true
         fuse default permissions: false
 tasks:
-- ceph-fuse:
 - workunit:
     clients:
       all:

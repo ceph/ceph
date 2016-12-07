@@ -1,4 +1,6 @@
-
+overrides:
+  ceph-fuse:
+    disabled: true
 tasks:
   - cephfs_test_runner:
       modules:
