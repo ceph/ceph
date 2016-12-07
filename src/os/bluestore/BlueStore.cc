@@ -8587,6 +8587,8 @@ int BlueStore::_clone(TransContext *txc,
       }
       it->next();
     }
+  } else {
+    newo->onode.clear_omap_flag();
   }
 
   txc->write_onode(newo);
