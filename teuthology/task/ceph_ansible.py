@@ -145,7 +145,10 @@ class CephAnsible(Task):
         extra_vars = self.config.get('vars', dict())
         host_vars = dict()
         if not extra_vars.get('osd_auto_discovery', False):
-            host_vars['devices'] = get_scratch_devices(remote)
+            roles = self.ctx.cluster.remotes[remote]
+            dev_needed = len([role for role in roles
+                              if role.startswith('osd')])
+            host_vars['devices'] = get_scratch_devices(remote)[0:dev_needed]
         if 'monitor_interface' not in extra_vars:
             host_vars['monitor_interface'] = remote.interface
         if 'public_network' not in extra_vars:
