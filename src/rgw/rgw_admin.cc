@@ -356,6 +356,8 @@ enum {
   OPT_BUCKET_SYNC_STATUS,
   OPT_BUCKET_SYNC_INIT,
   OPT_BUCKET_SYNC_RUN,
+  OPT_BUCKET_SYNC_DISABLE,
+  OPT_BUCKET_SYNC_ENABLE,
   OPT_BUCKET_RM,
   OPT_BUCKET_REWRITE,
   OPT_BUCKET_RESHARD,
@@ -612,11 +614,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) {
     if (strcmp(prev_cmd, "sync") == 0) {
       if (strcmp(cmd, "status") == 0)
-	return OPT_BUCKET_SYNC_STATUS;
+        return OPT_BUCKET_SYNC_STATUS;
       if (strcmp(cmd, "init") == 0)
-	return OPT_BUCKET_SYNC_INIT;
+        return OPT_BUCKET_SYNC_INIT;
       if (strcmp(cmd, "run") == 0)
-	return OPT_BUCKET_SYNC_RUN;
+        return OPT_BUCKET_SYNC_RUN;
+      if (strcmp(cmd, "disable") == 0)
+        return OPT_BUCKET_SYNC_DISABLE;
+      if (strcmp(cmd, "enable") == 0)
+        return OPT_BUCKET_SYNC_ENABLE;
     } else if ((strcmp(prev_cmd, "limit") == 0) &&
 	       (strcmp(cmd, "check") == 0)) {
       return OPT_BUCKET_LIMIT_CHECK;
@@ -1493,6 +1499,59 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   return 0;
 }
+
+int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_name, const string& bucket_name)
+{
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
+  if (r < 0) {
+    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  if (opt_cmd == OPT_BUCKET_SYNC_ENABLE) {
+    bucket_info.flags &= ~BUCKET_DATASYNC_DISABLED;
+  } else if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+    bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
+  }
+
+  r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+  if (r < 0) {
+    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  int shards_num = bucket_info.num_shards? bucket_info.num_shards : 1;
+  int shard_id = bucket_info.num_shards? 0 : -1;
+
+  if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+    r = store->stop_bi_log_entries(bucket_info, -1);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing stop bilog" << dendl;
+      return r;
+    }
+  } else {
+    r = store->resync_bi_log_entries(bucket_info, -1);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing resync bilog" << dendl;
+      return r;
+    }
+  }
+
+  for (int i = 0; i < shards_num; ++i, ++shard_id) {
+    r = store->data_log->add_entry(bucket_info.bucket, shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      return r;
+    }
+  }
+
+  return 0;
+}
+
 
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
@@ -6371,6 +6430,35 @@ next:
       return -ret;
     }
   }
+
+  if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    if (ret < 0) {
+      cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    RGWPeriod period;
+    ret = period.init(g_ceph_context, store, realm_id, realm_name, true);
+    if (ret < 0) {
+      cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    if (!store->is_meta_master()) {
+      cerr << "failed to update bucket sync: only allowed on meta master zone "  << std::endl;
+      cerr << period.get_master_zone() << " | " << period.get_realm() << std::endl;
+      return EINVAL;
+    }
+
+    rgw_obj obj(bucket, object);
+    ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
+    if (ret < 0)
+      return -ret;
+}
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
     if (source_zone.empty()) {

@@ -2726,6 +2726,74 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
+static int rgw_bi_log_resync(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    return rc;
+  }
+
+  bufferlist bl;
+
+  struct rgw_bi_log_entry entry;
+
+  entry.timestamp = real_clock::now();
+  entry.op = RGWModifyOp::CLS_RGW_OP_RESYNC;
+  entry.state = RGWPendingState::CLS_RGW_STATE_COMPLETE;
+
+  string key;
+  bi_log_index_key(hctx, key, entry.id, header.ver);
+
+  ::encode(entry, bl);
+
+  if (entry.id > header.max_marker)
+    header.max_marker = entry.id;
+
+  header.syncstopped = false;
+
+  rc = cls_cxx_map_set_val(hctx, key, &bl);
+  if (rc < 0)
+    return rc;
+
+  return write_bucket_header(hctx, &header);
+}
+
+static int rgw_bi_log_stop(cls_method_context_t hctx, bufferlist *in, bufferlist *out) 
+{
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    return rc;
+  }
+
+  bufferlist bl;
+
+  struct rgw_bi_log_entry entry;
+
+  entry.timestamp = real_clock::now();
+  entry.op = RGWModifyOp::CLS_RGW_OP_SYNCSTOP;
+  entry.state = RGWPendingState::CLS_RGW_STATE_COMPLETE;
+
+  string key;
+  bi_log_index_key(hctx, key, entry.id, header.ver);
+
+  ::encode(entry, bl);
+
+  if (entry.id > header.max_marker)
+    header.max_marker = entry.id;
+  header.syncstopped = true;
+
+  rc = cls_cxx_map_set_val(hctx, key, &bl);
+  if (rc < 0)
+    return rc;
+
+  return write_bucket_header(hctx, &header);
+}
+
+
 static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 {
   char buf[32];
@@ -3745,6 +3813,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bi_put_op;
   cls_method_handle_t h_rgw_bi_list_op;
   cls_method_handle_t h_rgw_bi_log_list_op;
+  cls_method_handle_t h_rgw_bi_log_resync_op;
+  cls_method_handle_t h_rgw_bi_log_stop_op;
   cls_method_handle_t h_rgw_dir_suggest_changes;
   cls_method_handle_t h_rgw_user_usage_log_add;
   cls_method_handle_t h_rgw_user_usage_log_read;
@@ -3797,6 +3867,9 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_BI_LOG_LIST, CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, RGW_BI_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, RGW_DIR_SUGGEST_CHANGES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
+
+  cls_register_cxx_method(h_class, "bi_log_resync", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
+  cls_register_cxx_method(h_class, "bi_log_stop", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
 
   /* usage logging */
   cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
