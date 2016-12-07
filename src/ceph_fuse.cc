@@ -35,6 +35,7 @@ using namespace std;
 #endif
 #include "global/global_init.h"
 #include "global/signal_handler.h"
+#include "common/Preforker.h"
 #include "common/safe_io.h"
        
 #include <sys/types.h>
@@ -111,33 +112,31 @@ int main(int argc, const char **argv, const char *envp[]) {
     cerr << std::endl;
   }
 
-  // we need to handle the forking ourselves.
-  int fd[2] = {0, 0};  // parent's, child's
-  pid_t childpid = 0;
-  int tester_r = 0;
-  void *tester_rp = NULL;
-  bool restart_log = false;
+  global_init_prefork(g_ceph_context);
+  Preforker forker;
   if (g_conf->daemonize) {
-    int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
-    if (r < 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno) << std::endl;
-      exit(1);
+    string err;
+    if (forker.prefork(err)) {
+      cerr << "ceph-fuse[" << err << std::endl;
+      return 1;
     }
-
-    g_ceph_context->_log->stop();
-    restart_log = true;
-
-    childpid = fork();
+    global_init_postfork_start(cct.get());
   }
 
-  if (childpid == 0) {
-    if (restart_log)
-      g_ceph_context->_log->start();
+
+  if (forker.is_parent()) {
+    string err;
+    int r = forker.parent_wait(err);
+    if (r) {
+      cerr << "ceph-fuse" << err << std::endl;
+    }
+    return r;
+  }
+
+  if (forker.is_child()) {
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
-    ::close(fd[0]);
-
     class RemountTest : public Thread {
     public:
       CephFuse *cfuse;
@@ -191,6 +190,8 @@ int main(int argc, const char **argv, const char *envp[]) {
     Client *client;
     CephFuse *cfuse;
     UserPerm perms;
+    int tester_r = 0;
+    void *tester_rp = NULL;
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
@@ -210,7 +211,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       client->set_filer_flags(filer_flags);
     }
 
-    cfuse = new CephFuse(client, fd[1]);
+    cfuse = new CephFuse(client, forker.get_signal_fd());
 
     r = cfuse->init(newargc, newargv);
     if (r != 0) {
@@ -218,7 +219,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_messenger_start_failed;
     }
 
-    cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
+    cerr << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     r = messenger->start();
     if (r < 0) {
       cerr << "ceph-fuse[" << getpid() << "]: ceph messenger failed with " << cpp_strerror(-r) << std::endl;
@@ -281,40 +282,10 @@ int main(int argc, const char **argv, const char *envp[]) {
     delete client;
     delete messenger;
   out_mc_start_failed:
-    
-    if (g_conf->daemonize) {
-      //cout << "child signalling parent with " << r << std::endl;
-      static int foo = 0;
-      foo += ::write(fd[1], &r, sizeof(r));
-    }
-    
     free(newargv);
-    
     delete mc;
-    
     //cout << "child done" << std::endl;
-    return r;
-  } else {
-    if (restart_log)
-      g_ceph_context->_log->start();
-    // i am the parent
-    //cout << "parent, waiting for signal" << std::endl;
-    ::close(fd[1]);
-
-    int r = -1;
-    int err = safe_read_exact(fd[0], &r, sizeof(r));
-    if (err == 0 && r == 0) {
-      // close stdout, etc.
-      //cout << "success" << std::endl;
-      ::close(0);
-      ::close(1);
-      ::close(2);
-    } else if (err) {
-      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << cpp_strerror(-err) << std::endl;
-    } else {
-      cerr << "ceph-fuse[" << getpid() << "]: mount failed: " << cpp_strerror(-r) << std::endl;
-    }
-    return r;
+    return forker.signal_exit(r);
   }
 }
 
