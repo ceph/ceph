@@ -142,6 +142,24 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   }
 
   /*
+   * Make sure allocations are of min_alloc_size when min_alloc_size > block_size.
+   */
+  {
+    alloc->init_add_free(0, block_size * 1024);
+    EXPECT_EQ(alloc->reserve(block_size * 1024), 0);
+    AllocExtentVector extents = AllocExtentVector 
+                        (1024, AllocExtent(0, 0));
+  
+    EXPECT_EQ(alloc->alloc_extents(1024 * (uint64_t)block_size, (uint64_t) block_size * 4, 
+                                   block_size * 4, (int64_t) 0, &extents, &count), 0);
+ 
+    for (int i = 0; i < count; i++) {
+      EXPECT_EQ(extents[i].length, block_size * 4);
+    }
+    EXPECT_EQ(count, 1024 / 4);
+  }
+
+  /*
    * Allocate and free.
    */
   {
