@@ -3,5 +3,6 @@ overrides:
     conf:
       client:
         debug rgw: 20
+        rgw compression type: random
   rgw:
     frontend: civetweb
