@@ -11,6 +11,7 @@
 #include "os/bluestore/bluestore_types.h"
 
 class StupidAllocator : public Allocator {
+  CephContext* cct;
   std::mutex lock;
 
   int64_t num_free;     ///< total bytes in freelist
@@ -24,7 +25,7 @@ class StupidAllocator : public Allocator {
   void _insert_free(uint64_t offset, uint64_t len);
 
 public:
-  StupidAllocator();
+  StupidAllocator(CephContext* cct);
   ~StupidAllocator();
 
   int reserve(uint64_t need);

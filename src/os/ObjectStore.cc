@@ -95,7 +95,7 @@ int ObjectStore::probe_block_device_fsid(
 #if defined(HAVE_LIBAIO)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
-  r = BlueStore::get_block_device_fsid(path, fsid);
+  r = BlueStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
 			  << *fsid << dendl;

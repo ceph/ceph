@@ -11,6 +11,7 @@
 #include "include/btree_interval_set.h"
 
 class BitMapAllocator : public Allocator {
+  CephContext* cct;
   std::mutex m_lock;
 
   int64_t m_block_size;
@@ -24,8 +25,7 @@ class BitMapAllocator : public Allocator {
                         int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len);
 
 public:
-  BitMapAllocator();
-  BitMapAllocator(int64_t device_size, int64_t block_size);
+  BitMapAllocator(CephContext* cct, int64_t device_size, int64_t block_size);
   ~BitMapAllocator();
 
   int reserve(uint64_t need);

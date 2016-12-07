@@ -7,7 +7,7 @@
 
 #include "common/debug.h"
 
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
@@ -208,7 +208,7 @@ void ExtentFreelistManager::allocate(
       p->second = newlen;
     }
   }
-  if (g_conf->bluestore_debug_freelist)
+  if (cct->_conf->bluestore_debug_freelist)
     _audit();
 }
 
@@ -279,6 +279,6 @@ void ExtentFreelistManager::release(
 
   kv_free[offset] = length;
 
-  if (g_conf->bluestore_debug_freelist)
+  if (cct->_conf->bluestore_debug_freelist)
     _audit();
 }
