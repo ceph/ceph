@@ -285,10 +285,9 @@ else(ALLOCATOR)
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-if(NOT FREEBSD)
-  # XXX keyutils is available, but not yet recognised
+if(WITH_LIBCEPHFS OR WITH_RBD)
   find_package(keyutils REQUIRED)
-endif(NOT FREEBSD)
+endif()
 
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
