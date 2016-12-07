@@ -628,19 +628,15 @@ if(${WITH_RADOSGW})
 endif(${WITH_RADOSGW})
 if(WITH_RBD)
   set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      rbd_types
-      cls_rbd_client
-      rbd_replay_types)
-  if(LINUX)
-    list(APPEND dencoder_srcs
-      $<TARGET_OBJECTS:krbd_objs>
-      $<TARGET_OBJECTS:parse_secret_objs>)
-    set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      keyutils
-      udev)
-  endif(LINUX)
+    ${DENCODER_EXTRALIBS}
+    rbd_types
+    cls_rbd_client
+    rbd_replay_types
+    keyutils
+    udev)
+  list(APPEND dencoder_srcs
+    $<TARGET_OBJECTS:krbd_objs>
+    $<TARGET_OBJECTS:parse_secret_objs>)
 endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
@@ -820,7 +816,7 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-if(KEYUTILS_FOUND)
+if(WITH_LIBCEPHFS OR WITH_RBD)
   set(parse_secret_files
     common/secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_files})
@@ -876,11 +872,8 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-if(LINUX)
-  add_library(krbd_objs OBJECT krbd.cc)
-endif()
-
 if(${WITH_RBD})
+  add_library(krbd_objs OBJECT krbd.cc)
   add_subdirectory(librbd)
   if(WITH_FUSE)
     add_subdirectory(rbd_fuse)
