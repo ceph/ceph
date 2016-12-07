@@ -7038,8 +7038,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     bool create = false;
     if (op->op == Transaction::OP_TOUCH ||
 	op->op == Transaction::OP_WRITE ||
-	op->op == Transaction::OP_ZERO ||
-	op->op == Transaction::OP_CLONE) {
+	op->op == Transaction::OP_ZERO) {
       create = true;
     }
 
