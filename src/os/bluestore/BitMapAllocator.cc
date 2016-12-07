@@ -178,26 +178,28 @@ int BitMapAllocator::alloc_extents_cont(
   *count = 0;
   assert(alloc_unit);
   assert(!(alloc_unit % m_block_size));
+  assert(!(want_size % alloc_unit));
   assert(!(max_alloc_size % m_block_size));
 
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
   int64_t start_blk = 0;
   int64_t need_blks = nblks;
-  int64_t max_blks = max_alloc_size / m_block_size;
+  int64_t cont_blks = alloc_unit / m_block_size;
 
   ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
 
   while (need_blks > 0) {
     int64_t count = 0;
-    count = m_bit_alloc->alloc_blocks_res(
-      (max_blks && need_blks > max_blks) ? max_blks : need_blks, hint, &start_blk);
+    count = m_bit_alloc->alloc_blocks_res(cont_blks, hint, &start_blk);
     if (count == 0) {
       break;
     }
+    assert(cont_blks == count);
     dout(30) << __func__ <<" instance "<< (uint64_t) this
       << " offset " << start_blk << " length " << count << dendl;
     need_blks -= count;
     block_list.add_extents(start_blk, count);
+    hint = start_blk + count;
   }
 
   if (need_blks > 0) {
