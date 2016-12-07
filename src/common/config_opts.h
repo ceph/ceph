@@ -1088,6 +1088,7 @@ OPTION(bluestore_debug_randomize_serial_transaction, OPT_INT, 0)
 OPTION(bluestore_debug_omit_block_device_write, OPT_BOOL, false)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
+OPTION(bluestore_skip_data_write_for_steady_state_test, OPT_U32, 0)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)

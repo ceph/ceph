@@ -30,6 +30,7 @@
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << path << ") "
+extern thread_local uint32_t skip_data_write;
 
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct),
@@ -443,6 +444,8 @@ int KernelDevice::aio_write(
   assert(len > 0);
   assert(off < size);
   assert(off + len <= size);
+  if (skip_data_write)
+    return 0;
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size)) {

@@ -8007,7 +8007,6 @@ int BlueStore::_do_alloc_write(
         dblob.add_unused(b_end, wi.blob_length - b_end);
       }
     }
-
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
       b->get_blob().map_bl(
