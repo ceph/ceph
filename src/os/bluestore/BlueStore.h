@@ -1204,7 +1204,6 @@ public:
       utime_t lat, now = ceph_clock_now(g_ceph_context);
       lat = now - last_stamp;
       logger->tinc(state, lat);
-      start = now;
       last_stamp = now;
     }
 
