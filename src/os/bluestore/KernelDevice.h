@@ -73,7 +73,7 @@ class KernelDevice : public BlockDevice {
   void debug_aio_unlink(FS::aio_t& aio);
 
 public:
-  KernelDevice(aio_callback_t cb, void *cbpriv);
+  KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   void aio_submit(IOContext *ioc) override;
 

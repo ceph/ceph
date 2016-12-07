@@ -143,6 +143,7 @@ typedef unsigned long bmap_t;
 typedef mempool::bluestore_alloc::vector<bmap_t> bmap_mask_vec_t;
 
 class BmapEntry {
+  CephContext* cct;
 
 private:
   bmap_t m_bits;
@@ -160,11 +161,12 @@ public:
   static bmap_t align_mask(int x);
   static bmap_t bit_mask(int bit_num);
   bmap_t atomic_fetch();
-  BmapEntry(bool val);
-  BmapEntry() {
+  BmapEntry(CephContext* cct, bool val);
+  BmapEntry(CephContext* cct) : cct(cct) {
     m_bits = 0;
   }
   BmapEntry(const BmapEntry& bmap) {
+    cct = bmap.cct;
     bmap_t i = bmap.m_bits;
     m_bits = i;
   }
@@ -198,6 +200,8 @@ typedef enum bmap_area_type {
 } bmap_area_type_t;
 
 class BitMapArea {
+public:
+  CephContext* cct;
 
 protected:
   int16_t m_area_index;
@@ -205,11 +209,11 @@ protected:
 
 public:
   MEMPOOL_CLASS_HELPERS();
-  static int64_t get_zone_size();
-  static int64_t get_span_size();
+  static int64_t get_zone_size(CephContext* cct);
+  static int64_t get_span_size(CephContext* cct);
   bmap_area_type_t level_to_type(int level);
-  static int get_level(int64_t total_blocks);
-  static int64_t get_level_factor(int level);
+  static int get_level(CephContext* cct, int64_t total_blocks);
+  static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
   virtual bool is_exhausted() = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
@@ -259,6 +263,7 @@ public:
   int64_t get_level();
   bmap_area_type_t get_type();
   virtual void dump_state(int& count) = 0;
+  BitMapArea(CephContext* cct) : cct(cct) {}
   virtual ~BitMapArea() { }
 };
 
@@ -349,8 +354,8 @@ public:
   void free_blocks_int(int64_t start_block, int64_t num_blocks);
   void init(int64_t zone_num, int64_t total_blocks, bool def);
 
-  BitMapZone(int64_t total_blocks, int64_t zone_num);
-  BitMapZone(int64_t total_blocks, int64_t zone_num, bool def);
+  BitMapZone(CephContext* cct, int64_t total_blocks, int64_t zone_num);
+  BitMapZone(CephContext* cct, int64_t total_blocks, int64_t zone_num, bool def);
 
   ~BitMapZone();
   void shutdown();
@@ -401,11 +406,15 @@ protected:
   int64_t alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, int64_t min_alloc, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
 
+  int64_t alloc_blocks_int_work(bool wait, bool wrap,
+                         int64_t num_blocks, int64_t hint, int64_t *start_block);
+
 public:
   MEMPOOL_CLASS_HELPERS();
-  BitMapAreaIN();
-  BitMapAreaIN(int64_t zone_num, int64_t total_blocks);
-  BitMapAreaIN(int64_t zone_num, int64_t total_blocks, bool def);
+  BitMapAreaIN(CephContext* cct);
+  BitMapAreaIN(CephContext* cct, int64_t zone_num, int64_t total_blocks);
+  BitMapAreaIN(CephContext* cct, int64_t zone_num, int64_t total_blocks,
+	       bool def);
 
   virtual ~BitMapAreaIN();
   void shutdown();
@@ -442,9 +451,10 @@ public:
   MEMPOOL_CLASS_HELPERS();
   static int64_t count;
   static void incr_count() { count++;}
-  BitMapAreaLeaf() { }
-  BitMapAreaLeaf(int64_t zone_num, int64_t total_blocks);
-  BitMapAreaLeaf(int64_t zone_num, int64_t total_blocks, bool def);
+  BitMapAreaLeaf(CephContext* cct) : BitMapAreaIN(cct) { }
+  BitMapAreaLeaf(CephContext* cct, int64_t zone_num, int64_t total_blocks);
+  BitMapAreaLeaf(CephContext* cct, int64_t zone_num, int64_t total_blocks,
+		 bool def);
 
   bool child_check_n_lock(BitMapArea *child, int64_t required) {
     ceph_abort();
@@ -503,9 +513,11 @@ private:
 public:
   MEMPOOL_CLASS_HELPERS();
 
-  BitAllocator(int64_t total_blocks, int64_t zone_size_block, bmap_alloc_mode_t mode);
-  BitAllocator(int64_t total_blocks, int64_t zone_size_block, bmap_alloc_mode_t mode, bool def);
-  BitAllocator(int64_t total_blocks, int64_t zone_size_block,
+  BitAllocator(CephContext* cct, int64_t total_blocks,
+	       int64_t zone_size_block, bmap_alloc_mode_t mode);
+  BitAllocator(CephContext* cct, int64_t total_blocks, int64_t zone_size_block,
+	       bmap_alloc_mode_t mode, bool def);
+  BitAllocator(CephContext* cct, int64_t total_blocks, int64_t zone_size_block,
                bmap_alloc_mode_t mode, bool def, bool stats_on);
   ~BitAllocator();
   void shutdown();

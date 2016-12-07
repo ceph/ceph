@@ -7,7 +7,7 @@
 
 #include "common/debug.h"
 
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
@@ -46,10 +46,12 @@ void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
   db->set_merge_operator(prefix, merge_op);
 }
 
-BitmapFreelistManager::BitmapFreelistManager(KeyValueDB *db,
+BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
+					     KeyValueDB *db,
 					     string meta_prefix,
 					     string bitmap_prefix)
-  : meta_prefix(meta_prefix),
+  : FreelistManager(cct),
+    meta_prefix(meta_prefix),
     bitmap_prefix(bitmap_prefix),
     kvdb(db)
 {
@@ -57,10 +59,10 @@ BitmapFreelistManager::BitmapFreelistManager(KeyValueDB *db,
 
 int BitmapFreelistManager::create(uint64_t new_size, KeyValueDB::Transaction txn)
 {
-  bytes_per_block = g_conf->bdev_block_size;
+  bytes_per_block = cct->_conf->bdev_block_size;
   assert(ISP2(bytes_per_block));
   size = P2ALIGN(new_size, bytes_per_block);
-  blocks_per_key = g_conf->bluestore_freelist_blocks_per_key;
+  blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
 
   _init_misc();
 
@@ -456,7 +458,7 @@ void BitmapFreelistManager::allocate(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (g_conf->bluestore_debug_freelist)
+  if (cct->_conf->bluestore_debug_freelist)
     _verify_range(offset, length, 0);
   _xor(offset, length, txn);
 }
@@ -467,7 +469,7 @@ void BitmapFreelistManager::release(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (g_conf->bluestore_debug_freelist)
+  if (cct->_conf->bluestore_debug_freelist)
     _verify_range(offset, length, 1);
   _xor(offset, length, txn);
 }

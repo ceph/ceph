@@ -5,13 +5,13 @@
 #include "bluestore_types.h"
 #include "common/debug.h"
 
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc "
 
-StupidAllocator::StupidAllocator()
-  : num_free(0),
+StupidAllocator::StupidAllocator(CephContext* cct)
+  : cct(cct), num_free(0),
     num_reserved(0),
     free(10),
     last_alloc(0)
@@ -24,7 +24,7 @@ StupidAllocator::~StupidAllocator()
 
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
-  uint64_t len = orig_len / g_conf->bdev_block_size;
+  uint64_t len = orig_len / cct->_conf->bdev_block_size;
   int bin = std::min((int)cbits(len), (int)free.size() - 1);
   dout(30) << __func__ << " len 0x" << std::hex << orig_len << std::dec
 	   << " -> " << bin << dendl;
@@ -159,9 +159,9 @@ int StupidAllocator::allocate_int(
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
   *length = MIN(MAX(alloc_unit, want_size), p.get_len() - skew);
-  if (g_conf->bluestore_debug_small_allocations) {
+  if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
-      alloc_unit * (rand() % g_conf->bluestore_debug_small_allocations);
+      alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
     if (max && *length > max) {
       dout(10) << __func__ << " shortening allocation of 0x" << std::hex
 	       << *length << " -> 0x"

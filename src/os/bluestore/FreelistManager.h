@@ -12,10 +12,12 @@
 
 class FreelistManager {
 public:
-  FreelistManager() {}
+  CephContext* cct;
+  FreelistManager(CephContext* cct) : cct(cct) {}
   virtual ~FreelistManager() {}
 
   static FreelistManager *create(
+    CephContext* cct,
     string type,
     KeyValueDB *db,
     string prefix);
