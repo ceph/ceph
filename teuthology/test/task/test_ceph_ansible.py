@@ -5,15 +5,15 @@ from StringIO import StringIO
 from teuthology.config import FakeNamespace
 from teuthology.orchestra.cluster import Cluster
 from teuthology.orchestra.remote import Remote
-from teuthology.task import ansible
+from teuthology.task import ceph_ansible
 from teuthology.task.ceph_ansible import CephAnsible
 
-from .test_ansible import TestAnsibleTask
+from . import TestTask
 
 SKIP_IRRELEVANT = "Not relevant to this subclass"
 
 
-class TestCephAnsibleTask(TestAnsibleTask):
+class TestCephAnsibleTask(TestTask):
     klass = CephAnsible
     task_name = 'ceph_ansible'
 
@@ -29,14 +29,8 @@ class TestCephAnsibleTask(TestAnsibleTask):
         self.start_patchers()
 
     def start_patchers(self):
-        super(TestCephAnsibleTask, self).start_patchers()
         m_fetch_repo = MagicMock()
         m_fetch_repo.return_value = 'PATH'
-        self.patcher_fetch_repo = patch(
-            'teuthology.task.ceph_ansible.ansible.fetch_repo',
-            m_fetch_repo,
-        )
-        self.patcher_fetch_repo.start()
 
         def fake_get_scratch_devices(remote):
             return ['/dev/%s' % remote.shortname]
@@ -58,8 +52,6 @@ class TestCephAnsibleTask(TestAnsibleTask):
         self.patcher_remote.start()
 
     def stop_patchers(self):
-        super(TestCephAnsibleTask, self).stop_patchers()
-        self.patcher_fetch_repo.stop()
         self.patcher_get_scratch_devices.stop()
         self.patcher_remote.stop()
 
@@ -88,7 +80,7 @@ class TestCephAnsibleTask(TestAnsibleTask):
         hosts_file_path = '/my/hosts/file'
         hosts_file_obj = StringIO()
         hosts_file_obj.name = hosts_file_path
-        with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
+        with patch.object(ceph_ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
@@ -119,7 +111,7 @@ class TestCephAnsibleTask(TestAnsibleTask):
         hosts_file_path = '/my/hosts/file'
         hosts_file_obj = StringIO()
         hosts_file_obj.name = hosts_file_path
-        with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
+        with patch.object(ceph_ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
@@ -129,10 +121,10 @@ class TestCephAnsibleTask(TestAnsibleTask):
         hosts_file_obj.seek(0)
         assert hosts_file_obj.read() == '\n'.join([
             '[mdss]',
-            'remote2 devices=\'["/dev/remote2"]\'',
+            'remote2 devices=\'[]\'',
             '',
             '[mons]',
-            'remote1 devices=\'["/dev/remote1"]\'',
+            'remote1 devices=\'[]\'',
             '',
             '[osds]',
             'remote3 devices=\'["/dev/remote3"]\'',
@@ -149,7 +141,7 @@ class TestCephAnsibleTask(TestAnsibleTask):
         hosts_file_path = '/my/hosts/file'
         hosts_file_obj = StringIO()
         hosts_file_obj.name = hosts_file_path
-        with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
+        with patch.object(ceph_ansible, 'NamedTemporaryFile') as m_NTF:
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
