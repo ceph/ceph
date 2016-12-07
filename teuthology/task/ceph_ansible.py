@@ -219,4 +219,44 @@ class CephAnsible(Task):
             host_vars['public_network'] = remote.cidr
         return host_vars
 
+    def run_rh_playbook(self):
+        ceph_installer = self.ceph_installer
+        args = self.args
+        ceph_installer.run(args=[
+            'cp',
+            '-R',
+            '/usr/share/ceph-ansible',
+            '.'
+        ])
+        ceph_installer.put_file(self.inventory, 'ceph-ansible/inven.yml')
+        ceph_installer.put_file(self.playbook_file, 'ceph-ansible/site.yml')
+        # copy extra vars to groups/all
+        ceph_installer.put_file(self.extra_vars_file, 'ceph-ansible/group_vars/all')
+        # print for debug info
+        ceph_installer.run(args=('cat', 'ceph-ansible/inven.yml'))
+        ceph_installer.run(args=('cat', 'ceph-ansible/site.yml'))
+        ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
+        out = StringIO()
+        str_args = ' '.join(args)
+        ceph_installer.run(
+            args=[
+                'cd',
+                'ceph-ansible',
+                run.Raw(';'),
+                run.Raw(str_args)
+            ],
+            timeout=4200,
+            check_status=False,
+            stdout=out
+        )
+        log.info(out.getvalue())
+        if re.search(r'all hosts have already failed', out.getvalue()):
+            log.error("Failed during ceph-ansible execution")
+            raise CephAnsibleError("Failed during ceph-ansible execution")
+
+
+
+class CephAnsibleError(Exception):
+    pass
+
 task = CephAnsible
