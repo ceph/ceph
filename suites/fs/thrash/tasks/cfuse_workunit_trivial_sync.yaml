@@ -1,5 +1,1 @@
-tasks:
-- ceph-fuse:
-- workunit:
-    clients:
-      all: [fs/misc/trivial_sync.sh]
+../../../../cephfs/tasks/cfuse_workunit_trivial_sync.yaml

@@ -1,11 +1,1 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        filestore flush min: 0
-tasks:
-- ceph-fuse:
-- workunit:
-    clients:
-      all:
-        - suites/ffsb.sh
+../../../../cephfs/tasks/cfuse_workunit_suites_ffsb.yaml
