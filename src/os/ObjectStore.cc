@@ -64,7 +64,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,
 				 const string& journal,
-			         osflagbits_t flags)
+				 osflagbits_t flags)
 {
   if (type == "filestore") {
     return new FileStore(cct, data, journal, flags);

@@ -638,7 +638,7 @@ KStore::KStore(CephContext *cct, const string& path)
     finisher(cct),
     kv_sync_thread(this),
     kv_stop(false),
-    logger(NULL)
+    logger(nullptr)
 {
   _init_logger();
 }
