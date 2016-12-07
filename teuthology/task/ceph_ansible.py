@@ -34,6 +34,11 @@ class CephAnsible(Task):
             roles=['ceph-rgw'],
         ),
         dict(
+            hosts='clients',
+            become=True,
+            roles=['ceph-client'],
+        ),
+        dict(
             hosts='restapis',
             become=True,
             roles=['ceph-restapi'],
@@ -99,6 +104,7 @@ class CephAnsible(Task):
             mons='mon',
             mdss='mds',
             osds='osd',
+            clients='client',
         )
         hosts_dict = dict()
         for group in sorted(groups_to_roles.keys()):
