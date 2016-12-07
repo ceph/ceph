@@ -177,6 +177,17 @@ public:
 		        const string& _name, const string& _cookie);
 };
 
+class RGWAsyncDeleteSystemObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  RGWObjVersionTracker *objv_tracker;
+  rgw_raw_obj obj;
+
+protected:
+  int _send_request();
+public:
+  RGWAsyncDeleteSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+		          RGWObjVersionTracker *_objv_tracker, rgw_raw_obj& _obj);
+};
 
 template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
@@ -536,6 +547,37 @@ public:
 
   int send_request() override;
   int request_complete() override;
+};
+
+class RGWSimpleRadosDeleteCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWObjectCtx obj_ctx;
+
+  rgw_raw_obj obj;
+
+  RGWAsyncDeleteSystemObj *req;
+
+public:
+  RGWSimpleRadosDeleteCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                         const rgw_raw_obj& _obj) : RGWSimpleCoroutine(_store->ctx()),
+								  async_rados(_async_rados), store(_store),
+								  obj_ctx(store),
+								  obj(_obj),
+								  req(NULL) { }
+  ~RGWSimpleRadosDeleteCR() {
+    request_cleanup();
+  }
+
+  void request_cleanup() {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request();
+  int request_complete();
 };
 
 #define OMAP_APPEND_MAX_ENTRIES_DEFAULT 100
