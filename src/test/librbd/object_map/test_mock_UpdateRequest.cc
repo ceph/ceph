@@ -8,6 +8,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/object_map/UpdateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -56,10 +57,13 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::NoOpProgressContext no_progress;
+  ASSERT_EQ(0, ictx->operations->resize(4 << ictx->order, true, no_progress));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
   ceph::BitVector<2> object_map;
-  object_map.resize(1024);
+  object_map.resize(4);
   for (uint64_t i = 0; i < object_map.size(); ++i) {
     object_map[i] = i % 4;
   }
