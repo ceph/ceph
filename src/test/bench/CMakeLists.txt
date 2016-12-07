@@ -31,7 +31,7 @@ if(WITH_RBD)
     udev
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
-    keyutils
+    ${KEYUTILS_LIBRARIES}
     )
   add_dependencies(ceph_smalliobenchrbd
     cls_rbd
