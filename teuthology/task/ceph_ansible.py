@@ -1,12 +1,19 @@
 import json
 import os
+import re
+import logging
+import yaml
 
 from cStringIO import StringIO
 
-from . import ansible
 from . import Task
+from tempfile import NamedTemporaryFile
 from ..config import config as teuth_config
 from ..misc import get_scratch_devices
+from teuthology import contextutil
+from teuthology.orchestra import run
+from teuthology import misc
+log = logging.getLogger(__name__)
 
 
 class CephAnsible(Task):
@@ -93,11 +100,53 @@ class CephAnsible(Task):
         if 'ceph_dev_branch' not in vars:
             vars['ceph_dev_branch'] = ctx.config.get('branch', 'master')
 
-    def get_inventory(self):
+    def setup(self):
+        super(CephAnsible, self).setup()
+        # generate hosts file based on test config
+        self.generate_hosts_file()
+        # use default or user provided playbook file
+        pb_buffer = StringIO()
+        pb_buffer.write('---\n')
+        yaml.safe_dump(self.playbook, pb_buffer)
+        pb_buffer.seek(0)
+        playbook_file = NamedTemporaryFile(
+            prefix="ceph_ansible_playbook_",
+            dir='/tmp/',
+            delete=False,
+        )
+        playbook_file.write(pb_buffer.read())
+        playbook_file.flush()
+        self.playbook_file = playbook_file.name
+        # everything from vars in config go into group_vars/all file
+        extra_vars = dict()
+        extra_vars.update(self.config.get('vars', dict()))
+        gvar = yaml.dump(extra_vars, default_flow_style=False)
+        self.extra_vars_file = self._write_hosts_file(prefix='teuth_ansible_gvar',
+                                                      content=gvar)
+
+    def execute_playbook(self):
         """
-        Stub this method so we always generate the hosts file
+        Execute ansible-playbook
+
+        :param _logfile: Use this file-like object instead of a LoggerFile for
+                         testing
         """
-        pass
+
+        args = [
+            'ansible-playbook', '-vv',
+            '-i', 'inven.yml', 'site.yml'
+        ]
+        log.debug("Running %s", args)
+        # use the first mon node as installer node
+        (ceph_installer,) = self.ctx.cluster.only(
+            misc.get_first_mon(self.ctx,
+                               self.config)).remotes.iterkeys()
+        self.ceph_installer = ceph_installer
+        self.args = args
+        if self.config.get('rhbuild'):
+            self.run_rh_playbook()
+        else:
+            self.run_playbook()
 
     def generate_hosts_file(self):
         groups_to_roles = dict(
@@ -138,8 +187,23 @@ class CephAnsible(Task):
                 hosts_stringio.write('%s\n' % host_line)
             hosts_stringio.write('\n')
         hosts_stringio.seek(0)
-        self.inventory = self._write_hosts_file(hosts_stringio.read().strip())
+        self.inventory = self._write_hosts_file(prefix='teuth_ansible_hosts_',
+                                                content=hosts_stringio.read().strip())
         self.generated_inventory = True
+
+    def begin(self):
+        super(CephAnsible, self).begin()
+        self.execute_playbook()
+
+    def _write_hosts_file(self, prefix, content):
+        """
+        Actually write the hosts file
+        """
+        hosts_file = NamedTemporaryFile(prefix=prefix,
+                                        delete=False)
+        hosts_file.write(content)
+        hosts_file.flush()
+        return hosts_file.name
 
     def get_host_vars(self, remote):
         extra_vars = self.config.get('vars', dict())
