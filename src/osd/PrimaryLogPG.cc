@@ -3180,6 +3180,8 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
 			       successful_write);
+  //track lifetime of MOSDOp
+  ctx->reply->set_recv_stamp(m->get_recv_stamp());
 
   // Write operations aren't allowed to return a data payload because
   // we can't do so reliably. If the client has to resend the request
