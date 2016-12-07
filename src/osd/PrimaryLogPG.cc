@@ -3353,14 +3353,14 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
 
   utime_t now = ceph_clock_now(cct);
   utime_t latency = now;
-  latency -= ctx->op->get_req()->get_recv_stamp();
+  latency -= m->get_recv_stamp();
   utime_t process_latency = now;
-  process_latency -= ctx->op->get_dequeued_time();
+  process_latency -= op->get_dequeued_time();
 
   utime_t rlatency;
   if (ctx->readable_stamp != utime_t()) {
     rlatency = ctx->readable_stamp;
-    rlatency -= ctx->op->get_req()->get_recv_stamp();
+    rlatency -= m->get_recv_stamp();
   }
 
   uint64_t inb = ctx->bytes_written;
