@@ -16,6 +16,7 @@
  */
 
 #include "boost/tuple/tuple.hpp"
+#include "boost/intrusive_ptr.hpp"
 #include "PG.h"
 #include "ReplicatedPG.h"
 #include "OSD.h"
@@ -2335,27 +2336,42 @@ void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
   entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
 				   get_next_version(), eversion_t(), 0,
 				   reqid, utime_t(), r));
+
+  struct OnComplete {
+    ReplicatedPG *pg;
+    OpRequestRef op;
+    boost::intrusive_ptr<MOSDOpReply> orig_reply;
+    int r;
+    OnComplete(
+      ReplicatedPG *pg,
+      OpRequestRef op,
+      MOSDOpReply *orig_reply,
+      int r)
+      : pg(pg), op(op),
+	orig_reply(orig_reply, false /* take over ref */), r(r)
+      {}
+    void operator()() {
+      ldpp_dout(pg, 20) << "finished " << __func__ << " r=" << r << dendl;
+      MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+      int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+      MOSDOpReply *reply = orig_reply.detach();
+      if (reply == nullptr) {
+	reply = new MOSDOpReply(m, r, pg->get_osdmap()->get_epoch(),
+				flags, true);
+      }
+      ldpp_dout(pg, 10) << " sending commit on " << *m << " " << reply << dendl;
+      pg->osd->send_message_osd_client(reply, m->get_connection());
+    }
+  };
+
   ObcLockManager lock_manager;
   submit_log_entries(
     entries,
     std::move(lock_manager),
     boost::optional<std::function<void(void)> >(
-      [=]() {
-	dout(20) << "finished " << __func__ << " r=" << r << dendl;
-	MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-	int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	MOSDOpReply *reply = orig_reply;
-	if (reply == nullptr) {
-	  reply = new MOSDOpReply(m, r, get_osdmap()->get_epoch(),
-				  flags, true);
-	}
-	dout(10) << " sending commit on " << *m << " " << reply << dendl;
-	osd->send_message_osd_client(reply, m->get_connection());
-      }
-      ),
+      OnComplete(this, op, orig_reply, r)),
     op,
-    r
-  );
+    r);
 }
 
 ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
