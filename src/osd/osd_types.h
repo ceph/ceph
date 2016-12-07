@@ -4770,7 +4770,7 @@ struct OSDOp {
   }
 
   /**
-   * split a bufferlist into constituent indata nembers of a vector of OSDOps
+   * split a bufferlist into constituent indata members of a vector of OSDOps
    *
    * @param ops [out] vector of OSDOps
    * @param in  [in] combined data buffer
@@ -4778,7 +4778,7 @@ struct OSDOp {
   static void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
 
   /**
-   * merge indata nembers of a vector of OSDOp into a single bufferlist
+   * merge indata members of a vector of OSDOp into a single bufferlist
    *
    * Notably this also encodes certain other OSDOp data into the data
    * buffer, including the sobject_t soid.
