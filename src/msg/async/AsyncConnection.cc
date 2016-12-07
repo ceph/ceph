@@ -2234,6 +2234,10 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
   ssize_t rc = _try_send(more);
+
+  if (m->get_type() == CEPH_MSG_OSD_OPREPLY && m->get_recv_stamp() > utime_t(0, 0))
+    logger->tinc(l_msgr_osdop_lifetime_lat, ceph_clock_now(NULL) - m->get_recv_stamp());
+
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(rc) << dendl;
