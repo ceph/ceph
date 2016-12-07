@@ -702,7 +702,7 @@ fi
 
 make "$PARALLEL_BUILD"
 
-%if 0%{with make_check}
+%if 0%{with make_check} && 0%{with ceph_test_package}
 %check
 # run in-tree unittests
 make CHECK_ULIMIT=false %{?_smp_mflags} check
