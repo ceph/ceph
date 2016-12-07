@@ -348,7 +348,19 @@ class CephAnsible(Task):
         wait_for_health = self.config.get('wait-for-health', True)
         if wait_for_health:
             self.wait_for_ceph_health()
+        # for the teuthology workunits to work we
+        # need to fix the permission on keyring to be readable by them
+        self.fix_keyring_permission()
 
+    def fix_keyring_permission(self):
+        clients_only = lambda role: role.startswith('client')
+        for client in self.cluster.only(clients_only).remotes.iterkeys():
+            client.run(args=[
+                'sudo',
+                'chmod',
+                run.Raw('o+r'),
+                '/etc/ceph/ceph.client.admin.keyring'
+            ])
 
 
 class CephAnsibleError(Exception):
