@@ -33,20 +33,6 @@ void UpdateRequest::send() {
 		 << "->" << static_cast<uint32_t>(m_new_state)
 		 << dendl;
 
-  // rebuilding the object map might update on-disk only
-  if (m_snap_id == m_image_ctx.snap_id) {
-    assert(m_image_ctx.object_map_lock.is_wlocked());
-    for (uint64_t object_no = m_start_object_no;
-         object_no < MIN(m_end_object_no, m_object_map.size());
-         ++object_no) {
-      uint8_t state = m_object_map[object_no];
-      if (!m_current_state || state == *m_current_state ||
-          (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
-        m_object_map[object_no] = m_new_state;
-      }
-    }
-  }
-
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
     rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
@@ -61,8 +47,23 @@ void UpdateRequest::send() {
 }
 
 void UpdateRequest::finish_request() {
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
   ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
                              << dendl;
+
+  // rebuilding the object map might update on-disk only
+  if (m_snap_id == m_image_ctx.snap_id) {
+    for (uint64_t object_no = m_start_object_no;
+         object_no < MIN(m_end_object_no, m_object_map.size());
+         ++object_no) {
+      uint8_t state = m_object_map[object_no];
+      if (!m_current_state || state == *m_current_state ||
+          (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
+        m_object_map[object_no] = m_new_state;
+      }
+    }
+  }
 }
 
 } // namespace object_map
