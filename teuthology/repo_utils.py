@@ -84,7 +84,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
             clone_repo(repo_url, dest_path, branch)
         elif not is_fresh(sentinel):
             set_remote(dest_path, repo_url)
-            fetch(dest_path)
+            fetch_branch(dest_path, branch)
             touch_file(sentinel)
         else:
             log.info("%s was just updated; assuming it is current", dest_path)
@@ -97,20 +97,25 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
         raise
 
 
-def clone_repo(repo_url, dest_path, branch):
+def clone_repo(repo_url, dest_path, branch, shallow=True):
     """
     Clone a repo into a path
 
     :param repo_url:  The full URL to the repo (not including the branch)
     :param dest_path: The full path to the destination directory
     :param branch:    The branch.
+    :param shallow:   Whether to perform a shallow clone (--depth 1)
     :raises:          BranchNotFoundError if the branch is not found;
                       GitError for other errors
     """
     validate_branch(branch)
     log.info("Cloning %s %s from upstream", repo_url, branch)
+    args = ['git', 'clone']
+    if shallow:
+        args.extend(['--depth', '1'])
+    args.extend(['--branch', branch, repo_url, dest_path])
     proc = subprocess.Popen(
-        ('git', 'clone', '--branch', branch, repo_url, dest_path),
+        args,
         cwd=os.path.dirname(dest_path),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
@@ -139,7 +144,7 @@ def set_remote(repo_path, repo_url):
     :param repo_path: The full path to the repository
     :raises:          GitError if the operation fails
     """
-    log.debug("Setting repo remote to  %s", repo_url)
+    log.debug("Setting repo remote to %s", repo_url)
     proc = subprocess.Popen(
         ('git', 'remote', 'set-url', 'origin', repo_url),
         cwd=repo_path,
@@ -170,19 +175,24 @@ def fetch(repo_path):
         raise GitError("git fetch failed!")
 
 
-def fetch_branch(repo_path, branch):
+def fetch_branch(repo_path, branch, shallow=True):
     """
     Call "git fetch -p origin <branch>"
 
     :param repo_path: The full path to the repository on-disk
     :param branch:    The branch.
+    :param shallow:   Whether to perform a shallow fetch (--depth 1)
     :raises:          BranchNotFoundError if the branch is not found;
                       GitError for other errors
     """
     validate_branch(branch)
     log.info("Fetching %s from upstream", branch)
+    args = ['git', 'fetch']
+    if shallow:
+        args.extend(['--depth', '1'])
+    args.extend(['-p', 'origin', branch])
     proc = subprocess.Popen(
-        ('git', 'fetch', '-p', 'origin', branch),
+        args,
         cwd=repo_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
@@ -240,12 +250,11 @@ def fetch_repo(url, branch, bootstrap=None, lock=True):
     :param branch:     The branch we want
     :returns:          The destination path
     """
-    # 'url/to/project.git' -> 'project'
-    name = url.split('/')[-1].split('.git')[0]
     src_base_path = config.src_base_path
     if not os.path.exists(src_base_path):
         os.mkdir(src_base_path)
-    dest_path = os.path.join(src_base_path, '%s_%s' % (name, branch))
+    dirname = '%s_%s' % (url_to_dirname(url), branch)
+    dest_path = os.path.join(src_base_path, dirname)
     # only let one worker create/update the checkout at a time
     lock_path = dest_path.rstrip('/') + '.lock'
     with FileLock(lock_path, noop=not lock):
@@ -265,6 +274,29 @@ def fetch_repo(url, branch, bootstrap=None, lock=True):
                 shutil.rmtree(dest_path, ignore_errors=True)
                 raise
     return dest_path
+
+
+def url_to_dirname(url):
+    """
+    Given a URL, returns a string that's safe to use as a directory name.
+    Examples:
+
+        git://git.ceph.com/ceph-qa-suite.git -> git.ceph.com_ceph-qa-suite
+        https://github.com/ceph/ceph -> github.com_ceph_ceph
+        https://github.com/liewegas/ceph.git -> github.com_liewegas_ceph
+        file:///my/dir/has/ceph.git -> my_dir_has_ceph
+    """
+    # Strip protocol from left-hand side
+    string = re.match('.*://(.*)', url).groups()[0]
+    # Strip '.git' from the right-hand side
+    string = string.rstrip('.git')
+    # Replace certain characters with underscores
+    string = re.sub('[:/]', '_', string)
+    # Remove duplicate underscores
+    string = re.sub('_+', '_', string)
+    # Remove leading or trailing underscore
+    string = string.strip('_')
+    return string
 
 
 def fetch_qa_suite(branch, lock=True):

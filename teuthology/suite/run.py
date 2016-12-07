@@ -36,6 +36,10 @@ class Run(object):
         """
         self.args = args
         self.name = self.make_run_name()
+
+        if self.args.suite_repo:
+            config.ceph_qa_suite_git_url = self.args.suite_repo
+
         self.base_config = self.create_initial_config()
         # caches package versions to minimize requests to gbs
         self.package_versions = dict()
@@ -102,6 +106,8 @@ class Run(object):
             distro_version=self.args.distro_version,
             archive_upload=config.archive_upload,
             archive_upload_key=config.archive_upload_key,
+            suite_repo=config.get_ceph_qa_suite_git_url(),
+            suite_relpath=self.args.suite_relpath,
         )
         return self.build_base_config()
 
@@ -189,30 +195,50 @@ class Run(object):
         log.info("teuthology branch: %s", teuthology_branch)
         return teuthology_branch
 
+    @property
+    def suite_repo_name(self):
+        if self.args.suite_repo:
+            return self.args.suite_repo.split('/')[-1].rstrip('.git')
+        else:
+            return 'ceph-qa-suite'
+
     def choose_suite_branch(self):
+        suite_repo_name = self.suite_repo_name
+        suite_repo_project_or_url = self.args.suite_repo or 'ceph-qa-suite'
         suite_branch = self.args.suite_branch
         ceph_branch = self.args.ceph_branch
         if suite_branch and suite_branch != 'master':
-            if not util.git_branch_exists('ceph-qa-suite', suite_branch):
-                exc = BranchNotFoundError(suite_branch, 'ceph-qa-suite.git')
+            if not util.git_branch_exists(
+                suite_repo_project_or_url,
+                suite_branch
+            ):
+                exc = BranchNotFoundError(suite_branch, suite_repo_name)
                 util.schedule_fail(message=str(exc), name=self.name)
         elif not suite_branch:
-            # Decide what branch of ceph-qa-suite to use
-            if util.git_branch_exists('ceph-qa-suite', ceph_branch):
+            # Decide what branch of the suite repo to use
+            if util.git_branch_exists(suite_repo_project_or_url, ceph_branch):
                 suite_branch = ceph_branch
             else:
                 log.info(
-                    "branch {0} not in ceph-qa-suite.git; will use master for"
-                    " ceph-qa-suite".format(ceph_branch))
+                    "branch {0} not in {1}; will use master for"
+                    " ceph-qa-suite".format(
+                        ceph_branch,
+                        suite_repo_name
+                    ))
                 suite_branch = 'master'
         return suite_branch
 
     def choose_suite_hash(self, suite_branch):
-        suite_hash = util.git_ls_remote('ceph-qa-suite', suite_branch)
+        suite_repo_name = self.suite_repo_name
+        suite_repo_project_or_url = self.args.suite_repo or 'ceph-qa-suite'
+        suite_hash = util.git_ls_remote(
+            suite_repo_project_or_url,
+            suite_branch
+        )
         if not suite_hash:
-            exc = BranchNotFoundError(suite_branch, 'ceph-qa-suite.git')
+            exc = BranchNotFoundError(suite_branch, suite_repo_name)
             util.schedule_fail(message=str(exc), name=self.name)
-        log.info("ceph-qa-suite branch: %s %s", suite_branch, suite_hash)
+        log.info("%s branch: %s %s", suite_repo_name, suite_branch, suite_hash)
         return suite_hash
 
     def build_base_config(self):
@@ -416,9 +442,12 @@ class Run(object):
         name = self.name
         arch = util.get_arch(self.base_config.machine_type)
         suite_name = self.base_config.suite
-        suite_path = os.path.join(
-            self.suite_repo_path, 'suites',
-            self.base_config.suite.replace(':', '/'))
+        suite_path = os.path.normpath(os.path.join(
+            self.suite_repo_path,
+            self.args.suite_relpath,
+            'suites',
+            self.base_config.suite.replace(':', '/'),
+        ))
         log.debug('Suite %s in %s' % (suite_name, suite_path))
         configs = [
             (combine_path(suite_name, item[0]), item[1]) for item in

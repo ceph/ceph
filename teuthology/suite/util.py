@@ -169,13 +169,20 @@ def get_distro_defaults(distro, machine_type):
     )
 
 
-def git_ls_remote(project, branch, project_owner='ceph'):
+def git_ls_remote(project_or_url, branch, project_owner='ceph'):
     """
     Find the latest sha1 for a given project's branch.
 
+    :param project_or_url: Either a project name or a full URL
+    :param branch:         The branch to query
+    :param project_owner:  The GitHub project owner. Only used when a project
+                           name is passed; not when a URL is passed
     :returns: The sha1 if found; else None
     """
-    url = build_git_url(project, project_owner)
+    if '://' in project_or_url:
+        url = project_or_url
+    else:
+        url = build_git_url(project_or_url, project_owner)
     return repo_utils.ls_remote(url, branch)
 
 
@@ -205,11 +212,16 @@ def git_validate_sha1(project, sha1, project_owner='ceph'):
     return None
 
 
-def git_branch_exists(project, branch, project_owner='ceph'):
+def git_branch_exists(project_or_url, branch, project_owner='ceph'):
     """
     Query the git repository to check the existence of a project's branch
+
+    :param project_or_url: Either a project name or a full URL
+    :param branch:         The branch to query
+    :param project_owner:  The GitHub project owner. Only used when a project
+                           name is passed; not when a URL is passed
     """
-    return git_ls_remote(project, branch, project_owner) is not None
+    return git_ls_remote(project_or_url, branch, project_owner) is not None
 
 
 def get_branch_info(project, branch, project_owner='ceph'):

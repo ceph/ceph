@@ -1,7 +1,7 @@
 import logging
 import os
 import os.path
-from pytest import raises
+from pytest import raises, mark
 import shutil
 import subprocess
 
@@ -167,3 +167,14 @@ class TestRepoUtils(object):
                     )
             for result in p:
                 pass
+
+    URLS_AND_DIRNAMES = [
+        ('git://git.ceph.com/ceph-qa-suite.git', 'git.ceph.com_ceph-qa-suite'),
+        ('https://github.com/ceph/ceph', 'github.com_ceph_ceph'),
+        ('https://github.com/liewegas/ceph.git', 'github.com_liewegas_ceph'),
+        ('file:///my/dir/has/ceph.git', 'my_dir_has_ceph'),
+    ]
+
+    @mark.parametrize("input_, expected", URLS_AND_DIRNAMES)
+    def test_url_to_dirname(self, input_, expected):
+        assert repo_utils.url_to_dirname(input_) == expected
