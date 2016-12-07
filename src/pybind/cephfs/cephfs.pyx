@@ -124,6 +124,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_link(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_unlink(ceph_mount_info *cmount, const char *path)
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
+    int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags)
     int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
@@ -863,6 +864,25 @@ cdef class LibCephFS(object):
             ret = ceph_link(self.cluster, _existing, _newname)
         if ret < 0:
             raise make_ex(ret, "error in link")    
+    
+    def readlink(self, path, size):
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        cdef:
+            char* _path = path
+            int64_t _size = size
+            char *buf = NULL
+
+        try:
+            buf = <char *>realloc_chk(buf, _size)
+            with nogil:
+                ret = ceph_readlink(self.cluster, _path, buf, _size)
+            if ret < 0:
+                raise make_ex(ret, "error in readlink")
+            return buf
+        finally:
+            free(buf)
 
     def unlink(self, path):
         self.require_state("mounted")
