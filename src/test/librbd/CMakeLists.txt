@@ -133,7 +133,7 @@ target_link_libraries(ceph_test_librbd_fsx
   ${EXTRALIBS}
   blkid
   udev
-  keyutils
+  ${KEYUTILS_LIBRARIES}
   )
 
 install(TARGETS

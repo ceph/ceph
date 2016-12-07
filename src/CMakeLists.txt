@@ -638,7 +638,7 @@ if(WITH_RBD)
       $<TARGET_OBJECTS:parse_secret_objs>)
     set(DENCODER_EXTRALIBS
       ${DENCODER_EXTRALIBS}
-      keyutils
+      ${KEYUTILS_LIBRARIES}
       udev)
   endif(LINUX)
 endif(WITH_RBD)
@@ -823,8 +823,8 @@ add_subdirectory(bash_completion)
 if(KEYUTILS_FOUND)
   set(parse_secret_files
     common/secret.c)
-  add_library(parse_secret_objs OBJECT ${parse_secret_files})
 endif()
+add_library(parse_secret_objs OBJECT ${parse_secret_files})
 
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
@@ -857,7 +857,7 @@ if(WITH_LIBCEPHFS)
   add_executable(mount.ceph ${mount_ceph_srcs}
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:common_mountcephfs_objs>)
-  target_link_libraries(mount.ceph keyutils)
+  target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})

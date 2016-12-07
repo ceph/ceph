@@ -47,7 +47,7 @@ target_link_libraries(rbd librbd librados
   rbd_types
   journal
   common global
-  keyutils udev
+  ${KEYUTILS_LIBRARIES} udev
   ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 install(TARGETS rbd DESTINATION bin)
