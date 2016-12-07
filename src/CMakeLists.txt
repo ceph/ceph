@@ -628,19 +628,11 @@ if(${WITH_RADOSGW})
 endif(${WITH_RADOSGW})
 if(WITH_RBD)
   set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      rbd_types
-      cls_rbd_client
-      rbd_replay_types)
-  if(LINUX)
-    list(APPEND dencoder_srcs
-      $<TARGET_OBJECTS:krbd_objs>
-      $<TARGET_OBJECTS:parse_secret_objs>)
-    set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      keyutils
-      udev)
-  endif(LINUX)
+    ${DENCODER_EXTRALIBS}
+    cls_rbd_client
+    krbd
+    rbd_types
+    rbd_replay_types)
 endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
@@ -820,11 +812,11 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-if(KEYUTILS_FOUND)
+if(WITH_LIBCEPHFS OR WITH_RBD)
   set(parse_secret_files
     common/secret.c)
-  add_library(parse_secret_objs OBJECT ${parse_secret_files})
 endif()
+add_library(parse_secret_objs OBJECT ${parse_secret_files})
 
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
@@ -857,7 +849,7 @@ if(WITH_LIBCEPHFS)
   add_executable(mount.ceph ${mount_ceph_srcs}
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:common_mountcephfs_objs>)
-  target_link_libraries(mount.ceph keyutils)
+  target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
@@ -876,11 +868,10 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-if(LINUX)
-  add_library(krbd_objs OBJECT krbd.cc)
-endif()
-
 if(${WITH_RBD})
+  add_library(krbd STATIC krbd.cc
+    $<TARGET_OBJECTS:parse_secret_objs>)
+  target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
   add_subdirectory(librbd)
   if(WITH_FUSE)
     add_subdirectory(rbd_fuse)

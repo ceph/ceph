@@ -28,10 +28,8 @@ if(WITH_RBD)
     os
     global
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    udev
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
-    keyutils
     )
   add_dependencies(ceph_smalliobenchrbd
     cls_rbd
