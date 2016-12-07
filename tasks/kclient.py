@@ -58,7 +58,7 @@ def task(ctx, config):
         client_roles = config
         config = dict([r, dict()] for r in client_roles)
     elif isinstance(config, dict):
-        client_roles = config.keys()
+        client_roles = filter(lambda x: 'client.' in x, config.keys())
     else:
         raise ValueError("Invalid config object: {0} ({1})".format(config, config.__class__))
 
@@ -79,6 +79,13 @@ def task(ctx, config):
 
     mounts = {}
     for id_, remote in clients:
+        client_config = config.get("client.%s" % id_)
+        if client_config is None:
+            client_config = {}
+
+        if config.get("disabled", False) or not client_config.get('mounted', True):
+            continue
+
         kernel_mount = KernelMount(
             mons,
             test_dir,
@@ -91,7 +98,6 @@ def task(ctx, config):
 
         mounts[id_] = kernel_mount
 
-        client_config = config["client.{0}".format(id_)]
         if client_config.get('debug', False):
             remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
             remote.run(args=["sudo", "bash", "-c", "echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control"])
