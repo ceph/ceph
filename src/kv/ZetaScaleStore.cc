@@ -41,6 +41,10 @@ using std::string;
 #define dwarn dout(0)
 #define dinfo dout(0)
 
+
+thread_local ZSStore::ZSMultiMap ZSStore::write_ops;
+thread_local std::set<std::string> ZSStore::delete_ops;
+
 static std::string decode_key(const std::string &k)
 {
   char buf[256];
@@ -109,8 +113,7 @@ static bool is_logging(const std::string &prefix, const std::string &key)
 {
   if (prefix[0] != 'M' ||
       (key.length() != 40 &&
-       strncmp(key.c_str() + 8, "._info", sizeof("._info")) &&
-       strncmp(key.c_str() + 8, "._fastinfo", sizeof("._fastinfo"))))
+       strncmp(key.c_str() + 8, "._info", sizeof("._info"))))
     return false;
 
   dtrace << " " << prefix << " " << decode_key(key) << "(" << key.length()
@@ -200,7 +203,7 @@ int ZSStore::_init(bool format)
 
   if (size < ZS_MINIMUM_DB_SIZE) {
     derr << "Given ZS data partition size " << size
-	 << " is less then minimum 64GiB" << dendl;
+	 << " is less then minimum 8Gb" << dendl;
     dinfo << "Please adjust partition size or bluestore_block_db_size"
 	     "accordingly"
 	  << dendl;
@@ -252,13 +255,14 @@ int ZSStore::_init(bool format)
   ZSSetProperty("ZS_NVR_LENGTH", str_buf);
 
   // ZS_NVR_LENGTH/ZS_NVR_PARTITIONS/ZS_MAX_NUM_LC/ZS_NVR_OBJECT_SIZE
-  int num_lc = (size / 2) / 65536;
+  int num_part = size / 2 / (16 / 2) / 65536;
 
-  dinfo << "ZS log partition size is set to " << size << dendl;
+  dinfo << "ZS log partition size is set to " << size
+	<< ", num internal nvram partitions= " << num_part << dendl;
 
-  sprintf(str_buf, "%u", num_lc);
+  sprintf(str_buf, "%u", num_part);
 
-  ZSSetProperty("ZS_MAX_NUM_LC", str_buf);
+  ZSSetProperty("ZS_NVR_PARTITIONS", str_buf);
 
   ZSSetProperty("ZS_ASYNC_PUT_THREADS", "3");
   ZSSetProperty("ZS_MAX_NUM_CONTAINERS", "8");
@@ -266,6 +270,8 @@ int ZSStore::_init(bool format)
 
   ZSSetProperty("ZS_CRASH_DIR", g_conf->osd_data.c_str());
 
+  //  char buf[32];
+  //  snprintf(buf, sizeof(buf), ".zs.%d", getpid());
   ZSSetProperty("ZS_LOG_FILE", (g_conf->log_file + ".zs").c_str());
 
   ZSLoadProperties(getenv("ZS_PROPERTY_FILE"));
@@ -377,6 +383,8 @@ int ZSStore::submit_transaction(KeyValueDB::Transaction t)
   ZSTransactionImpl *zt = static_cast<ZSTransactionImpl *>(t.get());
 
   dtrace << " " << zt->get_ops().size() << dendl;
+  //dout(0) <<__func__ << "tx size = " << zt->get_ops().size() << dendl;
+  fm.lock();
 
   for (auto &op : zt->get_ops()) {
     if (op.first == ZSTransactionImpl::WRITE) {
@@ -389,6 +397,7 @@ int ZSStore::submit_transaction(KeyValueDB::Transaction t)
     } else
       delete_ops.insert(op.second.first);
   }
+  fm.unlock();
 
   return 0;
 }
@@ -411,14 +420,16 @@ int ZSStore::_submit_transaction_sync(KeyValueDB::Transaction tsync)
 
 int ZSStore::submit_transaction_sync(KeyValueDB::Transaction tsync)
 {
-  dtrace << " writes=" << write_ops.size() << " del=" << delete_ops.size()
-	 << dendl;
+  /*dtrace << " writes=" << write_ops.size() << " del=" << delete_ops.size()
+	 << dendl;*/
 
+  ++zs_num_thread_in_parallel;
+  dout(1) <<__func__ << " writes=" << write_ops.size() << " del=" << delete_ops.size() << " parallelism = " << zs_num_thread_in_parallel << dendl;
   int r = _submit_transaction_sync(tsync);
 
   write_ops.clear();
   delete_ops.clear();
-
+  --zs_num_thread_in_parallel;
   return r;
 }
 
@@ -524,6 +535,7 @@ bufferlist ZSStore::_merge(const std::string &key, const bufferlist &_base,
   std::string out;
 
   if (!_base.length()) {
+    dtrace << " " << key << dendl;
     int r = _get(key, &rbase);
     assert(!r || r == -ENOENT);
   }
@@ -604,6 +616,8 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
 
   dtrace << "ZSMPut count=" << ops.size() << dendl;
 
+  fm.lock();
+
   for (auto &op : ops) {
     int key_len = op.first.length();
     key = (char *)op.first.c_str();
@@ -613,7 +627,110 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
 
     dtrace << " i=" << i << " l1=" << l1 << " " << decode_key(op.first) << "("
 	   << op.first.length() << ")"
-	   << " data_size=" << length << dendl;
+	   << " " << length << dendl;
+
+    if (op.first[0] == 'b') {
+      fm.write(op.first, op.second);
+      continue;
+    }
+
+    bool lc = is_logging_prefixed(op.first);
+
+    if (lc) {
+      if (!enqueue_obj(cguid_lc, objs_lc, &l1, op.first.c_str(),
+		       op.first.length(), ptr, length)) {
+        fm.unlock();
+	return -1;
+      }
+      continue;
+    }
+
+    if (length > 4096) {
+      if (!enqueue_obj(cguid, objs, &i, op.first.c_str(), op.first.length(),
+		       ptr, length)) {
+            fm.unlock();
+	    return -1;
+        }
+    } else {
+      for (unsigned int j = 0;
+	   j < (length + CHUNK_SIZE - 1) / CHUNK_SIZE && j < MAX_CHUNK_COUNT;
+	   j++) {
+	if (j) {
+	  keys.resize(k + 1);
+	  keys[k] = op.first;
+	  append_chunk_number(keys[k], key_len, j);
+	  dtrace << keys[k] << dendl;
+	  key = (char *)keys[k].c_str();
+	  objs[i].key_len = key_len + 3;
+	  k++;
+	} else
+	  objs[i].key_len = key_len;
+
+	if (!enqueue_obj(cguid, objs, &i, key, objs[i].key_len,
+			 ptr + j * CHUNK_SIZE,
+			 (length - j * CHUNK_SIZE > CHUNK_SIZE &&
+			  j < MAX_CHUNK_COUNT - 1)
+			     ? CHUNK_SIZE
+			     : length - j * CHUNK_SIZE)) {
+            fm.unlock();
+	    return -1;
+        }
+
+	if (!i) {
+	  k = 0;
+	  keys.clear();
+	}
+      }
+    }
+  }
+  fm.flush();
+  fm.unlock();
+
+  if (i) {
+    status = ZSMPut(_thd_state(), cguid, i, objs, 0, &objs_written);
+    assert(status != ZS_SUCCESS || objs_written == i);
+  }
+
+  if (l1) {
+    status = ZSMPut(_thd_state(), cguid_lc, l1, objs_lc, 0, &objs_written);
+    assert(status != ZS_SUCCESS || objs_written == l1);
+  }
+
+  dtrace << "ZSMPut flush=" << i << " l1=" << l1
+	 << " status=" << ZSStrError(status) << dendl;
+
+  if (status != ZS_SUCCESS)
+    derr << "ZSMPut flush=" << ZSStrError(status) << dendl;
+
+
+
+
+
+  return status == ZS_SUCCESS ? 0 : -1;
+}
+#if 0
+
+int ZSStore::_batch_set_orig(const ZSStore::ZSMultiMap &ops)
+{
+#define CHUNK_SIZE (1024 * 1024)
+  char *key;
+  std::vector<std::string> keys;
+  ZS_obj_t objs[WRITE_BATCH_SIZE], objs_lc[WRITE_BATCH_SIZE];
+  ZS_status_t status = ZS_SUCCESS;
+  uint32_t i = 0, k = 0, l1 = 0, objs_written;
+
+  dtrace << "ZSMPut count=" << ops.size() << dendl;
+
+  for (auto &op : ops) {
+    int key_len = op.first.length();
+    key = (char *)op.first.c_str();
+    bufferlist *o = (bufferlist *)&op.second;
+    char *ptr = (char *)o->c_str();
+    unsigned int length = op.second.length();
+
+    dtrace << " i=" << i << " l1=" << l1 << " " << decode_key(op.first) << "("
+	   << op.first.length() << ")"
+	   << " " << length << dendl;
 
     if (op.first[0] == 'b') {
       fm.write(op.first, op.second);
@@ -684,6 +801,7 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
 
   return status == ZS_SUCCESS ? 0 : -1;
 }
+#endif
 
 int ZSStore::_rmkey(const std::string &_key)
 {
@@ -727,8 +845,8 @@ int ZSStore::_get(const string &key, bufferlist *out)
   }
 
   if (is_logging_prefixed(key)) {
-    uint64_t datalen = 0;
-    char *dataw = NULL;
+    uint64_t datalen;
+    char *dataw;
     ZS_status_t status = ZSReadObject(_thd_state(), cguid_lc, key.c_str(),
 				      key.length(), &dataw, &datalen);
     dtrace << "ZSReadObject logging: [" << status << "]" << datalen << dendl;
@@ -1125,6 +1243,8 @@ void ZSFreeListManager::init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid)
 
   cguid_lc = _cguid_lc;
   cguid = _cguid;
+  pthread_mutex_init(&wlock,NULL);
+  enable_lock=1;
 
   dtrace << "fm recovery" << dendl;
 
@@ -1172,7 +1292,7 @@ void ZSFreeListManager::init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid)
 	  ptr = deserialize(data, ptr, freelist[key]);
 	  lsn_map[key] = plsn;
 	} else
-	  ptr += *(uint8_t *)(data + ptr) + 1;
+	  ptr += *(uint8_t *)(data + ptr);
 
 	dtrace << " ptr=" << ptr << dendl;
 
@@ -1197,7 +1317,7 @@ void ZSFreeListManager::init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid)
 	  ptr = deserialize(data, ptr, freelist[key]);
 	  lsn_map[key] = plsn;
 	} else
-	  ptr += *(uint8_t *)(data + ptr) + 1;
+	  ptr += *(uint8_t *)(data + ptr);
 
 	data += ptr;
 	data_size -= ptr;
@@ -1212,6 +1332,18 @@ void ZSFreeListManager::init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid)
   fl_it = freelist.begin();
 
   dtrace << "fm recovery finish. freelist size=" << freelist.size() << dendl;
+}
+void ZSFreeListManager::lock(void) 
+{
+    if (enable_lock == 1) {
+        pthread_mutex_lock(&wlock);
+    }
+}
+void ZSFreeListManager::unlock(void) 
+{
+    if (enable_lock == 1) {
+        pthread_mutex_unlock(&wlock);
+    }
 }
 
 void ZSFreeListManager::get(const std::string &key, bufferlist *data)
@@ -1254,14 +1386,13 @@ void ZSFreeListManager::flush()
     fl_it = freelist.begin();
 
   uint64_t offset;
-  _key_decode_u64(fl_it->first.c_str() + 2, &offset);
+  _key_decode_u64(fl_it->first.c_str() + 1, &offset);
+
+  dtrace << "write freelist chunk. offset=" << offset << " lsn=" << lsn
+	 << " fm size:" << freelist.size()
+	 << " bytes per key: " << bytes_per_key << dendl;
 
   uint64_t page_num = offset / bytes_per_key / n_recs_per_page;
-
-  dtrace << "write freelist chunk. offset=" << offset << "(" << decode_key(string((char*)&offset, 8)) << ") page_num=" << page_num << " lsn=" << lsn
-	 << " fm size:" << freelist.size()
-	 << " bytes per key: " << bytes_per_key << " n_recs_per_page: " << n_recs_per_page << dendl;
-
   for (int i = 0; i < n_recs_per_page && fl_it != freelist.end(); i++) {
     _key_decode_u64(fl_it->first.c_str() + 1, &offset);
     if (offset / bytes_per_key / n_recs_per_page > page_num)
@@ -1274,7 +1405,7 @@ void ZSFreeListManager::flush()
 
     dtrace << "page_ptr: " << page_ptr
 	   << " data_part: " << page_ptr - page_head_ptr - 2 << " "
-	   << decode_key(fl_it->first) << dendl;
+	   << decode_key(fl_it->first.c_str()) << dendl;
     fl_it++;
   }
 

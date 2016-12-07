@@ -9,7 +9,7 @@
 #include <ostream>
 #include <set>
 #include <string>
-
+#include <atomic>
 #include "KeyValueDB.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -24,7 +24,7 @@ using std::string;
 #define CEPH_ZS_CONTAINER_NAME "ceph_kv_store"
 #define CEPH_ZS_LOG_CONTAINER_NAME "ceph_kv_log_store"
 
-#define ZS_MINIMUM_DB_SIZE (64L * 1024 * 1024 * 1024)
+#define ZS_MINIMUM_DB_SIZE (8L * 1024 * 1024 * 1024)
 
 class ZSFreeListManager
 {
@@ -40,6 +40,9 @@ class ZSFreeListManager
   uint16_t log_ptr, page_ptr;
   ZS_cguid_t cguid_lc, cguid;
   uint64_t lsn;
+  int enable_lock;
+  pthread_mutex_t wlock;
+  
 
   public:
   void init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid);
@@ -55,6 +58,8 @@ class ZSFreeListManager
   bool seek(const std::string& key, bool inclusive);
   bool next(std::string &key, bufferlist& data);
   void flush();
+  void lock();
+  void unlock();
 
   ~ZSFreeListManager() {}
 };
@@ -72,6 +77,7 @@ class ZSStore : public KeyValueDB
   int dev_log_fd, dev_data_fd;
 
   ZS_cguid_t cguid, cguid_lc;
+  std::atomic_int zs_num_thread_in_parallel = {0};
 
   int transaction_start();
   int transaction_commit();
@@ -158,8 +164,8 @@ private:
 
   typedef std::map<std::string, bufferlist, zs_map_comparator> ZSMultiMap;
 
-  ZSMultiMap write_ops;
-  std::set<std::string> delete_ops;
+  static thread_local ZSMultiMap write_ops;
+  static thread_local std::set<std::string> delete_ops;
   int _batch_set(const ZSMultiMap &ops);
   int _rmkey(const std::string &k);
   int _submit_transaction_sync(Transaction);
