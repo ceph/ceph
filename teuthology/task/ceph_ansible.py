@@ -4,12 +4,12 @@ import os
 from cStringIO import StringIO
 
 from . import ansible
-
+from . import Task
 from ..config import config as teuth_config
 from ..misc import get_scratch_devices
 
 
-class CephAnsible(ansible.Ansible):
+class CephAnsible(Task):
     name = 'ceph_ansible'
 
     _default_playbook = [
@@ -41,11 +41,17 @@ class CephAnsible(ansible.Ansible):
     ]
 
     __doc__ = """
-    A subclass of Ansible that defaults to:
+    A task to setup ceph cluster using ceph-ansible
 
-    - ansible:
+    - ceph-ansible:
         repo: {git_base}ceph-ansible.git
-        playbook: {playbook}
+        branch: mybranch # defaults to master
+        ansible-version: 2.2 # defaults to 2.1
+        vars:
+          ceph_dev: True ( default)
+          ceph_conf_overrides:
+             global:
+                mon pg warn min per osd: 2
 
     It always uses a dynamic inventory.
 
@@ -61,13 +67,26 @@ class CephAnsible(ansible.Ansible):
     )
 
     def __init__(self, ctx, config):
-        config = config or dict()
-        if 'playbook' not in config:
-            config['playbook'] = self._default_playbook
-        if 'repo' not in config:
-            config['repo'] = os.path.join(teuth_config.ceph_git_base_url,
-                                          'ceph-ansible.git')
         super(CephAnsible, self).__init__(ctx, config)
+        config = self.config or dict()
+        if 'playbook' not in config:
+            self.playbook = self._default_playbook
+        else:
+            self.playbook = self.config['playbook']
+        if 'repo' not in config:
+            self.config['repo'] = os.path.join(teuth_config.ceph_git_base_url,
+                                               'ceph-ansible.git')
+        # default vars to dev builds
+        if 'vars' not in config:
+            vars = dict()
+            config['vars'] = vars
+        vars = config['vars']
+        if 'ceph_dev' not in vars:
+            vars['ceph_dev'] = True
+        if 'ceph_dev_key' not in vars:
+            vars['ceph_dev_key'] = 'https://download.ceph.com/keys/autobuild.asc'
+        if 'ceph_dev_branch' not in vars:
+            vars['ceph_dev_branch'] = ctx.config.get('branch', 'master')
 
     def get_inventory(self):
         """
