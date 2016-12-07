@@ -1694,10 +1694,10 @@ TEST(LibCephFS, SetSize) {
 
   struct ceph_statx stx;
   uint64_t size = 8388608;
-  stx.stx_size = (off_t)size;
+  stx.stx_size = size;
   ASSERT_EQ(ceph_fsetattrx(cmount, fd, &stx, CEPH_SETATTR_SIZE), 0);
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_SIZE, 0), 0);
-  ASSERT_EQ(stx.stx_size, (off_t)size);
+  ASSERT_EQ(stx.stx_size, size);
 
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);
