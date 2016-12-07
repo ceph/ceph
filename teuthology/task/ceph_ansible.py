@@ -205,6 +205,22 @@ class CephAnsible(Task):
         hosts_file.flush()
         return hosts_file.name
 
+    def wait_for_ceph_health(self):
+        with contextutil.safe_while(sleep=15, tries=6,
+                                    action='check health') as proceed:
+            (remote,) = self.ctx.cluster.only('mon.a').remotes
+            remote.run(args=['sudo', 'ceph', 'osd', 'tree'])
+            remote.run(args=['sudo', 'ceph', '-s'])
+            log.info("Waiting for Ceph health to reach HEALTH_OK \
+                        or HEALTH WARN")
+            while proceed():
+                out = StringIO()
+                remote.run(args=['sudo', 'ceph', 'health'], stdout=out)
+                out = out.getvalue().split(None, 1)[0]
+                log.info("cluster in state: %s", out)
+                if out in ('HEALTH_OK', 'HEALTH_WARN'):
+                    break
+
     def get_host_vars(self, remote):
         extra_vars = self.config.get('vars', dict())
         host_vars = dict()
