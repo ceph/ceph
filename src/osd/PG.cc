@@ -1898,6 +1898,7 @@ void PG::take_op_map_waiters()
     if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), *i)) {
       break;
     } else {
+      (*i)->mark_queued_for_pg();
       osd->op_wq.queue(make_pair(PGRef(this), *i));
       waiting_for_map.erase(i++);
     }
