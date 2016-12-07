@@ -2593,7 +2593,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
     m_finisher_num(1),
-    kv_sync_thread(this),
+    //kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
@@ -2615,6 +2615,11 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     Finisher *f = new Finisher(cct, oss.str(), "finisher");
     finishers.push_back(f);
   }
+  for (uint32_t i =0; i < cct->_conf->bluestore_num_kv_sync_threads; i++) {
+    KVSyncThread* kv_thread = new KVSyncThread(this, i+1);
+    kv_sync_thread_list.push_back(kv_thread); 
+  }
+
 }
 
 BlueStore::~BlueStore()
@@ -2635,6 +2640,11 @@ BlueStore::~BlueStore()
     delete i;
   }
   cache_shards.clear();
+
+  for (auto kth : kv_sync_thread_list) {
+    delete kth;
+  }
+  kv_sync_thread_list.clear();
 }
 
 const char **BlueStore::get_tracked_conf_keys() const
@@ -4126,7 +4136,12 @@ int BlueStore::mount()
     f->start();
   }
   wal_tp.start();
-  kv_sync_thread.create("bstore_kv_sync");
+  //kv_sync_thread.create("bstore_kv_sync");
+  for (uint32_t i =0; i < kv_sync_thread_list.size(); i++) {
+    char kv_th_name[16] = {0};
+    snprintf(kv_th_name, sizeof(kv_th_name),"%s_%d","bstor_kv_sync", i+1);
+    kv_sync_thread_list[i]->create(kv_th_name);
+  } 
 
   r = _wal_replay();
   if (r < 0)
@@ -4755,7 +4770,7 @@ void BlueStore::_sync()
   bdev->flush();
 
   std::unique_lock<std::mutex> l(kv_lock);
-  while (!kv_committing.empty() ||
+  while (kv_pending_commits ||
 	 !kv_queue.empty()) {
     dout(20) << " waiting for kv to commit" << dendl;
     kv_sync_cond.wait(l);
@@ -6311,8 +6326,10 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
-      if (cct->_conf->bluestore_sync_submit_transaction &&
-	  fm->supports_parallel_transactions()) {
+      if ((g_conf->bluestore_sync_submit_transaction &&
+	  fm->supports_parallel_transactions()) && 
+          (1 == kv_sync_thread_list.size())) {
+
 	if (txc->last_nid >= nid_max ||
 	    txc->last_blobid >= blobid_max) {
 	  dout(20) << __func__
@@ -6343,7 +6360,8 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       {
 	std::lock_guard<std::mutex> l(kv_lock);
 	kv_queue.push_back(txc);
-	kv_cond.notify_one();
+	//kv_cond.notify_one();
+        kv_cond.notify_all();
 	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
@@ -6698,7 +6716,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   txc->allocated.clear();
   txc->released.clear();
 }
-
+#if 0
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -6855,6 +6873,252 @@ void BlueStore::_kv_sync_thread()
   }
   dout(10) << __func__ << " finish" << dendl;
 }
+#else
+void BlueStore::_kv_sync_thread(uint32_t tid)
+{
+  dout(10) << __func__ << " start" << dendl;
+  std::unique_lock<std::mutex> l(kv_lock);
+  while (true) {
+    //assert(kv_committing.empty());
+    if (kv_queue.empty() && wal_cleanup_queue.empty()) {
+      if (kv_stop)
+        break;
+      dout(20) << __func__ << " sleep" << dendl;
+      kv_sync_cond.notify_all();
+      kv_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      deque<TransContext*> kv_submitting;
+      deque<TransContext*> kv_committing_local;
+      deque<TransContext*> wal_cleaning;
+      dout(20) << __func__ << " committing " << kv_queue.size()
+               << " submitting " << kv_queue_unsubmitted.size()
+               << " cleaning " << wal_cleanup_queue.size() << dendl;
+       
+      if (1 == kv_sync_thread_list.size()) {
+        kv_committing_local.swap(kv_queue);
+        kv_submitting.swap(kv_queue_unsubmitted);
+        wal_cleaning.swap(wal_cleanup_queue);
+      } else {
+
+        if (!kv_queue.empty()) {
+          uint32_t txc_per_thread = kv_queue.size()/kv_sync_thread_list.size();
+          if (txc_per_thread == 0)
+            txc_per_thread = kv_queue.size();
+
+          uint32_t txc_count = 0;
+          auto ckv = kv_queue.begin();
+          bool done_iterating = false;
+          while (!done_iterating) {
+            if (ckv + 1 == kv_queue.end()) {
+              done_iterating = true;
+            }
+            uint32_t th_no = (*ckv)->osr->parent->shard_hint.hash_to_shard(
+                             kv_sync_thread_list.size()) + 1;
+
+            dout(1) << __func__ << " Mapped thread = " << th_no 
+                    << " This thread id = " << tid << " txc = " 
+                    << (*ckv) << dendl;
+            if (tid == th_no) {
+              kv_committing_local.push_back(*ckv);
+              kv_submitting.push_back(*ckv);
+              ckv = kv_queue.erase(ckv);
+              ++txc_count;
+              ++kv_pending_commits;
+            } else {
+              ++ckv;
+            }
+            if (txc_count == txc_per_thread) {
+              dout(1) << __func__ << " Num txc for this thread = " << txc_count 
+                      << " This thread id = " << tid << " Total still in Q = " 
+                      << kv_queue.size() <<dendl;
+              break;
+            }
+
+          }
+        }
+
+        if (!wal_cleanup_queue.empty()) {
+          uint32_t txc_per_thread = wal_cleanup_queue.size()/kv_sync_thread_list.size();
+          if (txc_per_thread == 0)
+            txc_per_thread = wal_cleanup_queue.size();
+
+          uint32_t txc_count = 0;
+          auto ckv = wal_cleanup_queue.begin();
+          bool done_iterating = false;
+          while (!done_iterating) {
+            if (ckv + 1 == wal_cleanup_queue.end()) {
+              done_iterating = true;
+            }
+            uint32_t th_no = (*ckv)->osr->parent->shard_hint.hash_to_shard(
+                             kv_sync_thread_list.size()) +1;
+
+            dout(1) << __func__ << " Mapped thread = " << th_no
+                    << " This thread id = " << tid << " wal cleaning txc = "
+                    << (*ckv) << dendl;
+            if (tid == th_no) {
+              wal_cleaning.push_back(*ckv);
+              ckv = wal_cleanup_queue.erase(ckv);
+              ++txc_count;
+            } else {
+              ++ckv;
+            }
+            if (txc_count == txc_per_thread) {
+              dout(1) << __func__ << " Num WAL cleaning txc for this thread = " 
+                      << txc_count << " This thread id = " << tid 
+                      << " Total still in Q = "
+                      << wal_cleanup_queue.size() <<dendl;
+              break;
+            }
+
+          }
+        }
+
+      }
+      utime_t start = ceph_clock_now(NULL);
+      l.unlock();
+
+      //Try to acquire lock and check again.
+      if ((0 == kv_committing_local.size()) && ( 0 == wal_cleaning.size())) {
+        l.lock();
+        continue;
+      }
+
+      dout(30) << __func__ << " committing txc " << kv_committing_local << dendl;
+      dout(30) << __func__ << " submitting txc " << kv_submitting << dendl;
+      dout(30) << __func__ << " wal_cleaning txc " << wal_cleaning << dendl;
+
+      // flush/barrier on block device
+      bdev->flush();
+
+      // we will use one final transaction to force a sync
+      KeyValueDB::Transaction synct = db->get_transaction();
+
+      // increase {nid,blobid}_max?  note that this covers both the
+      // case where we are approaching the max and the case we passed
+      // it.  in either case, we increase the max in the earlier txn
+      // we submit.
+      uint64_t new_nid_max = 0, new_blobid_max = 0;
+      if (nid_last + g_conf->bluestore_nid_prealloc/2 > nid_max) {
+        KeyValueDB::Transaction t =
+          kv_submitting.empty() ? synct : kv_submitting.front()->t;
+        new_nid_max = nid_last + g_conf->bluestore_nid_prealloc;
+        bufferlist bl;
+        ::encode(new_nid_max, bl);
+        t->set(PREFIX_SUPER, "nid_max", bl);
+        dout(10) << __func__ << " new_nid_max " << new_nid_max << dendl;
+      }
+      if (blobid_last + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
+        KeyValueDB::Transaction t =
+          kv_submitting.empty() ? synct : kv_submitting.front()->t;
+        new_blobid_max = blobid_last + g_conf->bluestore_blobid_prealloc;
+        bufferlist bl;
+        ::encode(new_blobid_max, bl);
+        t->set(PREFIX_SUPER, "blobid_max", bl);
+        dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
+      }
+      for (auto txc : kv_submitting) {
+        assert(txc->state == TransContext::STATE_KV_QUEUED);
+        _txc_finalize_kv(txc, txc->t);
+        txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+        int r = db->submit_transaction(txc->t);
+        assert(r == 0);
+        --txc->osr->kv_committing_serially;
+        txc->state = TransContext::STATE_KV_SUBMITTED;
+      }
+      for (auto txc : kv_committing_local) {
+        if (txc->had_ios) {
+          --txc->osr->txc_with_unstable_io;
+        }
+      }
+
+      vector<bluestore_pextent_t> bluefs_gift_extents;
+      if (bluefs) {
+        int r = _balance_bluefs_freespace(&bluefs_gift_extents);
+        assert(r >= 0);
+        if (r > 0) {
+          for (auto& p : bluefs_gift_extents) {
+            bluefs_extents.insert(p.offset, p.length);
+          }
+          bufferlist bl;
+          ::encode(bluefs_extents, bl);
+          dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
+                   << bluefs_extents << std::dec << dendl;
+          synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+        }
+      }
+
+      // cleanup sync wal keys
+      for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
+            it != wal_cleaning.end();
+            ++it) {
+        bluestore_wal_transaction_t& wt =*(*it)->wal_txn;
+        // kv metadata updates
+        _txc_finalize_kv(*it, synct);
+        // cleanup the wal
+        string key;
+        get_wal_key(wt.seq, &key);
+        synct->rm_single_key(PREFIX_WAL, key);
+      }
+
+      // submit synct synchronously (block and wait for it to commit)
+      int r = db->submit_transaction_sync(synct);
+      assert(r == 0);
+
+      if (new_nid_max) {
+        nid_max = new_nid_max;
+        dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+      }
+      if (new_blobid_max) {
+        blobid_max = new_blobid_max;
+        dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+      }
+
+      utime_t finish = ceph_clock_now(NULL);
+      utime_t dur = finish - start;
+      dout(20) << __func__ << " committed " << kv_committing_local.size()
+               << " cleaned " << wal_cleaning.size()
+               << " in " << dur << dendl;
+      while (!kv_committing_local.empty()) {
+        TransContext *txc = kv_committing_local.front();
+        assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+        _txc_release_alloc(txc);
+        _txc_state_proc(txc);
+        kv_committing_local.pop_front();
+        --kv_pending_commits;
+      }
+      while (!wal_cleaning.empty()) {
+        TransContext *txc = wal_cleaning.front();
+        _txc_state_proc(txc);
+        wal_cleaning.pop_front();
+      }
+
+      // this is as good a place as any ...
+      _reap_collections();
+
+      if (bluefs) {
+        if (!bluefs_gift_extents.empty()) {
+          _commit_bluefs_freespace(bluefs_gift_extents);
+        }
+        for (auto p = bluefs_extents_reclaiming.begin();
+             p != bluefs_extents_reclaiming.end();
+             ++p) {
+          dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
+                   << p.get_start() << "~" << p.get_len() << std::dec
+                   << dendl;
+          alloc->release(p.get_start(), p.get_len());
+        }
+        bluefs_extents_reclaiming.clear();
+      }
+
+      l.lock();
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+}
+
+
+#endif
 
 bluestore_wal_op_t *BlueStore::_get_wal_op(TransContext *txc, OnodeRef o)
 {
@@ -6908,7 +7172,8 @@ int BlueStore::_wal_finish(TransContext *txc)
   txc->state = TransContext::STATE_WAL_CLEANUP;
   txc->osr->qcond.notify_all();
   wal_cleanup_queue.push_back(txc);
-  kv_cond.notify_one();
+  //kv_cond.notify_one();
+  kv_cond.notify_all();
   return 0;
 }
 
