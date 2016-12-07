@@ -115,6 +115,10 @@ struct librados::IoCtxImpl {
   string nlist_get_cursor(Objecter::NListContext *context);
   int list(Objecter::ListContext *context, int max_entries);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
+  int list_seek(Objecter::ListContext *context, const string& cursor,
+                uint32_t *current_pg);
+  string list_get_cursor(Objecter::ListContext *context);
+
   void object_list_slice(
     const hobject_t start,
     const hobject_t finish,

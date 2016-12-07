@@ -718,7 +718,11 @@ int librados::NObjectIteratorImpl::seek(const string& cursor)
 string librados::NObjectIteratorImpl::get_cursor()
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)ctx.get();
-  return lh->ctx->nlist_get_cursor(lh->nlc);
+  if (ctx->new_request) {
+    return lh->ctx->nlist_get_cursor(lh->nlc);
+  } else {
+    return lh->ctx->list_get_cursor(lh->lc);
+  }
 }
 
 void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
@@ -946,6 +950,22 @@ uint32_t librados::ObjectIterator::seek(uint32_t pos)
   uint32_t r = rados_objects_list_seek(ctx.get(), pos);
   get_next();
   return r;
+}
+
+int librados::ObjectIterator::seek(const string& cursor)
+{
+  int r = rados_objects_list_seek_cursor(ctx.get(), cursor.c_str(), nullptr);
+  if (r < 0) {
+    return r;
+  }
+  get_next();
+  return 0;
+}
+
+string librados::ObjectIterator::get_cursor()
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)ctx.get();
+  return lh->ctx->list_get_cursor(lh->lc);
 }
 
 void librados::ObjectIterator::get_next()
@@ -4258,6 +4278,9 @@ extern "C" int rados_nobjects_list_seek_cursor(rados_list_ctx_t listctx,
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
 
+  if (!lh->new_request)
+    return rados_objects_list_seek_cursor(listctx, cursor, cur_pg);
+
   tracepoint(librados, rados_nobjects_list_seek_cursor_enter, listctx, cursor);
   int r = lh->ctx->nlist_seek(lh->nlc, cursor, cur_pg);
   tracepoint(librados, rados_nobjects_list_seek_cursor_exit, r, (cur_pg ? *cur_pg : 0));
@@ -4268,6 +4291,9 @@ extern "C" int rados_nobjects_list_get_cursor(rados_list_ctx_t listctx,
                                               char *cursor, size_t max_len)
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+
+  if (!lh->new_request)
+    return rados_objects_list_get_cursor(listctx, cursor, max_len);
 
   tracepoint(librados, rados_nobjects_list_get_cursor_enter, listctx, max_len);
   string s = lh->ctx->nlist_get_cursor(lh->nlc);
@@ -4326,6 +4352,34 @@ extern "C" uint32_t rados_objects_list_seek(rados_list_ctx_t listctx,
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
   uint32_t r = lh->ctx->list_seek(lh->lc, pos);
   tracepoint(librados, rados_objects_list_seek_exit, r);
+  return r;
+}
+
+extern "C" int rados_objects_list_seek_cursor(rados_list_ctx_t listctx,
+                                              const char *cursor, uint32_t *cur_pg)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+
+  tracepoint(librados, rados_objects_list_seek_cursor_enter, listctx, cursor);
+  int r = lh->ctx->list_seek(lh->lc, cursor, cur_pg);
+  tracepoint(librados, rados_objects_list_seek_cursor_exit, r, (cur_pg ? *cur_pg : 0));
+  return r;
+}
+
+extern "C" int rados_objects_list_get_cursor(rados_list_ctx_t listctx,
+                                             char *cursor, size_t max_len)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+
+  tracepoint(librados, rados_objects_list_get_cursor_enter, listctx, max_len);
+  string s = lh->ctx->list_get_cursor(lh->lc);
+  int r = 0;
+  if (s.size() >= max_len) {
+    r = -ERANGE;
+  } else {
+    strncpy(cursor, s.c_str(), s.size() + 1);
+  }
+  tracepoint(librados, rados_objects_list_get_cursor_exit, r, cursor);
   return r;
 }
 

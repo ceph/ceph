@@ -3652,6 +3652,33 @@ uint32_t Objecter::list_objects_seek(ListContext *list_context,
   return list_context->current_pg;
 }
 
+uint32_t Objecter::list_objects_seek(ListContext *list_context,
+                                     const ListCursor& pos)
+{
+  shared_lock rl(rwlock);
+  ldout(cct, 10) << "list_objects_seek " << list_context
+		 << " pos.current_pg " << pos.current_pg << dendl;
+  list_context->seek(pos);
+  return list_context->current_pg;
+}
+
+void Objecter::list_objects_get_cursor(ListContext *list_context,
+                                       ListCursor *pos)
+{
+  shared_lock rl(rwlock);
+  pos->current_pg = list_context->current_pg;
+  if (list_context->list.empty()) {
+    pos->obj = list_context->cookie;
+  } else {
+    pair<object_t, string>& front = list_context->list.front();
+    object_t& obj = front.first;
+    string& loc = front.second;
+    const string *key = (loc.empty() ? &obj.name : &loc);
+    uint32_t h = osdmap->get_pg_pool(list_context->pool_id)->hash_key(*key, string());
+    pos->obj = hobject_t(obj, loc, list_context->pool_snap_seq, h, list_context->pool_id, string());
+  }
+}
+
 void Objecter::list_objects(ListContext *list_context, Context *onfinish)
 {
   ldout(cct, 10) << "list_objects" << dendl;

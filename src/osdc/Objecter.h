@@ -1508,6 +1508,14 @@ public:
     uint32_t get_pg_hash_position() const {
       return current_pg;
     }
+
+    void seek(const Objecter::ListCursor& cursor) {
+      current_pg = cursor.current_pg;
+      cookie = cursor.obj;
+      at_end_of_pg = false;
+      at_end_of_pool = false;
+      current_pg_epoch = 0;
+    }
   };
 
   struct C_List : public Context {
@@ -2775,6 +2783,8 @@ public:
   void list_nobjects_get_cursor(NListContext *list_context, ListCursor *pos);
   void list_objects(ListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
+  uint32_t list_objects_seek(ListContext *list_context, const ListCursor& pos);
+  void list_objects_get_cursor(ListContext *list_context, ListCursor *pos);
 
   hobject_t enumerate_objects_begin();
   hobject_t enumerate_objects_end();
