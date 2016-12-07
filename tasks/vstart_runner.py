@@ -708,6 +708,12 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
             self.id = fscid
         self.getinfo(refresh=True)
 
+        # Stash a reference to the first created filesystem on ctx, so
+        # that if someone drops to the interactive shell they can easily
+        # poke our methods.
+        if not hasattr(self._ctx, "filesystem"):
+            self._ctx.filesystem = self
+
     @property
     def _prefix(self):
         return BIN_PREFIX

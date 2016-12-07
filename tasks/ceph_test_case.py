@@ -25,6 +25,14 @@ class CephTestCase(unittest.TestCase):
 
     mon_manager = None
 
+    def setUp(self):
+        self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
+            "Starting test {0}".format(self.id()))
+
+    def tearDown(self):
+        self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
+            "Ended test {0}".format(self.id()))
+
     def assert_cluster_log(self, expected_pattern, invert_match=False, timeout=10):
         """
         Context manager.  Assert that during execution, or up to 5 seconds later,
@@ -125,13 +133,14 @@ class CephTestCase(unittest.TestCase):
         elapsed = 0
         while True:
             if condition():
+                log.debug("wait_until_true: success in {0}s".format(elapsed))
                 return
             else:
                 if elapsed >= timeout:
-                    raise RuntimeError("Timed out after {0} seconds".format(elapsed))
+                    raise RuntimeError("Timed out after {0}s".format(elapsed))
                 else:
                     log.debug("wait_until_true: waiting...")
                 time.sleep(period)
                 elapsed += period
 
-        log.debug("wait_until_true: success")
+
