@@ -2554,8 +2554,7 @@ static void aio_cb(void *priv, void *priv2)
 }
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
-  : ObjectStore(path),
-    cct(cct),
+  : ObjectStore(cct, path),
     bluefs(NULL),
     bluefs_shared_bdev(0),
     db(NULL),
@@ -6923,7 +6922,7 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
 int BlueStore::_wal_replay()
 {
   dout(10) << __func__ << " start" << dendl;
-  OpSequencerRef osr = new OpSequencer;
+  OpSequencerRef osr = new OpSequencer(cct);
   int count = 0;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_WAL);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
@@ -6982,7 +6981,7 @@ int BlueStore::queue_transactions(
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer;
+    osr = new OpSequencer(cct);
     osr->parent = posr;
     posr->p = osr;
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;

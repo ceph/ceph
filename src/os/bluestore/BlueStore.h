@@ -1370,9 +1370,10 @@ public:
 
     std::atomic_int kv_committing_serially = {0};
 
-    OpSequencer()
+    OpSequencer(CephContext* cct)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL) {
+      : Sequencer_impl(cct),
+	parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -1505,7 +1506,6 @@ public:
   // --------------------------------------------------------
   // members
 private:
-  CephContext *cct;
   BlueFS *bluefs;
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;

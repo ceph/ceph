@@ -115,9 +115,10 @@ public:
     }
   };
 
-  explicit DBObjectMap(KeyValueDB *db) : db(db), header_lock("DBOBjectMap"),
-           	                         cache_lock("DBObjectMap::CacheLock"),
-      	                                 caches(g_conf->filestore_omap_header_cache_size)
+  DBObjectMap(CephContext* cct, KeyValueDB *db)
+    : ObjectMap(cct), db(db), header_lock("DBOBjectMap"),
+      cache_lock("DBObjectMap::CacheLock"),
+      caches(cct->_conf->filestore_omap_header_cache_size)
     {}
 
   int set_keys(
