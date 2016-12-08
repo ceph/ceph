@@ -6586,6 +6586,10 @@ force_request:
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
     ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
   }
+  if (mask & CEPH_SETATTR_BTIME) {
+    req->head.args.setattr.btime = utime_t(stx->stx_btime);
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+  }
   if (mask & CEPH_SETATTR_MTIME) {
     req->head.args.setattr.mtime = utime_t(stx->stx_mtime);
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
@@ -6593,11 +6597,6 @@ force_request:
   }
   if (mask & CEPH_SETATTR_ATIME) {
     req->head.args.setattr.atime = utime_t(stx->stx_atime);
-    req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
-      CEPH_CAP_FILE_WR;
-  }
-  if (mask & CEPH_SETATTR_BTIME) {
-    req->head.args.setattr.btime = utime_t(stx->stx_btime);
     req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
   }
