@@ -57,6 +57,7 @@ public:
 
   /// an in-memory object
   struct Onode {
+    CephContext* cct;
     std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
@@ -76,8 +77,9 @@ public:
 
     map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
 
-    Onode(const ghobject_t& o, const string& k)
-      : nref(0),
+    Onode(CephContext* cct, const ghobject_t& o, const string& k)
+      : cct(cct),
+	nref(0),
 	oid(o),
 	key(k),
 	dirty(false),
@@ -104,6 +106,7 @@ public:
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
   struct OnodeHashLRU {
+    CephContext* cct;
     typedef boost::intrusive::list<
       Onode,
       boost::intrusive::member_hook<
@@ -115,7 +118,7 @@ public:
     ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
 
-    OnodeHashLRU() {}
+    OnodeHashLRU(CephContext* cct) : cct(cct) {}
 
     void add(const ghobject_t& oid, OnodeRef o);
     void _touch(OnodeRef o);
