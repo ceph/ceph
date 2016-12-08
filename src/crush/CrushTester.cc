@@ -4,6 +4,7 @@
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"
+#include "include/ceph_features.h"
 
 #include <algorithm>
 #include <stdlib.h>
@@ -383,7 +384,7 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
   }
 
   bufferlist bl;
-  ::encode(crush, bl);
+  ::encode(crush, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   bl.write_fd(crushtool.get_stdin());
   crushtool.close_stdin();
   bl.clear();

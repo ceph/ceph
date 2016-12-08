@@ -43,7 +43,7 @@ TYPE_FEATUREFUL_STRAYDATA(OSDMap)
 TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
-TYPE_NOCOPY(CrushWrapper)
+TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
 
 #include "common/histogram.h"
 TYPE(pow2_hist_t)
