@@ -381,7 +381,11 @@ TEST_F(LibRadosListPP, ListObjectsCursorPP) {
   librados::ObjectIterator it = ioctx.objects_begin();
   std::map<string, string> cursor_to_obj;
 
+  string seek_cursor;
+
   int count = 0;
+
+  vector<string> objs_order;
 
   for (; it != ioctx.objects_end(); ++it, ++count) {
     string cursor = it.get_cursor();
@@ -394,6 +398,17 @@ TEST_F(LibRadosListPP, ListObjectsCursorPP) {
     cout << ": seek to " << cursor << std::endl;
     ASSERT_EQ(oid, it->first);
     ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    if (count == max_objs/2) {
+      seek_cursor = cursor;
+    }
+    objs_order.push_back(oid);
+  }
+
+  /* check that reading past seek also works */
+  it.seek(seek_cursor);
+  for (count = max_objs/2; count < max_objs; ++count, ++it) {
+    ASSERT_EQ(objs_order[count], it->first);
   }
 
   auto p = cursor_to_obj.rbegin();

@@ -412,7 +412,11 @@ TEST_F(LibRadosListPP, ListObjectsCursorNSPP) {
 
   int count = 0;
 
+  string seek_cursor;
+
   map<string, list<string> > ns_to_cursors;
+
+  vector<string> objs_order;
 
   for (; it != ioctx.nobjects_end(); ++it, ++count) {
     string cursor = it.get_cursor();
@@ -429,9 +433,20 @@ TEST_F(LibRadosListPP, ListObjectsCursorNSPP) {
     ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
 
     ns_to_cursors[it->get_nspace()].push_back(cursor);
+
+    if (count == max_objs/2) {
+      seek_cursor = cursor;
+    }
+    objs_order.push_back(it->get_oid());
   }
 
+  /* check that reading past seek also works */
+  it.seek(seek_cursor);
+  for (count = max_objs/2; count < max_objs; ++count, ++it) {
+    ASSERT_EQ(objs_order[count], it->get_oid());
+  }
 
+  /* seek to all cursors, check that we get expected obj */
   for (auto& niter : ns_to_cursors) {
     const string& ns = niter.first;
     list<string>& cursors = niter.second;
