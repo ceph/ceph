@@ -6494,7 +6494,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
-    bool kill_sguid = false;
+    bool kill_sguid = mask & CEPH_SETATTR_KILL_SGUID;
+
+    mask &= ~CEPH_SETATTR_KILL_SGUID;
 
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
@@ -6571,6 +6573,9 @@ force_request:
   req->set_filepath(path);
   req->set_inode(in);
 
+  if (mask & CEPH_SETATTR_KILL_SGUID) {
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+  }
   if (mask & CEPH_SETATTR_MODE) {
     req->head.args.setattr.mode = stx->stx_mode;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
@@ -8828,9 +8833,22 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   utime_t lat;
   uint64_t totalwritten;
   int have;
-  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
-  if (r < 0) {
+  int r = get_caps(in, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED,
+		    CEPH_CAP_FILE_BUFFER, &have, endoff);
+  if (r < 0)
     return r;
+
+  /* clear the setuid/setgid bits, if any */
+  if (unlikely((in->mode & S_ISUID) ||
+	       (in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+    struct ceph_statx stx = { 0 };
+
+    put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
+    r = __setattrx(in, &stx, CEPH_SETATTR_KILL_SGUID, f->actor_perms);
+    if (r < 0)
+      return r;
+  } else {
+    put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
   }
 
   if (f->flags & O_DIRECT)
