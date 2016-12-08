@@ -146,6 +146,7 @@ class TeuthologyConfig(YamlConfig):
         'lab_domain': 'front.sepia.ceph.com',
         'lock_server': 'http://paddles.front.sepia.ceph.com/',
         'max_job_time': 259200,  # 3 days
+        'nsupdate_url': 'http://nsupdate.front.sepia.ceph.com/update',
         'results_server': 'http://paddles.front.sepia.ceph.com/',
         'results_ui_server': 'http://pulpito.ceph.com/',
         'results_sending_email': 'teuthology',
