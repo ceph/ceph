@@ -1774,6 +1774,25 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   return iter;
 }
 
+librados::NObjectIterator librados::IoCtx::nobjects_begin(const string& cursor)
+{
+  bufferlist bl;
+  return nobjects_begin(cursor, bl);
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+  const string& cursor, const bufferlist &filter)
+{
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
+  iter.seek(cursor);
+  return iter;
+}
+
 const librados::NObjectIterator& librados::IoCtx::nobjects_end() const
 {
   return NObjectIterator::__EndObjectIterator;
@@ -4245,6 +4264,7 @@ extern "C" int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *list
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
   h->nspace = ctx->oloc.nspace;	// After dropping compatibility need nspace
+  h->sort_bitwise = ctx->sort_bitwise;
   *listh = (void *)new librados::ObjListCtx(ctx, h);
   tracepoint(librados, rados_nobjects_list_open_exit, 0, *listh);
   return 0;
@@ -4330,6 +4350,7 @@ extern "C" int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh
   Objecter::ListContext *h = new Objecter::ListContext;
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
+  h->sort_bitwise = ctx->sort_bitwise;
   h->nspace = ctx->oloc.nspace;
   *listh = (void *)new librados::ObjListCtx(ctx, h);
   tracepoint(librados, rados_objects_list_open_exit, 0, *listh);

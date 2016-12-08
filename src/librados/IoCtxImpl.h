@@ -34,6 +34,7 @@ struct librados::IoCtxImpl {
   int64_t poolid;
   snapid_t snap_seq;
   ::SnapContext snapc;
+  bool sort_bitwise;
   uint64_t assert_ver;
   map<object_t, uint64_t> assert_src_version;
   version_t last_objver;
@@ -58,6 +59,7 @@ struct librados::IoCtxImpl {
     poolid = rhs.poolid;
     snap_seq = rhs.snap_seq;
     snapc = rhs.snapc;
+    sort_bitwise = rhs.sort_bitwise;
     assert_ver = rhs.assert_ver;
     assert_src_version = rhs.assert_src_version;
     last_objver = rhs.last_objver;

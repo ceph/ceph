@@ -1810,6 +1810,7 @@ public:
 
   bool osdmap_full_flag() const;
   bool osdmap_pool_full(const int64_t pool_id) const;
+  bool osdmap_sort_bitwise() const;
 
  private:
 

@@ -496,6 +496,10 @@ TEST_F(LibRadosListPP, ListObjectsCursorPP) {
     cout << ": it->get_cursor()=" << it.get_cursor() << " expected=" << p->first << std::endl;
     cout << ": it->get_oid()=" << it->get_oid() << " expected=" << p->second << std::endl;
     ASSERT_EQ(p->second, it->get_oid());
+
+    librados::NObjectIterator it2 = ioctx.nobjects_begin(it.get_cursor());
+    ASSERT_EQ(it2->get_oid(), it->get_oid());
+
     ++p;
   }
 }

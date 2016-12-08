@@ -842,6 +842,10 @@ namespace librados
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
                                    const bufferlist &filter);
+    /// Start enumerating objects for a pool starting from cursor
+    NObjectIterator nobjects_begin(const std::string& cursor);
+    NObjectIterator nobjects_begin(const std::string& cursor,
+                                   const bufferlist &filter);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 

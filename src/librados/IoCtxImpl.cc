@@ -188,7 +188,7 @@ struct C_aio_notify_Ack : public Context {
 } // namespace librados
 
 librados::IoCtxImpl::IoCtxImpl() :
-  ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
+  ref_cnt(0), client(NULL), poolid(0), sort_bitwise(false), assert_ver(0), last_objver(0),
   notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
   aio_write_seq(0), objecter(NULL)
 {
@@ -202,6 +202,7 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
     oloc(poolid), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
     aio_write_seq(0), objecter(objecter)
 {
+  sort_bitwise = objecter->osdmap_sort_bitwise();
 }
 
 void librados::IoCtxImpl::set_snap_read(snapid_t s)

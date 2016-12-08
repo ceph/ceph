@@ -2600,6 +2600,12 @@ bool Objecter::osdmap_pool_full(const int64_t pool_id) const
   return _osdmap_pool_full(pool_id);
 }
 
+bool Objecter::osdmap_sort_bitwise() const
+{
+  shared_lock rl(rwlock);
+  return osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+}
+
 bool Objecter::_osdmap_pool_full(const int64_t pool_id) const
 {
   const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
