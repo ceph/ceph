@@ -1576,9 +1576,9 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
     inline_bl(g_conf->bluestore_extent_map_inline_shard_prealloc_size) {
 }
 
-
-bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
-				  bool force)
+bool BlueStore::ExtentMap::update(Onode *o,
+                                  KeyValueDB::Transaction t,
+                                  bool force)
 {
   assert(!needs_reshard);
   if (o->onode.extent_map_shards.empty()) {
@@ -1596,7 +1596,29 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
     }
     // will persist in the onode key, see below
   } else {
+
+    struct dirty_shard_t{
+      string* key = nullptr;
+      bufferlist bl;
+      boost::intrusive::list_member_hook<> dirty_list_item;
+    };
+
+    typedef boost::intrusive::list<
+      dirty_shard_t,
+      boost::intrusive::member_hook<
+        dirty_shard_t,
+        boost::intrusive::list_member_hook<>,
+        &dirty_shard_t::dirty_list_item> > dirty_shard_list_t;
+
+    vector<dirty_shard_t> encoded_shards;
+    //allocate slots for all shards in a single call instead of
+    //doing multiple allocations - one per each dirty shard
+    encoded_shards.resize(shards.size()); 
+
+    dirty_shard_list_t dirty_shards;
+
     auto p = shards.begin();
+    unsigned pos = 0;
     while (p != shards.end()) {
       auto n = p;
       ++n;
@@ -1607,8 +1629,8 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 	} else {
 	  endoff = n->offset;
 	}
-	bufferlist bl;
 	unsigned nn;
+        bufferlist& bl = encoded_shards[pos].bl;
 	if (encode_some(p->offset, endoff - p->offset, bl, &nn)) {
 	  return true;
 	}
@@ -1622,18 +1644,26 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
         //non-last shard size is below the min threshold. The last check is to avoid potential 
         //unneeded reshardings since this might happen permanently.
         if (!force &&
-            (len > g_conf->bluestore_extent_map_shard_max_size ||
-              (n != shards.end() && len < g_conf->bluestore_extent_map_shard_min_size) 
-             )) {
+             (len > g_conf->bluestore_extent_map_shard_max_size ||
+               (n != shards.end() && len < g_conf->bluestore_extent_map_shard_min_size))) {
           return true;
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
 	p->shard_info->extents = nn;
-	t->set(PREFIX_OBJ, p->key, bl);
+        
+        encoded_shards[pos].key = &p->key;
+        dirty_shards.push_back(encoded_shards[pos]);
 	p->dirty = false;
       }
       p = n;
+      ++pos;
+    }
+    //schedule DB update for dirty shards
+    auto it = dirty_shards.begin();
+    while(it != dirty_shards.end()) {
+      t->set(PREFIX_OBJ, *(it->key), it->bl);
+      ++it;
     }
   }
   return false;
