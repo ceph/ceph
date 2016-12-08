@@ -3424,7 +3424,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 string Objecter::ListCursor::to_str() const
 {
   char buf[32];
-  snprintf(buf, sizeof(buf), "%d:", current_pg);
+  snprintf(buf, sizeof(buf), "%d:", starting_pg_num);
   stringstream ss;
   ss << buf << obj;
   return ss.str();
@@ -3444,7 +3444,7 @@ int Objecter::ListCursor::from_str(const string& s)
   if (llpg > (uint32_t)-1) {
     return -EINVAL;
   }
-  current_pg = (uint32_t)llpg;
+  starting_pg_num = (uint32_t)llpg;
   if (!err.empty()) {
     return -EINVAL;
   }
@@ -3476,7 +3476,7 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
 {
   shared_lock rl(rwlock);
   ldout(cct, 10) << "list_nobjects_seek " << list_context
-		 << " pos.current_pg " << pos.current_pg << dendl;
+		 << " pos.starting_pg_num " << pos.starting_pg_num << dendl;
   list_context->seek(pos);
   return list_context->current_pg;
 }
@@ -3485,7 +3485,7 @@ void Objecter::list_nobjects_get_cursor(NListContext *list_context,
                                         ListCursor *pos)
 {
   shared_lock rl(rwlock);
-  pos->current_pg = list_context->current_pg;
+  pos->starting_pg_num = list_context->starting_pg_num;
   if (list_context->list.empty()) {
     pos->obj = list_context->cookie;
   } else {
@@ -3657,7 +3657,7 @@ uint32_t Objecter::list_objects_seek(ListContext *list_context,
 {
   shared_lock rl(rwlock);
   ldout(cct, 10) << "list_objects_seek " << list_context
-		 << " pos.current_pg " << pos.current_pg << dendl;
+		 << " pos.starting_pg_num " << pos.starting_pg_num << dendl;
   list_context->seek(pos);
   return list_context->current_pg;
 }
@@ -3666,7 +3666,7 @@ void Objecter::list_objects_get_cursor(ListContext *list_context,
                                        ListCursor *pos)
 {
   shared_lock rl(rwlock);
-  pos->current_pg = list_context->current_pg;
+  pos->starting_pg_num = list_context->starting_pg_num;
   if (list_context->list.empty()) {
     pos->obj = list_context->cookie;
   } else {

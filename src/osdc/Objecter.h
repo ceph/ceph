@@ -1375,7 +1375,7 @@ public:
 
   struct ListCursor {
     hobject_t obj;
-    int current_pg;
+    int starting_pg_num{0};
 
     string to_str() const;
     int from_str(const string& s);
@@ -1435,7 +1435,12 @@ public:
     }
 
     void seek(const Objecter::ListCursor& cursor) {
-      current_pg = cursor.current_pg;
+      starting_pg_num = cursor.starting_pg_num;
+      if (starting_pg_num) {
+        current_pg = cursor.obj.get_hash() % starting_pg_num;
+      } else {
+        current_pg = 0;
+      }
       cookie = cursor.obj;
       at_end_of_pg = false;
       at_end_of_pool = false;
@@ -1510,7 +1515,12 @@ public:
     }
 
     void seek(const Objecter::ListCursor& cursor) {
-      current_pg = cursor.current_pg;
+      starting_pg_num = cursor.starting_pg_num;
+      if (starting_pg_num) {
+        current_pg = cursor.obj.get_hash() % starting_pg_num;
+      } else {
+        current_pg = 0;
+      }
       cookie = cursor.obj;
       at_end_of_pg = false;
       at_end_of_pool = false;
