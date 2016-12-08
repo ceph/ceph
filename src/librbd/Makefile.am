@@ -97,6 +97,7 @@ noinst_HEADERS += \
 	librbd/AsyncObjectThrottle.h \
 	librbd/AsyncOperation.h \
 	librbd/AsyncRequest.h \
+        librbd/BlockGuard.h \
 	librbd/CopyupRequest.h \
 	librbd/DiffIterate.h \
 	librbd/ExclusiveLock.h \

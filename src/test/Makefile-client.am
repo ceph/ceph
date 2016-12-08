@@ -383,6 +383,7 @@ librbd_test_mock_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test_mock.la
 
 unittest_librbd_SOURCES = \
+        test/librbd/test_BlockGuard.cc \
         test/librbd/test_main.cc \
 	test/librbd/test_mock_fixture.cc \
 	test/librbd/test_mock_ExclusiveLock.cc \
