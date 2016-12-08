@@ -2501,6 +2501,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     &wal_tp),
     m_finisher_num(1),
     kv_sync_thread(this),
+    kv_sync_thread1(this),
     kv_stop(false),
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
@@ -4015,6 +4016,7 @@ int BlueStore::mount()
   }
   wal_tp.start();
   kv_sync_thread.create("bstore_kv_sync");
+  kv_sync_thread1.create("bstore_kv_sync1");
 
   r = _wal_replay();
   if (r < 0)
@@ -6577,6 +6579,48 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   txc->released.clear();
 }
 
+void BlueStore::_kv_sync_thread1()
+{
+  dout(10) << __func__ << " start" << dendl;
+  std::unique_lock<std::mutex> l(kv_lock1);
+  while (true) {
+    assert(kv_committing2.empty());
+    assert(wal_cleaning2.empty());
+    if (kv_committing1.empty() && wal_cleaning1.empty()) {
+      if (kv_stop)
+	break;
+      dout(20) << __func__ << " sleep" << dendl;
+      kv_sync_cond.notify_all();
+      kv_cond1.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      kv_committing2.swap(kv_committing1);
+      wal_cleaning2.swap(wal_cleaning1);
+      kv_cond1.notify_one();
+      utime_t start = ceph_clock_now(NULL);
+      l.unlock();
+
+     while (!kv_committing2.empty()) {
+	TransContext *txc = kv_committing2.front();
+	_txc_state_proc(txc);
+	kv_committing2.pop_front();
+      }
+      while (!wal_cleaning2.empty()) {
+	TransContext *txc = wal_cleaning2.front();
+	_txc_state_proc(txc);
+	wal_cleaning2.pop_front();
+      }
+
+      // this is as good a place as any ...
+      _reap_collections();
+
+      l.lock();
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+}
+
+
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -6700,6 +6744,7 @@ void BlueStore::_kv_sync_thread()
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " cleaned " << wal_cleaning.size()
 	       << " in " << dur << dendl;
+#if 0
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
@@ -6711,16 +6756,29 @@ void BlueStore::_kv_sync_thread()
 	_txc_state_proc(txc);
 	wal_cleaning.pop_front();
       }
-
+#endif
       alloc->commit_finish();
 
       // this is as good a place as any ...
-      _reap_collections();
+     // _reap_collections();
 
       if (bluefs) {
 	if (!bluefs_gift_extents.empty()) {
 	  _commit_bluefs_freespace(bluefs_gift_extents);
 	}
+      }
+
+      {
+	std::unique_lock<std::mutex> m(kv_lock1);
+	while (true) {
+	  if (!(kv_committing1.empty() && wal_cleaning1.empty()))
+	    kv_cond1.wait(m);
+	  else
+	    break;
+	}
+	kv_committing1.swap(kv_committing);
+	wal_cleaning1.swap(wal_cleaning);
+	kv_cond1.notify_one();
       }
 
       l.lock();
