@@ -1402,6 +1402,7 @@ TEST(LibCephFS, Nlink) {
   ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &dir, &stx, 0, 0, perms), 0);
   ASSERT_EQ(ceph_ll_create(cmount, dir, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
 			   &file, &fh, &stx, CEPH_STATX_NLINK, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ASSERT_EQ(stx.stx_nlink, (nlink_t)1);
 
   ASSERT_EQ(ceph_ll_link(cmount, file, dir, linkname, perms), 0);
@@ -1573,6 +1574,7 @@ TEST(LibCephFS, LazyStatx) {
   ceph_ll_unlink(cmount1, root1, filename, perms1);
   ASSERT_EQ(ceph_ll_create(cmount1, root1, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
 			   &file1, &fh, &stx, 0, 0, perms1), 0);
+  ASSERT_EQ(ceph_ll_close(cmount1, fh), 0);
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
 
@@ -1737,5 +1739,6 @@ TEST(LibCephFS, ClearSetuid) {
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
   ASSERT_FALSE(stx.stx_mode & (S_ISUID|S_ISGID));
 
+  ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ceph_shutdown(cmount);
 }
