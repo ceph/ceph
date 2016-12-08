@@ -1057,11 +1057,22 @@ uint64_t librados::AioCompletion::AioCompletion::get_version64()
   return c->get_version();
 }
 
+void librados::AioCompletion::AioCompletion::get()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  c->get();
+}
+
+void librados::AioCompletion::AioCompletion::put()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  c->put();
+}
+
 void librados::AioCompletion::AioCompletion::release()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
   c->release();
-  delete this;
 }
 
 ///////////////////////////// IoCtx //////////////////////////////
@@ -1903,7 +1914,9 @@ int librados::IoCtx::aio_getxattr(const std::string& oid, librados::AioCompletio
   comp->set_complete_callback(cdata, rados_aio_getxattr_completepp);
   // call actual getxattr from IoCtxImpl
   object_t obj(oid);
-  return io_ctx_impl->aio_getxattr(obj, comp, name, bl);
+  int io_r = io_ctx_impl->aio_getxattr(obj, comp, name, bl);
+  comp->put();
+  return io_r;
 }
 
 int librados::IoCtx::aio_getxattrs(const std::string& oid, AioCompletion *c,
@@ -2652,7 +2665,7 @@ librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
 librados::AioCompletion *librados::Rados::aio_create_completion()
 {
   AioCompletionImpl *c = new AioCompletionImpl;
-  return new AioCompletion(c);
+  return &(c->c);
 }
 
 librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
@@ -2662,7 +2675,7 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
   assert(r == 0);
-  return new AioCompletion(c);
+  return &(c->c);
 }
 
 librados::ObjectOperation::ObjectOperation()
@@ -4631,6 +4644,7 @@ extern "C" int rados_aio_getxattr(rados_ioctx_t io, const char *o,
   object_t oid(o);
   int ret = ctx->aio_getxattr(oid, c, name, cdata->bl);
   tracepoint(librados, rados_aio_getxattr_exit, ret, buf, ret);
+  c->put();
   return ret;
 }
 
@@ -4680,6 +4694,7 @@ extern "C" int rados_aio_getxattrs(rados_ioctx_t io, const char *oid,
   object_t obj(oid);
   int ret = ctx->aio_getxattrs(obj, c, cdata->it->attrset);
   tracepoint(librados, rados_aio_getxattrs_exit, ret, cdata->it);
+  c->put();
   return ret;
 }
 
