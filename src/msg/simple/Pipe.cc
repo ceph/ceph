@@ -2500,8 +2500,11 @@ int Pipe::tcp_read_wait()
   if (has_pending_data())
     return 0;
 
-  if (poll(&pfd, 1, msgr->timeout) <= 0)
+  int r = poll(&pfd, 1, msgr->timeout);
+  if (r < 0)
     return -errno;
+  if (r == 0)
+    return -EAGAIN;
 
   evmask = POLLERR | POLLHUP | POLLNVAL;
 #if defined(__linux__)
