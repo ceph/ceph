@@ -508,7 +508,7 @@ set(mon_common_files
 add_library(mon_common_objs OBJECT ${mon_common_files})
 set(common_mountcephfs_files
   common/armor.c
-  common/safe_io.c
+  common/safe_io.cc
   common/module.c
   common/addr_parsing.c)
 add_library(common_mountcephfs_objs OBJECT
