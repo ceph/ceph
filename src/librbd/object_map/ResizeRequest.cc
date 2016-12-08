@@ -30,7 +30,7 @@ void ResizeRequest::send() {
   RWLock::WLocker l(m_image_ctx.object_map_lock);
   m_num_objs = Striper::get_num_objects(m_image_ctx.layout, m_new_size);
 
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 5) << this << " resizing on-disk object map: "
                 << "ictx=" << &m_image_ctx << ", "
                 << "oid=" << oid << ", num_objs=" << m_num_objs << dendl;

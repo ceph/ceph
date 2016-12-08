@@ -21,9 +21,14 @@ namespace librbd {
 
 class ImageCtx;
 
+template <typename ImageCtxT = ImageCtx>
 class ObjectMap {
 public:
-  ObjectMap(ImageCtx &image_ctx, uint64_t snap_id);
+  static ObjectMap *create(ImageCtxT &image_ctx, uint64_t snap_id) {
+    return new ObjectMap(image_ctx, snap_id);
+  }
+
+  ObjectMap(ImageCtxT &image_ctx, uint64_t snap_id);
 
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static std::string object_map_name(const std::string &image_id,
@@ -85,7 +90,7 @@ public:
   void snapshot_remove(uint64_t snap_id, Context *on_finish);
 
 private:
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
   ceph::BitVector<2> m_object_map;
   uint64_t m_snap_id;
 
@@ -98,5 +103,7 @@ private:
 };
 
 } // namespace librbd
+
+extern template class librbd::ObjectMap<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OBJECT_MAP_H

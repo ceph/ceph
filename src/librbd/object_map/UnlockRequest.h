@@ -15,6 +15,10 @@ namespace object_map {
 template <typename ImageCtxT = ImageCtx>
 class UnlockRequest {
 public:
+  static UnlockRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
+    return new UnlockRequest(image_ctx, on_finish);
+  }
+
   UnlockRequest(ImageCtxT &image_ctx, Context *on_finish);
 
   void send();

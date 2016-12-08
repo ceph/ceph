@@ -25,7 +25,8 @@ public:
   typedef UnlockRequest<MockImageCtx> MockUnlockRequest;
 
   void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
-    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, CEPH_NOSNAP));
+    std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
+                                                 CEPH_NOSNAP));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
                   .WillOnce(Return(r));
