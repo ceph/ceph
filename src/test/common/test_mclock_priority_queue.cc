@@ -43,7 +43,7 @@ bool operator==(const Client& r1, const Client& r2) {
 
 TEST(mClockPriorityQueue, Create)
 {
-  ceph::mClockQueue<Request,Client> q;
+  ceph::mClockQueue<Request,Client> q(nullptr);
 }
 
 
