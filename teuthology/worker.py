@@ -46,6 +46,18 @@ def stop():
     sys.exit(0)
 
 
+def load_config(ctx=None):
+    teuth_config.load()
+    if ctx is not None:
+        if not os.path.isdir(ctx.archive_dir):
+            sys.exit("{prog}: archive directory must exist: {path}".format(
+                prog=os.path.basename(sys.argv[0]),
+                path=ctx.archive_dir,
+            ))
+        else:
+            teuth_config.archive_base = ctx.archive_dir
+
+
 def install_except_hook():
     """
     Install an exception hook that first logs any uncaught exception, then
@@ -71,13 +83,7 @@ def main(ctx):
 
     install_except_hook()
 
-    if not os.path.isdir(ctx.archive_dir):
-        sys.exit("{prog}: archive directory must exist: {path}".format(
-            prog=os.path.basename(sys.argv[0]),
-            path=ctx.archive_dir,
-        ))
-    else:
-        teuth_config.archive_base = ctx.archive_dir
+    load_config(ctx=ctx)
 
     set_config_attr(ctx)
 
@@ -102,6 +108,8 @@ def main(ctx):
             restart()
         elif sentinel(stop_file_path):
             stop()
+
+        load_config()
 
         job = connection.reserve(timeout=60)
         if job is None:
