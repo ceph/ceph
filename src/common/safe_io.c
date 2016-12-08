@@ -12,7 +12,9 @@
  *
  */
 
+#if !defined(__FreeBSD__)
 #define _XOPEN_SOURCE 500
+#endif
 
 #include <stdio.h>
 #include <string.h>
