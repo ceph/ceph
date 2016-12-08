@@ -107,10 +107,11 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
 
   list<rados_completion_t> cls;
   while (true) {
+    char buf[100];
     rados_completion_t c;
     rados_aio_create_completion(0, 0, 0, &c);
     cls.push_back(c);
-    rados_aio_write(b, "foo", c, "data", 4, 0);
+    rados_aio_read(b, "PoolCreationRaceObj", c, buf, 100, 0);
     cout << "started " << (void*)c << std::endl;
     if (rados_aio_is_complete(cls.front())) {
       break;
