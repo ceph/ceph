@@ -263,9 +263,10 @@ public:
 
     Sequencer *parent;
 
-    OpSequencer()
+    OpSequencer(CephContext* cct)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL) {
+      : Sequencer_impl(cct),
+	parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -309,7 +310,6 @@ public:
   // --------------------------------------------------------
   // members
 private:
-  CephContext *cct;
   KeyValueDB *db;
   uuid_d fsid;
   int path_fd;  ///< open handle to $path

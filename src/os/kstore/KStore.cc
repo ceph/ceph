@@ -625,8 +625,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
 #define dout_prefix *_dout << "kstore(" << path << ") "
 
 KStore::KStore(CephContext *cct, const string& path)
-  : ObjectStore(path),
-    cct(cct),
+  : ObjectStore(cct, path),
     db(NULL),
     path_fd(-1),
     fsid_fd(-1),
@@ -2135,7 +2134,7 @@ int KStore::queue_transactions(
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer;
+    osr = new OpSequencer(cct);
     osr->parent = posr;
     posr->p = osr;
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;

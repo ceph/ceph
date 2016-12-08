@@ -343,8 +343,9 @@ private:
       }
     }
 
-    explicit OpSequencer(int i)
-      : qlock("FileStore::OpSequencer::qlock", false, false),
+    OpSequencer(CephContext* cct, int i)
+      : Sequencer_impl(cct),
+	qlock("FileStore::OpSequencer::qlock", false, false),
 	parent(0),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
         id(i) {}
@@ -438,8 +439,8 @@ public:
 		 bool force_clear_omap=false);
 
 public:
-  FileStore(const std::string &base, const std::string &jdev,
-    osflagbits_t flags = 0,
+  FileStore(CephContext* cct, const std::string &base, const std::string &jdev,
+	    osflagbits_t flags = 0,
     const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 

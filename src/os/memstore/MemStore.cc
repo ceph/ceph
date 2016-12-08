@@ -679,6 +679,8 @@ int MemStore::queue_transactions(Sequencer *osr,
   // Sequencer with a mutex. this guarantees ordering on a given sequencer,
   // while allowing operations on different sequencers to happen in parallel
   struct OpSequencer : public Sequencer_impl {
+    OpSequencer(CephContext* cct) :
+      Sequencer_impl(cct) {}
     std::mutex mutex;
     void flush() override {}
     bool flush_commit(Context*) override { return true; }
@@ -687,7 +689,7 @@ int MemStore::queue_transactions(Sequencer *osr,
   std::unique_lock<std::mutex> lock;
   if (osr) {
     if (!osr->p) {
-      osr->p = new OpSequencer();
+      osr->p = new OpSequencer(cct);
     }
     auto seq = static_cast<OpSequencer*>(osr->p.get());
     lock = std::unique_lock<std::mutex>(seq->mutex);

@@ -516,8 +516,10 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
   return 0;
 }
 
-FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbits_t flags, const char *name, bool do_update) :
-  JournalingObjectStore(base),
+FileStore::FileStore(CephContext* cct, const std::string &base,
+		     const std::string &jdev, osflagbits_t flags,
+		     const char *name, bool do_update) :
+  JournalingObjectStore(cct, base),
   internal_name(name),
   basedir(base), journalpath(jdev),
   generic_flags(flags),
@@ -1644,7 +1646,7 @@ int FileStore::mount()
       goto close_current_fd;
     }
 
-    DBObjectMap *dbomap = new DBObjectMap(omap_store);
+    DBObjectMap *dbomap = new DBObjectMap(cct, omap_store);
     ret = dbomap->init(do_update);
     if (ret < 0) {
       delete dbomap;
@@ -2073,7 +2075,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << "queue_transactions existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer(next_osr_id.inc());
+    osr = new OpSequencer(cct, next_osr_id.inc());
     osr->set_cct(g_ceph_context);
     osr->parent = posr;
     posr->p = osr;
