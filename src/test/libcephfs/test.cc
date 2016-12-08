@@ -1721,23 +1721,54 @@ TEST(LibCephFS, ClearSetuid) {
   Fh *fh;
   Inode *in;
   struct ceph_statx stx;
+  const mode_t after_mode = S_IRWXU | S_IRWXG;
+  const mode_t before_mode = S_IRWXU | S_IRWXG | S_ISUID | S_ISGID;
+  const unsigned want = CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_MODE;
+  UserPerm *usercred = ceph_mount_perms(cmount);
 
-  ceph_ll_unlink(cmount, root, filename, ceph_mount_perms(cmount));
-  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 06555,
-	    O_RDWR|O_CREAT|O_EXCL, &in, &fh, &stx,
-	    CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_MODE, 0,
-	    ceph_mount_perms(cmount)), 0);
+  ceph_ll_unlink(cmount, root, filename, usercred);
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, before_mode,
+			   O_RDWR|O_CREAT|O_EXCL, &in, &fh, &stx, want, 0,
+			   usercred), 0);
 
-  ASSERT_EQ(stx.stx_mode & 07777, 06555);
+  ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, before_mode);
 
+  // write
+  ASSERT_EQ(ceph_ll_write(cmount, fh, 0, 3, "foo"), 3);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, usercred), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
+  ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, after_mode);
+
+  // reset mode
+  stx.stx_mode = before_mode;
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_STATX_MODE, usercred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, usercred), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
+  ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, before_mode);
+
+  // truncate
+  stx.stx_size = 1;
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_SETATTR_SIZE, usercred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, usercred), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
+  ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, after_mode);
+
+  // reset mode
+  stx.stx_mode = before_mode;
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_STATX_MODE, usercred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, usercred), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
+  ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, before_mode);
+
+  // chown  -- for this we need to be "root"
   UserPerm *rootcred = ceph_userperm_new(0, 0, 0, NULL);
   ASSERT_TRUE(rootcred);
   stx.stx_uid++;
   stx.stx_gid++;
   ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_SETATTR_UID|CEPH_SETATTR_GID, rootcred), 0);
-  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, ceph_mount_perms(cmount)), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, usercred), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
-  ASSERT_FALSE(stx.stx_mode & (S_ISUID|S_ISGID));
+  ASSERT_EQ(stx.stx_mode & (mode_t)ALLPERMS, after_mode);
 
   ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ceph_shutdown(cmount);
