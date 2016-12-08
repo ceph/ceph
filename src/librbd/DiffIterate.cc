@@ -261,7 +261,7 @@ int DiffIterate::execute() {
     RWLock::RLocker l(m_image_ctx.snap_lock);
     RWLock::RLocker l2(m_image_ctx.parent_lock);
     uint64_t overlap = end_size;
-    m_image_ctx.get_parent_overlap(from_snap_id, &overlap);
+    m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
     r = 0;
     if (m_image_ctx.parent && overlap > 0) {
       ldout(cct, 10) << " first getting parent diff" << dendl;
