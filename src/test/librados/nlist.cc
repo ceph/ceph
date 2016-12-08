@@ -519,6 +519,61 @@ TEST_F(LibRadosListPP, ListObjectsCursorPP) {
   }
 }
 
+TEST_F(LibRadosList, ListObjectsCursor) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+
+  const int max_objs = 16;
+
+  for (int i=0; i<max_objs; ++i) {
+    string n = stringify(i);
+    ASSERT_EQ(0, rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
+  }
+
+  rados_list_ctx_t ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+
+  std::map<string, string> cursor_to_obj;
+  int count = 0;
+
+  ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, NULL, 0), -ERANGE);
+
+  const char *entry;
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
+    char cursor[128];
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, cursor, sizeof(cursor)), 0);
+    string oid = entry;
+    std::cout << oid << " " << rados_objects_list_get_pg_hash_position(ctx) << std::endl;
+    cout << ": oid=" << oid << " cursor=" << cursor << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    ASSERT_EQ(rados_nobjects_list_seek_cursor(ctx, cursor, NULL), 0);
+    cout << ": seek to " << cursor << std::endl;
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    ASSERT_EQ(string(entry), oid);
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    ++count;
+  }
+
+  auto p = cursor_to_obj.rbegin();
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  while (p != cursor_to_obj.rend()) {
+    cout << ": seek to " << p->first << std::endl;
+    char cursor[128];
+    string oid(p->first);
+    ASSERT_EQ(rados_nobjects_list_seek_cursor(ctx, oid.c_str(), NULL), 0);
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, cursor, sizeof(cursor)), 0);
+    ASSERT_EQ(oid, string(cursor));
+    cout << ": cursor()=" << cursor << " expected=" << oid << std::endl;
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    cout << ": entry=" << entry << " expected=" << p->second << std::endl;
+    ASSERT_EQ(p->second, string(entry));
+
+    ++p;
+  }
+}
+
 TEST_F(LibRadosListEC, ListObjects) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
