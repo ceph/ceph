@@ -31,11 +31,11 @@ public:
   void expect_read_map(librbd::ImageCtx *ictx, int r) {
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  read(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP),
+                  read(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP),
                        0, 0, _)).WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  read(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP),
+                  read(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP),
                        0, 0, _)).WillOnce(DoDefault());
     }
   }
@@ -44,18 +44,18 @@ public:
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   write_full(
-                    ObjectMap::object_map_name(ictx->id, snap_id), _, _))
+                    ObjectMap<>::object_map_name(ictx->id, snap_id), _, _))
                   .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   write_full(
-                    ObjectMap::object_map_name(ictx->id, snap_id), _, _))
+                    ObjectMap<>::object_map_name(ictx->id, snap_id), _, _))
                   .WillOnce(DoDefault());
     }
   }
 
   void expect_add_snapshot(librbd::ImageCtx *ictx, int r) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))

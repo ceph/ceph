@@ -17,14 +17,15 @@
 namespace librbd {
 namespace object_map {
 
-void UpdateRequest::send() {
+template <typename I>
+void UpdateRequest<I>::send() {
   assert(m_image_ctx.snap_lock.is_locked());
   assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   // safe to update in-memory state first without handling rollback since any
   // failures will invalidate the object map
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 20) << this << " updating object map"
                  << ": ictx=" << &m_image_ctx << ", oid=" << oid << ", ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
@@ -46,7 +47,8 @@ void UpdateRequest::send() {
   rados_completion->release();
 }
 
-void UpdateRequest::finish_request() {
+template <typename I>
+void UpdateRequest<I>::finish_request() {
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
   ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
@@ -68,3 +70,5 @@ void UpdateRequest::finish_request() {
 
 } // namespace object_map
 } // namespace librbd
+
+template class librbd::object_map::UpdateRequest<librbd::ImageCtx>;

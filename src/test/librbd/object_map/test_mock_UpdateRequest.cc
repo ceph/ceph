@@ -24,7 +24,7 @@ using ::testing::StrEq;
 class TestMockObjectMapUpdateRequest : public TestMockFixture {
 public:
   void expect_update(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, snap_id));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (snap_id == CEPH_NOSNAP) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
@@ -69,7 +69,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
   }
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -101,7 +101,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateHeadOnDisk) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -129,7 +129,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -156,7 +156,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateOnDiskError) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -186,7 +186,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_EXISTS_CLEAN,
     boost::optional<uint8_t>(), &cond_ctx);
   {
