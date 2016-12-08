@@ -454,12 +454,10 @@ void AbstractAioObjectWrite::send() {
 void AbstractAioObjectWrite::send_pre() {
   assert(m_ictx->owner_lock.is_locked());
 
-  bool write = false;
   {
     RWLock::RLocker snap_lock(m_ictx->snap_lock);
     if (m_ictx->object_map == nullptr) {
       m_object_exist = true;
-      write = true;
     } else {
       // should have been flushed prior to releasing lock
       assert(m_ictx->exclusive_lock->is_lock_owner());
@@ -469,27 +467,20 @@ void AbstractAioObjectWrite::send_pre() {
       pre_object_map_update(&new_state);
 
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-      if (m_ictx->object_map->update_required(m_object_no, new_state)) {
-        ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
-                               << m_object_off << "~" << m_object_len
-                               << dendl;
-        m_state = LIBRBD_AIO_WRITE_PRE;
+      ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
+                             << m_object_off << "~" << m_object_len
+                             << dendl;
+      m_state = LIBRBD_AIO_WRITE_PRE;
 
-        Context *ctx = util::create_context_callback<AioObjectRequest>(this);
-        bool updated = m_ictx->object_map->aio_update(m_object_no, new_state,
-                                                      {}, ctx);
-        assert(updated);
-      } else {
-        write = true;
+      if (m_ictx->object_map->aio_update<AioObjectRequest>(
+            CEPH_NOSNAP, m_object_no, new_state, {}, this)) {
+        return;
       }
     }
   }
 
-  // avoid possible recursive lock attempts
-  if (write) {
-    // no object map update required
-    send_write();
-  }
+  // no object map update required
+  send_write();
 }
 
 bool AbstractAioObjectWrite::send_post() {
@@ -503,20 +494,16 @@ bool AbstractAioObjectWrite::send_post() {
   assert(m_ictx->exclusive_lock->is_lock_owner());
 
   RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-  if (!m_ictx->object_map->update_required(m_object_no, OBJECT_NONEXISTENT)) {
-    return true;
-  }
-
   ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_POST;
 
-  Context *ctx = util::create_context_callback<AioObjectRequest>(this);
-  bool updated = m_ictx->object_map->aio_update(m_object_no,
-                                                OBJECT_NONEXISTENT,
-      			                  OBJECT_PENDING, ctx);
-  assert(updated);
-  return false;
+  if (m_ictx->object_map->aio_update<AioObjectRequest>(
+        CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING, this)) {
+    return false;
+  }
+
+  return true;
 }
 
 void AbstractAioObjectWrite::send_write() {
