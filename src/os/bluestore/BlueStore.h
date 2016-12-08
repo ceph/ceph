@@ -1659,6 +1659,14 @@ public:
       return NULL;
     }
   };
+  struct KVSyncThread1 : public Thread {
+    BlueStore *store;
+    explicit KVSyncThread1(BlueStore *s) : store(s) {}
+    void *entry() {
+      store->_kv_sync_thread1();
+      return NULL;
+    }
+  };
 
   struct DBHistogram {
     struct value_dist {
@@ -1723,13 +1731,17 @@ private:
   vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
-  std::mutex kv_lock;
-  std::condition_variable kv_cond, kv_sync_cond;
+  KVSyncThread1 kv_sync_thread1;
+  std::mutex kv_lock, kv_lock1;
+  std::condition_variable kv_cond, kv_sync_cond, kv_cond1;
   bool kv_stop;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
+  deque<TransContext*> wal_cleaning1, kv_committing1;
+  deque<TransContext*> wal_cleaning2, kv_committing2;
+
 
   PerfCounters *logger;
 
@@ -1870,13 +1882,20 @@ private:
   void _osr_reap_done(OpSequencer *osr);
 
   void _kv_sync_thread();
+  void _kv_sync_thread1();
   void _kv_stop() {
     {
       std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = true;
       kv_cond.notify_all();
     }
+    {
+      std::lock_guard<std::mutex> l(kv_lock1);
+      kv_cond1.notify_all();
+    }
+
     kv_sync_thread.join();
+    kv_sync_thread1.join();
     {
       std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = false;
