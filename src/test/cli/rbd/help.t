@@ -973,7 +973,8 @@
   
   rbd help nbd map
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
-                     [--read-only] [--device <device>] 
+                     [--read-only] [--device <device>] [--nbds_max <nbds_max>] 
+                     [--max_part <max_part>] 
                      <image-or-snap-spec> 
   
   Map image to a nbd device.
@@ -988,6 +989,8 @@
     --snap arg            snapshot name
     --read-only           mount read-only
     --device arg          specify nbd device
+    --nbds_max arg        override module param nbds_max
+    --max_part arg        override module param max_part
   
   rbd help nbd unmap
   usage: rbd nbd unmap 
