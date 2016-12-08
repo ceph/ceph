@@ -254,12 +254,9 @@ void TrimRequest<I>::send_pre_remove() {
     return;
   }
 
-  bool remove_objects = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.object_map == nullptr) {
-      remove_objects = true;
-    } else {
+    if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_pre_remove: "
 				<< " delete_start=" << m_delete_start
 				<< " num_objects=" << m_num_objects << dendl;
@@ -268,22 +265,17 @@ void TrimRequest<I>::send_pre_remove() {
       assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the objects as pending deletion
-      Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
-					    OBJECT_PENDING, OBJECT_EXISTS,
-                                            ctx)) {
-        delete ctx;
-        remove_objects = true;
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_PENDING,
+            OBJECT_EXISTS, this)) {
+        return;
       }
     }
   }
 
-  // avoid possible recursive lock attempts
-  if (remove_objects) {
-    // no object map update required
-    send_remove_objects();
-  }
+  // no object map update required
+  send_remove_objects();
 }
 
 template <typename I>
@@ -291,12 +283,9 @@ void TrimRequest<I>::send_post_remove() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
 
-  bool clean_boundary = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.object_map == nullptr) {
-      clean_boundary = true;
-    } else {
+    if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_post_remove: "
           		        << " delete_start=" << m_delete_start
           		        << " num_objects=" << m_num_objects << dendl;
@@ -305,22 +294,17 @@ void TrimRequest<I>::send_post_remove() {
       assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the pending objects as removed
-      Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
-					    OBJECT_NONEXISTENT,
-					    OBJECT_PENDING, ctx)) {
-        delete ctx;
-	clean_boundary = true;
+      if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
+            CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_NONEXISTENT,
+            OBJECT_PENDING, this)) {
+        return;
       }
     }
   }
 
-  // avoid possible recursive lock attempts
-  if (clean_boundary) {
-    // no object map update required
-    send_clean_boundary();
-  }
+  // no object map update required
+  send_clean_boundary();
 }
 
 template <typename I>
