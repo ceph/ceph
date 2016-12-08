@@ -1576,12 +1576,11 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
     inline_bl(g_conf->bluestore_extent_map_inline_shard_prealloc_size) {
 }
 
-bool BlueStore::ExtentMap::update(Onode *o,
-                                  KeyValueDB::Transaction t,
+bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
   assert(!needs_reshard);
-  if (o->onode.extent_map_shards.empty()) {
+  if (onode->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
       // we need to encode inline_bl to measure encoded length
@@ -1669,7 +1668,7 @@ bool BlueStore::ExtentMap::update(Onode *o,
   return false;
 }
 
-void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
+void BlueStore::ExtentMap::reshard(uint64_t min_alloc_size)
 {
   needs_reshard = false;
 
@@ -1684,15 +1683,15 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
   if (extent_map.size() <= 1) {
     dout(20) << __func__ << " <= 1 extent, going inline" << dendl;
     shards.clear();
-    o->onode.extent_map_shards.clear();
+    onode->onode.extent_map_shards.clear();
     return;
   }
 
   unsigned bytes = 0;
-  if (o->onode.extent_map_shards.empty()) {
+  if (onode->onode.extent_map_shards.empty()) {
     bytes = inline_bl.length();
   } else {
-    for (auto &s : o->onode.extent_map_shards) {
+    for (auto &s : onode->onode.extent_map_shards) {
       bytes += s.bytes;
     }
   }
@@ -1734,17 +1733,17 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
       max_blob_end = be;
     }
   }
-  o->onode.extent_map_shards.swap(new_shard_info);
+  onode->onode.extent_map_shards.swap(new_shard_info);
 
   // set up new shards vector; ensure shards/inline both dirty/invalidated.
-  init_shards(o, true, true);
+  init_shards(true, true);
   inline_bl.clear();
 
   // identify spanning blobs
-  if (!o->onode.extent_map_shards.empty()) {
+  if (!onode->onode.extent_map_shards.empty()) {
     dout(20) << __func__ << " checking for spanning blobs" << dendl;
-    auto sp = o->onode.extent_map_shards.begin();
-    auto esp = o->onode.extent_map_shards.end();
+    auto sp = onode->onode.extent_map_shards.begin();
+    auto esp = onode->onode.extent_map_shards.end();
     unsigned shard_start = 0;
     unsigned shard_end;
     ++sp;
@@ -1997,12 +1996,12 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   }
 }
 
-void BlueStore::ExtentMap::init_shards(Onode *on, bool loaded, bool dirty)
+void BlueStore::ExtentMap::init_shards(bool loaded, bool dirty)
 {
-  shards.resize(on->onode.extent_map_shards.size());
+  shards.resize(onode->onode.extent_map_shards.size());
   unsigned i = 0;
-  for (auto &s : on->onode.extent_map_shards) {
-    get_extent_shard_key(on->key, s.offset, &shards[i].key);
+  for (auto &s : onode->onode.extent_map_shards) {
+    get_extent_shard_key(onode->key, s.offset, &shards[i].key);
     shards[i].offset = s.offset;
     shards[i].shard_info = &s;
     shards[i].loaded = loaded;
@@ -2437,7 +2436,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       denc(on->extent_map.inline_bl, p);
       on->extent_map.decode_some(on->extent_map.inline_bl);
     } else {
-      on->extent_map.init_shards(on, false, false);
+      on->extent_map.init_shards(false, false);
     }
   }
   o.reset(on);
@@ -6372,7 +6371,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     // finalize extent_map shards
     bool reshard = o->extent_map.needs_reshard;
     if (!reshard) {
-      reshard = o->extent_map.update(o.get(), t, false);
+      reshard = o->extent_map.update(t, false);
     }
     if (reshard) {
       dout(20) << __func__ << "  resharding extents for " << o->oid << dendl;
@@ -6380,8 +6379,8 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 	t->rmkey(PREFIX_OBJ, s.key);
       }
       o->extent_map.fault_range(db, 0, o->onode.size);
-      o->extent_map.reshard(o.get(), min_alloc_size);
-      reshard = o->extent_map.update(o.get(), t, true);
+      o->extent_map.reshard(min_alloc_size);
+      reshard = o->extent_map.update(t, true);
       if (reshard) {
 	dout(20) << __func__ << " warning: still wants reshard, check options?"
 		 << dendl;
