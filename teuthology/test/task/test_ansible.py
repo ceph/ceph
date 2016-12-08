@@ -36,12 +36,12 @@ class TestAnsibleTask(TestTask):
         m_file.name = 'file_name'
         m_NTF.return_value = m_file
         self.patcher_NTF = patch(
-            'teuthology.task.ceph_ansible.ansible.NamedTemporaryFile',
+            'teuthology.task.ansible.NamedTemporaryFile',
             m_NTF,
         )
         self.patcher_NTF.start()
         self.patcher_os_remove = patch(
-            'teuthology.task.ceph_ansible.ansible.os.remove',
+            'teuthology.task.ansible.os.remove',
         )
         self.patcher_os_remove.start()
 
