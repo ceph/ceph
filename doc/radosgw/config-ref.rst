@@ -929,6 +929,17 @@ Logging Settings
 :Default: ``30``
 
 
+``rgw log http headers``
+
+:Description: Comma-delimited list of HTTP headers to include with ops
+	      log entries.  Header names are case insensitive, and use
+	      the full header name with words separated by underscores.
+
+:Type: String
+:Default: None
+:Example: "http_x_forwarded_for, http_x_special_k"
+
+
 ``rgw intent log object name``
 
 :Description: The logging format for the intent log object name. See manpage 
