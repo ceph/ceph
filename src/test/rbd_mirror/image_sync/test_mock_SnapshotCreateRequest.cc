@@ -91,8 +91,8 @@ public:
 
   void expect_object_map_resize(librbd::MockTestImageCtx &mock_image_ctx,
                                 librados::snap_t snap_id, int r) {
-    std::string oid(librbd::ObjectMap::object_map_name(mock_image_ctx.id,
-                                                       snap_id));
+    std::string oid(librbd::ObjectMap<>::object_map_name(mock_image_ctx.id,
+                                                         snap_id));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(oid, _, StrEq("rbd"), StrEq("object_map_resize"), _, _, _))
                   .WillOnce(Return(r));
