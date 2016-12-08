@@ -47,7 +47,7 @@ namespace librbd {
   template <typename> class ImageWatcher;
   template <typename> class Journal;
   class LibrbdAdminSocketHook;
-  class ObjectMap;
+  template <typename> class ObjectMap;
   template <typename> class Operations;
   class LibrbdWriteback;
 
@@ -146,7 +146,7 @@ namespace librbd {
     Operations<ImageCtx> *operations;
 
     ExclusiveLock<ImageCtx> *exclusive_lock;
-    ObjectMap *object_map;
+    ObjectMap<ImageCtx> *object_map;
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
@@ -296,7 +296,7 @@ namespace librbd {
     void apply_metadata(const std::map<std::string, bufferlist> &meta);
 
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
-    ObjectMap *create_object_map(uint64_t snap_id);
+    ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);
     Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();
