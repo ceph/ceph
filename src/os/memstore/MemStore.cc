@@ -29,7 +29,7 @@
 #include "MemStore.h"
 #include "include/compat.h"
 
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "memstore(" << path << ") "
@@ -225,10 +225,10 @@ int MemStore::statfs(struct store_statfs_t *st)
 {
    dout(10) << __func__ << dendl;
   st->reset();
-  st->total = g_conf->memstore_device_bytes;
+  st->total = cct->_conf->memstore_device_bytes;
   st->available = MAX(int64_t(st->total) - int64_t(used_bytes), 0ll);
   dout(10) << __func__ << ": used_bytes: " << used_bytes
-	   << "/" << g_conf->memstore_device_bytes << dendl;
+	   << "/" << cct->_conf->memstore_device_bytes << dendl;
   return 0;
 }
 
