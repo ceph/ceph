@@ -123,18 +123,29 @@ endif(no_yasm)
 if(CMAKE_VERSION VERSION_LESS "3.1")
   include(CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-  if(COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-  else()
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
+  if(NOT COMPILER_SUPPORTS_CXX11)
+    message(FATAL_ERROR
+      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
   endif()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  include(CheckCCompilerFlag)
+  CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
+  if(NOT COMPILER_SUPPORTS_GNU99)
+    message(FATAL_ERROR
+      "The compiler ${CMAKE_C_COMPILER} has no GNU C99 support.")
+  endif()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 else()
   set(CMAKE_CXX_STANDARD 11)
   set(CMAKE_CXX_EXTENSIONS OFF)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_C_STANDARD 99)
+  # we use `asm()` to inline assembly, so enable the GNU extension
+  set(CMAKE_C_EXTENSIONS ON)
+  set(C_STANDARD_REQUIRED ON)
 endif()
 
 ## Handle diagnostics color if compiler supports them.
-
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
   COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
 
