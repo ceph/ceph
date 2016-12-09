@@ -8,7 +8,7 @@
 # This will only work with particular qemu versions, like 1.0. Later
 # versions of qemu include qemu-iotests directly in the qemu
 # repository.
-testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055 077'
+testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055'
 
 git clone https://github.com/qemu/qemu.git
 # use v2.2.0-rc3 (last released version that handles all the tests
