@@ -611,6 +611,11 @@ public:
     return pool->get_pg_num();
   }
 
+  bool pg_exists(pg_t pgid) const {
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    return p && pgid.ps() < p->get_pg_num();
+  }
+
 private:
   /// pg -> (raw osd list)
   int _pg_to_raw_osds(
