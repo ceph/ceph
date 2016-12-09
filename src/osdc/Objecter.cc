@@ -3438,6 +3438,10 @@ string Objecter::ListCursor::to_str() const
 
 int Objecter::ListCursor::from_str(const string& s)
 {
+  if (s.empty()) {
+    *this = ListCursor();
+    return 0;
+  }
   size_t pos = s.find(':');
   if (pos == string::npos) {
     return -EINVAL;
