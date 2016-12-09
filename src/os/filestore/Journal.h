@@ -31,14 +31,15 @@ protected:
   uuid_d fsid;
   Finisher *finisher;
 public:
+  CephContext* cct;
   PerfCounters *logger;
 protected:
   Cond *do_sync_cond;
   bool wait_on_full;
 
 public:
-  Journal(uuid_d f, Finisher *fin, Cond *c=0) :
-    fsid(f), finisher(fin), logger(NULL),
+  Journal(CephContext* cct, uuid_d f, Finisher *fin, Cond *c=0) :
+    fsid(f), finisher(fin), cct(cct), logger(NULL),
     do_sync_cond(c),
     wait_on_full(false) { }
   virtual ~Journal() { }

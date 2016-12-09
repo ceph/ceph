@@ -325,7 +325,8 @@ public:
   /// String munging (public for testing)
   static string ghobject_key(const ghobject_t &oid);
   static string ghobject_key_v0(coll_t c, const ghobject_t &oid);
-  static int is_buggy_ghobject_key_v1(const string &in);
+  static int is_buggy_ghobject_key_v1(CephContext* cct,
+				      const string &in);
 private:
   /// Implicit lock on Header->seq
   typedef ceph::shared_ptr<_Header> Header;

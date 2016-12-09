@@ -24,9 +24,11 @@
 #include "common/RWLock.h"
 
 /**
- * CollectionIndex provides an interface for manipulating indexed collections
+  CollectionIndex provides an interface for manipulating indexed collections
  */
 class CollectionIndex {
+public:
+  CephContext* cct;
 protected:
   /**
    * Object encapsulating a returned path.
@@ -175,8 +177,8 @@ protected:
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 
-  explicit CollectionIndex(const coll_t& collection):
-    access_lock("CollectionIndex::access_lock", true, false) {}
+  CollectionIndex(CephContext* cct, const coll_t& collection)
+    : cct(cct), access_lock("CollectionIndex::access_lock", true, false) {}
 
   /*
    * Pre-hash the collection, this collection should map to a PG folder.

@@ -2228,7 +2228,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
   if (!journalpath.length())
     return -EINVAL;
 
-  FileJournal *journal = new FileJournal(uuid_d(), NULL, NULL, journalpath.c_str(), m_journal_dio);
+  FileJournal *journal = new FileJournal(g_ceph_context, uuid_d(), NULL, NULL,
+					 journalpath.c_str(), m_journal_dio);
   r = journal->_fdump(*f, false);
   delete journal;
   return r;
