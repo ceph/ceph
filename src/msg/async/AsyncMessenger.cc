@@ -170,7 +170,7 @@ int Processor::rebind(const set<int>& avoid_ports)
   ldout(msgr->cct, 10) << __func__ << " new nonce " << nonce << " and inst " << msgr->my_inst << dendl;
 
   ldout(msgr->cct, 10) << __func__ << " will try " << addr << " and avoid ports " << new_avoid << dendl;
-  return bind(addr, new_avoid);
+  return bind(msgr->my_inst.addr, new_avoid);
 }
 
 void Processor::start()
