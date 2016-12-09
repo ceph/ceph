@@ -101,7 +101,9 @@ void get_map_arguments(po::options_description *positional,
   options->add_options()
     ("read-only", po::bool_switch(), "mount read-only")
     ("exclusive", po::bool_switch(), "forbid other clients write")
-    ("device", po::value<std::string>(), "specify nbd device");
+    ("device", po::value<std::string>(), "specify nbd device")
+    ("nbds_max", po::value<std::string>(), "override module param nbds_max")
+    ("max_part", po::value<std::string>(), "override module param max_part");
 }
 
 int execute_map(const po::variables_map &vm)
@@ -140,6 +142,14 @@ int execute_map(const po::variables_map &vm)
   if (vm.count("device")) {
     args.push_back("--device");
     args.push_back(vm["device"].as<std::string>().c_str());
+  }
+  if (vm.count("nbds_max")) {
+    args.push_back("--nbds_max");
+    args.push_back(vm["nbds_max"].as<std::string>().c_str());
+  }
+  if (vm.count("max_part")) {
+    args.push_back("--max_part");
+    args.push_back(vm["max_part"].as<std::string>().c_str());
   }
 
   return call_nbd_cmd(vm, args);
