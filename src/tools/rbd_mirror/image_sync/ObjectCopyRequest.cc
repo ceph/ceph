@@ -174,23 +174,48 @@ void ObjectCopyRequest<I>::send_write_object() {
 
   auto &sync_ops = m_snap_sync_ops.begin()->second;
   assert(!sync_ops.empty());
+  uint64_t object_offset;
   uint64_t buffer_offset;
   librados::ObjectWriteOperation op;
   for (auto &sync_op : sync_ops) {
     switch (std::get<0>(sync_op)) {
     case SYNC_OP_TYPE_WRITE:
+      object_offset = std::get<1>(sync_op);
       buffer_offset = 0;
-      for(auto it : std::get<4>(sync_op)){
-         bufferlist tmpbl;
-         tmpbl.substr_of(std::get<3>(sync_op), buffer_offset, it.second);
-         op.write(it.first, tmpbl);
-         op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
-                          LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
-         buffer_offset += it.second;
-	 dout(20) << ": write op: " << it.first<< "~" << it.second << dendl;
+      for (auto it : std::get<4>(sync_op)) {
+        if (object_offset < it.first) {
+          dout(20) << ": zero op: " << object_offset << "~"
+                   << it.first - object_offset << dendl;
+          op.zero(object_offset, it.first - object_offset);
+        }
+        dout(20) << ": write op: " << it.first << "~" << it.second << dendl;
+        bufferlist tmpbl;
+        tmpbl.substr_of(std::get<3>(sync_op), buffer_offset, it.second);
+        op.write(it.first, tmpbl);
+        op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
+                         LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+        buffer_offset += it.second;
+        object_offset = it.first + it.second;
+      }
+      if (object_offset < std::get<1>(sync_op) + std::get<2>(sync_op)) {
+        uint64_t sync_op_end = std::get<1>(sync_op) + std::get<2>(sync_op);
+        assert(sync_op_end <= m_snap_object_sizes[remote_snap_seq]);
+        if (sync_op_end == m_snap_object_sizes[remote_snap_seq]) {
+          dout(20) << ": trunc op: " << object_offset << dendl;
+          op.truncate(object_offset);
+          m_snap_object_sizes[remote_snap_seq] = object_offset;
+        } else {
+          dout(20) << ": zero op: " << object_offset << "~"
+                   << sync_op_end - object_offset << dendl;
+          op.zero(object_offset, sync_op_end - object_offset);
+        }
       }
       break;
     case SYNC_OP_TYPE_TRUNC:
+      if (std::get<1>(sync_op) > m_snap_object_sizes[remote_snap_seq]) {
+        // skip (must have been updated in WRITE op case issuing trunc op)
+        break;
+      }
       dout(20) << ": trunc op: " << std::get<1>(sync_op) << dendl;
       op.truncate(std::get<1>(sync_op));
       break;
@@ -353,6 +378,7 @@ void ObjectCopyRequest<I>::compute_diffs() {
                                                          bufferlist(),
                                                          std::map<uint64_t, uint64_t>());
       }
+      m_snap_object_sizes[end_remote_snap_id] = end_size;
     } else {
       if (prev_exists) {
         // object remove
