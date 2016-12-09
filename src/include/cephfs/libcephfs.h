@@ -991,7 +991,7 @@ int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name,
 	void *value, size_t size);
 
 /**
- * Get an extended attribute wihtout following symbolic links.  This function is
+ * Get an extended attribute without following symbolic links.  This function is
  * identical to ceph_getxattr, but if the path refers to a symbolic link,
  * we get the extended attributes of the symlink rather than the attributes
  * of the link itself.
