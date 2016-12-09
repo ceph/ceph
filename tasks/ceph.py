@@ -590,6 +590,12 @@ def cluster(ctx, config):
                         os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=id_)),
                     ]
                 )
+                remote.run(
+                    args=[
+                        'sudo', '/sbin/restorecon', mnt_point,
+                    ],
+                    check_status=False,
+                )
                 if not remote in ctx.disk_config.remote_to_roles_to_dev_mount_options:
                     ctx.disk_config.remote_to_roles_to_dev_mount_options[remote] = {}
                 ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][id_] = mount_options
