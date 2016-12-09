@@ -273,8 +273,8 @@ obj_version& RGWMetadataObject::get_version()
 
 class RGWMetadataTopHandler : public RGWMetadataHandler {
   struct iter_data {
-    list<string> sections;
-    list<string>::iterator iter;
+    set<string> sections;
+    set<string>::iterator iter;
   };
 
 public:
@@ -290,10 +290,14 @@ public:
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override { return -ENOTSUP; }
 
-  int list_keys_init(RGWRados *store, void **phandle) override {
+  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
-    store->meta_mgr->get_sections(data->sections);
-    data->iter = data->sections.begin();
+    list<string> sections;
+    store->meta_mgr->get_sections(sections);
+    for (auto& s : sections) {
+      data->sections.insert(s);
+    }
+    data->iter = data->sections.lower_bound(marker);
 
     *phandle = data;
 
@@ -313,6 +317,16 @@ public:
     iter_data *data = static_cast<iter_data *>(handle);
 
     delete data;
+  }
+
+  virtual string get_marker(void *handle) {
+    iter_data *data = static_cast<iter_data *>(handle);
+
+    if (data->iter != data->sections.end()) {
+      return *(data->iter);
+    }
+
+    return string();
   }
 };
 
@@ -830,8 +844,12 @@ struct list_keys_handle {
   RGWMetadataHandler *handler;
 };
 
-
 int RGWMetadataManager::list_keys_init(string& section, void **handle)
+{
+  return list_keys_init(section, string(), handle);
+}
+
+int RGWMetadataManager::list_keys_init(string& section, const string& marker, void **handle)
 {
   string entry;
   RGWMetadataHandler *handler;
@@ -845,7 +863,7 @@ int RGWMetadataManager::list_keys_init(string& section, void **handle)
 
   list_keys_handle *h = new list_keys_handle;
   h->handler = handler;
-  ret = handler->list_keys_init(store, &h->handle);
+  ret = handler->list_keys_init(store, marker, &h->handle);
   if (ret < 0) {
     delete h;
     return ret;
@@ -865,7 +883,6 @@ int RGWMetadataManager::list_keys_next(void *handle, int max, list<string>& keys
   return handler->list_keys_next(h->handle, max, keys, truncated);
 }
 
-
 void RGWMetadataManager::list_keys_complete(void *handle)
 {
   list_keys_handle *h = static_cast<list_keys_handle *>(handle);
@@ -874,6 +891,13 @@ void RGWMetadataManager::list_keys_complete(void *handle)
 
   handler->list_keys_complete(h->handle);
   delete h;
+}
+
+string RGWMetadataManager::get_marker(void *handle)
+{
+  list_keys_handle *h = static_cast<list_keys_handle *>(handle);
+
+  return h->handler->get_marker(h->handle);
 }
 
 void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
