@@ -5173,14 +5173,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	 << ')';
       return -E2BIG;
     }
-    for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
-	i != mon->pgmon()->pg_map.creating_pgs.end();
-	++i) {
-      if (i->m_pool == static_cast<uint64_t>(pool)) {
-	ss << "currently creating pgs, wait";
-	return -EBUSY;
-      }
-    }
     p.set_pg_num(n);
   } else if (var == "pgp_num") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
@@ -5198,14 +5190,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (n > (int)p.get_pg_num()) {
       ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
       return -EINVAL;
-    }
-    for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
-	i != mon->pgmon()->pg_map.creating_pgs.end();
-	++i) {
-      if (i->m_pool == static_cast<uint64_t>(pool)) {
-	ss << "currently creating pgs, wait";
-	return -EBUSY;
-      }
     }
     p.set_pgp_num(n);
   } else if (var == "crush_ruleset") {
