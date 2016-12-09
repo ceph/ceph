@@ -963,12 +963,6 @@ Usage::
 
 	ceph osd stat
 
-Subcommand ``thrash`` thrashes OSDs for <num_epochs>.
-
-Usage::
-
-	ceph osd thrash <int[0-]>
-
 Subcommand ``tier`` is used for managing tiers. It uses some additional
 subcommands.
 
