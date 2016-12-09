@@ -439,7 +439,7 @@ still write a new object to a ``degraded`` placement group if it is ``active``.
 If an OSD is ``down`` and the ``degraded`` condition persists, Ceph may mark the
 ``down`` OSD as ``out`` of the cluster and remap the data from the ``down`` OSD
 to another OSD. The time between being marked ``down`` and being marked ``out``
-is controlled by ``mon osd down out interval``, which is set to ``300`` seconds
+is controlled by ``mon osd down out interval``, which is set to ``600`` seconds
 by default.
 
 A placement group can also be ``degraded``, because Ceph cannot find one or more

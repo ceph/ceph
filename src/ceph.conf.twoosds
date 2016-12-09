@@ -23,7 +23,7 @@
 	mon data = /data/mondata/mon$num
 	debug mon = 20
 	debug ms = 20
-	mon osd down out interval = 0  ; 10 minutes
+	mon osd down out interval = 600  ; 10 minutes
 
 [mon0]
 	host = cosd0

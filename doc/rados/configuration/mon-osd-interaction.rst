@@ -286,7 +286,7 @@ Monitor Settings
               ``down`` and ``out`` if it doesn't respond.
               
 :Type: 32-bit Integer
-:Default: ``300``
+:Default: ``600``
 
 
 ``mon osd down out subtree limit``
