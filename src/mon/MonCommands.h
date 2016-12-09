@@ -790,9 +790,6 @@ COMMAND("osd test-reweight-by-pg " \
 	"name=pools,type=CephPoolname,n=N,req=false",			\
 	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd thrash " \
-	"name=num_epochs,type=CephInt,range=0", \
-	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
 COMMAND("osd df " \
 	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
 	"show OSD utilization", "osd", "r", "cli,rest")

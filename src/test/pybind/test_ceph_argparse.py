@@ -1121,9 +1121,6 @@ class TestOSD(TestArgparse):
                                                     '100',
                                                     'toomany']))
 
-    def test_thrash(self):
-        self.check_1_natural_arg('osd', 'thrash')
-
     def test_tier_op(self):
         for op in ('add', 'remove', 'set-overlay'):
             self.assert_valid_command(['osd', 'tier', op,
