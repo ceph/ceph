@@ -157,6 +157,18 @@
    fun:_ZN8tcmalloc15CentralFreeList11RemoveRangeEPPvS2_i
 }
 {
+   tcmalloc: msync (xenial)
+   Memcheck:Param
+   msync(start)
+   fun:__msync_nocancel
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:*tcmalloc*
+   fun:*GetStackTrace*
+}
+{
 	tcmalloc: string
 	Memcheck:Leak
 	...
