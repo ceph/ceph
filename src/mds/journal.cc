@@ -1571,11 +1571,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (session) {
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
-	  if (session->info.prealloc_inos.empty()) {
-	    // HRM: badness in the journal
-	    mds->clog->warn() << " replayed op " << client_reqs << " on session for "
-			     << client_name << " with empty prealloc_inos\n";
-	  } else {
+	  if (!session->info.prealloc_inos.empty()) {
 	    inodeno_t next = session->next_ino();
 	    inodeno_t i = session->take_ino(used_preallocated_ino);
 	    if (next != i)
