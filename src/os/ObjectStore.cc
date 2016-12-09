@@ -104,7 +104,7 @@ int ObjectStore::probe_block_device_fsid(
 #endif
 
   // okay, try FileStore (journal).
-  r = FileStore::get_block_device_fsid(path, fsid);
+  r = FileStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is filestore, "
 			  << *fsid << dendl;
