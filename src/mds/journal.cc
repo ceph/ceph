@@ -2132,11 +2132,9 @@ void EUpdate::replay(MDSRank *mds)
 	       << " < " << cmapv << dendl;
       // open client sessions?
       map<client_t,entity_inst_t> cm;
-      map<client_t, uint64_t> seqm;
       bufferlist::iterator blp = client_map.begin();
       ::decode(cm, blp);
-      mds->server->prepare_force_open_sessions(cm, seqm);
-      mds->server->finish_force_open_sessions(cm, seqm);
+      mds->sessionmap.open_sessions(cm);
 
       assert(mds->sessionmap.get_version() == cmapv);
       mds->sessionmap.set_projected(mds->sessionmap.get_version());
