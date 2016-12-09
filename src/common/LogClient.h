@@ -219,7 +219,7 @@ public:
     if (channels.count(name))
       c = channels[name];
     else {
-      c = LogChannelRef(new LogChannel(cct, this, name));
+      c = std::make_shared<LogChannel>(cct, this, name);
       channels[name] = c;
     }
     return c;
