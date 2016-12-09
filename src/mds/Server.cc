@@ -423,12 +423,15 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
 
-  mds->sessionmap.mark_dirty(session);
-
   if (piv) {
+    assert(session->is_closing() || session->is_killing() ||
+	   session->is_opening()); // re-open closing session
+    session->info.prealloc_inos.subtract(inos);
     mds->inotable->apply_release_ids(inos);
     assert(mds->inotable->get_version() == piv);
   }
+
+  mds->sessionmap.mark_dirty(session);
 
   // apply
   if (session->get_state_seq() != state_seq) {
@@ -708,9 +711,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   // release alloc and pending-alloc inos for this session
   // and wipe out session state, in case the session close aborts for some reason
   interval_set<inodeno_t> both;
-  both.swap(session->info.prealloc_inos);
+  both.insert(session->info.prealloc_inos);
   both.insert(session->pending_prealloc_inos);
-  session->pending_prealloc_inos.clear();
   if (both.size()) {
     mds->inotable->project_release_ids(both);
     piv = mds->inotable->get_projected_version();
@@ -2303,8 +2305,15 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 {
   CInode *in = new CInode(mdcache);
   
+  // Server::prepare_force_open_sessions() can re-open session in closing
+  // state. In that corner case, session's prealloc_inos are being freed.
+  // To simplify the code, we disallow using/refilling session's prealloc_ino
+  // while session is opening.
+  bool allow_prealloc_inos = !mdr->session->is_opening();
+
   // assign ino
-  if (mdr->session->info.prealloc_inos.size()) {
+  if (allow_prealloc_inos &&
+      mdr->session->info.prealloc_inos.size()) {
     mdr->used_prealloc_ino = 
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.mark_projected(mdr->session);
@@ -2327,9 +2336,10 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     //ceph_abort(); // just for now.
   }
     
-  int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
-  if (got > g_conf->mds_client_prealloc_inos / 2) {
-    mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
+  if (allow_prealloc_inos &&
+      mdr->session->get_num_projected_prealloc_inos() < g_conf->mds_client_prealloc_inos / 2) {
+    int need = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+    mds->inotable->project_alloc_ids(mdr->prealloc_inos, need);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
     mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.mark_projected(mdr->session);
@@ -2421,10 +2431,8 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   }
   if (mdr->prealloc_inos.size()) {
     assert(session);
-    if (!mdr->killed) {
-      session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
-      session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    }
+    session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+    session->info.prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.mark_dirty(session);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
