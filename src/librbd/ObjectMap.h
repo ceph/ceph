@@ -19,6 +19,8 @@ namespace librados {
 
 namespace librbd {
 
+template <typename Op> class BlockGuard;
+struct BlockGuardCell;
 class ImageCtx;
 
 template <typename ImageCtxT = ImageCtx>
@@ -29,6 +31,7 @@ public:
   }
 
   ObjectMap(ImageCtxT &image_ctx, uint64_t snap_id);
+  ~ObjectMap();
 
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static std::string object_map_name(const std::string &image_id,
@@ -77,11 +80,17 @@ public:
       if (object_no == end_object_no) {
         return false;
       }
-    }
 
-    aio_update(snap_id, start_object_no, end_object_no, new_state,
-               current_state,
-               util::create_context_callback<T, MF>(callback_object));
+      UpdateOperation update_operation(start_object_no, end_object_no,
+                                       new_state, current_state,
+                                       util::create_context_callback<T, MF>(
+                                         callback_object));
+      detained_aio_update(std::move(update_operation));
+    } else {
+      aio_update(snap_id, start_object_no, end_object_no, new_state,
+                 current_state,
+                 util::create_context_callback<T, MF>(callback_object));
+    }
     return true;
   }
 
@@ -90,9 +99,34 @@ public:
   void snapshot_remove(uint64_t snap_id, Context *on_finish);
 
 private:
+  struct UpdateOperation {
+    uint64_t start_object_no;
+    uint64_t end_object_no;
+    uint8_t new_state;
+    boost::optional<uint8_t> current_state;
+    Context *on_finish;
+
+    UpdateOperation(uint64_t start_object_no, uint64_t end_object_no,
+                    uint8_t new_state,
+                    const boost::optional<uint8_t> &current_state,
+                    Context *on_finish)
+      : start_object_no(start_object_no), end_object_no(end_object_no),
+        new_state(new_state), current_state(current_state),
+        on_finish(on_finish) {
+    }
+  };
+
+  typedef BlockGuard<UpdateOperation> UpdateGuard;
+
   ImageCtxT &m_image_ctx;
   ceph::BitVector<2> m_object_map;
   uint64_t m_snap_id;
+
+  UpdateGuard *m_update_guard = nullptr;
+
+  void detained_aio_update(UpdateOperation &&update_operation);
+  void handle_detained_aio_update(BlockGuardCell *cell, int r,
+                                  Context *on_finish);
 
   void aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,

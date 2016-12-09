@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ObjectMap.h"
+#include "librbd/BlockGuard.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/object_map/RefreshRequest.h"
@@ -26,14 +27,20 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::ObjectMap: "
+#define dout_prefix *_dout << "librbd::ObjectMap: " << this << " " << __func__ \
+                           << ": "
 
 namespace librbd {
 
 template <typename I>
 ObjectMap<I>::ObjectMap(I &image_ctx, uint64_t snap_id)
-  : m_image_ctx(image_ctx), m_snap_id(snap_id)
-{
+  : m_image_ctx(image_ctx), m_snap_id(snap_id),
+    m_update_guard(new UpdateGuard(m_image_ctx.cct)) {
+}
+
+template <typename I>
+ObjectMap<I>::~ObjectMap() {
+  delete m_update_guard;
 }
 
 template <typename I>
@@ -92,8 +99,7 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
   RWLock::RLocker l(m_image_ctx.object_map_lock);
   uint8_t state = (*this)[object_no];
   bool exists = (state != OBJECT_NONEXISTENT);
-  ldout(m_image_ctx.cct, 20) << &m_image_ctx << " object_may_exist: "
-			     << "object_no=" << object_no << " r=" << exists
+  ldout(m_image_ctx.cct, 20) << "object_no=" << object_no << " r=" << exists
 			     << dendl;
   return exists;
 }
@@ -203,6 +209,62 @@ void ObjectMap<I>::aio_resize(uint64_t new_size, uint8_t default_object_state,
 }
 
 template <typename I>
+void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+
+  BlockGuardCell *cell;
+  int r = m_update_guard->detain({op.start_object_no, op.end_object_no},
+                                &op, &cell);
+  if (r < 0) {
+    lderr(cct) << "failed to detain object map update: " << cpp_strerror(r)
+               << dendl;
+    m_image_ctx.op_work_queue->queue(op.on_finish, r);
+    return;
+  } else if (r > 0) {
+    ldout(cct, 20) << "detaining object map update due to in-flight update: "
+                   << "start=" << op.start_object_no << ", "
+		   << "end=" << op.end_object_no << ", "
+                   << (op.current_state ?
+                         stringify(static_cast<uint32_t>(*op.current_state)) :
+                         "")
+		   << "->" << static_cast<uint32_t>(op.new_state) << dendl;
+    return;
+  }
+
+  ldout(cct, 20) << "in-flight update cell: " << cell << dendl;
+  Context *on_finish = op.on_finish;
+  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
+      handle_detained_aio_update(cell, r, on_finish);
+    });
+  aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
+             op.current_state, ctx);
+}
+
+template <typename I>
+void ObjectMap<I>::handle_detained_aio_update(BlockGuardCell *cell, int r,
+                                              Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "cell=" << cell << ", r=" << r << dendl;
+
+  typename UpdateGuard::BlockOperations block_ops;
+  m_update_guard->release(cell, &block_ops);
+
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+    for (auto &op : block_ops) {
+      detained_aio_update(std::move(op));
+    }
+  }
+
+  on_finish->complete(r);
+}
+
+template <typename I>
 void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                               uint64_t end_object_no, uint8_t new_state,
                               const boost::optional<uint8_t> &current_state,
@@ -216,8 +278,8 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
   assert(start_object_no < end_object_no);
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << &m_image_ctx << " aio_update: start=" << start_object_no
-		 << ", end=" << end_object_no << ", "
+  ldout(cct, 20) << "start=" << start_object_no << ", "
+		 << "end=" << end_object_no << ", "
                  << (current_state ?
                        stringify(static_cast<uint32_t>(*current_state)) : "")
 		 << "->" << static_cast<uint32_t>(new_state) << dendl;
