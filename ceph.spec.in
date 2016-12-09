@@ -853,6 +853,8 @@ fi
 %if %{with lttng}
 %{_libdir}/librbd_tp.so.*
 %endif
+%{_bindir}/ceph-rbdnamer
+%{_mandir}/man8/ceph-rbdnamer.8*
 
 %post -n librbd1
 /sbin/ldconfig
