@@ -2791,10 +2791,12 @@ public:
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
   uint32_t list_nobjects_seek(NListContext *list_context, const ListCursor& pos);
+  int list_nobjects_seek_end(NListContext *list_context);
   void list_nobjects_get_cursor(NListContext *list_context, ListCursor *pos);
   void list_objects(ListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
   uint32_t list_objects_seek(ListContext *list_context, const ListCursor& pos);
+  int list_objects_seek_end(ListContext *list_context);
   void list_objects_get_cursor(ListContext *list_context, ListCursor *pos);
 
   hobject_t enumerate_objects_begin();

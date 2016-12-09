@@ -544,6 +544,7 @@ int librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
   Objecter::ListCursor c;
   int ret = c.from_str(cursor);
   if (ret < 0) {
+    objecter->list_nobjects_seek_end(context);
     return ret;
   }
   uint32_t cur_pg = objecter->list_nobjects_seek(context, c);
@@ -599,6 +600,7 @@ int librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
   Objecter::ListCursor c;
   int ret = c.from_str(cursor);
   if (ret < 0) {
+    objecter->list_objects_seek_end(context);
     return ret;
   }
   uint32_t cur_pg = objecter->list_objects_seek(context, c);
