@@ -7546,62 +7546,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
     pg->apply_peer_features(infoevt.features);
 
     // are we done getting everything?
-    if (peer_info_requested.empty() && !prior_set->pg_down) {
-      /*
-       * make sure we have at least one !incomplete() osd from the
-       * last rw interval.  the incomplete (backfilling) replicas
-       * get a copy of the log, but they don't get all the object
-       * updates, so they are insufficient to recover changes during
-       * that interval.
-       */
-      if (pg->info.history.last_epoch_started) {
-	for (map<epoch_t,pg_interval_t>::reverse_iterator p = pg->past_intervals.rbegin();
-	     p != pg->past_intervals.rend();
-	     ++p) {
-	  if (p->first < pg->info.history.last_epoch_started)
-	    break;
-	  if (!p->second.maybe_went_rw)
-	    continue;
-	  pg_interval_t& interval = p->second;
-	  ldout(pg->cct, 10) << " last maybe_went_rw interval was " << interval << dendl;
-	  OSDMapRef osdmap = pg->get_osdmap();
-
-	  /*
-	   * this mirrors the PriorSet calculation: we wait if we
-	   * don't have an up (AND !incomplete) node AND there are
-	   * nodes down that might be usable.
-	   */
-	  bool any_up_complete_now = false;
-	  bool any_down_now = false;
-	  for (unsigned i=0; i<interval.acting.size(); i++) {
-	    int o = interval.acting[i];
-	    if (o == CRUSH_ITEM_NONE)
-	      continue;
-	    pg_shard_t so(o, pg->pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
-	    if (!osdmap->exists(o) || osdmap->get_info(o).lost_at > interval.first)
-	      continue;  // dne or lost
-	    if (osdmap->is_up(o)) {
-	      pg_info_t *pinfo;
-	      if (so == pg->pg_whoami) {
-		pinfo = &pg->info;
-	      } else {
-		assert(pg->peer_info.count(so));
-		pinfo = &pg->peer_info[so];
-	      }
-	      if (!pinfo->is_incomplete())
-		any_up_complete_now = true;
-	    } else {
-	      any_down_now = true;
-	    }
-	  }
-	  if (!any_up_complete_now && any_down_now) {
-	    ldout(pg->cct, 10) << " no osds up+complete from interval " << interval << dendl;
-	    post_event(IsDown());
-	    return discard_event();
-	  }
-	  break;
-	}
-      }
+    if (peer_info_requested.empty() && !prior_set.pg_down) {
       ldout(pg->cct, 20) << "Common peer features: " << hex << pg->get_min_peer_features() << dec << dendl;
       ldout(pg->cct, 20) << "Common acting features: " << hex << pg->get_min_acting_features() << dec << dendl;
       ldout(pg->cct, 20) << "Common upacting features: " << hex << pg->get_min_upacting_features() << dec << dendl;
