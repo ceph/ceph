@@ -79,9 +79,11 @@ public:
                   real_time mtime, JSONObj *obj, sync_type_t type) = 0;
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
-  virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
+  virtual int list_keys_init(RGWRados *store, const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
+
+  virtual string get_marker(void *handle) = 0;
 
   /* key to use for hashing entries for log shard placement */
   virtual void get_hash_key(const string& section, const string& key, string& hash_key) {
@@ -352,8 +354,11 @@ public:
   int remove(string& metadata_key);
 
   int list_keys_init(string& section, void **phandle);
+  int list_keys_init(string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
+
+  string get_marker(void *handle);
 
   void dump_log_entry(cls_log_entry& entry, Formatter *f);
 
