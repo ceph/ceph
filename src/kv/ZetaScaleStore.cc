@@ -113,7 +113,8 @@ static bool is_logging(const std::string &prefix, const std::string &key)
 {
   if (prefix[0] != 'M' ||
       (key.length() != 40 &&
-       strncmp(key.c_str() + 8, "._info", sizeof("._info"))))
+       strncmp(key.c_str() + 8, "._info", sizeof("._info")) &&
+       strncmp(key.c_str() + 8, "._fastinfo", sizeof("._fastinfo"))))
     return false;
 
   dtrace << " " << prefix << " " << decode_key(key) << "(" << key.length()

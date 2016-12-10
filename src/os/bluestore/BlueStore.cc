@@ -6891,7 +6891,7 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
       deque<TransContext*> kv_submitting;
       deque<TransContext*> kv_committing_local;
       deque<TransContext*> wal_cleaning;
-      dout(20) << __func__ << " committing " << kv_queue.size()
+      dout(1) << __func__ << " committing " << kv_queue.size()
                << " submitting " << kv_queue_unsubmitted.size()
                << " cleaning " << wal_cleanup_queue.size() << dendl;
        
@@ -6899,8 +6899,9 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
         kv_committing_local.swap(kv_queue);
         kv_submitting.swap(kv_queue_unsubmitted);
         wal_cleaning.swap(wal_cleanup_queue);
+        kv_pending_commits += kv_committing_local.size();
       } else {
-
+        kv_queue_unsubmitted.clear();
         if (!kv_queue.empty()) {
           uint32_t txc_per_thread = kv_queue.size()/kv_sync_thread_list.size();
           if (txc_per_thread == 0)
