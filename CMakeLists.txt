@@ -501,6 +501,12 @@ if(WITH_UBSAN)
   endif()
 endif()
 
+# Rocksdb
+option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
+if (WITH_SYSTEM_ROCKSDB)
+  find_package(rocksdb REQUIRED)
+endif()
+
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
