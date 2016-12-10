@@ -1784,6 +1784,18 @@ Notable Changes
 * tools: ceph-disk: change ownership of initfile to ceph:ceph (`issue#16280 <http://tracker.ceph.com/issues/16280>`_, `pr#9688 <http://github.com/ceph/ceph/pull/9688>`_, Shylesh Kumar)
 * test: ceph_test_rados_api_tmap_migrate: remove test for tmap_upgrade (`pr#10234 <http://github.com/ceph/ceph/pull/10234>`_, Kefu Chai)
 
+v10.2.5 Jewel
+=============
+
+This point release fixes an important `regression introduced in v10.2.4 <http://tracker.ceph.com/issues/18185>`_.
+
+We recommend that all v10.2.x users upgrade.
+
+Notable Changes
+---------------
+For more detailed information, see :download:`the complete changelog <changelog/v10.2.5.txt>`.
+
+* msg/simple/Pipe: avoid returning 0 on poll timeout (`issue#18185 <http://tracker.ceph.com/issues/18185>`_, `pr#12376 <https://github.com/ceph/ceph/pull/12376>`_, Sage Weil)
 
 v10.2.4 Jewel
 =============
