@@ -87,8 +87,11 @@ static bool exclusive = false;
 
 #define RBD_NBD_SOCK_PREFIX "ceph-client"
 #define RBD_NBD_SOCK_EXT "asok"
+#define RBD_NBD_LOG_EXT "log"
 #define RBD_NBD_CONF_ADMIN_SOCKET "admin_socket"
+#define RBD_NBD_CONF_LOG "log_file"
 #define RBD_NBD_CONF_DIR "run_dir"
+#define RBD_NBD_LOG_DIR "/var/log/ceph"
 
 class NBDServer
 {
@@ -471,8 +474,12 @@ static int open_device(const char* path, bool try_load_moudle = false)
   return nbd;
 }
 
-static void clear_temp_admin_socket()
+static void clear_temp_admin_socket_and_log()
 {
+  if (g_ceph_context->_conf->log_file.length()) {
+    remove(g_ceph_context->_conf->log_file.c_str());
+    g_ceph_context->_conf->set_val_or_die(RBD_NBD_CONF_LOG, "");
+  }
   if (g_ceph_context->_conf->admin_socket.length()) {
     g_ceph_context->_conf->set_val_or_die(RBD_NBD_CONF_ADMIN_SOCKET, "");
   }
@@ -492,6 +499,21 @@ static int do_change_admin_socket(int index)
     g_ceph_context->_conf->get_val(RBD_NBD_CONF_DIR, &tmp, sizeof(dir));
     snprintf(path, sizeof(path), "%s/%s.%s.%s", dir, RBD_NBD_SOCK_PREFIX, idname, RBD_NBD_SOCK_EXT);
     g_ceph_context->_conf->set_val_or_die(RBD_NBD_CONF_ADMIN_SOCKET, path);
+  }
+
+  if (g_ceph_context->_conf->log_file.length()) {
+    char old_path[128] = {0};
+
+    tmp = old_path;
+    g_ceph_context->_conf->get_val(RBD_NBD_CONF_LOG, &tmp, sizeof(old_path));
+    snprintf(path, sizeof(path), "%s/%s.%s.%s", RBD_NBD_LOG_DIR, RBD_NBD_SOCK_PREFIX, idname, RBD_NBD_LOG_EXT);
+
+    if (rename(old_path, path) < 0) {
+      cerr << "rename fail" << old_path << path << std::endl;
+      return -1;
+    }
+
+    g_ceph_context->_conf->set_val_or_die(RBD_NBD_CONF_LOG, path);
   }
 
   return 0;
@@ -710,7 +732,7 @@ close_ret:
 
 static int do_unmap()
 {
-  clear_temp_admin_socket();
+  clear_temp_admin_socket_and_log();
   common_init_finish(g_ceph_context);
 
   int nbd = open_device(devpath.c_str());
@@ -754,7 +776,7 @@ static int do_list_mapped_devices()
   int m = 0;
   int fd[2];
 
-  clear_temp_admin_socket();
+  clear_temp_admin_socket_and_log();
   common_init_finish(g_ceph_context);
 
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
