@@ -11624,7 +11624,6 @@ void PrimaryLogPG::hit_set_clear()
   dout(20) << __func__ << dendl;
   hit_set.reset();
   hit_set_start_stamp = utime_t();
-  hit_set_flushing.clear();
 }
 
 void PrimaryLogPG::hit_set_setup()
@@ -11773,7 +11772,6 @@ void PrimaryLogPG::hit_set_persist()
 
   utime_t now = ceph_clock_now();
   hobject_t oid;
-  time_t flush_time = 0;
 
   // If any archives are degraded we skip this persist request
   // account for the additional entry being added below
@@ -11835,19 +11833,8 @@ void PrimaryLogPG::hit_set_persist()
     hit_set_in_memory_trim(size);
   }
 
-  // hold a ref until it is flushed to disk
-  hit_set_flushing[new_hset.begin] = hit_set;
-  flush_time = new_hset.begin;
-
   ObjectContextRef obc = get_object_context(oid, true);
   OpContextUPtr ctx = simple_opc_create(obc);
-  if (flush_time != 0) {
-    PrimaryLogPGRef pg(this);
-    ctx->register_on_applied(
-      [pg, flush_time]() {
-	pg->hit_set_flushing.erase(flush_time);
-      });
-  }
 
   ctx->at_version = get_next_version();
   ctx->updated_hset_history = info.hit_set;
@@ -12178,12 +12165,6 @@ void PrimaryLogPG::agent_load_hit_sets()
 	  // FIXME: EC not supported here yet
 	  derr << __func__ << " on non-replicated pool" << dendl;
 	  break;
-	}
-
-	// check if it's still in flight
-	if (hit_set_flushing.count(p->begin)) {
-	  agent_state->add_hit_set(p->begin.sec(), hit_set_flushing[p->begin]);
-	  continue;
 	}
 
 	hobject_t oid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);

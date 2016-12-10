@@ -872,7 +872,6 @@ protected:
   HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
-  map<time_t,HitSetRef> hit_set_flushing; ///< currently being written, not yet readable
 
   void hit_set_clear();     ///< discard any HitSet state
   void hit_set_setup();     ///< initialize HitSet state
