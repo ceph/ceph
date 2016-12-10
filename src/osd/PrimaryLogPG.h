@@ -512,7 +512,6 @@ public:
 
     MOSDOpReply *reply;
 
-    utime_t readable_stamp;  // when applied on all replicas
     PrimaryLogPG *pg;
 
     int num_read;    ///< count read ops

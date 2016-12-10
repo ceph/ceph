@@ -3279,13 +3279,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	osd->send_message_osd_client(reply, m->get_connection());
 	ctx->sent_ack = true;
       }
-
-      // note the write is now readable (for rlatency calc).  note
-      // that this will only be defined if the write is readable
-      // _prior_ to being committed; it will not get set with
-      // writeahead journaling, for instance.
-      if (ctx->readable_stamp == utime_t())
-	ctx->readable_stamp = ceph_clock_now();
     });
   ctx->register_on_commit(
     [m, ctx, this](){
@@ -3357,12 +3350,6 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
   utime_t process_latency = now;
   process_latency -= ctx->op->get_dequeued_time();
 
-  utime_t rlatency;
-  if (ctx->readable_stamp != utime_t()) {
-    rlatency = ctx->readable_stamp;
-    rlatency -= ctx->op->get_req()->get_recv_stamp();
-  }
-
   uint64_t inb = ctx->bytes_written;
   uint64_t outb = ctx->bytes_read;
 
@@ -3379,8 +3366,6 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_rw_outb, outb);
     osd->logger->tinc(l_osd_op_rw_lat, latency);
     osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
-    if (rlatency != utime_t())
-      osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
   } else if (op->may_read()) {
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
@@ -3391,15 +3376,12 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_w_inb, inb);
     osd->logger->tinc(l_osd_op_w_lat, latency);
     osd->logger->tinc(l_osd_op_w_process_lat, process_latency);
-    if (rlatency != utime_t())
-      osd->logger->tinc(l_osd_op_w_rlat, rlatency);
   } else
     ceph_abort();
 
   dout(15) << "log_op_stats " << *m
 	   << " inb " << inb
 	   << " outb " << outb
-	   << " rlat " << rlatency
 	   << " lat " << latency << dendl;
 }
 
