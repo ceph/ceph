@@ -3262,32 +3262,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 
   // no need to capture PG ref, repop cancel will handle that
   // Can capture the ctx by pointer, it's owned by the repop
-  ctx->register_on_applied(
-    [m, ctx, this](){
-      if (m && m->wants_ack() && !ctx->sent_ack && !ctx->sent_disk) {
-	// send ack
-	MOSDOpReply *reply = ctx->reply;
-	if (reply)
-	  ctx->reply = NULL;
-	else {
-	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
-	  reply->set_reply_versions(ctx->at_version,
-				    ctx->user_at_version);
-	}
-	reply->add_flags(CEPH_OSD_FLAG_ACK);
-	dout(10) << " sending ack: " << *m << " " << reply << dendl;
-	osd->send_message_osd_client(reply, m->get_connection());
-	ctx->sent_ack = true;
-      }
-    });
   ctx->register_on_commit(
     [m, ctx, this](){
       if (ctx->op)
 	log_op_stats(
 	  ctx);
 
-      if (m && m->wants_ondisk() && !ctx->sent_disk) {
-	// send commit.
+      if (m && (m->wants_ondisk() || m->wants_ack()) && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
 	if (reply)
 	  ctx->reply = NULL;
@@ -3297,9 +3278,9 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 				    ctx->user_at_version);
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	dout(10) << " sending commit on " << *m << " " << reply << dendl;
+	dout(10) << " sending reply on " << *m << " " << reply << dendl;
 	osd->send_message_osd_client(reply, m->get_connection());
-	ctx->sent_disk = true;
+	ctx->sent_reply = true;
 	ctx->op->mark_commit_sent();
       }
     });
