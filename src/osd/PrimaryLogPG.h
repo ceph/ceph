@@ -544,8 +544,7 @@ public:
       on_committed.emplace_back(std::forward<F>(f));
     }
 
-    bool sent_ack;
-    bool sent_disk;
+    bool sent_reply;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -581,7 +580,7 @@ public:
       num_read(0),
       num_write(0),
       copy_cb(NULL),
-      sent_ack(false), sent_disk(false),
+      sent_reply(false),
       async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {
