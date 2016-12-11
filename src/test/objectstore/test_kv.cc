@@ -25,7 +25,7 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #if GTEST_HAS_PARAM_TEST
 

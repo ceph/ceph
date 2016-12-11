@@ -14,7 +14,7 @@ extern "C"{
   ((g_test->get_key_type() == KEY_TYPE_S3)?(string("/" S3_BUCKET_NAME)):(string("/swift/v1/" SWIFT_BUCKET_NAME)))
 #define GTEST
 #ifdef GTEST
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #else
 #define TEST(x, y) void y()
 #define ASSERT_EQ(v, s) if(v != s)cout << "Error at " << __LINE__ << "(" << #v << "!= " << #s << "\n"; \

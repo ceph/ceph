@@ -8,7 +8,7 @@
  * LGPL2.1 (see COPYING-LGPL2.1) or later
  */
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include <cmath>
 #include "common/bit_vector.hpp"
 #include <boost/assign/list_of.hpp>

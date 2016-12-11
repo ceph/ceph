@@ -12,7 +12,7 @@
  *
  */
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include "osd/PGTransaction.h"
 
 TEST(pgtransaction, simple)

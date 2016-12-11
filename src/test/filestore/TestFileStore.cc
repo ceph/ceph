@@ -17,7 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "os/filestore/FileStore.h"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 class TestFileStore {
 public:

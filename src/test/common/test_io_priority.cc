@@ -15,7 +15,7 @@
  */
 
 #include <errno.h>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "common/io_priority.h"
 

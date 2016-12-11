@@ -27,7 +27,7 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "include/unordered_map.h"
 

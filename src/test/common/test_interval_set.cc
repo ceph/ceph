@@ -14,7 +14,7 @@
  *
  */
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include "include/interval_set.h"
 #include "include/btree_interval_set.h"
 

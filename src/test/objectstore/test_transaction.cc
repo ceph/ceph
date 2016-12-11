@@ -13,7 +13,7 @@
  */
 
 #include "os/ObjectStore.h"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include "common/Clock.h"
 #include "include/utime.h"
 #include <boost/tuple/tuple.hpp>

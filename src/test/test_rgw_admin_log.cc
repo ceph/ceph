@@ -39,7 +39,7 @@ extern "C"{
 #include "include/object.h"
 #define GTEST
 #ifdef GTEST
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #else
 #define TEST(x, y) void y()
 #define ASSERT_EQ(v, s) if(v != s)cout << "Error at " << __LINE__ << "(" << #v << "!= " << #s << "\n"; \

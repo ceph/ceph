@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string>
 #include <iostream>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "common/errno.h"
 #include "os/ObjectStore.h"

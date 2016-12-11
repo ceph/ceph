@@ -17,7 +17,7 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "compressor/AsyncCompressor.h"
 #include "global/global_init.h"

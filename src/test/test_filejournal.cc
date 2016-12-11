@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 #include <stdlib.h>
 #include <limits.h>
 

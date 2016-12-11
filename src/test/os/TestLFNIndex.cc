@@ -25,7 +25,7 @@
 #include "os/filestore/chain_xattr.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 class TestWrapLFNIndex : public LFNIndex {
 public:
