@@ -223,6 +223,9 @@ OPTION(ms_async_rdma_send_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_receive_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_port_num, OPT_U32, 1)
 OPTION(ms_async_rdma_polling_us, OPT_U32, 1000)
+OPTION(ms_async_rdma_local_gid, OPT_STR, "")       // GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
+OPTION(ms_async_rdma_roce_ver, OPT_INT, 2)         // 2=RoCEv2, 1=RoCEv1.5, 0=RoCEv1
+OPTION(ms_async_rdma_sl, OPT_INT, 3)               // in RoCE, this means PCP
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
 OPTION(ms_dpdk_coremask, OPT_STR, "1")
