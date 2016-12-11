@@ -37,12 +37,15 @@ int RDMAConnectedSocketImpl::activate()
   qpa.ah_attr.is_global = 1;
   qpa.ah_attr.grh.hop_limit = 6;
   qpa.ah_attr.grh.dgid = peer_msg.gid;
-  qpa.ah_attr.grh.sgid_index = 0;
+
+  qpa.ah_attr.grh.sgid_index = infiniband->get_device()->get_gid_idx();
 
   qpa.ah_attr.dlid = peer_msg.lid;
-  qpa.ah_attr.sl = 0;
+  qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
   qpa.ah_attr.src_path_bits = 0;
   qpa.ah_attr.port_num = (uint8_t)(infiniband->get_ib_physical_port());
+
+  ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
 
   r = ibv_modify_qp(qp->get_qp(), &qpa, IBV_QP_STATE |
       IBV_QP_AV |
