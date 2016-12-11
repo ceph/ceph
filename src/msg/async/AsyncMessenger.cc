@@ -27,8 +27,7 @@
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "common/FuncTrace.h"
-#include "common/OIDTrace.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -506,14 +505,11 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   FUNCTRACE();
-#ifdef WITH_LTTNG
-  if (m && m->get_type() == CEPH_MSG_OSD_OP)  {
+  if (m && m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE(((MOSDOp *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP");
-  }
-  else if (m && m->get_type() == CEPH_MSG_OSD_OPREPLY) {
+  else if (m && m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE(((MOSDOpReply *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP_REPLY");
-  }
-#endif
+
   ldout(cct, 1) << __func__ << "--> " << dest.name << " "
       << dest.addr << " -- " << *m << " -- ?+"
       << m->get_data().length() << " " << m << dendl;

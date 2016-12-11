@@ -30,7 +30,7 @@
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
-#include "common/FuncTrace.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -2471,7 +2471,6 @@ void *BlueStore::MempoolThread::entry()
 
 static void aio_cb(void *priv, void *priv2)
 {
-  FUNCTRACE();
   BlueStore *store = static_cast<BlueStore*>(priv);
   store->_txc_aio_finish(priv2);
 }
@@ -4894,7 +4893,6 @@ int BlueStore::read(
   uint32_t op_flags,
   bool allow_eio)
 {
-  FUNCTRACE();
   Collection *c = static_cast<Collection*>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -6336,7 +6334,6 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
-  FUNCTRACE();
   dout(20) << __func__ << " txc " << txc
 	   << " onodes " << txc->onodes
 	   << " shared_blobs " << txc->shared_blobs
@@ -8132,7 +8129,6 @@ int BlueStore::_write(TransContext *txc,
 		     bufferlist& bl,
 		     uint32_t fadvise_flags)
 {
-  FUNCTRACE();
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;

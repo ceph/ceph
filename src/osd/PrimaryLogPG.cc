@@ -39,8 +39,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
 #include "mds/inode_backtrace.h" // Ugh
-#include "common/FuncTrace.h"
-#include "common/OIDTrace.h"
+#include "common/EventTrace.h"
 
 #include "common/config.h"
 #include "include/compat.h"
@@ -1599,7 +1598,6 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  FUNCTRACE();
   assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
   if (can_discard_request(op)) {
     return;
@@ -4335,7 +4333,6 @@ void PrimaryLogPG::maybe_create_new_object(
 
 int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
-  FUNCTRACE();
   int result = 0;
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
@@ -6661,7 +6658,6 @@ void PrimaryLogPG::complete_disconnect_watches(
 
 void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 {
-  FUNCTRACE();
   entity_name_t entity = ctx->reqid.name;
   dout(15) << "do_osd_op_effects " << entity << " con " << conn.get() << dendl;
 
@@ -6769,7 +6765,6 @@ hobject_t PrimaryLogPG::get_temp_recovery_object(eversion_t version, snapid_t sn
 
 int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 {
-  FUNCTRACE();
   assert(!ctx->ops.empty());
   
   const hobject_t& soid = ctx->obs->oi.soid;
@@ -6836,7 +6831,6 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 
 void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc)
 {
-  FUNCTRACE();
   const hobject_t& soid = ctx->obs->oi.soid;
   dout(20) << __func__ << " " << soid << " " << ctx
 	   << " op " << pg_log_entry_t::get_op_name(log_op_type)
@@ -7021,7 +7015,6 @@ void PrimaryLogPG::apply_stats(
 
 void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 {
-  FUNCTRACE();
   MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
   assert(ctx->async_reads_complete());
 
@@ -7060,15 +7053,6 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
   osd->send_message_osd_client(reply, m->get_connection());
   close_op_ctx(ctx);
-#ifdef WITH_LTTNG
-  if (m) {
-    ostringstream buf;
-    buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type() << ","
-        << ((MOSDOp *)m)->get_oid().name.c_str();
-    OID_EVENT_TRACE(buf.str().c_str(), "OSD_READ_OP_COMPLETE");
-  }
-#endif
 }
 
 // ========================================================================
@@ -8453,7 +8437,6 @@ public:
 
 void PrimaryLogPG::repop_all_applied(RepGather *repop)
 {
-  FUNCTRACE();
   dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all applied "
 	   << dendl;
   assert(!repop->applies_with_commit);
@@ -8476,7 +8459,6 @@ public:
 
 void PrimaryLogPG::repop_all_committed(RepGather *repop)
 {
-  FUNCTRACE();
   dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
 	   << dendl;
   repop->all_committed = true;
@@ -8491,25 +8473,11 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
       last_complete_ondisk = repop->pg_local_last_complete;
     }
     eval_repop(repop);
-#ifdef WITH_LTTNG
-    MOSDOp *m = NULL;
-    if (repop->op) {
-      m = static_cast<MOSDOp *>(repop->op->get_req());
-      if (m) {
-        ostringstream buf;
-        buf << m->get_source() << "!" << m->get_source_addr() << "!"
-            << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type() <<","
-            << ((MOSDOp *)m)->get_oid().name.c_str();
-        OID_EVENT_TRACE(buf.str().c_str(), "OSD_WRITE_OP_COMPLETE");
-      }
-    }
-#endif
   }
 }
 
 void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 {
-  FUNCTRACE();
   dout(10) << "op_applied version " << applied_version << dendl;
   if (applied_version == eversion_t())
     return;
@@ -8540,7 +8508,6 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
-  FUNCTRACE();
   MOSDOp *m = NULL;
   if (repop->op)
     m = static_cast<MOSDOp *>(repop->op->get_req());
@@ -8702,7 +8669,6 @@ PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
   OpContext *ctx, ObjectContextRef obc,
   ceph_tid_t rep_tid)
 {
-  FUNCTRACE();
   if (ctx->op)
     dout(10) << "new_repop rep_tid " << rep_tid << " on " << *ctx->op->get_req() << dendl;
   else
@@ -8751,7 +8717,6 @@ boost::intrusive_ptr<PrimaryLogPG::RepGather> PrimaryLogPG::new_repop(
  
 void PrimaryLogPG::remove_repop(RepGather *repop)
 {
-  FUNCTRACE();
   dout(20) << __func__ << " " << *repop << dendl;
 
   for (auto p = repop->on_finish.begin();
@@ -9095,7 +9060,6 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
 ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
 						     SnapSetContext *ssc)
 {
-  FUNCTRACE();
   ObjectContextRef obc(object_contexts.lookup_or_create(oi.soid));
   assert(obc->destructor_callback == NULL);
   obc->destructor_callback = new C_PG_ObjectContext(this, obc.get());  

@@ -23,8 +23,7 @@
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "common/FuncTrace.h"
-#include "common/OIDTrace.h"
+#include "common/EventTrace.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
@@ -751,19 +750,15 @@ void AsyncConnection::process()
 
           message->set_connection(this);
 
-#ifdef WITH_LTTNG
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
           if (message->get_type() == CEPH_MSG_OSD_OP || message->get_type() == CEPH_MSG_OSD_OPREPLY) {
             utime_t ltt_processed_stamp = ceph_clock_now(async_msgr->cct);
             double usecs_elapsed = (ltt_processed_stamp.to_nsec()-ltt_recv_stamp.to_nsec())/1000;
             ostringstream buf;
-            buf << message->get_source() << "!" << message->get_source_addr() << "!"
-                << message->get_tid() << "!" << message->get_seq() << "!" << message->get_type();
-            if (message->get_type() == CEPH_MSG_OSD_OP) {
-              OID_ELAPSED(buf.str().c_str(), usecs_elapsed, "TIME_TO_DECODE_OSD_OP");
-            }
-            else if (message->get_type() == CEPH_MSG_OSD_OPREPLY) {
-              OID_ELAPSED(buf.str().c_str(), usecs_elapsed, "TIME_TO_DECODE_OSD_OPREPLY");
-            }
+            if (message->get_type() == CEPH_MSG_OSD_OP) 
+              OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OP", false);
+            else
+              OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OPREPLY", false);
           }
 #endif
 
@@ -1467,7 +1462,6 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
 ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &authorizer_bl,
                                             bufferlist &authorizer_reply)
 {
-  FUNCTRACE();
   ssize_t r = 0;
   ceph_msg_connect_reply reply;
   bufferlist reply_bl;
@@ -1893,21 +1887,11 @@ int AsyncConnection::send_message(Message *m)
   m->get_header().src = async_msgr->get_myname();
   m->set_connection(this);
 
-#ifdef WITH_LTTNG
-  if (m && (m->get_type() == CEPH_MSG_OSD_OP || m->get_type() == CEPH_MSG_OSD_OPREPLY)) {
-    ostringstream buf;
-    buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();
-    if (m->get_type() == CEPH_MSG_OSD_OP)  {
-      buf << "," << ((MOSDOp *)m)->get_oid().name;
-      OID_EVENT_TRACE(buf.str().c_str(), "SEND_MSG_OSD_OP_BEGIN");
-    }
-    else if (m->get_type() == CEPH_MSG_OSD_OPREPLY) {
-      buf << "," << ((MOSDOpReply *)m)->get_oid().name;
-      OID_EVENT_TRACE(buf.str().c_str(), "SEND_MSG_OSD_OPREPLY_BEGIN");
-    }
-  }
-#endif
+  if (m->get_type() == CEPH_MSG_OSD_OP)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_BEGIN", true);
+  else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_BEGIN", true);
+
   if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
     std::lock_guard<std::mutex> l(write_lock);
@@ -2287,19 +2271,10 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   } else {
     ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " continuely." << dendl;
   }
-#ifdef WITH_LTTNG
-  if (m->get_type() == CEPH_MSG_OSD_OP ||  m->get_type() == CEPH_MSG_OSD_OPREPLY)  {
-    ostringstream buf;
-    buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();
-    if (m->get_type() == CEPH_MSG_OSD_OP) {
-      OID_EVENT_TRACE(buf.str().c_str(), "SEND_MSG_OSD_OP_END");
-    }
-    else if (m->get_type() == CEPH_MSG_OSD_OPREPLY) {
-      OID_EVENT_TRACE(buf.str().c_str(), "SEND_MSG_OSD_OPREPLY_END");
-    }
-  }
-#endif
+  if (m->get_type() == CEPH_MSG_OSD_OP)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
+  else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
   m->put();
 
   return rc;

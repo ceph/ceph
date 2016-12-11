@@ -2,4 +2,4 @@
 /*
  * The header containing our TRACEPOINT_EVENTs.
  */
-#include "tracing/functrace.h"
+#include "tracing/eventtrace.h"

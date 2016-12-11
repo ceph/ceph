@@ -52,7 +52,7 @@
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "common/BackTrace.h"
-#include "common/FuncTrace.h"
+#include "common/EventTrace.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -1908,7 +1908,6 @@ void PG::take_op_map_waiters()
 
 void PG::queue_op(OpRequestRef& op)
 {
-  FUNCTRACE();
   Mutex::Locker l(map_lock);
   if (!waiting_for_map.empty()) {
     // preserve ordering
@@ -3067,7 +3066,6 @@ void PG::append_log(
   ObjectStore::Transaction &t,
   bool transaction_applied)
 {
-  FUNCTRACE();
   if (transaction_applied)
     update_snap_map(logv, t);
 
@@ -5404,7 +5402,6 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 bool PG::can_discard_op(OpRequestRef& op)
 {
-  FUNCTRACE();
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (g_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
@@ -5490,7 +5487,6 @@ bool PG::can_discard_backfill(OpRequestRef op)
 
 bool PG::can_discard_request(OpRequestRef& op)
 {
-  FUNCTRACE();
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
     return can_discard_op(op);

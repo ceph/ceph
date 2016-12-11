@@ -254,6 +254,10 @@ if(HAVE_DPDK)
   list(APPEND EXTRALIBS ${DPDK_LIBRARIES})
 endif(HAVE_DPDK)
 
+if(WITH_EVENTTRACE)
+  add_definitions("-DWITH_EVENTTRACE")
+endif(WITH_EVENTTRACE)
+
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
@@ -413,8 +417,7 @@ set(libcommon_files
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
-  common/FuncTrace.cc
-  common/OIDTrace.cc
+  common/EventTrace.cc
   common/ConfUtils.cc
   common/MemoryModel.cc
   common/fd.cc

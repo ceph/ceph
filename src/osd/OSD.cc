@@ -138,8 +138,7 @@
 
 #include "include/assert.h"
 #include "common/config.h"
-#include "common/FuncTrace.h"
-#include "common/OIDTrace.h"
+#include "common/EventTrace.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -4871,7 +4870,6 @@ void OSD::ms_handle_fast_connect(Connection *con)
 
 void OSD::ms_handle_fast_accept(Connection *con)
 {
-  FUNCTRACE();
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
@@ -5307,7 +5305,6 @@ void OSD::send_pg_stats(const utime_t &now)
 
 void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 {
-  FUNCTRACE();
   dout(10) << "handle_pg_stats_ack " << dendl;
 
   if (!require_mon_peer(ack)) {
@@ -5963,7 +5960,6 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
-  FUNCTRACE();
   dout(20) << "OSD::ms_dispatch: " << *m << dendl;
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
     service.got_stop_ack();
@@ -5990,7 +5986,6 @@ bool OSD::ms_dispatch(Message *m)
 
 void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
 {
-  FUNCTRACE();
   assert(session->session_dispatch_lock.is_locked());
   assert(session->osdmap == osdmap);
   for (list<OpRequestRef>::iterator i = session->waiting_on_map.begin();
@@ -6008,7 +6003,6 @@ void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
 
 void OSD::update_waiting_for_pg(Session *session, OSDMapRef newmap)
 {
-  FUNCTRACE();
   assert(session->session_dispatch_lock.is_locked());
   if (!session->osdmap) {
     session->osdmap = newmap;
@@ -6113,14 +6107,7 @@ void OSD::ms_fast_dispatch(Message *m)
     session->put();
   }
   service.release_map(nextmap);
-#ifdef WITH_LTTNG
-  if (m && m->get_type() == CEPH_MSG_OSD_OP)  {
-    ostringstream buf;
-    buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();
-    OID_EVENT_TRACE(buf.str().c_str(), "MS_FAST_DISPATCH_END");
-  }
-#endif
+  OID_EVENT_TRACE_WITH_MSG(m, "MS_FAST_DISPATCH_END", false); 
 }
 
 void OSD::ms_fast_preprocess(Message *m)
@@ -9032,15 +9019,8 @@ void OSD::dequeue_op(
   ThreadPool::TPHandle &handle)
 {
   FUNCTRACE();
-#ifdef WITH_LTTNG
-  Message *m = op->get_req();
-  if (m && m->get_type() == CEPH_MSG_OSD_OP)  {
-    ostringstream buf;
-    buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();
-    OID_EVENT_TRACE(buf.str().c_str(), "DEQUEUE_OP_BEGIN");
-  }
-#endif
+  OID_EVENT_TRACE_WITH_MSG(op->get_req(), "DEQUEUE_OP_BEGIN", false);
+
   utime_t now = ceph_clock_now(cct);
   op->set_dequeued_time(now);
   utime_t latency = now - op->get_req()->get_recv_stamp();
@@ -9085,15 +9065,7 @@ void OSD::dequeue_op(
 
   // finish
   dout(10) << "dequeue_op " << op << " finish" << dendl;
-#ifdef WITH_LTTNG
-  if (m && m->get_type() == CEPH_MSG_OSD_OP)  {
-    ostringstream buf;
-    buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type() <<","
-        << ((MOSDOp *)m)->get_oid().name.c_str();
-    OID_EVENT_TRACE(buf.str().c_str(), "DEQUEUE_OP_END");
-  }
-#endif
+  OID_EVENT_TRACE_WITH_MSG(op->get_req(), "DEQUEUE_OP_END", true);
 }
 
 
