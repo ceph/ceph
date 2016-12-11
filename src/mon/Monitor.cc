@@ -690,6 +690,7 @@ int Monitor::preinit()
 
   int r = sanitize_options();
   if (r < 0) {
+    lock.Unlock();
     derr << "option sanitization failed!" << dendl;
     lock.Unlock();
     return r;
