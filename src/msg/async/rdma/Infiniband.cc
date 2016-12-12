@@ -49,6 +49,7 @@ Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_
 Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn), port_attr(new ibv_port_attr) {
    union ibv_gid cgid;
    struct ibv_exp_gid_attr gid_attr;
+   bool malformed = false;
 
    int r = ibv_query_port(ctxt, port_num, port_attr);
    if (r == -1) {
@@ -61,7 +62,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
    // search for requested GID in GIDs table
    ldout(cct, 1) << __func__ << " looking for local GID " << (cct->_conf->ms_async_rdma_local_gid)
        << " of type " << (cct->_conf->ms_async_rdma_roce_ver) << dendl;
-   sscanf(cct->_conf->ms_async_rdma_local_gid.c_str(),
+   r = sscanf(cct->_conf->ms_async_rdma_local_gid.c_str(),
        "%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx"
        ":%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx",
      &cgid.raw[ 0], &cgid.raw[ 1],
@@ -72,6 +73,11 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
      &cgid.raw[10], &cgid.raw[11],
      &cgid.raw[12], &cgid.raw[13],
      &cgid.raw[14], &cgid.raw[15]);
+
+   if (r != 16) {
+     ldout(cct, 1) << __func__ << " malformed or no GID supplied, using GID index 0" << dendl;
+     malformed = true;
+   }
 
    gid_attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE;
 
@@ -86,6 +92,8 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
        lderr(cct) << __func__  << " query gid attributes of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno) << dendl;
        ceph_abort();
      }
+
+     if (malformed) break; // stay with gid_idx=0
      if ( (gid_attr.type == cct->_conf->ms_async_rdma_roce_ver) &&
 	   (memcmp(&gid, &cgid, 16) == 0) ) {
 	ldout(cct, 1) << __func__ << " found at index " << gid_idx << dendl;
