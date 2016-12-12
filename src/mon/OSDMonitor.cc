@@ -3006,21 +3006,25 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     // warn about flags
-    if (osdmap.test_flag(CEPH_OSDMAP_FULL |
-			 CEPH_OSDMAP_PAUSERD |
-			 CEPH_OSDMAP_PAUSEWR |
-			 CEPH_OSDMAP_NOUP |
-			 CEPH_OSDMAP_NODOWN |
-			 CEPH_OSDMAP_NOIN |
-			 CEPH_OSDMAP_NOOUT |
-			 CEPH_OSDMAP_NOBACKFILL |
-			 CEPH_OSDMAP_NOREBALANCE |
-			 CEPH_OSDMAP_NORECOVER |
-			 CEPH_OSDMAP_NOSCRUB |
-			 CEPH_OSDMAP_NODEEP_SCRUB |
-			 CEPH_OSDMAP_NOTIERAGENT)) {
+    uint64_t warn_flags =
+      CEPH_OSDMAP_FULL |
+      CEPH_OSDMAP_PAUSERD |
+      CEPH_OSDMAP_PAUSEWR |
+      CEPH_OSDMAP_PAUSEREC |
+      CEPH_OSDMAP_NOUP |
+      CEPH_OSDMAP_NODOWN |
+      CEPH_OSDMAP_NOIN |
+      CEPH_OSDMAP_NOOUT |
+      CEPH_OSDMAP_NOBACKFILL |
+      CEPH_OSDMAP_NORECOVER |
+      CEPH_OSDMAP_NOSCRUB |
+      CEPH_OSDMAP_NODEEP_SCRUB |
+      CEPH_OSDMAP_NOTIERAGENT |
+      CEPH_OSDMAP_NOREBALANCE;
+    if (osdmap.test_flag(warn_flags)) {
       ostringstream ss;
-      ss << osdmap.get_flag_string() << " flag(s) set";
+      ss << osdmap.get_flag_string(osdmap.get_flags() & warn_flags)
+	 << " flag(s) set";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail)
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
