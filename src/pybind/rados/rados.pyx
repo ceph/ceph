@@ -2235,7 +2235,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error reading %s" % object_name)
         return completion
 
-    @requires(('object_name', str_type), ('cls', str_type), ('method', str_type), ('data', bytes),
+    @requires(('object_name', str_type), ('cls', str_type), ('method', str_type),
+              ('data', bytes), ('length', int),
               ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_execute(self, object_name, cls, method, data,
                     length=8192, oncomplete=None, onsafe=None):
