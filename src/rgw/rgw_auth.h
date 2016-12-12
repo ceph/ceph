@@ -647,6 +647,49 @@ public:
   };
 };
 
+
+/* rgw::auth::LocalApplier targets those auth engines that base on the data
+ * enclosed in the RGWUserInfo control structure. As a side effect of doing
+ * the authentication process, they must have it loaded. Leveraging this is
+ * a way to avoid unnecessary calls to underlying RADOS store. */
+class LocalApplier : public IdentityApplier {
+  using aclspec_t = RGWIdentityApplier::aclspec_t;
+
+protected:
+  const RGWUserInfo user_info;
+  const std::string subuser;
+
+  uint32_t get_perm_mask(const std::string& subuser_name,
+                         const RGWUserInfo &uinfo) const;
+
+public:
+  static const std::string NO_SUBUSER;
+
+  LocalApplier(CephContext* const cct,
+               const RGWUserInfo& user_info,
+               std::string subuser)
+    : user_info(user_info),
+      subuser(std::move(subuser)) {
+  }
+
+
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  bool is_admin_of(const rgw_user& uid) const override;
+  bool is_owner_of(const rgw_user& uid) const override;
+  uint32_t get_perm_mask() const override {
+    return get_perm_mask(subuser, user_info);
+  }
+  void to_str(std::ostream& out) const override;
+  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+
+  struct Factory {
+    virtual ~Factory() {}
+    virtual aplptr_t create_apl_local(CephContext* const cct,
+                                      const RGWUserInfo& user_info,
+                                      const std::string& subuser) const = 0;
+    };
+};
+
 } /* namespace auth */
 } /* namespace rgw */
 
