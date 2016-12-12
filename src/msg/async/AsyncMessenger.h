@@ -48,7 +48,7 @@ class Processor {
   NetHandler net;
   Worker *worker;
   ServerSocket listen_socket;
-  uint64_t nonce;
+  uint32_t nonce;
   EventCallbackRef listen_handler;
 
   class C_processor_accept;
@@ -83,7 +83,7 @@ public:
    * be a value that will be repeated if the daemon restarts.
    */
   AsyncMessenger(CephContext *cct, entity_name_t name,
-                 string mname, uint64_t _nonce);
+                 string mname, uint32_t nonce);
 
   /**
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
@@ -226,7 +226,7 @@ private:
   Mutex lock;
   // AsyncMessenger stuff
   /// approximately unique ID set by the Constructor for use in entity_addr_t
-  uint64_t nonce;
+  uint32_t nonce;
 
   /// true, specifying we haven't learned our addr; set false when we find it.
   // maybe this should be protected by the lock?

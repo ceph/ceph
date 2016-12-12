@@ -31,7 +31,7 @@ private:
 public:
 
   SimplePolicyMessenger(CephContext *cct, entity_name_t name,
-			string mname, uint64_t _nonce)
+			string mname, uint32_t nonce)
     : Messenger(cct, name),
       policy_lock("SimplePolicyMessenger::policy_lock")
     {

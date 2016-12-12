@@ -82,7 +82,7 @@ public:
    * features The local features bits for the local_connection
    */
   SimpleMessenger(CephContext *cct, entity_name_t name,
-		  string mname, uint64_t _nonce);
+		  string mname, uint32_t nonce);
 
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
@@ -262,7 +262,7 @@ private:
 
   // SimpleMessenger stuff
   /// approximately unique ID set by the Constructor for use in entity_addr_t
-  uint64_t nonce;
+  uint32_t nonce;
   /// overall lock used for SimpleMessenger data structures
   Mutex lock;
   /// true, specifying we haven't learned our addr; set false when we find it.

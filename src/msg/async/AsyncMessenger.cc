@@ -166,7 +166,6 @@ int Processor::rebind(const set<int>& avoid_ports)
 
   // adjust the nonce; we want our entity_addr_t to be truly unique.
   nonce += 1000000;
-  msgr->my_inst.addr.nonce = nonce;
   ldout(msgr->cct, 10) << __func__ << " new nonce " << nonce << " and inst " << msgr->my_inst << dendl;
 
   ldout(msgr->cct, 10) << __func__ << " will try " << addr << " and avoid ports " << new_avoid << dendl;
@@ -265,7 +264,7 @@ class C_handle_reap : public EventCallback {
  */
 
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
-                               string mname, uint64_t _nonce)
+                               string mname, uint32_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     dispatch_queue(cct, this, mname),
     lock("AsyncMessenger::lock"),
