@@ -55,9 +55,6 @@
 // will resume processing.
 
 template <typename... T>
-class stream;
-
-template <typename... T>
 class subscription;
 
 template <typename... T>

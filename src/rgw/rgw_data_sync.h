@@ -185,9 +185,7 @@ struct rgw_datalog_shard_data {
 };
 
 class RGWAsyncRadosProcessor;
-class RGWDataSyncStatusManager;
 class RGWDataSyncControlCR;
-struct RGWDataSyncEnv;
 
 struct rgw_bucket_entry_owner {
   string id;

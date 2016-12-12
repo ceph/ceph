@@ -122,7 +122,6 @@ e 12v
 
 class Monitor;
 class MMonPaxos;
-class Paxos;
 
 enum {
   l_paxos_first = 45800,

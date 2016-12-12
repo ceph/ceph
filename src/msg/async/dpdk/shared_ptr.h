@@ -49,9 +49,6 @@ using remove_const_t = typename remove_const<T>::type;
 template <typename T>
 class lw_shared_ptr;
 
-template <typename T>
-class enable_lw_shared_from_this;
-
 template <typename T, typename... A>
 lw_shared_ptr<T> make_lw_shared(A&&... a);
 

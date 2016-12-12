@@ -38,7 +38,6 @@ class SafeTimer;
 
 namespace librbd {
 
-  struct ImageCtx;
   class AioCompletion;
   class AioImageRequestWQ;
   class AsyncOperation;
