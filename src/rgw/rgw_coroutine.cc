@@ -462,6 +462,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   int ret = 0;
   int blocked_count = 0;
   int interval_wait_count = 0;
+  bool canceled = false; // set on going_down
   RGWCoroutinesEnv env;
 
   uint64_t run_context = run_context_count.inc();
@@ -573,12 +574,13 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       if (going_down.read() > 0) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
 	ret = -ECANCELED;
+        canceled = true;
         break;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
       iter = scheduled_stacks.begin();
     }
-    if (ret == -ECANCELED) {
+    if (canceled) {
       break;
     }
 
