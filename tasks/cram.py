@@ -29,6 +29,7 @@ def task(ctx, config):
               - http://ceph.com/qa/test.t
               - http://ceph.com/qa/test2.t]
               client.1: [http://ceph.com/qa/test.t]
+            branch: foo
 
     You can also run a list of cram tests on all clients::
 
@@ -49,6 +50,17 @@ def task(ctx, config):
                                                   config['clients'])
     testdir = teuthology.get_testdir(ctx)
 
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('workunit', {}))
+
+    refspec = config.get('branch')
+    if refspec is None:
+        refspec = config.get('tag')
+    if refspec is None:
+        refspec = config.get('sha1')
+    if refspec is None:
+        refspec = 'HEAD'
+
     try:
         for client, tests in clients.iteritems():
             (remote,) = ctx.cluster.only(client).remotes.iterkeys()
@@ -68,7 +80,7 @@ def task(ctx, config):
                 assert test.endswith('.t'), 'tests must end in .t'
                 remote.run(
                     args=[
-                        'wget', '-nc', '-nv', '-P', client_dir, '--', test,
+                        'wget', '-nc', '-nv', '-P', client_dir, '--', test.format(branch=refspec),
                         ],
                     )
 
