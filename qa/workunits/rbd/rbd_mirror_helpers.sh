@@ -176,8 +176,10 @@ setup()
     trap cleanup INT TERM EXIT
 
     if [ -n "${RBD_MIRROR_TEMDIR}" ]; then
+	test -d "${RBD_MIRROR_TEMDIR}" ||
 	mkdir "${RBD_MIRROR_TEMDIR}"
 	TEMPDIR="${RBD_MIRROR_TEMDIR}"
+	cd ${TEMPDIR}
     else
 	TEMPDIR=`mktemp -d`
     fi
@@ -187,8 +189,10 @@ setup()
         ${CEPH_SRC}/mstart.sh ${CLUSTER1} -n
         ${CEPH_SRC}/mstart.sh ${CLUSTER2} -n
 
+	rm -f ${TEMPDIR}/${CLUSTER1}.conf
         ln -s $(readlink -f run/${CLUSTER1}/ceph.conf) \
            ${TEMPDIR}/${CLUSTER1}.conf
+	rm -f ${TEMPDIR}/${CLUSTER2}.conf
         ln -s $(readlink -f run/${CLUSTER2}/ceph.conf) \
            ${TEMPDIR}/${CLUSTER2}.conf
 
@@ -234,6 +238,7 @@ cleanup()
         ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
         ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
     fi
+    test "${RBD_MIRROR_TEMDIR}" = "${TEMPDIR}" ||
     rm -Rf ${TEMPDIR}
 }
 
