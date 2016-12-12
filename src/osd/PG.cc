@@ -5586,6 +5586,19 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
+  if (cct->_conf->osd_debug_verify_cached_snaps) {
+    interval_set<snapid_t> actual_removed_snaps;
+    const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
+    assert(pi);
+    pi->build_removed_snaps(actual_removed_snaps);
+    if (!(actual_removed_snaps == pool.cached_removed_snaps)) {
+      derr << __func__ << ": mismatch between the actual removed snaps "
+	   << actual_removed_snaps << " and pool.cached_removed_snaps "
+	   << " pool.cached_removed_snaps " << pool.cached_removed_snaps
+	   << dendl;
+    }
+    assert(actual_removed_snaps == pool.cached_removed_snaps);
+  }
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
