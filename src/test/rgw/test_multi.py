@@ -804,6 +804,15 @@ def test_versioned_object_incremental_sync():
             realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
             check_bucket_eq(source_zone, target_zone, bucket)
 
+def test_bucket_versioning():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    for zone, bucket in zone_bucket.items():
+        bucket.configure_versioning(True)
+        res = bucket.get_versioning_status()
+        key = 'Versioning'
+        assert(key in res and res[key] == 'Enabled')
+
 def test_multi_period_incremental_sync():
     if len(realm.clusters) < 3:
         from nose.plugins.skip import SkipTest
