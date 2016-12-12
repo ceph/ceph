@@ -179,6 +179,7 @@ public:
 MDCache::MDCache(MDSRank *m) :
   mds(m),
   filer(m->objecter, m->finisher),
+  exceeded_size_limit(false),
   recovery_queue(m),
   stray_manager(m)
 {
@@ -279,6 +280,10 @@ void MDCache::add_inode(CInode *in)
     }
     if (in->is_base())
       base_inodes.insert(in);
+  }
+
+  if (get_num_inodes() > g_conf->mds_cache_size * 1.5) {
+    exceeded_size_limit = true;
   }
 }
 
@@ -7377,6 +7382,21 @@ void MDCache::check_memory_usage()
       last_recall_state = ceph_clock_now(g_ceph_context);
       mds->server->recall_client_state(ratio);
     }
+  }
+
+  // If the cache size had exceeded its limit, but we're back in bounds
+  // now, free any unused pool memory so that our memory usage isn't
+  // permanently bloated.
+  if (exceeded_size_limit
+      && get_num_inodes() <= g_conf->mds_cache_size * 1.5) {
+    // Only do this once we are back in bounds: otherwise the releases would
+    // slow down whatever process caused us to exceed bounds to begin with
+    dout(2) << "check_memory_usage: releasing unused space from pool allocators"
+            << dendl;
+    CInode::pool.release_memory();
+    CDir::pool.release_memory();
+    CDentry::pool.release_memory();
+    exceeded_size_limit = false;
   }
 }
 
