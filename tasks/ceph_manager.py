@@ -2,6 +2,7 @@
 ceph manager -- Thrasher and CephManager objects
 """
 from cStringIO import StringIO
+from functools import wraps
 import contextlib
 import random
 import time
@@ -10,6 +11,7 @@ import base64
 import json
 import logging
 import threading
+import traceback
 import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
@@ -110,6 +112,7 @@ class Thrasher:
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
+        self.dump_ops_enable = self.config.get('dump_ops_enable')
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -133,6 +136,8 @@ class Thrasher:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
         self.thread = gevent.spawn(self.do_thrash)
+        if self.dump_ops_enable == "true":
+            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
@@ -437,6 +442,9 @@ class Thrasher:
         """
         self.stopping = True
         self.thread.get()
+        if self.dump_ops_enable == "true":
+            self.log("joining the do_dump_ops greenlet")
+            self.dump_ops_thread.join()
 
     def grow_pool(self):
         """
@@ -644,6 +652,34 @@ class Thrasher:
             val -= prob
         return None
 
+    def log_exc(func):
+        @wraps(func)
+        def wrapper(self):
+            try:
+                return func(self)
+            except:
+                self.log(traceback.format_exc())
+                raise
+        return wrapper
+
+    @log_exc
+    def do_dump_ops(self):
+        """
+        Loops and does op dumps on all osds
+        """
+        self.log("starting do_dump_ops")
+        while not self.stopping:
+            for osd in self.live_osds:
+                # Ignore errors because live_osds is in flux
+                self.ceph_manager.osd_admin_socket(osd, command=['dump_ops_in_flight'],
+                                     check_status=False, timeout=30)
+                self.ceph_manager.osd_admin_socket(osd, command=['dump_blocked_ops'],
+                                     check_status=False, timeout=30)
+                self.ceph_manager.osd_admin_socket(osd, command=['dump_historic_ops'],
+                                     check_status=False, timeout=30)
+            gevent.sleep(0)
+
+    @log_exc
     def do_thrash(self):
         """
         Loop to select random actions to thrash ceph manager with.
@@ -876,8 +912,8 @@ class CephManager:
                 ]
             )
 
-    def osd_admin_socket(self, osd_id, command, check_status=True):
-        return self.admin_socket('osd', osd_id, command, check_status)
+    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0):
+        return self.admin_socket('osd', osd_id, command, check_status, timeout)
 
     def find_remote(self, service_type, service_id):
         """
@@ -898,7 +934,7 @@ class CephManager:
                                                           service_id))
 
     def admin_socket(self, service_type, service_id,
-                     command, check_status=True):
+                     command, check_status=True, timeout=0):
         """
         Remotely start up ceph specifying the admin socket
         :param command: a list of words to use as the command
@@ -911,6 +947,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            str(timeout),
             'ceph',
             '--admin-daemon',
             '/var/run/ceph/ceph-{type}.{id}.asok'.format(
