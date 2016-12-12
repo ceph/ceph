@@ -282,7 +282,8 @@ void MDCache::add_inode(CInode *in)
       base_inodes.insert(in);
   }
 
-  if (get_num_inodes() > g_conf->mds_cache_size * 1.5) {
+  if (get_num_inodes() >
+        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     exceeded_size_limit = true;
   }
 }
@@ -7388,7 +7389,8 @@ void MDCache::check_memory_usage()
   // now, free any unused pool memory so that our memory usage isn't
   // permanently bloated.
   if (exceeded_size_limit
-      && get_num_inodes() <= g_conf->mds_cache_size * 1.5) {
+      && get_num_inodes() <=
+        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     // Only do this once we are back in bounds: otherwise the releases would
     // slow down whatever process caused us to exceed bounds to begin with
     dout(2) << "check_memory_usage: releasing unused space from pool allocators"
