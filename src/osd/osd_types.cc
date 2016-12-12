@@ -54,6 +54,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
   case CEPH_OSD_FLAG_FULL_TRY: return "full_try";
   case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
+  case CEPH_OSD_FLAG_REPAIR_READS: return "repair_reads";
   default: return "???";
   }
 }
@@ -5325,6 +5326,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_SETALLOCHINT:
       out << " object_size " << op.op.alloc_hint.expected_object_size
           << " write_size " << op.op.alloc_hint.expected_write_size;
+      break;
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      out << " e" << op.op.assert_interval.epoch;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
