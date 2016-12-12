@@ -684,3 +684,57 @@ void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const     
 
   /* Succeeded if we are here (create_account() hasn't throwed). */
 }
+
+
+/* rgw::auth::LocalApplier */
+/* static declaration */
+const std::string rgw::auth::LocalApplier::NO_SUBUSER;
+
+uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+{
+  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
+}
+
+bool rgw::auth::LocalApplier::is_admin_of(const rgw_user& uid) const
+{
+  return user_info.admin || user_info.system;
+}
+
+bool rgw::auth::LocalApplier::is_owner_of(const rgw_user& uid) const
+{
+  return uid == user_info.user_id;
+}
+
+void rgw::auth::LocalApplier::to_str(std::ostream& out) const
+{
+  out << "rgw::auth::LocalApplier(acct_user=" << user_info.user_id
+      << ", acct_name=" << user_info.display_name
+      << ", subuser=" << subuser
+      << ", perm_mask=" << get_perm_mask()
+      << ", is_admin=" << user_info.admin << ")";
+}
+
+uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
+                                                const RGWUserInfo &uinfo) const
+{
+  if (! subuser_name.empty() && subuser_name != NO_SUBUSER) {
+    const auto iter = uinfo.subusers.find(subuser_name);
+
+    if (iter != std::end(uinfo.subusers)) {
+      return iter->second.perm_mask;
+    } else {
+      /* Subuser specified but not found. */
+      return RGW_PERM_NONE;
+    }
+  } else {
+    /* Due to backward compatibility. */
+    return RGW_PERM_FULL_CONTROL;
+  }
+}
+
+void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* out */
+{
+  /* Load the account that belongs to the authenticated identity. An extra call
+   * to RADOS may be safely skipped in this case. */
+  user_info = this->user_info;
+}
