@@ -3065,8 +3065,20 @@ reprotect_and_return_err:
 
 	librados::snap_set_t snap_set;
 	int r = head_ctx.list_snaps(p->first.name, &snap_set);
-	if (r == -ENOENT) {
-	  if (from_snap_id == 0 && !parent_diff.empty()) {
+	if (r < 0 && r != -ENOENT) {
+	  return r;
+	}
+
+	// calc diff from from_snap_id -> to_snap_id
+	interval_set<uint64_t> diff;
+	bool end_exists = false;
+	if (!snap_set.clones.empty()) {
+	  calc_snap_set_diff(ictx->cct, snap_set, from_snap_id, end_snap_id,
+			     &diff, &end_exists);
+	  ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
+	}
+	if (diff.empty()) {
+	  if (from_snap_id == 0 && !parent_diff.empty() && !end_exists) {
 	    // report parent diff instead
 	    for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	      for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
@@ -3084,19 +3096,6 @@ reprotect_and_return_err:
 	  }
 	  continue;
 	}
-	if (r < 0)
-	  return r;
-
-	// calc diff from from_snap_id -> to_snap_id
-	interval_set<uint64_t> diff;
-	bool end_exists;
-	calc_snap_set_diff(ictx->cct, snap_set,
-			   from_snap_id,
-			   end_snap_id,
-			   &diff, &end_exists);
-	ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
-	if (diff.empty())
-	  continue;
 
 	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	  ldout(ictx->cct, 20) << "diff_iterate object " << p->first
