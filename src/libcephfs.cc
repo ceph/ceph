@@ -625,6 +625,17 @@ extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing
   return cmount->get_client()->symlink(existing, newname, cmount->default_perms);
 }
 
+extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
+                            unsigned int want, unsigned int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  if (flags & ~CEPH_REQ_FLAG_MASK)
+    return -EINVAL;
+  return cmount->get_client()->fstatx(fd, stx, cmount->default_perms,
+                                      want, flags);
+}
+
 extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
 			  struct ceph_statx *stx, unsigned int want, unsigned int flags)
 {
@@ -896,17 +907,6 @@ extern "C" int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->fallocate(fd, mode, offset, length);
-}
-
-extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
-			    unsigned int want, unsigned int flags)
-{
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return cmount->get_client()->fstatx(fd, stx, cmount->default_perms,
-				      want, flags);
 }
 
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
