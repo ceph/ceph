@@ -857,8 +857,8 @@ Notable Changes:
 * tools: ceph-create-keys should not try forever to do things (`issue#17753 <http://tracker.ceph.com/issues/17753>`_, `issue#12649 <http://tracker.ceph.com/issues/12649>`_, `issue#16255 <http://tracker.ceph.com/issues/16255>`_, `pr#11749 <http://github.com/ceph/ceph/pull/11749>`_, Alfredo Deza)
 
 
-v11.0.2
-=======
+v11.0.2 Kraken
+==============
 
 This development checkpoint release includes a lot of changes and improvements
 to Kraken. This is the first release introducing ceph-mgr, a new daemon which
