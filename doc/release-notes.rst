@@ -101,6 +101,12 @@ Upgrading from Jewel
 Upgrading
 ---------
 
+* The OSDs now avoid starting new scrubs while recovery is in progress.  To
+  revert to the old behavior (and do not let recovery activity affect the
+  scrub scheduling) you can set the following option::
+
+    osd scrub during recovery = true
+
 * The list of monitor hosts/addresses for building the monmap can now be
   obtained from DNS SRV records. The service name used in when querying the DNS
   is defined in the "mon_dns_srv_name" config option, which defaults to
