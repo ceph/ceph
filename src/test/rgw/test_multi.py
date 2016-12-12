@@ -813,6 +813,14 @@ def test_bucket_versioning():
         key = 'Versioning'
         assert(key in res and res[key] == 'Enabled')
 
+def test_bucket_acl():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    for zone, bucket in zone_bucket.items():
+        assert(len(bucket.get_acl().acl.grants) == 1) # single grant on owner
+        bucket.set_acl('public-read')
+        assert(len(bucket.get_acl().acl.grants) == 2) # new grant on AllUsers
+
 def test_multi_period_incremental_sync():
     if len(realm.clusters) < 3:
         from nose.plugins.skip import SkipTest
