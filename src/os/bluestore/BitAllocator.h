@@ -380,6 +380,8 @@ public:
   using BitMapArea::alloc_blocks_dis;
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
+  int64_t alloc_blocks_dis2(int64_t num_blocks, int64_t min_alloc, int64_t hint,
+        int64_t blk_off, ExtentList *block_list);  
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
 
   void free_blocks(int64_t start_block, int64_t num_blocks);
