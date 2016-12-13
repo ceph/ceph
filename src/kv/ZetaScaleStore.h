@@ -75,6 +75,7 @@ class ZSStore : public KeyValueDB
   string db_path;
   string options;
   int dev_log_fd, dev_data_fd;
+  int data_chunking;
 
   ZS_cguid_t cguid, cguid_lc;
   std::atomic_int zs_num_thread_in_parallel = {0};

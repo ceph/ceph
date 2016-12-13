@@ -210,6 +210,7 @@ int ZSStore::_init(bool format)
 	  << dendl;
     return 1;
   }
+  data_chunking = 0;
 
   uint64_t flash_size = size / (1024 * 1024 * 1024);
   dinfo << "ZS data partition size is set to " << flash_size << "Gb" << dendl;
@@ -646,7 +647,7 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
       continue;
     }
 
-    if (length > 4096) {
+    if (data_chunking == 0) {
       if (!enqueue_obj(cguid, objs, &i, op.first.c_str(), op.first.length(),
 		       ptr, length)) {
             fm.unlock();
@@ -688,6 +689,9 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
   fm.unlock();
 
   if (i) {
+    for (int iter = 0; iter < i ; iter++) {
+      dtrace << "ZSMPut keys = " << decode_key(objs[iter].key) << dendl;
+    }
     status = ZSMPut(_thd_state(), cguid, i, objs, 0, &objs_written);
     assert(status != ZS_SUCCESS || objs_written == i);
   }
@@ -853,6 +857,20 @@ int ZSStore::_get(const string &key, bufferlist *out)
     dtrace << "ZSReadObject logging: [" << status << "]" << datalen << dendl;
     if (status == ZS_SUCCESS)
       out->push_back(buffer::claim_malloc(datalen, dataw));
+
+    return status == ZS_SUCCESS ? 0 : -EIO;
+  }
+
+  if ( data_chunking == 0 ) {
+    uint64_t datalen = 0;
+    char *dataw = NULL;
+    ZS_status_t status = ZSReadObject(_thd_state(), cguid, key.c_str(),
+                                      key.length(), &dataw, &datalen);
+    dtrace << "ZSReadObject logging: [" << status << "]" << datalen << dendl;
+    if (status == ZS_SUCCESS)
+      out->push_back(buffer::claim_malloc(datalen, dataw));
+    if (status == ZS_OBJECT_UNKNOWN)
+      return -ENOENT;
 
     return status == ZS_SUCCESS ? 0 : -EIO;
   }
