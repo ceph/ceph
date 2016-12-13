@@ -10,6 +10,7 @@
 
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_swift_auth.h"
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;

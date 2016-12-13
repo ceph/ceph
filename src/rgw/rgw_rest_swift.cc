@@ -2077,6 +2077,44 @@ int RGWHandler_REST_SWIFT::authorize()
     }
   } aplfact(store, s->account_name);
 
+
+  auto strategy = rgw::auth::swift::DefaultStrategy::get_instance();
+  rgw::auth::Applier::aplptr_t applier;
+  rgw::auth::Completer::cmplptr_t completer;
+
+  std::tie(applier, completer) = strategy.authenticate(s);
+
+  try {
+    if (! applier) {
+      /* Access denied is acknowledged by returning a std::unique_ptr with
+       * nullptr inside. */
+      ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
+      return -EPERM;
+    }
+
+    try {
+      /* Account used by a given RGWOp is decoupled from identity employed
+       * in the authorization phase (RGWOp::verify_permissions). */
+      applier->load_acct_info(*s->user);
+      //s->perm_mask = applier->get_perm_mask();
+
+      /* This is the signle place where we pass req_state as a pointer
+       * to non-const and thus its modification is allowed. In the time
+       * of writing only RGWTempURLEngine needed that feature. */
+      applier->modify_request_state(s);
+
+      // FIXME
+      //applier->load_identity();
+      //s->auth_identity = std::move(applier);
+    } catch (int err) {
+      ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
+      return err;
+    }
+  } catch (int err) {
+    ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+    return err;
+  }
+
   /* Extractors. */
   RGWXAuthTokenExtractor token_extr(s);
 
