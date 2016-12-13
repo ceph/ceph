@@ -1551,13 +1551,27 @@ private:
   //KVSyncThread kv_sync_thread;
   vector<KVSyncThread*> kv_sync_thread_list;
   std::mutex kv_lock;
-  std::condition_variable kv_cond, kv_sync_cond;
+  //std::condition_variable kv_cond, kv_sync_cond;
+  std::condition_variable kv_sync_cond;
   bool kv_stop;
-  deque<TransContext*> kv_queue;             ///< ready, already submitted
-  deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
+  //deque<TransContext*> kv_queue;             ///< ready, already submitted
+  //deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   //deque<TransContext*> kv_committing;        ///< currently syncing
-  deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
+  //deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
   std::atomic_int kv_pending_commits = {0};
+  std::atomic_int kv_threads_stop = {0};
+
+  struct kv_sync_shard {
+    std::condition_variable kv_cond_shard;
+    std::mutex kv_lock_shard;
+    deque<TransContext*> kv_queue_shard;             ///< ready,already submitted
+    deque<TransContext*> kv_queue_unsubmitted_shard; ///< ready,need submit by kv thread
+    deque<TransContext*> wal_cleanup_queue_shard;
+    uint32_t attached_tid;
+    kv_sync_shard(uint32_t tid): attached_tid(tid) {}
+  };
+
+  vector<kv_sync_shard*> kv_sync_shard_list;
 
   PerfCounters *logger;
 
@@ -1703,8 +1717,13 @@ private:
     {
       std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = true;
-      kv_cond.notify_all();
     }
+      //kv_cond.notify_all();
+    for (uint32_t i =0; i < kv_sync_shard_list.size(); i++) {
+      std::lock_guard<std::mutex> l (kv_sync_shard_list[i]->kv_lock_shard);
+      kv_sync_shard_list[i]->kv_cond_shard.notify_all();
+    }
+
     //kv_sync_thread.join();
     for (uint32_t i =0; i < kv_sync_thread_list.size(); i++) {
      kv_sync_thread_list[i]->join(); 
