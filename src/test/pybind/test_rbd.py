@@ -1519,6 +1519,23 @@ class TestConsistencyGroups(object):
         answer.sort()
         eq(snap_names, answer)
 
+    def test_group_snap_info(self):
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+        self.group.create_snap(snap_name)
+        snap_info = self.group.snap_info(snap_name)
+        eq(snap_name, snap_info['name'])
+        eq(1, snap_info['state'])
+
+    def test_group_snap_list_members(self):
+        global snap_name
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap(snap_name)
+        image_snaps_list = self.group.list_snap_members(snap_name)
+        answer = [snap['image_name'] for snap in image_snaps_list]
+        eq(['image1'], answer)
+        self.group.remove_snap(snap_name)
+
 @with_setup(create_image, remove_image)
 def test_rename():
     rbd = RBD()

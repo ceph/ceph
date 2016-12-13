@@ -20,6 +20,10 @@ int group_snap_create(librados::IoCtx& group_ioctx,
 		      const char *group_name, const char *snap_name);
 int group_snap_remove(librados::IoCtx& group_ioctx,
 		      const char *group_name, const char *snap_name);
+int group_snap_info(librados::IoCtx& group_ioctx,
+		    const char *group_name,
+		    const char *snap_name,
+		    group_snap_spec_t *snap_spec);
 int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 		    std::vector<group_snap_spec_t> *snaps);
 }

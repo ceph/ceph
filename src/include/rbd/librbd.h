@@ -165,6 +165,12 @@ typedef enum {
 } rbd_group_snap_state_t;
 
 typedef struct {
+  char *pool_name;
+  char *image_name;
+  uint64_t snap_id;
+} rbd_group_image_snap_spec_t;
+
+typedef struct {
   char *name;
   rbd_group_snap_state_t state;
 } rbd_group_snap_spec_t;
@@ -772,6 +778,17 @@ CEPH_RBD_API int rbd_group_snap_create(rados_ioctx_t group_p, const char *group_
 					const char *snap_name);
 CEPH_RBD_API int rbd_group_snap_remove(rados_ioctx_t group_p, const char *group_name,
 					const char *snap_name);
+CEPH_RBD_API int rbd_group_snap_info(rados_ioctx_t group_p, const char *group_name,
+				     const char *snap_name,
+				     rbd_group_snap_spec_t *snap);
+CEPH_RBD_API int rbd_group_snap_list_members(rados_ioctx_t group_p, const char *group_name,
+					     const char *snap_name,
+					     rbd_group_image_snap_spec_t *snap,
+					     size_t *snaps_size);
+CEPH_RBD_API void rbd_group_image_snap_spec_cleanup(rbd_group_image_snap_spec_t *group_image_snap_spec);
+
+CEPH_RBD_API void rbd_group_image_snap_spec_list_cleanup(rbd_group_image_snap_spec_t *image_snaps,
+							 size_t len);
 CEPH_RBD_API int rbd_group_snap_list(rados_ioctx_t group_p, const char *group_name,
 				     rbd_group_snap_spec_t *snaps, size_t *snaps_size);
 CEPH_RBD_API void rbd_group_snap_spec_cleanup(rbd_group_snap_spec_t *group_snap_spec);

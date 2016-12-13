@@ -42,6 +42,59 @@ static string generate_uuid(librados::IoCtx& io_ctx)
   return bid_ss.str();
 }
 
+static int group_snap_info(librados::IoCtx& group_ioctx,
+			   const char *group_name,
+			   const char *snap_name,
+			   cls::rbd::GroupSnapshot *cls_snap)
+{
+  if (nullptr == cls_snap) {
+    return -EINVAL;
+  }
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+  librados::Rados rados(group_ioctx);
+
+  string group_id;
+
+  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
+				 group_name, &group_id);
+  if (r < 0) {
+    lderr(cct) << "error reading consistency group id object: "
+	       << cpp_strerror(r)
+	       << dendl;
+    return r;
+  }
+  string group_header_oid = util::group_header_name(group_id);
+
+  const int max_read = 1024;
+  cls::rbd::GroupSnapshot snap_last;
+
+  for (;;) {
+    vector<cls::rbd::GroupSnapshot> snaps_page;
+
+    r = cls_client::group_snap_list(&group_ioctx, group_header_oid,
+				    snap_last, max_read, &snaps_page);
+
+    if (r < 0) {
+      lderr(cct) << "error reading snap list from consistency group: " <<
+		    cpp_strerror(-r) << dendl;
+      return r;
+    }
+    for (cls::rbd::GroupSnapshot &snap : snaps_page) {
+      if (snap.name == string(snap_name)) {
+	*cls_snap = snap;
+	goto exit;
+      }
+    }
+    if (snaps_page.size() < max_read) {
+      break;
+    }
+    snap_last = *snaps_page.rbegin();
+  }
+
+exit:
+  return 0;
+}
+
 static int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 			   std::vector<cls::rbd::GroupSnapshot> *cls_snaps)
 {
@@ -843,6 +896,45 @@ int group_snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
   r = group_snap_remove_by_record(group_ioctx, *group_snap, group_id, group_header_oid);
 
   return r;
+}
+
+int group_snap_info(librados::IoCtx& group_ioctx, const char *group_name,
+		    const char *snap_name,
+		    group_snap_spec_t *snap_spec)
+{
+  if (nullptr == snap_spec) {
+    return -EINVAL;
+  }
+
+  cls::rbd::GroupSnapshot cls_snap;
+  int r = group_snap_info(group_ioctx, group_name, snap_name, &cls_snap);
+  if (r < 0) {
+    return r;
+  }
+  snap_spec->name = cls_snap.name;
+  snap_spec->state = static_cast<group_snap_state_t>(cls_snap.state);
+
+  snap_spec->snaps.clear();
+  for (cls::rbd::ImageSnapshotRef isr : cls_snap.snaps) {
+    librados::Rados rados(group_ioctx);
+    IoCtx ioctx;
+    rados.ioctx_create2(isr.pool, ioctx);
+
+    std::string image_name;
+    int r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
+				     isr.image_id, &image_name);
+    if (r < 0) {
+      return r;
+    }
+
+    group_image_snap_spec_t spec;
+    spec.pool_name = ioctx.get_pool_name();
+    spec.image_name = image_name;
+    spec.snap_id = isr.snap_id;
+    snap_spec->snaps.push_back(spec);
+  }
+
+  return 0;
 }
 
 int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
