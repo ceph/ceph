@@ -7963,6 +7963,12 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
     ldout(cct, 3) << "lookup_parent dentry already present" << dendl;
     return 0;
   }
+  
+  if (ino->is_root()) {
+    *parent = NULL;
+    ldout(cct, 3) << "ino is root, no parent" << dendl;
+    return -EINVAL;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
   filepath path(ino->ino);
