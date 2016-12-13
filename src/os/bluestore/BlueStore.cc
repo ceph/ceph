@@ -1608,23 +1608,28 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 	  endoff = n->offset;
 	}
 	bufferlist bl;
-	unsigned n;
-	if (encode_some(p->offset, endoff - p->offset, bl, &n)) {
+	unsigned nn;
+	if (encode_some(p->offset, endoff - p->offset, bl, &nn)) {
 	  return true;
 	}
         size_t len = bl.length();
 	dout(20) << __func__ << " shard 0x" << std::hex
 		 << p->offset << std::dec << " is " << len
-		 << " bytes (was " << p->shard_info->bytes << ") from " << n
+		 << " bytes (was " << p->shard_info->bytes << ") from " << nn
 		 << " extents" << dendl;
+
+        //indicate need for reshard if force mode selected, len > shard_max size OR
+        //non-last shard size is below the min threshold. The last check is to avoid potential 
+        //unneeded reshardings since this might happen permanently.
         if (!force &&
             (len > g_conf->bluestore_extent_map_shard_max_size ||
-             len < g_conf->bluestore_extent_map_shard_min_size)) {
+              (n != shards.end() && len < g_conf->bluestore_extent_map_shard_min_size) 
+             )) {
           return true;
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
-	p->shard_info->extents = n;
+	p->shard_info->extents = nn;
 	t->set(PREFIX_OBJ, p->key, bl);
 	p->dirty = false;
       }
