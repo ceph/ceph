@@ -124,6 +124,47 @@ public:
 };
 
 
+namespace rgw {
+namespace auth {
+namespace swift {
+
+class DefaultStrategy : public rgw::auth::Strategy,
+                        public rgw::auth::LocalApplier::Factory {
+  /* The engines. */
+  const rgw::auth::AnonymousEngine anon_engine;
+
+  DefaultStrategy(CephContext* const cct)
+    : anon_engine(cct, static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
+    /* When the constructor's body is being executed, all member engines
+     * should be initialized. Thus, we can safely add them. */
+    using Control = rgw::auth::Strategy::Control;
+    add_engine(Control::SUFFICIENT, anon_engine);
+  }
+
+  using aplptr_t = rgw::auth::Applier::aplptr_t;
+
+  aplptr_t create_apl_local(CephContext* const cct,
+                            const RGWUserInfo& user_info,
+                            const std::string& subuser) const override {
+    return aplptr_t(new rgw::auth::LocalApplier(cct, user_info, subuser));
+  }
+
+public:
+  const char* get_name() const noexcept override {
+    return "rgw::auth::swift::DefaultStrategy";
+  }
+
+  static const DefaultStrategy& get_instance() {
+    static const DefaultStrategy instance(g_ceph_context);
+    return instance;
+  }
+};
+
+} /* namespace swift */
+} /* namespace auth */
+} /* namespace rgw */
+
+
 class RGW_SWIFT_Auth_Get : public RGWOp {
 public:
   RGW_SWIFT_Auth_Get() {}
