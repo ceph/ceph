@@ -95,6 +95,7 @@ dict_templ = {
             'sha1': Placeholder('ceph_hash'),
         }
     },
+    'repo': Placeholder('ceph_repo'),
     'suite': Placeholder('suite'),
     'suite_repo': Placeholder('suite_repo'),
     'suite_relpath': Placeholder('suite_relpath'),

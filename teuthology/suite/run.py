@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 import pwd
+import re
 import time
 import yaml
 
@@ -37,6 +38,8 @@ class Run(object):
         self.args = args
         self.name = self.make_run_name()
 
+        if self.args.ceph_repo:
+            config.ceph_git_url = self.args.ceph_repo
         if self.args.suite_repo:
             config.ceph_qa_suite_git_url = self.args.suite_repo
 
@@ -100,6 +103,7 @@ class Run(object):
             suite_hash=suite_hash,
             ceph_branch=self.args.ceph_branch,
             ceph_hash=ceph_hash,
+            ceph_repo=config.get_ceph_git_url(),
             teuthology_branch=teuthology_branch,
             machine_type=self.args.machine_type,
             distro=self.args.distro,
@@ -144,18 +148,25 @@ class Run(object):
         just keep the ceph_branch around.  Otherwise use the current git branch
         tip.
         """
+        repo_name = self.ceph_repo_name
 
         if self.args.ceph_sha1:
-            ceph_hash = util.git_validate_sha1('ceph', self.args.ceph_sha1)
+            ceph_hash = util.git_validate_sha1(repo_name, self.args.ceph_sha1)
             if not ceph_hash:
-                exc = CommitNotFoundError(self.args.ceph_sha1, 'ceph.git')
+                exc = CommitNotFoundError(
+                    self.args.ceph_sha1,
+                    '%s.git' % repo_name
+                )
                 util.schedule_fail(message=str(exc), name=self.name)
             log.info("ceph sha1 explicitly supplied")
 
         elif self.args.ceph_branch:
-            ceph_hash = util.git_ls_remote('ceph', self.args.ceph_branch)
+            ceph_hash = util.git_ls_remote(repo_name, self.args.ceph_branch)
             if not ceph_hash:
-                exc = BranchNotFoundError(self.args.ceph_branch, 'ceph.git')
+                exc = BranchNotFoundError(
+                    self.args.ceph_branch,
+                    '%s.git' % repo_name
+                )
                 util.schedule_fail(message=str(exc), name=self.name)
 
         log.info("ceph sha1: {hash}".format(hash=ceph_hash))
@@ -196,11 +207,22 @@ class Run(object):
         return teuthology_branch
 
     @property
+    def ceph_repo_name(self):
+        if self.args.ceph_repo:
+            return self._repo_name(self.args.ceph_repo)
+        else:
+            return 'ceph'
+
+    @property
     def suite_repo_name(self):
         if self.args.suite_repo:
-            return self.args.suite_repo.split('/')[-1].rstrip('.git')
+            return self._repo_name(self.args.suite_repo)
         else:
             return 'ceph-qa-suite'
+
+    @staticmethod
+    def _repo_name(url):
+        return re.sub('\.git$', '', url.split('/')[-1])
 
     def choose_suite_branch(self):
         suite_repo_name = self.suite_repo_name
