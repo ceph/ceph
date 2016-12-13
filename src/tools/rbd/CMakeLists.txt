@@ -15,7 +15,6 @@ set(rbd_srcs
   action/Export.cc
   action/Feature.cc
   action/Flatten.cc
-  action/Group.cc
   action/ImageMeta.cc
   action/Import.cc
   action/Info.cc

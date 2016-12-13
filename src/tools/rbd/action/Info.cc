@@ -130,16 +130,6 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
 
   std::string prefix = image.get_block_name_prefix();
 
-  librbd::group_spec_t group_spec;
-  r = image.get_group(&group_spec);
-  if (r < 0) {
-    return r;
-  }
-
-  std::string group_string = "";
-  if (-1 != group_spec.pool)
-    group_string = stringify(group_spec.pool) + "." + group_spec.name;
-
   struct timespec create_timestamp;
   image.get_create_timestamp(&create_timestamp);
 
@@ -187,15 +177,6 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   if (!old_format) {
     format_features(f, features);
     format_flags(f, flags);
-  }
-
-  if (!group_string.empty()) {
-    if (f) {
-      f->dump_string("group", group_string);
-    } else {
-      std::cout << "\tconsistency group: " << group_string
-		<< std::endl;
-    }
   }
 
   if (!create_timestamp_str.empty()) {
