@@ -19,6 +19,8 @@ namespace consgrp {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+#define ID_PARAM "show-id"
+
 int execute_create(const po::variables_map &vm) {
   size_t arg_index = 0;
 
@@ -377,6 +379,70 @@ int execute_group_snap_remove(const po::variables_map &vm) {
   return r;
 }
 
+int execute_group_snap_info(const po::variables_map &vm) {
+  size_t arg_index = 0;
+
+  bool show_ids = vm[ID_PARAM].as<bool>();
+
+  std::string group_name;
+  std::string pool_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (vm.count(at::SNAPSHOT_NAME)) {
+    snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
+  }
+
+  if (snap_name.empty()) {
+    snap_name = utils::get_positional_argument(vm, arg_index++);
+  }
+
+  if (snap_name.empty()) {
+    std::cerr << "rbd: "
+	      << "snapshot name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  librados::IoCtx io_ctx;
+  librados::Rados rados;
+
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+  librbd::group_snap_spec_t snap_spec;
+
+  librbd::RBD rbd;
+  r = rbd.group_snap_info(io_ctx,
+			  group_name.c_str(),
+			  snap_name.c_str(),
+			  &snap_spec);
+  if (r < 0) {
+    std::cerr << "rbd: failed to get snapshot info" << std::endl;
+    return r;
+  }
+
+  std::cout << "rbd group snapshot '" << snap_spec.name << "':" << std::endl;
+  std::cout << "\tstate: " << snap_spec.state << std::endl;
+  std::cout << "\timages: " << std::endl;
+
+
+  for (librbd::group_image_snap_spec_t spec: snap_spec.snaps) {
+    std::cout << "\t\t" << spec.pool_name << "/" << spec.image_name;
+    if (show_ids) {
+      std::cout << "@" << spec.snap_id;
+    }
+    std::cout << std::endl;
+  }
+
+  return 0;
+}
+
 int execute_group_snap_list(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string group_name;
@@ -544,6 +610,19 @@ void get_group_snap_remove_arguments(po::options_description *positional,
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
 }
 
+void get_group_snap_info_arguments(po::options_description *positional,
+				      po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+
+  positional->add_options()
+    (at::SNAPSHOT_NAME.c_str(), "snapshot name\n(example: <snapshot-name>)");
+
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+
+  options->add_options()
+    (ID_PARAM, po::bool_switch(), "show image snapshot id");
+}
+
 void get_group_snap_list_arguments(po::options_description *positional,
                              po::options_description *options) {
   at::add_format_options(options);
@@ -574,6 +653,9 @@ Shell::Action action_group_snap_create(
 Shell::Action action_group_snap_remove(
   {"group", "snap", "remove"}, {}, "Remove a snapshot from a group.",
   "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
+Shell::Action action_group_snap_info(
+  {"group", "snap", "info"}, {}, "List image snapshots in a group snapshot.",
+  "", &get_group_snap_info_arguments, &execute_group_snap_info);
 Shell::Action action_group_snap_list(
   {"group", "snap", "list"}, {}, "List snapshots of a consistency group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);

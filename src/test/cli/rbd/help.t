@@ -27,6 +27,7 @@
       group list (group ls)       List rbd consistency groups.
       group remove (group rm)     Delete a consistency group.
       group snap create           Make a snapshot of a group.
+      group snap info             List image snapshots in a group snapshot.
       group snap list             List snapshots of a consistency group.
       group snap remove           Remove a snapshot from a group.
       image-meta get              Image metadata get the value associated with
@@ -531,6 +532,25 @@
     -p [ --pool ] arg    pool name
     --group arg          group name
     --snap arg           snapshot name
+  
+  rbd help group snap info
+  usage: rbd group snap info [--pool <pool>] [--group <group>] [--snap <snap>] 
+                             [--show-id] 
+                             <group-spec> <snap> 
+  
+  List image snapshots in a group snapshot.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+    <snap>               snapshot name
+                         (example: <snapshot-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+    --snap arg           snapshot name
+    --show-id            show image snapshot id
   
   rbd help group snap list
   usage: rbd group snap list [--format <format>] [--pretty-format] 
