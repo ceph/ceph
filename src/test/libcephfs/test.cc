@@ -999,7 +999,13 @@ TEST(LibCephFS, BadFileDesc) {
 
   ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
+  char poolname[80];
+  ASSERT_EQ(ceph_get_file_pool_name(cmount, -1, poolname, sizeof(poolname)), -EBADF);
   ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_get_file_object_size(cmount, -1), -EBADF);
+  int stripe_unit, stripe_count, object_size, pg_pool;
+  ASSERT_EQ(ceph_get_file_layout(cmount, -1, &stripe_unit, &stripe_count, &object_size, &pg_pool), -EBADF);
+  ASSERT_EQ(ceph_get_file_stripe_count(cmount, -1), -EBADF);
 
   ceph_shutdown(cmount);
 }
@@ -1182,9 +1188,20 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_fstatx(cmount, 0, &stx, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_sync_fs(cmount));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_count(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_layout(cmount, 0, NULL, NULL ,NULL ,NULL));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_object_size(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_pool(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_pool_name(cmount, 0, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_replication(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_replication(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_layout(cmount, "/path", NULL, NULL, NULL, NULL));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_object_size(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_stripe_count(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_stripe_unit(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_pool(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_get_path_pool_name(cmount, "/path", NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_pool_name(cmount, 0, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_address(cmount, 0, 0, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_localize_reads(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_debug_get_fd_caps(cmount, 0));
