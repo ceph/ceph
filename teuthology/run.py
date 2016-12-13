@@ -341,6 +341,10 @@ def main(args):
 
     args["summary"] = get_summary(owner, description)
 
+    ceph_repo = config.get('repo')
+    if ceph_repo:
+        teuth_config.ceph_git_url = ceph_repo
+
     config["tasks"] = validate_tasks(config)
 
     init_tasks = get_initial_tasks(lock, config, machine_type)
