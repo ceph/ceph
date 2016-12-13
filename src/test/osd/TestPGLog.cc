@@ -21,9 +21,9 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "osd/PGLog.h"
 #include "osd/OSDMap.h"
-#include "test/unit.h"
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
@@ -260,7 +260,8 @@ public:
     for (list<pg_log_entry_t>::const_iterator i = tcase.auth.begin();
 	 i != tcase.auth.end();
 	 ++i) {
-      omissing.add_next_event(*i);
+      if (i->version > oinfo.last_update)
+	omissing.add_next_event(*i);
     }
     verify_missing(tcase, omissing);
   }
@@ -291,22 +292,6 @@ struct TestHandler : public PGLog::LogEntryHandler {
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
-  // newhead > log.tail : throw an assert
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    log.tail = eversion_t(2, 1);
-    TestHandler h(remove_snap);
-    EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
-				      dirty_info, dirty_big_info), "");
-  }
-
   /*        +----------------+
             |  log           |
             +--------+-------+
@@ -1254,69 +1239,6 @@ TEST_F(PGLogTest, merge_log) {
 			   dirty_info, dirty_big_info), "");
   }
 
-  /*        +--------------------------+
-            |  log              olog   |
-            +--------+-------+---------+
-            |        |object |         |
-            |version | hash  | version |
-       tail > (0,0)  |       |         |
-            | (1,1)  |  x5   |         |
-            |        |       |         |
-            |        |       |         |
-       head > (1,2)  |  x3   |         |
-            |        |       |         |
-            |        |       |  (2,3)  < tail
-            |        |  x9   |  (2,4)  |
-            |        |       |         |
-            |        |  x5   |  (2,5)  < head
-            |        |       |         |
-            +--------+-------+---------+
-
-      If the logs do not overlap, throw an exception.
-
-  */
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_t olog;
-    pg_info_t oinfo;
-    pg_shard_t fromosd;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    {
-      pg_log_entry_t e;
-      e.mark_unrollbackable();
-
-      log.tail = eversion_t();
-      e.version = eversion_t(1, 1);
-      e.soid.set_hash(0x5);
-      log.log.push_back(e);
-      e.version = eversion_t(1, 2);
-      e.soid.set_hash(0x3);
-      log.log.push_back(e);
-      log.head = e.version;
-      log.index();
-
-      info.last_update = log.head;
-
-      olog.tail = eversion_t(2, 3);
-      e.version = eversion_t(2, 4);
-      e.soid.set_hash(0x9);
-      olog.log.push_back(e);
-      e.version = eversion_t(2, 5);
-      e.soid.set_hash(0x5);
-      olog.log.push_back(e);
-      olog.head = e.version;
-    }
-
-    TestHandler h(remove_snap);
-    EXPECT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
-  }
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
@@ -1944,6 +1866,34 @@ TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
   t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
   t.set_auth_bounds(mk_evt(15, 160), mk_evt(9, 77));
   t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, olog_tail_gt_log_tail_split) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(15, 153), mk_evt(15, 151));
+  t.set_auth_bounds(mk_evt(15, 156), mk_evt(10, 99));
+  t.final.add(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150));
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, olog_tail_gt_log_tail_split2) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(16, 155), mk_evt(15, 150)));
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(15, 153), mk_evt(15, 150)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(15, 153), mk_evt(15, 151));
+  t.set_auth_bounds(mk_evt(16, 156), mk_evt(10, 99));
+  t.final.add(mk_obj(1), mk_evt(16, 155), mk_evt(0, 0));
+  t.toremove.insert(mk_obj(1));
   run_test_case(t);
 }
 

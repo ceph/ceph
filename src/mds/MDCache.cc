@@ -10840,15 +10840,20 @@ void MDCache::fragment_mark_and_complete(MDRequestRef& mdr)
       dout(15) << " fetching incomplete " << *dir << dendl;
       dir->fetch(gather.new_sub(), true);  // ignore authpinnability
       ready = false;
-    }
-    if (dir->get_frag() == frag_t() && dir->is_new()) {
+    } else if (dir->get_frag() == frag_t()) {
       // The COMPLETE flag gets lost if we fragment a new dirfrag, then rollback
       // the operation. To avoid CDir::fetch() complaining about missing object,
       // we commit new dirfrag first.
-      dout(15) << " committing new " << *dir << dendl;
-      assert(dir->is_dirty());
-      dir->commit(0, gather.new_sub(), true);
-      ready = false;
+      if (dir->state_test(CDir::STATE_CREATING)) {
+	dout(15) << " waiting until new dir gets journaled " << *dir << dendl;
+	dir->add_waiter(CDir::WAIT_CREATED, gather.new_sub());
+	ready = false;
+      } else if (dir->is_new()) {
+	dout(15) << " committing new " << *dir << dendl;
+	assert(dir->is_dirty());
+	dir->commit(0, gather.new_sub(), true);
+	ready = false;
+      }
     }
     if (!ready)
       continue;

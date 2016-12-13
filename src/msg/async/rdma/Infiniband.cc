@@ -31,18 +31,18 @@ Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_
 {
   if (device == NULL) {
     lderr(cct) << __func__ << "device == NULL" << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
   name = ibv_get_device_name(device);
   ctxt = ibv_open_device(device);
   if (ctxt == NULL) {
     lderr(cct) << __func__ << "open rdma device failed. " << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
   int r = ibv_query_device(ctxt, device_attr);
   if (r == -1) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -75,14 +75,19 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
   assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
   max_recv_wr = device->device_attr->max_srq_wr;
-  if (max_recv_wr < cct->_conf->ms_async_rdma_receive_buffers) {
-    ldout(cct, 0) << __func__ << " max allowed receive buffers is " << max_recv_wr << " use this instead." << dendl;
+  if (max_recv_wr > cct->_conf->ms_async_rdma_receive_buffers) {
     max_recv_wr = cct->_conf->ms_async_rdma_receive_buffers;
+    ldout(cct, 1) << __func__ << " assigning: " << max_recv_wr << " receive buffers" << dendl;
+  } else {
+    ldout(cct, 1) << __func__ << " using the max allowed receive buffers: " << max_recv_wr << dendl;
   }
+
   max_send_wr = device->device_attr->max_qp_wr;
-  if (max_send_wr < cct->_conf->ms_async_rdma_send_buffers) {
-    ldout(cct, 0) << __func__ << " max allowed send buffers is " << max_send_wr << " use this instead." << dendl;
+  if (max_send_wr > cct->_conf->ms_async_rdma_send_buffers) {
     max_send_wr = cct->_conf->ms_async_rdma_send_buffers;
+    ldout(cct, 1) << __func__ << " assigning: " << max_send_wr << " send buffers"  << dendl;
+  } else {
+    ldout(cct, 1) << __func__ << " using the max allowed send buffers: " << max_send_wr << dendl;
   }
 
   ldout(cct, 1) << __func__ << " device allow " << device->device_attr->max_cqe
@@ -91,9 +96,7 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
   memory_manager = new MemoryManager(device, pd,
                                      cct->_conf->ms_async_rdma_enable_hugepage);
   memory_manager->register_rx_tx(
-      cct->_conf->ms_async_rdma_buffer_size,
-      cct->_conf->ms_async_rdma_receive_buffers,
-      cct->_conf->ms_async_rdma_send_buffers);
+      cct->_conf->ms_async_rdma_buffer_size, max_recv_wr, max_send_wr);
 
   srq = create_shared_receive_queue(max_recv_wr, MAX_SHARED_RX_SGE_COUNT);
   post_channel_cluster();
@@ -157,6 +160,8 @@ int Infiniband::QueuePair::init()
   qp = ibv_create_qp(pd, &qpia);
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers or"
+	" ms_async_rdma_send_buffers" << dendl;
     return -1;
   }
 
@@ -185,7 +190,7 @@ int Infiniband::QueuePair::init()
     case IBV_QPT_RAW_PACKET:
       break;
     default:
-      assert(0);
+      ceph_abort();
   }
 
   int ret = ibv_modify_qp(qp, &qpa, mask);
@@ -312,7 +317,7 @@ Infiniband::QueuePair::QueuePair(
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
     lderr(cct) << __func__ << "invalid queue pair type" << cpp_strerror(errno) << dendl;
-    assert(0);
+    ceph_abort();
   }
   pd = infiniband.pd->pd;
 }
@@ -335,7 +340,9 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
     r = -errno;
     lderr(cct) << __func__ << " got error " << errno << ": "
                << cpp_strerror(errno) << dendl;
-  } else if ((size_t)r != sizeof(msg)) { // valid message length
+  } else if (r == 0) { // valid disconnect message of length 0
+    ldout(cct, 10) << __func__ << " got disconnect message " << dendl;
+  } else if ((size_t)r != sizeof(msg)) { // invalid message
     r = -EINVAL;
     lderr(cct) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
   } else { // valid message

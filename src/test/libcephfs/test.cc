@@ -1694,11 +1694,48 @@ TEST(LibCephFS, SetSize) {
 
   struct ceph_statx stx;
   uint64_t size = 8388608;
-  stx.stx_size = (off_t)size;
+  stx.stx_size = size;
   ASSERT_EQ(ceph_fsetattrx(cmount, fd, &stx, CEPH_SETATTR_SIZE), 0);
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_SIZE, 0), 0);
-  ASSERT_EQ(stx.stx_size, (off_t)size);
+  ASSERT_EQ(stx.stx_size, size);
 
   ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, ClearSetuid) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  Inode *root;
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  char filename[32];
+  sprintf(filename, "clearsetuid%x", getpid());
+
+  Fh *fh;
+  Inode *in;
+  struct ceph_statx stx;
+
+  ceph_ll_unlink(cmount, root, filename, ceph_mount_perms(cmount));
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 06555,
+	    O_RDWR|O_CREAT|O_EXCL, &in, &fh, &stx,
+	    CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_MODE, 0,
+	    ceph_mount_perms(cmount)), 0);
+
+  ASSERT_EQ(stx.stx_mode & 07777, 06555);
+
+  UserPerm *rootcred = ceph_userperm_new(0, 0, 0, NULL);
+  ASSERT_TRUE(rootcred);
+  stx.stx_uid++;
+  stx.stx_gid++;
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_SETATTR_UID|CEPH_SETATTR_GID, rootcred), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, ceph_mount_perms(cmount)), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_MODE);
+  ASSERT_FALSE(stx.stx_mode & (S_ISUID|S_ISGID));
+
   ceph_shutdown(cmount);
 }

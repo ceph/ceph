@@ -759,8 +759,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 {
   Mutex::Locker lock(stat_lock);
 
-  osd_stat.hb_in.swap(hb_peers);
-  osd_stat.hb_out.clear();
+  osd_stat.hb_peers.swap(hb_peers);
 
   osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
@@ -1935,6 +1934,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
+  } else if (command == "dump_objectstore_kv_stats") {
+    store->get_db_statistics(f);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2394,6 +2395,9 @@ void OSD::final_init()
 				     "get malloc extension heap property");
   assert(r == 0);
 
+  r = admin_socket->register_command("dump_objectstore_kv_stats", "dump_objectstore_kv_stats", asok_hook,
+					 "print statistics of kvdb which used by bluestore");
+  assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
@@ -2715,6 +2719,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("get_latest_osdmap");
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
+  cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -4208,7 +4213,7 @@ void OSD::heartbeat_check()
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now(cct);
 
-  // check for incoming heartbeats (move me elsewhere?)
+  // check for heartbeat replies (move me elsewhere?)
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_heartbeat_grace;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
@@ -4294,9 +4299,6 @@ void OSD::heartbeat()
 						     MOSDPing::PING,
 						     now));
   }
-
-  dout(30) << "heartbeat check" << dendl;
-  heartbeat_check();
 
   logger->set(l_osd_hb_to, heartbeat_peers.size());
 
@@ -9267,8 +9269,15 @@ int OSD::init_op_flags(OpRequestRef& op)
 
   // set bits based on op codes, called methods.
   for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
-    if (ceph_osd_op_mode_modify(iter->op.op))
-      op->set_write();
+    if (!(iter->op.op == CEPH_OSD_OP_WATCH &&
+	  iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
+      /* This a bit odd.  PING isn't actually a write.  It can't
+       * result in an update to the object_info.  PINGs also aren'ty
+       * replayed, so there's no reason to write out a log entry
+       */
+      if (ceph_osd_op_mode_modify(iter->op.op))
+	op->set_write();
+    }
     if (ceph_osd_op_mode_read(iter->op.op))
       op->set_read();
 

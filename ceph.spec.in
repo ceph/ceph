@@ -720,6 +720,8 @@ export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
 
+env | sort
+
 mkdir build
 cd build
 cmake .. \

@@ -466,6 +466,9 @@ public:
     bool requires_rmw() const { return !plan.to_read.empty(); }
     bool invalidates_cache() const { return plan.invalidates_cache; }
 
+    // must be true if requires_rmw(), must be false if invalidates_cache()
+    bool using_cache = false;
+
     /// In progress read state;
     hobject_t::bitwisemap<extent_set> pending_read; // subset already being read
     hobject_t::bitwisemap<extent_set> remote_read;  // subset we must read

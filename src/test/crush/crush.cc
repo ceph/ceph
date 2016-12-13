@@ -9,20 +9,20 @@
  */
 
 #include <iostream>
+#include <memory>
 #include <gtest/gtest.h>
 
 #include "include/stringify.h"
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "test/unit.h"
 
 #include <set>
 
-CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
-			      int num_osd)
+std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
+                              int num_host, int num_osd)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   c->create();
 
   c->set_type_name(5, "root");
@@ -77,7 +77,7 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
     delete f;
   }
 
-  return c;
+  return std::move(c);
 }
 
 int get_num_dups(const vector<int>& v)
@@ -94,7 +94,7 @@ int get_num_dups(const vector<int>& v)
 }
 
 TEST(CRUSH, indep_toosmall) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 1, 3, 1);
+  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 1, 3, 1));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
@@ -110,11 +110,10 @@ TEST(CRUSH, indep_toosmall) {
     ASSERT_EQ(2, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
-  delete c;
 }
 
 TEST(CRUSH, indep_basic) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
+  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
@@ -130,11 +129,10 @@ TEST(CRUSH, indep_basic) {
     ASSERT_EQ(0, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
-  delete c;
 }
 
 TEST(CRUSH, indep_out_alt) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
+  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -157,11 +155,10 @@ TEST(CRUSH, indep_out_alt) {
     ASSERT_EQ(0, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
-  delete c;
 }
 
 TEST(CRUSH, indep_out_contig) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
+  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -183,12 +180,11 @@ TEST(CRUSH, indep_out_contig) {
     ASSERT_EQ(1, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
-  delete c;
 }
 
 
 TEST(CRUSH, indep_out_progressive) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
+  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
   c->set_choose_total_tries(100);
   vector<__u32> tweight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
@@ -248,13 +244,12 @@ TEST(CRUSH, indep_out_progressive) {
   }
   cout << tchanged << " total changed" << std::endl;
 
-  delete c;
 }
 
 TEST(CRUSH, straw_zero) {
   // zero weight items should have no effect on placement.
 
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
   const int OSD_TYPE = 0;
@@ -319,7 +314,7 @@ TEST(CRUSH, straw_same) {
   // compare the result and verify that the resulting mapping is
   // almost identical.
 
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
   const int OSD_TYPE = 0;
@@ -417,7 +412,7 @@ TEST(CRUSH, straw_same) {
 
 double calc_straw2_stddev(int *weights, int n, bool verbose)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
   const int HOST_TYPE = 1;
@@ -541,7 +536,7 @@ TEST(CRUSH, straw2_reweight) {
   };
   int n = 15;
 
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
   const int HOST_TYPE = 1;

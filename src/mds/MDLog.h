@@ -134,6 +134,7 @@ protected:
     PendingEvent(LogEvent *e, MDSContext *c, bool f=false) : le(e), fin(c), flush(f) {}
   };
 
+  int64_t mdsmap_up_features;
   map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
   Mutex submit_mutex;
   Cond submit_cond;
@@ -202,6 +203,7 @@ public:
                       already_replayed(false),
                       recovery_thread(this),
                       event_seq(0), expiring_events(0), expired_events(0),
+		      mdsmap_up_features(0),
                       submit_mutex("MDLog::submit_mutex"),
                       submit_thread(this),
                       cur_event(NULL) { }		  

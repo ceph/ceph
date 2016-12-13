@@ -461,19 +461,34 @@ def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
-def command_check_call(arguments):
+def command_check_call(arguments, exit=False):
     """
     Safely execute a ``subprocess.check_call`` call making sure that the
     executable exists and raising a helpful error message if it does not.
 
+    When ``exit`` is set to ``True`` this helper will do a clean (sans
+    traceback) system exit.
     .. note:: This should be the preferred way of calling
     ``subprocess.check_call`` since it provides the caller with the safety net
     of making sure that executables *will* be found and will error nicely
     otherwise.
     """
     arguments = _get_command_executable(arguments)
-    LOG.info('Running command: %s', ' '.join(arguments))
-    return subprocess.check_call(arguments)
+    command = ' '.join(arguments)
+    LOG.info('Running command: %s', command)
+    try:
+        return subprocess.check_call(arguments)
+    except subprocess.CalledProcessError as error:
+        if exit:
+            if error.output:
+                LOG.error(error.output)
+            raise SystemExit(
+                "'{cmd}' failed with status code {returncode}".format(
+                    cmd=command,
+                    returncode=error.returncode,
+                )
+            )
+        raise
 
 
 def platform_distro():
@@ -1560,7 +1575,8 @@ class Device(object):
                 '--mbrtogpt',
                 '--',
                 self.path,
-            ]
+            ],
+            exit=True
         )
         update_partition(self.path, 'created')
         return num
@@ -2712,12 +2728,9 @@ class PrepareData(object):
                 '--',
                 partition.get_dev(),
             ])
-            try:
-                LOG.debug('Creating %s fs on %s',
-                          self.args.fs_type, partition.get_dev())
-                command_check_call(args)
-            except subprocess.CalledProcessError as e:
-                raise Error(e)
+            LOG.debug('Creating %s fs on %s',
+                      self.args.fs_type, partition.get_dev())
+            command_check_call(args, exit=True)
 
             path = mount(dev=partition.get_dev(),
                          fstype=self.args.fs_type,
@@ -2733,18 +2746,16 @@ class PrepareData(object):
                 partition.unmap()
 
         if not is_partition(self.args.data):
-            try:
-                command_check_call(
-                    [
-                        'sgdisk',
-                        '--typecode=%d:%s' % (partition.get_partition_number(),
-                                              partition.ptype_for_name('osd')),
-                        '--',
-                        self.args.data,
-                    ],
-                )
-            except subprocess.CalledProcessError as e:
-                raise Error(e)
+            command_check_call(
+                [
+                    'sgdisk',
+                    '--typecode=%d:%s' % (partition.get_partition_number(),
+                                          partition.ptype_for_name('osd')),
+                    '--',
+                    self.args.data,
+                ],
+                exit=True,
+            )
             update_partition(self.args.data, 'prepared')
             command_check_call(['udevadm', 'trigger',
                                 '--action=add',
@@ -3001,10 +3012,19 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
+            # ensure there is no duplicate ceph-osd@.service
+            command_check_call(
+                [
+                    'systemctl',
+                    'disable',
+                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+                ],
+            )
             command_check_call(
                 [
                     'systemctl',
                     'enable',
+                    '--runtime',
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
@@ -3076,6 +3096,7 @@ def stop_daemon(
                 [
                     'systemctl',
                     'disable',
+                    '--runtime',
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )

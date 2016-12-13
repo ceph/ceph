@@ -73,7 +73,7 @@ public:
         lock("librbd::Journal::SafeTimerSingleton::lock") {
     init();
   }
-  virtual ~SafeTimerSingleton() {
+  ~SafeTimerSingleton() {
     Mutex::Locker locker(lock);
     shutdown();
   }
@@ -910,7 +910,6 @@ struct C_InvalidateCache : public Context {
                                         map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
-    string start = prefix;
     for (auto it : pairs) {
       if (it.first.compare(0, MIN(conf_prefix_len, it.first.size()), prefix) > 0)
         return false;

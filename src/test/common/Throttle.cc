@@ -21,11 +21,11 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
-#include "test/unit.h"
 
 #include <thread>
 #include <atomic>

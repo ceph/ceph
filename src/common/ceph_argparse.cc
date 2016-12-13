@@ -134,8 +134,7 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
 void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args)
 {
-  for (int i=1; i<argc; i++)
-    args.push_back(argv[i]);
+  args.insert(args.end(), argv + 1, argv + argc);
 }
 
 void vec_to_argv(const char *argv0, std::vector<const char*>& args,

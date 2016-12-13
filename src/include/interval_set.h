@@ -499,6 +499,11 @@ class interval_set {
     swap(a);    
     union_of(a, b);
   }
+  void union_insert(T off, T len) {
+    interval_set a;
+    a.insert(off, len);
+    union_of(a);
+  }
 
   bool subset_of(const interval_set &big) const {
     for (typename std::map<T,T>::const_iterator i = m.begin();

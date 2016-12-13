@@ -21,7 +21,6 @@
 #include "arch/arm.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
-#include "test/unit.h"
 
 
 #define FLAGS_SIZE 4096

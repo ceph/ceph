@@ -1360,8 +1360,8 @@ void RGWPutObj_ObjStore_S3::send_response()
 static void parse_params(const string& params_str, string& first,
 			 map<string, string>& params)
 {
-  int pos = params_str.find(';');
-  if (pos < 0) {
+  size_t pos = params_str.find(';');
+  if (pos == string::npos) {
     first = rgw_trim_whitespace(params_str);
     return;
   }
@@ -1370,18 +1370,17 @@ static void parse_params(const string& params_str, string& first,
 
   pos++;
 
-  while (pos < (int)params_str.size()) {
-    ssize_t end = params_str.find(';', pos);
-    if (end < 0)
+  while (pos < params_str.size()) {
+    size_t end = params_str.find(';', pos);
+    if (end == string::npos)
       end = params_str.size();
 
     string param = params_str.substr(pos, end - pos);
 
-    int eqpos = param.find('=');
-    if (eqpos > 0) {
-      string param_name = rgw_trim_whitespace(param.substr(0, eqpos));
-      string val = rgw_trim_quotes(param.substr(eqpos + 1));
-      params[param_name] = val;
+    size_t eqpos = param.find('=');
+    if (eqpos != string::npos) {
+      params[rgw_trim_whitespace(param.substr(0, eqpos))] =
+        rgw_trim_quotes(param.substr(eqpos + 1));
     } else {
       params[rgw_trim_whitespace(param)] = "";
     }
@@ -1393,12 +1392,12 @@ static void parse_params(const string& params_str, string& first,
 static int parse_part_field(const string& line, string& field_name,
 			    struct post_part_field& field)
 {
-  int pos = line.find(':');
-  if (pos < 0)
+  size_t pos = line.find(':');
+  if (pos == string::npos)
     return -EINVAL;
 
   field_name = line.substr(0, pos);
-  if (pos >= (int)line.size() - 1)
+  if (pos >= line.size() - 1)
     return 0;
 
   parse_params(line.substr(pos + 1), field.val, field.params);

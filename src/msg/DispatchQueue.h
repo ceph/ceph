@@ -27,7 +27,6 @@
 #include "common/PrioritizedQueue.h"
 
 class CephContext;
-class DispatchQueue;
 class Messenger;
 class Message;
 struct Connection;

@@ -222,6 +222,7 @@ OPTION(ms_async_rdma_buffer_size, OPT_INT, 8192)
 OPTION(ms_async_rdma_send_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_receive_buffers, OPT_U32, 10240)
 OPTION(ms_async_rdma_port_num, OPT_U32, 1)
+OPTION(ms_async_rdma_polling_us, OPT_U32, 1000)
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
 OPTION(ms_dpdk_coremask, OPT_STR, "1")
@@ -461,6 +462,7 @@ OPTION(objecter_inflight_ops, OPT_U64, 1024)               // max in-flight ios
 OPTION(objecter_completion_locks_per_session, OPT_U64, 32) // num of completion locks per each session, for serializing same object responses
 OPTION(objecter_inject_no_watch_ping, OPT_BOOL, false)   // suppress watch pings
 OPTION(objecter_retry_writes_after_first_reply, OPT_BOOL, false)   // ignore the first reply for each write, and resend the osd op instead
+OPTION(objecter_debug_inject_relock_delay, OPT_BOOL, false)
 
 // Max number of deletes at once in a single Filer::purge call
 OPTION(filer_max_purge_ops, OPT_U32, 10)
@@ -643,7 +645,6 @@ OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
 OPTION(osd_client_message_cap, OPT_U64, 100)              // num client messages allowed in-memory
-OPTION(osd_pg_op_threshold_ratio, OPT_U64, 2)             // the expected maximum op over the average number of ops per pg
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
@@ -885,7 +886,10 @@ OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default rocksdb cache size
 OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
-OPTION(rocksdb_perf, OPT_BOOL, false) // rocksdb breakdown
+OPTION(rocksdb_perf, OPT_BOOL, false) // Enabling this will have 5-10% impact on performance for the stats collection
+OPTION(rocksdb_collect_compaction_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_extended_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_memory_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
@@ -977,7 +981,8 @@ OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
-OPTION(bluefs_allocator, OPT_STR, "stupid")     // stupid | bitmap
+OPTION(bluefs_allocator, OPT_STR, "bitmap")     // stupid | bitmap
+OPTION(bluefs_preextend_wal_files, OPT_BOOL, true)  // this *requires* that rocksdb has recycling enabled
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
@@ -1002,8 +1007,6 @@ OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL, false)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate space if block/db_path/wal_path is file rather that block device.
-OPTION(bluestore_precondition_bluefs, OPT_U64, 512*1024*1024)  // write this much data at mkfs
-OPTION(bluestore_precondition_bluefs_block, OPT_U64, 1048576)
 OPTION(bluestore_csum_type, OPT_STR, "crc32c") // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
 OPTION(bluestore_csum_min_block, OPT_U32, 4096)
 OPTION(bluestore_csum_max_block, OPT_U32, 64*1024)
@@ -1046,7 +1049,7 @@ OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
-OPTION(bluestore_sync_submit_transaction, OPT_BOOL, true) // submit kv txn in queueing thread (not kv_sync_thread)
+OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
 OPTION(bluestore_wal_threads, OPT_INT, 4)
 OPTION(bluestore_wal_thread_timeout, OPT_INT, 30)
@@ -1561,7 +1564,6 @@ OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
 OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
 
 OPTION(rgw_rest_getusage_op_compat, OPT_BOOL, false) // dump description of total stats for s3 GetUsage API
-OPTION(rgw_compression_type, OPT_STR, "none") // type of compressor, none to not use
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

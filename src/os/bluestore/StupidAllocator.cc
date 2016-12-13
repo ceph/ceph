@@ -261,34 +261,34 @@ uint64_t StupidAllocator::get_free()
   return num_free;
 }
 
-void StupidAllocator::dump(ostream& out)
+void StupidAllocator::dump()
 {
   std::lock_guard<std::mutex> l(lock);
   for (unsigned bin = 0; bin < free.size(); ++bin) {
-    dout(30) << __func__ << " free bin " << bin << ": "
-	     << free[bin].num_intervals() << " extents" << dendl;
+    dout(0) << __func__ << " free bin " << bin << ": "
+	    << free[bin].num_intervals() << " extents" << dendl;
     for (auto p = free[bin].begin();
 	 p != free[bin].end();
 	 ++p) {
-      dout(30) << __func__ << "  0x" << std::hex << p.get_start() << "~"
-	       << p.get_len() << std::dec << dendl;
+      dout(0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
+	      << p.get_len() << std::dec << dendl;
     }
   }
-  dout(30) << __func__ << " committing: "
-	   << committing.num_intervals() << " extents" << dendl;
+  dout(0) << __func__ << " committing: "
+	  << committing.num_intervals() << " extents" << dendl;
   for (auto p = committing.begin();
        p != committing.end();
        ++p) {
-    dout(30) << __func__ << "  0x" << std::hex << p.get_start() << "~"
-	     << p.get_len() << std::dec << dendl;
+    dout(0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
+	    << p.get_len() << std::dec << dendl;
   }
-  dout(30) << __func__ << " uncommitted: "
-	   << uncommitted.num_intervals() << " extents" << dendl;
+  dout(0) << __func__ << " uncommitted: "
+	  << uncommitted.num_intervals() << " extents" << dendl;
   for (auto p = uncommitted.begin();
        p != uncommitted.end();
        ++p) {
-    dout(30) << __func__ << "  0x" << std::hex << p.get_start() << "~"
-	     << p.get_len() << std::dec << dendl;
+    dout(0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
+	    << p.get_len() << std::dec << dendl;
   }
 }
 

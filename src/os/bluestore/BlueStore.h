@@ -786,7 +786,6 @@ public:
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
 
-    OnodeSpace *space;    ///< containing OnodeSpace
     boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
@@ -798,12 +797,11 @@ public:
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(OnodeSpace *s, Collection *c, const ghobject_t& o, const string& k)
+    Onode(Collection *c, const ghobject_t& o, const string& k)
       : nref(0),
 	c(c),
 	oid(o),
 	key(k),
-	space(s),
 	exists(false),
 	extent_map(this) {
     }
@@ -1206,7 +1204,6 @@ public:
       utime_t lat, now = ceph_clock_now(g_ceph_context);
       lat = now - last_stamp;
       logger->tinc(state, lat);
-      start = now;
       last_stamp = now;
     }
 
@@ -1542,15 +1539,15 @@ private:
 
   std::atomic<int> csum_type;
 
-  uint64_t block_size;     ///< block size of block device (power of 2)
-  uint64_t block_mask;     ///< mask to get just the block offset
-  size_t block_size_order; ///< bits to shift to get block size
+  uint64_t block_size = 0;     ///< block size of block device (power of 2)
+  uint64_t block_mask = 0;     ///< mask to get just the block offset
+  size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
-  uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
+  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
@@ -1677,7 +1674,10 @@ private:
       kv_cond.notify_all();
     }
     kv_sync_thread.join();
-    kv_stop = false;
+    {
+      std::lock_guard<std::mutex> l(kv_lock);
+      kv_stop = false;
+    }
   }
 
   bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
@@ -1703,7 +1703,8 @@ private:
     txc->shared_blobs_written.insert(b->shared_blob);
   }
 
-  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+  int _collection_list(
+    Collection *c, const ghobject_t& start, const ghobject_t& end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
@@ -1750,6 +1751,8 @@ public:
   int mkjournal() override {
     return 0;
   }
+
+  void get_db_statistics(Formatter *f);
 
 public:
   int statfs(struct store_statfs_t *buf) override;
@@ -1816,10 +1819,14 @@ public:
   int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
-  int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
+  int collection_list(const coll_t& cid,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
-  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
+  int collection_list(CollectionHandle &c,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 

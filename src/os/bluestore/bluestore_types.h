@@ -667,7 +667,11 @@ struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  uint64_t omap_head = 0;              ///< id for omap root node
+  uint8_t flags = 0;
+
+  enum {
+    FLAG_OMAP = 1,
+  };
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
@@ -686,15 +690,44 @@ struct bluestore_onode_t {
   uint32_t expected_write_size = 0;
   uint32_t alloc_hint_flags = 0;
 
-  /// get preferred csum chunk size
-  size_t get_preferred_csum_order() const;
+  string get_flags_string() const {
+    string s;
+    if (flags & FLAG_OMAP) {
+      s = "omap";
+    }
+    return s;
+  }
+
+  bool has_flag(unsigned f) const {
+    return flags & f;
+  }
+
+  void set_flag(unsigned f) {
+    flags |= f;
+  }
+
+  void clear_flag(unsigned f) {
+    flags &= ~f;
+  }
+
+  bool has_omap() const {
+    return has_flag(FLAG_OMAP);
+  }
+
+  void set_omap_flag() {
+    set_flag(FLAG_OMAP);
+  }
+
+  void clear_omap_flag() {
+    clear_flag(FLAG_OMAP);
+  }
 
   DENC(bluestore_onode_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.nid, p);
     denc(v.size, p);
     denc(v.attrs, p);
-    denc(v.omap_head, p);
+    denc(v.flags, p);
     denc(v.extent_map_shards, p);
     denc(v.expected_object_size, p);
     denc(v.expected_write_size, p);

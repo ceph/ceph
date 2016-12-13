@@ -933,20 +933,22 @@ struct RGWZonePlacementInfo {
   string data_pool;
   string data_extra_pool; /* if not set we should use data_pool */
   RGWBucketIndexType index_type;
+  std::string compression_type;
 
   RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     ::encode(index_pool, bl);
     ::encode(data_pool, bl);
     ::encode(data_extra_pool, bl);
     ::encode((uint32_t)index_type, bl);
+    ::encode(compression_type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     ::decode(index_pool, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 4) {
@@ -956,6 +958,9 @@ struct RGWZonePlacementInfo {
       uint32_t it;
       ::decode(it, bl);
       index_type = (RGWBucketIndexType)it;
+    }
+    if (struct_v >= 6) {
+      ::decode(compression_type, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1013,6 +1018,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int create_default(bool old_format = false);
   int create(bool exclusive = true);
   int fix_pool_names();
+
+  const string& get_compression_type(const string& placement_rule) const;
   
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 1, bl);
@@ -1179,18 +1186,15 @@ WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
 struct RGWZoneGroupPlacementTarget {
   string name;
-  list<string> tags;
+  set<string> tags;
 
   bool user_permitted(list<string>& user_tags) {
     if (tags.empty()) {
       return true;
     }
-    for (list<string>::iterator uiter = user_tags.begin(); uiter != user_tags.end(); ++uiter) { /* we don't expect many of either, so we can handle this kind of lookup */
-      string& rule = *uiter;
-      for (list<string>::iterator iter = tags.begin(); iter != tags.end(); ++iter) {
-        if (rule == *iter) {
-          return true;
-        }
+    for (auto& rule : user_tags) {
+      if (tags.find(rule) != tags.end()) {
+        return true;
       }
     }
     return false;

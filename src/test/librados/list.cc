@@ -6,7 +6,6 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "global/global_context.h"
-#include "test/unit.h"
 
 #include "include/types.h"
 #include "common/hobject.h"

@@ -1178,7 +1178,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   new_log_writer->append(bl);
 
   // 3. flush
-  _flush(new_log_writer, true);
+  r = _flush(new_log_writer, true);
+  assert(r == 0);
   lock.unlock();
 
   // 4. wait
@@ -1442,6 +1443,17 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
            << " offset: 0x" << offset << " length: 0x" << length << std::dec
            << dendl;
       return r;
+    }
+    if (g_conf->bluefs_preextend_wal_files &&
+	h->writer_type == WRITER_WAL) {
+      // NOTE: this *requires* that rocksdb also has log recycling
+      // enabled and is therefore doing robust CRCs on the log
+      // records.  otherwise, we will fail to reply the rocksdb log
+      // properly due to garbage on the device.
+      h->file->fnode.size = h->file->fnode.get_allocated();
+      dout(10) << __func__ << " extending WAL size to 0x" << std::hex
+	       << h->file->fnode.size << std::dec << " to include allocated"
+	       << dendl;
     }
     must_dirty = true;
   }
@@ -1753,6 +1765,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   r = alloc[id]->alloc_extents(left, min_alloc_size,
                                hint, &extents, &count);
   if (r < 0) {
+    derr << __func__ << " allocate failed on 0x" << std::hex << left
+	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+    alloc[id]->dump();
     assert(0 == "allocate failed... wtf");
     return r;
   }

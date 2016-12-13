@@ -459,7 +459,9 @@ int MemStore::collection_empty(const coll_t& cid, bool *empty)
   return 0;
 }
 
-int MemStore::collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
+int MemStore::collection_list(const coll_t& cid,
+			      const ghobject_t& start,
+			      const ghobject_t& end,
 			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {

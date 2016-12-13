@@ -1730,8 +1730,9 @@ bool ECBackend::try_state_to_reads()
 
   Op *op = &(waiting_state.front());
   if (op->requires_rmw() && pipeline_state.cache_invalid()) {
+    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
     dout(20) << __func__ << ": blocking " << *op
-	     << " because it requires an rmw and the cache is invalid"
+	     << " because it requires an rmw and the cache is invalid "
 	     << pipeline_state
 	     << dendl;
     return false;
@@ -1741,12 +1742,15 @@ bool ECBackend::try_state_to_reads()
     dout(20) << __func__ << ": invalidating cache after this op"
 	     << dendl;
     pipeline_state.invalidate();
+    op->using_cache = false;
+  } else {
+    op->using_cache = pipeline_state.caching_enabled();
   }
 
   waiting_state.pop_front();
   waiting_reads.push_back(*op);
 
-  if (op->requires_rmw() || pipeline_state.caching_enabled()) {
+  if (op->using_cache) {
     cache.open_write_pin(op->pin);
 
     extent_set empty;
@@ -1780,6 +1784,7 @@ bool ECBackend::try_state_to_reads()
   dout(10) << __func__ << ": " << *op << dendl;
 
   if (!op->remote_read.empty()) {
+    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
       [this, op](hobject_t::bitwisemap<pair<int, extent_map> > &&results) {
@@ -1810,7 +1815,7 @@ bool ECBackend::try_reads_to_commit()
     op->hoid,
     op->delta_stats);
 
-  if (pipeline_state.caching_enabled() || op->requires_rmw()) {
+  if (op->using_cache) {
     for (auto &&hpair: op->pending_read) {
       op->remote_read_result[hpair.first].insert(
 	cache.get_remaining_extents_for_rmw(
@@ -1869,7 +1874,7 @@ bool ECBackend::try_reads_to_commit()
   dout(20) << __func__ << ": written_set: " << written_set << dendl;
   assert(written_set == op->plan.will_write);
 
-  if (pipeline_state.caching_enabled() || op->requires_rmw()) {
+  if (op->using_cache) {
     for (auto &&hpair: written) {
       dout(20) << __func__ << ": " << hpair << dendl;
       cache.present_rmw_update(hpair.first, op->pin, hpair.second);
@@ -1969,7 +1974,7 @@ bool ECBackend::try_finish_rmw()
     }
   }
 
-  if (pipeline_state.caching_enabled() || op->requires_rmw()) {
+  if (op->using_cache) {
     cache.release_write_pin(op->pin);
   }
   tid_to_op_map.erase(op->tid);

@@ -309,13 +309,9 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("kb", kb);
   f->dump_unsigned("kb_used", kb_used);
   f->dump_unsigned("kb_avail", kb_avail);
-  f->open_array_section("hb_in");
-  for (vector<int>::const_iterator p = hb_in.begin(); p != hb_in.end(); ++p)
-    f->dump_int("osd", *p);
-  f->close_section();
-  f->open_array_section("hb_out");
-  for (vector<int>::const_iterator p = hb_out.begin(); p != hb_out.end(); ++p)
-    f->dump_int("osd", *p);
+  f->open_array_section("hb_peers");
+  for (auto p : hb_peers)
+    f->dump_int("osd", p);
   f->close_section();
   f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
   f->dump_int("num_snap_trimming", num_snap_trimming);
@@ -329,14 +325,14 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 2, bl);
+  ENCODE_START(5, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
   ::encode(snap_trim_queue_len, bl);
   ::encode(num_snap_trimming, bl);
-  ::encode(hb_in, bl);
-  ::encode(hb_out, bl);
+  ::encode(hb_peers, bl);
+  ::encode((uint32_t)0, bl);
   ::encode(op_queue_age_hist, bl);
   ::encode(os_perf_stat, bl);
   ENCODE_FINISH(bl);
@@ -344,14 +340,15 @@ void osd_stat_t::encode(bufferlist &bl) const
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
   ::decode(snap_trim_queue_len, bl);
   ::decode(num_snap_trimming, bl);
-  ::decode(hb_in, bl);
-  ::decode(hb_out, bl);
+  ::decode(hb_peers, bl);
+  vector<int> num_hb_out;
+  ::decode(num_hb_out, bl);
   if (struct_v >= 3)
     ::decode(op_queue_age_hist, bl);
   if (struct_v >= 4)
@@ -367,10 +364,7 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->kb = 1;
   o.back()->kb_used = 2;
   o.back()->kb_avail = 3;
-  o.back()->hb_in.push_back(5);
-  o.back()->hb_in.push_back(6);
-  o.back()->hb_out = o.back()->hb_in;
-  o.back()->hb_out.push_back(7);
+  o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
 }
@@ -1488,7 +1482,14 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(24, 5, bl);
+  uint8_t v = 24;
+  if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
+    // this was the first post-hammer thing we added; if it's missing, encode
+    // like hammer.
+    v = 21;
+  }
+
+  ENCODE_START(v, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1530,13 +1531,25 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(last_force_op_resend, bl);
   ::encode(min_read_recency_for_promote, bl);
   ::encode(expected_num_objects, bl);
-  ::encode(cache_target_dirty_high_ratio_micro, bl);
-  ::encode(min_write_recency_for_promote, bl);
-  ::encode(use_gmt_hitset, bl);
-  ::encode(fast_read, bl);
-  ::encode(hit_set_grade_decay_rate, bl);
-  ::encode(hit_set_search_last_n, bl);
-  ::encode(opts, bl);
+  if (v >= 19) {
+    ::encode(cache_target_dirty_high_ratio_micro, bl);
+  }
+  if (v >= 20) {
+    ::encode(min_write_recency_for_promote, bl);
+  }
+  if (v >= 21) {
+    ::encode(use_gmt_hitset, bl);
+  }
+  if (v >= 22) {
+    ::encode(fast_read, bl);
+  }
+  if (v >= 23) {
+    ::encode(hit_set_grade_decay_rate, bl);
+    ::encode(hit_set_search_last_n, bl);
+  }
+  if (v >= 24) {
+    ::encode(opts, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -3419,6 +3432,8 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   ::decode(can_local_rollback, _bl);
   ::decode(rollback_info_completed, _bl);
   ::decode(bl, _bl);
+  // ensure bl does not pin a larger buffer in memory
+  bl.rebuild();
   DECODE_FINISH(_bl);
 }
 
@@ -3520,6 +3535,8 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 7 ||  // for v >= 7, this is for all ops.
       op == CLONE) {    // for v < 7, it's only present for CLONE.
     ::decode(snaps, bl);
+    // ensure snaps does not pin a larger buffer in memory
+    snaps.rebuild();
   }
 
   if (struct_v >= 8)

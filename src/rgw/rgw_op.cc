@@ -2775,6 +2775,11 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
   RGWPutObj_CB cb(this);
+  RGWGetDataCB* filter = &cb;
+  boost::optional<RGWGetObj_Decompress> decompress;
+  RGWCompressionInfo cs_info;
+  map<string, bufferlist> attrs;
+
   int ret = 0;
 
   uint64_t obj_size;
@@ -2790,27 +2795,46 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   RGWRados::Object op_target(store, copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
   read_op.params.obj_size = &obj_size;
+  read_op.params.attrs = &attrs;
+
   ret = read_op.prepare();
   if (ret < 0)
     return ret;
+
+  bool need_decompress;
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  if (op_ret < 0) {
+	  lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
+      return -EIO;
+  }
+
+  bool partial_content = true;
+  if (need_decompress)
+  {
+    obj_size = cs_info.orig_size;
+    decompress.emplace(s->cct, &cs_info, partial_content, filter);
+    filter = &*decompress;
+  }
+
   ret = read_op.range_to_ofs(obj_size, new_ofs, new_end);
   if (ret < 0)
     return ret;
 
-  ret = read_op.iterate(new_ofs, new_end, &cb);
-  if (ret < 0) {
-    return ret;
-  }
+  filter->fixup_range(new_ofs, new_end);
+  ret = read_op.iterate(new_ofs, new_end, filter);
+
+  if (ret >= 0)
+    ret = filter->flush();
 
   bl.claim_append(bl_aux);
 
   return ret;
 }
 
-// special handling for rgw_compression_type = "random" with multipart uploads
-static CompressorRef get_compressor_plugin(const req_state *s)
+// special handling for compression type = "random" with multipart uploads
+static CompressorRef get_compressor_plugin(const req_state *s,
+                                           const std::string& compression_type)
 {
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
   if (compression_type != "random") {
     return Compressor::create(s->cct, compression_type);
   }
@@ -2846,6 +2870,8 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      s->bucket_info.placement_rule);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -2932,11 +2958,11 @@ void RGWPutObj::execute()
 
   fst = copy_source_range_fst;
   lst = copy_source_range_lst;
-  if (s->cct->_conf->rgw_compression_type != "none") {
-    plugin = get_compressor_plugin(s);
+  if (compression_type != "none") {
+    plugin = get_compressor_plugin(s, compression_type);
     if (!plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-          << s->cct->_conf->rgw_compression_type << dendl;
+      ldout(s->cct, 1) << "Cannot load plugin for compression type "
+          << compression_type << dendl;
     } else {
       compressor.emplace(s->cct, plugin, filter);
       filter = &*compressor;
@@ -3239,12 +3265,13 @@ void RGWPostObj::execute()
   if (op_ret < 0)
     return;
 
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      s->bucket_info.placement_rule);
   CompressorRef plugin;
   if (compression_type != "none") {
     plugin = Compressor::create(s->cct, compression_type);
     if (!plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+      ldout(s->cct, 1) << "Cannot load plugin for compression type "
           << compression_type << dendl;
     } else {
       compressor.emplace(s->cct, plugin, filter);
@@ -5239,8 +5266,8 @@ void RGWDeleteMultiObj::execute()
   for (iter = multi_delete->objects.begin();
         iter != multi_delete->objects.end() && num_processed < max_to_delete;
         ++iter, num_processed++) {
-    rgw_obj obj(bucket, (*iter).name);
-    obj.set_instance(s->object.instance);
+    rgw_obj obj(bucket, iter->name);
+    obj.set_instance(iter->instance);
 
     obj_ctx->set_atomic(obj);
 

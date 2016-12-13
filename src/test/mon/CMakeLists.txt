@@ -42,6 +42,7 @@ target_link_libraries(unittest_mon_moncap mon global)
 # unittest_mon_pgmap
 add_executable(unittest_mon_pgmap
   PGMap.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_mon_pgmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_pgmap)
 target_link_libraries(unittest_mon_pgmap mon global)

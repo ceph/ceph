@@ -286,8 +286,8 @@ namespace librados
    * Alloc hint flags for the alloc_hint operation.
    */
   enum AllocHintFlags {
-    ALLOC_HINT_SEQUENTIAL_WRITE = 1,
-    ALLOC_HINT_RANDOM_WRITE = 2,
+    ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
+    ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
     ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
     ALLOC_HINT_FLAG_RANDOM_READ = 8,
     ALLOC_HINT_FLAG_APPEND_ONLY = 16,
@@ -395,7 +395,6 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
-    void setxattr(const char *name, const bufferlist&& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
     void clone_range(uint64_t dst_off,

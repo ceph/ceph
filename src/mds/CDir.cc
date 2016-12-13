@@ -636,6 +636,13 @@ void CDir::add_to_bloom(CDentry *dn)
     /* not create bloom filter for incomplete dir that was added by log replay */
     if (!is_complete())
       return;
+
+    /* don't maintain bloom filters in standby replay (saves cycles, and also
+     * avoids need to implement clearing it in EExport for #16924) */
+    if (cache->mds->is_standby_replay()) {
+      return;
+    }
+
     unsigned size = get_num_head_items() + get_num_snap_items();
     if (size < 100) size = 100;
     bloom.reset(new bloom_filter(size, 1.0 / size, 0));
@@ -1223,6 +1230,11 @@ void CDir::add_waiter(uint64_t tag, MDSInternalContextBase *c)
     }
   }
 
+  if (tag & WAIT_CREATED) {
+    assert(state_test(STATE_CREATING));
+    assert(state_test(STATE_FRAGMENTING));
+  }
+
   MDSCacheObject::add_waiter(tag, c);
 }
 
@@ -1334,6 +1346,13 @@ void CDir::_mark_dirty(LogSegment *ls)
 void CDir::mark_new(LogSegment *ls)
 {
   ls->new_dirfrags.push_back(&item_new);
+  state_clear(STATE_CREATING);
+
+  if (state_test(CDir::STATE_FRAGMENTING)) {
+    list<MDSInternalContextBase*> ls;
+    take_waiting(CDir::WAIT_CREATED, ls);
+    cache->mds->queue_waiters(ls);
+  }
 }
 
 void CDir::mark_clean()

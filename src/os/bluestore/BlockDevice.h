@@ -73,7 +73,7 @@ class BlockDevice {
   std::atomic_int ioc_reap_count = {0};
 
 protected:
-  bool rotational;
+  bool rotational = true;
 
 public:
   BlockDevice() = default;

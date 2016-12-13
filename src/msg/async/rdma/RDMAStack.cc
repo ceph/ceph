@@ -14,6 +14,8 @@
  *
  */
 
+#include <poll.h>
+
 #include "include/str_list.h"
 #include "RDMAStack.h"
 
@@ -250,6 +252,8 @@ void RDMADispatcher::polling()
   RDMAWorker* worker;
   ldout(cct, 20) << __func__ << " going to poll rx cq:" << rx_cq << dendl;
   RDMAConnectedSocketImpl *conn = nullptr;
+  utime_t last_inactive = ceph_clock_now(cct);
+  bool rearmed = false;
 
   while (true) {
     int n = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
@@ -268,8 +272,36 @@ void RDMADispatcher::polling()
         }
       }
       // handle_async_event();
-      if (done && !inflight)
+      if (done)
         break;
+
+      if ((ceph_clock_now(cct) - last_inactive).to_nsec() / 1000 > cct->_conf->ms_async_rdma_polling_us) {
+        if (!rearmed) {
+          // Clean up cq events after rearm notify ensure no new incoming event
+          // arrived between polling and rearm
+          rx_cq->rearm_notify();
+          rearmed = true;
+          continue;
+        }
+
+        struct pollfd channel_poll;
+        channel_poll.fd = rx_cc->get_fd();
+        channel_poll.events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+        channel_poll.revents = 0;
+        int r = 0;
+        while (!done && r == 0) {
+          r = poll(&channel_poll, 1, 1);
+          if (r < 0) {
+            r = -errno;
+            lderr(cct) << __func__ << " poll failed " << r << dendl;
+            ceph_abort();
+          }
+        }
+        if (r > 0 && rx_cc->get_cq_event())
+          ldout(cct, 20) << __func__ << " got cq event." << dendl;
+        last_inactive = ceph_clock_now(cct);
+        rearmed = false;
+      }
       continue;
     }
 

@@ -9,7 +9,9 @@ add_ceph_unittest(unittest_rgw_period_history ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/
 target_link_libraries(unittest_rgw_period_history rgw_a)
 
 # unitttest_rgw_compression
-add_executable(unittest_rgw_compression test_rgw_compression.cc)
+add_executable(unittest_rgw_compression
+  test_rgw_compression.cc
+  $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_compression ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_compression)
 target_link_libraries(unittest_rgw_compression rgw_a)
 

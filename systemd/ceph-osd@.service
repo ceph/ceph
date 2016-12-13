@@ -14,7 +14,8 @@ ExecStartPre=/usr/lib/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 StartLimitInterval=30min
-StartLimitBurst=3
+StartLimitBurst=30
+RestartSec=20s
 
 [Install]
 WantedBy=ceph-osd.target

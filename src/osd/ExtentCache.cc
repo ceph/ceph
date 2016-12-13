@@ -168,20 +168,23 @@ extent_map ExtentCache::get_remaining_extents_for_rmw(
   auto &eset = get_or_create(oid);
   for (auto &&res: to_get) {
     bufferlist bl;
+    uint64_t cur = res.first;
     eset.traverse_update(
       pin,
       res.first,
       res.second,
       [&](uint64_t off, uint64_t len,
 	  extent *ext, object_extent_set::update_action *action) {
+	assert(off == cur);
+	cur = off + len;
 	action->action = object_extent_set::update_action::NONE;
 	assert(ext && ext->bl && ext->pinned_by_write());
 	bl.substr_of(
 	  *(ext->bl),
 	  off - ext->offset,
 	  len);
+	ret.insert(off, len, bl);
       });
-    ret.insert(res.first, res.second, bl);
   }
   return ret;
 }

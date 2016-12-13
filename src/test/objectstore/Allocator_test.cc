@@ -14,7 +14,6 @@
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/BitAllocator.h"
-#include "test/unit.h"
 
 
 #if GTEST_HAS_PARAM_TEST

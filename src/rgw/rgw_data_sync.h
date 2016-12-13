@@ -185,9 +185,7 @@ struct rgw_datalog_shard_data {
 };
 
 class RGWAsyncRadosProcessor;
-class RGWDataSyncStatusManager;
 class RGWDataSyncControlCR;
-struct RGWDataSyncEnv;
 
 struct rgw_bucket_entry_owner {
   string id;
@@ -479,7 +477,6 @@ class RGWBucketSyncStatusManager {
 
   RGWCoroutinesManager cr_mgr;
 
-  RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager http_manager;
 
   string source_zone;
@@ -504,7 +501,6 @@ public:
   RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
                              const rgw_bucket& bucket) : store(_store),
                                                                                      cr_mgr(_store->ctx(), _store->get_cr_registry()),
-                                                                                     async_rados(NULL),
                                                                                      http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                      source_zone(_source_zone),
                                                                                      conn(NULL), error_logger(NULL),

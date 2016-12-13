@@ -180,6 +180,7 @@ public:
         ExtentList *alloc_list, int64_t block_offset,
         int64_t *scanned);
 
+  void dump_state(int& count);
   ~BmapEntry();
 
 };
@@ -264,6 +265,7 @@ public:
   int64_t get_index();
   int64_t get_level();
   bmap_area_type_t get_type();
+  virtual void dump_state(int& count) = 0;
   virtual ~BitMapArea() { }
 };
 
@@ -381,6 +383,7 @@ public:
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
 
   void free_blocks(int64_t start_block, int64_t num_blocks);
+  void dump_state(int& count);
 };
 
 class BitMapAreaIN: public BitMapArea{
@@ -457,6 +460,7 @@ public:
 
   virtual void free_blocks_int(int64_t start_block, int64_t num_blocks);
   virtual void free_blocks(int64_t start_block, int64_t num_blocks);
+  void dump_state(int& count);
 };
 
 class BitMapAreaLeaf: public BitMapAreaIN{
@@ -562,6 +566,7 @@ public:
   BitAllocatorStats *get_stats() {
       return m_stats;
   }
+  void dump();
 };
 
 #endif //End of file

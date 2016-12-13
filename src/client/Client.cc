@@ -6494,15 +6494,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
-    if (mask & CEPH_SETATTR_MODE) {
-      in->ctime = ceph_clock_now(cct);
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
-      in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
-      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
-      mask &= ~CEPH_SETATTR_MODE;
-      ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    }
+    bool kill_sguid = false;
+
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
       in->cap_dirtier_uid = perms.uid();
@@ -6510,6 +6503,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->uid = stx->stx_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
+      kill_sguid = true;
       ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
     }
     if (mask & CEPH_SETATTR_GID) {
@@ -6519,8 +6513,26 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->gid = stx->stx_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
+      kill_sguid = true;
       ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
     }
+
+    if (mask & CEPH_SETATTR_MODE) {
+      in->ctime = ceph_clock_now(cct);
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
+      in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
+      mask &= ~CEPH_SETATTR_MODE;
+      ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
+    } else if (kill_sguid && S_ISREG(in->mode)) {
+      /* Must squash the any setuid/setgid bits with an ownership change */
+      in->mode &= ~S_ISUID;
+      if ((in->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
+	in->mode &= ~S_ISGID;
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
+    }
+
     if (mask & CEPH_SETATTR_BTIME) {
       in->ctime = ceph_clock_now(cct);
       in->cap_dirtier_uid = perms.uid();
@@ -9917,6 +9929,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   } else {
     assert(in);
     fill_statx(in, mask, stx);
+    _ll_get(in.get());
     *out = in.get();
     return 0;
   }
@@ -11927,8 +11940,8 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
 		      const UserPerm& perms)
 {
-  InodeRef in;
   Mutex::Locker lock(client_lock);
+  InodeRef in;
 
   int r = _ll_create(parent, name, mode, flags, &in, CEPH_STAT_CAP_INODE_ALL,
 		      fhp, perms);
@@ -11954,8 +11967,8 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
 			const UserPerm& perms)
 {
   unsigned caps = statx_to_mask(lflags, want);
-  InodeRef in;
   Mutex::Locker lock(client_lock);
+  InodeRef in;
 
   int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
   if (r >= 0) {

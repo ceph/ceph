@@ -3,6 +3,10 @@ include(AddCephTest)
 set(UNITTEST_LIBS gmock_main gmock gtest ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/googletest/googlemock/include -I${CMAKE_BINARY_DIR}/src/googletest/googlemock/include -I${CMAKE_SOURCE_DIR}/src/googletest/googletest/include -I${CMAKE_BINARY_DIR}/src/googletest/googletest/include -fno-strict-aliasing")
 
+add_library(unit-main OBJECT unit.cc)
+set_source_files_properties(unit.cc PROPERTIES
+  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
 add_subdirectory(bench)
 add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
@@ -440,6 +444,7 @@ target_link_libraries(ceph_test_keys mon global ${CMAKE_DL_LIBS})
 # ceph_test_snap_mapper
 add_executable(ceph_test_snap_mapper
   test_snap_mapper.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES} ${UNITTEST_LIBS})
 set_target_properties(ceph_test_snap_mapper PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
@@ -487,16 +492,18 @@ if(${WITH_CEPHFS})
     )
 endif(${WITH_CEPHFS})
 
-add_executable(ceph_test_get_blkdev_size
-  test_get_blkdev_size.cc
-  )
-target_link_libraries(ceph_test_get_blkdev_size
-  common
-  pthread
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
+if(HAVE_BLKID)
+  add_executable(ceph_test_get_blkdev_size
+    test_get_blkdev_size.cc
+    )
+  target_link_libraries(ceph_test_get_blkdev_size
+    common
+    pthread
+    ${EXTRALIBS}
+    ${BLKID_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    )
+endif(HAVE_BLKID)
 
 #make check starts here
 
@@ -578,6 +585,7 @@ set_property(TEST
 # unittest_admin_socket
 add_executable(unittest_admin_socket
   admin_socket.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_admin_socket ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_admin_socket)
 target_link_libraries(unittest_admin_socket global) 
@@ -599,6 +607,7 @@ target_link_libraries(unittest_addrs common librados ${XIO_LIBRARY} pthread rt m
 # unittest_workqueue
 add_executable(unittest_workqueue
   test_workqueue.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_workqueue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_workqueue)
 target_link_libraries(unittest_workqueue global ${BLKID_LIBRARIES})
@@ -606,6 +615,7 @@ target_link_libraries(unittest_workqueue global ${BLKID_LIBRARIES})
 # unittest_striper
 add_executable(unittest_striper
   test_striper.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_striper ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_striper)
 target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
@@ -655,6 +665,7 @@ target_link_libraries(unittest_ceph_compatset global)
 # unittest_gather
 add_executable(unittest_gather
   gather.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_gather ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_gather)
 target_link_libraries(unittest_gather global)
@@ -669,6 +680,7 @@ target_link_libraries(unittest_run_cmd global)
 # signals
 add_executable(unittest_signals
   signals.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_signals ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_signals)
 target_link_libraries(unittest_signals global)
@@ -697,6 +709,7 @@ target_link_libraries(unittest_xlist common ${XIO_LIBRARY})
 # unittest_arch
 add_executable(unittest_arch
   test_arch.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_arch ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_arch)
 target_link_libraries(unittest_arch global)
@@ -718,6 +731,7 @@ target_link_libraries(unittest_mempool global)
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_crypto ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_crypto)
 target_link_libraries(unittest_crypto global)
@@ -781,6 +795,7 @@ target_link_libraries(unittest_confutils global)
 # unittest_heartbeatmap
 add_executable(unittest_heartbeatmap
   heartbeat_map.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_heartbeatmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_heartbeatmap)
 target_link_libraries(unittest_heartbeatmap common global)
@@ -789,6 +804,7 @@ if(${WITH_RADOSGW})
   # unittest_formatter
   add_executable(unittest_formatter
     formatter.cc
+    $<TARGET_OBJECTS:unit-main>
     )
   add_ceph_unittest(unittest_formatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_formatter)
   target_link_libraries(unittest_formatter global)
@@ -797,6 +813,7 @@ endif(${WITH_RADOSGW})
 # unittest_daemon_config
 add_executable(unittest_daemon_config
   daemon_config.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_daemon_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_daemon_config)
 target_link_libraries(unittest_daemon_config
@@ -826,7 +843,6 @@ target_link_libraries(unittest_rbd_replay
   global
   rbd_replay
   rbd_replay_ios
-  keyutils
   ${BLKID_LIBRARIES}
   )
 endif(WITH_RBD)
