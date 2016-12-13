@@ -738,3 +738,20 @@ void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* ou
    * to RADOS may be safely skipped in this case. */
   user_info = this->user_info;
 }
+
+
+rgw::auth::Engine::result_t
+rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
+{
+  if (! is_applicable()) {
+    return std::make_pair(nullptr, nullptr);
+  } else {
+    RGWUserInfo user_info;
+    rgw_get_anon_user(user_info);
+
+    // FIXME: over 80 columns
+    auto apl = apl_factory->create_apl_local(cct, user_info,
+                                             rgw::auth::LocalApplier::NO_SUBUSER);
+    return std::make_pair(std::move(apl), nullptr);
+  }
+}
