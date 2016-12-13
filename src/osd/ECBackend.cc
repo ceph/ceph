@@ -1337,7 +1337,6 @@ void ECBackend::on_change()
   }
   tid_to_op_map.clear();
 
-  tid_to_op_map.clear();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
