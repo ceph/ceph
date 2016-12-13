@@ -559,6 +559,7 @@ public:
   struct PriorSet {
     const bool ec_pool;
     set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
+    set<pg_shard_t> request_log;
     set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
     map<int, epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
@@ -1680,6 +1681,8 @@ public:
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
       std::unique_ptr< PriorSet > prior_set;
+      set<pg_shard_t> peer_missing_requested;
+      map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > msgs;
       bool history_les_bound;  //< need osd_find_best_info_ignore_history_les
 
       explicit Peering(my_context ctx);
@@ -1928,10 +1931,12 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::transition< GotInfo, GetLog >,
+       boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MNotifyRec& infoevt);
+      boost::statechart::result react(const MLogRec& logevt);
     };
 
     struct GotLog : boost::statechart::event< GotLog > {
@@ -1961,8 +1966,6 @@ public:
     struct WaitUpThru;
 
     struct GetMissing : boost::statechart::state< GetMissing, Peering >, NamedState {
-      set<pg_shard_t> peer_missing_requested;
-
       explicit GetMissing(my_context ctx);
       void exit();
 

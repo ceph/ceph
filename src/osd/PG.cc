@@ -7256,6 +7256,8 @@ void PG::RecoveryState::GetInfo::get_infos()
 {
   PG *pg = context< RecoveryMachine >().pg;
   unique_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
 
   pg->blocked_by.clear();
   for (set<pg_shard_t>::const_iterator it = prior_set->probe.begin();
@@ -7276,11 +7278,20 @@ void PG::RecoveryState::GetInfo::get_infos()
       dout(10) << " not querying info from down osd." << peer << dendl;
     } else {
       dout(10) << " querying info from osd." << peer << dendl;
-      context< RecoveryMachine >().send_query(
-	peer, pg_query_t(pg_query_t::INFO,
-			 it->shard, pg->pg_whoami.shard,
-			 pg->info.history,
-			 pg->get_osdmap()->get_epoch()));
+      if (prior_set->request_log.find(peer) == prior_set->request_log.end()) {
+        context< RecoveryMachine >().send_query(
+	  peer, pg_query_t(pg_query_t::INFO,
+			   it->shard, pg->pg_whoami.shard,
+			   pg->info.history,
+			   pg->get_osdmap()->get_epoch()));
+      } else {
+        context< RecoveryMachine >().send_query(
+	  peer, pg_query_t(pg_query_t::ALL,
+			   it->shard, pg->pg_whoami.shard,
+			   pg->info.history,
+			   pg->get_osdmap()->get_epoch()));
+        peer_missing_requested.insert(peer);
+      }
       peer_info_requested.insert(peer);
       pg->blocked_by.insert(peer.osd);
     }
@@ -7393,6 +7404,24 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::GetInfo::react(const MLogRec& logevt)
+{
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
+  if (!peer_missing_requested.count(logevt.from)) {
+    dout(10) << "GetInfo: discarding log from osd."
+            << logevt.from << dendl;
+    return discard_event();
+  }
+  dout(10) << "GetInfo: received log from osd."
+          << logevt.from << dendl;
+  msgs[logevt.from] = logevt.msg;
+  peer_missing_requested.erase(logevt.from);
+  return discard_event();
+}
+
 boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -7440,6 +7469,10 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
 
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
   // adjust acting?
   if (!pg->choose_acting(auth_log_shard,
       &context< Peering >().history_les_bound)) {
@@ -7450,7 +7483,15 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
     }
     return;
   }
-
+  set<pg_shard_t>::iterator p = peer_missing_requested.begin();
+  while (p != peer_missing_requested.end()) {
+    if (pg->actingbackfill.count(*p) == 0) {
+      dout(20) << " dropping osd." << *p << " from missing_requested" << dendl;
+      peer_missing_requested.erase(p++);
+    } else {
+      ++p;
+    }
+  }
   // am i the best?
   if (auth_log_shard == pg->pg_whoami) {
     post_event(GotLog());
@@ -7466,6 +7507,13 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
     return;
   }
 
+  if (peer_missing_requested.count(auth_log_shard)) {
+    if (msgs[auth_log_shard]) {
+      msg = msgs[auth_log_shard];
+      post_event(GotLog());
+    }
+    return;
+  }
   // how much log to request?
   eversion_t request_log_from = pg->info.last_update;
   assert(!pg->actingbackfill.empty());
@@ -7512,9 +7560,13 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
 boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
 {
   assert(!msg);
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
   if (logevt.from != auth_log_shard) {
-    dout(10) << "GetLog: discarding log from "
-	     << "non-auth_log_shard osd." << logevt.from << dendl;
+    if (peer_missing_requested.count(logevt.from))
+      msgs[logevt.from] = logevt.msg;
     return discard_event();
   }
   dout(10) << "GetLog: received master log from osd"
@@ -7689,6 +7741,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  set<pg_shard_t> pm_requested;
   assert(!pg->actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = pg->actingbackfill.begin();
        i != pg->actingbackfill.end();
@@ -7721,33 +7778,44 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
       continue;
     }
 
-    // We pull the log from the peer's last_epoch_started to ensure we
-    // get enough log to detect divergent updates.
-    eversion_t since(pi.last_epoch_started, 0);
-    assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
-    if (pi.log_tail <= since) {
-      dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
-      context< RecoveryMachine >().send_query(
-	*i,
-	pg_query_t(
-	  pg_query_t::LOG,
-	  i->shard, pg->pg_whoami.shard,
-	  since, pg->info.history,
-	  pg->get_osdmap()->get_epoch()));
+    if (msgs[*i]) {
+      pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
+                      msgs[*i]->info, msgs[*i]->log, msgs[*i]->missing, *i);
     } else {
-      dout(10) << " requesting fulllog+missing from osd." << *i
-	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
-	       << dendl;
-      context< RecoveryMachine >().send_query(
-	*i, pg_query_t(
-	  pg_query_t::FULLLOG,
-	  i->shard, pg->pg_whoami.shard,
-	  pg->info.history, pg->get_osdmap()->get_epoch()));
+      if (peer_missing_requested.count(*i)) {
+        dout(10) << " already requested missing from osd." << *i << dendl;
+      } else {
+        // We pull the log from the peer's last_epoch_started to ensure we
+        // get enough log to detect divergent updates.
+        eversion_t since(pi.last_epoch_started, 0);
+        assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
+        if (pi.log_tail <= since) {
+          dout(10) << " requesting log+missing since " << since
+            << " from osd." << *i << dendl;
+          context< RecoveryMachine >().send_query(
+	    *i,
+	    pg_query_t(
+	      pg_query_t::LOG,
+	      i->shard, pg->pg_whoami.shard,
+	      since, pg->info.history,
+	      pg->get_osdmap()->get_epoch()));
+        } else {
+          dout(10) << " requesting fulllog+missing from osd." << *i
+	           << " (want since " << since << " < log.tail "
+                   << pi.log_tail << ")"
+	           << dendl;
+          context< RecoveryMachine >().send_query(
+	    *i, pg_query_t(
+	      pg_query_t::FULLLOG,
+	      i->shard, pg->pg_whoami.shard,
+	      pg->info.history, pg->get_osdmap()->get_epoch()));
+        }
+      }
+      pm_requested.insert(*i);
+      pg->blocked_by.insert(i->osd);
     }
-    peer_missing_requested.insert(*i);
-    pg->blocked_by.insert(i->osd);
   }
-
+  peer_missing_requested.swap(pm_requested);
   if (peer_missing_requested.empty()) {
     if (pg->need_up_thru) {
       dout(10) << " still need up_thru update before going active" << dendl;
@@ -7765,8 +7833,16 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& logevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
 
+  if (!peer_missing_requested.count(logevt.from)) {
+    dout(10) << "GetMissing: discarding log from osd."
+            << logevt.from << dendl;
+    return discard_event();
+  }
   peer_missing_requested.erase(logevt.from);
+  pg->blocked_by.erase(logevt.from.osd);
   pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
 		       logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   
@@ -7786,6 +7862,8 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
 boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
@@ -7948,14 +8026,19 @@ PG::PriorSet::PriorSet(bool ec_pool,
   for (unsigned i = 0; i < acting.size(); i++) {
     if (acting[i] != CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+      request_log.insert(pg_shard_t(acting[i], ec_pool ?
+        shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   // It may be possible to exclude the up nodes, but let's keep them in
   // there for now.
   for (unsigned i = 0; i < up.size(); i++) {
     if (up[i] != CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+      request_log.insert(pg_shard_t(up[i], ec_pool ?
+        shard_id_t(i) : shard_id_t::NO_SHARD));
   }
 
+  bool first_interval = true;
   for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        ++p) {
@@ -7992,6 +8075,8 @@ PG::PriorSet::PriorSet(bool ec_pool,
 	// include past acting osds if they are up.
 	probe.insert(so);
 	up_now.insert(so);
+       if (first_interval)
+         request_log.insert(so);
       } else if (!pinfo) {
 	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
 	down.insert(o);
@@ -8026,6 +8111,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
 	}
       }
     }
+    first_interval = false;
   }
 
   dout(10) << "build_prior final: probe " << probe

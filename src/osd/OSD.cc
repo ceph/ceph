@@ -8222,12 +8222,29 @@ void OSD::handle_pg_query(OpRequestRef op)
     }
 
     if (service.splitting(pgid)) {
-      peering_wait_for_split[pgid].push_back(
-	PG::CephPeeringEvtRef(
-	  new PG::CephPeeringEvt(
-	    it->second.epoch_sent, it->second.epoch_sent,
-	    PG::MQuery(pg_shard_t(from, it->second.from),
-		       it->second, it->second.epoch_sent))));
+      if (it->second.type != pg_query_t::ALL) {
+        peering_wait_for_split[pgid].push_back(
+	  PG::CephPeeringEvtRef(
+	    new PG::CephPeeringEvt(
+	      it->second.epoch_sent, it->second.epoch_sent,
+	      PG::MQuery(pg_shard_t(from, it->second.from),
+		         it->second, it->second.epoch_sent))));
+      } else {
+        it->second.type = pg_query_t::INFO;
+        peering_wait_for_split[pgid].push_back(
+	  PG::CephPeeringEvtRef(
+	    new PG::CephPeeringEvt(
+	      it->second.epoch_sent, it->second.epoch_sent,
+	      PG::MQuery(pg_shard_t(from, it->second.from),
+		         it->second, it->second.epoch_sent))));
+        it->second.type = pg_query_t::FULLLOG;
+        peering_wait_for_split[pgid].push_back(
+	  PG::CephPeeringEvtRef(
+	    new PG::CephPeeringEvt(
+	      it->second.epoch_sent, it->second.epoch_sent,
+	      PG::MQuery(pg_shard_t(from, it->second.from),
+		         it->second, it->second.epoch_sent))));
+      }
       continue;
     }
 
@@ -8236,9 +8253,20 @@ void OSD::handle_pg_query(OpRequestRef op)
       if (pg_map.count(pgid)) {
         PG *pg = 0;
         pg = _lookup_lock_pg_with_map_lock_held(pgid);
-        pg->queue_query(
-            it->second.epoch_sent, it->second.epoch_sent,
-            pg_shard_t(from, it->second.from), it->second);
+        if (it->second.type != pg_query_t::ALL) {
+          pg->queue_query(
+              it->second.epoch_sent, it->second.epoch_sent,
+              pg_shard_t(from, it->second.from), it->second);
+        } else {
+          it->second.type = pg_query_t::INFO;
+          pg->queue_query(
+              it->second.epoch_sent, it->second.epoch_sent,
+              pg_shard_t(from, it->second.from), it->second);
+          it->second.type = pg_query_t::FULLLOG;
+          pg->queue_query(
+              it->second.epoch_sent, it->second.epoch_sent,
+              pg_shard_t(from, it->second.from), it->second);
+        }
         pg->unlock();
         continue;
       }
