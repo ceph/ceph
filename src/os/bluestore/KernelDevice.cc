@@ -25,6 +25,7 @@
 #include "common/debug.h"
 #include "common/blkdev.h"
 #include "common/align.h"
+#include "global/signal_handler.h"
 
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -265,8 +266,12 @@ void KernelDevice::_aio_thread()
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
 		 << " with " << left << " aios left" << dendl;
-	assert(r >= 0);
-	int left = --ioc->num_running;
+	if (r < 0) {
+          dout(0) << __func__ << "bluestore assert(r >=0) , but r= " << r << dendl;
+          queue_async_signal(SIGABRT);
+          return;
+        }
+        int left = --ioc->num_running;
 	// NOTE: once num_running is decremented we can no longer
 	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
 	if (left == 0) {

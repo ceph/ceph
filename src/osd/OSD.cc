@@ -1746,9 +1746,15 @@ void cls_initialize(ClassHandler *ch);
 
 void OSD::handle_signal(int signum)
 {
-  assert(signum == SIGINT || signum == SIGTERM);
+  assert(signum == SIGINT || signum == SIGTERM || signum == SIGABRT);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+
+  if (signum == SIGINT || signum == SIGTERM) {
+    shutdown();
+  } else {
+    service.prepare_to_stop();
+    exit(EXIT_FAILURE);
+  }
 }
 
 int OSD::pre_init()

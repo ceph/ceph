@@ -30,6 +30,7 @@
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
+#include "global/signal_handler.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -4913,7 +4914,12 @@ int BlueStore::read(
   }
 
  out:
-  assert(allow_eio || r != -EIO);
+  if ((!allow_eio) && (r == -EIO)) {
+    dout(0) << __func__ << "bluestore assert(allow_eio || r != -EIO) , but r= " << r 
+            << " allow_eio = " << allow_eio << dendl;
+    queue_async_signal(SIGABRT);
+    return r;
+  }
   c->trim_cache();
   if (r == 0 && _debug_data_eio(oid)) {
     r = -EIO;
