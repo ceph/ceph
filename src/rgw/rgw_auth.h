@@ -690,6 +690,31 @@ public:
     };
 };
 
+
+/* The anonymous abstract engine. */
+class AnonymousEngine : public Engine {
+  CephContext* const cct;
+  const rgw::auth::LocalApplier::Factory* const apl_factory;
+
+public:
+  AnonymousEngine(CephContext* const cct,
+                  const rgw::auth::LocalApplier::Factory* const apl_factory)
+    : cct(cct),
+      apl_factory(apl_factory) {
+  }
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::AnonymousEngine";
+  }
+
+  Engine::result_t authenticate(const req_state* s) const override final;
+
+protected:
+  virtual bool is_applicable() const noexcept {
+    return true;
+  }
+};
+
 } /* namespace auth */
 } /* namespace rgw */
 
