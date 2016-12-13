@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 // vim: ts=8 sw=2 smarttab
 /*
  * Bitmap based in-memory allocator.
@@ -640,6 +641,94 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
 
   return allocated;
 }
+
+int64_t BitMapZone::alloc_blocks_dis2(int64_t num_blocks,
+           int64_t min_alloc,
+	   int64_t hint,
+	   int64_t zone_blk_off, 
+	   ExtentList *alloc_blocks)
+{
+  int64_t bmap_idx = hint / BmapEntry::size();
+  int bit = hint % BmapEntry::size();
+  BmapEntry *bmap = NULL;
+  int64_t allocated = 0;
+  int64_t blk_off = 0;
+  int64_t alloc_cont = 0;
+  int64_t last_cont = 0;
+  int64_t last_running_ext = 0;
+  int search_idx = bit;
+  int64_t scanned = 0;
+  int start_off = 0;
+  
+
+  alloc_assert(check_locked());
+
+  BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
+          m_bmap_list, bmap_idx);
+
+  while (allocated < num_blocks) {
+		blk_off = zone_blk_off + bmap_idx * size();
+		if (last_cont) {
+			/*
+			 * We had bits free at end of last bitmap, try to complete required
+			 * min alloc size using that.
+			 */
+			alloc_cont = bmap->find_n_cont_bits(0, min_alloc - last_cont);
+			allocated += alloc_cont;
+			last_cont += alloc_cont;
+			
+			if (!alloc_cont) {
+				this->free_blocks(last_running_ext, last_cont);
+				allocated -= last_cont;
+				last_cont = 0;
+			} else {
+				/*
+				 * Got contiguous min_alloc_size across bitmaps.
+				 */
+				alloc_blocks->add_extents(last_running_ext, last_cont);
+			}
+			last_running_ext = 0;
+			search_idx = alloc_cont;
+		} else {
+			/*
+			 * Try to allocate  min_alloc_size bits from given bmap.
+			 */
+			alloc_cont = bmap->find_first_set_bits(min_alloc, search_idx, &start_off, &scanned);
+			search_idx = search_idx + scanned;
+			if (alloc_cont / min_alloc) {
+				/*
+       * Got contiguous min_alloc_size within a bitmap.
+       */
+      alloc_blocks->add_extents(blk_off + start_off, min_alloc);
+			}
+			
+			if (alloc_cont % min_alloc) {
+				/*
+				 * Got some bits at end of bitmap, carry them to try match with
+				 * start bits from next bitmap.
+				 */
+				if (!last_cont) {
+					last_running_ext = blk_off + start_off;
+				} 
+				last_cont += alloc_cont % min_alloc;
+			}
+		}
+  
+   
+		if (search_idx == BmapEntry::size()) {
+			search_idx = 0;
+			if ((bmap = iter.next())) {
+				this->free_blocks(last_running_ext, last_cont);
+				allocated -= last_cont;
+				break;
+			}
+		}
+	}
+
+	return allocated;
+}
+
+
 
 void BitMapZone::dump_state(int& count)
 {
