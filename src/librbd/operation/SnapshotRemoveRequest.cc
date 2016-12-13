@@ -180,10 +180,6 @@ void SnapshotRemoveRequest<I>::send_remove_snap() {
   if (image_ctx.old_format) {
     cls_client::old_snapshot_remove(&op, m_snap_name);
   } else {
-    if (image_ctx.exclusive_lock != nullptr &&
-        image_ctx.exclusive_lock->is_lock_owner()) {
-      image_ctx.exclusive_lock->assert_header_locked(&op);
-    }
     cls_client::snapshot_remove(&op, m_snap_id);
   }
 
