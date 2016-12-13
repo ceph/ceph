@@ -381,9 +381,6 @@ void ResizeRequest<I>::send_update_header() {
     bl.append(reinterpret_cast<const char*>(&m_new_size), sizeof(m_new_size));
     op.write(offsetof(rbd_obj_header_ondisk, image_size), bl);
   } else {
-    if (image_ctx.exclusive_lock != nullptr) {
-      image_ctx.exclusive_lock->assert_header_locked(&op);
-    }
     cls_client::set_size(&op, m_new_size);
   }
 

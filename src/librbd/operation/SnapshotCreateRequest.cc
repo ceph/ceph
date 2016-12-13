@@ -207,9 +207,6 @@ void SnapshotCreateRequest<I>::send_create_snap() {
   if (image_ctx.old_format) {
     cls_client::old_snapshot_add(&op, m_snap_id, m_snap_name);
   } else {
-    if (image_ctx.exclusive_lock != nullptr) {
-      image_ctx.exclusive_lock->assert_header_locked(&op);
-    }
     cls_client::snapshot_add(&op, m_snap_id, m_snap_name);
   }
 
