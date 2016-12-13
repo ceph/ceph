@@ -140,26 +140,6 @@ typedef struct {
 } rbd_mirror_image_status_t;
 
 typedef enum {
-  GROUP_IMAGE_STATE_ATTACHED,
-  GROUP_IMAGE_STATE_INCOMPLETE
-} rbd_group_image_state_t;
-
-typedef struct {
-  char *name;
-  int64_t pool;
-} rbd_group_image_spec_t;
-
-typedef struct {
-  rbd_group_image_spec_t spec;
-  rbd_group_image_state_t state;
-} rbd_group_image_status_t;
-
-typedef struct {
-  char *name;
-  int64_t pool;
-} rbd_group_spec_t;
-
-typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
   RBD_LOCK_MODE_SHARED = 1,
 } rbd_lock_mode_t;
@@ -724,11 +704,6 @@ CEPH_RBD_API int rbd_mirror_image_get_status(rbd_image_t image,
                                              rbd_mirror_image_status_t *mirror_image_status,
                                              size_t status_size);
 
-// RBD consistency groups support functions
-CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);
-CEPH_RBD_API int rbd_group_remove(rados_ioctx_t p, const char *name);
-CEPH_RBD_API int rbd_group_list(rados_ioctx_t p, char *names, size_t *size);
-
 /**
  * Register an image metadata change watcher.
  *
@@ -750,27 +725,6 @@ CEPH_RBD_API int rbd_update_watch(rbd_image_t image, uint64_t *handle,
  */
 CEPH_RBD_API int rbd_update_unwatch(rbd_image_t image, uint64_t handle);
 
-
-CEPH_RBD_API int rbd_group_image_add(
-				rados_ioctx_t group_p, const char *group_name,
-				rados_ioctx_t image_p, const char *image_name);
-CEPH_RBD_API int rbd_group_image_remove(
-				rados_ioctx_t group_p, const char *group_name,
-				rados_ioctx_t image_p, const char *image_name);
-CEPH_RBD_API int rbd_group_image_list(
-				  rados_ioctx_t group_p, const char *group_name,
-				  rbd_group_image_status_t *images,
-				  size_t *image_size);
-CEPH_RBD_API int rbd_image_get_group(rados_ioctx_t image_p,
-				     const char *image_name,
-				     rbd_group_spec_t *group_spec);
-CEPH_RBD_API void rbd_group_spec_cleanup(rbd_group_spec_t *group_spec);
-CEPH_RBD_API void rbd_group_image_status_cleanup(
-						rbd_group_image_status_t *image
-						);
-CEPH_RBD_API void rbd_group_image_status_list_cleanup(
-					      rbd_group_image_status_t *images,
-					      size_t len);
 #ifdef __cplusplus
 }
 #endif

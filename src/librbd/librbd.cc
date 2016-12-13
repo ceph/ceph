@@ -143,19 +143,6 @@ struct C_UpdateWatchCB : public librbd::UpdateWatchCtx {
   }
 };
 
-void group_image_status_cpp_to_c(const librbd::group_image_status_t &cpp_status,
-				 rbd_group_image_status_t *c_status) {
-  c_status->spec.name = strdup(cpp_status.name.c_str());
-  c_status->spec.pool = cpp_status.pool;
-  c_status->state = cpp_status.state;
-}
-
-void group_spec_cpp_to_c(const librbd::group_spec_t &cpp_spec,
-			 rbd_group_spec_t *c_spec) {
-  c_spec->name = strdup(cpp_spec.name.c_str());
-  c_spec->pool = cpp_spec.pool;
-}
-
 void mirror_image_info_cpp_to_c(const librbd::mirror_image_info_t &cpp_info,
 				rbd_mirror_image_info_t *c_info) {
   c_info->global_id = strdup(cpp_info.global_id.c_str());
@@ -462,78 +449,6 @@ namespace librbd {
     return librbd::mirror_image_status_summary(io_ctx, states);
   }
 
-  int RBD::group_create(IoCtx& io_ctx, const char *group_name)
-  {
-    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-    tracepoint(librbd, group_create_enter, io_ctx.get_pool_name().c_str(),
-	       io_ctx.get_id(), group_name);
-    int r = librbd::group_create(io_ctx, group_name);
-    tracepoint(librbd, group_create_exit, r);
-    return r;
-  }
-
-  int RBD::group_remove(IoCtx& io_ctx, const char *group_name)
-  {
-    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-    tracepoint(librbd, group_remove_enter, io_ctx.get_pool_name().c_str(),
-	       io_ctx.get_id(), group_name);
-    int r = librbd::group_remove(io_ctx, group_name);
-    tracepoint(librbd, group_remove_exit, r);
-    return r;
-  }
-
-  int RBD::group_list(IoCtx& io_ctx, vector<string> *names)
-  {
-    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-    tracepoint(librbd, group_list_enter, io_ctx.get_pool_name().c_str(),
-	       io_ctx.get_id());
-
-    int r = librbd::group_list(io_ctx, names);
-    if (r >= 0) {
-      for (auto itr : *names) {
-	tracepoint(librbd, group_list_entry, itr.c_str());
-      }
-    }
-    tracepoint(librbd, group_list_exit, r);
-    return r;
-  }
-
-  int RBD::group_image_add(IoCtx& group_ioctx, const char *group_name,
-                           IoCtx& image_ioctx, const char *image_name)
-  {
-    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
-    tracepoint(librbd, group_image_add_enter, group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
-	       image_ioctx.get_id(), image_name);
-    int r = librbd::group_image_add(group_ioctx, group_name, image_ioctx, image_name);
-    tracepoint(librbd, group_image_add_exit, r);
-    return r;
-  }
-
-  int RBD::group_image_remove(IoCtx& group_ioctx, const char *group_name,
-                              IoCtx& image_ioctx, const char *image_name)
-  {
-    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
-    tracepoint(librbd, group_image_remove_enter, group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
-	       image_ioctx.get_id(), image_name);
-    int r = librbd::group_image_remove(group_ioctx, group_name, image_ioctx, image_name);
-    tracepoint(librbd, group_image_remove_exit, r);
-    return r;
-  }
-
-  int RBD::group_image_list(IoCtx& group_ioctx, const char *group_name,
-                            std::vector<group_image_status_t> *images)
-  {
-    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
-    tracepoint(librbd, group_image_list_enter, group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name);
-    int r = librbd::group_image_list(group_ioctx, group_name, images);
-    tracepoint(librbd, group_image_list_exit, r);
-    return r;
-  }
-
-
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
     pc = reinterpret_cast<void*>(librbd::AioCompletion::create(
@@ -726,15 +641,6 @@ namespace librbd {
     tracepoint(librbd, get_size_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     int r = librbd::get_size(ictx, size);
     tracepoint(librbd, get_size_exit, r, *size);
-    return r;
-  }
-
-  int Image::get_group(group_spec_t *group_spec)
-  {
-    ImageCtx *ictx = (ImageCtx *)ctx;
-    tracepoint(librbd, image_get_group_enter, ictx->name.c_str());
-    int r = librbd::image_get_group(ictx, group_spec);
-    tracepoint(librbd, image_get_group_exit, r);
     return r;
   }
 
@@ -3191,6 +3097,7 @@ extern "C" void rbd_aio_release(rbd_completion_t c)
   comp->release();
 }
 
+<<<<<<< HEAD
 extern "C" int rbd_group_create(rados_ioctx_t p, const char *name)
 {
   librados::IoCtx io_ctx;
@@ -3383,3 +3290,5 @@ extern "C" void rbd_group_image_status_list_cleanup(
     rbd_group_image_status_cleanup(&images[i]);
   }
 }
+=======
+>>>>>>> librbd: remove consistency group rbd cli and API support
