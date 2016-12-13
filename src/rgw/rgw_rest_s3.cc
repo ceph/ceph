@@ -2808,7 +2808,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
 
       s->formatter->dump_string("Key", key.name);
       s->formatter->dump_string("VersionId", key.instance);
-      s->formatter->dump_int("Code", r.http_ret);
+      s->formatter->dump_string("Code", r.s3_code);
       s->formatter->dump_string("Message", r.s3_code);
       s->formatter->close_section();
     }
