@@ -101,9 +101,6 @@ public:
                     .WillOnce(Return(r));
     } else {
       expect_is_lock_owner(mock_image_ctx);
-      if (mock_image_ctx.exclusive_lock != nullptr) {
-        EXPECT_CALL(*mock_image_ctx.exclusive_lock, assert_header_locked(_));
-      }
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                   exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_size"), _, _, _))
                     .WillOnce(Return(r));
