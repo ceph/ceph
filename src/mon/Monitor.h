@@ -103,7 +103,6 @@ class MMonSync;
 class MMonScrub;
 class MMonProbe;
 struct MMonSubscribe;
-class MAuthRotating;
 struct MRoute;
 struct MForward;
 struct MTimeCheck;
