@@ -1643,6 +1643,10 @@ public:
     struct IsIncomplete : boost::statechart::event< IsIncomplete > {
       IsIncomplete() : boost::statechart::event< IsIncomplete >() {}
     };
+    struct Down;
+    struct IsDown : boost::statechart::event< IsDown > {
+      IsDown() : boost::statechart::event< IsDown >() {}
+    };
 
     struct Primary : boost::statechart::state< Primary, Started, Peering >, NamedState {
       explicit Primary(my_context ctx);
@@ -1928,7 +1932,8 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::transition< GotInfo, GetLog >,
-	boost::statechart::custom_reaction< MNotifyRec >
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::transition< IsDown, Down >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MNotifyRec& infoevt);
@@ -1987,6 +1992,11 @@ public:
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap& am);
       boost::statechart::result react(const MLogRec& logrec);
+    };
+
+    struct Down : boost::statechart::state< Down, Peering>, NamedState {
+      explicit Down(my_context ctx);
+      void exit();
     };
 
     struct Incomplete : boost::statechart::state< Incomplete, Peering>, NamedState {

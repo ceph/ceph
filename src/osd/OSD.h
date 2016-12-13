@@ -195,6 +195,7 @@ enum {
   rs_getlog_latency,
   rs_waitactingchange_latency,
   rs_incomplete_latency,
+  rs_down_latency,
   rs_getmissing_latency,
   rs_waitupthru_latency,
   rs_last,
