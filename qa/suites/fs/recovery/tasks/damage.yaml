@@ -1,0 +1,24 @@
+
+overrides:
+  ceph:
+    log-whitelist:
+      - bad backtrace
+      - object missing on disk
+      - error reading table object
+      - error reading sessionmap
+      - Error loading MDS rank
+      - missing journal object
+      - Error recovering journal
+      - error decoding table object
+      - failed to read JournalPointer
+      - Corrupt directory entry
+      - Corrupt fnode header
+      - corrupt sessionmap header
+      - Corrupt dentry
+      - Scrub error on inode
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_damage
+

@@ -1,0 +1,25 @@
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 400
+    objects: 50
+    ec_pool: true
+    write_append_excl: false
+    erasure_code_profile:
+      name: shecprofile
+      plugin: shec
+      k: 4
+      m: 3
+      c: 2
+      ruleset-failure-domain: osd
+    op_weights:
+      read: 100
+      write: 0
+      append: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
+      copy_from: 50
+      setattr: 25
+      rmattr: 25

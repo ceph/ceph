@@ -1,0 +1,11 @@
+os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+overrides:
+  install:
+    ceph:
+      flavor: notcmalloc
+      debuginfo: true
+  rbd_fsx:
+    valgrind: ["--tool=memcheck"]
+  workunit:
+    env:
+      VALGRIND: "memcheck"
