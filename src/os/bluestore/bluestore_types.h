@@ -137,8 +137,8 @@ struct bluestore_pextent_t : public AllocExtent{
   }
 
   DENC(bluestore_pextent_t, v, p) {
-    denc(v.offset, p);
-    denc(v.length, p);
+    denc_lba(v.offset, p);
+    denc_varint_lowz(v.length, p);
   }
 
   void dump(Formatter *f) const;
