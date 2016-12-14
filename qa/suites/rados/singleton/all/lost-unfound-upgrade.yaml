@@ -1,0 +1,29 @@
+os_type: centos
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+- - osd.2
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+tasks:
+- install:
+    branch: infernalis
+- ceph:
+    log-whitelist:
+    - objects unfound and apparently lost
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - log bound mismatch
+    - failed to encode
+- install.upgrade:
+    mon.a:
+- print: "upgraded mon.a and friends"
+- ceph.restart:
+    daemons: [mon.a, mon.b, mon.c, osd.0, osd.1]
+- lost_unfound:
+    parallel_bench: false

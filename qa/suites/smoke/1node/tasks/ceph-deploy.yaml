@@ -1,0 +1,7 @@
+meta:
+- desc: |
+   Run ceph-deploy cli tests on one node
+   and verify all the cli works and cluster can reach
+   HEALTH_OK state(implicty verifying the daemons via init).
+tasks:
+- ceph_deploy.single_node_test: null

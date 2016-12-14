@@ -1,0 +1,18 @@
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+overrides:
+  ceph:
+    log-whitelist:
+    - failed to encode map
+    conf:
+      client:
+        rbd default format: 1
+        rbd default features: 1

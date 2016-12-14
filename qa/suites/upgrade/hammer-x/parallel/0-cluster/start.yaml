@@ -1,0 +1,31 @@
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+  - client.1
+  - client.2
+  - client.3
+overrides:
+  ceph:
+    log-whitelist:
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked me down
+    - soft lockup
+    - detected stalls on CPUs
+    - failed to encode
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
+      client:
+        debug client: 20
+        debug ms: 1
+      mds:
+        debug mds: 20
+        debug ms: 1

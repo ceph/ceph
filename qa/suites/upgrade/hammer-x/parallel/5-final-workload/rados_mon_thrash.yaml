@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+tasks:
+  - mon_thrash:
+      revive_delay: 20
+      thrash_delay: 1
+  - print: "**** done mon_thrash 4-final-workload"
+  - workunit:
+      clients:
+        client.1:
+          - rados/test.sh
+  - print: "**** done rados/test.sh 4-final-workload"

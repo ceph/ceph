@@ -1,0 +1,10 @@
+tasks:
+- install:
+   branch: hammer
+- print: "**** done install hammer"
+- install.upgrade:
+   exclude_packages: ['ceph-test-dbg']
+   client.1:
+- print: "**** done install.upgrade client.1"
+- ceph:
+- print: "**** done ceph"

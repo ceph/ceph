@@ -1,0 +1,7 @@
+tasks:
+- install.upgrade:
+    osd.0: 
+- print: "**** done install.upgrade osd.0"
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+- print: "**** done ceph.restart 1st half"

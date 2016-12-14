@@ -1,0 +1,12 @@
+tasks:
+- install:
+    flavor: notcmalloc
+    debuginfo: true
+- ceph:
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
+- s3tests:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0

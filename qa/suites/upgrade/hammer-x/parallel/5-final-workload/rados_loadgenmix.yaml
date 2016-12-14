@@ -1,0 +1,6 @@
+tasks:
+  - workunit:
+      clients:
+        client.1:
+          - rados/load-gen-mix.sh
+  - print: "**** done rados/load-gen-mix.sh 4-final-workload"

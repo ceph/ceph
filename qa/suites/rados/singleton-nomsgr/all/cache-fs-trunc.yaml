@@ -1,0 +1,42 @@
+roles:
+- [mon.0, mds.a, osd.0, osd.1, osd.2, client.0, client.1]
+tasks:
+- install:
+- ceph:
+    conf:
+      global:
+        osd max object name len: 460
+        osd max object namespace len: 64
+- exec:
+    client.0:
+    - ceph osd pool create data_cache 4
+    - ceph osd tier add cephfs_data data_cache
+    - ceph osd tier cache-mode data_cache writeback
+    - ceph osd tier set-overlay cephfs_data data_cache
+    - ceph osd pool set data_cache hit_set_type bloom
+    - ceph osd pool set data_cache hit_set_count 8
+    - ceph osd pool set data_cache hit_set_period 3600
+    - ceph osd pool set data_cache min_read_recency_for_promote 0
+- ceph-fuse:
+- exec:
+    client.0:
+      - sudo chmod 777 $TESTDIR/mnt.0/
+      - dd if=/dev/urandom of=$TESTDIR/mnt.0/foo bs=1M count=5
+      - ls -al $TESTDIR/mnt.0/foo
+      - truncate --size 0 $TESTDIR/mnt.0/foo
+      - ls -al $TESTDIR/mnt.0/foo
+      - dd if=/dev/urandom of=$TESTDIR/mnt.0/foo bs=1M count=5
+      - ls -al $TESTDIR/mnt.0/foo
+      - cp $TESTDIR/mnt.0/foo /tmp/foo
+      - sync
+      - rados -p data_cache ls -
+      - sleep 10
+      - rados -p data_cache ls -
+      - rados -p data_cache cache-flush-evict-all
+      - rados -p data_cache ls -
+      - sleep 1
+- exec:
+    client.1:
+      - hexdump -C /tmp/foo | head
+      - hexdump -C $TESTDIR/mnt.1/foo | head
+      - cmp $TESTDIR/mnt.1/foo /tmp/foo

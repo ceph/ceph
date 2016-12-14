@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+workload2:
+  sequential:
+  - workunit:
+      branch: hammer
+      clients:
+        client.0:
+        - rados/test-upgrade-v9.0.1.sh
+        - cls
+  - print: "**** done rados/test.sh and cls from 5-workload/rados_api.yaml"

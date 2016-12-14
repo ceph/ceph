@@ -1,0 +1,25 @@
+# this runs s3tests against rgw, using mod_proxy_fcgi
+# the choice between uds or tcp with mod_proxy_fcgi depends on the distro
+roles:
+- [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
+- [mon.b, osd.3, osd.4, osd.5, client.1]
+
+tasks:
+- install:
+    branch: master
+- ceph:
+- rgw: [client.0]
+- s3tests:
+    client.0:
+      rgw_server: client.0
+      force-branch: master
+overrides:
+  ceph:
+    fs: xfs
+    conf:
+      client:
+        debug rgw: 20
+  rgw:
+    ec-data-pool: false
+    frontend: apache
+    use_fcgi: true

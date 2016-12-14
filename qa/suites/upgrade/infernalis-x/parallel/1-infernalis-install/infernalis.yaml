@@ -1,0 +1,22 @@
+meta:
+- desc: |
+   install ceph/infernalis latest
+   run workload and upgrade-sequence in parallel
+   upgrade the client node
+tasks:
+- install:
+    branch: infernalis
+- print: "**** done installing infernalis"
+- ceph:
+- print: "**** done ceph"
+- install.upgrade:
+    mon.a:
+    mon.b:
+- print: "**** done install.upgrade mon.a and mon.b"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
+- install.upgrade:
+    client.0:
+- print: "**** done install.upgrade on client.0"

@@ -1,0 +1,11 @@
+tasks:
+- install:
+    flavor: notcmalloc
+    debuginfo: true
+- ceph:
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
+- swift:
+    client.0:
+      rgw_server: client.0

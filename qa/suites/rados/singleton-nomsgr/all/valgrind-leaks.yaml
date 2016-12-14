@@ -1,0 +1,21 @@
+overrides:
+  install:
+    ceph:
+      flavor: notcmalloc
+      debuginfo: true
+  ceph:
+    conf:
+      global:
+        osd heartbeat grace: 40
+        debug deliberately leak memory: true
+        osd max object name len: 460
+        osd max object namespace len: 64
+    valgrind:
+      mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
+      osd: [--tool=memcheck]
+roles:
+- [mon.0, osd.0, osd.1, client.0]
+tasks:
+- install:
+- ceph:
+    expect_valgrind_errors: true
