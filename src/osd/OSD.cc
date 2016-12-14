@@ -48,7 +48,7 @@
 #include "os/FuseStore.h"
 #endif
 
-#include "ReplicatedPG.h"
+#include "PrimaryLogPG.h"
 
 
 #include "msg/Messenger.h"
@@ -3104,7 +3104,7 @@ PG* OSD::_make_pg(
   PG *pg;
   if (createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_REPLICATED ||
       createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_ERASURE)
-    pg = new ReplicatedPG(&service, createmap, pool, pgid);
+    pg = new PrimaryLogPG(&service, createmap, pool, pgid);
   else
     ceph_abort();
 

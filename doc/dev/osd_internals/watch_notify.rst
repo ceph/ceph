@@ -32,7 +32,7 @@ Notify to the Watch and either:
 * if the Watch is *connected*, sends a Notify message to the client
 * if the Watch is *unconnected*, does nothing.
 
-When the Watch becomes connected (in ReplicatedPG::do_osd_op_effects),
+When the Watch becomes connected (in PrimaryLogPG::do_osd_op_effects),
 Notifies are resent to all remaining tracked Notify objects.
 
 Each Notify object tracks the set of un-notified Watchers via
@@ -53,8 +53,8 @@ A watch may be in one of 5 states:
 Case 2 occurs between when an OSD goes active and the ObjectContext
 for an object with watchers is loaded into memory due to an access.
 During Case 2, no state is registered for the watch.  Case 2
-transitions to Case 4 in ReplicatedPG::populate_obc_watchers() during
-ReplicatedPG::find_object_context.  Case 1 becomes case 3 via
+transitions to Case 4 in PrimaryLogPG::populate_obc_watchers() during
+PrimaryLogPG::find_object_context.  Case 1 becomes case 3 via
 OSD::do_osd_op_effects due to a watch operation.  Case 4,5 become case
 3 in the same way. Case 3 becomes case 4 when the connection resets
 on a watcher's session.

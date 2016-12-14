@@ -215,7 +215,7 @@ class Objecter;
 
 class Watch;
 class Notification;
-class ReplicatedPG;
+class PrimaryLogPG;
 
 class AuthAuthorizeHandlerRegistry;
 
@@ -1962,7 +1962,7 @@ private:
     ThreadPool::TPHandle &handle);
 
   friend class PG;
-  friend class ReplicatedPG;
+  friend class PrimaryLogPG;
 
 
  protected:
