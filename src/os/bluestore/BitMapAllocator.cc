@@ -148,6 +148,7 @@ int BitMapAllocator::alloc_extents(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
   int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
 {
+
   assert(!(alloc_unit % m_block_size));
   assert(alloc_unit);
 
@@ -159,13 +160,8 @@ int BitMapAllocator::alloc_extents(
      << " hint " << hint
      << dendl;
 
-  if (alloc_unit > (uint64_t) m_block_size) {
-    return alloc_extents_cont(want_size, alloc_unit, 
-                              max_alloc_size, hint / m_block_size, extents, count);     
-  } else {
-    return alloc_extents_dis(want_size, alloc_unit,
-                             max_alloc_size, hint / m_block_size, extents, count); 
-  }
+  return alloc_extents_dis(want_size, alloc_unit / m_block_size,
+                           max_alloc_size, hint / m_block_size, extents, count); 
 }
 
 /*
@@ -220,7 +216,7 @@ int BitMapAllocator::alloc_extents_dis(
   int64_t num = 0;
   *count = 0;
 
-  num = m_bit_alloc->alloc_blocks_dis_res(nblks, hint, &block_list);
+  num = m_bit_alloc->alloc_blocks_dis_res(nblks, alloc_unit, hint, &block_list);
   if (num < nblks) {
     m_bit_alloc->free_blocks_dis(num, &block_list);
     return -ENOSPC;
