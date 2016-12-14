@@ -3095,8 +3095,12 @@ reprotect_and_return_err:
 			   end_snap_id,
 			   &diff, &end_exists);
 	ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
-	if (diff.empty())
+	if (diff.empty()) {
+          if (from_snap_id == 0 && !end_exists) {
+            AsyncResizeRequest::compute_parent_overlap();
+          }
 	  continue;
+        }
 
 	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	  ldout(ictx->cct, 20) << "diff_iterate object " << p->first
