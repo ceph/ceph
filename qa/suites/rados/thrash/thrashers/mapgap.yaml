@@ -16,6 +16,6 @@ tasks:
     - osd_map_cache_size
 - thrashosds:
     timeout: 1800
-    chance_pgnum_grow: 1
-    chance_pgpnum_fix: 1
-    chance_test_map_discontinuity: 0.5
+    chance_pgnum_grow: 0.25
+    chance_pgpnum_fix: 0.25
+    chance_test_map_discontinuity: 2
