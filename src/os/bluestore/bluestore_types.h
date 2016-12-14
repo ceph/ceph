@@ -297,8 +297,8 @@ struct bluestore_blob_t {
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   DENC_HELPERS;
-  void bound_encode(size_t& p) const {
-    p += 1;
+  void bound_encode(size_t& p, uint64_t struct_v) const {
+    assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
     denc_varint(sbid, p);
@@ -310,9 +310,8 @@ struct bluestore_blob_t {
     p += sizeof(unsigned long long);
   }
 
-  void encode(bufferlist::contiguous_appender& p) const {
-    __u8 struct_v = 1;
-    denc(struct_v, p);
+  void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
+    assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_shared()) {
@@ -332,9 +331,7 @@ struct bluestore_blob_t {
     }
   }
 
-  void decode(bufferptr::iterator& p) {
-    __u8 struct_v;
-    denc(struct_v, p);
+  void decode(bufferptr::iterator& p, uint64_t struct_v) {
     assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
@@ -639,7 +636,7 @@ struct bluestore_blob_t {
     }
   }
 };
-WRITE_CLASS_DENC(bluestore_blob_t)
+WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
