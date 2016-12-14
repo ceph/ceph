@@ -8396,7 +8396,7 @@ retry:
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_CACHE;
 
-  Mutex uninline_flock("Clinet::_read_uninline_data flock");
+  Mutex uninline_flock("Client::_read_uninline_data flock");
   Cond uninline_cond;
   bool uninline_done = false;
   int uninline_ret = 0;
@@ -8839,7 +8839,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
-  Mutex uninline_flock("Clinet::_write_uninline_data flock");
+  Mutex uninline_flock("Client::_write_uninline_data flock");
   Cond uninline_cond;
   bool uninline_done = false;
   int uninline_ret = 0;
@@ -12218,7 +12218,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if (r < 0)
     return r;
 
-  Mutex uninline_flock("Clinet::_fallocate_uninline_data flock");
+  Mutex uninline_flock("Client::_fallocate_uninline_data flock");
   Cond uninline_cond;
   bool uninline_done = false;
   int uninline_ret = 0;
