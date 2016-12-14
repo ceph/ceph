@@ -933,8 +933,7 @@ usermod -c "Ceph storage service" \
         ceph
 # fix ownership of log files
 [ -d /var/log/ceph ] || exit 0
-[ "$(stat -c %U /var/log/ceph)" = "ceph" ] && exit 0
-find /var/log/ceph -type f -name '*.log' -exec chown ceph.ceph {} \;
+find /var/log/ceph -type f -name '*.log*' -exec chown ceph.ceph {} \;
 chown ceph.ceph /var/log/ceph
 %endif
 exit 0
