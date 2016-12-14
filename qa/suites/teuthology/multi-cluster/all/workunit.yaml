@@ -1,0 +1,21 @@
+roles:
+- - backup.mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+  - backup.client.0
+- - mon.a
+  - backup.osd.0
+  - backup.osd.1
+  - backup.osd.2
+  - client.1
+  - backup.client.1
+tasks:
+- install:
+- workunit:
+    clients:
+      all: [true.sh]
+- workunit:
+    clients:
+      backup.client.1: [true.sh]

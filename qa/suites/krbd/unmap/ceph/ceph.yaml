@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    crush_tunables: bobtail
+tasks:
+- install:
+- ceph:

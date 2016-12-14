@@ -1,0 +1,6 @@
+meta:
+- desc: "Tell ceph-ansible to discover OSD devices automatically"
+overrides:
+  ceph_ansible:
+    vars:
+      osd_auto_discovery: true

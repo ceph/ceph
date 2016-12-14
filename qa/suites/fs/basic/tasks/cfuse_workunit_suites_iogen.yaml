@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/iogen.sh
+
