@@ -182,6 +182,17 @@ def test_symlink():
     cephfs.unlink(b'file-2')
 
 @with_setup(setup_test)
+def test_readlink():
+    fd = cephfs.open(b'/file-1', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.close(fd)
+    cephfs.symlink(b'/file-1', b'/file-2')
+    d = cephfs.readlink(b"/file-2",100)
+    assert_equal(d, b"/file-1")
+    cephfs.unlink(b'/file-2')
+    cephfs.unlink(b'/file-1')
+
+@with_setup(setup_test)
 def test_delete_cwd():
     assert_equal(b"/", cephfs.getcwd())
 
