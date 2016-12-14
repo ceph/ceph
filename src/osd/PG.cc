@@ -3403,6 +3403,7 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
+  bool nodeep_scrub = false;
   assert(_lock.is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
     return false;
@@ -3426,8 +3427,10 @@ bool PG::sched_scrub()
 
   //NODEEP_SCRUB so ignore time initiated deep-scrub
   if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
-      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB))
+      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
     time_for_deep = false;
+    nodeep_scrub = true;
+  }
 
   if (!scrubber.must_scrub) {
     assert(!scrubber.must_deep_scrub);
@@ -3485,6 +3488,24 @@ bool PG::sched_scrub()
       if (time_for_deep) {
 	dout(10) << "sched_scrub: scrub will be deep" << dendl;
 	state_set(PG_STATE_DEEP_SCRUB);
+      } else if (!scrubber.must_deep_scrub && info.stats.stats.sum.num_deep_scrub_errors) {
+	if (!nodeep_scrub) {
+	  osd->clog->info() << "osd." << osd->whoami
+			    << " pg " << info.pgid
+			    << " Deep scrub errors, upgrading scrub to deep-scrub";
+	  state_set(PG_STATE_DEEP_SCRUB);
+	} else if (!scrubber.must_scrub) {
+	  osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
+	  clear_scrub_reserved();
+	  scrub_unreserve_replicas();
+	  return false;
+	} else {
+	  osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub request, losing deep-scrub details";
+	}
       }
       queue_scrub();
     } else {
@@ -4592,7 +4613,7 @@ void PG::scrub_finish()
       oss << "ok";
     if (!deep_scrub && info.stats.stats.sum.num_deep_scrub_errors)
       oss << " ( " << info.stats.stats.sum.num_deep_scrub_errors
-          << " remaining deep scrub error(s) )";
+          << " remaining deep scrub error details lost)";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";

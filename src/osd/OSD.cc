@@ -2476,6 +2476,13 @@ void OSD::final_init()
     test_ops_hook,
      "Delay osd recovery by specified seconds");
   assert(r == 0);
+  r = admin_socket->register_command(
+   "trigger_scrub",
+   "trigger_scrub " \
+   "name=pgid,type=CephString ",
+   test_ops_hook,
+   "Trigger a scheduled scrub ");
+  assert(r == 0);
 }
 
 void OSD::create_logger()
@@ -4641,6 +4648,44 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     service->cct->_conf->apply_changes(NULL);
     ss << "set_recovery_delay: set osd_recovery_delay_start "
        << "to " << service->cct->_conf->osd_recovery_delay_start;
+    return;
+  }
+  if (command ==  "trigger_scrub") {
+    spg_t pgid;
+    OSDMapRef curmap = service->get_osdmap();
+
+    string pgidstr;
+
+    cmd_getval(service->cct, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "Invalid pgid specified";
+      return;
+    }
+
+    PG *pg = service->osd->_lookup_lock_pg(pgid);
+    if (pg == nullptr) {
+      ss << "Can't find pg " << pgid;
+      return;
+    }
+
+    if (pg->is_primary()) {
+      pg->unreg_next_scrub();
+      const pg_pool_t *p = curmap->get_pg_pool(pgid.pool());
+      double pool_scrub_max_interval = 0;
+      p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
+      double scrub_max_interval = pool_scrub_max_interval > 0 ?
+        pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
+      // Instead of marking must_scrub force a schedule scrub
+      utime_t stamp = ceph_clock_now(service->cct);
+      stamp -= scrub_max_interval;
+      stamp -=  100.0;  // push back last scrub more for good measure
+      pg->info.history.last_scrub_stamp = stamp;
+      pg->reg_next_scrub();
+      ss << "ok";
+    } else {
+      ss << "Not primary";
+    }
+    pg->unlock();
     return;
   }
   ss << "Internal error - command=" << command;
