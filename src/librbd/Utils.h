@@ -197,7 +197,7 @@ private:
   Context *m_on_finish = nullptr;
 };
 
-uint64_t parse_rbd_default_features(CephContext* cct);
+uint64_t get_rbd_default_features(CephContext* cct);
 
 } // namespace util
 
