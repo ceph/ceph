@@ -183,7 +183,7 @@ class TeuthologyConfig(YamlConfig):
 
     def get_ceph_qa_suite_git_url(self):
         return (self.ceph_qa_suite_git_url or
-                self.ceph_git_base_url + 'ceph.git')
+                self.get_ceph_git_url())
 
     def get_ceph_git_url(self):
         return (self.ceph_git_url or
