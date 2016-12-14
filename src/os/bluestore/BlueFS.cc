@@ -8,6 +8,7 @@
 #include "common/perf_counters.h"
 #include "BlockDevice.h"
 #include "Allocator.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_bluefs
 #undef dout_prefix
@@ -1607,6 +1608,7 @@ void BlueFS::_claim_completed_aios(FileWriter *h, list<FS::aio_t> *ls)
 
 void BlueFS::wait_for_aio(FileWriter *h)
 {
+  FUNCTRACE();
   // NOTE: this is safe to call without a lock, as long as our reference is
   // stable.
   dout(10) << __func__ << " " << h << dendl;
@@ -1688,6 +1690,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 
 int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 {
+  FUNCTRACE();
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   int r = _flush(h, true);
   if (r < 0)

@@ -254,10 +254,6 @@ if(HAVE_DPDK)
   list(APPEND EXTRALIBS ${DPDK_LIBRARIES})
 endif(HAVE_DPDK)
 
-if(WITH_EVENTTRACE)
-  add_definitions("-DWITH_EVENTTRACE")
-endif(WITH_EVENTTRACE)
-
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
@@ -417,7 +413,6 @@ set(libcommon_files
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
-  common/EventTrace.cc
   common/ConfUtils.cc
   common/MemoryModel.cc
   common/fd.cc
@@ -516,6 +511,12 @@ elseif(FREEBSD OR APPLE)
   list(APPEND libcommon_files msg/async/EventKqueue.cc)
   message(STATUS " Using EventKqueue for events.")
 endif(LINUX)
+
+if(WITH_LTTNG AND WITH_EVENTTRACE)
+  message(STATUS " Using EventTrace class.")
+  add_definitions("-DWITH_EVENTTRACE")
+  list(APPEND libcommon_files common/EventTrace.cc)
+endif()
 
 set(mon_common_files
   auth/AuthSessionHandler.cc

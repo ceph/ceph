@@ -7676,6 +7676,7 @@ int BlueStore::_do_alloc_write(
   CollectionRef coll,
   WriteContext *wctx)
 {
+  FUNCTRACE();
   dout(20) << __func__ << " txc " << txc
 	   << " " << wctx->writes.size() << " blobs"
 	   << dendl;
@@ -8129,6 +8130,7 @@ int BlueStore::_write(TransContext *txc,
 		     bufferlist& bl,
 		     uint32_t fadvise_flags)
 {
+  FUNCTRACE();
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
