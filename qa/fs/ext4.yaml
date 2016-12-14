@@ -1,0 +1,3 @@
+overrides:
+  ceph:
+    fs: ext4

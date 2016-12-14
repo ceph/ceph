@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+     conf:
+       mon:
+          mon warn on legacy crush tunables: false
+  thrashosds:
+    thrash_primary_affinity: false
+tasks:
+- install:
+    tag: v0.67.11
+- ceph:
+    log-whitelist:
+      - scrub mismatch
+      - ScrubResult
+- parallel:
+   - workload
+   - upgrade-sequence

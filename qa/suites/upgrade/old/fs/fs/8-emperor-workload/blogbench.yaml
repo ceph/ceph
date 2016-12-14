@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+     branch: emperor
+     clients:
+        client.0:
+           - suites/blogbench.sh

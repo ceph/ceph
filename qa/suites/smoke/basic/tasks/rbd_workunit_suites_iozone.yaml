@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms die on skipped message: false
+tasks:
+- install:
+- ceph:
+- rbd:
+    all:
+      image_size: 20480
+- workunit:
+    clients:
+      all:
+        - suites/iozone.sh

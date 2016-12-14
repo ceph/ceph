@@ -1,0 +1,11 @@
+roles:
+- - mon.a
+  - mds.0
+  - osd.0
+  - osd.1
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+- dump_stuck:

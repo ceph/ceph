@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+     branch: cuttlefish
+     clients:
+        all:
+           - suites/dbench.sh

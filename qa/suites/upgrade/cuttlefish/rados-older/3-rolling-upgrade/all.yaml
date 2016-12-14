@@ -1,0 +1,4 @@
+tasks:
+- parallel:
+   - workload
+   - upgrade-sequence

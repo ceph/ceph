@@ -1,0 +1,9 @@
+roles:
+- [mon.0, osd.0, osd.1, mds.a, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      global:
+        journal aio: true
+- filestore_idempotent:

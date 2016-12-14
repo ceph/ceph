@@ -1,0 +1,11 @@
+tasks:
+- install:
+    branch: dumpling
+- ceph:
+- install.upgrade:
+    all:
+      tag: 
+- ceph.restart:
+- parallel:
+   - workload
+   - upgrade-sequence

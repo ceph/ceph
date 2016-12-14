@@ -1,0 +1,10 @@
+tasks:
+   - install.upgrade:
+       mon.a:
+         branch: emperor
+       mon.b:
+         branch: emperor
+   - ceph.restart:
+   - parallel:
+     - workload2
+     - upgrade-sequence

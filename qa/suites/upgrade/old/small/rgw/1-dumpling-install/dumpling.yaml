@@ -1,0 +1,6 @@
+tasks:
+- install:
+    branch: dumpling
+- ceph:
+    fs: xfs
+- rgw: [client.0]

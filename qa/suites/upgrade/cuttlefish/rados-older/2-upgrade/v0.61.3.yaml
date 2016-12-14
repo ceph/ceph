@@ -1,0 +1,5 @@
+tasks:
+- install.upgrade:
+    all:
+      tag: v0.61.3
+- ceph.restart:
