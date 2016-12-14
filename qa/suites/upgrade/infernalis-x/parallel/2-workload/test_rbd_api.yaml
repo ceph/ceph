@@ -1,0 +1,11 @@
+meta:
+- desc: |
+   librbd C and C++ api tests
+workload:
+  full_sequential:
+    - workunit:
+        branch: infernalis
+        clients:
+          client.0:
+            - rbd/test_librbd.sh
+    - print: "**** done rbd/test_librbd.sh 2-workload"

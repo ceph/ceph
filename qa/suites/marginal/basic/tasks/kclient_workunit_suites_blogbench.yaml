@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/blogbench.sh

@@ -1,0 +1,48 @@
+<IfModule !version_module>
+  LoadModule version_module {mod_path}/mod_version.so
+</IfModule>
+<IfModule !env_module>
+  LoadModule env_module {mod_path}/mod_env.so
+</IfModule>
+<IfModule !rewrite_module>
+  LoadModule rewrite_module {mod_path}/mod_rewrite.so
+</IfModule>
+<IfModule !log_config_module>
+  LoadModule log_config_module {mod_path}/mod_log_config.so
+</IfModule>
+
+Listen {port}
+ServerName {host}
+
+<IfVersion >= 2.4>
+  <IfModule !unixd_module>
+    LoadModule unixd_module {mod_path}/mod_unixd.so
+  </IfModule>
+  <IfModule !authz_core_module>
+    LoadModule authz_core_module {mod_path}/mod_authz_core.so
+  </IfModule>
+  <IfModule !mpm_worker_module>
+    LoadModule mpm_worker_module {mod_path}/mod_mpm_worker.so
+  </IfModule>
+  User {user}
+  Group {group}
+</IfVersion>
+
+ServerRoot {testdir}/apache
+ErrorLog {testdir}/archive/apache.{client}/error.log
+LogFormat "%h l %u %t \"%r\" %>s %b \"{{Referer}}i\" \"%{{User-agent}}i\"" combined
+CustomLog {testdir}/archive/apache.{client}/access.log combined
+PidFile {testdir}/apache/tmp.{client}/apache.pid
+DocumentRoot {testdir}/apache/htdocs.{client}
+
+
+<Directory {testdir}/apache/htdocs.{client}>
+  Options +ExecCGI
+  AllowOverride All
+  SetHandler fastcgi-script
+</Directory>
+
+AllowEncodedSlashes On
+ServerSignature Off
+MaxRequestsPerChild 0
+

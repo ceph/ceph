@@ -1,0 +1,20 @@
+meta:
+- desc: |
+   randomly kill and revive osd
+   small chance to increase the number of pgs
+overrides:
+  ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - log bound mismatch
+    - failed to encode map e
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgpnum_fix: 1
+    min_in: 4
+    ceph_objectstore_tool: false
+    test_rm_past_intervals: false
+- print: "**** done thrashosds 3-thrash"

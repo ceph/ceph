@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - log bound mismatch
+    - failed to encode
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgpnum_fix: 1
+- print: "**** done thrashosds 3-thrash"

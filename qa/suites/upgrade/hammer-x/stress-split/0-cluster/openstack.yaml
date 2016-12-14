@@ -1,0 +1,3 @@
+openstack:
+  - machine:
+      disk: 40 # GB

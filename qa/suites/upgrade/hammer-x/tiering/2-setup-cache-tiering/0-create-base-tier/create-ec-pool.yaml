@@ -1,0 +1,5 @@
+tasks:
+- exec:
+    client.0:
+      - ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd k=2 m=1
+      - ceph osd pool create base-pool 4 4 erasure teuthologyprofile

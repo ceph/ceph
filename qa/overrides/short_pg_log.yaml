@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_min_pg_log_entries: 150
+        osd_max_pg_log_entries: 300

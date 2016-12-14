@@ -1,0 +1,24 @@
+overrides:
+  ceph:
+    conf:
+      client.0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+tasks:
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150

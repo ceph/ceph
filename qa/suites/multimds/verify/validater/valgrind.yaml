@@ -1,0 +1,16 @@
+overrides:
+  install:
+    ceph:
+      flavor: notcmalloc
+      debuginfo: true
+  ceph:
+    conf:
+      global:
+        osd heartbeat grace: 40
+    valgrind:
+      mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
+      osd: [--tool=memcheck]
+      mds: [--tool=memcheck]
+  ceph-fuse:
+    client.0:
+      valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]

@@ -1,0 +1,10 @@
+tasks:
+- install:
+   branch: infernalis
+- print: "**** done install infernalis"
+- install.upgrade:
+   exclude_packages: ['ceph-test-dbg']
+   client.1:
+- print: "**** done install.upgrade to -x on client.0"
+- ceph:
+- print: "**** done ceph"

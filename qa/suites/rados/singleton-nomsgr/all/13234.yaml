@@ -1,0 +1,248 @@
+# we don't have el7 packages for old releases
+# http://tracker.ceph.com/issues/15139
+os_type: ubuntu
+os_version: "14.04"
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+        debug ms: 1
+        debug paxos: 20
+        mon warn on legacy crush tunables: false
+        mon min osdmap epochs: 99999
+      osd:
+        osd map cache size: 2
+        osd map max advance: 1
+        debug filestore: 20
+        debug journal: 20
+        debug ms: 1
+        debug osd: 20
+    log-whitelist:
+    - osd_map_cache_size
+    - slow request
+    - scrub mismatch
+    - ScrubResult
+    - failed to encode
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - mon.b
+  - mon.c
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+    tag: v0.67.10
+- print: '**** done installing dumpling'
+- ceph:
+    fs: xfs
+- print: '**** done ceph'
+- full_sequential:
+  - ceph_manager.create_pool:
+      args:
+      - newpool
+      kwargs:
+        pg_num: 32
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 0
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 1
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 2
+  - print: '**** done killing osds'
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - install.upgrade:
+      mon.a:
+        branch: firefly
+  - print: '**** killing mons'
+  - sleep:
+      duration: 10
+  - ceph_manager.kill_mon:
+      kwargs:
+        mon: a
+  - ceph_manager.kill_mon:
+      kwargs:
+        mon: b
+  - ceph_manager.kill_mon:
+      kwargs:
+        mon: c
+  - print: '**** reviving osds'
+  - ceph_manager.revive_osd:
+      kwargs:
+        skip_admin_check: True
+        osd: 0
+  - ceph_manager.revive_osd:
+      kwargs:
+        skip_admin_check: True
+        osd: 1
+  - ceph_manager.revive_osd:
+      kwargs:
+        skip_admin_check: True
+        osd: 2
+  - sleep:
+      duration: 60
+  - print: '**** killing osds'
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 0
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 1
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 2
+  - print: '**** reviving mons'
+  - ceph_manager.revive_mon:
+      kwargs:
+        mon: a
+  - ceph_manager.revive_mon:
+      kwargs:
+        mon: b
+  - ceph_manager.revive_mon:
+      kwargs:
+        mon: c
+  - sleep:
+      duration: 10
+  - print: '**** done upgrading restarting osds and reviving mons'
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - sleep:
+      duration: 10
+  - install.upgrade:
+      mon.a:
+        branch: hammer
+  - print: '**** done upgrading to hammer'
+  - print: '**** killing mons'
+  - ceph_manager.kill_mon:
+      kwargs:
+        mon: a
+  - ceph_manager.kill_mon:
+      kwargs:
+        mon: b
+  - ceph_manager.kill_mon:
+      kwargs:
+        mon: c
+  - print: '**** reviving osds'
+  - ceph_manager.revive_osd:
+      kwargs:
+        skip_admin_check: True
+        osd: 0
+  - ceph_manager.revive_osd:
+      kwargs:
+        skip_admin_check: True
+        osd: 1
+  - ceph_manager.revive_osd:
+      kwargs:
+        skip_admin_check: True
+        osd: 2
+  - sleep:
+      duration: 60
+  - print: '**** killing osds'
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 0
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 1
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 2
+  - print: '**** reviving mons'
+  - ceph_manager.revive_mon:
+      kwargs:
+        mon: a
+  - ceph_manager.revive_mon:
+      kwargs:
+        mon: b
+  - ceph_manager.revive_mon:
+      kwargs:
+        mon: c
+  - sleep:
+      duration: 10
+  - print: '**** done upgrading restarting osds and reviving mons'
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - sleep:
+      duration: 10
+  - install.upgrade:
+      mon.a: null
+  - print: '**** done upgrading to branch'
+  - ceph.restart:
+    - mon.a
+    - mon.b
+    - mon.c
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - sleep:
+      duration: 10
+  - print: '**** about to start osds'
+  - ceph_manager.revive_osd:
+      kwargs:
+        osd: 0
+  - ceph_manager.revive_osd:
+      kwargs:
+        osd: 1
+  - ceph_manager.revive_osd:
+      kwargs:
+        osd: 2
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - print: '**** done!'

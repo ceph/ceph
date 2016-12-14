@@ -1,0 +1,21 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+openstack:
+  - volumes: # attached to each instance
+      count: 4
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    conf:
+      osd:
+        osd min pg log entries: 5
+- osd_recovery.test_incomplete_pgs:

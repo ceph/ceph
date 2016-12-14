@@ -1,0 +1,84 @@
+tasks:
+- parallel:
+  - workload-when-upgrading
+  - upgrade-sequence
+- print: "**** done upgrade"
+
+workload-when-upgrading:
+  sequential:
+  - rados:
+      clients: [client.0]
+      ops: 4000
+      objects: 50
+      pools: [base-pool]
+      write_append_excl: false
+      op_weights:
+        read: 100
+        write: 0
+        append: 100
+        delete: 50
+        copy_from: 50
+        setattr: 25
+        rmattr: 25
+  - print: "**** done rados when upgrading"
+
+upgrade-sequence:
+  sequential:
+  - upgrade-first-half
+  - flip-but-fail
+  - upgrade-second-half
+
+upgrade-first-half:
+  sequential:
+  - install.upgrade:
+      mon.a:
+  - print: "**** done install.upgrade mon.{a,b,c} and osd.{0,1}"
+  - ceph.restart:
+      daemons: [mon.a]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+  - ceph.restart:
+      daemons: [osd.0]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+  - ceph.restart:
+      daemons: [osd.1]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+  - ceph.restart:
+      daemons: [mon.b]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+  - ceph.restart:
+      daemons: [mon.c]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+
+upgrade-second-half:
+  sequential:
+  - install.upgrade:
+      osd.2:
+  - print: "**** done install.upgrade osd.{2,3}"
+  - ceph.restart:
+      daemons: [osd.2]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+  - ceph.restart:
+      daemons: [osd.3]
+      wait-for-healthy: true
+  - sleep:
+      duration: 60
+
+flip-but-fail:
+  sequential:
+  - exec:
+      mon.a:
+        - |-
+          ceph osd set sortbitwise 2>&1 | grep "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature"
+  - print: "**** done flip-but-fail"

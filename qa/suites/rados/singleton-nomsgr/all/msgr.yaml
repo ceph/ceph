@@ -1,0 +1,21 @@
+roles:
+- [mon.0, osd.0, osd.1, client.0]
+tasks:
+- install:
+- exec:
+    client.0:
+          - ceph_test_async_driver
+          - ceph_test_msgr
+openstack:
+  - machine:
+      disk: 40 # GB
+      ram: 15000 # MB
+      cpus: 1
+    volumes: # attached to each instance
+      count: 0
+      size: 1 # GB
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 20

@@ -1,0 +1,7 @@
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+- thrashosds:

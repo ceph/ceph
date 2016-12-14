@@ -1,0 +1,7 @@
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - cls/test_cls_rbd.sh
+- print: "**** done 7-final-workload/rbd_cls.yaml"
+

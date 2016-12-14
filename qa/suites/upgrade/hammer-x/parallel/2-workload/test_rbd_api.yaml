@@ -1,0 +1,8 @@
+workload:
+  full_sequential:
+    - workunit:
+        branch: hammer
+        clients:
+          client.0:
+            - rbd/test_librbd.sh
+    - print: "**** done rbd/test_librbd.sh 2-workload"
