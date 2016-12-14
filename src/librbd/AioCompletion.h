@@ -156,6 +156,7 @@ struct AioCompletion {
 
   void associate_journal_event(uint64_t tid);
 
+  bool is_last_request();
   bool is_complete();
 
   ssize_t get_return_value();
@@ -228,6 +229,9 @@ public:
   virtual ~C_AioRequest() {}
   virtual void finish(int r) {
     m_completion->complete_request(r);
+  }
+  bool is_last_request() {
+    return m_completion->is_last_request();
   }
 protected:
   AioCompletion *m_completion;

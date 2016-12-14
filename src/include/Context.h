@@ -70,6 +70,9 @@ class Context {
     finish(r);
     delete this;
   }
+  virtual bool is_last_request() {
+    return true;
+  }
 };
 
 /**

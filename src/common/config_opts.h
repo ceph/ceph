@@ -1303,6 +1303,9 @@ OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing 
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 
+// batch size for batched object map updations (whenever appropriate)
+OPTION(rbd_object_map_batch_size, OPT_INT, 16384)
+
 /**
  * RBD journal options.
  */
