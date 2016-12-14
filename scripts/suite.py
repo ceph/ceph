@@ -57,6 +57,8 @@ Standard arguments:
                               Distribution to run against
   -D <distroversion>, --distro-version <distroversion>
                               Distro version to run against
+  --ceph-repo <ceph_repo>     Query this repository for Ceph branch and SHA1
+                              values [default: {default_ceph_repo}]
   --suite-repo <suite_repo>   Use tasks and suite definition in this repository
                               [default: {default_suite_repo}]
   --suite-relpath <suite_relpath>
@@ -125,6 +127,7 @@ Scheduler arguments:
 """.format(
     default_machine_type=config.default_machine_type,
     default_results_timeout=config.results_timeout,
+    default_ceph_repo=config.get_ceph_git_url(),
     default_suite_repo=config.get_ceph_qa_suite_git_url(),
 )
 
