@@ -298,7 +298,7 @@ struct bluestore_blob_t {
 
   DENC_HELPERS;
   void bound_encode(size_t& p) const {
-    p += 2 + 4;
+    p += 1;
     denc(extents, p);
     denc_varint(flags, p);
     denc_varint(sbid, p);
@@ -309,8 +309,10 @@ struct bluestore_blob_t {
     denc(csum_data, p);
     p += sizeof(unsigned long long);
   }
+
   void encode(bufferlist::contiguous_appender& p) const {
-    DENC_START(1, 1, p);
+    __u8 struct_v = 1;
+    denc(struct_v, p);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_shared()) {
@@ -328,10 +330,12 @@ struct bluestore_blob_t {
     if (has_unused()) {
       denc(unused_uint_t(unused.to_ullong()), p);
     }
-    DENC_FINISH(p);
   }
+
   void decode(bufferptr::iterator& p) {
-    DENC_START(1, 1, p);
+    __u8 struct_v;
+    denc(struct_v, p);
+    assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_shared()) {
@@ -351,7 +355,6 @@ struct bluestore_blob_t {
       denc(val, p);
       unused = unused_t(val);
     }
-    DENC_FINISH(p);
   }
 
   bool can_split() const {
