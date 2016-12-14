@@ -1102,7 +1102,7 @@ void Paxos::finish_round()
   dout(20) << __func__ << " waiting_for_writeable" << dendl;
   finish_contexts(g_ceph_context, waiting_for_writeable);
   
-  dout(10) << __func__ << " done w/ waiters, state " << state << dendl;
+  dout(10) << __func__ << " done w/ waiters, state " << get_statename(state) << dendl;
 
   if (should_trim()) {
     trim();
