@@ -139,6 +139,8 @@ class MDCache {
 
   Filer filer;
 
+  bool exceeded_size_limit;
+
 public:
   void advance_stray() {
     stray_index = (stray_index+1)%NUM_STRAY;

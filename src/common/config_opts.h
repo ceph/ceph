@@ -491,6 +491,7 @@ OPTION(mds_recall_state_timeout, OPT_FLOAT, 60)    // detect clients which aren'
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT, 300) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT, 10) // collapse N-client health metrics to a single 'many'
+OPTION(mds_health_cache_threshold, OPT_FLOAT, 1.5) // warn on cache size if it exceeds mds_cache_size by this factor
 OPTION(mds_reconnect_timeout, OPT_FLOAT, 45)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT, 5)
