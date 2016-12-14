@@ -224,7 +224,7 @@ private:
 
       int r = safe_read_exact(fd, &ctx->request, sizeof(struct nbd_request));
       if (r < 0) {
-	derr << "failed to read nbd request header: " << cpp_strerror(errno)
+	derr << "failed to read nbd request header: " << cpp_strerror(r)
 	     << dendl;
 	return;
       }
@@ -256,7 +256,7 @@ private:
 	  r = safe_read_exact(fd, ptr.c_str(), ctx->request.len);
           if (r < 0) {
 	    derr << *ctx << ": failed to read nbd request data: "
-		 << cpp_strerror(errno) << dendl;
+		 << cpp_strerror(r) << dendl;
             return;
 	  }
           ctx->data.push_back(ptr);
