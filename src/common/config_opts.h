@@ -1299,8 +1299,25 @@ OPTION(rbd_default_format, OPT_INT, 2)
 OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
-SAFE_OPTION(rbd_default_features, OPT_STR, "layering,exclusive-lock,object-map,fast-diff,deep-flatten")   // only applies to format 2 images
 OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing image data blocks
+
+/**
+ * RBD features are only applicable for v2 images. This setting accepts either
+ * an integer bitmask value or comma-delimited string of RBD feature names.
+ * This setting is always internally stored as an integer bitmask value. The
+ * mapping between feature bitmask value and feature name is as follows:
+ *
+ *  +1 -> layering
+ *  +2 -> striping
+ *  +4 -> exclusive-lock
+ *  +8 -> object-map
+ *  +16 -> fast-diff
+ *  +32 -> deep-flatten
+ *  +64 -> journaling
+ *  +128 -> data-pool
+ */
+SAFE_OPTION(rbd_default_features, OPT_STR, "layering,exclusive-lock,object-map,fast-diff,deep-flatten")
+OPTION_VALIDATOR(rbd_default_features)
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 

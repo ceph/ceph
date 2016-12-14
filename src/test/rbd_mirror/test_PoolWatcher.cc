@@ -86,7 +86,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
 
   void create_image(const string &pool_name, bool mirrored=true,
 		    string *image_name=nullptr) {
-    uint64_t features = librbd::util::parse_rbd_default_features(g_ceph_context);
+    uint64_t features = librbd::util::get_rbd_default_features(g_ceph_context);
     string name = "image" + stringify(++m_image_number);
     if (mirrored) {
       features |= RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
@@ -135,7 +135,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
       ictx->state->close();
     }
 
-    uint64_t features = librbd::util::parse_rbd_default_features(g_ceph_context);
+    uint64_t features = librbd::util::get_rbd_default_features(g_ceph_context);
     string name = "clone" + stringify(++m_image_number);
     if (mirrored) {
       features |= RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
