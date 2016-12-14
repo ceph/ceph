@@ -1,0 +1,12 @@
+os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+tasks:
+- install:
+    flavor: notcmalloc
+    debuginfo: true
+- ceph:
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
+- swift:
+    client.0:
+      rgw_server: client.0

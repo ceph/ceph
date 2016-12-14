@@ -1,0 +1,6 @@
+meta:
+- desc: "3-node cluster"
+roles:
+- [mon.a, mds.a, osd.0, osd.1, client.0]
+- [mon.b, mds.b, osd.2, osd.3]
+- [mon.c, mds.c, osd.4, osd.5]

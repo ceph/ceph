@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+    conf:
+      client:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+        debug monc: 20
+tasks:
+- workunit:
+    timeout: 6h
+    clients:
+      client.0:
+        - rados/test.sh

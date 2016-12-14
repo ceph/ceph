@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        debug ms: 1
+        debug mds: 20
+      client:
+        debug ms: 1
+        debug client: 20
