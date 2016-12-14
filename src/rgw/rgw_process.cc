@@ -162,6 +162,7 @@ int process_request(RGWRados* const store,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
   }
+
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
@@ -209,7 +210,7 @@ done:
   }
 
   if (should_log) {
-    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
   }
 
   int http_ret = s->err.http_ret;

@@ -31,6 +31,7 @@
 #include <string.h>
 #include <type_traits>
 #include <boost/intrusive/set.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include "include/int_types.h"
 #include "include/intarith.h"
@@ -1061,6 +1062,134 @@ struct denc_traits<
   }
 };
 
+// boost::container::flat_map
+template<typename A, typename B>
+struct denc_traits<
+  boost::container::flat_map<A, B>,
+  typename std::enable_if<denc_traits<A>::supported != 0 &&
+			  denc_traits<B>::supported != 0>::type> {
+  typedef denc_traits<A> a_traits;
+  typedef denc_traits<B> b_traits;
+
+  enum { supported = true };
+  enum { featured = a_traits::featured || b_traits::featured };
+  enum { bounded = a_traits::bounded && b_traits::bounded };
+
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 !bounded &&
+				 !featured>::type
+  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p) {
+    denc((uint32_t)v.size(), p);
+    for (const auto& i : v) {
+      denc(i.first, p);
+      denc(i.second, p);
+    }
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 !bounded &&
+				 featured, void>::type
+  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p,
+	       uint64_t f) {
+    denc((uint32_t)v.size(), p);
+    for (const auto& i : v) {
+      denc(i.first, p, f);
+      denc(i.second, p, f);
+    }
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 bounded &&
+				 !featured>::type
+  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p) {
+    denc((uint32_t)v.size(), p);
+    size_t elem_size = 0;
+    denc(*(A*)nullptr, elem_size);
+    denc(*(B*)nullptr, elem_size);
+    p += v.size() * elem_size;
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 bounded &&
+				 featured, void>::type
+  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p,
+	       uint64_t f) {
+    denc((uint32_t)v.size(), p);
+    size_t elem_size = 0;
+    denc(*(A*)nullptr, elem_size, f);
+    denc(*(B*)nullptr, elem_size, f);
+    p += v.size() * elem_size;
+  }
+
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 !featured>::type
+  encode(const boost::container::flat_map<A,B>& v,
+	 bufferlist::contiguous_appender& p) {
+    denc((uint32_t)v.size(), p);
+    for (const auto& i : v) {
+      denc(i.first, p);
+      denc(i.second, p);
+    }
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 featured, void>::type
+  encode(const boost::container::flat_map<A,B>& v,
+	 bufferlist::contiguous_appender& p,
+	   uint64_t f) {
+    denc((uint32_t)v.size(), p);
+    for (const auto& i : v) {
+      denc(i.first, p, f);
+      denc(i.second, p, f);
+    }
+  }
+
+  static void decode(boost::container::flat_map<A,B>& v,
+		     buffer::ptr::iterator& p) {
+    v.clear();
+    uint32_t num;
+    denc(num, p);
+    A key;
+    while (num--) {
+      denc(key, p);
+      denc(v[key], p);
+    }
+  }
+
+  // nohead variants
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 !featured>::type
+  encode_nohead(const boost::container::flat_map<A,B>& v,
+		bufferlist::contiguous_appender& p) {
+    for (const auto& i : v) {
+      denc(i.first, p);
+      denc(i.second, p);
+    }
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 featured, void>::type
+  encode_nohead(const boost::container::flat_map<A,B>& v,
+		bufferlist::contiguous_appender& p,
+		uint64_t f) {
+    for (const auto& i : v) {
+      denc(i.first, p, f);
+      denc(i.second, p, f);
+    }
+  }
+  static void decode_nohead(size_t num, boost::container::flat_map<A,B>& v,
+			    buffer::ptr::iterator& p) {
+    v.clear();
+    A key;
+    while (num--) {
+      denc(key, p);
+      denc(v[key], p);
+    }
+  }
+};
 
 // ----------------------------------------------------------------------
 // class helpers
