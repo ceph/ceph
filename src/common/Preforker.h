@@ -64,6 +64,10 @@ public:
     return 0;
   }
 
+  int get_signal_fd() const {
+    return forked ? fd[1] : 0;
+  }
+
   bool is_child() {
     return childpid == 0;
   }
