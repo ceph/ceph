@@ -1,0 +1,7 @@
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        fuse_default_permissions: 0
+- ceph-fuse:

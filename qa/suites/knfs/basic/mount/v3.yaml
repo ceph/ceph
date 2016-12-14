@@ -1,0 +1,5 @@
+tasks:
+- nfs:
+    client.1:
+        server: client.0
+        options: [rw,hard,intr,nfsvers=3]

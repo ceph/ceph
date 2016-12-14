@@ -1,0 +1,31 @@
+tasks:
+- install: null
+- ceph:
+    fs: xfs
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+- thrashosds:
+    chance_pgnum_grow: 3
+    chance_pgpnum_fix: 1
+    timeout: 1200
+- rados:
+    clients:
+    - client.0
+    ec_pool: true
+    max_in_flight: 64
+    max_seconds: 600
+    objects: 1024
+    op_weights:
+      append: 100
+      copy_from: 50
+      delete: 50
+      read: 100
+      rmattr: 25
+      rollback: 50
+      setattr: 25
+      snap_create: 50
+      snap_remove: 50
+      write: 0
+    ops: 400000
+    size: 16384

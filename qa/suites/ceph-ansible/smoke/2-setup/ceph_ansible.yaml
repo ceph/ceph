@@ -1,0 +1,19 @@
+meta:
+- desc: "Build the cluster using ceph-ansible; then check health and make the keyring readable"
+tasks:
+- ceph_ansible:
+- exec:
+    mon.a:
+      - "sudo ceph health"
+- exec:
+    all:
+      - "KEYRING=/etc/ceph/ceph.client.admin.keyring; test -f $KEYRING && sudo chmod o+r $KEYRING"
+- install.ship_utilities:
+overrides:
+  ceph_ansible:
+    vars:
+      ceph_test: true
+openstack:
+  - volumes:
+      count: 3
+      size: 20  # GB

@@ -1,0 +1,18 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+openstack:
+  - volumes: # attached to each instance
+      count: 4
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - objects unfound and apparently lost
+- ec_lost_unfound:

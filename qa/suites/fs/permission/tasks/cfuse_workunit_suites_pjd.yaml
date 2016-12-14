@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse set user groups: true
+        fuse default permissions: false
+        client acl type: posix_acl
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/pjd.sh

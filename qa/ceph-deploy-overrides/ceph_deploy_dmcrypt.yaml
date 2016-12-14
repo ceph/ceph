@@ -1,0 +1,3 @@
+overrides:
+   ceph-deploy:
+      dmcrypt: yes

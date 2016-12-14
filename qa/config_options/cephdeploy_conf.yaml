@@ -1,0 +1,6 @@
+overrides:
+   ceph-deploy:
+      conf:
+         global:
+             mon pg warn min per osd: 2
+             osd pool default size: 2

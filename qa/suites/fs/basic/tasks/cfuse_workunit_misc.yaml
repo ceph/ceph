@@ -1,0 +1,7 @@
+tasks:
+- workunit:
+    timeout: 6h
+    clients:
+      all:
+        - fs/misc
+

@@ -1,0 +1,11 @@
+tasks:
+   - sequential:
+      - mon_thrash:
+          revive_delay: 20
+          thrash_delay: 1
+      - workunit:
+          branch: jewel
+          clients:
+            client.1:
+            - rados/test-upgrade-v11.0.0.sh
+      - print: "**** done rados/test-upgrade-v11.0.0.sh from 7-final-workload"
