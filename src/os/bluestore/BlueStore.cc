@@ -7921,8 +7921,7 @@ void BlueStore::_wctx_finish(
     if (b->is_spanning() && b->get_ref_map().empty()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
-      auto it = o->extent_map.spanning_blob_map.find(b->id);
-      o->extent_map.spanning_blob_map.erase(it);
+      o->extent_map.spanning_blob_map.erase(b->id);
     }
   }
 }
@@ -8040,8 +8039,13 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
-    wctx.csum_order = std::max(min_alloc_size_order,
-			       (size_t)ctzl(o->onode.expected_write_size));
+    if (o->onode.expected_write_size) {
+      wctx.csum_order = std::max(min_alloc_size_order,
+			         (size_t)ctzl(o->onode.expected_write_size));
+    } else {
+      wctx.csum_order = min_alloc_size_order;
+    }
+
     if (wctx.compress) {
       wctx.target_blob_size = select_option(
         "compression_max_blob_size",
@@ -8626,11 +8630,12 @@ int BlueStore::_do_clone_range(
   }
   int n = 0;
   bool dirtied_oldo = false;
+  uint64_t end = srcoff + length;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
     auto& e = *ep;
-    if (e.logical_offset >= srcoff + length) {
+    if (e.logical_offset >= end) {
       break;
     }
     dout(20) << __func__ << "  src " << e << dendl;
@@ -8655,9 +8660,6 @@ int BlueStore::_do_clone_range(
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
-      if (cb->id >= 0) {
-	newo->extent_map.spanning_blob_map[cb->id] = cb;
-      }
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.extents) {
 	if (p.is_valid()) {
@@ -8674,8 +8676,8 @@ int BlueStore::_do_clone_range(
     } else {
       skip_front = 0;
     }
-    if (e.logical_offset + e.length > srcoff + length) {
-      skip_back = e.logical_offset + e.length - (srcoff + length);
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
     } else {
       skip_back = 0;
     }
