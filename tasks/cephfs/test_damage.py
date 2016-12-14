@@ -5,6 +5,7 @@ import re
 from teuthology.contextutil import MaxWhileTries
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra.run import wait
+from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 DAMAGED_ON_START = "damaged_on_start"
@@ -408,7 +409,11 @@ class TestDamage(CephFSTestCase):
         try:
             self.mount_a.stat("subdir/file_to_be_damaged", wait=True)
         except CommandFailedError as e:
-            self.assertEqual(e.exitstatus, errno.EIO)
+            if isinstance(self.mount_a, FuseMount):
+                self.assertEqual(e.exitstatus, errno.EIO)
+            else:
+                # Kernel client handles this case differently
+                self.assertEqual(e.exitstatus, errno.ENOENT)
         else:
             raise AssertionError("Expected EIO")
 

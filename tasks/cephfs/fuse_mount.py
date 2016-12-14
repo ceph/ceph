@@ -22,7 +22,7 @@ class FuseMount(CephFSMount):
         self.fuse_daemon = None
         self._fuse_conn = None
 
-    def mount(self, mount_path=None):
+    def mount(self, mount_path=None, mount_fs_name=None):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
 
         daemon_signal = 'kill'
@@ -53,6 +53,9 @@ class FuseMount(CephFSMount):
 
         if mount_path is not None:
             fuse_cmd += ["--client_mountpoint={0}".format(mount_path)]
+
+        if mount_fs_name is not None:
+            fuse_cmd += ["--client_mds_namespace={0}".format(mount_fs_name)]
 
         fuse_cmd += [
             '--name', 'client.{id}'.format(id=self.client_id),

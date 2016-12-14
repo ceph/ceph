@@ -1,10 +1,15 @@
 import logging
+from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
 
+
 class TestReadahead(CephFSTestCase):
     def test_flush(self):
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("FUSE needed for measuring op counts")
+
         # Create 32MB file
         self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=foo", "bs=1M", "count=32"])
 
