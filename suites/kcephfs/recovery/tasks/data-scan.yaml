@@ -1,0 +1,15 @@
+
+overrides:
+  ceph:
+    log-whitelist:
+      - bad backtrace
+      - object missing on disk
+      - error reading table object
+      - error reading sessionmap
+      - unmatched fragstat
+      - was unreadable, recreating it now
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_data_scan

@@ -8,7 +8,7 @@ import logging
 from textwrap import dedent
 import time
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 from tasks.workunit import task as workunit
@@ -169,6 +169,11 @@ class TestJournalRepair(CephFSTestCase):
                               reject_fn=lambda v: v > 2 or v < 1)
         active_mds_names = self.fs.get_active_names()
 
+        # Switch off any unneeded MDS daemons
+        for unneeded_mds in set(self.mds_cluster.mds_ids) - set(active_mds_names):
+            self.mds_cluster.mds_stop(unneeded_mds)
+            self.mds_cluster.mds_fail(unneeded_mds)
+
         # Do a bunch of I/O such that at least some will hit the second MDS: create
         # lots of directories so that the balancer should find it easy to make a decision
         # to allocate some of them to the second mds.
@@ -220,7 +225,9 @@ class TestJournalRepair(CephFSTestCase):
         try:
             # Now that the mount is dead, the ls -R should error out.
             blocked_ls.wait()
-        except CommandFailedError:
+        except (CommandFailedError, ConnectionLostError):
+            # The ConnectionLostError case is for kernel client, where
+            # killing the mount also means killing the node.
             pass
 
         log.info("Terminating spammer processes...")
@@ -228,7 +235,9 @@ class TestJournalRepair(CephFSTestCase):
             spammer_proc.stdin.close()
             try:
                 spammer_proc.wait()
-            except CommandFailedError:
+            except (CommandFailedError, ConnectionLostError):
+                # The ConnectionLostError case is for kernel client, where
+                # killing the mount also means killing the node.
                 pass
 
         # See that the second MDS will crash when it starts and tries to

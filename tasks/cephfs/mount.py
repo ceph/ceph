@@ -37,7 +37,7 @@ class CephFSMount(object):
     def is_mounted(self):
         raise NotImplementedError()
 
-    def mount(self, mount_path=None):
+    def mount(self, mount_path=None, mount_fs_name=None):
         raise NotImplementedError()
 
     def umount(self):

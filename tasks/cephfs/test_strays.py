@@ -723,6 +723,8 @@ class TestStrays(CephFSTestCase):
             os.mkdir(path)
             for n in range(0, {file_count}):
                 open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+            dfd = os.open(path, os.O_DIRECTORY)
+            os.fsync(dfd)
             """.format(
         path=self.mount_a.mountpoint,
         file_count=LOW_LIMIT

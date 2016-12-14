@@ -176,11 +176,13 @@ class TestClientRecovery(CephFSTestCase):
     def test_reconnect_eviction(self):
         # Eviction during reconnect
         # =========================
+        mount_a_client_id = self.mount_a.get_global_id()
+
         self.fs.mds_stop()
         self.fs.mds_fail()
 
-        mount_a_client_id = self.mount_a.get_global_id()
-        self.mount_a.umount_wait(force=True)
+        # The mount goes away while the MDS is offline
+        self.mount_a.kill()
 
         self.fs.mds_restart()
 
@@ -200,6 +202,9 @@ class TestClientRecovery(CephFSTestCase):
                         "reconnect did not complete soon enough after eviction, took {0}".format(
                             evict_til_active
                         ))
+
+        # We killed earlier so must clean up before trying to use again
+        self.mount_a.kill_cleanup()
 
         # Bring the client back
         self.mount_a.mount()

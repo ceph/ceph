@@ -1,10 +1,12 @@
 import json
 import logging
-from unittest import case
+from unittest import case, SkipTest
+
 from cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
+from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +58,9 @@ class TestFailover(CephFSTestCase):
         That a client will respect fuse_require_active_mds and error out
         when the cluster appears to be unavailable.
         """
+
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Requires FUSE client to inject client metadata")
 
         require_active = self.fs.get_config("fuse_require_active_mds", service_type="mon").lower() == "true"
         if not require_active:
@@ -286,22 +291,14 @@ class TestMultiFilesystems(CephFSTestCase):
         fs_a, fs_b = self._setup_two()
 
         # Mount a client on fs_a
-        fs_a.set_ceph_conf(
-            "client.{0}".format(self.mount_a.client_id),
-	    "client_mds_namespace", fs_a.name
-        )
-        self.mount_a.mount()
+        self.mount_a.mount(mount_fs_name=fs_a.name)
         self.mount_a.write_n_mb("pad.bin", 1)
         self.mount_a.write_n_mb("test.bin", 2)
         a_created_ino = self.mount_a.path_to_ino("test.bin")
         self.mount_a.create_files()
 
         # Mount a client on fs_b
-        fs_b.set_ceph_conf(
-            "client.{0}".format(self.mount_b.client_id),
-	    "client_mds_namespace", fs_b.name
-        )
-        self.mount_b.mount()
+        self.mount_b.mount(mount_fs_name=fs_b.name)
         self.mount_b.write_n_mb("test.bin", 1)
         b_created_ino = self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()
