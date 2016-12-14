@@ -7973,7 +7973,6 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
   filepath path(ino->ino);
   req->set_filepath(path);
-  req->set_inode(ino);
 
   InodeRef target;
   int r = make_request(req, perms, &target, NULL, rand() % mdsmap->get_num_in_mds());
