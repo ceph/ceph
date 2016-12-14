@@ -9,7 +9,7 @@ set(osd_srcs
   OpRequest.cc
   PG.cc
   PGLog.cc
-  ReplicatedPG.cc
+  PrimaryLogPG.cc
   ReplicatedBackend.cc
   ECBackend.cc
   ECTransaction.cc

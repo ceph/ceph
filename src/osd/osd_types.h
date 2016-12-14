@@ -4401,7 +4401,7 @@ public:
   ObjectContext()
     : ssc(NULL),
       destructor_callback(0),
-      lock("ReplicatedPG::ObjectContext::lock"),
+      lock("PrimaryLogPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
       blocked(false), requeue_scrub_on_unblock(false) {}
 
