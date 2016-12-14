@@ -309,39 +309,23 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
 
     git_url = teuth_config.get_ceph_git_url()
-    if 'github.com/ceph/ceph' in git_url:
-        remote.run(
-            logger=log.getChild(role),
-            args=[
-                'mkdir', '--', srcdir,
-                run.Raw('&&'),
-                'git',
-                'archive',
-                '--remote=git://git.ceph.com/ceph.git',
-                '%s:qa/workunits' % refspec,
-                run.Raw('|'),
-                'tar',
-                '-C', srcdir,
-                '-x',
-                '-f-',
-            ],
-        )
-    else:
-        remote.run(
-            logger=log.getChild(role),
-            args=[
-                'git',
-                'clone',
-                git_url,
-                clonedir,
-                run.Raw(';'),
-                'cd', '--', clonedir,
-                run.Raw('&&'),
-                'git', 'checkout', refspec,
-                run.Raw('&&'),
-                'mv', 'qa/workunits', srcdir,
-            ],
-        )
+    remote.run(
+        logger=log.getChild(role),
+        args=[
+            'git',
+            'clone',
+            '--depth',
+            '1',
+            git_url,
+            clonedir,
+            run.Raw(';'),
+            'cd', '--', clonedir,
+            run.Raw('&&'),
+            'git', 'checkout', refspec,
+            run.Raw('&&'),
+            'mv', 'qa/workunits', srcdir,
+        ],
+    )
 
     remote.run(
         logger=log.getChild(role),
