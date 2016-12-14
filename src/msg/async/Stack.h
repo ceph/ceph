@@ -194,6 +194,7 @@ enum {
   l_msgr_created_connections,
   l_msgr_active_connections,
   l_msgr_osdop_lifetime_lat,
+  l_msgr_osdop_max_lifetime,
   l_msgr_last,
 };
 
@@ -230,6 +231,7 @@ class Worker {
     plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
     plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
     plb.add_time_avg(l_msgr_osdop_lifetime_lat, "osdop_lifetime_lat", "lifetime of MOSDOp");
+    plb.add_time(l_msgr_osdop_max_lifetime, "osdop_max_lifetime", "max lifetime of MOSDOp");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
