@@ -306,7 +306,8 @@ struct bluestore_blob_t {
     denc_varint_lowz(compressed_length, p);
     denc(csum_type, p);
     denc(csum_chunk_order, p);
-    denc(csum_data, p);
+    denc_varint(csum_data.length(), p);
+    p += csum_data.length();
     p += sizeof(unsigned long long);
   }
 
@@ -324,7 +325,9 @@ struct bluestore_blob_t {
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
-      denc(csum_data, p);
+      denc_varint(csum_data.length(), p);
+      memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
+	     csum_data.length());
     }
     if (has_unused()) {
       denc(unused_uint_t(unused.to_ullong()), p);
@@ -345,7 +348,9 @@ struct bluestore_blob_t {
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
-      denc(csum_data, p);
+      int len;
+      denc_varint(len, p);
+      csum_data = p.get_ptr(len);
     }
     if (has_unused()) {
       unused_uint_t val;
