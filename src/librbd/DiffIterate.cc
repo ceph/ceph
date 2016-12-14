@@ -385,8 +385,8 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     }
 
     BitVector<2> object_map;
-    std::string oid(ObjectMap::object_map_name(m_image_ctx.id,
-                                               current_snap_id));
+    std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id,
+                                                 current_snap_id));
     r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid, &object_map);
     if (r < 0) {
       lderr(cct) << "diff_object_map: failed to load object map " << oid

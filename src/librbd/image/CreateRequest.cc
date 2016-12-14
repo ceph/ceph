@@ -91,7 +91,7 @@ int validate_data_pool(CephContext *cct, IoCtx &io_ctx, uint64_t features,
 
 
 bool validate_layout(CephContext *cct, uint64_t size, file_layout_t &layout) {
-  if (!librbd::ObjectMap::is_compatible(layout, size)) {
+  if (!librbd::ObjectMap<>::is_compatible(layout, size)) {
     lderr(cct) << "image size not compatible with object map" << dendl;
     return false;
   }
@@ -132,7 +132,7 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
 
   m_id_obj = util::id_obj_name(m_image_name);
   m_header_obj = util::header_name(m_image_id);
-  m_objmap_name = ObjectMap::object_map_name(m_image_id, CEPH_NOSNAP);
+  m_objmap_name = ObjectMap<>::object_map_name(m_image_id, CEPH_NOSNAP);
 
   if (image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
     m_features = util::parse_rbd_default_features(m_cct);
