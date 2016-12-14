@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    client:
+      debug ms: 1
+      debug client: 20
+tasks:
+- install:
+- ceph:
+    fs: btrfs
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - libcephfs/test.sh

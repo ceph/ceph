@@ -1,0 +1,5 @@
+*~
+.*.sw[nmop]
+__pycache__
+*.pyc
+.tox

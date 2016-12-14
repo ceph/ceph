@@ -1,0 +1,22 @@
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+- thrashosds:
+    op_delay: 30
+    clean_interval: 120
+    chance_down: .5
+- workunit:
+    clients:
+      all:
+      - rados/load-gen-mix-small.sh

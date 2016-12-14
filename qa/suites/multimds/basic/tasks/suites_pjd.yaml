@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
+      mds:
+        debug ms: 1
+        debug mds: 20
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/pjd.sh

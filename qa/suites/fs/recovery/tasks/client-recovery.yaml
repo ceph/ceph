@@ -1,0 +1,11 @@
+
+# The task interferes with the network, so we need
+# to permit OSDs to complain about that.
+overrides:
+  ceph:
+      log-whitelist:
+      - wrongly marked me down
+      - slow request
+
+tasks:
+- mds_client_recovery:

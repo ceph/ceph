@@ -1,0 +1,25 @@
+#cloud-config-archive
+
+- type: text/cloud-config
+  content: |
+    output:
+      all: '| tee -a /var/log/cloud-init-output.log'
+
+# allow passwordless access for debugging
+- |
+  #!/bin/bash
+  exec passwd -d ubuntu
+
+- |
+  #!/bin/bash
+
+  # mount a NFS share for storing logs
+  apt-get update
+  apt-get -y install nfs-common
+  mkdir /mnt/log
+  # 10.0.2.2 is the host
+  mount -v -t nfs -o proto=tcp 10.0.2.2:{mnt_dir} /mnt/log
+
+  # mount the iso image that has the test script
+  mkdir /mnt/cdrom
+  mount -t auto /dev/cdrom /mnt/cdrom

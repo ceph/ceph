@@ -1,0 +1,17 @@
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - client.a
+tasks:
+- install:
+- ceph:
+- admin_socket:
+    osd.0:
+      version:
+      git_version:
+      help:
+      config show:
+      config set filestore_dump_file /tmp/foo:
+      perf dump:
+      perf schema:

@@ -1,0 +1,15 @@
+roles:
+- - mon.0
+  - mon.1
+  - mon.2
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+tasks:
+- install:
+- ceph:
+- workunit:
+    clients:
+      all:
+        - mon/test_mon_config_key.py

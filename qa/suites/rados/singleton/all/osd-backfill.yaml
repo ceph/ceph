@@ -1,0 +1,16 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    conf:
+      osd:
+        osd min pg log entries: 5
+- osd_backfill:

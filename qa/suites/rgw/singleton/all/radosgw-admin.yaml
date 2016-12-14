@@ -1,0 +1,15 @@
+roles:
+- [mon.a, osd.0, client.0, osd.1, osd.2, osd.3]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        debug ms: 1
+        rgw gc obj min wait: 15
+      osd:
+        debug ms: 1
+        debug objclass : 20
+- rgw:
+    client.0:
+- radosgw-admin:

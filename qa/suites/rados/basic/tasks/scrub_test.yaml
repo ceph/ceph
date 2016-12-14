@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - '!= best guess digest'
+    - '!= best guess data_digest'
+    - '!= best guess omap_digest'
+    - '!= known digest'
+    - '!= known data_digest'
+    - '!= known omap_digest'
+    - deep-scrub 0 missing, 1 inconsistent objects
+    - deep-scrub 1 errors
+    - repair 0 missing, 1 inconsistent objects
+    - repair 1 errors, 1 fixed
+tasks:
+- install:
+- ceph:
+- scrub_test:
