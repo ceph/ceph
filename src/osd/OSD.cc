@@ -20,6 +20,7 @@
 #include <signal.h>
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
+#include <urcu.h>
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -110,6 +111,7 @@
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGPull.h"
 
+#include "common/RCU.h"
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
@@ -173,6 +175,40 @@ void PGQueueable::RunVis::operator()(const PGScrub &op) {
 
 void PGQueueable::RunVis::operator()(const PGRecovery &op) {
   return osd->do_recovery(pg.get(), op.epoch_queued, op.reserved_pushes, handle);
+}
+
+OSD::PG_map_subscriber::PG_map_subscriber(OSD *o) {
+  assert(pthread_getspecific(o->cct->registered) > 0);
+  RCU<>::RCU_read_lock();
+  subscribed_pg_map = RCU<ceph::unordered_map<spg_t, PG*>>::RCU_dereference(o->pg_map_ptr);
+}
+
+bool OSD::PG_map_subscriber::is_pg_map_end(unordered_map<spg_t, PG*>::iterator &i) {
+  return i == subscribed_pg_map->end();
+}
+
+unordered_map<spg_t, PG*>::iterator OSD::PG_map_subscriber::pg_map_find(const spg_t &pgid) {
+  return subscribed_pg_map->find(pgid);
+}
+
+OSD::PG_map_subscriber::~PG_map_subscriber() {
+  RCU<>::RCU_read_unlock();
+}
+
+// Take write lock and swap pg_map_ptr to a shadow copy of the pg_map.
+// Readers will see the shadow copy until the write completes so need not
+// block. When the write completes swap pg_map_ptr to modified pg_map.
+OSD::WLocker_and_pg_map_publish::WLocker_and_pg_map_publish(OSD *o) :
+  osd_ptr(o),
+  l(o->pg_map_lock) {
+  osd_ptr->pg_map_shadow = osd_ptr->pg_map;
+  RCU<ceph::unordered_map<spg_t, PG*>>::RCU_xchg_and_sync(
+    &osd_ptr->pg_map_ptr, &osd_ptr->pg_map_shadow);
+}
+
+OSD::WLocker_and_pg_map_publish::~WLocker_and_pg_map_publish() {
+  RCU<ceph::unordered_map<spg_t, PG*>>::RCU_xchg_and_sync(
+    &osd_ptr->pg_map_ptr, &osd_ptr->pg_map);
 }
 
 //Initial features in new superblock.
@@ -1701,6 +1737,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &osd_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
+  pg_map_ptr(&pg_map),
   last_pg_create_epoch(0),
   mon_report_lock("OSD::mon_report_lock"),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
@@ -3091,7 +3128,11 @@ PG *OSD::_open_lock_pg(
 
   PG* pg = _make_pg(createmap, pgid);
   {
-    RWLock::WLocker l(pg_map_lock);
+    WLocker_and_pg_map_publish l(this);
+    if (g_conf->osd_inject_pg_lock_longhold) {
+      usleep(5000);
+    }
+
     pg->lock(no_lockdep_check);
     pg_map[pgid] = pg;
     pg->get("PGMap");  // because it's in pg_map
@@ -3246,10 +3287,10 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op,
   // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
   // the session_dispatch_lock must already be held.
   assert(session->session_dispatch_lock.is_locked());
-  RWLock::RLocker l(pg_map_lock);
 
-  ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.find(pgid);
-  if (i == pg_map.end())
+  PG_map_subscriber l(this);
+  ceph::unordered_map<spg_t, PG*>::iterator i = l.pg_map_find(pgid);
+  if (l.is_pg_map_end(i))
     session->waiting_for_pg[pgid];
 
   map<spg_t, list<OpRequestRef> >::iterator wlistiter =
@@ -7420,7 +7461,7 @@ void OSD::consume_map()
   for (list<PGRef>::iterator i = to_remove.begin();
        i != to_remove.end();
        to_remove.erase(i++)) {
-    RWLock::WLocker locker(pg_map_lock);
+    WLocker_and_pg_map_publish l(this);
     (*i)->lock();
     _remove_pg(&**i);
     (*i)->unlock();
@@ -8372,7 +8413,8 @@ void OSD::handle_pg_remove(OpRequestRef op)
       continue;
     }
 
-    RWLock::WLocker l(pg_map_lock);
+    WLocker_and_pg_map_publish l(this);
+
     if (pg_map.count(pgid) == 0) {
       dout(10) << " don't have pg " << pgid << dendl;
       continue;

@@ -55,7 +55,7 @@ add_executable(unittest_osdscrub
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_osdscrub ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osdscrub)
-target_link_libraries(unittest_osdscrub osd global ${CMAKE_DL_LIBS} os mon ${BLKID_LIBRARIES})
+target_link_libraries(unittest_osdscrub osd global ${CMAKE_DL_LIBS} os mon ${BLKID_LIBRARIES} ${URCU_LIBRARIES})
 
 # unittest_pglog
 add_executable(unittest_pglog

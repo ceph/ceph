@@ -14,8 +14,10 @@
  *
  */
 
+#include <urcu.h>
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "common/RCU.h"
 #include "PosixStack.h"
 #ifdef HAVE_RDMA
 #include "rdma/RDMAStack.h"
@@ -40,6 +42,7 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
       ldout(cct, 10) << __func__ << " starting" << dendl;
       w->initialize();
       w->init_done();
+      RCU<> rcu(w->cct->registered, this);
       while (!w->done) {
         ldout(cct, 30) << __func__ << " calling event process" << dendl;
 

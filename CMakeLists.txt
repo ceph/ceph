@@ -182,9 +182,14 @@ endif(WITH_RDMA)
 
 find_package(Backtrace)
 
+find_package(urcu REQUIRED)
+
 if(LINUX)
   find_package(udev REQUIRED)
   set(HAVE_UDEV ${UDEV_FOUND})
+
+  find_package(urcu REQUIRED)
+  set(HAVE_URCU ${URCU_FOUND})
 
   find_package(aio REQUIRED)
   set(HAVE_LIBAIO ${AIO_FOUND})
@@ -192,6 +197,8 @@ if(LINUX)
   find_package(blkid REQUIRED)
   set(HAVE_BLKID ${BLKID_FOUND})
 else()
+  set(HAVE_URCU OFF)
+  message(STATUS "Not using urcu")
   set(HAVE_UDEV OFF)
   message(STATUS "Not using udev")
   set(HAVE_LIBAIO OFF)

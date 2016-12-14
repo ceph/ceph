@@ -1,3 +1,4 @@
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
@@ -12,6 +13,7 @@
  * 
  */
 
+#include <urcu.h>
 #include "msg/Message.h"
 #include "DispatchQueue.h"
 #include "Messenger.h"
@@ -19,7 +21,7 @@
 
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
-
+#include "common/RCU.h"
 
 /*******************
  * DispatchQueue
@@ -105,14 +107,20 @@ void DispatchQueue::local_delivery(Message *m, int priority)
 
 void DispatchQueue::run_local_delivery()
 {
+  RCU<> rcu(cct->registered, this);
+
   local_delivery_lock.Lock();
   while (true) {
     if (stop_local_delivery)
       break;
     if (local_messages.empty()) {
+      RCU<>::RCU_offline();
       local_delivery_cond.Wait(local_delivery_lock);
+      RCU<>::RCU_online();
       continue;
     }
+    RCU<>::RCU_quiescent();
+
     pair<Message *, int> mp = local_messages.front();
     local_messages.pop_front();
     local_delivery_lock.Unlock();
@@ -127,6 +135,7 @@ void DispatchQueue::run_local_delivery()
     local_delivery_lock.Lock();
   }
   local_delivery_lock.Unlock();
+
 }
 
 void DispatchQueue::dispatch_throttle_release(uint64_t msize)
@@ -150,9 +159,12 @@ void DispatchQueue::dispatch_throttle_release(uint64_t msize)
  */
 void DispatchQueue::entry()
 {
+  RCU<> rcu(cct->registered, this);
+
   lock.Lock();
   while (true) {
     while (!mqueue.empty()) {
+      RCU<>::RCU_quiescent();
       QueueItem qitem = mqueue.dequeue();
       if (!qitem.is_code())
 	remove_arrival(qitem.get_message());
@@ -205,7 +217,9 @@ void DispatchQueue::entry()
       break;
 
     // wait for something to be put on queue
+    RCU<>::RCU_offline();
     cond.Wait(lock);
+    RCU<>::RCU_online();
   }
   lock.Unlock();
 }
