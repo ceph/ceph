@@ -739,6 +739,11 @@ public:
     assert(p != pools.end());
     return p->second.get_size();
   }
+  unsigned get_pg_min_size(pg_t pg) const {
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.get_min_size();
+  }
   int get_pg_type(pg_t pg) const {
     map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
     assert(p != pools.end());

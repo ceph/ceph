@@ -381,8 +381,13 @@ public:
       hoid.pool != (int64_t)info.pgid.pool() ||
       cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
       cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
-    if (!should_send)
+    if (!should_send) {
       assert(is_backfill_targets(peer));
+      return should_send;
+    }
+    if (peer_missing.count(peer) &&
+	peer_missing[peer].get_items().count(hoid))
+      should_send = false;
     return should_send;
   }
   
@@ -1571,6 +1576,9 @@ public:
 
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
+
+  bool is_missing_have_old_object(const hobject_t& soid);
+  bool is_degraded_on_async_recovery_target_object(const hobject_t& soid);
 
   void block_write_on_full_cache(
     const hobject_t& oid, OpRequestRef op);

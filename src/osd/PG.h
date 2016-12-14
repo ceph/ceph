@@ -404,6 +404,10 @@ public:
     void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have) {
       needs_recovery_map[hoid] = pg_missing_item(need, have);
     }
+    void remove_missing(const hobject_t &hoid) {
+      missing_loc.erase(hoid);
+      needs_recovery_map.erase(hoid);
+    }
     void revise_need(const hobject_t &hoid, eversion_t need) {
       assert(needs_recovery(hoid));
       needs_recovery_map[hoid].need = need;
@@ -1008,17 +1012,24 @@ public:
   static void calc_replicated_acting(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     unsigned size,
+    unsigned min_size,
     const vector<int> &acting,
     pg_shard_t acting_primary,
     const vector<int> &up,
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
     bool compat_mode,
+    set<pg_shard_t> &strayset,
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
     pg_shard_t *want_primary,
+    unsigned max_updates,
     ostream &ss);
+  static bool is_up_or_acting_set_equal_replicated(const vector<int> &l,
+                                                   const vector<int> &r);
+  bool is_up_or_acting_set_equal(const vector<int> &l,
+                                 const vector<int> &r);
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool *history_les_bound);
   void build_might_have_unfound();

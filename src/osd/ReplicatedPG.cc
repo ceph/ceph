@@ -573,9 +573,11 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     return true;
   if (pg_log.get_missing().get_items().count(soid))
     return true;
-  assert(!actingbackfill.empty());
-  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-       i != actingbackfill.end();
+
+  // Object is degraded if missing in the actingset
+  assert(!actingset.empty());
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
@@ -583,11 +585,30 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     if (peer_missing_entry != peer_missing.end() &&
 	peer_missing_entry->second.get_items().count(soid))
       return true;
+  }
 
-    // Object is degraded if after last_backfill AND
-    // we are backfilling it
-    if (is_backfill_targets(peer) &&
-	cmp(peer_info[peer].last_backfill, soid, get_sort_bitwise()) <= 0 &&
+  // Object is degraded if under async recovering
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator q = actingbackfill.begin();
+       q != actingbackfill.end();
+       ++q) {
+    if (*q == get_primary()) continue;
+    if (actingset.count(*q)) continue;
+    pg_shard_t peer = *q;
+    if (peer_missing.count(peer) &&
+	peer_missing[peer].get_items().count(soid) &&
+	recovering.count(soid))
+      return true;
+  }
+
+  // Object is degraded if after last_backfill AND
+  // we are backfilling it
+  for (set<pg_shard_t>::iterator p = backfill_targets.begin();
+       p != backfill_targets.end();
+       ++p) {
+    if (*p == get_primary()) continue;
+    pg_shard_t backfill_peer = *p;
+    if (cmp(peer_info[backfill_peer].last_backfill, soid, get_sort_bitwise()) <= 0 &&
 	cmp(last_backfill_started, soid, get_sort_bitwise()) >= 0 &&
 	backfills_in_flight.count(soid))
       return true;
@@ -597,11 +618,46 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 
 void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef op)
 {
-  assert(is_degraded_or_backfilling_object(soid));
+  assert(is_degraded_or_backfilling_object(soid) ||
+         is_missing_have_old_object(soid) ||
+         is_degraded_on_async_recovery_target_object(soid));
 
   maybe_kick_recovery(soid);
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed("waiting for degraded object");
+}
+
+// have old version of this object on the async recovery targets?
+bool ReplicatedPG::is_missing_have_old_object(const hobject_t& soid)
+{
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    if (actingset.count(*i)) continue;
+    pg_shard_t peer = *i;
+    if (peer_missing.count(peer) &&
+	peer_missing[peer].get_items().count(soid) &&
+	peer_missing[peer].have_old(soid) != eversion_t())
+      return true;
+  }
+  return false;
+}
+
+// is the object degraded on the async recovery targets?
+bool ReplicatedPG::is_degraded_on_async_recovery_target_object(const hobject_t& soid)
+{
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    if (actingset.count(*i)) continue;
+    pg_shard_t peer = *i;
+    if (peer_missing.count(peer) &&
+	peer_missing[peer].get_items().count(soid))
+      return true;
+  }
+  return false;
 }
 
 void ReplicatedPG::block_write_on_full_cache(
@@ -4871,7 +4927,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // make_writeable() clone or snapdir object creation in finish_ctx()
 	  ctx->cache_evict = true;
 	}
-	osd->logger->inc(l_osd_tier_evict);
+	if (result != -EAGAIN)
+	  osd->logger->inc(l_osd_tier_evict);
       }
       break;
 
@@ -6240,6 +6297,13 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   const hobject_t& soid = oi.soid;
   PGTransaction* t = ctx->op_t.get();
 
+  // if the object is missing and have an old version on the async
+  // recovery targets, recover it first
+  if (is_missing_have_old_object(soid)) {
+    wait_for_degraded_object(soid, ctx->op);
+    return -EAGAIN;
+  }
+
   if (!obs.exists || (obs.oi.is_whiteout() && !no_whiteout))
     return -ENOENT;
 
@@ -6359,15 +6423,17 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // Cannot delete an object with watchers
       ret = -EBUSY;
     } else {
-      _delete_oid(ctx, false);
-      ret = 0;
+      ret = _delete_oid(ctx, false);
+      if (ret != -EAGAIN)
+        ret = 0;
     }
   } else if (ret) {
     // ummm....huh? It *can't* return anything else at time of writing.
     assert(0 == "unexpected error code in _rollback_to");
   } else { //we got our context, let's use it to do the rollback!
     hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
-    if (is_degraded_or_backfilling_object(rollback_to_sobject)) {
+    if (is_degraded_or_backfilling_object(rollback_to_sobject) ||
+	is_degraded_on_async_recovery_target_object(rollback_to_sobject)) {
       dout(20) << "_rollback_to attempted to roll back to a degraded object "
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
       block_write_on_degraded_snap(rollback_to_sobject, ctx->op);
@@ -10582,9 +10648,9 @@ bool ReplicatedPG::start_recovery_ops(
   }
 
   if (needs_recovery()) {
-    // this shouldn't happen!
-    // We already checked num_missing() so we must have missing replicas
-    osd->clog->error() << info.pgid << " recovery ending with missing replicas\n";
+    // This is possible when an object is missing on the async recovery
+    // targets and the the recovery lock can't be acquired. In this case,
+    // no recovery may start, and we still have missings on replicas.
     return work_in_progress;
   }
 
@@ -12288,6 +12354,11 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
   }
   if (obc->obs.oi.is_cache_pinned()) {
     dout(20) << __func__ << " skip (cache_pinned) " << obc->obs.oi << dendl;
+    return false;
+  }
+  if (is_missing_have_old_object(soid)) {
+    dout(20) << __func__ << " skip (degraded on async recovery targets) "
+             << obc->obs.oi << dendl;
     return false;
   }
 

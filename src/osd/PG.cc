@@ -842,12 +842,20 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
   map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();
   while (p != peer_info.end()) {
     if (!osdmap->is_up(p->first.osd)) {
-      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
-      peer_missing.erase(p->first);
-      peer_log_requested.erase(p->first);
-      peer_missing_requested.erase(p->first);
+      pg_shard_t shard = p->first;
+      dout(10) << " dropping down osd." << shard << " info " << p->second << dendl;
+      peer_missing.erase(shard);
+      peer_log_requested.erase(shard);
+      peer_missing_requested.erase(shard);
       peer_info.erase(p++);
       removed = true;
+      // if the up and acting don't change, but the async recovery target osd goes down,
+      // remove it from the async recovery targets
+      set<pg_shard_t>::iterator q = actingbackfill.find(shard);
+      if (q != actingbackfill.end()) {
+        dout(10) << " dropping down osd." << shard << " from async recovery targets" << dendl;
+	actingbackfill.erase(q);
+      }
     } else
       ++p;
   }
@@ -1164,16 +1172,19 @@ void PG::calc_ec_acting(
 void PG::calc_replicated_acting(
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
   unsigned size,
+  unsigned min_size,
   const vector<int> &acting,
   pg_shard_t acting_primary,
   const vector<int> &up,
   pg_shard_t up_primary,
   const map<pg_shard_t, pg_info_t> &all_info,
   bool compat_mode,
+  set<pg_shard_t> &strayset,
   vector<int> *want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
   pg_shard_t *want_primary,
+  unsigned max_updates,
   ostream &ss)
 {
   ss << "calc_acting newest update on osd." << auth_log_shard->first
@@ -1184,8 +1195,9 @@ void PG::calc_replicated_acting(
   map<pg_shard_t,pg_info_t>::const_iterator primary;
   if (up.size() &&
       !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
-        auth_log_shard->second.log_tail) {
+      all_info.find(up_primary)->second.last_update >= auth_log_shard->second.log_tail &&
+      all_info.find(up_primary)->second.last_update.version + max_updates >=
+        auth_log_shard->second.last_update.version) {
     ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
     primary = all_info.find(up_primary); // prefer up[0], all thing being equal
   } else {
@@ -1240,63 +1252,172 @@ void PG::calc_replicated_acting(
   }
 
   // This no longer has backfill OSDs, but they are covered above.
-  for (vector<int>::const_iterator i = acting.begin();
-       i != acting.end();
-       ++i) {
-    pg_shard_t acting_cand(*i, shard_id_t::NO_SHARD);
-    if (usable >= size)
-      break;
+  if (usable < size) {
+    multimap<eversion_t, int> last_update_to_acting;
+    for (vector<int>::const_iterator it = acting.begin(); it != acting.end(); ++it) {
+      pg_shard_t shard(*it, shard_id_t::NO_SHARD);
+      const pg_info_t &cur_info = all_info.find(shard)->second;
+      last_update_to_acting.insert(std::make_pair(cur_info.last_update, *it));
+    }
+    for (multimap<eversion_t, int>::reverse_iterator i = last_update_to_acting.rbegin();
+         i != last_update_to_acting.rend();
+         ++i) {
+      pg_shard_t acting_cand(i->second, shard_id_t::NO_SHARD);
+      if (usable >= size)
+        break;
 
-    // skip up osds we already considered above
-    if (acting_cand == primary->first)
-      continue;
-    vector<int>::const_iterator up_it = find(up.begin(), up.end(), acting_cand.osd);
-    if (up_it != up.end())
-      continue;
+      // skip up osds we already considered above
+      if (acting_cand == primary->first)
+        continue;
+      vector<int>::const_iterator up_it = find(up.begin(), up.end(), acting_cand.osd);
+      if (up_it != up.end())
+        continue;
 
-    const pg_info_t &cur_info = all_info.find(acting_cand)->second;
-    if (cur_info.is_incomplete() ||
-	cur_info.last_update < primary->second.log_tail) {
-      ss << " shard " << acting_cand << " (stray) REJECTED "
-	       << cur_info << std::endl;
-    } else {
-      want->push_back(*i);
-      acting_backfill->insert(acting_cand);
-      ss << " shard " << acting_cand << " (stray) accepted "
-	 << cur_info << std::endl;
-      usable++;
+      const pg_info_t &cur_info = all_info.find(acting_cand)->second;
+      if (cur_info.is_incomplete() ||
+          cur_info.last_update < primary->second.log_tail) {
+        ss << " shard " << acting_cand << " (stray) REJECTED "
+                 << cur_info << std::endl;
+      } else {
+        want->push_back(i->second);
+        acting_backfill->insert(acting_cand);
+        ss << " shard " << acting_cand << " (stray) accepted "
+           << cur_info << std::endl;
+        usable++;
+      }
     }
   }
 
-  for (map<pg_shard_t,pg_info_t>::const_iterator i = all_info.begin();
-       i != all_info.end();
-       ++i) {
-    if (usable >= size)
-      break;
+  if (usable < size) {
+    multimap<eversion_t, map<pg_shard_t, pg_info_t>::const_iterator> last_update_to_shard;
+    for (map<pg_shard_t, pg_info_t>::const_iterator it = all_info.begin();
+	 it != all_info.end(); ++it) {
+      last_update_to_shard.insert(std::make_pair(it->second.last_update, it));
+    }
+    for (multimap<eversion_t, map<pg_shard_t, pg_info_t>::const_iterator>::reverse_iterator i
+             = last_update_to_shard.rbegin();
+         i != last_update_to_shard.rend();
+         ++i) {
+      if (usable >= size)
+        break;
+      pg_shard_t acting_cand = i->second->first;
 
-    // skip up osds we already considered above
-    if (i->first == primary->first)
-      continue;
-    vector<int>::const_iterator up_it = find(up.begin(), up.end(), i->first.osd);
-    if (up_it != up.end())
-      continue;
-    vector<int>::const_iterator acting_it = find(
-      acting.begin(), acting.end(), i->first.osd);
-    if (acting_it != acting.end())
-      continue;
+      // skip up osds we already considered above
+      if (acting_cand == primary->first)
+        continue;
+      vector<int>::const_iterator up_it = find(up.begin(), up.end(), acting_cand.osd);
+      if (up_it != up.end())
+        continue;
+      vector<int>::const_iterator acting_it = find(
+        acting.begin(), acting.end(), acting_cand.osd);
+      if (acting_it != acting.end())
+        continue;
 
-    if (i->second.is_incomplete() ||
-	i->second.last_update < primary->second.log_tail) {
-      ss << " shard " << i->first << " (stray) REJECTED "
-	 << i->second << std::endl;
-    } else {
-      want->push_back(i->first.osd);
-      acting_backfill->insert(i->first);
-      ss << " shard " << i->first << " (stray) accepted "
-	 << i->second << std::endl;
-      usable++;
+      const pg_info_t &cur_info = i->second->second;
+
+      if (cur_info.is_incomplete() ||
+          cur_info.last_update < primary->second.log_tail) {
+        ss << " shard " << acting_cand << " (stray) REJECTED "
+           << cur_info << std::endl;
+      } else {
+        want->push_back(acting_cand.osd);
+        acting_backfill->insert(acting_cand);
+        ss << " shard " << acting_cand << " (stray) accepted "
+           << cur_info << std::endl;
+        usable++;
+      }
     }
   }
+
+  // async recovery?
+  vector<int> async_recovery_targets;
+  if (want->size() > min_size) {
+    multimap<eversion_t, int> last_update_to_shard;
+    for (vector<int>::iterator it = want->begin(); it != want->end(); ++it) {
+      pg_shard_t shard(*it, shard_id_t::NO_SHARD);
+      const pg_info_t &cur_info = all_info.find(shard)->second;
+      last_update_to_shard.insert(std::make_pair(cur_info.last_update, *it));
+    }
+    eversion_t max_last_update = last_update_to_shard.rbegin()->first;
+    for (multimap<eversion_t, int>::iterator p = last_update_to_shard.begin();
+         p != last_update_to_shard.end(); ++p) {
+      assert(p->first.epoch <= max_last_update.epoch);
+      // change to async recovery if there are over max_updates gap
+      if (want->size() > min_size &&
+          max_last_update.version > p->first.version + max_updates) {
+        vector<int>::iterator q = find(want->begin(), want->end(), p->second);
+        assert(q != want->end());
+        want->erase(q);
+	async_recovery_targets.push_back(*q);
+	// backfill->insert(pg_shard_t(p->second, shard_id_t::NO_SHARD));
+        ss << " too many updates for shard " << p->second
+	   << ", switch to async recovery" << std::endl;
+      } else {
+	break;
+      }
+    }
+  }
+  // when up == acting == want, don't bother to do async recovery
+  if (is_up_or_acting_set_equal_replicated(up, acting) &&
+      is_up_or_acting_set_equal_replicated(acting, *want)) {
+    ss << " up == acting == want, don't bother to do async recovery" << std::endl;
+    assert(backfill->empty());
+    acting_backfill->clear();
+    // remove all async recovery targets
+    for (vector<int>::iterator it = want->begin(); it != want->end(); ++it) {
+      pg_shard_t shard(*it, shard_id_t::NO_SHARD);
+      acting_backfill->insert(shard);
+    }
+  } else {
+    for (vector<int>::iterator it = async_recovery_targets.begin();
+	 it != async_recovery_targets.end(); ++it) {
+      // remove async recovery targets from stray set if any
+      set<pg_shard_t>::iterator r = strayset.find(pg_shard_t(*it, shard_id_t::NO_SHARD));
+      if (r != strayset.end())
+	strayset.erase(r);
+    }
+  }
+}
+
+/**
+ * For replicated pg, two up or acting sets are equal only when:
+ * 1) Primary are the same
+ * 2) Replicas are the same, but maybe in different order in the vector
+ */
+bool PG::is_up_or_acting_set_equal_replicated(const vector<int> &l,
+                                              const vector<int> &r)
+{
+  if (l.size() != r.size())
+    return false;
+
+  if ((l.size() >= 1) && (l[0] != r[0]))
+    return false;
+
+  if (l.size() >= 2) {
+    vector<int>::const_iterator p = l.begin();
+    vector<int> lr(++p, l.end());
+    vector<int>::const_iterator q = r.begin();
+    vector<int> rr(++q, r.end());
+
+    sort(lr.begin(), lr.end());
+    sort(rr.begin(), rr.end());
+    unsigned i = 0;
+    while (i < lr.size()) {
+      if (lr[i] != rr[i])
+	return false;
+      i++;
+    }
+  }
+
+  return true;
+}
+
+bool PG::is_up_or_acting_set_equal(const vector<int> &l, const vector<int> &r)
+{
+  if (pool.info.ec_pool())
+    return (l == r);
+  else
+    return is_up_or_acting_set_equal_replicated(l, r);
 }
 
 /**
@@ -1320,7 +1441,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     find_best_info(all_info, history_les_bound);
 
   if (auth_log_shard == all_info.end()) {
-    if (up != acting) {
+    if (!is_up_or_acting_set_equal(up, acting)) {
       dout(10) << "choose_acting no suitable info found (incomplete backfills?),"
 	       << " reverting to up" << dendl;
       want_acting = up;
@@ -1365,16 +1486,19 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     calc_replicated_acting(
       auth_log_shard,
       get_osdmap()->get_pg_size(info.pgid.pgid),
+      get_osdmap()->get_pg_min_size(info.pgid.pgid),
       acting,
       primary,
       up,
       up_primary,
       all_info,
       compat_mode,
+      stray_set,
       &want,
       &want_backfill,
       &want_acting_backfill,
       &want_primary,
+      cct->_conf->osd_async_recovery_max_updates,
       ss);
   else
     calc_ec_acting(
@@ -1425,12 +1549,12 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     return false;
   }
 
-  if (want != acting) {
+  if (!is_up_or_acting_set_equal(want, acting)) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
-    if (want_acting == up) {
+    if (is_up_or_acting_set_equal(want_acting, up)) {
       // There can't be any pending backfill if
       // want is the same as crush map up OSDs.
       assert(compat_mode || want_backfill.empty());
@@ -2101,7 +2225,7 @@ void PG::mark_clean()
   // only mark CLEAN if we have the desired number of replicas AND we
   // are not remapped.
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
-      up == acting)
+      is_up_or_acting_set_equal(up, acting))
     state_set(PG_STATE_CLEAN);
 
   // NOTE: this is actually a bit premature: we haven't purged the
@@ -3099,7 +3223,85 @@ void PG::append_log(
 	(cmp(p->soid, info.last_backfill, get_sort_bitwise()) > 0)) {
       pg_log.roll_forward(&handler);
     }
+
+    // update missing and missing_loc when deleting an object
+    if (p->is_delete()) {
+      if (is_primary()) {
+        // update peer_missing and missing_loc
+        for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+             i != actingbackfill.end();
+             ++i) {
+          if (*i == get_primary()) continue;
+          pg_shard_t peer = *i;
+          if (peer_missing.count(peer) &&
+              peer_missing[peer].get_items().count(p->soid)) {
+            peer_missing[peer].rm(p->soid);
+            missing_loc.remove_missing(p->soid);
+          }
+        }
+      } else {
+        if (pg_log.get_missing().is_missing(p->soid)) {
+          pg_log.missing_rm(p->soid);
+        }
+      }
+      continue;
+    }
+
+    // update missing and missing_loc when
+    // 1. cloning
+    // 2. creating the snapdir object
+    // deleting snapdir object is handled above
+    if ((p->is_clone() && !p->soid.is_head()) ||
+        (p->soid.is_snapdir())) {
+      if (is_primary()) {
+	bool update_missing_loc = false;
+        for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+             i != actingbackfill.end();
+             ++i) {
+          if (*i == get_primary()) continue;
+          pg_shard_t peer = *i;
+          if (peer_missing.count(peer) &&
+              peer_missing[peer].get_items().count(p->soid.get_head())) {
+            peer_missing[peer].add(p->soid, p->version, eversion_t());
+	    update_missing_loc = true;
+          }
+        }
+	if (update_missing_loc) {
+          missing_loc.add_missing(p->soid, p->version, eversion_t());
+	  // the object should exist on all osds of the actingset
+	  for (set<pg_shard_t>::iterator q = actingset.begin();
+	       q != actingset.end();
+	       ++q)
+            missing_loc.add_location(p->soid, *q);
+	}
+      } else {
+        if (pg_log.get_missing().is_missing(p->soid.get_head())) {
+          pg_log.missing_add(p->soid, p->version, eversion_t());
+        }
+      }
+      continue;
+    }
+
+    // for others, revise need
+    if (is_primary()) {
+      // update peer_missing and missing_loc
+      for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+           i != actingbackfill.end();
+           ++i) {
+        if (*i == get_primary()) continue;
+        pg_shard_t peer = *i;
+        if (peer_missing.count(peer) &&
+            peer_missing[peer].get_items().count(p->soid)) {
+          missing_loc.revise_need(p->soid, p->version);
+        }
+      }
+    } else {
+      if (pg_log.get_missing().is_missing(p->soid)) {
+        pg_log.revise_need(p->soid, p->version);
+      }
+    }
   }
+
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
     projected_log.skip_can_rollback_to_to_head();
@@ -5069,7 +5271,7 @@ void PG::start_peering_interval(
 
   // This will now be remapped during a backfill in cases
   // that it would not have been before.
-  if (up != acting)
+  if (!is_up_or_acting_set_equal(up, acting))
     state_set(PG_STATE_REMAPPED);
   else
     state_clear(PG_STATE_REMAPPED);
@@ -6675,8 +6877,8 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
 
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
-  if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard,
-						 &history_les_bound))
+  if (!pg->is_up_or_acting_set_equal(pg->acting, pg->up) &&
+      !pg->choose_acting(auth_log_shard, &history_les_bound))
     assert(pg->want_acting.size());
 
   if (context< Active >().all_replicas_activated)

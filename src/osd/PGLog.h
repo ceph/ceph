@@ -588,6 +588,12 @@ public:
     missing.add(oid, need, have);
   }
 
+  void missing_rm(const hobject_t& oid) {
+    map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator p
+        = missing.get_items().find(oid);
+    missing.rm(p);
+  }
+
   void missing_add_event(const pg_log_entry_t &e) {
     missing.add_next_event(e);
   }
