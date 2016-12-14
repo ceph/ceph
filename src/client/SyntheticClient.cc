@@ -2201,7 +2201,7 @@ int SyntheticClient::read_file(const std::string& fn, int size,
 	  readclient != client->get_nodeid()) {
         if (!bad && !ignoreprint)
           dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
-		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		  << ", should be offset " << wantoff << " client " << client->get_nodeid()
 		  << dendl;
         bad++;
       }
@@ -2504,7 +2504,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
 	if (readoff != wantoff || readclient != client->get_nodeid()) {
 	  if (!bad)
 	    dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
-		    << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		    << ", should be offset " << wantoff << " client " << client->get_nodeid()
 		    << dendl;
 	  bad++;
 	}
@@ -2636,7 +2636,7 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
 	if (readoff != wantoff || readclient != client->get_nodeid()) { 
 	  if (!bad)
 	    dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
-		    << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		    << ", should be offset " << wantoff << " client " << client->get_nodeid()
 		    << dendl;
 	  bad++;
 	}
