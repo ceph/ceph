@@ -5,19 +5,12 @@ Log Based PG
 Background
 ==========
 
-Why ReplicatedPG?
+Why PrimaryLogPG?
 -----------------
 
 Currently, consistency for all ceph pool types is ensured by primary
 log-based replication.  This goes for both erasure-coded and
-replicated pools.  If you ever find yourself asking "why is it that
-both replicated and erasure coded pools are implemented by
-ReplicatedPG.h/cc", that's why (though it definitely should be called
-LogBasedPG, should include peering, and PG should be an abstract
-interface defining only those things the OSD needs to know to route
-messages etc -- but we live in an imperfect world where git deals
-imperfectly with cherry-picking between branches where the file has
-different names).
+replicated pools.
 
 Primary log-based replication
 -----------------------------
@@ -55,7 +48,7 @@ newer cannot have completed without that log containing it) and the
 newest head remembered (clearly, all writes in the log were started,
 so it's fine for us to remember them) as the new head.  This is the
 main point of divergence between replicated pools and ec pools in
-PG/ReplicatedPG: replicated pools try to choose the newest valid
+PG/PrimaryLogPG: replicated pools try to choose the newest valid
 option to avoid the client needing to replay those operations and
 instead recover the other copies.  EC pools instead try to choose
 the *oldest* option available to them.
@@ -85,7 +78,7 @@ PGBackend
 So, the fundamental difference between replication and erasure coding
 is that replication can do destructive updates while erasure coding
 cannot.  It would be really annoying if we needed to have two entire
-implementations of ReplicatedPG, one for each of the two, if there are
+implementations of PrimaryLogPG, one for each of the two, if there are
 really only a few fundamental differences:
 
   1. How reads work -- async only, requires remote reads for ec

@@ -32,7 +32,7 @@ class MOSDSubOpReply;
 class CopyFromCallback;
 class PromoteCallback;
 
-class ReplicatedPG;
+class PrimaryLogPG;
 class PGLSFilter;
 class HitSet;
 struct TierAgentState;
@@ -41,20 +41,20 @@ class MOSDOpReply;
 class MOSDSubOp;
 class OSDService;
 
-void intrusive_ptr_add_ref(ReplicatedPG *pg);
-void intrusive_ptr_release(ReplicatedPG *pg);
-uint64_t get_with_id(ReplicatedPG *pg);
-void put_with_id(ReplicatedPG *pg, uint64_t id);
+void intrusive_ptr_add_ref(PrimaryLogPG *pg);
+void intrusive_ptr_release(PrimaryLogPG *pg);
+uint64_t get_with_id(PrimaryLogPG *pg);
+void put_with_id(PrimaryLogPG *pg, uint64_t id);
 
 #ifdef PG_DEBUG_REFS
-  typedef TrackedIntPtr<ReplicatedPG> ReplicatedPGRef;
+  typedef TrackedIntPtr<PrimaryLogPG> PrimaryLogPGRef;
 #else
-  typedef boost::intrusive_ptr<ReplicatedPG> ReplicatedPGRef;
+  typedef boost::intrusive_ptr<PrimaryLogPG> PrimaryLogPGRef;
 #endif
 
 struct inconsistent_snapset_wrapper;
 
-class ReplicatedPG : public PG, public PGBackend::Listener {
+class PrimaryLogPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
 
@@ -513,7 +513,7 @@ public:
     MOSDOpReply *reply;
 
     utime_t readable_stamp;  // when applied on all replicas
-    ReplicatedPG *pg;
+    PrimaryLogPG *pg;
 
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
@@ -554,8 +554,8 @@ public:
     int async_read_result;
     int inflightreads;
     friend struct OnReadComplete;
-    void start_async_reads(ReplicatedPG *pg);
-    void finish_read(ReplicatedPG *pg);
+    void start_async_reads(PrimaryLogPG *pg);
+    void finish_read(PrimaryLogPG *pg);
     bool async_reads_complete() {
       return inflightreads == 0;
     }
@@ -568,7 +568,7 @@ public:
 
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectContextRef& obc,
-	      ReplicatedPG *_pg) :
+	      PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops),
       obs(&obc->obs),
       snapset(0),
@@ -592,7 +592,7 @@ public:
       }
     }
     OpContext(OpRequestRef _op, osd_reqid_t _reqid,
-              vector<OSDOp>& _ops, ReplicatedPG *_pg) :
+              vector<OSDOp>& _ops, PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
@@ -1330,9 +1330,9 @@ protected:
   friend struct C_ProxyWrite_Commit;
 
 public:
-  ReplicatedPG(OSDService *o, OSDMapRef curmap,
+  PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool, spg_t p);
-  ~ReplicatedPG() {}
+  ~PrimaryLogPG() {}
 
   int do_command(
     cmdmap_t cmdmap,
@@ -1441,10 +1441,10 @@ private:
     Reset() : boost::statechart::event< Reset >() {}
   };
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
-    ReplicatedPG *pg;
+    PrimaryLogPG *pg;
     set<hobject_t, hobject_t::BitwiseComparator> in_flight;
     snapid_t snap_to_trim;
-    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg) {}
+    explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
@@ -1630,7 +1630,7 @@ public:
     bool user_only = false);
 };
 
-inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
+inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
 {
   out << "repgather(" << &repop
       << " " << repop.v
@@ -1643,7 +1643,7 @@ inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
 }
 
 inline ostream& operator<<(ostream& out,
-			   const ReplicatedPG::ProxyWriteOpRef& pwop)
+			   const PrimaryLogPG::ProxyWriteOpRef& pwop)
 {
   out << "proxywrite(" << &pwop
       << " " << pwop->user_version
@@ -1654,8 +1654,8 @@ inline ostream& operator<<(ostream& out,
   return out;
 }
 
-void intrusive_ptr_add_ref(ReplicatedPG::RepGather *repop);
-void intrusive_ptr_release(ReplicatedPG::RepGather *repop);
+void intrusive_ptr_add_ref(PrimaryLogPG::RepGather *repop);
+void intrusive_ptr_release(PrimaryLogPG::RepGather *repop);
 
 
 #endif

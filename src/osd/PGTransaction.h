@@ -509,7 +509,7 @@ public:
    * object clone from source case (make_writeable made a clone).
    *
    * This structure only requires that the source->sink graph be acyclic.
-   * This is much more general than is actually required by ReplicatedPG.
+   * This is much more general than is actually required by PrimaryLogPG.
    * Only 4 flavors of multi-object transactions actually happen:
    * 1) rename temp -> object for copyfrom
    * 2) clone head -> clone, modify head for make_writeable on normal head write
