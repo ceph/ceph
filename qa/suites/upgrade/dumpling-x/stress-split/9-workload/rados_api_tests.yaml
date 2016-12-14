@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    branch: dumpling
+    clients:
+      client.0:
+        - rados/test-upgrade-firefly.sh

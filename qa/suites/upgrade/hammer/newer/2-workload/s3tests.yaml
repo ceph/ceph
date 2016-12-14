@@ -1,0 +1,9 @@
+workload:
+  sequential:
+  - rgw: [client.1]
+  - print: "**** done rgw: [client.1] 2-workload"
+  - s3tests:
+      client.1:
+        force-branch: hammer
+        rgw_server: client.1
+  - print: "**** done s3tests 2-workload off hammer branch"

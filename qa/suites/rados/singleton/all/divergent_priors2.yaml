@@ -1,0 +1,17 @@
+roles:
+- - mon.0
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+
+overrides:
+  ceph:
+    conf:
+      osd:
+        debug osd: 5
+
+tasks:
+- install:
+- ceph:
+- divergent_priors2:

@@ -1,0 +1,9 @@
+tasks:
+- rbd_fsx:
+    clients: [client.0]
+    ops: 2000
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd cache: true

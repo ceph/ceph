@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse_default_permissions: 0
+tasks:
+- ceph-fuse:
+- workunit:
+    timeout: 6h
+    clients:
+      all:
+        - kernel_untar_build.sh

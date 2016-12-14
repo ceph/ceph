@@ -1,0 +1,11 @@
+tasks:
+- exec:
+    client.0:
+      - ceph osd pool create cache 4
+      - ceph osd tier add rbd cache
+      - ceph osd tier cache-mode cache writeback
+      - ceph osd tier set-overlay rbd cache
+      - ceph osd pool set cache hit_set_type bloom
+      - ceph osd pool set cache hit_set_count 8
+      - ceph osd pool set cache hit_set_period 60
+      - ceph osd pool set cache target_max_objects 250

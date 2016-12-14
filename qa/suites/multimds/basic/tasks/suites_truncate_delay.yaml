@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        ms_inject_delay_probability: 1
+        ms_inject_delay_type: osd
+        ms_inject_delay_max: 5
+        client_oc_max_dirty_age: 1
+tasks:
+- exec:
+    client.0:
+      - dd if=/dev/zero of=./foo count=100
+      - sleep 2
+      - truncate --size 0 ./foo

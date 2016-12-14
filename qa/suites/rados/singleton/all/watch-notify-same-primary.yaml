@@ -1,0 +1,22 @@
+roles:
+- - mon.0
+  - mon.1
+  - mon.2
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+tasks:
+- install:
+- ceph:
+    config:
+      global:
+        osd pool default min size : 1
+      client:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+    log-whitelist:
+    - objects unfound and apparently lost
+- watch_notify_same_primary:
+    clients: [client.0]

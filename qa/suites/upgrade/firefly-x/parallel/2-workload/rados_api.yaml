@@ -1,0 +1,8 @@
+workload:
+  parallel:
+    - workunit:
+        branch: firefly
+        clients:
+          client.1:
+            - cls
+    - print: "**** done cls 2-workload"

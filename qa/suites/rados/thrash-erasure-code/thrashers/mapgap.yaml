@@ -1,0 +1,22 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon min osdmap epochs: 2
+      osd:
+        osd map cache size: 1
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - osd_map_cache_size
+- thrashosds:
+    timeout: 1800
+    chance_pgnum_grow: 1
+    chance_pgpnum_fix: 1
+    chance_test_map_discontinuity: 0.5
+    min_in: 4

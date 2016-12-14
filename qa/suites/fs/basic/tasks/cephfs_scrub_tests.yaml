@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds log max segments: 1
+        mds cache max size: 1000
+tasks:
+- ceph-fuse:
+- mds_scrub_checks:
+    mds_rank: 0
+    path: /scrub/test/path
+    client: 0
+    run_seq: 0
+- workunit:
+    clients:
+      client.0: [suites/pjd.sh]
+- mds_scrub_checks:
+    mds_rank: 0
+    path: /scrub/test/path
+    client: 0
+    run_seq: 1
