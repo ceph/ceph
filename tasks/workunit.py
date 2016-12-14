@@ -314,6 +314,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         args=[
             'git',
             'clone',
+            '--depth',
+            '1',
             git_url,
             clonedir,
             run.Raw(';'),
