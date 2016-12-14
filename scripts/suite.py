@@ -64,6 +64,7 @@ Standard arguments:
   --suite-relpath <suite_relpath>
                               Look for tasks and suite definitions in this
                               subdirectory of the suite repo.
+                              [default: qa]
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
   --suite-dir <suite_dir>     Use this alternative directory as-is when
