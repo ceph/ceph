@@ -1,0 +1,12 @@
+tasks:
+- install:
+- ceph:
+    conf:
+      mds:
+        debug mds: 20
+        debug ms: 1
+- kclient:
+- workunit:
+    clients:
+      all:
+        - fs/misc

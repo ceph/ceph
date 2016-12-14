@@ -1,0 +1,8 @@
+tasks:
+- workunit:
+    branch: cuttlefish
+    clients:
+      client.0:
+        - rados/test.sh
+        - cls
+

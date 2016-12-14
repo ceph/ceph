@@ -1,0 +1,7 @@
+tasks:
+- install:
+    tag: v0.80.9
+- ceph:
+- parallel:
+   - workload
+   - upgrade-sequence

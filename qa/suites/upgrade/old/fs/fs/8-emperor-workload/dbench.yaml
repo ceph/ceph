@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+     branch: emperor
+     clients:
+        all:
+           - suites/dbench.sh

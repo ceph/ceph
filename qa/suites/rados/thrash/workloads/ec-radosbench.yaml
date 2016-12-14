@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - shard.*missing
+tasks:
+- radosbench:
+    clients: [client.0]
+    time: 1800
+    unique_pool: true
+    ec_pool: true

@@ -1,0 +1,24 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - wrongly marked me down
+
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+  - client.0
+
+tasks:
+- install:
+- ceph:
+- rest-api: [client.0]
+- workunit:
+    clients:
+      client.0:
+         - rest/test.py
