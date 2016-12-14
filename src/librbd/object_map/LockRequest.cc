@@ -54,6 +54,10 @@ Context *LockRequest<I>::handle_lock(int *ret_val) {
 
   if (*ret_val == 0) {
     return m_on_finish;
+  } else if (*ret_val == -EEXIST) {
+    // already locked by myself
+    *ret_val = 0;
+    return m_on_finish;
   } else if (m_broke_lock || *ret_val != -EBUSY) {
     lderr(cct) << "failed to lock object map: " << cpp_strerror(*ret_val)
                << dendl;
