@@ -23,6 +23,7 @@
 #endif
 
 #include "common/debug.h"
+#include "common/EventTrace.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev

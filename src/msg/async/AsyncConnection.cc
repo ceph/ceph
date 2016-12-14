@@ -21,6 +21,10 @@
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
 
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "common/EventTrace.h"
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
 
@@ -324,6 +328,9 @@ void AsyncConnection::process()
 {
   ssize_t r = 0;
   int prev_state = state;
+#ifdef WITH_LTTNG
+  utime_t ltt_recv_stamp = ceph_clock_now();
+#endif
   bool need_dispatch_writer = false;
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
@@ -425,6 +432,9 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_HEADER:
         {
+#ifdef WITH_LTTNG
+          ltt_recv_stamp = ceph_clock_now();
+#endif
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
@@ -739,6 +749,18 @@ void AsyncConnection::process()
           }
 
           message->set_connection(this);
+
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+          if (message->get_type() == CEPH_MSG_OSD_OP || message->get_type() == CEPH_MSG_OSD_OPREPLY) {
+            utime_t ltt_processed_stamp = ceph_clock_now();
+            double usecs_elapsed = (ltt_processed_stamp.to_nsec()-ltt_recv_stamp.to_nsec())/1000;
+            ostringstream buf;
+            if (message->get_type() == CEPH_MSG_OSD_OP)
+              OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OP", false);
+            else
+              OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OPREPLY", false);
+          }
+#endif
 
           // note last received message.
           in_seq.set(message->get_seq());
@@ -1850,6 +1872,7 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
+  FUNCTRACE();
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddr() << " --> "
 		      << get_peer_addr() << " -- "
@@ -1863,6 +1886,11 @@ int AsyncConnection::send_message(Message *m)
 
   m->get_header().src = async_msgr->get_myname();
   m->set_connection(this);
+
+  if (m->get_type() == CEPH_MSG_OSD_OP)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_BEGIN", true);
+  else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_BEGIN", true);
 
   if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
@@ -2147,6 +2175,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
+  FUNCTRACE();
   assert(can_write == WriteStatus::CANWRITE);
   m->set_seq(out_seq.inc());
 
@@ -2242,6 +2271,10 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   } else {
     ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " continuely." << dendl;
   }
+  if (m->get_type() == CEPH_MSG_OSD_OP)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
+  else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
+    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
   m->put();
 
   return rc;
