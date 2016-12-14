@@ -33,11 +33,12 @@ class TestRun(object):
         )
         self.args = YamlConfig.from_dict(self.args_dict)
 
+    @patch('teuthology.suite.run.util.fetch_repos')
     @patch('teuthology.suite.run.util.git_ls_remote')
     @patch('teuthology.suite.run.Run.choose_ceph_version')
     @patch('teuthology.suite.run.util.git_validate_sha1')
     def test_email_addr(self, m_git_validate_sha1, m_choose_ceph_version,
-                        m_git_ls_remote):
+                        m_git_ls_remote, m_fetch_repos):
         # neuter choose_X_branch
         m_git_validate_sha1.return_value = self.args_dict['ceph_sha1']
         m_choose_ceph_version.return_value = self.args_dict['ceph_sha1']
