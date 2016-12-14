@@ -32,5 +32,18 @@ For example::
 
 See `ceph-fuse`_ for additional details.
 
+To automate mounting ceph-fuse, you may add an entry to the system fstab_.
+Additionally, ``ceph-fuse@.service`` and ``ceph-fuse.target`` systemd units are
+available. As usual, these unit files declare the default dependencies and
+recommended execution context for ``ceph-fuse``. An example ceph-fuse mount on
+``/mnt`` would be::
+
+	sudo systemctl start ceph-fuse@/mnt.service
+
+A persistent mount point can be setup via::
+
+	sudo systemctl enable ceph-fuse@/mnt.service
+
 .. _ceph-fuse: ../../man/8/ceph-fuse/
+.. _fstab: ./fstab
 .. _CEPHX Config Reference: ../../rados/configuration/auth-config-ref
