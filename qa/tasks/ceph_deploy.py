@@ -239,12 +239,12 @@ def build_ceph_cluster(ctx, config):
                         ceph_admin, conf_path, lines, sudo=True)
 
         # install ceph
-        ceph_sha = ctx.config['sha1']
-        devcommit = '--dev-commit={sha}'.format(sha=ceph_sha)
+        dev_branch = ctx.config['branch']
+        branch = '--dev={branch}'.format(branch=dev_branch)
         if ceph_branch:
             option = ceph_branch
         else:
-            option = devcommit
+            option = branch
         install_nodes = './ceph-deploy install ' + option + " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes)
         if estatus_install != 0:
