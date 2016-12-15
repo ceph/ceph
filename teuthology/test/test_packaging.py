@@ -684,6 +684,11 @@ class TestShamanProject(TestBuilderProject):
                 "&flavor=default&distros=ubuntu%2F14.04%2Fx86_64&sha1=sha1"
             )
 
+    @patch('teuthology.packaging.ShamanProject._get_package_sha1')
+    def test_init_from_config_tag_ref(self, m_get_package_sha1):
+        m_get_package_sha1.return_value = 'the_sha1'
+        super(TestShamanProject, self).test_init_from_config_tag_ref()
+
     def test_init_from_config_tag_overrides_branch_ref(self, caplog):
         with patch(
             'teuthology.packaging.repo_utils.ls_remote',
