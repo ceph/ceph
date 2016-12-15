@@ -359,7 +359,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ARGS="--cluster {0}"'.format(cluster)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
-                    run.Raw('PATH=$PATH:/usr/sbin')
+                    run.Raw('PATH=$PATH:/usr/sbin'),
+                    run.Raw('CEPH_BASE={dir}'.format(dir=clonedir)),
                 ]
                 if env is not None:
                     for var, val in env.iteritems():
