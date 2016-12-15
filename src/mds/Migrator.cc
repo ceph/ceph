@@ -958,7 +958,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     return;
   }
 
-  it->second.mut = std::make_shared<MutationImpl>();
+  it->second.mut = new MutationImpl();
   if (diri->is_auth())
     it->second.mut->auth_pin(diri);
   mds->locker->rdlock_take_set(rdlocks, it->second.mut);
@@ -2192,7 +2192,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   if (!mds->mdcache->is_readonly() &&
       dir->get_inode()->filelock.can_wrlock(-1) &&
       dir->get_inode()->nestlock.can_wrlock(-1)) {
-    it->second.mut = std::make_shared<MutationImpl>();
+    it->second.mut = new MutationImpl();
     // force some locks.  hacky.
     mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
     mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);

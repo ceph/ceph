@@ -173,6 +173,10 @@ void MutationImpl::cleanup()
   drop_pins();
 }
 
+void MutationImpl::_dump_op_descriptor_unlocked(ostream& stream) const
+{
+  stream << "Mutation";
+}
 
 // MDRequestImpl
 

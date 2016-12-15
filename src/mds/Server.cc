@@ -5365,7 +5365,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
   assert(mdr || mds->is_resolve());
 
-  auto mut(std::make_shared<MutationImpl>(rollback.reqid));
+  MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CInode *in = mdcache->get_inode(rollback.ino);
@@ -7618,7 +7618,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
   // need to finish this update before sending resolve to claim the subtree
   mdcache->add_rollback(rollback.reqid, master);
 
-  auto mut(std::make_shared<MutationImpl>(rollback.reqid));
+  MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CDentry *srcdn = NULL;
