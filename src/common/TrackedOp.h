@@ -130,6 +130,14 @@ public:
     boost::intrusive::list_member_hook<>,
     &TrackedOp::tracker_item> > tracked_op_list_t;
 
+  // for use when clearing lists.  e.g.,
+  //   ls.clear_and_dispose(TrackedOp::Putter());
+  struct Putter {
+    void operator()(TrackedOp *op) {
+      op->put();
+    }
+  };
+
 protected:
   OpTracker *tracker;          ///< the tracker we are associated with
   std::atomic_int nref = {0};  ///< ref count
@@ -169,6 +177,32 @@ protected:
 public:
   virtual ~TrackedOp() {}
 
+  void get() {
+    ++nref;
+  }
+  void put() {
+    if (--nref == 0) {
+      switch (state.load()) {
+      case STATE_UNTRACKED:
+	_unregistered();
+	delete this;
+	break;
+
+      case STATE_LIVE:
+	mark_event("done");
+	tracker->unregister_inflight_op(this);
+	break;
+
+      case STATE_HISTORY:
+	delete this;
+	break;
+
+      default:
+	ceph_abort();
+      }
+    }
+  }
+
   const utime_t& get_initiated() const {
     return initiated_at;
   }
@@ -197,30 +231,12 @@ public:
   // ref counting via intrusive_ptr, with special behavior on final
   // put for historical op tracking
   friend void intrusive_ptr_add_ref(TrackedOp *o) {
-    ++o->nref;
+    o->get();
   }
   friend void intrusive_ptr_release(TrackedOp *o) {
-    if (--o->nref == 0) {
-      switch (o->state.load()) {
-      case STATE_UNTRACKED:
-	o->_unregistered();
-	delete o;
-	break;
-
-      case STATE_LIVE:
-	o->mark_event("done");
-	o->tracker->unregister_inflight_op(o);
-	break;
-
-      case STATE_HISTORY:
-	delete o;
-	break;
-
-      default:
-	ceph_abort();
-      }
-    }
+    o->put();
   }
 };
+
 
 #endif
