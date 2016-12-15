@@ -3083,8 +3083,8 @@ int DataLogTrimPollCR::operate()
       // prevent other gateways from attempting to trim for the duration
       set_status("acquiring trim lock");
       yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
-                                          store->get_zone_params().log_pool,
-                                          lock_oid, "data_trim", lock_cookie,
+                                          rgw_raw_obj(store->get_zone_params().log_pool, lock_oid),
+                                          "data_trim", lock_cookie,
                                           interval.sec()));
       if (retcode < 0) {
         // if the lock is already held, go back to sleep and try again later
