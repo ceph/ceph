@@ -144,7 +144,36 @@ protected:
   std::atomic_int nref = {0};  ///< ref count
 
   utime_t initiated_at;
-  list<pair<utime_t, string> > events; /// list of events and their times
+
+  struct Event {
+    utime_t stamp;
+    string str;
+    const char *cstr = nullptr;
+
+    Event(utime_t t, const string& s) : stamp(t), str(s) {}
+    Event(utime_t t, const char *s) : stamp(t), cstr(s) {}
+
+    int compare(const char *s) const {
+      if (cstr)
+	return strcmp(cstr, s);
+      else
+	return str.compare(s);
+    }
+
+    const char *c_str() const {
+      if (cstr)
+	return cstr;
+      else
+	return str.c_str();
+    }
+
+    void dump(Formatter *f) const {
+      f->dump_stream("time") << stamp;
+      f->dump_string("event", c_str());
+    }
+  };
+
+  list<Event> events; /// list of events and their times
   mutable Mutex lock; /// to protect the events list
   string current; /// the current state the event is in
   uint64_t seq; /// a unique value set by the OpTracker
@@ -210,21 +239,25 @@ public:
 
   double get_duration() const {
     Mutex::Locker l(lock);
-    if (!events.empty() && events.rbegin()->second.compare("done") == 0)
-      return events.rbegin()->first - get_initiated();
+    if (!events.empty() && events.rbegin()->compare("done") == 0)
+      return events.rbegin()->stamp - get_initiated();
     else
       return ceph_clock_now() - get_initiated();
   }
 
   void mark_event(const string &event);
+  void mark_event(const char *event);
+
   virtual const char *state_string() const {
     Mutex::Locker l(lock);
-    return events.rbegin()->second.c_str();
+    return events.rbegin()->c_str();
   }
+
   void dump(utime_t now, Formatter *f) const;
+
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {
-      events.push_back(make_pair(initiated_at, "initiated"));
+      events.push_back(Event(initiated_at, "initiated"));
       state = STATE_LIVE;
     }
   }

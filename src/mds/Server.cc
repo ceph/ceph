@@ -1022,7 +1022,7 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestR
   if (mdr) {
     string event_str("submit entry: ");
     event_str += event;
-    mdr->mark_event(event_str);
+    mdr->mark_event_string(event_str);
   } 
   mdlog->submit_entry(le, fin);
 }
