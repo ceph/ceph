@@ -3291,7 +3291,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     });
   ctx->register_on_commit(
     [m, ctx, this](){
-      if (ctx->op)
+      if (ctx->op && !ctx->ignore_log_op_stats)
 	log_op_stats(
 	  ctx);
 
