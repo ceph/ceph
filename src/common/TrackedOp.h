@@ -115,7 +115,7 @@ public:
 };
 
 
-class TrackedOp {
+class TrackedOp : public boost::intrusive::list_base_hook<> {
 private:
   friend class OpHistory;
   friend class OpTracker;
