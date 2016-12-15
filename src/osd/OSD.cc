@@ -7172,6 +7172,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	start_waiting_for_healthy();
 
 	set<int> avoid_ports;
+#if defined(__FreeBSD__)
+        // prevent FreeBSD from grabbing the client_messenger port during
+        // rebinding. In which case a cluster_meesneger will connect also 
+	// to the same port
+	avoid_ports.insert(client_messenger->get_myaddr().get_port());
+#endif
 	avoid_ports.insert(cluster_messenger->get_myaddr().get_port());
 	avoid_ports.insert(hb_back_server_messenger->get_myaddr().get_port());
 	avoid_ports.insert(hb_front_server_messenger->get_myaddr().get_port());
