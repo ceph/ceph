@@ -137,8 +137,8 @@ struct bluestore_pextent_t : public AllocExtent{
   }
 
   DENC(bluestore_pextent_t, v, p) {
-    denc(v.offset, p);
-    denc(v.length, p);
+    denc_lba(v.offset, p);
+    denc_varint_lowz(v.length, p);
   }
 
   void dump(Formatter *f) const;
@@ -297,8 +297,8 @@ struct bluestore_blob_t {
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   DENC_HELPERS;
-  void bound_encode(size_t& p) const {
-    p += 2 + 4;
+  void bound_encode(size_t& p, uint64_t struct_v) const {
+    assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
     denc_varint(sbid, p);
@@ -306,11 +306,13 @@ struct bluestore_blob_t {
     denc_varint_lowz(compressed_length, p);
     denc(csum_type, p);
     denc(csum_chunk_order, p);
-    denc(csum_data, p);
+    denc_varint(csum_data.length(), p);
+    p += csum_data.length();
     p += sizeof(unsigned long long);
   }
-  void encode(bufferlist::contiguous_appender& p) const {
-    DENC_START(1, 1, p);
+
+  void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
+    assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_shared()) {
@@ -323,15 +325,17 @@ struct bluestore_blob_t {
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
-      denc(csum_data, p);
+      denc_varint(csum_data.length(), p);
+      memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
+	     csum_data.length());
     }
     if (has_unused()) {
       denc(unused_uint_t(unused.to_ullong()), p);
     }
-    DENC_FINISH(p);
   }
-  void decode(bufferptr::iterator& p) {
-    DENC_START(1, 1, p);
+
+  void decode(bufferptr::iterator& p, uint64_t struct_v) {
+    assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_shared()) {
@@ -344,14 +348,15 @@ struct bluestore_blob_t {
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
-      denc(csum_data, p);
+      int len;
+      denc_varint(len, p);
+      csum_data = p.get_ptr(len);
     }
     if (has_unused()) {
       unused_uint_t val;
       denc(val, p);
       unused = unused_t(val);
     }
-    DENC_FINISH(p);
   }
 
   bool can_split() const {
@@ -636,7 +641,7 @@ struct bluestore_blob_t {
     }
   }
 };
-WRITE_CLASS_DENC(bluestore_blob_t)
+WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
@@ -678,9 +683,9 @@ struct bluestore_onode_t {
     uint32_t bytes = 0;   ///< encoded bytes
     uint32_t extents = 0; ///< extents
     DENC(shard_info, v, p) {
-      denc(v.offset, p);
-      denc(v.bytes, p);
-      denc(v.extents, p);
+      denc_varint(v.offset, p);
+      denc_varint(v.bytes, p);
+      denc_varint(v.extents, p);
     }
     void dump(Formatter *f) const;
   };
@@ -724,14 +729,14 @@ struct bluestore_onode_t {
 
   DENC(bluestore_onode_t, v, p) {
     DENC_START(1, 1, p);
-    denc(v.nid, p);
-    denc(v.size, p);
+    denc_varint(v.nid, p);
+    denc_varint(v.size, p);
     denc(v.attrs, p);
     denc(v.flags, p);
     denc(v.extent_map_shards, p);
-    denc(v.expected_object_size, p);
-    denc(v.expected_write_size, p);
-    denc(v.alloc_hint_flags, p);
+    denc_varint(v.expected_object_size, p);
+    denc_varint(v.expected_write_size, p);
+    denc_varint(v.alloc_hint_flags, p);
     DENC_FINISH(p);
   }
   void dump(Formatter *f) const;
