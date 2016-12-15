@@ -178,7 +178,7 @@ public:
     return (con && con->get_peer_type() & CEPH_ENTITY_TYPE_MON);
   }
 
-  typedef ceph::shared_ptr<MonOpRequest> Ref;
+  typedef boost::intrusive_ptr<MonOpRequest> Ref;
 
   void set_op_type(op_type_t t) {
     op_type = t;

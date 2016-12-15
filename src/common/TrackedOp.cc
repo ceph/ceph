@@ -182,7 +182,7 @@ bool OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 void OpTracker::unregister_inflight_op(TrackedOp *i)
 {
   // caller checks;
-  assert(i->is_tracked);
+  assert(i->state);
 
   uint32_t shard_index = i->seq % num_optracker_shards;
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
@@ -198,6 +198,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   if (!tracking_enabled)
     delete i;
   else {
+    i->state = TrackedOp::STATE_HISTORY;
     utime_t now = ceph_clock_now();
     history.insert(now, TrackedOpRef(i));
   }
@@ -315,7 +316,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 
 void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 {
-  if (!op->is_tracked)
+  if (!op->state)
     return;
   return _mark_event(op, dest, time);
 }
@@ -332,20 +333,9 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
      
 }
 
-void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
-  if (!op->is_tracked) {
-    op->_unregistered();
-    delete op;
-    return;
-  }
-  op->mark_event("done");
-  tracker->unregister_inflight_op(op);
-  // Do not delete op, unregister_inflight_op took control
-}
-
 void TrackedOp::mark_event(const string &event)
 {
-  if (!is_tracked)
+  if (!state)
     return;
 
   utime_t now = ceph_clock_now();
@@ -360,7 +350,7 @@ void TrackedOp::mark_event(const string &event)
 void TrackedOp::dump(utime_t now, Formatter *f) const
 {
   // Ignore if still in the constructor
-  if (!is_tracked)
+  if (!state)
     return;
   stringstream name;
   _dump_op_descriptor_unlocked(name);

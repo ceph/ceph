@@ -16,6 +16,7 @@
 #define CEPH_MDS_SERVER_H
 
 #include "MDSRank.h"
+#include "Mutation.h"
 
 class OSDMap;
 class PerfCounters;
@@ -27,11 +28,6 @@ struct SnapInfo;
 class MClientRequest;
 class MClientReply;
 class MDLog;
-
-struct MutationImpl;
-struct MDRequestImpl;
-typedef ceph::shared_ptr<MutationImpl> MutationRef;
-typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdss_first = 1000,
