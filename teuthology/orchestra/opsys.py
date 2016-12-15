@@ -1,4 +1,3 @@
-import ast
 import re
 
 DISTRO_CODENAME_MAP = {
@@ -77,37 +76,6 @@ class OS(object):
             name,
             codename,
         ))
-
-    @classmethod
-    def from_python(cls, python_val):
-        """
-        Parse output from platform.linux_distribution() and populate attributes
-
-        Given a tuple or str()'ed tuple like this:
-            ('Ubuntu', '14.04', 'trusty')
-
-        Attributes will be:
-            name = 'ubuntu'
-            version = '14.04'
-            codename = 'trusty'
-        Additionally, we set the package type:
-            package_type = 'deb'
-        """
-        if not isinstance(python_val, tuple):
-            python_val = ast.literal_eval(python_val)
-
-        (name, version, codename) = python_val
-        name = name.lower().replace(' ', '')
-        if name.startswith('redhat'):
-            name = 'rhel'
-        elif name.startswith('centos'):
-            name = 'centos'
-        elif name.startswith('fedora'):
-            name = 'fedora'
-        elif name.startswith('opensuse'):
-            name = 'opensuse'
-        obj = cls(name=name, version=version, codename=codename.lower())
-        return obj
 
     @classmethod
     def from_lsb_release(cls, lsb_release_str):
