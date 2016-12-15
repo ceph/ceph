@@ -3212,13 +3212,14 @@ more:
     last = extent++;
   }
   const bool is_last = last->fe_flags & FIEMAP_EXTENT_LAST;
-  free(fiemap);
   if (!is_last) {
     uint64_t xoffset = last->fe_logical + last->fe_length - offset;
     offset = last->fe_logical + last->fe_length;
     len -= xoffset;
+    free(fiemap);
     goto more;
   }
+  free(fiemap);
 
   return r;
 }
