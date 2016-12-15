@@ -206,7 +206,7 @@ private:
 
   int _touch(const coll_t& cid, const ghobject_t& oid);
   int _write(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
-	      const bufferlist& bl, uint32_t fadvsie_flags = 0);
+	      const bufferlist& bl, uint32_t fadvise_flags = 0);
   int _zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _remove(const coll_t& cid, const ghobject_t& oid);
