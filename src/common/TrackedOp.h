@@ -15,14 +15,15 @@
 #define TRACKEDREQUEST_H_
 #include <sstream>
 #include <stdint.h>
-#include <include/utime.h>
+#include <boost/intrusive/list.hpp>
+#include <atomic>
+
+#include "include/utime.h"
 #include "common/Mutex.h"
 #include "common/histogram.h"
-#include "include/xlist.h"
 #include "msg/Message.h"
 #include "include/memory.h"
 #include "common/RWLock.h"
-#include <atomic>
 
 class TrackedOp;
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
@@ -82,7 +83,7 @@ public:
   }
   bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
   bool dump_historic_ops(Formatter *f);
-  bool register_inflight_op(xlist<TrackedOp*>::item *i);
+  bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
@@ -113,11 +114,22 @@ public:
   }
 };
 
+
 class TrackedOp {
 private:
   friend class OpHistory;
   friend class OpTracker;
-  xlist<TrackedOp*>::item xitem;
+
+  boost::intrusive::list_member_hook<> tracker_item;
+
+public:
+  typedef boost::intrusive::list<
+  TrackedOp,
+  boost::intrusive::member_hook<
+    TrackedOp,
+    boost::intrusive::list_member_hook<>,
+    &TrackedOp::tracker_item> > tracked_op_list_t;
+
 protected:
   OpTracker *tracker;          ///< the tracker we are associated with
   std::atomic_int nref = {0};  ///< ref count
@@ -138,7 +150,6 @@ protected:
   atomic<int> state = {STATE_UNTRACKED};
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
-    xitem(this),
     tracker(_tracker),
     initiated_at(initiated),
     lock("TrackedOp::lock"),
@@ -177,7 +188,7 @@ public:
   }
   void dump(utime_t now, Formatter *f) const;
   void tracking_start() {
-    if (tracker->register_inflight_op(&xitem)) {
+    if (tracker->register_inflight_op(this)) {
       events.push_back(make_pair(initiated_at, "initiated"));
       state = STATE_LIVE;
     }

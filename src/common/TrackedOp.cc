@@ -90,7 +90,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
 
 struct ShardedTrackingData {
   Mutex ops_in_flight_lock_sharded;
-  xlist<TrackedOp *> ops_in_flight_sharded;
+  TrackedOp::tracked_op_list_t ops_in_flight_sharded;
   explicit ShardedTrackingData(string lock_name):
       ops_in_flight_lock_sharded(lock_name.c_str()) {}
 };
@@ -142,11 +142,11 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     assert(NULL != sdata); 
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
-    for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
-      if (print_only_blocked && (now - (*p)->get_initiated() <= complaint_time))
+    for (auto& op : sdata->ops_in_flight_sharded) {
+      if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
 	break;
       f->open_object_section("op");
-      (*p)->dump(now, f);
+      op.dump(now, f);
       f->close_section(); // this TrackedOp
       total_ops_in_flight++;
     }
@@ -161,7 +161,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
   return true;
 }
 
-bool OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
+bool OpTracker::register_inflight_op(TrackedOp *i)
 {
   RWLock::RLocker l(lock);
   if (!tracking_enabled)
@@ -173,8 +173,8 @@ bool OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
   assert(NULL != sdata);
   {
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
-    sdata->ops_in_flight_sharded.push_back(i);
-    sdata->ops_in_flight_sharded.back()->seq = current_seq;
+    sdata->ops_in_flight_sharded.push_back(*i);
+    i->seq = current_seq;
   }
   return true;
 }
@@ -189,8 +189,8 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   assert(NULL != sdata);
   {
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
-    assert(i->xitem.get_list() == &sdata->ops_in_flight_sharded);
-    i->xitem.remove_myself();
+    auto p = sdata->ops_in_flight_sharded.iterator_to(*i);
+    sdata->ops_in_flight_sharded.erase(p);
   }
   i->_unregistered();
 
@@ -221,7 +221,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     if (!sdata->ops_in_flight_sharded.empty()) {
-      utime_t oldest_op_tmp = sdata->ops_in_flight_sharded.front()->get_initiated();
+      utime_t oldest_op_tmp =
+	sdata->ops_in_flight_sharded.front().get_initiated();
       if (oldest_op_tmp < oldest_op) {
         oldest_op = oldest_op_tmp;
       }
@@ -257,27 +258,29 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     if (sdata->ops_in_flight_sharded.empty())
       continue;
-    xlist<TrackedOp*>::iterator i = sdata->ops_in_flight_sharded.begin();    
-    while (!i.end() && (*i)->get_initiated() < too_old) {
+    auto i = sdata->ops_in_flight_sharded.begin();
+    while (i != sdata->ops_in_flight_sharded.end() &&
+	   i->get_initiated() < too_old) {
       (*slow)++;
 
       // exponential backoff of warning intervals
       if (warned < log_threshold &&
-         ((*i)->get_initiated() + (complaint_time * (*i)->warn_interval_multiplier)) < now) {
+	  (i->get_initiated() + (complaint_time *
+				 i->warn_interval_multiplier)) < now) {
         // will warn, increase counter
         warned++;
 
-        utime_t age = now - (*i)->get_initiated();
+        utime_t age = now - i->get_initiated();
         stringstream ss;
         ss << "slow request " << age << " seconds old, received at "
-           << (*i)->get_initiated() << ": ";
-        (*i)->_dump_op_descriptor_unlocked(ss);
+           << i->get_initiated() << ": ";
+        i->_dump_op_descriptor_unlocked(ss);
         ss << " currently "
-	   << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
+	   << (i->current.size() ? i->current : i->state_string());
         warning_vector.push_back(ss.str());
 
         // only those that have been shown will backoff
-        (*i)->warn_interval_multiplier *= 2;
+        i->warn_interval_multiplier *= 2;
       }
       ++i;
     }
@@ -305,9 +308,8 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
 
-    for (xlist<TrackedOp*>::iterator i = sdata->ops_in_flight_sharded.begin();
-                                                               !i.end(); ++i) {
-      utime_t age = now - (*i)->get_initiated();
+    for (auto& i : sdata->ops_in_flight_sharded) {
+      utime_t age = now - i.get_initiated();
       uint32_t ms = (long)(age * 1000.0);
       h->add(ms);
     }
