@@ -2248,7 +2248,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   }
   ret = sync_filesystem(basedir_fd);
   if (ret < 0) {
-    derr << __func__ << " : sync_filesytem error " << cpp_strerror(ret) << dendl;
+    derr << __func__ << " : sync_filesystem error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
   }
 
