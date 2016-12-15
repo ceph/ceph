@@ -128,7 +128,7 @@ void append_stripes(list<rgw_obj> *objs, RGWObjManifest& manifest, uint64_t obj_
 }
 
 static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size, uint64_t stripe_size,
-                    RGWObjManifest *manifest, rgw_bucket *bucket, rgw_obj *head, RGWObjManifest::generator *gen,
+                    RGWObjManifest *manifest, const string& placement_id, rgw_bucket *bucket, rgw_obj *head, RGWObjManifest::generator *gen,
                     list<rgw_obj> *test_objs)
 {
   manifest->set_trivial_rule(head_max_size, stripe_size);
@@ -136,7 +136,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
   test_rgw_init_bucket(bucket, "buck");
 
   *head = rgw_obj(*bucket, "oid");
-  gen->create_begin(g_ceph_context, manifest, *bucket, *head);
+  gen->create_begin(g_ceph_context, manifest, placement_id, *bucket, *head);
 
   append_head(test_objs, *head);
   cout << "test_objs.size()=" << test_objs->size() << std::endl;
@@ -153,9 +153,8 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
 
   while (ofs < obj_size) {
     rgw_raw_obj obj = gen->get_cur_obj(env.zonegroup, env.zone_params);
-cout << "obj=" << obj << std::endl;
-    rgw_raw_obj test_raw;
-    rgw_obj_to_raw(env.zonegroup, env.zone_params, *iter, &test_raw);
+    cout << "obj=" << obj << std::endl;
+    rgw_raw_obj test_raw = rgw_obj_select(*iter).get_raw_obj(env.zonegroup, env.zone_params);
     ASSERT_TRUE(obj == test_raw);
 
     ofs = MIN(ofs + gen->cur_stripe_max_size(), obj_size);
@@ -169,8 +168,7 @@ cout << "obj=" << obj << std::endl;
 
   if (manifest->has_tail()) {
     rgw_raw_obj obj = gen->get_cur_obj(env.zonegroup, env.zone_params);
-    rgw_raw_obj test_raw;
-    rgw_obj_to_raw(env.zonegroup, env.zone_params, *iter, &test_raw);
+    rgw_raw_obj test_raw = rgw_obj_select(*iter).get_raw_obj(env.zonegroup, env.zone_params);
     ASSERT_TRUE(obj == test_raw);
     ++iter;
   }
@@ -227,7 +225,7 @@ TEST(TestRGWManifest, head_only_obj) {
 
   list<rgw_obj> objs;
 
-  gen_obj(env, obj_size, 512 * 1024, 4 * 1024 * 1024, &manifest, &bucket, &head, &gen, &objs);
+  gen_obj(env, obj_size, 512 * 1024, 4 * 1024 * 1024, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs);
 
   cout <<  " manifest.get_obj_size()=" << manifest.get_obj_size() << std::endl;
   cout <<  " manifest.get_head_size()=" << manifest.get_head_size() << std::endl;
@@ -263,7 +261,7 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
   int stripe_size = 4 * 1024 * 1024;
   int head_size = 512 * 1024;
 
-  gen_obj(env, obj_size, head_size, stripe_size, &manifest, &bucket, &head, &gen, &objs);
+  gen_obj(env, obj_size, head_size, stripe_size, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs);
 
   list<rgw_obj>::iterator liter;
 
@@ -315,7 +313,7 @@ TEST(TestRGWManifest, multipart) {
     rgw_obj head;
     for (ofs = 0; ofs < part_size; ofs += stripe_size) {
       if (ofs == 0) {
-        int r = gen.create_begin(g_ceph_context, &manifest, bucket, head);
+        int r = gen.create_begin(g_ceph_context, &manifest, env.zonegroup.default_placement, bucket, head);
         ASSERT_EQ(r, 0);
         continue;
       }
@@ -398,8 +396,7 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  vector<const char*> def_args;
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

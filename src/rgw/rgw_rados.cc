@@ -11401,8 +11401,7 @@ int RGWRados::omap_get_all(rgw_raw_obj& obj, bufferlist& header,
 			   std::map<string, bufferlist>& m)
 {
   rgw_rados_ref ref;
-  rgw_bucket bucket;
-  int r = get_obj_ref(obj, &ref, &bucket);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }

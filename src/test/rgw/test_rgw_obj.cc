@@ -35,38 +35,34 @@ using namespace std;
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)
 {
   /* parse_raw_oid() */
-  string parsed_name, parsed_ns, parsed_instance;
-  ASSERT_EQ(true, rgw_obj::parse_raw_oid(obj.get_object(), &parsed_name, &parsed_instance, &parsed_ns));
+  rgw_obj_key parsed_key;
+  ASSERT_EQ(true, rgw_obj_key::parse_raw_oid(obj.get_oid(), &parsed_key));
 
-  cout << "parsed: " << parsed_name << " ns=" << parsed_ns << " i=" << parsed_instance << std::endl;
+  cout << "parsed: " << parsed_key << std::endl;
 
-  ASSERT_EQ(name, parsed_name);
-  ASSERT_EQ(ns, parsed_ns);
-  ASSERT_EQ(instance, parsed_instance);
+  ASSERT_EQ(name, parsed_key.name);
+  ASSERT_EQ(ns, parsed_key.ns);
+  ASSERT_EQ(instance, parsed_key.instance);
 
   /* translate_raw_obj_to_obj_in_ns() */
-  string tname = obj.get_object();
+  rgw_obj_key tkey = parsed_key;
   string tns = ns + "foo";
-  string tinstance;
-  ASSERT_EQ(0, rgw_obj::translate_raw_obj_to_obj_in_ns(tname, tinstance, tns));
-  ASSERT_EQ(name, tname);
-  ASSERT_EQ(instance, tinstance);
+  ASSERT_EQ(0, rgw_obj_key::oid_to_key_in_ns(obj.get_oid(), &tkey, tns));
 
-  tname = obj.get_object();
+  tkey = rgw_obj_key();
   tns = ns;
-  ASSERT_EQ(true, rgw_obj::translate_raw_obj_to_obj_in_ns(tname, tinstance, tns));
+  ASSERT_EQ(true, rgw_obj_key::oid_to_key_in_ns(obj.get_oid(), &tkey, tns));
 
-  cout << "parsed: " << parsed_name << " ns=" << parsed_ns << " i=" << parsed_instance << std::endl;
+  cout << "parsed: " << tkey << std::endl;
 
-  ASSERT_EQ(name, tname);
-  ASSERT_EQ(instance, tinstance);
+  ASSERT_EQ(obj.key, tkey);
 
   /* strip_namespace_from_object() */
 
-  string strip_name = obj.get_object();
+  string strip_name = obj.get_oid();
   string strip_ns, strip_instance;
 
-  ASSERT_EQ(true, rgw_obj::strip_namespace_from_object(strip_name, strip_ns, strip_instance));
+  ASSERT_EQ(true, rgw_obj_key::strip_namespace_from_name(strip_name, strip_ns, strip_instance));
 
   cout << "stripped: " << strip_name << " ns=" << strip_ns << " i=" << strip_instance << std::endl;
 
@@ -87,10 +83,10 @@ void test_obj(const string& name, const string& ns, const string& instance)
   rgw_obj obj1(o);
 
   if (!instance.empty()) {
-    obj1.set_instance(instance);
+    obj1.key.instance = instance;
   }
   if (!ns.empty()) {
-    obj1.set_ns(ns);
+    obj1.key.ns = ns;
   }
   
   check_parsed_correctly(obj1, name, ns, instance);
@@ -112,10 +108,10 @@ void test_obj(const string& name, const string& ns, const string& instance)
   encode_json("obj3", obj3, formatter);
 
   if (!instance.empty()) {
-    obj3.set_instance(instance);
+    obj3.key.instance = instance;
   }
   if (!ns.empty()) {
-    obj3.set_ns(ns);
+    obj3.key.ns = ns;
   }
   check_parsed_correctly(obj3, name, ns, instance);
 
@@ -130,8 +126,8 @@ void test_obj(const string& name, const string& ns, const string& instance)
 
 
   /* rgw_obj_key conversion */
-  rgw_obj_key k;
-  obj1.get_index_key(&k);
+  rgw_obj_index_key k;
+  obj1.key.get_index_key(&k);
 
   rgw_obj new_obj(b, k);
 
@@ -169,12 +165,11 @@ static void test_obj_to_raw(test_rgw_env& env, const rgw_bucket& b,
 {
   JSONFormatter f(true);
   dump(f, "bucket", b);
-  rgw_obj obj = test_rgw_create_obj(b, name, instance, ns, placement_id);
+  rgw_obj obj = test_rgw_create_obj(b, name, instance, ns);
   dump(f, "obj", obj);
 
-  rgw_raw_obj raw_obj;
-
-  rgw_obj_to_raw(env.zonegroup, env.zone_params, obj, &raw_obj);
+  rgw_obj_select s(obj);
+  rgw_raw_obj raw_obj = s.get_raw_obj(env.zonegroup, env.zone_params);
   dump(f, "raw_obj", raw_obj);
 
   if (!placement_id.empty()) {
@@ -262,11 +257,22 @@ TEST(TestRGWObj, old_to_raw) {
           bufferlist::iterator iter = bl.begin();
           ::decode(new_obj2, iter);
 
+          /*
+            can't decode raw obj here, because we didn't encode an old versioned
+            object
+           */
+
+          bl.clear();
+          ::encode(raw_obj, bl);
           iter = bl.begin();
           ::decode(raw_obj2, iter);
         } catch (buffer::error& err) {
           ASSERT_TRUE(false);
         }
+
+        dump(f, "raw_obj2", raw_obj2);
+        dump(f, "new_obj2", new_obj2);
+        cout << "raw2=" << raw_obj2 << std::endl;
 
         ASSERT_EQ(new_obj, new_obj2);
         ASSERT_EQ(raw_obj, raw_obj2);
