@@ -301,7 +301,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
   } else if (profile.find("k") == profile.end() ||
 	     profile.find("m") == profile.end() ||
 	     profile.find("c") == profile.end()){
-    dout(10) << "(k, m, c) must be choosed" << dendl;
+    dout(10) << "(k, m, c) must be chosen" << dendl;
     err = -EINVAL;
   } else {
     std::string err_k, err_m, err_c, value_k, value_m, value_c;

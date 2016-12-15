@@ -788,8 +788,8 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     if (buffer_num) {
       uint64_t buffer_avg_size = buffer_bytes / buffer_num;
       assert(buffer_avg_size);
-      uint64_t caculated_buffer_num = buffer_max / buffer_avg_size;
-      kout = caculated_buffer_num * g_conf->bluestore_2q_cache_kout_ratio;
+      uint64_t calculated_buffer_num = buffer_max / buffer_avg_size;
+      kout = calculated_buffer_num * g_conf->bluestore_2q_cache_kout_ratio;
     }
 
     if (buffer_list_bytes[BUFFER_HOT] < khot) {
