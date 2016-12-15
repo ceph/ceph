@@ -3358,6 +3358,7 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
   latency -= m->get_recv_stamp();
   utime_t process_latency = now;
   process_latency -= op->get_dequeued_time();
+  utime_t enqueue_latency = op->get_enqueue_time() - m->get_recv_stamp();
 
   utime_t rlatency;
   if (ctx->readable_stamp != utime_t()) {
@@ -3374,6 +3375,7 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
   osd->logger->inc(l_osd_op_inb, inb);
   osd->logger->tinc(l_osd_op_lat, latency);
   osd->logger->tinc(l_osd_op_process_lat, process_latency);
+  osd->logger->tinc(l_osd_op_enqueue_lat, enqueue_latency);
 
   if (op->may_read() && op->may_write()) {
     osd->logger->inc(l_osd_op_rw);
@@ -3381,6 +3383,7 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_rw_outb, outb);
     osd->logger->tinc(l_osd_op_rw_lat, latency);
     osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
+    osd->logger->tinc(l_osd_op_rw_enqueue_lat, enqueue_latency);
     if (rlatency != utime_t())
       osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
   } else if (op->may_read()) {
@@ -3388,11 +3391,14 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->tinc(l_osd_op_r_lat, latency);
     osd->logger->tinc(l_osd_op_r_process_lat, process_latency);
+    osd->logger->tinc(l_osd_op_r_enqueue_lat, enqueue_latency);
+  osd->logger->tinc(l_osd_op_enqueue_lat, enqueue_latency);
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
     osd->logger->tinc(l_osd_op_w_lat, latency);
     osd->logger->tinc(l_osd_op_w_process_lat, process_latency);
+    osd->logger->tinc(l_osd_op_w_enqueue_lat, enqueue_latency);
     if (rlatency != utime_t())
       osd->logger->tinc(l_osd_op_w_rlat, rlatency);
   } else
@@ -3401,6 +3407,7 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
   dout(15) << "log_op_stats " << *m
 	   << " inb " << inb
 	   << " outb " << outb
+	   << " enqueuelat " << enqueue_latency
 	   << " rlat " << rlatency
 	   << " lat " << latency << dendl;
 }
