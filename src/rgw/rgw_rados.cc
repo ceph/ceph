@@ -11102,7 +11102,7 @@ int RGWRados::convert_old_bucket_info(RGWObjectCtx& obj_ctx,
 
   int ret = get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, entry_point, &ot, &ep_mtime, &attrs);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: get_bucket_entrypont_info() returned " << ret << " bucket=" << bucket_name << dendl;
+    ldout(cct, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket_name << dendl;
     return ret;
   }
 
