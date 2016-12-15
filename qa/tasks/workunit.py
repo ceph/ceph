@@ -305,8 +305,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         scratch_tmp = os.path.join(mnt, 'client.{id}'.format(id=id_), 'tmp')
     else:
         scratch_tmp = os.path.join(mnt, subdir)
-    srcdir = '{tdir}/workunit.{role}'.format(tdir=testdir, role=role)
     clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
+    srcdir = '{cdir}/qa/workunits'.format(cdir=clonedir)
 
     git_url = teuth_config.get_ceph_git_url()
     remote.run(
@@ -320,8 +320,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             'cd', '--', clonedir,
             run.Raw('&&'),
             'git', 'checkout', refspec,
-            run.Raw('&&'),
-            'mv', 'qa/workunits', srcdir,
         ],
     )
 
@@ -394,6 +392,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(
             logger=log.getChild(role),
             args=[
-                'rm', '-rf', '--', workunits_file, srcdir, clonedir,
+                'rm', '-rf', '--', workunits_file, clonedir,
             ],
         )
