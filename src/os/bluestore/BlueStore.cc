@@ -1790,8 +1790,11 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
   auto start = extent_map.lower_bound(dummy);
   uint32_t end = offset + length;
 
+  __u8 struct_v = 1;
+
   unsigned n = 0;
   size_t bound = 0;
+  denc(struct_v, bound);
   denc_varint(0, bound);
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
@@ -1807,11 +1810,12 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
     denc_varint(0, bound); // logical_offset
     denc_varint(0, bound); // len
     denc_varint(0, bound); // blob_offset
-    p->blob->bound_encode(bound, false);
+    p->blob->bound_encode(bound, struct_v, false);
   }
 
   {
     auto app = bl.get_contiguous_appender(bound);
+    denc(struct_v, app);
     denc_varint(n, app);
     if (pn) {
       *pn = n;
@@ -1858,7 +1862,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       }
       pos = p->logical_end();
       if (include_blob) {
-	p->blob->encode(app, false);
+	p->blob->encode(app, struct_v, false);
       }
     }
   }
@@ -1880,6 +1884,9 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 
   assert(bl.get_num_buffers() <= 1);
   auto p = bl.front().begin_deep();
+  __u8 struct_v;
+  denc(struct_v, p);
+  assert(struct_v == 1);
   uint32_t num;
   denc_varint(num, p);
   vector<BlobRef> blobs(num);
@@ -1915,7 +1922,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 	assert(le->blob);
       } else {
 	Blob *b = new Blob();
-	b->decode(p, false);
+	b->decode(p, struct_v, false);
 	blobs[n] = b;
 	onode->c->open_shared_blob(b);
 	le->assign_blob(b);
@@ -1933,22 +1940,26 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 
 void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
 {
+  __u8 struct_v = 1;
+  denc(struct_v, p);
   denc_varint((uint32_t)0, p);
   size_t key_size = 0;
   denc_varint((uint32_t)0, key_size);
   p += spanning_blob_map.size() * key_size;
   for (const auto& i : spanning_blob_map) {
-    i.second->bound_encode(p, true);
+    i.second->bound_encode(p, struct_v, true);
   }
 }
 
 void BlueStore::ExtentMap::encode_spanning_blobs(
   bufferlist::contiguous_appender& p)
 {
+  __u8 struct_v = 1;
+  denc(struct_v, p);
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
     denc_varint(i.second->id, p);
-    i.second->encode(p, true);
+    i.second->encode(p, struct_v, true);
   }
 }
 
@@ -1956,13 +1967,16 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   Collection *c,
   bufferptr::iterator& p)
 {
+  __u8 struct_v;
+  denc(struct_v, p);
+  assert(struct_v == 1);
   unsigned n;
   denc_varint(n, p);
   while (n--) {
     BlobRef b(new Blob());
     denc_varint(b->id, p);
     spanning_blob_map[b->id] = b;
-    b->decode(p, true);
+    b->decode(p, struct_v, true);
     c->open_shared_blob(b);
   }
 }
