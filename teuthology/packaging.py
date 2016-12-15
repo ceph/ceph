@@ -889,17 +889,35 @@ class ShamanProject(GitbuilderProject):
         """
         Shaman doesn't know about tags. Use git ls-remote to query the remote
         repo in order to map tags to their sha1 value.
+
+        This method will also retry against ceph.git if the original request
+        uses ceph-ci.git and fails.
         """
+        def get_sha1(url):
+            # Ceph (and other projects) uses annotated tags for releases. This
+            # has the side-effect of making git ls-remote return the sha1 for
+            # the annotated tag object and not the last "real" commit in that
+            # tag. By contrast, when a person (or a build system) issues a
+            # "git checkout <tag>" command, HEAD will be the last "real" commit
+            # and not the tag.
+            # Below we have to append "^{}" to the tag value to work around
+            # this in order to query for the sha1 that the build system uses.
+            return repo_utils.ls_remote(url, "%s^{}" % self.tag)
+
         git_url = repo_utils.build_git_url(self.project)
-        # Ceph (and other projects) uses annotated tags for releases. This has
-        # the side-effect of making git ls-remote return the sha1 for the
-        # annotated tag object and not the last "real" commit in that tag. By
-        # contrast, when a person (or a build system) issues a
-        # "git checkout <tag>" command, HEAD will be the last "real" commit and
-        # not the tag.
-        # Below we have to append "^{}" to the tag value to work around this in
-        # order to query for the sha1 that the build system uses.
-        result = repo_utils.ls_remote(git_url, "%s^{}" % self.tag)
+        result = get_sha1(git_url)
+        # For upgrade tests that are otherwise using ceph-ci.git, we need to
+        # also look in ceph.git to lookup released tags.
+        if result is None and 'ceph-ci' in git_url:
+            alt_git_url = git_url.replace('ceph-ci', 'ceph')
+            log.info(
+                "Tag '%s' not found in %s; will also look in %s",
+                self.tag,
+                git_url,
+                alt_git_url,
+            )
+            result = get_sha1(alt_git_url)
+
         if result is None:
             raise CommitNotFoundError(self.tag, git_url)
         return result
