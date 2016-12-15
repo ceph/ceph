@@ -683,9 +683,9 @@ struct bluestore_onode_t {
     uint32_t bytes = 0;   ///< encoded bytes
     uint32_t extents = 0; ///< extents
     DENC(shard_info, v, p) {
-      denc(v.offset, p);
-      denc(v.bytes, p);
-      denc(v.extents, p);
+      denc_varint(v.offset, p);
+      denc_varint(v.bytes, p);
+      denc_varint(v.extents, p);
     }
     void dump(Formatter *f) const;
   };
@@ -729,14 +729,14 @@ struct bluestore_onode_t {
 
   DENC(bluestore_onode_t, v, p) {
     DENC_START(1, 1, p);
-    denc(v.nid, p);
-    denc(v.size, p);
+    denc_varint(v.nid, p);
+    denc_varint(v.size, p);
     denc(v.attrs, p);
     denc(v.flags, p);
     denc(v.extent_map_shards, p);
-    denc(v.expected_object_size, p);
-    denc(v.expected_write_size, p);
-    denc(v.alloc_hint_flags, p);
+    denc_varint(v.expected_object_size, p);
+    denc_varint(v.expected_write_size, p);
+    denc_varint(v.alloc_hint_flags, p);
     DENC_FINISH(p);
   }
   void dump(Formatter *f) const;
