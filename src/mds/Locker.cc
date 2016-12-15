@@ -2279,7 +2279,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     }
   }
 
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
     
   inode_t *pi = in->project_inode();
@@ -2955,7 +2955,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 
   EUpdate *le = new EUpdate(mds->mdlog, "snap flush");
   mds->mdlog->start_entry(le);
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut = new MutationImpl();
   mut->ls = mds->mdlog->get_current_segment();
 
   // normal metadata updates that we can apply to the head as well.
@@ -3250,7 +3250,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   inode_t *pi = in->project_inode(px);
   pi->version = in->pre_dirty();
 
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
 
   _update_cap_fields(in, dirty, m, pi);
@@ -4255,7 +4255,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // journal
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
 
   // forcefully take a wrlock
