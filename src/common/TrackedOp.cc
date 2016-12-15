@@ -70,16 +70,16 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
 {
   Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
-  f->open_object_section("OpHistory");
-  f->dump_int("num to keep", history_size);
-  f->dump_int("duration to keep", history_duration);
+  f->open_object_section("op_history");
+  f->dump_int("size", history_size);
+  f->dump_int("duration", history_duration);
   {
-    f->open_array_section("Ops");
+    f->open_array_section("ops");
     for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
 	   arrived.begin();
 	 i != arrived.end();
 	 ++i) {
-      f->open_object_section("Op");
+      f->open_object_section("op");
       i->second->dump(now, f);
       f->close_section();
     }
