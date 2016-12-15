@@ -25,7 +25,7 @@
 #include <atomic>
 
 class TrackedOp;
-typedef ceph::shared_ptr<TrackedOp> TrackedOpRef;
+typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 
 class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
@@ -54,13 +54,6 @@ public:
 
 struct ShardedTrackingData;
 class OpTracker {
-  class RemoveOnDelete {
-    OpTracker *tracker;
-  public:
-    explicit RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
-    void operator()(TrackedOp *op);
-  };
-  friend class RemoveOnDelete;
   friend class OpHistory;
   atomic64_t seq;
   vector<ShardedTrackingData*> sharded_in_flight_list;
@@ -114,8 +107,7 @@ public:
   template <typename T, typename U>
   typename T::Ref create_request(U params)
   {
-    typename T::Ref retval(new T(params, this),
-			   RemoveOnDelete(this));
+    typename T::Ref retval(new T(params, this));
     retval->tracking_start();
     return retval;
   }
@@ -127,7 +119,8 @@ private:
   friend class OpTracker;
   xlist<TrackedOp*>::item xitem;
 protected:
-  OpTracker *tracker; /// the tracker we are associated with
+  OpTracker *tracker;          ///< the tracker we are associated with
+  std::atomic_int nref = {0};  ///< ref count
 
   utime_t initiated_at;
   list<pair<utime_t, string> > events; /// list of events and their times
@@ -136,16 +129,21 @@ protected:
   uint64_t seq; /// a unique value set by the OpTracker
 
   uint32_t warn_interval_multiplier; // limits output of a given op warning
-  // Transitions from false -> true without locks being held
-  atomic<bool> is_tracked; //whether in tracker and out of constructor
+
+  enum {
+    STATE_UNTRACKED = 0,
+    STATE_LIVE,
+    STATE_HISTORY
+  };
+  atomic<int> state = {STATE_UNTRACKED};
+
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
     tracker(_tracker),
     initiated_at(initiated),
     lock("TrackedOp::lock"),
     seq(0),
-    warn_interval_multiplier(1),
-    is_tracked(false)
+    warn_interval_multiplier(1)
   { }
 
   /// output any type-specific data you want to get when dump() is called
@@ -181,7 +179,35 @@ public:
   void tracking_start() {
     if (tracker->register_inflight_op(&xitem)) {
       events.push_back(make_pair(initiated_at, "initiated"));
-      is_tracked = true;
+      state = STATE_LIVE;
+    }
+  }
+
+  // ref counting via intrusive_ptr, with special behavior on final
+  // put for historical op tracking
+  friend void intrusive_ptr_add_ref(TrackedOp *o) {
+    ++o->nref;
+  }
+  friend void intrusive_ptr_release(TrackedOp *o) {
+    if (--o->nref == 0) {
+      switch (o->state.load()) {
+      case STATE_UNTRACKED:
+	o->_unregistered();
+	delete o;
+	break;
+
+      case STATE_LIVE:
+	o->mark_event("done");
+	o->tracker->unregister_inflight_op(o);
+	break;
+
+      case STATE_HISTORY:
+	delete o;
+	break;
+
+      default:
+	ceph_abort();
+      }
     }
   }
 };
