@@ -316,23 +316,18 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
   }
 }
 
-void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
+void OpTracker::mark_event(TrackedOp *op, const char *evt,
+			   utime_t time)
 {
   if (!op->state)
     return;
-  return _mark_event(op, dest, time);
-}
 
-void OpTracker::_mark_event(TrackedOp *op, const string &evt,
-			    utime_t time)
-{
   dout(5);
-  *_dout  <<  "seq: " << op->seq
-	  << ", time: " << time << ", event: " << evt
-	  << ", op: ";
+  *_dout <<  "seq: " << op->seq
+	 << ", time: " << time << ", event: " << evt
+	 << ", op: ";
   op->_dump_op_descriptor_unlocked(*_dout);
   *_dout << dendl;
-     
 }
 
 void TrackedOp::mark_event(const string &event)
@@ -345,7 +340,7 @@ void TrackedOp::mark_event(const string &event)
     Mutex::Locker l(lock);
     events.push_back(make_pair(now, event));
   }
-  tracker->mark_event(this, event);
+  tracker->mark_event(this, event.c_str());
   _event_marked();
 }
 
