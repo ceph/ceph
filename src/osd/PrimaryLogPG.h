@@ -574,7 +574,7 @@ public:
       snapset(0),
       new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
-      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      ignore_cache(false), ignore_log_op_stats(!g_conf->perf), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
@@ -595,7 +595,7 @@ public:
               vector<OSDOp>& _ops, PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
-      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      ignore_cache(false), ignore_log_op_stats(!g_conf->perf), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       data_off(0), reply(NULL), pg(_pg),
