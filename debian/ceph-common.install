@@ -18,6 +18,7 @@ usr/bin/ceph-post-file
 usr/bin/ceph-brag
 usr/sbin/mount.ceph sbin
 usr/lib/ceph/compressor/*
+usr/lib/ceph/crypto/*
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
