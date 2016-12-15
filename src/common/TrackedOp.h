@@ -25,6 +25,8 @@
 #include "include/memory.h"
 #include "common/RWLock.h"
 
+#define OPTRACKER_PREALLOC_EVENTS 20
+
 class TrackedOp;
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 
@@ -173,7 +175,7 @@ protected:
     }
   };
 
-  list<Event> events; /// list of events and their times
+  vector<Event> events; /// list of events and their times
   mutable Mutex lock; /// to protect the events list
   string current; /// the current state the event is in
   uint64_t seq; /// a unique value set by the OpTracker
@@ -193,7 +195,9 @@ protected:
     lock("TrackedOp::lock"),
     seq(0),
     warn_interval_multiplier(1)
-  { }
+  {
+    events.reserve(OPTRACKER_PREALLOC_EVENTS);
+  }
 
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(Formatter *f) const {}
