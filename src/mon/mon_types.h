@@ -231,7 +231,7 @@ struct C_MonOp : public Context
 
   void mark_op_event(const string &event) {
     if (op)
-      op->mark_event(event);
+      op->mark_event_string(event);
   }
 
   virtual void _finish(int r) = 0;

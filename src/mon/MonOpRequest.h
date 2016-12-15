@@ -42,7 +42,7 @@ struct MonOpRequest : public TrackedOp {
   void mark_svc_event(const string &service, const string &event) {
     string s = service;
     s.append(":").append(event);
-    mark_event(s);
+    mark_event_string(s);
   }
 
   void mark_logmon_event(const string &event) {
@@ -112,12 +112,8 @@ private:
     {
       f->open_array_section("events");
       Mutex::Locker l(lock);
-      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
-           i != events.end(); ++i) {
-        f->open_object_section("event");
-        f->dump_stream("time") << i->first;
-        f->dump_string("event", i->second);
-        f->close_section();
+      for (auto& i : events) {
+	f->dump_object("event", i);
       }
       f->close_section();
       f->open_object_section("info");

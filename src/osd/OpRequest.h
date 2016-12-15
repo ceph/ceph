@@ -170,13 +170,13 @@ public:
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
   void mark_delayed(const string& s) {
-    mark_flag_point(flag_delayed, s);
+    mark_flag_point_string(flag_delayed, s);
   }
   void mark_started() {
     mark_flag_point(flag_started, "started");
   }
   void mark_sub_op_sent(const string& s) {
-    mark_flag_point(flag_sub_op_sent, s);
+    mark_flag_point_string(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
     mark_flag_point(flag_commit_sent, "commit_sent");
@@ -197,7 +197,8 @@ public:
 
 private:
   void set_rmw_flags(int flags);
-  void mark_flag_point(uint8_t flag, const string& s);
+  void mark_flag_point(uint8_t flag, const char *s);
+  void mark_flag_point_string(uint8_t flag, const string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
