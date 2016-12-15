@@ -85,8 +85,31 @@ void SafeTimer::timer_thread()
 {
   lock.Lock();
   ldout(cct,10) << "timer_thread starting" << dendl;
+  utime_t last;
   while (!stopping) {
+    // fire all the events already in the queue if the system time
+    // is changed to some time ago
     utime_t now = ceph_clock_now(cct);
+    if (now < last) {
+      last = now;
+      vector<Context *> callbacks;
+      for (scheduled_map_t::iterator p = schedule.begin();
+           p != schedule.end(); ++p)
+        callbacks.push_back(p->second);
+      events.clear();
+      schedule.clear();
+
+      if (!safe_callbacks)
+        lock.Unlock();
+      for (vector<Context *>::iterator it = callbacks.begin();
+           it != callbacks.end(); ++it)
+        (*it)->complete(0);
+      if (!safe_callbacks)
+        lock.Lock();
+      now = ceph_clock_now(cct); // recalc now
+    } else {
+      last = now;
+    }
     
     while (!schedule.empty()) {
       scheduled_map_t::iterator p = schedule.begin();
