@@ -1030,10 +1030,6 @@ usermod -c "Ceph storage service" \
         -g ceph \
         -s /sbin/nologin \
         ceph
-# fix ownership of log files
-[ -d /var/log/ceph ] || exit 0
-find /var/log/ceph -type f -name '*.log*' -exec chown ceph.ceph {} \;
-chown ceph.ceph /var/log/ceph
 %endif
 exit 0
 
@@ -1274,15 +1270,6 @@ fi
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
-
-%pre radosgw
-%if 0%{?suse_version}
-# fix ownership of log files
-[ -d /var/log/ceph-radosgw ] || exit 0
-[ "$(stat -c %U /var/log/ceph-radosgw)" = "ceph" ] && exit 0
-find /var/log/ceph-radosgw -type f -name '*.log' -exec chown ceph.ceph {} \;
-chown ceph.ceph /var/log/ceph-radosgw
-%endif
 
 %post radosgw
 %if 0%{?suse_version}
