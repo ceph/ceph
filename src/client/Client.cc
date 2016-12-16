@@ -5628,8 +5628,10 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   }
 
   filepath fp(CEPH_INO_ROOT);
-  if (!mount_root.empty())
+  if (!mount_root.empty()) {
+    metadata["root"] = mount_root.c_str();
     fp = filepath(mount_root.c_str());
+  }
   while (true) {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
