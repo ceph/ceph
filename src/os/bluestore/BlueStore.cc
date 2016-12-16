@@ -3636,8 +3636,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
       assert(r >= 0);
 
       bluefs_extents.erase(offset, length);
-
-      alloc->release(offset, length);
+      bluefs_extents_reclaiming.insert(offset, length);
 
       reclaim -= length;
     }
@@ -6631,8 +6630,6 @@ void BlueStore::_kv_sync_thread()
       dout(30) << __func__ << " submitting txc " << kv_submitting << dendl;
       dout(30) << __func__ << " wal_cleaning txc " << wal_cleaning << dendl;
 
-      alloc->commit_start();
-
       // flush/barrier on block device
       bdev->flush();
 
@@ -6672,7 +6669,6 @@ void BlueStore::_kv_sync_thread()
 	txc->state = TransContext::STATE_KV_SUBMITTED;
       }
       for (auto txc : kv_committing) {
-	_txc_release_alloc(txc);
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
@@ -6728,6 +6724,7 @@ void BlueStore::_kv_sync_thread()
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	_txc_release_alloc(txc);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
@@ -6737,8 +6734,6 @@ void BlueStore::_kv_sync_thread()
 	wal_cleaning.pop_front();
       }
 
-      alloc->commit_finish();
-
       // this is as good a place as any ...
       _reap_collections();
 
@@ -6746,6 +6741,15 @@ void BlueStore::_kv_sync_thread()
 	if (!bluefs_gift_extents.empty()) {
 	  _commit_bluefs_freespace(bluefs_gift_extents);
 	}
+	for (auto p = bluefs_extents_reclaiming.begin();
+	     p != bluefs_extents_reclaiming.end();
+	     ++p) {
+	  dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
+		   << p.get_start() << "~" << p.get_len() << std::dec
+		   << dendl;
+	  alloc->release(p.get_start(), p.get_len());
+	}
+	bluefs_extents_reclaiming.clear();
       }
 
       l.lock();
@@ -8754,17 +8758,19 @@ int BlueStore::_clone_range(TransContext *txc,
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  if (g_conf->bluestore_clone_cow) {
-    _do_zero(txc, c, newo, dstoff, length);
-    _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
-  } else {
-    bufferlist bl;
-    r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
-    if (r < 0)
-      goto out;
-    r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
-    if (r < 0)
-      goto out;
+  if (length > 0) {
+    if (g_conf->bluestore_clone_cow) {
+      _do_zero(txc, c, newo, dstoff, length);
+      _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
+    } else {
+      bufferlist bl;
+      r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
+      if (r < 0)
+	goto out;
+      r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+      if (r < 0)
+	goto out;
+    }
   }
 
   txc->write_onode(newo);
