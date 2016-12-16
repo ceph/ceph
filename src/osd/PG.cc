@@ -1136,7 +1136,7 @@ void PG::calc_ec_acting(
 	}
       }
       if (want[i] == CRUSH_ITEM_NONE)
-	ss << " failed to fill position " << i << std::endl;
+	ss << " failed to fill position " << (int)i << std::endl;
     }
   }
 
