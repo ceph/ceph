@@ -530,7 +530,17 @@ void BlueStore::Cache::trim(
   uint64_t current_buffer = _get_buffer_bytes();
   uint64_t current = current_meta + current_buffer;
 
-  uint64_t target_meta = target_bytes * target_meta_ratio;
+  uint64_t target_meta = target_bytes * (double)target_meta_ratio; //need to cast to double
+                                                                   //since float(1) might produce inaccurate value
+                                                                   // for target_meta (a bit greater than target_bytes)
+                                                                   // that causes overflow in target_buffer below.
+                                                                   //Consider the following code:
+                                                                   //uint64_t i =(uint64_t)227*1024*1024*1024 + 1;
+                                                                   //float f = 1;
+                                                                   //uint64_t i2 = i*f;
+                                                                   //assert(i == i2);
+
+  target_meta = min(target_bytes, target_meta); //and just in case that ratio is > 1
   uint64_t target_buffer = target_bytes - target_meta;
 
   if (current <= target_bytes) {
