@@ -172,12 +172,12 @@ protected:
     }
   };
 
-  vector<Event> events; /// list of events and their times
-  mutable Mutex lock; /// to protect the events list
-  const char *current; /// the current state the event is in
-  uint64_t seq; /// a unique value set by the OpTracker
+  vector<Event> events;    ///< list of events and their times
+  mutable Mutex lock = {"TrackedOp::lock"}; ///< to protect the events list
+  const char *current = 0; ///< the current state the event is in
+  uint64_t seq = 0;        ///< a unique value set by the OpTracker
 
-  uint32_t warn_interval_multiplier; // limits output of a given op warning
+  uint32_t warn_interval_multiplier = 1; //< limits output of a given op warning
 
   enum {
     STATE_UNTRACKED = 0,
@@ -191,10 +191,7 @@ protected:
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
-    initiated_at(initiated),
-    lock("TrackedOp::lock"),
-    seq(0),
-    warn_interval_multiplier(1)
+    initiated_at(initiated)
   {
     events.reserve(OPTRACKER_PREALLOC_EVENTS);
   }
@@ -244,12 +241,14 @@ public:
     }
     return desc;
   }
+private:
   void _gen_desc() const {
     ostringstream ss;
     _dump_op_descriptor_unlocked(ss);
     desc_str = ss.str();
     desc = desc_str.c_str();
   }
+public:
   void reset_desc() {
     desc = nullptr;
   }
