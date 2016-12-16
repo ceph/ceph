@@ -5632,6 +5632,16 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     ASSERT_EQ(total_onodes, 1u);
   }
   {
+    cout <<" mempool dump:\n";
+    JSONFormatter f(true);
+    f.open_object_section("transaction");
+    mempool::dump(&f);
+    f.close_section();
+    f.flush(cout);
+    cout << std::endl;
+  }
+
+  {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);
