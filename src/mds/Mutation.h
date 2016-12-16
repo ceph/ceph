@@ -305,11 +305,11 @@ struct MDRequestImpl : public MutationImpl {
     waited_for_osdmap(false), _more(NULL) {
     in[0] = in[1] = NULL;
     if (!params.throttled.is_zero())
-      tracker->mark_event(this, "throttled", params.throttled);
+      mark_event("throttled", params.throttled);
     if (!params.all_read.is_zero())
-      tracker->mark_event(this, "all_read", params.all_read);
+      mark_event("all_read", params.all_read);
     if (!params.dispatched.is_zero())
-      tracker->mark_event(this, "dispatched", params.dispatched);
+      mark_event("dispatched", params.dispatched);
   }
   ~MDRequestImpl();
   

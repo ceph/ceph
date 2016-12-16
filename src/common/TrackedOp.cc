@@ -330,29 +330,27 @@ void OpTracker::mark_event(TrackedOp *op, const char *evt,
   *_dout << dendl;
 }
 
-void TrackedOp::mark_event(const string &event)
+void TrackedOp::mark_event_string(const string &event, utime_t stamp)
 {
   if (!state)
     return;
 
-  utime_t now = ceph_clock_now();
   {
     Mutex::Locker l(lock);
-    events.push_back(Event(now, event));
+    events.push_back(Event(stamp, event));
   }
   tracker->mark_event(this, event.c_str());
   _event_marked();
 }
 
-void TrackedOp::mark_event(const char *event)
+void TrackedOp::mark_event(const char *event, utime_t stamp)
 {
   if (!state)
     return;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
   {
     Mutex::Locker l(lock);
-    events.push_back(Event(now, event));
+    events.push_back(Event(stamp, event));
   }
   tracker->mark_event(this, event);
   _event_marked();
