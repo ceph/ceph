@@ -291,21 +291,41 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
 
     git_url = teuth_config.get_ceph_git_url()
-    remote.run(
-        logger=log.getChild(role),
-        args=[
-            'git',
-            'clone',
+    try:
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'git',
+                'clone',
+                git_url,
+                clonedir,
+                run.Raw(';'),
+                'cd', '--', clonedir,
+                run.Raw('&&'),
+                'git', 'checkout', refspec,
+            ],
+        )
+    except CommandFailedError:
+        alt_git_url = git_url.replace('ceph-ci', 'ceph')
+        log.info(
+            "failed to check out '%s' from %s; will also try in %s",
+            refspec,
             git_url,
-            clonedir,
-            run.Raw(';'),
-            'cd', '--', clonedir,
-            run.Raw('&&'),
-            'git', 'checkout', refspec,
-            run.Raw('&&'),
-            'mv', 'qa/workunits', srcdir,
-        ],
-    )
+            alt_git_url,
+        )
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'git',
+                'clone',
+                alt_git_url,
+                clonedir,
+                run.Raw(';'),
+                'cd', '--', clonedir,
+                run.Raw('&&'),
+                'git', 'checkout', refspec,
+            ],
+        )
 
     remote.run(
         logger=log.getChild(role),
