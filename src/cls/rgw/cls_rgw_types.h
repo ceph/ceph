@@ -36,6 +36,13 @@ enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
 };
 
+#define ROUND_BLOCK_SIZE 4096
+
+static inline uint64_t cls_rgw_get_rounded_size(uint64_t size)
+{
+  return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
+}
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
   utime_t timestamp;
@@ -348,6 +355,8 @@ enum BIIndexType {
   OLHIdx        = 3,
 };
 
+struct rgw_bucket_category_stats;
+
 struct rgw_cls_bi_entry {
   BIIndexType type;
   string idx;
@@ -375,6 +384,8 @@ struct rgw_cls_bi_entry {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
+
+  bool get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
