@@ -851,7 +851,7 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
 
   rgw_pool heap_pool(store->get_zone_params().metadata_heap);
 
-  if (heap_pool.name.empty()) {
+  if (heap_pool.empty()) {
     return 0;
   }
 
@@ -877,7 +877,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
 
   rgw_pool heap_pool(store->get_zone_params().metadata_heap);
 
-  if (heap_pool.name.empty()) {
+  if (heap_pool.empty()) {
     return 0;
   }
 

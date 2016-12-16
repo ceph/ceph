@@ -166,6 +166,26 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
   return raw_obj;
 }
 
+int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, IoCtx& ioctx, bool create)
+{
+  int r = rados->ioctx_create(pool.name.c_str(), ioctx);
+  if (r == -ENOENT && create) {
+    r = rados->pool_create(pool.name.c_str());
+    if (r < 0 && r != -EEXIST) {
+      return r;
+    }
+
+    r = rados->ioctx_create(pool.name.c_str(), ioctx);
+  }
+  if (r < 0) {
+    return r;
+  }
+  if (!pool.ns.empty()) {
+    ioctx.set_namespace(pool.ns);
+  }
+  return 0;
+}
+
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
   encode_json("default_zonegroup", default_zonegroup, f);
 }
@@ -179,13 +199,13 @@ void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
   }
 }
 
-const string& RGWZoneGroup::get_pool_name(CephContext *cct_)
+rgw_pool RGWZoneGroup::get_pool(CephContext *cct_)
 {
   if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
-    return RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
+    return rgw_pool(RGW_DEFAULT_ZONEGROUP_ROOT_POOL);
   }
 
-  return cct_->_conf->rgw_zonegroup_root_pool;
+  return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
 }
 
 int RGWZoneGroup::create_default(bool old_format)
@@ -489,7 +509,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
 
 int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info, const string& oid)
 {
-  rgw_pool pool(get_pool_name(cct));
+  auto pool = get_pool(cct);
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
@@ -530,7 +550,7 @@ int RGWSystemMetaObj::set_as_default(bool exclusive)
 {
   string oid  = get_default_oid();
 
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
   bufferlist bl;
 
   RGWDefaultSystemMetaObjInfo default_info;
@@ -548,7 +568,7 @@ int RGWSystemMetaObj::set_as_default(bool exclusive)
 
 int RGWSystemMetaObj::read_id(const string& obj_name, string& object_id)
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
   bufferlist bl;
 
   string oid = get_names_oid_prefix() + obj_name;
@@ -573,7 +593,7 @@ int RGWSystemMetaObj::read_id(const string& obj_name, string& object_id)
 
 int RGWSystemMetaObj::delete_obj(bool old_format)
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
 
   /* check to see if obj is the default */
   RGWDefaultSystemMetaObjInfo default_info;
@@ -617,7 +637,7 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
 
 int RGWSystemMetaObj::store_name(bool exclusive)
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
   string oid = get_names_oid_prefix() + name;
 
   RGWNameToId nameToId;
@@ -652,7 +672,7 @@ int RGWSystemMetaObj::rename(const string& new_name)
     return ret;
   }
   /* delete old name */
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
   string oid = get_names_oid_prefix() + old_name;
   rgw_raw_obj old_name_obj(pool, oid);
   ret = store->delete_system_obj(old_name_obj);
@@ -666,7 +686,7 @@ int RGWSystemMetaObj::rename(const string& new_name)
 
 int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
 
   bufferlist bl;
 
@@ -734,7 +754,7 @@ int RGWSystemMetaObj::create(bool exclusive)
 
 int RGWSystemMetaObj::store_info(bool exclusive)
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
 
   string oid = get_info_oid_prefix() + id;
 
@@ -822,7 +842,7 @@ int RGWRealm::delete_obj()
 
 int RGWRealm::create_control(bool exclusive)
 {
-  auto pool = rgw_pool{get_pool_name(cct)};
+  auto pool = rgw_pool{get_pool(cct)};
   auto oid = get_control_oid();
   return rgw_put_system_obj(store, pool, oid, nullptr, 0, exclusive,
                             nullptr, real_time(), nullptr);
@@ -830,17 +850,17 @@ int RGWRealm::create_control(bool exclusive)
 
 int RGWRealm::delete_control()
 {
-  auto pool = rgw_pool{get_pool_name(cct)};
+  auto pool = rgw_pool{get_pool(cct)};
   auto obj = rgw_raw_obj{pool, get_control_oid()};
   return store->delete_system_obj(obj);
 }
 
-const string& RGWRealm::get_pool_name(CephContext *cct)
+rgw_pool RGWRealm::get_pool(CephContext *cct)
 {
   if (cct->_conf->rgw_realm_root_pool.empty()) {
-    return RGW_DEFAULT_REALM_ROOT_POOL;
+    return rgw_pool(RGW_DEFAULT_REALM_ROOT_POOL);
   }
-  return cct->_conf->rgw_realm_root_pool;
+  return rgw_pool(cct->_conf->rgw_realm_root_pool);
 }
 
 const string RGWRealm::get_default_oid(bool old_format)
@@ -902,9 +922,9 @@ string RGWRealm::get_control_oid()
 int RGWRealm::notify_zone(bufferlist& bl)
 {
   // open a context on the realm's pool
-  auto pool = get_pool_name(cct);
+  rgw_pool pool{get_pool(cct)};
   librados::IoCtx ctx;
-  int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
+  int r = rgw_init_ioctx(store->get_rados_handle(), pool, ctx);
   if (r < 0) {
     ldout(cct, 0) << "Failed to open pool " << pool << dendl;
     return r;
@@ -1030,7 +1050,7 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
 {
   string oid = get_period_oid_prefix() + get_latest_epoch_oid();
 
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
@@ -1080,7 +1100,7 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive)
 {
   string oid = get_period_oid_prefix() + get_latest_epoch_oid();
 
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
   bufferlist bl;
 
   RGWPeriodLatestEpochInfo info;
@@ -1094,7 +1114,7 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive)
 
 int RGWPeriod::delete_obj()
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
 
   // delete the object for each period epoch
   for (epoch_t e = 1; e <= epoch; e++) {
@@ -1119,7 +1139,7 @@ int RGWPeriod::delete_obj()
 
 int RGWPeriod::read_info()
 {
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
 
   bufferlist bl;
 
@@ -1178,7 +1198,7 @@ int RGWPeriod::store_info(bool exclusive)
     return ret;
   }
 
-  rgw_pool pool(get_pool_name(cct));
+  rgw_pool pool(get_pool(cct));
 
   string oid = get_period_oid();
   bufferlist bl;
@@ -1198,12 +1218,12 @@ int RGWPeriod::store_info(bool exclusive)
   return 0;
 }
 
-const string& RGWPeriod::get_pool_name(CephContext *cct)
+rgw_pool RGWPeriod::get_pool(CephContext *cct)
 {
   if (cct->_conf->rgw_period_root_pool.empty()) {
-    return RGW_DEFAULT_PERIOD_ROOT_POOL;
+    return rgw_pool(RGW_DEFAULT_PERIOD_ROOT_POOL);
   }
-  return cct->_conf->rgw_period_root_pool;
+  return rgw_pool(cct->_conf->rgw_period_root_pool);
 }
 
 int RGWPeriod::use_next_epoch()
@@ -1470,11 +1490,11 @@ int RGWZoneParams::create_default(bool old_format)
 }
 
 
-int get_zones_pool_names_set(CephContext* cct,
-			     RGWRados* store,
-			     const list<string>& zones,
-			     const string& my_zone_id,
-			     set<string>& pool_names)
+int get_zones_pool_set(CephContext* cct,
+                       RGWRados* store,
+                       const list<string>& zones,
+                       const string& my_zone_id,
+                       set<rgw_pool>& pool_names)
 {
   for(auto const& iter : zones) {
     RGWZoneParams zone(iter);
@@ -1484,18 +1504,18 @@ int get_zones_pool_names_set(CephContext* cct,
       return r;
     }
     if (zone.get_id() != my_zone_id) {
-      pool_names.insert(zone.domain_root.name);
-      pool_names.insert(zone.metadata_heap.name);
-      pool_names.insert(zone.control_pool.name);
-      pool_names.insert(zone.gc_pool.name);
-      pool_names.insert(zone.log_pool.name);
-      pool_names.insert(zone.intent_log_pool.name);
-      pool_names.insert(zone.usage_log_pool.name);
-      pool_names.insert(zone.user_keys_pool.name);
-      pool_names.insert(zone.user_email_pool.name);
-      pool_names.insert(zone.user_swift_pool.name);
-      pool_names.insert(zone.user_uid_pool.name);
-      pool_names.insert(zone.roles_pool.name);
+      pool_names.insert(zone.domain_root);
+      pool_names.insert(zone.metadata_heap);
+      pool_names.insert(zone.control_pool);
+      pool_names.insert(zone.gc_pool);
+      pool_names.insert(zone.log_pool);
+      pool_names.insert(zone.intent_log_pool);
+      pool_names.insert(zone.usage_log_pool);
+      pool_names.insert(zone.user_keys_pool);
+      pool_names.insert(zone.user_email_pool);
+      pool_names.insert(zone.user_swift_pool);
+      pool_names.insert(zone.user_uid_pool);
+      pool_names.insert(zone.roles_pool);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
@@ -1506,28 +1526,30 @@ int get_zones_pool_names_set(CephContext* cct,
   return 0;
 }
 
-string fix_zone_pool_name(set<string> pool_names,
-			  const string& default_prefix,
-			  const string& default_suffix,
-			  const string& suggested_name)
+rgw_pool fix_zone_pool_dup(set<rgw_pool> pools,
+                           const string& default_prefix,
+                           const string& default_suffix,
+                           const rgw_pool& suggested_pool)
 {
+  string suggested_name = suggested_pool.to_str();
+
   string prefix = default_prefix;
   string suffix = default_suffix;
 
-  if (!suggested_name.empty()) {
-    prefix = suggested_name.substr(0,suggested_name.find("."));
+  if (!suggested_pool.empty()) {
+    prefix = suggested_name.substr(0, suggested_name.find("."));
     suffix = suggested_name.substr(prefix.length());
   }
 
-  string name = prefix + suffix;
+  rgw_pool pool(prefix + suffix);
   
-  if (pool_names.find(name) == pool_names.end()) {
-    return name;
+  if (pools.find(pool) == pools.end()) {
+    return pool;
   } else {
     while(true) {
-      name =  prefix + "_" + std::to_string(std::rand()) + suffix;
-      if (pool_names.find(name) == pool_names.end()) {
-	return name;
+      pool =  prefix + "_" + std::to_string(std::rand()) + suffix;
+      if (pools.find(pool) == pools.end()) {
+	return pool;
       }
     }
   }  
@@ -1542,36 +1564,36 @@ int RGWZoneParams::fix_pool_names()
     ldout(cct, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
   }
 
-  set<string> pool_names;
-  r = get_zones_pool_names_set(cct, store, zones, id, pool_names);
+  set<rgw_pool> pools;
+  r = get_zones_pool_set(cct, store, zones, id, pools);
   if (r < 0) {
     ldout(cct, 0) << "Error: get_zones_pool_names" << r << dendl;
     return r;
   }
 
-  domain_root = fix_zone_pool_name(pool_names, name, ".rgw.data.root", domain_root.name);
+  domain_root = fix_zone_pool_dup(pools, name, ".rgw.data.root", domain_root);
   if (!metadata_heap.name.empty()) {
-    metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+    metadata_heap = fix_zone_pool_dup(pools, name, ".rgw.meta", metadata_heap);
   }
-  control_pool = fix_zone_pool_name(pool_names, name, ".rgw.control", control_pool.name);
-  gc_pool = fix_zone_pool_name(pool_names, name ,".rgw.gc", gc_pool.name);
-  lc_pool = fix_zone_pool_name(pool_names, name ,".rgw.lc", lc_pool.name);
-  log_pool = fix_zone_pool_name(pool_names, name, ".rgw.log", log_pool.name);
-  intent_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.intent-log", intent_log_pool.name);
-  usage_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.usage", usage_log_pool.name);
-  user_keys_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.keys", user_keys_pool.name);
-  user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
-  user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
-  user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
-  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.roles", roles_pool.name);
+  control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
+  gc_pool = fix_zone_pool_dup(pools, name ,".rgw.gc", gc_pool);
+  lc_pool = fix_zone_pool_dup(pools, name ,".rgw.lc", lc_pool);
+  log_pool = fix_zone_pool_dup(pools, name, ".rgw.log", log_pool);
+  intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.intent-log", intent_log_pool);
+  usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.usage", usage_log_pool);
+  user_keys_pool = fix_zone_pool_dup(pools, name, ".rgw.users.keys", user_keys_pool);
+  user_email_pool = fix_zone_pool_dup(pools, name, ".rgw.users.email", user_email_pool);
+  user_swift_pool = fix_zone_pool_dup(pools, name, ".rgw.users.swift", user_swift_pool);
+  user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.users.uid", user_uid_pool);
+  roles_pool = fix_zone_pool_dup(pools, name, ".rgw.roles", roles_pool);
 
   for(auto& iter : placement_pools) {
-    iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
-						iter.second.index_pool);
-    iter.second.data_pool = fix_zone_pool_name(pool_names, name, "." + default_storage_pool_suffix,
-					       iter.second.data_pool);
-    iter.second.data_extra_pool= fix_zone_pool_name(pool_names, name, "." + default_storage_extra_pool_suffix,
-						    iter.second.data_extra_pool);
+    iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
+                                               iter.second.index_pool);
+    iter.second.data_pool = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
+                                              iter.second.data_pool);
+    iter.second.data_extra_pool= fix_zone_pool_dup(pools, name, "." + default_storage_extra_pool_suffix,
+                                                   iter.second.data_extra_pool);
   }
 
   return 0;
@@ -1613,13 +1635,13 @@ int RGWZoneParams::create(bool exclusive)
   return 0;
 }
 
-const string& RGWZoneParams::get_pool_name(CephContext *cct)
+rgw_pool RGWZoneParams::get_pool(CephContext *cct)
 {
   if (cct->_conf->rgw_zone_root_pool.empty()) {
-    return RGW_DEFAULT_ZONE_ROOT_POOL;
+    return rgw_pool(RGW_DEFAULT_ZONE_ROOT_POOL);
   }
 
-  return cct->_conf->rgw_zone_root_pool;
+  return rgw_pool(cct->_conf->rgw_zone_root_pool);
 }
 
 const string RGWZoneParams::get_default_oid(bool old_format)
@@ -3446,8 +3468,7 @@ int RGWRados::replace_region_with_zonegroup()
 
 
   RGWZoneGroup default_zonegroup;
-  string pool_name = default_zonegroup.get_pool_name(cct);
-  rgw_pool pool(pool_name);
+  rgw_pool pool{default_zonegroup.get_pool(cct)};
   string oid  = "converted";
   bufferlist bl;
   RGWObjectCtx obj_ctx(this);
@@ -4161,37 +4182,34 @@ int RGWRados::list_regions(list<string>& regions)
 {
   RGWZoneGroup zonegroup;
 
-  return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), region_info_oid_prefix, regions);
+  return list_raw_prefixed_objs(zonegroup.get_pool(cct), region_info_oid_prefix, regions);
 }
 
 int RGWRados::list_zonegroups(list<string>& zonegroups)
 {
   RGWZoneGroup zonegroup;
 
-  return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), zonegroup_names_oid_prefix, zonegroups);
+  return list_raw_prefixed_objs(zonegroup.get_pool(cct), zonegroup_names_oid_prefix, zonegroups);
 }
 
 int RGWRados::list_zones(list<string>& zones)
 {
   RGWZoneParams zoneparams;
-  rgw_pool pool(zoneparams.get_pool_name(cct));
 
-  return list_raw_prefixed_objs(pool, zone_names_oid_prefix, zones);
+  return list_raw_prefixed_objs(zoneparams.get_pool(cct), zone_names_oid_prefix, zones);
 }
 
 int RGWRados::list_realms(list<string>& realms)
 {
   RGWRealm realm(cct, this);
-  rgw_pool pool(realm.get_pool_name(cct));
-  return list_raw_prefixed_objs(pool, realm_names_oid_prefix, realms);
+  return list_raw_prefixed_objs(realm.get_pool(cct), realm_names_oid_prefix, realms);
 }
 
 int RGWRados::list_periods(list<string>& periods)
 {
   RGWPeriod period;
   list<string> raw_periods;
-  rgw_pool pool(period.get_pool_name(cct));
-  int ret = list_raw_prefixed_objs(pool, period.get_info_oid_prefix(), raw_periods);
+  int ret = list_raw_prefixed_objs(period.get_pool(cct), period.get_info_oid_prefix(), raw_periods);
   if (ret < 0) {
     return ret;
   }
@@ -4232,95 +4250,28 @@ int RGWRados::list_periods(const string& current_period, list<string>& periods)
  */
 int RGWRados::open_root_pool_ctx()
 {
-  const string& pool = get_zone_params().domain_root.name;
-  const char *pool_str = pool.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(pool_str, root_pool_ctx);
-  if (r == -ENOENT) {
-    r = rad->pool_create(pool_str);
-    if (r == -EEXIST)
-      r = 0;
-    if (r < 0)
-      return r;
-
-    r = rad->ioctx_create(pool_str, root_pool_ctx);
-  }
-
-  return r;
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().domain_root, root_pool_ctx, true);
 }
 
 int RGWRados::open_gc_pool_ctx()
 {
-  const char *gc_pool = get_zone_params().gc_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(gc_pool, gc_pool_ctx);
-  if (r == -ENOENT) {
-    r = rad->pool_create(gc_pool);
-    if (r == -EEXIST)
-      r = 0;
-    if (r < 0)
-      return r;
-
-    r = rad->ioctx_create(gc_pool, gc_pool_ctx);
-  }
-
-  return r;
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().gc_pool, gc_pool_ctx, true);
 }
 
 int RGWRados::open_lc_pool_ctx()
 {
-  const char *lc_pool = get_zone_params().lc_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(lc_pool, lc_pool_ctx);
-  if (r == -ENOENT) {
-    r = rad->pool_create(lc_pool);
-    if (r == -EEXIST)
-      r = 0;
-    if (r < 0)
-      return r;
-
-    r = rad->ioctx_create(lc_pool, lc_pool_ctx);
-  }
-
-  return r;
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().lc_pool, lc_pool_ctx, true);
 }
 
 int RGWRados::open_objexp_pool_ctx()
 {
-  const char * const pool_name = get_zone_params().log_pool.name.c_str();
-  librados::Rados * const rad = get_rados_handle();
-  int r = rad->ioctx_create(pool_name, objexp_pool_ctx);
-  if (r == -ENOENT) {
-    r = rad->pool_create(pool_name);
-    if (r == -EEXIST) {
-      r = 0;
-    } else if (r < 0) {
-      return r;
-    }
-
-    r = rad->ioctx_create(pool_name, objexp_pool_ctx);
-  }
-
-  return r;
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, objexp_pool_ctx, true);
 }
 
 int RGWRados::init_watch()
 {
-  const char *control_pool = get_zone_params().control_pool.name.c_str();
-
-  librados::Rados *rad = &rados[0];
-  int r = rad->ioctx_create(control_pool, control_pool_ctx);
-  if (r == -ENOENT) {
-    r = rad->pool_create(control_pool);
-    if (r == -EEXIST)
-      r = 0;
-    if (r < 0)
-      return r;
-
-    r = rad->ioctx_create(control_pool, control_pool_ctx);
-    if (r < 0)
-      return r;
-  } else if (r < 0) {
+  int r = rgw_init_ioctx(&rados[0], get_zone_params().control_pool, control_pool_ctx, true);
+  if (r < 0) {
     return r;
   }
 
@@ -4376,7 +4327,7 @@ void RGWRados::pick_control_oid(const string& key, string& notify_oid)
 int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx)
 {
   librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(pool.name.c_str(), io_ctx);
+  int r = rgw_init_ioctx(rad, pool, io_ctx);
   if (r != -ENOENT)
     return r;
 
@@ -4387,7 +4338,7 @@ int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx)
   if (r < 0 && r != -EEXIST)
     return r;
 
-  return rad->ioctx_create(pool.name.c_str(), io_ctx);
+  return rgw_init_ioctx(rad, pool, io_ctx);
 }
 
 void RGWRados::build_bucket_index_marker(const string& shard_id_str, const string& shard_marker,
@@ -4469,9 +4420,7 @@ struct log_list_state {
 int RGWRados::log_list_init(const string& prefix, RGWAccessHandle *handle)
 {
   log_list_state *state = new log_list_state;
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, state->io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, state->io_ctx);
   if (r < 0) {
     delete state;
     return r;
@@ -4505,9 +4454,7 @@ int RGWRados::log_list_next(RGWAccessHandle handle, string *name)
 int RGWRados::log_remove(const string& name)
 {
   librados::IoCtx io_ctx;
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx);
   if (r < 0)
     return r;
   return io_ctx.remove(name);
@@ -4526,9 +4473,7 @@ struct log_show_state {
 int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle)
 {
   log_show_state *state = new log_show_state;
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, state->io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, state->io_ctx);
   if (r < 0) {
     delete state;
     return r;
@@ -4765,22 +4710,7 @@ void RGWRados::time_log_prepare_entry(cls_log_entry& entry, const real_time& ut,
 
 int RGWRados::time_log_add_init(librados::IoCtx& io_ctx)
 {
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
-  if (r == -ENOENT) {
-    rgw_pool pool(log_pool);
-    r = create_pool(pool);
-    if (r < 0)
-      return r;
- 
-    // retry
-    r = rad->ioctx_create(log_pool, io_ctx);
-  }
-  if (r < 0)
-    return r;
-
-  return 0;
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx, true);
 
 }
 
@@ -4829,9 +4759,7 @@ int RGWRados::time_log_list(const string& oid, const real_time& start_time, cons
 {
   librados::IoCtx io_ctx;
 
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx);
   if (r < 0)
     return r;
   librados::ObjectReadOperation op;
@@ -4855,9 +4783,7 @@ int RGWRados::time_log_info(const string& oid, cls_log_header *header)
 {
   librados::IoCtx io_ctx;
 
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx);
   if (r < 0)
     return r;
   librados::ObjectReadOperation op;
@@ -4875,9 +4801,7 @@ int RGWRados::time_log_info(const string& oid, cls_log_header *header)
 
 int RGWRados::time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cls_log_header *header, librados::AioCompletion *completion)
 {
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx);
   if (r < 0)
     return r;
 
@@ -4898,9 +4822,7 @@ int RGWRados::time_log_trim(const string& oid, const real_time& start_time, cons
 {
   librados::IoCtx io_ctx;
 
-  const char *log_pool = get_zone_params().log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx);
   if (r < 0)
     return r;
 
@@ -5036,12 +4958,10 @@ int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& durati
                              string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
 
-  const char *pool_name = pool.name.c_str();
-  
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(pool_name, io_ctx);
-  if (r < 0)
+  int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
+  if (r < 0) {
     return r;
+  }
   uint64_t msec = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
   utime_t ut(msec / 1000, msec % 1000);
   
@@ -5057,12 +4977,10 @@ int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& durati
 int RGWRados::unlock(rgw_pool& pool, const string& oid, string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
 
-  const char *pool_name = pool.name.c_str();
-
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(pool_name, io_ctx);
-  if (r < 0)
+  int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
+  if (r < 0) {
     return r;
+  }
   
   rados::cls::lock::Lock l(log_lock_name);
   l.set_tag(zone_id);
@@ -5572,12 +5490,12 @@ read_omap:
   }
 
   if (ret < 0 || m.empty()) {
-    vector<string> names;
+    vector<rgw_pool> pools;
     string s = string("default.") + default_storage_pool_suffix;
-    names.push_back(s);
+    pools.push_back(rgw_pool(s));
     vector<int> retcodes;
     bufferlist bl;
-    ret = create_pools(names, retcodes);
+    ret = create_pools(pools, retcodes);
     if (ret < 0)
       return ret;
     ret = omap_set(obj, s, bl);
@@ -5653,16 +5571,16 @@ int RGWRados::update_placement_map()
   return ret;
 }
 
-int RGWRados::add_bucket_placement(std::string& new_pool)
+int RGWRados::add_bucket_placement(const rgw_pool& new_pool)
 {
   librados::Rados *rad = get_rados_handle();
-  int ret = rad->pool_lookup(new_pool.c_str());
+  int ret = rad->pool_lookup(new_pool.name.c_str());
   if (ret < 0) // DNE, or something
     return ret;
 
   rgw_raw_obj obj(get_zone_params().domain_root, avail_pools);
   bufferlist empty_bl;
-  ret = omap_set(obj, new_pool, empty_bl);
+  ret = omap_set(obj, new_pool.to_str(), empty_bl);
 
   // don't care about return value
   update_placement_map();
@@ -5670,10 +5588,10 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
   return ret;
 }
 
-int RGWRados::remove_bucket_placement(std::string& old_pool)
+int RGWRados::remove_bucket_placement(const rgw_pool& old_pool)
 {
   rgw_raw_obj obj(get_zone_params().domain_root, avail_pools);
-  int ret = omap_del(obj, old_pool);
+  int ret = omap_del(obj, old_pool.to_str());
 
   // don't care about return value
   update_placement_map();
@@ -5681,7 +5599,7 @@ int RGWRados::remove_bucket_placement(std::string& old_pool)
   return ret;
 }
 
-int RGWRados::list_placement_set(set<string>& names)
+int RGWRados::list_placement_set(set<rgw_pool>& names)
 {
   bufferlist header;
   map<string, bufferlist> m;
@@ -5694,24 +5612,23 @@ int RGWRados::list_placement_set(set<string>& names)
   names.clear();
   map<string, bufferlist>::iterator miter;
   for (miter = m.begin(); miter != m.end(); ++miter) {
-    names.insert(miter->first);
+    names.insert(rgw_pool(miter->first));
   }
 
   return names.size();
 }
 
-int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
+int RGWRados::create_pools(vector<rgw_pool>& pools, vector<int>& retcodes)
 {
-  vector<string>::iterator iter;
   vector<librados::PoolAsyncCompletion *> completions;
   vector<int> rets;
 
   librados::Rados *rad = get_rados_handle();
-  for (iter = names.begin(); iter != names.end(); ++iter) {
+  for (auto iter = pools.begin(); iter != pools.end(); ++iter) {
     librados::PoolAsyncCompletion *c = librados::Rados::pool_async_create_completion();
     completions.push_back(c);
-    string& name = *iter;
-    int ret = rad->pool_create_async(name.c_str(), c);
+    rgw_pool& pool = *iter;
+    int ret = rad->pool_create_async(pool.name.c_str(), c);
     rets.push_back(ret);
   }
 
@@ -5784,7 +5701,7 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_po
   int r;
 
   if (ref->oid.empty()) {
-    ref->oid = obj.pool.name;
+    ref->oid = obj.pool.to_str();
     ref->pool = get_zone_params().domain_root;
   } else {
     ref->pool = obj.pool;
@@ -5792,7 +5709,7 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_po
   if (pool) {
     *pool = ref->pool;
   }
-  r = open_pool_ctx(ref->pool.name, ref->ioctx);
+  r = open_pool_ctx(ref->pool, ref->ioctx);
   if (r < 0)
     return r;
 
@@ -11425,7 +11342,7 @@ int RGWRados::omap_get_all(rgw_raw_obj& obj, bufferlist& header,
   return 0;
 }
 
-int RGWRados::omap_set(rgw_raw_obj& obj, std::string& key, bufferlist& bl)
+int RGWRados::omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl)
 {
   rgw_rados_ref ref;
   int r = get_raw_obj_ref(obj, &ref);
@@ -12660,9 +12577,9 @@ string RGWStateLog::get_oid(const string& object) {
 }
 
 int RGWStateLog::open_ioctx(librados::IoCtx& ioctx) {
-  string pool_name;
-  store->get_log_pool_name(pool_name);
-  int r = store->get_rados_handle()->ioctx_create(pool_name.c_str(), ioctx);
+  rgw_pool pool;
+  store->get_log_pool(pool);
+  int r = rgw_init_ioctx(store->get_rados_handle(), pool, ioctx);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: could not open rados pool" << dendl;
     return r;
