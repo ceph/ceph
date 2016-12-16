@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+tasks:
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh

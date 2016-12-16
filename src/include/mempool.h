@@ -161,7 +161,6 @@ extern bool debug_mode;
 extern void set_debug_mode(bool d);
 
 // --------------------------------------------------------------
-struct pool_allocator_base_t;
 class pool_t;
 
 // we shard pool stats across many shard_t's to reduce the amount

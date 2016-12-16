@@ -1651,7 +1651,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
 
         ldout(cct, 10) << "removing object map..." << dendl;
-        r = ObjectMap::remove(io_ctx, id);
+        r = ObjectMap<>::remove(io_ctx, id);
         if (r < 0 && r != -ENOENT) {
           lderr(cct) << "error removing image object map" << dendl;
           return r;

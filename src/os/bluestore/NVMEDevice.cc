@@ -805,7 +805,7 @@ int NVMEDevice::open(string p)
   serial_number = string(buf, r);
   r = manager.try_get(serial_number, &driver);
   if (r < 0) {
-    derr << __func__ << " failed to get nvme deivce with sn " << serial_number << dendl;
+    derr << __func__ << " failed to get nvme device with sn " << serial_number << dendl;
     return r;
   }
 

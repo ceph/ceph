@@ -1,0 +1,6 @@
+roles:
+- [mon.a, mds.a, osd.0, osd.1, client.0]
+- [mon.b, mds.a-s, mon.c, osd.2, osd.3]
+log-rotate:
+  ceph-mds: 10G
+  ceph-osd: 10G

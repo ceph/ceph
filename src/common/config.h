@@ -16,6 +16,7 @@
 #define CEPH_CONFIG_H
 
 #include <iosfwd>
+#include <functional>
 #include <vector>
 #include <map>
 #include <set>
@@ -113,12 +114,15 @@ public:
 	OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
    } opt_type_t;
 
+  typedef std::function<int(std::string*, std::string*)> validator_t;
+
   class config_option {
   public:
     const char *name;
     opt_type_t type;
     md_config_t::member_ptr_t md_member_ptr;
     bool safe; // promise to access it only via md_config_t::get_val
+    validator_t validator;
   private:
     template<typename T> struct get_typed_pointer_visitor : public boost::static_visitor<T const *> {
       md_config_t const *conf;
@@ -241,6 +245,9 @@ public:
   void complain_about_parse_errors(CephContext *cct);
 
 private:
+  void validate_default_settings();
+
+  int _get_val(const char *key, std::string *value) const;
   config_value_t _get_val(const char *key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
@@ -257,7 +264,8 @@ private:
   int parse_config_files_impl(const std::list<std::string> &conf_files,
 			      std::ostream *warnings);
 
-  int set_val_impl(const char *val, config_option const *opt);
+  int set_val_impl(const std::string &val, config_option const *opt,
+                   std::string *error_message);
   int set_val_raw(const char *val, config_option const *opt);
 
   void init_subsys();
@@ -308,12 +316,15 @@ public:
 #define OPTION_OPT_U64(name) const uint64_t name;
 #define OPTION_OPT_UUID(name) const uuid_d name;
 #define OPTION(name, ty, init) \
-  public: \
-    OPTION_##ty(name)
+  public:                      \
+    OPTION_##ty(name)          \
+    struct option_##name##_t;
+#define OPTION_VALIDATOR(name)
 #define SAFE_OPTION(name, ty, init) \
-  protected: \
-    OPTION_##ty(name) \
-  public:
+  protected:                        \
+    OPTION_##ty(name)               \
+  public:                           \
+    struct option_##name##_t;
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
 #include "common/config_opts.h"
@@ -328,6 +339,7 @@ public:
 #undef OPTION_OPT_U64
 #undef OPTION_OPT_UUID
 #undef OPTION
+#undef OPTION_VALIDATOR
 #undef SAFE_OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
@@ -385,6 +397,7 @@ typedef md_config_t::config_option config_option;
 enum config_subsys_id {
   ceph_subsys_,   // default
 #define OPTION(a,b,c)
+#define OPTION_VALIDATOR(name)
 #define SAFE_OPTION(a,b,c)
 #define SUBSYS(name, log, gather) \
   ceph_subsys_##name,
@@ -392,6 +405,7 @@ enum config_subsys_id {
 #include "common/config_opts.h"
 #undef SUBSYS
 #undef OPTION
+#undef OPTION_VALIDATOR
 #undef SAFE_OPTION
 #undef DEFAULT_SUBSYS
   ceph_subsys_max

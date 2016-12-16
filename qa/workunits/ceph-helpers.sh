@@ -893,6 +893,8 @@ function test_get_not_primary() {
 # @param STDOUT the output of ceph-objectstore-tool
 # @return 0 on success, 1 on error
 #
+# The value of $ceph_osd_args will be passed to restarted osds
+#
 function objectstore_tool() {
     local dir=$1
     shift
@@ -905,7 +907,7 @@ function objectstore_tool() {
         --data-path $osd_data \
         --journal-path $osd_data/journal \
         "$@" || return 1
-    activate_osd $dir $id >&2 || return 1
+    activate_osd $dir $id $ceph_osd_args >&2 || return 1
     wait_for_clean >&2
 }
 

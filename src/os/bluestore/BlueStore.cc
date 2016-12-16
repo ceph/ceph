@@ -530,7 +530,17 @@ void BlueStore::Cache::trim(
   uint64_t current_buffer = _get_buffer_bytes();
   uint64_t current = current_meta + current_buffer;
 
-  uint64_t target_meta = target_bytes * target_meta_ratio;
+  uint64_t target_meta = target_bytes * (double)target_meta_ratio; //need to cast to double
+                                                                   //since float(1) might produce inaccurate value
+                                                                   // for target_meta (a bit greater than target_bytes)
+                                                                   // that causes overflow in target_buffer below.
+                                                                   //Consider the following code:
+                                                                   //uint64_t i =(uint64_t)227*1024*1024*1024 + 1;
+                                                                   //float f = 1;
+                                                                   //uint64_t i2 = i*f;
+                                                                   //assert(i == i2);
+
+  target_meta = min(target_bytes, target_meta); //and just in case that ratio is > 1
   uint64_t target_buffer = target_bytes - target_meta;
 
   if (current <= target_bytes) {
@@ -788,8 +798,8 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     if (buffer_num) {
       uint64_t buffer_avg_size = buffer_bytes / buffer_num;
       assert(buffer_avg_size);
-      uint64_t caculated_buffer_num = buffer_max / buffer_avg_size;
-      kout = caculated_buffer_num * g_conf->bluestore_2q_cache_kout_ratio;
+      uint64_t calculated_buffer_num = buffer_max / buffer_avg_size;
+      kout = calculated_buffer_num * g_conf->bluestore_2q_cache_kout_ratio;
     }
 
     if (buffer_list_bytes[BUFFER_HOT] < khot) {
@@ -1608,23 +1618,28 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 	  endoff = n->offset;
 	}
 	bufferlist bl;
-	unsigned n;
-	if (encode_some(p->offset, endoff - p->offset, bl, &n)) {
+	unsigned nn;
+	if (encode_some(p->offset, endoff - p->offset, bl, &nn)) {
 	  return true;
 	}
         size_t len = bl.length();
 	dout(20) << __func__ << " shard 0x" << std::hex
 		 << p->offset << std::dec << " is " << len
-		 << " bytes (was " << p->shard_info->bytes << ") from " << n
+		 << " bytes (was " << p->shard_info->bytes << ") from " << nn
 		 << " extents" << dendl;
+
+        //indicate need for reshard if force mode selected, len > shard_max size OR
+        //non-last shard size is below the min threshold. The last check is to avoid potential 
+        //unneeded reshardings since this might happen permanently.
         if (!force &&
             (len > g_conf->bluestore_extent_map_shard_max_size ||
-             len < g_conf->bluestore_extent_map_shard_min_size)) {
+              (n != shards.end() && len < g_conf->bluestore_extent_map_shard_min_size) 
+             )) {
           return true;
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
-	p->shard_info->extents = n;
+	p->shard_info->extents = nn;
 	t->set(PREFIX_OBJ, p->key, bl);
 	p->dirty = false;
       }
@@ -1785,8 +1800,11 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
   auto start = extent_map.lower_bound(dummy);
   uint32_t end = offset + length;
 
+  __u8 struct_v = 1;
+
   unsigned n = 0;
   size_t bound = 0;
+  denc(struct_v, bound);
   denc_varint(0, bound);
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
@@ -1802,11 +1820,12 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
     denc_varint(0, bound); // logical_offset
     denc_varint(0, bound); // len
     denc_varint(0, bound); // blob_offset
-    p->blob->bound_encode(bound, false);
+    p->blob->bound_encode(bound, struct_v, false);
   }
 
   {
     auto app = bl.get_contiguous_appender(bound);
+    denc(struct_v, app);
     denc_varint(n, app);
     if (pn) {
       *pn = n;
@@ -1853,7 +1872,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       }
       pos = p->logical_end();
       if (include_blob) {
-	p->blob->encode(app, false);
+	p->blob->encode(app, struct_v, false);
       }
     }
   }
@@ -1875,6 +1894,9 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 
   assert(bl.get_num_buffers() <= 1);
   auto p = bl.front().begin_deep();
+  __u8 struct_v;
+  denc(struct_v, p);
+  assert(struct_v == 1);
   uint32_t num;
   denc_varint(num, p);
   vector<BlobRef> blobs(num);
@@ -1910,7 +1932,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 	assert(le->blob);
       } else {
 	Blob *b = new Blob();
-	b->decode(p, false);
+	b->decode(p, struct_v, false);
 	blobs[n] = b;
 	onode->c->open_shared_blob(b);
 	le->assign_blob(b);
@@ -1928,22 +1950,26 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 
 void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
 {
+  __u8 struct_v = 1;
+  denc(struct_v, p);
   denc_varint((uint32_t)0, p);
   size_t key_size = 0;
   denc_varint((uint32_t)0, key_size);
   p += spanning_blob_map.size() * key_size;
   for (const auto& i : spanning_blob_map) {
-    i.second->bound_encode(p, true);
+    i.second->bound_encode(p, struct_v, true);
   }
 }
 
 void BlueStore::ExtentMap::encode_spanning_blobs(
   bufferlist::contiguous_appender& p)
 {
+  __u8 struct_v = 1;
+  denc(struct_v, p);
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
     denc_varint(i.second->id, p);
-    i.second->encode(p, true);
+    i.second->encode(p, struct_v, true);
   }
 }
 
@@ -1951,13 +1977,16 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   Collection *c,
   bufferptr::iterator& p)
 {
+  __u8 struct_v;
+  denc(struct_v, p);
+  assert(struct_v == 1);
   unsigned n;
   denc_varint(n, p);
   while (n--) {
     BlobRef b(new Blob());
     denc_varint(b->id, p);
     spanning_blob_map[b->id] = b;
-    b->decode(p, true);
+    b->decode(p, struct_v, true);
     c->open_shared_blob(b);
   }
 }
@@ -7916,8 +7945,7 @@ void BlueStore::_wctx_finish(
     if (b->is_spanning() && b->get_ref_map().empty()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
-      auto it = o->extent_map.spanning_blob_map.find(b->id);
-      o->extent_map.spanning_blob_map.erase(it);
+      o->extent_map.spanning_blob_map.erase(b->id);
     }
   }
 }
@@ -8035,8 +8063,13 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
-    wctx.csum_order = std::max(min_alloc_size_order,
-			       (size_t)ctzl(o->onode.expected_write_size));
+    if (o->onode.expected_write_size) {
+      wctx.csum_order = std::max(min_alloc_size_order,
+			         (size_t)ctzl(o->onode.expected_write_size));
+    } else {
+      wctx.csum_order = min_alloc_size_order;
+    }
+
     if (wctx.compress) {
       wctx.target_blob_size = select_option(
         "compression_max_blob_size",
@@ -8621,11 +8654,12 @@ int BlueStore::_do_clone_range(
   }
   int n = 0;
   bool dirtied_oldo = false;
+  uint64_t end = srcoff + length;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
     auto& e = *ep;
-    if (e.logical_offset >= srcoff + length) {
+    if (e.logical_offset >= end) {
       break;
     }
     dout(20) << __func__ << "  src " << e << dendl;
@@ -8650,9 +8684,6 @@ int BlueStore::_do_clone_range(
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
-      if (cb->id >= 0) {
-	newo->extent_map.spanning_blob_map[cb->id] = cb;
-      }
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.extents) {
 	if (p.is_valid()) {
@@ -8669,8 +8700,8 @@ int BlueStore::_do_clone_range(
     } else {
       skip_front = 0;
     }
-    if (e.logical_offset + e.length > srcoff + length) {
-      skip_back = e.logical_offset + e.length - (srcoff + length);
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
     } else {
       skip_back = 0;
     }

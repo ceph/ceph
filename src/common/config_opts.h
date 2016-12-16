@@ -491,6 +491,7 @@ OPTION(mds_recall_state_timeout, OPT_FLOAT, 60)    // detect clients which aren'
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT, 300) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT, 10) // collapse N-client health metrics to a single 'many'
+OPTION(mds_health_cache_threshold, OPT_FLOAT, 1.5) // warn on cache size if it exceeds mds_cache_size by this factor
 OPTION(mds_reconnect_timeout, OPT_FLOAT, 45)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT, 5)
@@ -787,7 +788,7 @@ OPTION(osd_max_push_cost, OPT_U64, 8<<20)  // max size of push message
 OPTION(osd_max_push_objects, OPT_U64, 10)  // max objects in single push op
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
 OPTION(osd_max_scrubs, OPT_INT, 1)
-OPTION(osd_scrub_during_recovery, OPT_BOOL, true) // Allow new scrubs to start while recovery is active on the OSD
+OPTION(osd_scrub_during_recovery, OPT_BOOL, false) // Allow new scrubs to start while recovery is active on the OSD
 OPTION(osd_scrub_begin_hour, OPT_INT, 0)
 OPTION(osd_scrub_end_hour, OPT_INT, 24)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
@@ -1049,7 +1050,7 @@ OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
-OPTION(bluestore_sync_submit_transaction, OPT_BOOL, true) // submit kv txn in queueing thread (not kv_sync_thread)
+OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
 OPTION(bluestore_wal_threads, OPT_INT, 4)
 OPTION(bluestore_wal_thread_timeout, OPT_INT, 30)
@@ -1298,8 +1299,25 @@ OPTION(rbd_default_format, OPT_INT, 2)
 OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
-SAFE_OPTION(rbd_default_features, OPT_STR, "layering,exclusive-lock,object-map,fast-diff,deep-flatten")   // only applies to format 2 images
 OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing image data blocks
+
+/**
+ * RBD features are only applicable for v2 images. This setting accepts either
+ * an integer bitmask value or comma-delimited string of RBD feature names.
+ * This setting is always internally stored as an integer bitmask value. The
+ * mapping between feature bitmask value and feature name is as follows:
+ *
+ *  +1 -> layering
+ *  +2 -> striping
+ *  +4 -> exclusive-lock
+ *  +8 -> object-map
+ *  +16 -> fast-diff
+ *  +32 -> deep-flatten
+ *  +64 -> journaling
+ *  +128 -> data-pool
+ */
+SAFE_OPTION(rbd_default_features, OPT_STR, "layering,exclusive-lock,object-map,fast-diff,deep-flatten")
+OPTION_VALIDATOR(rbd_default_features)
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 
@@ -1402,6 +1420,7 @@ OPTION(rgw_cross_domain_policy, OPT_STR, "<allow-access-from domain=\"*\" secure
 OPTION(rgw_healthcheck_disabling_path, OPT_STR, "") // path that existence causes the healthcheck to respond 503
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL, true)  // should we try to use the internal credentials for s3?
 OPTION(rgw_s3_auth_use_keystone, OPT_BOOL, false)  // should we try to use keystone for s3?
+OPTION(rgw_s3_auth_aws4_force_boto2_compat, OPT_BOOL, true) // force aws4 auth boto2 compatibility
 
 /* OpenLDAP-style LDAP parameter strings */
 /* rgw_ldap_uri  space-separated list of LDAP servers in URI format */
@@ -1538,6 +1557,7 @@ OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in 
 OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a single operation when processing objexp data
 
 OPTION(rgw_enable_static_website, OPT_BOOL, false) // enable static website feature
+OPTION(rgw_log_http_headers, OPT_STR, "" ) // list of HTTP headers to log when seen, ignores case (e.g., http_x_forwarded_for
 
 OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
 OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notification interval to followers

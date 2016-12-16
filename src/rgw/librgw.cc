@@ -297,7 +297,8 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+      rgw_log_op(store, nullptr /* !rest */, s,
+		 (op ? op->name() : "unknown"), olog);
     }
 
     int http_ret = s->err.http_ret;

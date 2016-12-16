@@ -1,0 +1,29 @@
+roles:
+- - mon.0
+  - mon.1
+  - mon.2
+  - osd.0
+  - osd.1
+  - osd.2
+  - mds.a
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - had wrong client addr
+    conf:
+      client.rest0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+- rest-api: [client.0]
+- workunit:
+    clients:
+      all:
+        - rest/test.py

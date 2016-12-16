@@ -871,6 +871,8 @@ void JournalMetadata::handle_watch_notify(uint64_t notify_id, uint64_t cookie) {
 void JournalMetadata::handle_watch_error(int err) {
   if (err == -ENOTCONN) {
     ldout(m_cct, 5) << "journal watch error: header removed" << dendl;
+  } else if (err == -EBLACKLISTED) {
+    ldout(m_cct, 5) << "journal watch error: client blacklisted" << dendl;
   } else {
     lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
   }

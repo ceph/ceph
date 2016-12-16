@@ -262,6 +262,11 @@ class DataScan : public MDSUtility, public MetadataTool
     int scan_frags();
 
     /**
+     * Cleanup xattrs from data pool
+     */
+    int cleanup();
+
+    /**
      * Check if an inode number is in the permitted ranges
      */
     bool valid_ino(inodeno_t ino) const;

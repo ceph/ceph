@@ -3359,7 +3359,14 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       if (algorithm != "AWS4-HMAC-SHA256") {
         return -EPERM;
       }
-      return authorize_v4(store, s);
+      /* compute first aws4 signature (stick to the boto2 implementation) */
+      int err = authorize_v4(store, s);
+      if ((err==-ERR_SIGNATURE_NO_MATCH) && !store->ctx()->_conf->rgw_s3_auth_aws4_force_boto2_compat) {
+        /* compute second aws4 signature (no bugs supported) */
+        ldout(s->cct, 10) << "computing second aws4 signature..." << dendl;
+        return authorize_v4(store, s, false);
+      }
+      return err;
     }
 
     /* AWS2 */
@@ -3513,7 +3520,7 @@ static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "Sig
 /*
  * handle v4 signatures (rados auth only)
  */
-int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_boto2_compat /* = true */)
 {
   string::size_type pos;
   bool using_qs;
@@ -3790,7 +3797,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       }
     }
     string token_value = string(t);
-    if (using_qs && (token == "host")) {
+    if (force_boto2_compat && using_qs && (token == "host")) {
       if (!port.empty() && port != "80" && port != "0") {
         token_value = token_value + ":" + port;
       } else if (!secure_port.empty() && secure_port != "443") {

@@ -10,7 +10,7 @@ to the pg log as transactions, and is incremented in all the places it
 used to be. The user_version is modified by manipulating the new
 OpContext::user_at_version and is also persisted via the pg log
 transactions.
-user_at_version is modified only in ReplicatedPG::prepare_transaction
+user_at_version is modified only in PrimaryLogPG::prepare_transaction
 when the op was a "user modify" (a non-watch write), and the durable
 user_version is updated according to the following rules:
 1) set user_at_version to the maximum of ctx->new_obs.oi.user_version+1

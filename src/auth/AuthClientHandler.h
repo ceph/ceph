@@ -21,7 +21,6 @@
 
 class CephContext;
 struct MAuthReply;
-class AuthClientHandler;
 class RotatingKeyRing;
 
 class AuthClientHandler {

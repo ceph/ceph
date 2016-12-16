@@ -284,7 +284,7 @@ COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it", \
-	"make new filesystom using pools <metadata> and <data>", \
+	"make new filesystem using pools <metadata> and <data>", \
 	"mds", "rw", "cli,rest")
 /*
  * Monmap commands

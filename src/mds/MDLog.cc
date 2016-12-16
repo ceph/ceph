@@ -297,6 +297,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   le->update_segment();
   le->set_stamp(ceph_clock_now(g_ceph_context));
 
+  mdsmap_up_features = mds->mdsmap->get_up_features();
   pending_events[ls->seq].push_back(PendingEvent(le, c));
   num_events++;
 
@@ -376,6 +377,7 @@ void MDLog::_submit_thread()
       continue;
     }
 
+    int64_t features = mdsmap_up_features;
     PendingEvent data = it->second.front();
     it->second.pop_front();
 
@@ -386,7 +388,7 @@ void MDLog::_submit_thread()
       LogSegment *ls = le->_segment;
       // encode it, with event type
       bufferlist bl;
-      le->encode_with_header(bl, mds->mdsmap->get_up_features());
+      le->encode_with_header(bl, features);
 
       uint64_t write_pos = journaler->get_write_pos();
 
@@ -1435,9 +1437,20 @@ void MDLog::standby_trim_segments()
   bool removed_segment = false;
   while (have_any_segments()) {
     LogSegment *seg = get_oldest_segment();
-    if (seg->end > expire_pos)
+    dout(10) << " segment seq=" << seg->seq << " " << seg->offset <<
+      "~" << seg->end - seg->offset << dendl;
+
+    if (seg->end > expire_pos) {
+      dout(10) << " won't remove, not expired!" << dendl;
       break;
-    dout(10) << " removing segment " << seg->seq << "/" << seg->offset << dendl;
+    }
+
+    if (segments.size() == 1) {
+      dout(10) << " won't remove, last segment!" << dendl;
+      break;
+    }
+
+    dout(10) << " removing segment" << dendl;
     mds->mdcache->standby_trim_segment(seg);
     remove_oldest_segment();
     removed_segment = true;
@@ -1446,8 +1459,9 @@ void MDLog::standby_trim_segments()
   if (removed_segment) {
     dout(20) << " calling mdcache->trim!" << dendl;
     mds->mdcache->trim(-1);
-  } else
+  } else {
     dout(20) << " removed no segments!" << dendl;
+  }
 }
 
 void MDLog::dump_replay_status(Formatter *f) const

@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    clients:
+      all:
+        - suites/fsx.sh
