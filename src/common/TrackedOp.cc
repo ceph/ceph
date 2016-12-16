@@ -329,7 +329,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     events.push_back(Event(stamp, event));
     current = events.back().c_str();
   }
-  dout(5) <<  "seq: " << seq
+  dout(6) <<  "seq: " << seq
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
@@ -347,7 +347,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     events.push_back(Event(stamp, event));
     current = event;
   }
-  dout(5) <<  "seq: " << seq
+  dout(6) <<  "seq: " << seq
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
