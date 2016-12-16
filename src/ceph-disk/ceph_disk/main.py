@@ -2265,7 +2265,7 @@ class PrepareBluestoreBlockWAL(PrepareSpace):
         )
 
         if block_size is None:
-            return 128  # MB, default value
+            return 576  # MB, default value
         else:
             return int(block_size) / 1048576  # MB
 
