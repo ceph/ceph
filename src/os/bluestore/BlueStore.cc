@@ -656,23 +656,21 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 #ifdef DEBUG_CACHE
 void BlueStore::LRUCache::_audit(const char *when)
 {
-  if (true) {
-    dout(10) << __func__ << " " << when << " start" << dendl;
-    uint64_t s = 0;
-    for (auto i = buffer_lru.begin(); i != buffer_lru.end(); ++i) {
-      s += i->length;
-    }
-    if (s != buffer_size) {
-      derr << __func__ << " buffer_size " << buffer_size << " actual " << s
-	   << dendl;
-      for (auto i = buffer_lru.begin(); i != buffer_lru.end(); ++i) {
-	derr << __func__ << " " << *i << dendl;
-      }
-      assert(s == buffer_size);
-    }
-    dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
-	     << " ok" << dendl;
+  dout(10) << __func__ << " " << when << " start" << dendl;
+  uint64_t s = 0;
+  for (auto i = buffer_lru.begin(); i != buffer_lru.end(); ++i) {
+    s += i->length;
   }
+  if (s != buffer_size) {
+    derr << __func__ << " buffer_size " << buffer_size << " actual " << s
+	 << dendl;
+    for (auto i = buffer_lru.begin(); i != buffer_lru.end(); ++i) {
+      derr << __func__ << " " << *i << dendl;
+    }
+    assert(s == buffer_size);
+  }
+  dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
+	   << " ok" << dendl;
 }
 #endif
 
@@ -911,44 +909,42 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 #ifdef DEBUG_CACHE
 void BlueStore::TwoQCache::_audit(const char *when)
 {
-  if (true) {
-    dout(10) << __func__ << " " << when << " start" << dendl;
-    uint64_t s = 0;
-    for (auto i = buffer_hot.begin(); i != buffer_hot.end(); ++i) {
-      s += i->length;
-    }
-
-    uint64_t hot_bytes = s;
-    if (hot_bytes != buffer_list_bytes[BUFFER_HOT]) {
-      derr << __func__ << " hot_list_bytes "
-           << buffer_list_bytes[BUFFER_HOT]
-           << " != actual " << hot_bytes
-           << dendl;
-      assert(hot_bytes == buffer_list_bytes[BUFFER_HOT]);
-    }
-
-    for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
-      s += i->length;
-    }
-
-    uint64_t warm_in_bytes = s - hot_bytes;
-    if (warm_in_bytes != buffer_list_bytes[BUFFER_WARM_IN]) {
-      derr << __func__ << " warm_in_list_bytes "
-           << buffer_list_bytes[BUFFER_WARM_IN]
-           << " != actual " << warm_in_bytes
-           << dendl;
-      assert(warm_in_bytes == buffer_list_bytes[BUFFER_WARM_IN]);
-    }
-
-    if (s != buffer_bytes) {
-      derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
-	   << dendl;
-      assert(s == buffer_bytes);
-    }
-
-    dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
-	     << " ok" << dendl;
+  dout(10) << __func__ << " " << when << " start" << dendl;
+  uint64_t s = 0;
+  for (auto i = buffer_hot.begin(); i != buffer_hot.end(); ++i) {
+    s += i->length;
   }
+
+  uint64_t hot_bytes = s;
+  if (hot_bytes != buffer_list_bytes[BUFFER_HOT]) {
+    derr << __func__ << " hot_list_bytes "
+         << buffer_list_bytes[BUFFER_HOT]
+         << " != actual " << hot_bytes
+         << dendl;
+    assert(hot_bytes == buffer_list_bytes[BUFFER_HOT]);
+  }
+
+  for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
+    s += i->length;
+  }
+
+  uint64_t warm_in_bytes = s - hot_bytes;
+  if (warm_in_bytes != buffer_list_bytes[BUFFER_WARM_IN]) {
+    derr << __func__ << " warm_in_list_bytes "
+         << buffer_list_bytes[BUFFER_WARM_IN]
+         << " != actual " << warm_in_bytes
+         << dendl;
+    assert(warm_in_bytes == buffer_list_bytes[BUFFER_WARM_IN]);
+  }
+
+  if (s != buffer_bytes) {
+    derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
+	 << dendl;
+    assert(s == buffer_bytes);
+  }
+
+  dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
+	   << " ok" << dendl;
 }
 #endif
 
@@ -8619,6 +8615,8 @@ int BlueStore::_clone(TransContext *txc,
       }
       it->next();
     }
+  } else {
+    newo->onode.clear_omap_flag();
   }
 
   txc->write_onode(newo);
