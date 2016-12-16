@@ -467,10 +467,8 @@ class TestCephDisk(object):
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
-        assert len(device['partitions']) == 4
+        assert len(device['partitions']) == 2
         c.check_osd_status(osd_uuid, 'block')
-        c.check_osd_status(osd_uuid, 'block.wal')
-        c.check_osd_status(osd_uuid, 'block.db')
         c.helper("pool_read_write")
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk --verbose zap " + disk)
