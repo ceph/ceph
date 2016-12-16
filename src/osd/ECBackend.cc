@@ -1445,9 +1445,6 @@ int ECBackend::get_min_avail_to_read_shards(
   // Make sure we don't do redundant reads for recovery
   assert(!for_recovery || !do_redundant_reads);
 
-  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
-    get_parent()->get_missing_loc_shards().find(hoid);
-
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
 
@@ -1485,6 +1482,8 @@ int ECBackend::get_min_avail_to_read_shards(
       }
     }
 
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
+      get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
       for (set<pg_shard_t>::iterator i = miter->second.begin();
 	   i != miter->second.end();
