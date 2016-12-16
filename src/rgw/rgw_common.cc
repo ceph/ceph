@@ -1468,7 +1468,7 @@ static void escape_str(const string& s, char esc_char, char special_char, string
   const char *src = s.c_str();
   char dest_buf[s.size() * 2 + 1];
   char *destp = dest_buf;
-  
+
   for (size_t i = 0; i < s.size(); i++) {
     char c = src[i];
     if (c == esc_char || c == special_char) {
@@ -1482,7 +1482,7 @@ static void escape_str(const string& s, char esc_char, char special_char, string
 
 void rgw_pool::from_str(const string& s)
 {
-  ssize_t pos = unescape_str(s, 0, '\\', ':', &name);
+  size_t pos = unescape_str(s, 0, '\\', ':', &name);
   if (pos != string::npos) {
     pos = unescape_str(s, pos, '\\', ':', &ns);
     /* ignore return; if pos != string::npos it means that we had a colon

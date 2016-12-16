@@ -141,11 +141,10 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
 
 int RGWOrphanStore::init()
 {
-  const char *log_pool = store->get_zone_params().log_pool.name.c_str();
-  librados::Rados *rados = store->get_rados_handle();
-  int r = rados->ioctx_create(log_pool, ioctx);
+  rgw_pool& log_pool = store->get_zone_params().log_pool;
+  int r = rgw_init_ioctx(store->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
-    cerr << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << std::endl;
+    cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
     return r;
   }
 
@@ -280,13 +279,11 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
 
 int RGWOrphanSearch::build_all_oids_index()
 {
-  librados::Rados *rados = store->get_rados_handle();
-
   librados::IoCtx ioctx;
 
-  int ret = rados->ioctx_create(search_info.pool.c_str(), ioctx);
+  int ret = rgw_init_ioctx(store->get_rados_handle(), search_info.pool, ioctx);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": ioctx_create() returned ret=" << ret << dendl;
+    lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -674,11 +671,9 @@ int RGWOrphanSearch::compare_oid_indexes()
 
   librados::IoCtx data_ioctx;
 
-  librados::Rados *rados = store->get_rados_handle();
-
-  int ret = rados->ioctx_create(search_info.pool.c_str(), data_ioctx);
+  int ret = rgw_init_ioctx(store->get_rados_handle(), search_info.pool, data_ioctx);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": ioctx_create() returned ret=" << ret << dendl;
+    lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
     return ret;
   }
 

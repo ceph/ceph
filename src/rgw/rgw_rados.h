@@ -76,6 +76,8 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, s
   }
 }
 
+int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, librados::IoCtx& ioctx, bool create = false);
+
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
 static inline bool rgw_raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_obj& raw_obj, rgw_obj *obj)
@@ -1059,7 +1061,7 @@ public:
   int read();
   int write(bool exclusive);
 
-  virtual const string& get_pool_name(CephContext *cct) = 0;
+  virtual rgw_pool get_pool(CephContext *cct) = 0;
   virtual const string get_default_oid(bool old_format = false) = 0;
   virtual const string& get_names_oid_prefix() = 0;
   virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
@@ -1071,9 +1073,9 @@ public:
 WRITE_CLASS_ENCODER(RGWSystemMetaObj)
 
 struct RGWZonePlacementInfo {
-  string index_pool;
-  string data_pool;
-  string data_extra_pool; /* if not set we should use data_pool */
+  rgw_pool index_pool;
+  rgw_pool data_pool;
+  rgw_pool data_extra_pool; /* if not set we should use data_pool */
   RGWBucketIndexType index_type;
   std::string compression_type;
 
@@ -1081,9 +1083,9 @@ struct RGWZonePlacementInfo {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);
-    ::encode(index_pool, bl);
-    ::encode(data_pool, bl);
-    ::encode(data_extra_pool, bl);
+    ::encode(index_pool.to_str(), bl);
+    ::encode(data_pool.to_str(), bl);
+    ::encode(data_extra_pool.to_str(), bl);
     ::encode((uint32_t)index_type, bl);
     ::encode(compression_type, bl);
     ENCODE_FINISH(bl);
@@ -1091,10 +1093,16 @@ struct RGWZonePlacementInfo {
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(6, bl);
-    ::decode(index_pool, bl);
-    ::decode(data_pool, bl);
+    string index_pool_str;
+    string data_pool_str;
+    ::decode(index_pool_str, bl);
+    index_pool = rgw_pool(index_pool_str);
+    ::decode(data_pool_str, bl);
+    data_pool = rgw_pool(data_pool_str);
     if (struct_v >= 4) {
-      ::decode(data_extra_pool, bl);
+      string data_extra_pool_str;
+      ::decode(data_extra_pool_str, bl);
+      data_extra_pool = rgw_pool(data_extra_pool_str);
     }
     if (struct_v >= 5) {
       uint32_t it;
@@ -1106,7 +1114,7 @@ struct RGWZonePlacementInfo {
     }
     DECODE_FINISH(bl);
   }
-  const string& get_data_extra_pool() {
+  const rgw_pool& get_data_extra_pool() {
     if (data_extra_pool.empty()) {
       return data_pool;
     }
@@ -1147,7 +1155,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   RGWZoneParams(const string& id, const string& name, const string& _realm_id)
     : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
-  const string& get_pool_name(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct);
   const string get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
@@ -1276,9 +1284,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
       return false;
     }
     if (!obj.in_extra_data) {
-      pool->init(iter->second.data_pool);
+      *pool = iter->second.data_pool;
     } else {
-      pool->init(iter->second.data_extra_pool);
+      *pool = iter->second.data_extra_pool;
     }
     return true;
   }
@@ -1516,7 +1524,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
-  const string& get_pool_name(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct);
   const string get_default_oid(bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_names_oid_prefix();
@@ -1687,7 +1695,7 @@ public:
 
   int create(bool exclusive = true);
   int delete_obj();
-  const string& get_pool_name(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct);
   const string get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
@@ -1782,7 +1790,7 @@ public:
   const RGWPeriodMap& get_map() const { return period_map; }
   const RGWPeriodConfig& get_config() const { return period_config; }
   const std::vector<std::string>& get_sync_status() const { return sync_status; }
-  const string& get_pool_name(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
 
@@ -2520,10 +2528,10 @@ public:
                             ceph::real_time creation_time,
                             rgw_bucket *master_bucket,
                             bool exclusive = true);
-  int add_bucket_placement(std::string& new_pool);
-  int remove_bucket_placement(std::string& new_pool);
-  int list_placement_set(set<string>& names);
-  int create_pools(vector<string>& names, vector<int>& retcodes);
+  int add_bucket_placement(const rgw_pool& new_pool);
+  int remove_bucket_placement(const rgw_pool& new_pool);
+  int list_placement_set(set<rgw_pool>& names);
+  int create_pools(vector<rgw_pool>& pools, vector<int>& retcodes);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 
@@ -3208,7 +3216,7 @@ public:
 
   int omap_get_vals(rgw_raw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
   int omap_get_all(rgw_raw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
-  int omap_set(rgw_raw_obj& obj, std::string& key, bufferlist& bl);
+  int omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl);
   int omap_set(rgw_raw_obj& obj, map<std::string, bufferlist>& m);
   int omap_del(rgw_raw_obj& obj, const std::string& key);
   int update_containers_stats(map<string, RGWBucketEnt>& m);
@@ -3442,8 +3450,8 @@ public:
     return string(buf) + trans_id_suffix;
   }
 
-  void get_log_pool_name(string& name) {
-    name = get_zone_params().log_pool.name;
+  void get_log_pool(rgw_pool& pool) {
+    pool = get_zone_params().log_pool;
   }
 
   bool need_to_log_data() {

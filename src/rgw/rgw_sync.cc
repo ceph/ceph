@@ -306,11 +306,9 @@ int RGWMetaSyncStatusManager::init()
     return -EIO;
   }
 
-  const char *log_pool = store->get_zone_params().log_pool.name.c_str();
-  librados::Rados *rados = store->get_rados_handle();
-  int r = rados->ioctx_create(log_pool, ioctx);
+  int r = rgw_init_ioctx(store->get_rados_handle(), store->get_zone_params().log_pool, ioctx, true);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << dendl;
+    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool << " ret=" << r << dendl;
     return r;
   }
 

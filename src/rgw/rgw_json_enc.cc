@@ -42,7 +42,7 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
 
 void encode_json(const char *name, const rgw_pool& pool, Formatter *f)
 {
-  f->dump_string(name, pool.name);
+  f->dump_string(name, pool.to_str());
 }
 
 void decode_json_obj(rgw_pool& pool, JSONObj *obj)
@@ -1425,7 +1425,7 @@ void RGWOrphanSearchInfo::dump(Formatter *f) const
 {
   f->open_object_section("orphan_search_info");
   f->dump_string("job_name", job_name);
-  f->dump_string("pool", pool);
+  encode_json("pool", pool, f);
   f->dump_int("num_shards", num_shards);
   encode_json("start_time", start_time, f);
   f->close_section();
