@@ -23,7 +23,6 @@ import httplib2
 
 import util.rgw as rgw_utils
 
-from teuthology import misc as teuthology
 from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
@@ -63,28 +62,27 @@ def get_acl(key):
         remove_newlines(raw_acl)
     )
 
-
 def task(ctx, config):
     """
     Test radosgw-admin functionality against a running rgw instance.
     """
     global log
-    assert config is None or isinstance(config, list) \
-        or isinstance(config, dict), \
-        "task s3tests only supports a list or dictionary for configuration"
-    all_clients = ['client.{id}'.format(id=id_)
-                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
-    if config is None:
-        config = all_clients
-    if isinstance(config, list):
-        config = dict.fromkeys(config)
-    clients = config.keys()
+
+    assert isinstance(config, dict), \
+        "task radosgw-admin only supports a dictionary with a master_client for configuration"
+
+    # regions found just like in the rgw task
+    regions = ctx.rgw.regions
+
+    log.debug('regions are: %r', regions)
+    log.debug('config is: %r', config)
+
+    client = config["master_client"]
 
     multi_region_run = rgw_utils.multi_region_enabled(ctx)
 
-    client = clients[0]; # default choice, multi-region code may overwrite this
-    if multi_region_run:
-        client = rgw_utils.get_master_client(ctx, clients)
+    log.debug('multi_region_run is: %r', multi_region_run)
+    log.debug('master_client is: %r', client)
 
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task

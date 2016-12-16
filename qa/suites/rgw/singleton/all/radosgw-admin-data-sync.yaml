@@ -63,3 +63,4 @@ tasks:
 - sleep:
     duration: 30
 - radosgw-admin:
+    master_client: client.0
