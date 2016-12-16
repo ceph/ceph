@@ -30,7 +30,6 @@
 
 class CephContext;
 class PerfCountersBuilder;
-class PerfCountersCollectionTest;
 
 enum perfcounter_type_d : uint8_t
 {

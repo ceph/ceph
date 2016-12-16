@@ -910,7 +910,6 @@ struct C_InvalidateCache : public Context {
                                         map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
-    string start = prefix;
     for (auto it : pairs) {
       if (it.first.compare(0, MIN(conf_prefix_len, it.first.size()), prefix) > 0)
         return false;
@@ -1025,8 +1024,8 @@ struct C_InvalidateCache : public Context {
     return new ExclusiveLock<ImageCtx>(*this);
   }
 
-  ObjectMap *ImageCtx::create_object_map(uint64_t snap_id) {
-    return new ObjectMap(*this, snap_id);
+  ObjectMap<ImageCtx> *ImageCtx::create_object_map(uint64_t snap_id) {
+    return new ObjectMap<ImageCtx>(*this, snap_id);
   }
 
   Journal<ImageCtx> *ImageCtx::create_journal() {

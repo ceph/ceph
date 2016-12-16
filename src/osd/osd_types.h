@@ -66,17 +66,24 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
 
 
-/// max recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 255u
-
-/// base recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_BASE 230u
-
-/// base backfill priority for MBackfillReserve (degraded PG)
-#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 200u
+/// min recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MIN 0
 
 /// base backfill priority for MBackfillReserve
-#define OSD_BACKFILL_PRIORITY_BASE 1u
+#define OSD_BACKFILL_PRIORITY_BASE 100
+
+/// base backfill priority for MBackfillReserve (degraded PG)
+#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 140
+
+/// base recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_BASE 180
+
+/// base backfill priority for MBackfillReserve (inactive PG)
+#define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
+
+/// max recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 255
+
 
 typedef hobject_t collection_list_handle_t;
 
@@ -4394,7 +4401,7 @@ public:
   ObjectContext()
     : ssc(NULL),
       destructor_callback(0),
-      lock("ReplicatedPG::ObjectContext::lock"),
+      lock("PrimaryLogPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
       blocked(false), requeue_scrub_on_unblock(false) {}
 
@@ -4770,7 +4777,7 @@ struct OSDOp {
   }
 
   /**
-   * split a bufferlist into constituent indata nembers of a vector of OSDOps
+   * split a bufferlist into constituent indata members of a vector of OSDOps
    *
    * @param ops [out] vector of OSDOps
    * @param in  [in] combined data buffer
@@ -4778,7 +4785,7 @@ struct OSDOp {
   static void split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in);
 
   /**
-   * merge indata nembers of a vector of OSDOp into a single bufferlist
+   * merge indata members of a vector of OSDOp into a single bufferlist
    *
    * Notably this also encodes certain other OSDOp data into the data
    * buffer, including the sobject_t soid.

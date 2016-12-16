@@ -17,14 +17,15 @@
 namespace librbd {
 namespace object_map {
 
-void UpdateRequest::send() {
+template <typename I>
+void UpdateRequest<I>::send() {
   assert(m_image_ctx.snap_lock.is_locked());
   assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   // safe to update in-memory state first without handling rollback since any
   // failures will invalidate the object map
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 20) << this << " updating object map"
                  << ": ictx=" << &m_image_ctx << ", oid=" << oid << ", ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
@@ -32,20 +33,6 @@ void UpdateRequest::send() {
 		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
 		 << "->" << static_cast<uint32_t>(m_new_state)
 		 << dendl;
-
-  // rebuilding the object map might update on-disk only
-  if (m_snap_id == m_image_ctx.snap_id) {
-    assert(m_image_ctx.object_map_lock.is_wlocked());
-    for (uint64_t object_no = m_start_object_no;
-         object_no < MIN(m_end_object_no, m_object_map.size());
-         ++object_no) {
-      uint8_t state = m_object_map[object_no];
-      if (!m_current_state || state == *m_current_state ||
-          (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
-        m_object_map[object_no] = m_new_state;
-      }
-    }
-  }
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
@@ -60,10 +47,28 @@ void UpdateRequest::send() {
   rados_completion->release();
 }
 
-void UpdateRequest::finish_request() {
+template <typename I>
+void UpdateRequest<I>::finish_request() {
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
   ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
                              << dendl;
+
+  // rebuilding the object map might update on-disk only
+  if (m_snap_id == m_image_ctx.snap_id) {
+    for (uint64_t object_no = m_start_object_no;
+         object_no < MIN(m_end_object_no, m_object_map.size());
+         ++object_no) {
+      uint8_t state = m_object_map[object_no];
+      if (!m_current_state || state == *m_current_state ||
+          (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
+        m_object_map[object_no] = m_new_state;
+      }
+    }
+  }
 }
 
 } // namespace object_map
 } // namespace librbd
+
+template class librbd::object_map::UpdateRequest<librbd::ImageCtx>;

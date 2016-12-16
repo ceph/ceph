@@ -1,0 +1,25 @@
+
+overrides:
+  ceph:
+    log-whitelist:
+      - OSD full dropping all updates
+      - OSD near full
+      - is full \(reached quota
+    conf:
+      osd:
+        osd mon report interval max: 5
+        osd objectstore: memstore
+        memstore device bytes: 100000000
+      client.0:
+        debug client: 20
+        debug objecter: 20
+        debug objectcacher: 20
+      client.1:
+        debug client: 20
+        debug objecter: 20
+        debug objectcacher: 20
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_full

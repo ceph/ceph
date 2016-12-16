@@ -48,7 +48,6 @@ class Processor {
   NetHandler net;
   Worker *worker;
   ServerSocket listen_socket;
-  uint64_t nonce;
   EventCallbackRef listen_handler;
 
   class C_processor_accept;
@@ -58,8 +57,9 @@ class Processor {
   ~Processor() { delete listen_handler; };
 
   void stop();
-  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
-  int rebind(const set<int>& avoid_port);
+  int bind(const entity_addr_t &bind_addr,
+	   const set<int>& avoid_ports,
+	   entity_addr_t* bound_addr);
   void start();
   void accept();
 };
@@ -210,6 +210,8 @@ private:
                       const entity_addr_t& dest_addr, int dest_type);
 
   int _send_message(Message *m, const entity_inst_t& dest);
+  void _finish_bind(const entity_addr_t& bind_addr,
+		    const entity_addr_t& listen_addr);
 
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;

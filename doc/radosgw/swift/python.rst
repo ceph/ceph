@@ -95,7 +95,7 @@ This downloads the object ``hello.txt`` and saves it in
 Delete an Object
 ================
 
-This deletes the object ``goodbye.txt``:
+This deletes the object ``hello.txt``:
 
 .. code-block:: python
 

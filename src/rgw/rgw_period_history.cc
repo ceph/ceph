@@ -4,6 +4,8 @@
 #include "rgw_period_history.h"
 #include "rgw_rados.h"
 
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix

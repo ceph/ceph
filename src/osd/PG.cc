@@ -1136,7 +1136,7 @@ void PG::calc_ec_acting(
 	}
       }
       if (want[i] == CRUSH_ITEM_NONE)
-	ss << " failed to fill position " << i << std::endl;
+	ss << " failed to fill position " << (int)i << std::endl;
     }
   }
 
@@ -1898,6 +1898,7 @@ void PG::take_op_map_waiters()
     if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), *i)) {
       break;
     } else {
+      (*i)->mark_queued_for_pg();
       osd->op_wq.queue(make_pair(PGRef(this), *i));
       waiting_for_map.erase(i++);
     }
@@ -2125,18 +2126,31 @@ unsigned PG::get_recovery_priority()
   int pool_recovery_priority = 0;
   pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-  unsigned ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
-  if (ret > OSD_RECOVERY_PRIORITY_MAX)
+  int ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
+
+  // Clamp to valid range
+  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
     ret = OSD_RECOVERY_PRIORITY_MAX;
-  return ret;
+  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
+    ret = OSD_RECOVERY_PRIORITY_MIN;
+  }
+
+  static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
+  static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
+
+  return static_cast<unsigned>(ret);
 }
 
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  unsigned ret = OSD_BACKFILL_PRIORITY_BASE;
-  if (is_undersized()) {
+  int ret = OSD_BACKFILL_PRIORITY_BASE;
+  if (acting.size() < pool.info.min_size) {
+    // inactive: no. of replicas < min_size, highest priority since it blocks IO
+    ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
+
+  } else if (is_undersized()) {
     // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
     assert(pool.info.size > actingset.size());
     ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
@@ -2145,9 +2159,20 @@ unsigned PG::get_backfill_priority()
     // degraded: baseline degraded
     ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
   }
-  assert (ret < OSD_RECOVERY_PRIORITY_MAX);
 
-  return ret;
+  // Adjust with pool's recovery priority
+  int pool_recovery_priority = 0;
+  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+  ret += pool_recovery_priority;
+
+  // Clamp to valid range
+  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
+    ret = OSD_RECOVERY_PRIORITY_MAX;
+  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
+    ret = OSD_RECOVERY_PRIORITY_MIN;
+  }
+
+  return static_cast<unsigned>(ret);
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
@@ -3378,6 +3403,7 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
+  bool nodeep_scrub = false;
   assert(_lock.is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
     return false;
@@ -3401,8 +3427,10 @@ bool PG::sched_scrub()
 
   //NODEEP_SCRUB so ignore time initiated deep-scrub
   if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
-      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB))
+      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
     time_for_deep = false;
+    nodeep_scrub = true;
+  }
 
   if (!scrubber.must_scrub) {
     assert(!scrubber.must_deep_scrub);
@@ -3460,6 +3488,24 @@ bool PG::sched_scrub()
       if (time_for_deep) {
 	dout(10) << "sched_scrub: scrub will be deep" << dendl;
 	state_set(PG_STATE_DEEP_SCRUB);
+      } else if (!scrubber.must_deep_scrub && info.stats.stats.sum.num_deep_scrub_errors) {
+	if (!nodeep_scrub) {
+	  osd->clog->info() << "osd." << osd->whoami
+			    << " pg " << info.pgid
+			    << " Deep scrub errors, upgrading scrub to deep-scrub";
+	  state_set(PG_STATE_DEEP_SCRUB);
+	} else if (!scrubber.must_scrub) {
+	  osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
+	  clear_scrub_reserved();
+	  scrub_unreserve_replicas();
+	  return false;
+	} else {
+	  osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub request, losing deep-scrub details";
+	}
       }
       queue_scrub();
     } else {
@@ -4168,7 +4214,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	   * left end of the range if we are a tier because they may legitimately
 	   * not exist (see _scrub).
 	   */
-	  unsigned min = MAX(3, cct->_conf->osd_scrub_chunk_min);
+	  int min = MAX(3, cct->_conf->osd_scrub_chunk_min);
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
@@ -4567,7 +4613,7 @@ void PG::scrub_finish()
       oss << "ok";
     if (!deep_scrub && info.stats.stats.sum.num_deep_scrub_errors)
       oss << " ( " << info.stats.stats.sum.num_deep_scrub_errors
-          << " remaining deep scrub error(s) )";
+          << " remaining deep scrub error details lost)";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";
@@ -7247,7 +7293,9 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
 
   pg->reset_min_peer_features();
   get_infos();
-  if (peer_info_requested.empty() && !prior_set->pg_down) {
+  if (prior_set->pg_down) {
+    post_event(IsDown());
+  } else if (peer_info_requested.empty()) {
     post_event(GotInfo());
   }
 }
@@ -7377,8 +7425,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  }
 	  if (!any_up_complete_now && any_down_now) {
 	    dout(10) << " no osds up+complete from interval " << interval << dendl;
-	    pg->state_set(PG_STATE_DOWN);
-            pg->publish_stats_to_osd();
+	    post_event(IsDown());
 	    return discard_event();
 	  }
 	  break;
@@ -7619,6 +7666,36 @@ void PG::RecoveryState::WaitActingChange::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitactingchange_latency, dur);
+}
+
+/*------Down--------*/
+PG::RecoveryState::Down::Down(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering/Down")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_PEERING);
+  pg->state_set(PG_STATE_DOWN);
+
+  unique_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
+  assert(pg->blocked_by.empty());
+  pg->blocked_by.insert(prior_set->down.begin(), prior_set->down.end());
+  pg->publish_stats_to_osd();
+}
+
+void PG::RecoveryState::Down::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+
+  pg->state_clear(PG_STATE_DOWN);
+  utime_t dur = ceph_clock_now(pg->cct) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_down_latency, dur);
+
+  pg->blocked_by.clear();
+  pg->publish_stats_to_osd();
 }
 
 /*------Incomplete--------*/

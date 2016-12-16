@@ -35,6 +35,7 @@
 #include <iostream>
 #include <algorithm>
 #include <sstream>
+#include <list>
 #include <set>
 #include <vector>
 
@@ -5046,3 +5047,26 @@ TEST_F(TestLibRBD, DiscardAfterWrite)
   read_comp->release();
 }
 
+TEST_F(TestLibRBD, DefaultFeatures) {
+  std::string orig_default_features;
+  ASSERT_EQ(0, _rados.conf_get("rbd_default_features", orig_default_features));
+  BOOST_SCOPE_EXIT_ALL(orig_default_features) {
+    ASSERT_EQ(0, _rados.conf_set("rbd_default_features",
+                                 orig_default_features.c_str()));
+  };
+
+  std::list<std::pair<std::string, std::string> > feature_names_to_bitmask = {
+    {"", orig_default_features},
+    {"layering", "1"},
+    {"layering, exclusive-lock", "5"},
+    {"exclusive-lock,journaling", "68"},
+    {"125", "125"}
+  };
+
+  for (auto &pair : feature_names_to_bitmask) {
+    ASSERT_EQ(0, _rados.conf_set("rbd_default_features", pair.first.c_str()));
+    std::string features;
+    ASSERT_EQ(0, _rados.conf_get("rbd_default_features", features));
+    ASSERT_EQ(pair.second, features);
+  }
+}

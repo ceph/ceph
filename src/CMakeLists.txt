@@ -123,18 +123,29 @@ endif(no_yasm)
 if(CMAKE_VERSION VERSION_LESS "3.1")
   include(CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-  if(COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-  else()
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
+  if(NOT COMPILER_SUPPORTS_CXX11)
+    message(FATAL_ERROR
+      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
   endif()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  include(CheckCCompilerFlag)
+  CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
+  if(NOT COMPILER_SUPPORTS_GNU99)
+    message(FATAL_ERROR
+      "The compiler ${CMAKE_C_COMPILER} has no GNU C99 support.")
+  endif()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 else()
   set(CMAKE_CXX_STANDARD 11)
   set(CMAKE_CXX_EXTENSIONS OFF)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_C_STANDARD 99)
+  # we use `asm()` to inline assembly, so enable the GNU extension
+  set(CMAKE_C_EXTENSIONS ON)
+  set(C_STANDARD_REQUIRED ON)
 endif()
 
 ## Handle diagnostics color if compiler supports them.
-
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
   COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
 
@@ -465,6 +476,7 @@ set(libcommon_files
   common/ceph_strings.cc
   common/ceph_frag.cc
   common/config.cc
+  common/config_validators.cc
   common/utf8.c
   common/mime.c
   common/strtol.cc
@@ -628,19 +640,11 @@ if(${WITH_RADOSGW})
 endif(${WITH_RADOSGW})
 if(WITH_RBD)
   set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      rbd_types
-      cls_rbd_client
-      rbd_replay_types)
-  if(LINUX)
-    list(APPEND dencoder_srcs
-      $<TARGET_OBJECTS:krbd_objs>
-      $<TARGET_OBJECTS:parse_secret_objs>)
-    set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      keyutils
-      udev)
-  endif(LINUX)
+    ${DENCODER_EXTRALIBS}
+    cls_rbd_client
+    krbd
+    rbd_types
+    rbd_replay_types)
 endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
@@ -820,11 +824,11 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-if(KEYUTILS_FOUND)
+if(WITH_LIBCEPHFS OR WITH_RBD)
   set(parse_secret_files
     common/secret.c)
-  add_library(parse_secret_objs OBJECT ${parse_secret_files})
 endif()
+add_library(parse_secret_objs OBJECT ${parse_secret_files})
 
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
@@ -857,7 +861,7 @@ if(WITH_LIBCEPHFS)
   add_executable(mount.ceph ${mount_ceph_srcs}
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:common_mountcephfs_objs>)
-  target_link_libraries(mount.ceph keyutils)
+  target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
@@ -876,11 +880,10 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-if(LINUX)
-  add_library(krbd_objs OBJECT krbd.cc)
-endif()
-
 if(${WITH_RBD})
+  add_library(krbd STATIC krbd.cc
+    $<TARGET_OBJECTS:parse_secret_objs>)
+  target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
   add_subdirectory(librbd)
   if(WITH_FUSE)
     add_subdirectory(rbd_fuse)
@@ -932,7 +935,7 @@ configure_file(
 add_subdirectory(brag)
 
 # Everything you need to spin up a cluster with vstart.sh
-add_custom_target(vstart DEPENDS
+add_custom_target(vstart-base DEPENDS
     ceph-osd
     ceph-mon
     ceph-mgr
@@ -940,11 +943,17 @@ add_custom_target(vstart DEPENDS
     ceph-conf
     monmaptool
     crushtool
+    rados
     cython_rados
+    )
+
+add_custom_target(vstart DEPENDS
+    vstart-base
     ceph-mds)
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
+
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

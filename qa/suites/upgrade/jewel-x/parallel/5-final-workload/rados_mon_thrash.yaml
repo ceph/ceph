@@ -1,0 +1,18 @@
+meta:
+- desc: |
+   librados C and C++ api tests
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+tasks:
+  - mon_thrash:
+      revive_delay: 20
+      thrash_delay: 1
+  - print: "**** done mon_thrash 4-final-workload"
+  - workunit:
+      branch: jewel
+      clients:
+        client.1:
+          - rados/test-upgrade-v11.0.0.sh
+  - print: "**** done rados/test-upgrade-v11.0.0.sh 4-final-workload"

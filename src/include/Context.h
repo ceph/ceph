@@ -251,13 +251,6 @@ public:
 
 typedef C_ContextsBase<Context, Context> C_Contexts;
 
-
-// Forward declare GatherBuilder in order
-// to be able to friend it from Gather
-template <class ContextType, class GatherType>
-class C_GatherBuilderBase;
-
-
 /*
  * C_Gather
  *

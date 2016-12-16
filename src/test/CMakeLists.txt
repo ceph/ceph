@@ -492,16 +492,18 @@ if(${WITH_CEPHFS})
     )
 endif(${WITH_CEPHFS})
 
-add_executable(ceph_test_get_blkdev_size
-  test_get_blkdev_size.cc
-  )
-target_link_libraries(ceph_test_get_blkdev_size
-  common
-  pthread
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
+if(HAVE_BLKID)
+  add_executable(ceph_test_get_blkdev_size
+    test_get_blkdev_size.cc
+    )
+  target_link_libraries(ceph_test_get_blkdev_size
+    common
+    pthread
+    ${EXTRALIBS}
+    ${BLKID_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    )
+endif(HAVE_BLKID)
 
 #make check starts here
 
@@ -841,7 +843,6 @@ target_link_libraries(unittest_rbd_replay
   global
   rbd_replay
   rbd_replay_ios
-  keyutils
   ${BLKID_LIBRARIES}
   )
 endif(WITH_RBD)

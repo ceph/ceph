@@ -931,7 +931,9 @@ static void do_init(void *data, fuse_conn_info *conn)
 
   if (cfuse->fd_on_success) {
     //cout << "fuse init signaling on fd " << fd_on_success << std::endl;
-    uint32_t r = 0;
+    // see Preforker::daemonize(), ceph-fuse's parent process expects a `-1`
+    // from a daemonized child process.
+    uint32_t r = -1;
     int err = safe_write(cfuse->fd_on_success, &r, sizeof(r));
     if (err) {
       derr << "fuse_ll: do_init: safe_write failed with error "

@@ -195,6 +195,7 @@ enum {
   rs_getlog_latency,
   rs_waitactingchange_latency,
   rs_incomplete_latency,
+  rs_down_latency,
   rs_getmissing_latency,
   rs_waitupthru_latency,
   rs_last,
@@ -212,7 +213,7 @@ class MOSDPGMissing;
 class Objecter;
 
 class Watch;
-class ReplicatedPG;
+class PrimaryLogPG;
 
 class AuthAuthorizeHandlerRegistry;
 
@@ -1627,8 +1628,7 @@ private:
   map<int, int> debug_heartbeat_drops_remaining;
   Cond heartbeat_cond;
   bool heartbeat_stop;
-  Mutex heartbeat_update_lock; // orders under heartbeat_lock
-  bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
+  std::atomic_bool heartbeat_need_update;   
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
   Messenger *hbclient_messenger;
@@ -1643,16 +1643,13 @@ private:
   void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();
   bool heartbeat_peers_need_update() {
-    Mutex::Locker l(heartbeat_update_lock);
-    return heartbeat_need_update;
+    return heartbeat_need_update.load();
   }
   void heartbeat_set_peers_need_update() {
-    Mutex::Locker l(heartbeat_update_lock);
-    heartbeat_need_update = true;
+    heartbeat_need_update.store(true);
   }
   void heartbeat_clear_peers_need_update() {
-    Mutex::Locker l(heartbeat_update_lock);
-    heartbeat_need_update = false;
+    heartbeat_need_update.store(false);
   }
   void heartbeat();
   void heartbeat_check();
@@ -1957,7 +1954,7 @@ private:
     ThreadPool::TPHandle &handle);
 
   friend class PG;
-  friend class ReplicatedPG;
+  friend class PrimaryLogPG;
 
 
  protected:

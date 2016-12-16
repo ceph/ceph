@@ -534,20 +534,22 @@ public:
       }
     }
 #else
-    void bound_encode(size_t& p, bool include_ref_map) const {
-      denc(blob, p);
+    void bound_encode(size_t& p, uint64_t struct_v, bool include_ref_map) const {
+      denc(blob, p, struct_v);
       if (include_ref_map) {
         ref_map.bound_encode(p);
       }
     }
-    void encode(bufferlist::contiguous_appender& p, bool include_ref_map) const {
-      denc(blob, p);
+    void encode(bufferlist::contiguous_appender& p, uint64_t struct_v,
+		bool include_ref_map) const {
+      denc(blob, p, struct_v);
       if (include_ref_map) {
         ref_map.encode(p);
       }
     }
-    void decode(bufferptr::iterator& p, bool include_ref_map) {
-      denc(blob, p);
+    void decode(bufferptr::iterator& p, uint64_t struct_v,
+		bool include_ref_map) {
+      denc(blob, p, struct_v);
       if (include_ref_map) {
         ref_map.decode(p);
       }
@@ -1204,7 +1206,6 @@ public:
       utime_t lat, now = ceph_clock_now(g_ceph_context);
       lat = now - last_stamp;
       logger->tinc(state, lat);
-      start = now;
       last_stamp = now;
     }
 

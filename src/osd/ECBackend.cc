@@ -24,7 +24,7 @@
 #include "messages/MOSDECSubOpReadReply.h"
 #include "ECMsgTypes.h"
 
-#include "ReplicatedPG.h"
+#include "PrimaryLogPG.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -910,7 +910,7 @@ void ECBackend::handle_sub_write(
     !op.backfill,
     localt);
 
-  ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
+  PrimaryLogPG *_rPG = dynamic_cast<PrimaryLogPG *>(get_parent());
   if (_rPG && !_rPG->is_undersized() &&
       (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
@@ -1337,7 +1337,6 @@ void ECBackend::on_change()
   }
   tid_to_op_map.clear();
 
-  tid_to_op_map.clear();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {

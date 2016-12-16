@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 11.0.2)
+set(VERSION 11.1.0)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -285,10 +285,9 @@ else(ALLOCATOR)
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-if(NOT FREEBSD)
-  # XXX keyutils is available, but not yet recognised
+if(WITH_LIBCEPHFS OR WITH_RBD)
   find_package(keyutils REQUIRED)
-endif(NOT FREEBSD)
+endif()
 
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})

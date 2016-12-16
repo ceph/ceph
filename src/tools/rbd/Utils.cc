@@ -543,7 +543,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
   } else {
-    features = parse_rbd_default_features(g_ceph_context);
+    features = get_rbd_default_features(g_ceph_context);
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
@@ -874,40 +874,9 @@ std::string timestr(time_t t) {
   return buf;
 }
 
-// FIXME (asheplyakov): use function from librbd/Utils.cc
-
-uint64_t parse_rbd_default_features(CephContext* cct) 
-{
-  int ret = 0;
-  uint64_t value = 0;
+uint64_t get_rbd_default_features(CephContext* cct) {
   auto features = cct->_conf->get_val<std::string>("rbd_default_features");
-  try {
-    value = boost::lexical_cast<decltype(value)>(features);
-  } catch (const boost::bad_lexical_cast& ) {
-    map<std::string, int> conf_vals = {{RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING}, 
-                                       {RBD_FEATURE_NAME_STRIPINGV2, RBD_FEATURE_STRIPINGV2},
-                                       {RBD_FEATURE_NAME_EXCLUSIVE_LOCK, RBD_FEATURE_EXCLUSIVE_LOCK},
-                                       {RBD_FEATURE_NAME_OBJECT_MAP, RBD_FEATURE_OBJECT_MAP},
-                                       {RBD_FEATURE_NAME_FAST_DIFF, RBD_FEATURE_FAST_DIFF},
-                                       {RBD_FEATURE_NAME_DEEP_FLATTEN, RBD_FEATURE_DEEP_FLATTEN},
-                                       {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING},
-                                       {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
-    };
-    std::vector<std::string> strs;
-    boost::split(strs, features, boost::is_any_of(","));
-    for (auto feature: strs) {
-      boost::trim(feature);
-      if (conf_vals.find(feature) != conf_vals.end()) {
-        value += conf_vals[feature];
-      } else {
-        ret = -EINVAL;
-        std::cerr << "Warning: unknown rbd feature " << feature << std::endl;
-      }
-    }
-    if (value == 0 && ret == -EINVAL)
-      value = RBD_FEATURES_DEFAULT;
-  }
-  return value;
+  return boost::lexical_cast<uint64_t>(features);
 }
 
 } // namespace utils

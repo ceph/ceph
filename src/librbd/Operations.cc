@@ -609,7 +609,7 @@ int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& pro
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP) &&
-      !ObjectMap::is_compatible(m_image_ctx.layout, size)) {
+      !ObjectMap<>::is_compatible(m_image_ctx.layout, size)) {
     lderr(cct) << "New size not compatible with object map" << dendl;
     return -EINVAL;
   }
@@ -647,7 +647,7 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
     return;
   } else if (m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
                                        m_image_ctx.snap_lock) &&
-             !ObjectMap::is_compatible(m_image_ctx.layout, size)) {
+             !ObjectMap<>::is_compatible(m_image_ctx.layout, size)) {
     m_image_ctx.snap_lock.put_read();
     on_finish->complete(-EINVAL);
     return;
