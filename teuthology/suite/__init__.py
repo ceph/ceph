@@ -72,7 +72,7 @@ def expand_short_repo_name(name, orig):
     # when the orig URL is also github.  The two-level substitution may not
     # work with some configs.
     name_vec = name.split('/')
-    if len(name_vec) < 2 and name.count(':') == 0:
+    if len(name_vec) <= 2 and name.count(':') == 0:
         orig_vec = orig.split('/')
         return '/'.join(orig_vec[:-len(name_vec)] + name_vec)
     # otherwise, assume a full URL
