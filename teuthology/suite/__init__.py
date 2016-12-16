@@ -47,6 +47,14 @@ def process_args(args):
                 value = []
             else:
                 value = [x.strip() for x in value.split(',')]
+        elif key == 'ceph_repo':
+            value = expand_short_repo_name(
+                value,
+                config.get_ceph_git_url())
+        elif key == 'suite_repo':
+            value = expand_short_repo_name(
+                value,
+                config.get_ceph_qa_suite_git_url())
         conf[key] = value
     return conf
 
@@ -54,6 +62,21 @@ def process_args(args):
 def normalize_suite_name(name):
     return name.replace('/', ':')
 
+def expand_short_repo_name(name, orig):
+    # Allow shortname repo name 'foo' or 'foo/bar'.  This works with
+    # github URLs, e.g.
+    #
+    #   foo -> https://github.com/ceph/foo
+    #   foo/bar -> https://github.com/foo/bar
+    #
+    # when the orig URL is also github.  The two-level substitution may not
+    # work with some configs.
+    name_vec = name.split('/')
+    if len(name_vec) < 2 and name.count(':') == 0:
+        orig_vec = orig.split('/')
+        return '/'.join(orig_vec[:-len(name_vec)] + name_vec)
+    # otherwise, assume a full URL
+    return name
 
 def main(args):
     conf = process_args(args)
