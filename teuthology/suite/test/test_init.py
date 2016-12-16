@@ -107,7 +107,7 @@ REPO_SHORTHAND = [
     ['https://github.com/dude/foo', 'bar',
      'https://github.com/dude/bar'],
     ['https://github.com/dude/foo/', 'bar',
-     'https://github.com/dude/bar/'],
+     'https://github.com/dude/foo/bar'],
     ['https://github.com/ceph/ceph', 'ceph',
      'https://github.com/ceph/ceph'],
     ['https://github.com/ceph/ceph', 'ceph-ci',
@@ -115,11 +115,11 @@ REPO_SHORTHAND = [
     ['https://github.com/ceph/ceph-ci', 'ceph',
      'https://github.com/ceph/ceph'],
     ['git://git.ceph.com/ceph.git', 'ceph',
-     'git://git.ceph.com/ceph.git'],
+     'git://git.ceph.com/ceph'],
     ['git://git.ceph.com/ceph.git', 'ceph-ci',
-     'git://git.ceph.com/ceph-ci.git'],
+     'git://git.ceph.com/ceph-ci'],
     ['git://git.ceph.com/ceph-ci.git', 'ceph',
-     'git://git.ceph.com/ceph.git'],
+     'git://git.ceph.com/ceph'],
 ]
 
 
