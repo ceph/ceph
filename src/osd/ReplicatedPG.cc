@@ -5248,7 +5248,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
 	maybe_create_new_object(ctx);
-	t->truncate(soid, 0);
+	if (pool.info.require_rollback()) {
+	  t->truncate(soid, 0);
+	} else if (obs.exists && op.extent.length < oi.size) {
+	  t->truncate(soid, op.extent.length);
+	}
 	if (op.extent.length) {
 	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags);
 	}
