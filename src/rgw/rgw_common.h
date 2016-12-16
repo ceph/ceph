@@ -736,17 +736,20 @@ WRITE_CLASS_ENCODER(RGWUserInfo)
 
 struct rgw_pool {
   string name;
+  string ns;
 
   rgw_pool() {}
-  rgw_pool(const rgw_pool& _p) : name(_p.name) {}
-  rgw_pool(const string& _name) : name(_name) {}
-
-  const string& to_str() const {
-    return name;
+  rgw_pool(const rgw_pool& _p) : name(_p.name), ns(_p.ns) {}
+  rgw_pool(const string& _s) {
+    from_str(_s);
   }
+  rgw_pool(const string& _name, const string& _ns) : name(_name), ns(_ns) {}
 
-  void init(const string& _name) {
-    name = _name;
+  string to_str() const;
+  void from_str(const string& s);
+
+  void init(const string& _s) {
+    from_str(_s);
   }
 
   bool empty() const {
@@ -754,12 +757,17 @@ struct rgw_pool {
   }
 
   int compare(const rgw_pool& p) const {
-    return name.compare(p.name);
+    int r = name.compare(p.name);
+    if (r != 0) {
+      return r;
+    }
+    return ns.compare(p.ns);
   }
 
   void encode(bufferlist& bl) const {
      ENCODE_START(10, 10, bl);
     ::encode(name, bl);
+    ::encode(ns, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -780,6 +788,8 @@ struct rgw_pool {
      * version. Anything older than 10 needs to be treated as old rgw_bucket
      */
 
+    } else {
+      ::decode(ns, bl);
     }
 
     DECODE_FINISH(bl);
@@ -790,6 +800,13 @@ struct rgw_pool {
   }
   bool operator!=(const rgw_pool& p) const {
     return !(*this == p);
+  }
+  bool operator<(const rgw_pool& p) const {
+    int r = name.compare(p.name);
+    if (r == 0) {
+      return (ns.compare(p.ns) < 0);
+    }
+    return (r < 0);
   }
 };
 WRITE_CLASS_ENCODER(rgw_pool)
@@ -828,7 +845,7 @@ struct rgw_data_placement_target {
 };
 
 inline ostream& operator<<(ostream& out, const rgw_pool& p) {
-  out << p.name;
+  out << p.to_str();
   return out;
 }
 
