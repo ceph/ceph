@@ -343,7 +343,7 @@ std::string get_short_features_help(bool append_suffix) {
 
     std::string suffix;
     if (append_suffix) {
-      if ((pair.first & rbd::utils::parse_rbd_default_features(g_ceph_context)) != 0) {
+      if ((pair.first & rbd::utils::get_rbd_default_features(g_ceph_context)) != 0) {
         suffix += "+";
       }
       if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {
