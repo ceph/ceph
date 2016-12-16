@@ -275,7 +275,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
         ss << "slow request " << age << " seconds old, received at "
            << i->get_initiated() << ": " << i->get_desc()
 	   << " currently "
-	   << (i->current.size() ? i->current : i->state_string());
+	   << (i->current ? i->current : i->state_string());
         warning_vector.push_back(ss.str());
 
         // only those that have been shown will backoff
@@ -327,6 +327,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
   {
     Mutex::Locker l(lock);
     events.push_back(Event(stamp, event));
+    current = events.back().c_str();
   }
   dout(5) <<  "seq: " << seq
 	  << ", time: " << stamp
