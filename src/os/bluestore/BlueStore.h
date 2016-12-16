@@ -804,6 +804,7 @@ public:
 
     ExtentMap extent_map;
 
+    std::atomic<int> flushing_count = {0};
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
