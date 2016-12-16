@@ -60,7 +60,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     EXPECT_EQ(alloc->reserve(block_size), 0);
     AllocExtentVector extents = AllocExtentVector 
                         (1, AllocExtent(0, 0));
-    EXPECT_EQ(alloc->alloc_extents(block_size, block_size, 
+    EXPECT_EQ(alloc->allocate(block_size, block_size, 
                                    0, (int64_t) 0, &extents, &count, &alloc_len), 0);
     EXPECT_EQ(alloc_len, (uint64_t) block_size);
   }
@@ -74,7 +74,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
+    EXPECT_EQ(alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
                                    0, (int64_t) 0, &extents, &count, &alloc_len), 0);
     EXPECT_EQ(alloc_len, 4 * (uint64_t) block_size);
     EXPECT_EQ(extents[0].length, 4 * block_size);
@@ -92,7 +92,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
+    EXPECT_EQ(alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
                                    0, (int64_t) 0, &extents, &count, &alloc_len), 0);
     EXPECT_EQ(alloc_len, 4 * (uint64_t) block_size);
     EXPECT_EQ(extents[0].length, 2 * block_size);
@@ -122,7 +122,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
+    EXPECT_EQ(alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
                                    block_size, (int64_t) 0, &extents, &count, &alloc_len), 0);
     EXPECT_EQ(alloc_len, 4 * (uint64_t) block_size);
     for (int i = 0; i < 4; i++) {
@@ -142,7 +142,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     AllocExtentVector extents = AllocExtentVector 
                         (2, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
+    EXPECT_EQ(alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
                                    2 * block_size, (int64_t) 0, &extents, &count, &alloc_len), 0);
     EXPECT_EQ(alloc_len, 4 * (uint64_t) block_size);
     for (int i = 0; i < 2; i++) {
@@ -160,7 +160,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     AllocExtentVector extents = AllocExtentVector 
                         (1024, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(1024 * (uint64_t)block_size, (uint64_t) block_size * 4, 
+    EXPECT_EQ(alloc->allocate(1024 * (uint64_t)block_size, (uint64_t) block_size * 4, 
                                    block_size * 4, (int64_t) 0, &extents, &count, &alloc_len), 0);
  
     EXPECT_EQ(alloc_len, 1024 * (uint64_t) block_size);
@@ -179,7 +179,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     AllocExtentVector extents = AllocExtentVector 
                         (8, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(16 * (uint64_t)block_size, (uint64_t) block_size, 
+    EXPECT_EQ(alloc->allocate(16 * (uint64_t)block_size, (uint64_t) block_size, 
                                    2 * block_size, (int64_t) 0, &extents, &count, &alloc_len), 0);
 
     EXPECT_EQ(count, 8);
@@ -207,13 +207,13 @@ TEST_P(AllocTest, test_alloc_failure)
     AllocExtentVector extents = AllocExtentVector 
                         (4, AllocExtent(0, 0));
   
-    EXPECT_EQ(alloc->alloc_extents(512 * (uint64_t)block_size, (uint64_t) block_size * 256, 
+    EXPECT_EQ(alloc->allocate(512 * (uint64_t)block_size, (uint64_t) block_size * 256, 
                                    block_size * 256, (int64_t) 0, &extents, &count, &alloc_len), 0);
     EXPECT_EQ(512 * (uint64_t)block_size, alloc_len);
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
     EXPECT_EQ(alloc->reserve(block_size * 512), 0);
-    EXPECT_EQ(alloc->alloc_extents(512 * (uint64_t)block_size, (uint64_t) block_size * 512,
+    EXPECT_EQ(alloc->allocate(512 * (uint64_t)block_size, (uint64_t) block_size * 512,
                                    block_size * 512, (int64_t) 0, &extents, &count, &alloc_len), -ENOSPC);
     EXPECT_EQ(alloc_len, (uint64_t) 0);
   }
@@ -238,13 +238,13 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
           (zone_size * 4, AllocExtent(-1, -1));
   alloc->reserve(blocks);
 
-  allocated = alloc->alloc_extents(1, 1, 1, zone_size, &extents, &count, &alloc_len);
+  allocated = alloc->allocate(1, 1, 1, zone_size, &extents, &count, &alloc_len);
   ASSERT_EQ(0, allocated);
   ASSERT_EQ((uint64_t) 1, alloc_len);
   ASSERT_EQ(1, count);
   ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
 
-  allocated = alloc->alloc_extents(1, 1, 1, zone_size * 2 - 1, &extents, &count, &alloc_len);
+  allocated = alloc->allocate(1, 1, 1, zone_size * 2 - 1, &extents, &count, &alloc_len);
   ASSERT_EQ((uint64_t) 1, alloc_len);
   EXPECT_EQ(0, allocated);
   ASSERT_EQ(1, count);
@@ -253,13 +253,13 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   /*
    * Wrap around with hint
    */
-  allocated = alloc->alloc_extents(zone_size * 2, 1, 1,  blocks - zone_size * 2, &extents, &count, &alloc_len);
+  allocated = alloc->allocate(zone_size * 2, 1, 1,  blocks - zone_size * 2, &extents, &count, &alloc_len);
   EXPECT_EQ(0, allocated);
   ASSERT_EQ((uint64_t) zone_size * 2, alloc_len);
   EXPECT_EQ(zone_size * 2, count);
   EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
 
-  allocated = alloc->alloc_extents(zone_size, 1, 1, blocks - zone_size, &extents, &count, &alloc_len);
+  allocated = alloc->allocate(zone_size, 1, 1, blocks - zone_size, &extents, &count, &alloc_len);
   EXPECT_EQ(0, allocated);
   ASSERT_EQ((uint64_t) zone_size, alloc_len);
   EXPECT_EQ(zone_size, count);

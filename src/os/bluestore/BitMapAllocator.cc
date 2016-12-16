@@ -105,7 +105,7 @@ void BitMapAllocator::unreserve(uint64_t unused)
   m_bit_alloc->unreserve_blocks(nblks);
 }
 
-int BitMapAllocator::alloc_extents(
+int BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
   int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len)
 {
@@ -121,11 +121,11 @@ int BitMapAllocator::alloc_extents(
      << " hint " << hint
      << dendl;
 
-  return alloc_extents_dis(want_size, alloc_unit / m_block_size,
-                           max_alloc_size, hint / m_block_size, extents, count, ret_len); 
+  return allocate_dis(want_size, alloc_unit / m_block_size,
+                      max_alloc_size, hint / m_block_size, extents, count, ret_len); 
 }
 
-int BitMapAllocator::alloc_extents_dis(
+int BitMapAllocator::allocate_dis(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
   int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len)
 {
