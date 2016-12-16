@@ -270,7 +270,7 @@ void add_create_image_options(po::options_description *opt,
     (IMAGE_FEATURES.c_str(), po::value<ImageFeatures>()->composing(),
      ("image features\n" + get_short_features_help(true)).c_str())
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
-    (IMAGE_STRIPE_UNIT.c_str(), po::value<uint64_t>(), "stripe unit")
+    (IMAGE_STRIPE_UNIT.c_str(), po::value<ImageObjectSize>(), "stripe unit in B/K/M")
     (IMAGE_STRIPE_COUNT.c_str(), po::value<uint64_t>(), "stripe count")
     (IMAGE_DATA_POOL.c_str(), po::value<std::string>(), "data pool");
 
