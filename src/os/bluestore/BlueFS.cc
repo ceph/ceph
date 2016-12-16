@@ -181,8 +181,8 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   uint64_t alloc_len = 0;;
   AllocExtentVector extents = AllocExtentVector(want / g_conf->bluefs_alloc_size);
 
-  r = alloc[id]->alloc_extents(want, g_conf->bluefs_alloc_size, 0,
-                               &extents, &count, &alloc_len);
+  r = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
+                          &extents, &count, &alloc_len);
 
   *length = alloc_len;
   assert(r >= 0);
@@ -190,9 +190,9 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
     alloc[id]->unreserve(want - *length);
 
   for (int i = 0; i < count; i++) {
-		block_all[id].erase(extents[i].offset, extents[i].length);
-		block_total[id] -= extents[i].length;
-		log_t.op_alloc_rm(id, extents[i].offset, extents[i].length);
+    block_all[id].erase(extents[i].offset, extents[i].length);
+    block_total[id] -= extents[i].length;
+    log_t.op_alloc_rm(id, extents[i].offset, extents[i].length);
   }
 
   r = _flush_and_sync_log(l);
@@ -1772,8 +1772,8 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   uint64_t alloc_len = 0;
   AllocExtentVector extents = AllocExtentVector(left / min_alloc_size);
 
-  r = alloc[id]->alloc_extents(left, min_alloc_size, hint,
-                               &extents, &count, &alloc_len);
+  r = alloc[id]->allocate(left, min_alloc_size, hint,
+                          &extents, &count, &alloc_len);
   if (r < 0 || alloc_len < left) {
     derr << __func__ << " allocate failed on 0x" << std::hex << left
 	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
