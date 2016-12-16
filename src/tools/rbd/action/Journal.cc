@@ -111,10 +111,12 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     f->open_object_section("status");
     f->dump_unsigned("minimum_set", minimum_set);
     f->dump_unsigned("active_set", active_set);
-    f->open_object_section("registered_clients");
+    f->open_array_section("registered_clients");
     for (std::set<cls::journal::Client>::iterator c =
           registered_clients.begin(); c != registered_clients.end(); ++c) {
+      f->open_object_section("client");
       c->dump(f);
+      f->close_section();
     }
     f->close_section();
     f->close_section();

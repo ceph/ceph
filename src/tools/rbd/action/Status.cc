@@ -54,7 +54,7 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
     f->open_object_section("status");
 
   if (f) {
-    f->open_object_section("watchers");
+    f->open_array_section("watchers");
     for (std::list<obj_watch_t>::iterator i = watchers.begin(); i != watchers.end(); ++i) {
       f->open_object_section("watcher");
       f->dump_string("address", i->addr);
