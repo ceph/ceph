@@ -29,7 +29,8 @@ def extract_sync_client_data(ctx, client_name):
     """
     return_region_name = None
     return_dict = None
-    client = ctx.ceph['ceph'].conf.get(client_name, None)
+    cluster_name, daemon_type, client_id = teuthology.split_role(client_name)
+    client = ctx.ceph[cluster_name].conf.get(client_name, None)
     if client:
         current_client_zone = client.get('rgw zone', None)
         if current_client_zone:
@@ -199,19 +200,22 @@ def create_users(ctx, config):
         for section, user in users.iteritems():
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             log.debug('Creating user {user} on {host}'.format(user=s3tests_conf[section]['user_id'], host=client))
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_id = daemon_type + '.' + client_id
             ctx.cluster.only(client).run(
                 args=[
                     'adjust-ulimits',
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'radosgw-admin',
-                    '-n', client,
+                    '-n', client_with_id,
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
                     '--display-name', s3tests_conf[section]['display_name'],
                     '--access-key', s3tests_conf[section]['access_key'],
                     '--secret', s3tests_conf[section]['secret_key'],
                     '--email', s3tests_conf[section]['email'],
+                    '--cluster', cluster_name,
                 ],
             )
     try:
@@ -220,16 +224,19 @@ def create_users(ctx, config):
         for client in config['clients']:
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
+                client_with_id = daemon_type + '.' + client_id
                 ctx.cluster.only(client).run(
                     args=[
                         'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',
-                        '-n', client,
+                        '-n', client_with_id,
                         'user', 'rm',
                         '--uid', uid,
                         '--purge-data',
+                        '--cluster', cluster_name,
                         ],
                     )
 

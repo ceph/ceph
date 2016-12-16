@@ -65,3 +65,4 @@ tasks:
       dest: client.1
       metadata-only: true
 - radosgw-admin:
+    master_client: client.0
