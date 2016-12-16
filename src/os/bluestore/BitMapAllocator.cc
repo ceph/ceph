@@ -105,48 +105,9 @@ void BitMapAllocator::unreserve(uint64_t unused)
   m_bit_alloc->unreserve_blocks(nblks);
 }
 
-int BitMapAllocator::allocate(
-  uint64_t want_size, uint64_t alloc_unit, int64_t hint,
-  uint64_t *offset, uint32_t *length)
-{
-  if (want_size == 0)
-    return 0;
-
-  assert(!(alloc_unit % m_block_size));
-  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
-
-  assert(alloc_unit);
-
-  int64_t start_blk = 0;
-  int64_t count = 0;
-
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " want_size 0x" << std::hex << want_size
-           << " alloc_unit 0x" << alloc_unit
-           << " hint 0x" << hint << std::dec
-           << dendl;
-
-  *offset = 0;
-  *length = 0;
-
-  count = m_bit_alloc->alloc_blocks_res(nblks, hint / m_block_size, &start_blk);
-  if (count == 0) {
-    return -ENOSPC;
-  }
-  *offset = start_blk * m_block_size;
-  *length = count * m_block_size;
-
-  dout(20) << __func__ <<" instance "<< (uint64_t) this
-           << " offset 0x" << std::hex << *offset
-           << " length 0x" << *length << std::dec
-           << dendl;
-
-  return 0;
-}
-
 int BitMapAllocator::alloc_extents(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len)
 {
 
   assert(!(alloc_unit % m_block_size));
@@ -161,67 +122,25 @@ int BitMapAllocator::alloc_extents(
      << dendl;
 
   return alloc_extents_dis(want_size, alloc_unit / m_block_size,
-                           max_alloc_size, hint / m_block_size, extents, count); 
-}
-
-/*
- * Allocator extents with min alloc unit > bitmap block size.
- */
-int BitMapAllocator::alloc_extents_cont(
-  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size, int64_t hint,
-  mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
-{
-  *count = 0;
-  assert(alloc_unit);
-  assert(!(alloc_unit % m_block_size));
-  assert(!(want_size % alloc_unit));
-  assert(!(max_alloc_size % m_block_size));
-
-  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
-  int64_t start_blk = 0;
-  int64_t need_blks = nblks;
-  int64_t cont_blks = alloc_unit / m_block_size;
-
-  ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
-
-  while (need_blks > 0) {
-    int64_t count = 0;
-    count = m_bit_alloc->alloc_blocks_res(cont_blks, hint, &start_blk);
-    if (count == 0) {
-      break;
-    }
-    assert(cont_blks == count);
-    dout(30) << __func__ <<" instance "<< (uint64_t) this
-      << " offset " << start_blk << " length " << count << dendl;
-    need_blks -= count;
-    block_list.add_extents(start_blk, count);
-    hint = start_blk + count;
-  }
-
-  if (need_blks > 0) {
-    m_bit_alloc->free_blocks_dis(nblks - need_blks, &block_list);
-    return -ENOSPC;
-  }
-  *count = block_list.get_extent_count();
-
-  return 0;
+                           max_alloc_size, hint / m_block_size, extents, count, ret_len); 
 }
 
 int BitMapAllocator::alloc_extents_dis(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len)
 {
   ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
   int64_t num = 0;
   *count = 0;
+  *ret_len = 0;
 
   num = m_bit_alloc->alloc_blocks_dis_res(nblks, alloc_unit, hint, &block_list);
-  if (num < nblks) {
-    m_bit_alloc->free_blocks_dis(num, &block_list);
+  if (num == 0) {
     return -ENOSPC;
   }
   *count = block_list.get_extent_count();
+  *ret_len = num * m_block_size;
 
   return 0;
 }
