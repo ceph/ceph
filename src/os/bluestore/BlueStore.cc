@@ -2365,10 +2365,12 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 
 void BlueStore::Onode::flush()
 {
-  std::unique_lock<std::mutex> l(flush_lock);
-  ldout(c->store->cct, 20) << __func__ << " " << flush_txns << dendl;
-  while (!flush_txns.empty())
-    flush_cond.wait(l);
+  if (flushing_count) {
+    std::unique_lock<std::mutex> l(flush_lock);
+    ldout(c->store->cct, 20) << __func__ << " " << flush_txns << dendl;
+    while (!flush_txns.empty())
+      flush_cond.wait(l);
+  }
   ldout(c->store->cct, 20) << __func__ << " done" << dendl;
 }
 
@@ -6501,6 +6503,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 
     std::lock_guard<std::mutex> l(o->flush_lock);
     o->flush_txns.insert(txc);
+    o->flushing_count++;
   }
 
   // objects we modified but didn't affect the onode
@@ -6509,6 +6512,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     if (txc->onodes.count(*p) == 0) {
       std::lock_guard<std::mutex> l((*p)->flush_lock);
       (*p)->flush_txns.insert(txc);
+      (*p)->flushing_count++;
       ++p;
     } else {
       // remove dups with onodes list to avoid problems in _txc_finish
@@ -6585,6 +6589,7 @@ void BlueStore::_txc_finish(TransContext *txc)
 	       << dendl;
       assert(o->flush_txns.count(txc));
       o->flush_txns.erase(txc);
+      o->flushing_count--;
       if (o->flush_txns.empty()) {
 	o->flush_cond.notify_all();
       }
