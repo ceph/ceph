@@ -25,15 +25,11 @@ namespace crimson {
     struct ServerInfo {
       Counter   delta_prev_req;
       Counter   rho_prev_req;
-      uint32_t  my_delta;
-      uint32_t  my_rho;
 
       ServerInfo(Counter _delta_prev_req,
 		 Counter _rho_prev_req) :
 	delta_prev_req(_delta_prev_req),
-	rho_prev_req(_rho_prev_req),
-	my_delta(0),
-	my_rho(0)
+	rho_prev_req(_rho_prev_req)
       {
 	// empty
       }
@@ -41,13 +37,6 @@ namespace crimson {
       inline void req_update(Counter delta, Counter rho) {
 	delta_prev_req = delta;
 	rho_prev_req = rho;
-	my_delta = 0;
-	my_rho = 0;
-      }
-
-      inline void resp_update(PhaseType phase) {
-	++my_delta;
-	if (phase == PhaseType::reservation) ++my_rho;
       }
     };
 
@@ -113,19 +102,6 @@ namespace crimson {
        */
       void track_resp(const S& server_id, const PhaseType& phase) {
 	DataGuard g(data_mtx);
-
-	auto it = server_map.find(server_id);
-	if (server_map.end() == it) {
-	  // this code can only run if a request did not precede the
-	  // response or if the record was cleaned up b/w when
-	  // the request was made and now
-	  ServerInfo si(delta_counter, rho_counter);
-	  si.resp_update(phase);
-	  server_map.emplace(server_id, si);
-	} else {
-	  it->second.resp_update(phase);
-	}
-
 	++delta_counter;
 	if (PhaseType::reservation == phase) {
 	  ++rho_counter;
@@ -144,9 +120,9 @@ namespace crimson {
 	  return ReqParams(1, 1);
 	} else {
 	  Counter delta =
-	    1 + delta_counter - it->second.delta_prev_req - it->second.my_delta;
+	    delta_counter - it->second.delta_prev_req;
 	  Counter rho =
-	    1 + rho_counter - it->second.rho_prev_req - it->second.my_rho;
+	    rho_counter - it->second.rho_prev_req;
 
 	  it->second.req_update(delta_counter, rho_counter);
 
