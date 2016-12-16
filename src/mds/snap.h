@@ -45,7 +45,6 @@ ostream& operator<<(ostream& out, const SnapInfo &sn);
  * SnapRealm - a subtree that shares the same set of snapshots.
  */
 struct SnapRealm;
-struct CapabilityGroup;
 class CInode;
 class MDCache;
 
