@@ -216,9 +216,9 @@ bool JournalingObjectStore::ApplyManager::commit_start()
   }
   ret = true;
 
- out:
   if (journal)
     journal->commit_start(_committing_seq);  // tell the journal too
+ out:
   return ret;
 }
 
