@@ -34,6 +34,7 @@
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/rgw/cls_rgw_const.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 #include "cls/log/cls_log_client.h"
@@ -12110,7 +12111,7 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_
 
   bufferlist out;
 
-  r = index_ctx.exec(dir_oid, "rgw", "dir_suggest_changes", updates, out);
+  r = index_ctx.exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
 
   return r;
 }
