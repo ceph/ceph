@@ -476,6 +476,7 @@ set(libcommon_files
   common/ceph_strings.cc
   common/ceph_frag.cc
   common/config.cc
+  common/config_validators.cc
   common/utf8.c
   common/mime.c
   common/strtol.cc

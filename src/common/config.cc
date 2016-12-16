@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
+#include "common/config_validators.h"
 #include "common/static_assert.h"
 #include "common/strtol.h"
 #include "common/version.h"
@@ -36,6 +37,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <type_traits>
 #include <utility>
 #include <boost/type_traits.hpp>
 #include <boost/utility/enable_if.hpp>
@@ -87,6 +89,42 @@ int ceph_resolve_file_search(const std::string& filename_list,
   return ret;
 }
 
+#define OPTION(name, type, def_val)
+#define OPTION_VALIDATOR(name)              \
+struct md_config_t::option_##name##_t {     \
+  typedef decltype(md_config_t::name) type; \
+};
+#define SAFE_OPTION(name, type, def_val)
+#define SUBSYS(name, log, gather)
+#define DEFAULT_SUBSYS(log, gather)
+#include "common/config_opts.h"
+#undef OPTION
+#undef OPTION_VALIDATOR
+#undef SAFE_OPTION
+#undef SUBSYS
+#undef DEFAULT_SUBSYS
+
+namespace {
+
+template <typename T>
+typename std::enable_if<!std::is_constructible<T>::value,
+                        md_config_t::validator_t>::type create_validator() {
+  return md_config_t::validator_t();
+}
+
+template <typename T>
+typename std::enable_if<std::is_constructible<T>::value,
+                        md_config_t::validator_t>::type create_validator() {
+  // if T is defined (and not just forward declared), it implies
+  // that a validator function exists. use a dummy typed pointer to
+  // pick the correct validator function
+  return [](std::string *value, std::string *error_message) {
+      return ::validate(reinterpret_cast<T*>(0), value, error_message);
+    };
+}
+
+} // anonymous namespace
+
 md_config_t::md_config_t()
   : cluster(""),
 
@@ -101,6 +139,7 @@ md_config_t::md_config_t()
 #define OPTION_OPT_U64(name, def_val) name(((uint64_t)1) * def_val),
 #define OPTION_OPT_UUID(name, def_val) name(def_val),
 #define OPTION(name, type, def_val) OPTION_##type(name, def_val)
+#define OPTION_VALIDATOR(name)
 #define SAFE_OPTION(name, type, def_val) OPTION(name, type, def_val)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
@@ -116,6 +155,7 @@ md_config_t::md_config_t()
 #undef OPTION_OPT_U64
 #undef OPTION_OPT_UUID
 #undef OPTION
+#undef OPTION_VALIDATOR
 #undef SAFE_OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
@@ -123,13 +163,17 @@ md_config_t::md_config_t()
 {
   static const std::vector<md_config_t::config_option> s_config_options = {
 #define OPTION4(name, type, def_val, safe) \
-        config_option{ STRINGIFY(name), type, &md_config_t::name, safe },
+        config_option{ STRINGIFY(name), type, &md_config_t::name, safe, \
+                       create_validator<option_##name##_t>() },
 #define OPTION(name, type, def_val) OPTION4(name, type, def_val, false)
+#define OPTION_VALIDATOR(name)
 #define SAFE_OPTION(name, type, def_val) OPTION4(name, type, def_val, true)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
 #include "common/config_opts.h"
+#undef OPTION4
 #undef OPTION
+#undef OPTION_VALIDATOR
 #undef SAFE_OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
@@ -138,6 +182,7 @@ md_config_t::md_config_t()
     s_tbl(new std::vector<md_config_t::config_option>(std::move(s_config_options)));
   config_options = s_tbl;
 
+  validate_default_settings();
   init_subsys();
 }
 
@@ -148,9 +193,11 @@ void md_config_t::init_subsys()
 #define DEFAULT_SUBSYS(log, gather) \
   subsys.add(ceph_subsys_, "none", log, gather);
 #define OPTION(a, b, c)
+#define OPTION_VALIDATOR(a)
 #define SAFE_OPTION(a, b, c)
 #include "common/config_opts.h"
 #undef OPTION
+#undef OPTION_VALIDATOR
 #undef SAFE_OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
@@ -282,10 +329,19 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     std::string val;
     int ret = _get_val_from_conf_file(my_sections, opt.name, val, false);
     if (ret == 0) {
-      set_val_impl(val.c_str(), &opt);
+      std::string error_message;
+      int r = set_val_impl(val, &opt, &error_message);
+      if (warnings != nullptr && (r != 0 || !error_message.empty())) {
+        *warnings << "parse error setting '" << opt.name << "' to '" << val
+                  << "'";
+        if (!error_message.empty()) {
+          *warnings << " (" << error_message << ")";
+        }
+        *warnings << std::endl;
+      }
     }
   }
-  
+
   // subsystems?
   for (int o = 0; o < subsys.get_num(); o++) {
     std::string as_option("debug_");
@@ -515,20 +571,23 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     return ret;
   }
 
+  const char *option_name = nullptr;
+  std::string error_message;
   o = 0;
   for (auto& opt_ref: *config_options) {
     ostringstream err;
     config_option const *opt = &opt_ref;
     std::string as_option("--");
     as_option += opt->name;
+    option_name = opt->name;
     if (opt->type == OPT_BOOL) {
       int res;
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
 	if (res == 0)
-	  set_val_impl("false", opt);
+	  ret = set_val_impl("false", opt, &error_message);
 	else if (res == 1)
-	  set_val_impl("true", opt);
+	  ret = set_val_impl("true", opt, &error_message);
 	else
 	  ret = res;
 	break;
@@ -536,40 +595,46 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	std::string no("--no-");
 	no += opt->name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
-	  set_val_impl("false", opt);
+	  ret = set_val_impl("false", opt, &error_message);
 	  break;
 	}
       }
-    }
-    else if (ceph_argparse_witharg(args, i, &val, err,
-				   as_option.c_str(), (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err,
+                                     as_option.c_str(), (char*)NULL)) {
       if (!err.str().empty()) {
-	*oss << err.str();
+        error_message = err.str();
 	ret = -EINVAL;
 	break;
       }
       if (oss && ((!opt->is_safe()) &&
 		  (observers.find(opt->name) == observers.end()))) {
 	*oss << "You cannot change " << opt->name << " using injectargs.\n";
-	ret = -ENOSYS;
-	break;
+        return -ENOSYS;
       }
-      int res = set_val_impl(val.c_str(), opt);
-      if (res) {
-	if (oss) {
-	  *oss << "Parse error setting " << opt->name << " to '"
-	       << val << "' using injectargs.\n";
-	  ret = res;
-	  break;
-	} else {
-	  cerr << "parse error setting '" << opt->name << "' to '"
-	       << val << "'\n" << std::endl;
-	}
-      }
+      ret = set_val_impl(val, opt, &error_message);
       break;
     }
     ++o;
   }
+
+  if (ret != 0 || !error_message.empty()) {
+    if (oss) {
+      *oss << "Parse error setting " << option_name << " to '"
+           << val << "' using injectargs";
+      if (!error_message.empty()) {
+        *oss << " (" << error_message << ")";
+      }
+      *oss << ".\n";
+    } else {
+      cerr << "parse error setting '" << option_name << "' to '"
+	   << val << "'";
+      if (!error_message.empty()) {
+        cerr << " (" << error_message << ")";
+      }
+      cerr << "\n" << std::endl;
+    }
+  }
+
   if (o == (int)config_options->size()) {
     // ignore
     ++i;
@@ -796,7 +861,10 @@ int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
         return -ENOSYS;
       }
     }
-    return set_val_impl(v.c_str(), opt);
+
+    std::string error_message;
+    int r = set_val_impl(v, opt, &error_message);
+    return r;
   }
 
   // couldn't find a configuration option with key 'key'
@@ -841,6 +909,24 @@ md_config_t::config_value_t md_config_t::_get_val(const char *key) const
   }
   get_value_generic_visitor gvv(this);
   return boost::apply_visitor(gvv, opt->md_member_ptr);
+}
+
+int md_config_t::_get_val(const char *key, std::string *value) const {
+  assert(lock.is_locked());
+
+  std::string normalized_key(ConfFile::normalize_key_name(key));
+  config_value_t config_value = _get_val(normalized_key.c_str());
+  if (!boost::get<invalid_config_value_t>(&config_value)) {
+    ostringstream oss;
+    if (bool *flag = boost::get<bool>(&config_value)) {
+      oss << (*flag ? "true" : "false");
+    } else {
+      oss << config_value;
+    }
+    *value = oss.str();
+    return 0;
+  }
+  return -ENOENT;
 }
 
 int md_config_t::_get_val(const char *key, char **buf, int len) const
@@ -964,10 +1050,19 @@ int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sectio
   return -ENOENT;
 }
 
-int md_config_t::set_val_impl(const char *val, config_option const *opt)
+int md_config_t::set_val_impl(const std::string &val, config_option const *opt,
+                              std::string *error_message)
 {
   assert(lock.is_locked());
-  int ret = set_val_raw(val, opt);
+  std::string value(val);
+  if (opt->validator) {
+    int r = opt->validator(&value, error_message);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  int ret = set_val_raw(value.c_str(), opt);
   if (ret)
     return ret;
   changed.insert(opt->name);
@@ -1270,4 +1365,20 @@ void md_config_t::diff(
 void md_config_t::complain_about_parse_errors(CephContext *cct)
 {
   ::complain_about_parse_errors(cct, &parse_errors);
+}
+
+void md_config_t::validate_default_settings() {
+  Mutex::Locker l(lock);
+  for (auto &opt : *config_options) {
+    // normalize config defaults using their validator
+    if (opt.validator) {
+      std::string value;
+      int r = _get_val(opt.name, &value);
+      assert(r == 0);
+
+      std::string error_message;
+      r = set_val_impl(value.c_str(), &opt, &error_message);
+      assert(r == 0);
+    }
+  }
 }
