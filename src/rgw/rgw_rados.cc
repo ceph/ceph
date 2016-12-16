@@ -1571,21 +1571,21 @@ int RGWZoneParams::fix_pool_names()
     return r;
   }
 
-  domain_root = fix_zone_pool_dup(pools, name, ".rgw.data.root", domain_root);
+  domain_root = fix_zone_pool_dup(pools, name, ".rgw.meta:root", domain_root);
   if (!metadata_heap.name.empty()) {
-    metadata_heap = fix_zone_pool_dup(pools, name, ".rgw.meta", metadata_heap);
+    metadata_heap = fix_zone_pool_dup(pools, name, ".rgw.meta:heap", metadata_heap);
   }
   control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
-  gc_pool = fix_zone_pool_dup(pools, name ,".rgw.gc", gc_pool);
-  lc_pool = fix_zone_pool_dup(pools, name ,".rgw.lc", lc_pool);
+  gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
+  lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);
   log_pool = fix_zone_pool_dup(pools, name, ".rgw.log", log_pool);
-  intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.intent-log", intent_log_pool);
-  usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.usage", usage_log_pool);
-  user_keys_pool = fix_zone_pool_dup(pools, name, ".rgw.users.keys", user_keys_pool);
-  user_email_pool = fix_zone_pool_dup(pools, name, ".rgw.users.email", user_email_pool);
-  user_swift_pool = fix_zone_pool_dup(pools, name, ".rgw.users.swift", user_swift_pool);
-  user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.users.uid", user_uid_pool);
-  roles_pool = fix_zone_pool_dup(pools, name, ".rgw.roles", roles_pool);
+  intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:intent", intent_log_pool);
+  usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:usage", usage_log_pool);
+  user_keys_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.keys", user_keys_pool);
+  user_email_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.email", user_email_pool);
+  user_swift_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.swift", user_swift_pool);
+  user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
+  roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
