@@ -24,7 +24,6 @@
 
 
 class SimpleMessenger;
-class IncomingQueue;
 class DispatchQueue;
 
 static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);

@@ -34,10 +34,8 @@ struct MMonSubscribeAck;
 class MMonCommandAck;
 class MCommandReply;
 struct MAuthReply;
-class MAuthRotating;
 class MPing;
 class LogClient;
-class AuthSupported;
 class AuthMethodList;
 class Messenger;
 // class RotatingKeyRing;
@@ -152,7 +150,6 @@ private:
 
   Cond auth_cond;
 
-  void handle_auth_rotating_response(MAuthRotating *m);
   // monclient
   bool want_monmap;
 

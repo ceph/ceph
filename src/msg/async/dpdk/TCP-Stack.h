@@ -24,7 +24,6 @@
 #ifndef CEPH_MSG_DPDK_TCP_STACK_H
 #define CEPH_MSG_DPDK_TCP_STACK_H
 
-class socket_options;
 class ServerSocket;
 class ConnectedSocket;
 

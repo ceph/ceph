@@ -12,7 +12,6 @@
 
 class CephContext;
 class RGWRados;
-class RGWGetObjData;
 
 template <class T>
 static int parse_decode_json(CephContext *cct, T& t, bufferlist& bl)

@@ -209,18 +209,14 @@ class ObjectStore;
 class FuseStore;
 class OSDMap;
 class MLog;
-class MClass;
 class MOSDPGMissing;
 class Objecter;
 
 class Watch;
-class Notification;
 class PrimaryLogPG;
 
 class AuthAuthorizeHandlerRegistry;
 
-class OpsFlightSocketHook;
-class HistoricOpsSocketHook;
 class TestOpsSocketHook;
 struct C_CompleteSplits;
 struct C_OpenPGs;

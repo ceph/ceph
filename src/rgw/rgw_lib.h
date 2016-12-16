@@ -20,7 +20,6 @@ class OpsLogSocket;
 
 namespace rgw {
 
-  class RGWLibFrontendConfig;
   class RGWLibFrontend;
 
   class RGWLib {

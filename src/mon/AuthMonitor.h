@@ -26,7 +26,6 @@ using namespace std;
 
 class MMonCommand;
 struct MAuth;
-class MAuthMon;
 struct MMonGlobalID;
 class KeyRing;
 class Monitor;
