@@ -95,10 +95,10 @@ private:
     forwarded_to_leader(false),
     op_type(OP_TYPE_NONE)
   {
-    tracker->mark_event(this, "header_read", request->get_recv_stamp());
-    tracker->mark_event(this, "throttled", request->get_throttle_stamp());
-    tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
-    tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
+    mark_event("header_read", request->get_recv_stamp());
+    mark_event("throttled", request->get_throttle_stamp());
+    mark_event("all_read", request->get_recv_complete_stamp());
+    mark_event("dispatched", request->get_dispatch_stamp());
 
     if (req) {
       con = req->get_connection();

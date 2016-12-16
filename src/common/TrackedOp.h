@@ -249,8 +249,10 @@ public:
       return ceph_clock_now() - get_initiated();
   }
 
-  void mark_event(const string &event);
-  void mark_event(const char *event);
+  void mark_event_string(const string &event,
+			 utime_t stamp=ceph_clock_now());
+  void mark_event(const char *event,
+		  utime_t stamp=ceph_clock_now());
 
   virtual const char *state_string() const {
     Mutex::Locker l(lock);
