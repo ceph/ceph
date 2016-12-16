@@ -2992,8 +2992,11 @@ int OSDMap::summarize_mapping_stats(
       f->dump_unsigned("moved_pgs", moved_pg);
       f->dump_unsigned("total_pgs", total_pg);
     } else {
+      float percent = 0;
+      if (total_pg)
+        percent = (float)moved_pg * 100.0 / (float)total_pg;
       ss << "moved " << moved_pg << " / " << total_pg
-	 << " (" << ((float)moved_pg * 100.0 / (float)total_pg) << "%)\n";
+	 << " (" << percent << "%)\n";
     }
   }
   if (f) {
