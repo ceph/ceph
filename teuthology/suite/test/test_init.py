@@ -103,6 +103,31 @@ def test_wait_fails(m_get_jobs):
         suite.wait('name', 1, None)
 
 
+REPO_SHORTHAND = [
+    ['https://github.com/dude/foo', 'bar',
+     'https://github.com/dude/bar'],
+    ['https://github.com/dude/foo/', 'bar',
+     'https://github.com/dude/bar/'],
+    ['https://github.com/ceph/ceph', 'ceph',
+     'https://github.com/ceph/ceph'],
+    ['https://github.com/ceph/ceph', 'ceph-ci',
+     'https://github.com/ceph/ceph-ci'],
+    ['https://github.com/ceph/ceph-ci', 'ceph',
+     'https://github.com/ceph/ceph'],
+    ['git://git.ceph.com/ceph.git', 'ceph',
+     'git://git.ceph.com/ceph.git'],
+    ['git://git.ceph.com/ceph.git', 'ceph-ci',
+     'git://git.ceph.com/ceph-ci.git'],
+    ['git://git.ceph.com/ceph-ci.git', 'ceph',
+     'git://git.ceph.com/ceph.git'],
+]
+
+
+@pytest.mark.parametrize(['orig', 'shorthand', 'result'], REPO_SHORTHAND)
+def test_expand_short_repo_name(orig, shorthand, result):
+    assert suite.expand_short_repo_name(shorthand, orig) == result
+
+
 class TestSuiteMain(object):
     def test_main(self):
         suite_name = 'SUITE'
