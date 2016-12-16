@@ -470,10 +470,10 @@ struct ceph_osd_request_head {
     partial_decode_needed = false;
   }
 
-  void finish_decode() {
+  bool finish_decode() {
     assert(!partial_decode_needed); // partial decoding required
     if (!final_decode_needed)
-      return; // Message is already final decoded
+      return false; // Message is already final decoded
     assert(header.version >= 7);
 
     ::decode(client_inc, p);
@@ -498,6 +498,7 @@ struct ceph_osd_request_head {
     OSDOp::split_osd_op_vector_in_data(ops, data);
 
     final_decode_needed = false;
+    return true;
   }
 
   void clear_buffers() {

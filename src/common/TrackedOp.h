@@ -100,9 +100,6 @@ public:
   bool check_ops_in_flight(std::vector<string> &warning_strings,
 			   int *slow = NULL);
 
-  void mark_event(TrackedOp *op, const char *evt,
-		  utime_t time = ceph_clock_now());
-
   void on_shutdown() {
     history.on_shutdown();
   }
@@ -189,6 +186,9 @@ protected:
   };
   atomic<int> state = {STATE_UNTRACKED};
 
+  mutable string desc_str;   ///< protected by lock
+  mutable const char *desc = nullptr;  ///< readable without lock
+
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
     initiated_at(initiated),
@@ -235,6 +235,23 @@ public:
 	ceph_abort();
       }
     }
+  }
+
+  const char *get_desc() const {
+    if (!desc) {
+      Mutex::Locker l(lock);
+      _gen_desc();
+    }
+    return desc;
+  }
+  void _gen_desc() const {
+    ostringstream ss;
+    _dump_op_descriptor_unlocked(ss);
+    desc_str = ss.str();
+    desc = desc_str.c_str();
+  }
+  void reset_desc() {
+    desc = nullptr;
   }
 
   const utime_t& get_initiated() const {

@@ -273,9 +273,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
         utime_t age = now - i->get_initiated();
         stringstream ss;
         ss << "slow request " << age << " seconds old, received at "
-           << i->get_initiated() << ": ";
-        i->_dump_op_descriptor_unlocked(ss);
-        ss << " currently "
+           << i->get_initiated() << ": " << i->get_desc()
+	   << " currently "
 	   << (i->current.size() ? i->current : i->state_string());
         warning_vector.push_back(ss.str());
 
@@ -316,19 +315,9 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
   }
 }
 
-void OpTracker::mark_event(TrackedOp *op, const char *evt,
-			   utime_t time)
-{
-  if (!op->state)
-    return;
 
-  dout(5);
-  *_dout <<  "seq: " << op->seq
-	 << ", time: " << time << ", event: " << evt
-	 << ", op: ";
-  op->_dump_op_descriptor_unlocked(*_dout);
-  *_dout << dendl;
-}
+#undef dout_context
+#define dout_context tracker->cct
 
 void TrackedOp::mark_event_string(const string &event, utime_t stamp)
 {
@@ -339,7 +328,11 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     Mutex::Locker l(lock);
     events.push_back(Event(stamp, event));
   }
-  tracker->mark_event(this, event.c_str());
+  dout(5) <<  "seq: " << seq
+	  << ", time: " << stamp
+	  << ", event: " << event
+	  << ", op: " << get_desc()
+	  << dendl;
   _event_marked();
 }
 
@@ -351,8 +344,13 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
   {
     Mutex::Locker l(lock);
     events.push_back(Event(stamp, event));
+    current = event;
   }
-  tracker->mark_event(this, event);
+  dout(5) <<  "seq: " << seq
+	  << ", time: " << stamp
+	  << ", event: " << event
+	  << ", op: " << get_desc()
+	  << dendl;
   _event_marked();
 }
 
@@ -361,9 +359,7 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
   // Ignore if still in the constructor
   if (!state)
     return;
-  stringstream name;
-  _dump_op_descriptor_unlocked(name);
-  f->dump_string("description", name.str().c_str()); // this TrackedOp
+  f->dump_string("description", get_desc());
   f->dump_stream("initiated_at") << get_initiated();
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
