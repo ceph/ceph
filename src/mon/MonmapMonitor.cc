@@ -76,6 +76,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
     t->erase("mkfs", "monmap");
     mon->store->apply_transaction(t);
   }
+
+  check_subs();
 }
 
 void MonmapMonitor::create_pending()
@@ -578,4 +580,30 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
     return err;
   }
   return 0;
+}
+
+void MonmapMonitor::check_subs()
+{
+  const string type = "monmap";
+  auto subs = mon->session_map.subs.find(type);
+  if (subs == mon->session_map.subs.end())
+    return;
+  for (auto sub : *subs->second) {
+    check_sub(sub);
+  }
+}
+
+void MonmapMonitor::check_sub(Subscription *sub)
+{
+  const auto epoch = mon->monmap->get_epoch();
+  dout(10) << __func__
+	   << " monmap next " << sub->next
+	   << " have " << epoch << dendl;
+  if (sub->next <= epoch) {
+    mon->send_latest_monmap(sub->session->con.get());
+    if (sub->onetime)
+      mon->session_map.remove_sub(sub);
+    else
+      sub->next = epoch + 1;
+  }
 }
