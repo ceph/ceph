@@ -7186,21 +7186,24 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
-          dout(0) << __func__ << " marked down: rebind failed" << dendl;
+          dout(0) << __func__ << " marked down:"
+                  << " rebind cluster_messenger failed" << dendl;
         }
 
 	r = hb_back_server_messenger->rebind(avoid_ports);
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
-          dout(0) << __func__ << " marked down: rebind failed" << dendl;
+          dout(0) << __func__ << " marked down:"
+                  << " rebind hb_back_server_messenger failed" << dendl;
         }
 
 	r = hb_front_server_messenger->rebind(avoid_ports);
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
-          dout(0) << __func__ << " marked down: rebind failed" << dendl;
+          dout(0) << __func__ << " marked down:" 
+                  << " rebind hb_front_server_messenger failed" << dendl;
         }
 
 	hbclient_messenger->mark_down_all();
