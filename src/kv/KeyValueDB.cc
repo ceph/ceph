@@ -12,6 +12,9 @@
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"
 #endif
+#ifdef HAVE_ZS
+#include "ZetaScaleStore.h"
+#endif
 
 KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 			       const string& dir,
@@ -38,6 +41,13 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
     cct->check_experimental_feature_enabled("memdb")) {
     return new MemDB(cct, dir, p);
   }
+
+#ifdef HAVE_ZS
+  if (type == "zs" &&
+      cct->check_experimental_feature_enabled("zs")) {
+    return new ZSStore(cct, dir, p);
+}
+#endif
   return NULL;
 }
 
@@ -62,5 +72,10 @@ int KeyValueDB::test_init(const string& type, const string& dir)
   if (type == "memdb") {
     return MemDB::_test_init(dir);
   }
+#ifdef HAVE_ZS
+  if (type == "zs") {
+    return ZSStore::_test_init(dir);
+  }
+#endif
   return -EINVAL;
 }

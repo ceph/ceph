@@ -166,6 +166,7 @@ SUBSYS(fuse, 1, 5)
 SUBSYS(mgr, 1, 5)
 SUBSYS(mgrc, 1, 5)
 SUBSYS(dpdk, 1, 5)
+SUBSYS(zs, 4, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -897,6 +898,9 @@ OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
 OPTION(mon_rocksdb_options, OPT_STR, "write_buffer_size=33554432,compression=kNoCompression")
 
+OPTION(filestore_zs_options, OPT_STR, "")
+OPTION(mon_zs_options, OPT_STR, "")
+
 /**
  * osd_*_priority adjust the relative priority of client io, recovery io,
  * snaptrim io, etc
@@ -1044,6 +1048,7 @@ OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456")
+OPTION(bluestore_zs_options, OPT_STR, "")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
@@ -1079,6 +1084,8 @@ OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(kstore_backend, OPT_STR, "rocksdb")
 OPTION(kstore_rocksdb_options, OPT_STR, "compression=kNoCompression")
+OPTION(kstore_zs_options, OPT_STR, "") //ZS_FLASH_FILENAME=/dev/sde1,
+// ZS_FLASH_SIZE=100, ZS_BLOCK_SIZE=8192, ZS_O_DIRECT=0 
 OPTION(kstore_fsck_on_mount, OPT_BOOL, false)
 OPTION(kstore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(kstore_nid_prealloc, OPT_U64, 1024)

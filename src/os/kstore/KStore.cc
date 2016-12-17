@@ -848,6 +848,8 @@ int KStore::_open_db(bool create)
   string options;
   if (kv_backend == "rocksdb")
     options = g_conf->kstore_rocksdb_options;
+  else if (kv_backend == "zs")
+    options = g_conf->kstore_zs_options;
   db->init(options);
   stringstream err;
   if (create)

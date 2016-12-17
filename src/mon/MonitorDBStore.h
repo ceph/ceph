@@ -620,6 +620,8 @@ class MonitorDBStore
     }
     if (kv_type == "rocksdb")
       db->init(g_conf->mon_rocksdb_options);
+    else if (g_conf->mon_keyvaluedb == "zs")
+      db->init(g_conf->mon_zs_options);
     else
       db->init();
   }

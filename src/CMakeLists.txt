@@ -45,6 +45,12 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
+#FIXME: causes infinite loop when moved after CMAKE_ASM_COMPILER
+if(WITH_ZS)
+	add_subdirectory(zs)
+	add_definitions("-DHAVE_ZS")
+endif(WITH_ZS)
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
 endif()
