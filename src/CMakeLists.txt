@@ -700,6 +700,10 @@ endif(WITH_CCACHE AND CCACHE_FOUND)
 list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
 list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
+endif()
+
 # we use an external project and copy the sources to bin directory to ensure
 # that object files are built outside of the source tree.
 include(ExternalProject)
