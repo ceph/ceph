@@ -334,7 +334,9 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf->parse_env(); // environment variables coverride
   cct->_conf->apply_changes(NULL);
-  return ceph_create_with_context(cmount, cct);
+  int ret = ceph_create_with_context(cmount, cct);
+  cct->put();
+  return ret;
 }
 
 extern "C" int ceph_unmount(struct ceph_mount_info *cmount)
