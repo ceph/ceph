@@ -195,6 +195,7 @@ void BmapEntry::clear_bits(int offset, int num_bits)
   if (num_bits == 0) {
     return;
   }
+
   bmap_t bmask = BmapEntry::align_mask(num_bits) >> offset;
   m_bits &= ~(bmask);
 }
@@ -504,17 +505,25 @@ void BitMapZone::free_blocks_int(int64_t start_block, int64_t num_blocks)
   BmapEntry *bmap = NULL;
   int bit = 0;
   int64_t falling_in_bmap = 0;
+  int64_t count = num_blocks;
+  int64_t first_blk = start_block;
+  
+  if (num_blocks == 0) {
+    return; 
+  }
+  alloc_dbg_assert(is_allocated(start_block, num_blocks));
 
-  while (num_blocks) {
-    bit = start_block % BmapEntry::size();
-    bmap = &(*m_bmap_list)[start_block / BmapEntry::size()];
-    falling_in_bmap = MIN(num_blocks, BmapEntry::size() - bit);
+  while (count) {
+    bit = first_blk % BmapEntry::size();
+    bmap = &(*m_bmap_list)[first_blk / BmapEntry::size()];
+    falling_in_bmap = MIN(count, BmapEntry::size() - bit);
 
     bmap->clear_bits(bit, falling_in_bmap);
 
-    start_block += falling_in_bmap;
-    num_blocks -= falling_in_bmap;
+    first_blk += falling_in_bmap;
+    count -= falling_in_bmap;
   }
+  alloc_dbg_assert(!is_allocated(start_block, num_blocks));
 }
 
 void BitMapZone::lock_excl()
@@ -581,7 +590,9 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
       last_cont += alloc_cont;
       
       if (!alloc_cont) {
-        this->free_blocks_int(last_running_ext, last_cont);
+        if (last_cont) {
+          this->free_blocks_int(last_running_ext - zone_blk_off, last_cont);
+        }
         allocated -= last_cont;
         last_cont = 0;
       } else if (last_cont / min_alloc) {
@@ -624,7 +635,9 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
       search_idx = 0;
       bmap_idx = iter.index();
       if ((bmap = iter.next()) == NULL) {
-        this->free_blocks_int(last_running_ext, last_cont);
+        if (last_cont) {
+          this->free_blocks_int(last_running_ext - zone_blk_off, last_cont);
+        }
         allocated -= last_cont;
         break;
       }
