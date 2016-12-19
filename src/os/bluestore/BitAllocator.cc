@@ -908,7 +908,7 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
   return true;
 }
 
-int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t num_blocks, int64_t min_alloc, 
+int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, int64_t min_alloc, 
            int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
   BitMapArea *child = NULL;
@@ -925,7 +925,7 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t nu
     }
 
     blk_off = child->get_index() * m_child_size_blocks + area_blk_off;
-    allocated += child->alloc_blocks_dis(wait, num_blocks - allocated, min_alloc,
+    allocated += child->alloc_blocks_dis(num_blocks - allocated, min_alloc,
                             hint % m_child_size_blocks, blk_off, block_list);
     hint = 0;
     child_unlock(child);
@@ -937,20 +937,20 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t nu
   return allocated;
 }
 
-int64_t BitMapAreaIN::alloc_blocks_dis_int(bool wait, int64_t num_blocks,
-           int64_t min_alloc, int64_t hint, int64_t area_blk_off, ExtentList *block_list)
+int64_t BitMapAreaIN::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc,
+                       int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
-  return alloc_blocks_dis_int_work(wait, false, num_blocks, min_alloc, hint,
+  return alloc_blocks_dis_int_work(false, num_blocks, min_alloc, hint,
                      area_blk_off, block_list);
 }
 
-int64_t BitMapAreaIN::alloc_blocks_dis(bool wait, int64_t num_blocks, int64_t min_alloc,
+int64_t BitMapAreaIN::alloc_blocks_dis(int64_t num_blocks, int64_t min_alloc,
            int64_t hint, int64_t blk_off, ExtentList *block_list)
 {
   int64_t allocated = 0;
 
   lock_shared();
-  allocated += alloc_blocks_dis_int(wait, num_blocks, min_alloc, hint, blk_off, block_list);
+  allocated += alloc_blocks_dis_int(num_blocks, min_alloc, hint, blk_off, block_list);
   add_used_blocks(allocated);
 
   unlock();
@@ -1125,7 +1125,7 @@ void BitMapAreaLeaf::child_unlock(BitMapArea *child)
   child->unlock();
 }
 
-int64_t BitMapAreaLeaf::alloc_blocks_dis_int(bool wait, int64_t num_blocks, int64_t min_alloc, 
+int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, 
                                  int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
   BitMapArea *child = NULL;
@@ -1395,19 +1395,21 @@ void BitAllocator::set_blocks_used(int64_t start_block, int64_t num_blocks)
 /*
  * Allocate N dis-contiguous blocks.
  */
-int64_t BitAllocator::alloc_blocks_dis_int(bool wait, int64_t num_blocks,
-           int64_t min_alloc, int64_t hint, int64_t area_blk_off, ExtentList *block_list)
+int64_t BitAllocator::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc,
+                       int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
-  return alloc_blocks_dis_int_work(wait, true, num_blocks, min_alloc, hint,
+  return alloc_blocks_dis_int_work(true, num_blocks, min_alloc, hint,
                      area_blk_off, block_list);
 }
 
-int64_t BitAllocator::alloc_blocks_dis_res(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list)
+int64_t BitAllocator::alloc_blocks_dis_res(int64_t num_blocks, int64_t min_alloc,
+                                           int64_t hint, ExtentList *block_list)
 {
   return alloc_blocks_dis_work(num_blocks, min_alloc, hint, block_list, true);
 }
 
-int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list, bool reserved)
+int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc,
+                                            int64_t hint, ExtentList *block_list, bool reserved)
 {
   int scans = 1;
   int64_t allocated = 0;
@@ -1436,7 +1438,7 @@ int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_allo
   }
 
   while (scans && allocated < num_blocks) {
-    allocated += alloc_blocks_dis_int(false, num_blocks - allocated, min_alloc, hint + allocated, blk_off, block_list);
+    allocated += alloc_blocks_dis_int(num_blocks - allocated, min_alloc, hint + allocated, blk_off, block_list);
     scans--;
   }
 
@@ -1450,7 +1452,7 @@ int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_allo
     unlock();
     lock_excl();
     serial_lock();
-    allocated += alloc_blocks_dis_int(false, num_blocks - allocated, min_alloc, hint + allocated,
+    allocated += alloc_blocks_dis_int(num_blocks - allocated, min_alloc, hint + allocated,
                                       blk_off, block_list);
     if (is_stats_on()) {
       m_stats->add_serial_scans(1);
