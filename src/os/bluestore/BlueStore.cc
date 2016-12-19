@@ -3592,26 +3592,26 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
     int r = alloc->reserve(gift);
     assert(r == 0);
 
-    uint64_t hint = 0;
-    while (gift > 0) {
-      uint64_t eoffset;
-      uint32_t elength;
-      r = alloc->allocate(gift, min_alloc_size, hint, &eoffset, &elength);
-      if (r < 0) {
-	derr << __func__ << " allocate failed on 0x" << std::hex << gift
-	     << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-	alloc->dump();
-        assert(0 == "allocate failed, wtf");
-        return r;
-      }
+    int count = 0;
+    uint64_t alloc_len = 0;
+    AllocExtentVector exts = AllocExtentVector(gift / min_alloc_size);
+    r = alloc->allocate(gift, g_conf->bluefs_alloc_size, 0, 0, &exts, &count, &alloc_len);
 
-      bluestore_pextent_t e(eoffset, elength);
+    if (r < 0 || alloc_len < gift) {
+      derr << __func__ << " allocate failed on 0x" << std::hex << gift
+           << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+      alloc->dump();
+      assert(0 == "allocate failed, wtf");
+      return r;
+    }
+    assert(count > 0);
+    
+    for (int i = 0; i < count; i++) {
+      bluestore_pextent_t e = bluestore_pextent_t(exts[i]);
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
       extents->push_back(e);
-      gift -= e.length;
-      hint = e.end();
     }
-    assert(gift == 0); // otherwise there is a reservation leak
+    gift = 0;
 
     ret = 1;
   }
@@ -7833,11 +7833,12 @@ int BlueStore::_do_alloc_write(
     }
 
     int count = 0;
+    uint64_t alloc_len = 0;
     AllocExtentVector extents = AllocExtentVector(final_length / min_alloc_size);
 
-    int r = alloc->alloc_extents(final_length, min_alloc_size, max_alloc_size,
-                                 hint, &extents, &count);
-    assert(r == 0);
+    int r = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
+                            hint, &extents, &count, &alloc_len);
+    assert(r == 0 && alloc_len == final_length);
     need -= final_length;
     txc->statfs_delta.allocated() += final_length;
     assert(count > 0);
