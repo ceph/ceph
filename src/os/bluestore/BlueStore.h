@@ -1215,6 +1215,7 @@ public:
     uint64_t ops, bytes;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
+    set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
     set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
@@ -1315,6 +1316,15 @@ public:
     }
     void write_shared_blob(SharedBlobRef &sb) {
       shared_blobs.insert(sb);
+    }
+    /// note we logically modified object (when onode itself is unmodified)
+    void note_modified_object(OnodeRef &o) {
+      // onode itself isn't written, though
+      modified_objects.insert(o);
+    }
+    void removed(OnodeRef& o) {
+      onodes.erase(o);
+      modified_objects.erase(o);
     }
   };
 
