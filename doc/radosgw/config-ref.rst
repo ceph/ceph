@@ -47,6 +47,11 @@ Ceph configuration file, the default value will be set automatically.
 :Type: String
 :Default: N/A
 
+``rgw fcgi socket backlog``
+
+:Description: The socket backlog for fcgi.
+:Type: Integer
+:Default: ``1024``
 
 ``rgw host``
 
