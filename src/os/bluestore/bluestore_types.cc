@@ -400,7 +400,6 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
-  f->dump_unsigned("shared_blob_id", sbid);
   f->dump_unsigned("compressed_length_original", compressed_length_orig);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
@@ -434,9 +433,6 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents;
-  if (o.sbid) {
-    out << " sbid 0x" << std::hex << o.sbid << std::dec;
-  }
   if (o.is_compressed()) {
     out << " clen 0x" << std::hex
 	<< o.compressed_length_orig
