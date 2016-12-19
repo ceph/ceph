@@ -37,12 +37,12 @@ class MOSDBoot : public PaxosServiceMessage {
     : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
       boot_epoch(0), osd_features(0)
   { }
-  MOSDBoot(OSDSuperblock& s, epoch_t be,
+  MOSDBoot(OSDSuperblock& s, epoch_t e, epoch_t be,
 	   const entity_addr_t& hb_back_addr_ref,
 	   const entity_addr_t& hb_front_addr_ref,
            const entity_addr_t& cluster_addr_ref,
 	   uint64_t feat)
-    : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage(MSG_OSD_BOOT, e, HEAD_VERSION, COMPAT_VERSION),
       sb(s),
       hb_back_addr(hb_back_addr_ref),
       hb_front_addr(hb_front_addr_ref),
