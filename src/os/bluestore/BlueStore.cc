@@ -1291,7 +1291,6 @@ BlueStore::SharedBlob::SharedBlob(uint64_t i, Cache *c)
     bc(c)
 {
   assert(sbid > 0);
-  get_shared_blob_key(sbid, &key);
 }
 
 BlueStore::SharedBlob::~SharedBlob()
@@ -2340,10 +2339,12 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 {
   assert(!sb->loaded);
   bufferlist v;
-  int r = store->db->get(PREFIX_SHARED_BLOB, sb->key, &v);
+  string key;
+  get_shared_blob_key(sb->sbid, &key);
+  int r = store->db->get(PREFIX_SHARED_BLOB, key, &v);
   if (r < 0) {
     derr << __func__ << " sbid 0x" << std::hex << sb->sbid << std::dec
-	 << " not found at key " << pretty_binary_string(sb->key) << dendl;
+	 << " not found at key " << pretty_binary_string(key) << dendl;
     assert(0 == "uh oh, missing shared_blob");
   }
 
@@ -2366,7 +2367,6 @@ void BlueStore::Collection::make_blob_shared(BlobRef b)
   // update shared blob
   b->shared_blob->loaded = true;  // we are new and therefore up to date
   b->shared_blob->sbid = blob.sbid;
-  get_shared_blob_key(blob.sbid, &b->shared_blob->key);
   shared_blob_set.add(b->shared_blob.get());
   for (auto p : blob.extents) {
     if (p.is_valid()) {
@@ -6414,16 +6414,18 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 
   // finalize shared_blobs
   for (auto sb : txc->shared_blobs) {
+    string key;
+    get_shared_blob_key(sb->sbid, &key);
     if (sb->shared_blob.empty()) {
       dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
 	       << " is empty" << dendl;
-      t->rmkey(PREFIX_SHARED_BLOB, sb->key);
+      t->rmkey(PREFIX_SHARED_BLOB, key);
     } else {
       bufferlist bl;
       ::encode(sb->shared_blob, bl);
       dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
 	       << " is " << bl.length() << dendl;
-      t->set(PREFIX_SHARED_BLOB, sb->key, bl);
+      t->set(PREFIX_SHARED_BLOB, key, bl);
     }
   }
 }
