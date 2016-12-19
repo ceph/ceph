@@ -334,7 +334,6 @@ public:
 
     // these are defined/set if the blob is marked 'shared'
     uint64_t sbid = 0;          ///< shared blob id
-    string key;                 ///< key in kv store
     SharedBlobSet *parent_set = 0;  ///< containing SharedBlobSet
 
     BufferSpace bc;             ///< buffer cache
@@ -410,6 +409,8 @@ public:
     }
   };
 
+//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
+
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
@@ -421,8 +422,9 @@ public:
 
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
-    mutable bool dirty = true;      ///< true if blob is newer than blob_bl
-    mutable bufferlist blob_bl;     ///< cached encoded blob
+#ifdef CACHE_BLOB_BL
+    mutable bufferlist blob_bl;     ///< cached encoded blob, blob is dirty if empty
+#endif
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_extent_ref_map_t ref_map;
 
@@ -452,24 +454,20 @@ public:
     void dup(Blob& o) {
       o.shared_blob = shared_blob;
       o.blob = blob;
-      o.dirty = dirty;
+#ifdef CACHE_BLOB_BL
       o.blob_bl = blob_bl;
+#endif
     }
 
     const bluestore_blob_t& get_blob() const {
       return blob;
     }
     bluestore_blob_t& dirty_blob() {
-      if (!dirty) {
-	dirty = true;
-	blob_bl.clear();
-      }
+#ifdef CACHE_BLOB_BL
+      blob_bl.clear();
+#endif
       return blob;
     }
-    bool is_dirty() const {
-      return dirty;
-    }
-
     bool is_unreferenced(uint64_t offset, uint64_t length) const {
       return !ref_map.intersects(offset, length);
     }
@@ -496,14 +494,11 @@ public:
 	delete this;
     }
 
-//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
 
 #ifdef CACHE_BLOB_BL
     void _encode() const {
-      if (dirty) {
-	blob_bl.clear();
+      if (blob_bl.length() == 0 ) {
 	::encode(blob, blob_bl);
-	dirty = false;
       } else {
 	assert(blob_bl.length());
       }
@@ -528,28 +523,36 @@ public:
       const char *end = p.get_pos();
       blob_bl.clear();
       blob_bl.append(start, end - start);
-      dirty = false;
       if (include_ref_map) {
         ref_map.decode(p);
       }
     }
 #else
-    void bound_encode(size_t& p, uint64_t struct_v, bool include_ref_map) const {
+    void bound_encode(size_t& p, uint64_t struct_v, uint64_t sbid, bool include_ref_map) const {
       denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(sbid, p);
+      }
       if (include_ref_map) {
         ref_map.bound_encode(p);
       }
     }
-    void encode(bufferlist::contiguous_appender& p, uint64_t struct_v,
+    void encode(bufferlist::contiguous_appender& p, uint64_t struct_v, uint64_t sbid,
 		bool include_ref_map) const {
       denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(sbid, p);
+      }
       if (include_ref_map) {
         ref_map.encode(p);
       }
     }
-    void decode(bufferptr::iterator& p, uint64_t struct_v,
+    void decode(bufferptr::iterator& p, uint64_t struct_v, uint64_t* sbid,
 		bool include_ref_map) {
       denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(*sbid, p);
+      }
       if (include_ref_map) {
         ref_map.decode(p);
       }
@@ -1111,9 +1114,9 @@ public:
     //  open = SharedBlob is instantiated
     //  shared = blob_t shared flag is set; SharedBlob is hashed.
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
-    void open_shared_blob(BlobRef b);
+    void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
-    void make_blob_shared(BlobRef b);
+    void make_blob_shared(uint64_t sbid, BlobRef b);
 
     BlobRef new_blob() {
       BlobRef b = new Blob;
