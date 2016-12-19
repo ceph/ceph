@@ -3740,7 +3740,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   __u32 access_mask = MAY_WRITE;
 
   // xlock inode
-  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME))
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME|CEPH_SETATTR_KILL_SGUID))
     xlocks.insert(&cur->authlock);
   if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
     xlocks.insert(&cur->filelock);
@@ -3800,7 +3800,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
-  else if ((mask & (CEPH_SETATTR_UID|CEPH_SETATTR_GID)) &&
+  else if ((mask & (CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_KILL_SGUID)) &&
 	    S_ISREG(pi->mode)) {
     pi->mode &= ~S_ISUID;
     if ((pi->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
