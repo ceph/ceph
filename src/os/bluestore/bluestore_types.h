@@ -665,11 +665,6 @@ struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  uint8_t flags = 0;
-
-  enum {
-    FLAG_OMAP = 1,
-  };
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
@@ -687,6 +682,12 @@ struct bluestore_onode_t {
   uint32_t expected_object_size = 0;
   uint32_t expected_write_size = 0;
   uint32_t alloc_hint_flags = 0;
+
+  uint8_t flags = 0;
+
+  enum {
+    FLAG_OMAP = 1,
+  };
 
   string get_flags_string() const {
     string s;
