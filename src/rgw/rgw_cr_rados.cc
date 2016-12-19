@@ -228,7 +228,6 @@ RGWRadosSetOmapKeysCR::~RGWRadosSetOmapKeysCR()
 
 int RGWRadosSetOmapKeysCR::send_request()
 {
-  rgw_rados_ref ref;
   int r = store->get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
@@ -271,7 +270,6 @@ RGWRadosGetOmapKeysCR::~RGWRadosGetOmapKeysCR()
 }
 
 int RGWRadosGetOmapKeysCR::send_request() {
-  rgw_rados_ref ref;
   int r = store->get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
@@ -302,7 +300,6 @@ RGWRadosRemoveOmapKeysCR::~RGWRadosRemoveOmapKeysCR()
 }
 
 int RGWRadosRemoveOmapKeysCR::send_request() {
-  rgw_rados_ref ref;
   int r = store->get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
