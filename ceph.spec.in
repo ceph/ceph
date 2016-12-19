@@ -22,9 +22,11 @@
 %ifnarch ppc64 ppc64le s390 s390x
 %bcond_without tcmalloc
 %bcond_without xio
+%bcond_without valgrind_devel
 %else
 %bcond_with tcmalloc
 %bcond_with xio
+%bcond_with valgrind_devel
 %endif
 %bcond_without libs_compat
 %bcond_with lowmem_builder
@@ -133,7 +135,9 @@ BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	udev
 BuildRequires:	util-linux
+%if %{with valgrind_devel}
 BuildRequires:	valgrind-devel
+%endif
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
