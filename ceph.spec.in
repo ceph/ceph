@@ -19,12 +19,12 @@
 %bcond_without ceph_test_package
 %endif
 %bcond_with make_check
-%bcond_with xio
-%ifnarch s390 s390x
+%ifnarch ppc64 ppc64le s390 s390x
 %bcond_without tcmalloc
+%bcond_without xio
 %else
-# no gperftools/tcmalloc on s390(x)
 %bcond_with tcmalloc
+%bcond_with xio
 %endif
 %bcond_without libs_compat
 %bcond_with lowmem_builder
