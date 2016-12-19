@@ -30,22 +30,26 @@ static ostream& _prefix(std::ostream *_dout, mds_rank_t rank) {
 void PurgeItem::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
+  ::encode((uint8_t)action, bl);
   ::encode(ino, bl);
   ::encode(size, bl);
   ::encode(layout, bl, CEPH_FEATURE_FS_FILE_LAYOUT_V2);
   ::encode(old_pools, bl);
   ::encode(snapc, bl);
+  ::encode(fragtree, bl);
   ENCODE_FINISH(bl);
 }
 
 void PurgeItem::decode(bufferlist::iterator &p)
 {
   DECODE_START(1, p);
+  ::decode((uint8_t&)action, p);
   ::decode(ino, p);
   ::decode(size, p);
   ::decode(layout, p);
   ::decode(old_pools, p);
   ::decode(snapc, p);
+  ::decode(fragtree, p);
   DECODE_FINISH(p);
 }
 
@@ -131,6 +135,9 @@ void PurgeQueue::create(Context *fin)
   journaler.write_head(fin);
 }
 
+/**
+ * The `completion` context will always be called back via a Finisher
+ */
 void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 {
   dout(4) << "pushing inode 0x" << std::hex << pi.ino << std::dec << dendl;
@@ -269,37 +276,72 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
 
-  // TODO: handle things other than normal file purges
-  // (directories, snapshot truncates)
+  SnapContext nullsnapc;
+
   C_GatherBuilder gather(cct);
-  if (item.size > 0) {
-    uint64_t num = Striper::get_num_objects(item.layout, item.size);
+  if (item.action == PurgeItem::PURGE_FILE) {
+    if (item.size > 0) {
+      uint64_t num = Striper::get_num_objects(item.layout, item.size);
+      dout(10) << " 0~" << item.size << " objects 0~" << num
+               << " snapc " << item.snapc << " on " << item.ino << dendl;
+      filer.purge_range(item.ino, &item.layout, item.snapc,
+                        0, num, ceph::real_clock::now(), 0,
+                        gather.new_sub());
+    }
+
+    // remove the backtrace object if it was not purged
+    object_t oid = CInode::get_object_name(item.ino, frag_t(), "");
+    if (!gather.has_subs() || !item.layout.pool_ns.empty()) {
+      object_locator_t oloc(item.layout.pool_id);
+      dout(10) << " remove backtrace object " << oid
+               << " pool " << oloc.pool << " snapc " << item.snapc << dendl;
+      objecter->remove(oid, oloc, item.snapc,
+                            ceph::real_clock::now(), 0,
+                            NULL, gather.new_sub());
+    }
+
+    // remove old backtrace objects
+    for (const auto &p : item.old_pools) {
+      object_locator_t oloc(p);
+      dout(10) << " remove backtrace object " << oid
+               << " old pool " << p << " snapc " << item.snapc << dendl;
+      objecter->remove(oid, oloc, item.snapc,
+                            ceph::real_clock::now(), 0,
+                            NULL, gather.new_sub());
+    }
+  } else if (item.action == PurgeItem::PURGE_DIR) {
+    object_locator_t oloc(metadata_pool);
+    std::list<frag_t> frags;
+    if (!item.fragtree.is_leaf(frag_t()))
+      item.fragtree.get_leaves(frags);
+    frags.push_back(frag_t());
+    for (const auto &frag : frags) {
+      object_t oid = CInode::get_object_name(item.ino, frag, "");
+      dout(10) << " remove dirfrag " << oid << dendl;
+      objecter->remove(oid, oloc, nullsnapc,
+                       ceph::real_clock::now(),
+                       0, NULL, gather.new_sub());
+    }
+  } else if (item.action == PurgeItem::TRUNCATE_FILE) {
+    const uint64_t num = Striper::get_num_objects(item.layout, item.size);
     dout(10) << " 0~" << item.size << " objects 0~" << num
-             << " snapc " << item.snapc << " on " << item.ino << dendl;
-    filer.purge_range(item.ino, &item.layout, item.snapc,
-                      0, num, ceph::real_clock::now(), 0,
-                      gather.new_sub());
-  }
+	     << " snapc " << item.snapc << " on " << item.ino << dendl;
 
-  // remove the backtrace object if it was not purged
-  object_t oid = CInode::get_object_name(item.ino, frag_t(), "");
-  if (!gather.has_subs() || !item.layout.pool_ns.empty()) {
-    object_locator_t oloc(item.layout.pool_id);
-    dout(10) << " remove backtrace object " << oid
-	     << " pool " << oloc.pool << " snapc " << item.snapc << dendl;
-    objecter->remove(oid, oloc, item.snapc,
-			  ceph::real_clock::now(), 0,
-			  NULL, gather.new_sub());
-  }
-
-  // remove old backtrace objects
-  for (const auto &p : item.old_pools) {
-    object_locator_t oloc(p);
-    dout(10) << " remove backtrace object " << oid
-	     << " old pool " << p << " snapc " << item.snapc << dendl;
-    objecter->remove(oid, oloc, item.snapc,
-			  ceph::real_clock::now(), 0,
-			  NULL, gather.new_sub());
+    // keep backtrace object
+    if (num > 1) {
+      filer.purge_range(item.ino, &item.layout, item.snapc,
+			1, num - 1, ceph::real_clock::now(),
+			0, gather.new_sub());
+    }
+    filer.zero(item.ino, &item.layout, item.snapc,
+	       0, item.layout.object_size,
+	       ceph::real_clock::now(),
+	       0, true, NULL, gather.new_sub());
+  } else {
+    derr << "Invalid item (action=" << item.action << ") in purge queue, "
+            "dropping it" << dendl;
+    in_flight.erase(expire_to);
+    return;
   }
   assert(gather.has_subs());
 

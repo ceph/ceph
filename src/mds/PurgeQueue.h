@@ -29,14 +29,23 @@
 class PurgeItem
 {
 public:
+  enum Action : uint8_t {
+    NONE = 0,
+    PURGE_FILE = 1,
+    TRUNCATE_FILE,
+    PURGE_DIR
+  };
+
+  Action action;
   inodeno_t ino;
   uint64_t size;
   file_layout_t layout;
   compact_set<int64_t> old_pools;
   SnapContext snapc;
+  fragtree_t fragtree;
 
   PurgeItem()
-   : ino(0), size(0)
+   : action(NONE), ino(0), size(0)
   {}
 
   void encode(bufferlist &bl) const;
