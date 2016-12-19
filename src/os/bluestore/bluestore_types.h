@@ -280,7 +280,6 @@ struct bluestore_blob_t {
   static string get_flags_string(unsigned flags);
 
   vector<bluestore_pextent_t> extents;///< raw data position on device
-  uint64_t sbid = 0;                  ///< shared blob id (if shared)
   uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
@@ -301,7 +300,6 @@ struct bluestore_blob_t {
     assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
-    denc_varint(sbid, p);
     denc_varint_lowz(compressed_length_orig, p);
     denc_varint_lowz(compressed_length, p);
     denc(csum_type, p);
@@ -315,9 +313,6 @@ struct bluestore_blob_t {
     assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
-    if (is_shared()) {
-      denc_varint(sbid, p);
-    }
     if (is_compressed()) {
       denc_varint_lowz(compressed_length_orig, p);
       denc_varint_lowz(compressed_length, p);
@@ -338,9 +333,6 @@ struct bluestore_blob_t {
     assert(struct_v == 1);
     denc(extents, p);
     denc_varint(flags, p);
-    if (is_shared()) {
-      denc_varint(sbid, p);
-    }
     if (is_compressed()) {
       denc_varint_lowz(compressed_length_orig, p);
       denc_varint_lowz(compressed_length, p);
