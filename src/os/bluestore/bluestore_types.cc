@@ -411,7 +411,7 @@ void bluestore_blob_t::dump(Formatter *f) const
   for (unsigned i = 0; i < n; ++i)
     f->dump_unsigned("csum", get_csum_item(i));
   f->close_section();
-  f->dump_unsigned("unused", unused.to_ullong());
+  f->dump_unsigned("unused", unused);
 }
 
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
@@ -452,7 +452,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec;
   }
   if (o.has_unused())
-    out << " unused=0x" << std::hex << o.unused.to_ullong() << std::dec;
+    out << " unused=0x" << std::hex << o.unused << std::dec;
   out << ")";
   return out;
 }
