@@ -1331,7 +1331,6 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
     out << " spanning " << b.id;
   }
   out << " " << b.get_blob() << " " << b.get_ref_map()
-      << (b.is_dirty() ? " (dirty)" : " (clean)")
       << " " << *b.shared_blob
       << ")";
   return out;
