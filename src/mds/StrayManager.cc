@@ -15,8 +15,6 @@
 
 #include "common/perf_counters.h"
 
-#include "osdc/Objecter.h"
-#include "osdc/Filer.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDLog.h"
@@ -99,65 +97,46 @@ void StrayManager::purge(CDentry *dn)
   // dir.  on recovery, we'll need to re-eval all strays anyway.
   
   SnapContext nullsnapc;
-  C_GatherBuilder gather(
-    g_ceph_context,
-    new C_OnFinisher(new C_IO_PurgeStrayPurged(
-        this, dn, false), mds->finisher));
-
-  if (in->is_dir()) {
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-    std::list<frag_t> ls;
-    if (!in->dirfragtree.is_leaf(frag_t()))
-      in->dirfragtree.get_leaves(ls);
-    ls.push_back(frag_t());
-    for (std::list<frag_t>::iterator p = ls.begin();
-         p != ls.end();
-         ++p) {
-      object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
-      dout(10) << __func__ << " remove dirfrag " << oid << dendl;
-      mds->objecter->remove(oid, oloc, nullsnapc,
-			    ceph::real_clock::now(),
-			    0, gather.new_sub());
-    }
-    assert(gather.has_subs());
-    gather.activate();
-    return;
-  }
-
-  const SnapContext *snapc;
-  SnapRealm *realm = in->find_snaprealm();
-  if (realm) {
-    dout(10) << " realm " << *realm << dendl;
-    snapc = &realm->get_snap_context();
-  } else {
-    dout(10) << " NO realm, using null context" << dendl;
-    snapc = &nullsnapc;
-    assert(in->last == CEPH_NOSNAP);
-  }
-
-  uint64_t to = 0;
-  if (in->is_file()) {
-    to = in->inode.get_max_size();
-    to = MAX(in->inode.size, to);
-    // when truncating a file, the filer does not delete stripe objects that are
-    // truncated to zero. so we need to purge stripe objects up to the max size
-    // the file has ever been.
-    to = MAX(in->inode.max_size_ever, to);
-  }
-
-  inode_t *pi = in->get_projected_inode();
 
   PurgeItem item;
   item.ino = in->inode.ino;
-  item.size = to;
-  item.layout = pi->layout;
-  item.old_pools = pi->old_pools;
-  item.snapc = *snapc;
+  if (in->is_dir()) {
+    item.action = PurgeItem::PURGE_DIR;
+    item.fragtree = in->dirfragtree;
+  } else {
+    item.action = PurgeItem::PURGE_FILE;
 
-  purge_queue.push(item, gather.new_sub());
+    const SnapContext *snapc;
+    SnapRealm *realm = in->find_snaprealm();
+    if (realm) {
+      dout(10) << " realm " << *realm << dendl;
+      snapc = &realm->get_snap_context();
+    } else {
+      dout(10) << " NO realm, using null context" << dendl;
+      snapc = &nullsnapc;
+      assert(in->last == CEPH_NOSNAP);
+    }
 
-  assert(gather.has_subs());
-  gather.activate();
+    uint64_t to = 0;
+    if (in->is_file()) {
+      to = in->inode.get_max_size();
+      to = MAX(in->inode.size, to);
+      // when truncating a file, the filer does not delete stripe objects that are
+      // truncated to zero. so we need to purge stripe objects up to the max size
+      // the file has ever been.
+      to = MAX(in->inode.max_size_ever, to);
+    }
+
+    inode_t *pi = in->get_projected_inode();
+
+    item.size = to;
+    item.layout = pi->layout;
+    item.old_pools = pi->old_pools;
+    item.snapc = *snapc;
+  }
+
+  purge_queue.push(item, new C_IO_PurgeStrayPurged(
+        this, dn, false));
 }
 
 class C_PurgeStrayLogged : public StrayManagerLogContext {
@@ -679,25 +658,20 @@ StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
     mds(mds), logger(NULL), started(false), num_strays(0),
     num_strays_delayed(0), num_strays_enqueuing(0),
-    filer(mds->objecter, mds->finisher), purge_queue(purge_queue_)
+    purge_queue(purge_queue_)
 {
   assert(mds != NULL);
 }
 
 void StrayManager::truncate(CDentry *dn)
 {
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  CInode *in = dnl->get_inode();
+  const CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  const CInode *in = dnl->get_inode();
   assert(in);
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
   assert(!dn->is_replicated());
 
-  C_GatherBuilder gather(
-    g_ceph_context,
-    new C_OnFinisher(new C_IO_PurgeStrayPurged(this, dn, true),
-		     mds->finisher));
-
-  SnapRealm *realm = in->find_snaprealm();
+  const SnapRealm *realm = in->find_snaprealm();
   assert(realm);
   dout(10) << " realm " << *realm << dendl;
   const SnapContext *snapc = &realm->get_snap_context();
@@ -708,25 +682,17 @@ void StrayManager::truncate(CDentry *dn)
   // truncated to zero. so we need to purge stripe objects up to the max size
   // the file has ever been.
   to = MAX(in->inode.max_size_ever, to);
-  if (to > 0) {
-    uint64_t num = Striper::get_num_objects(in->inode.layout, to);
-    dout(10) << __func__ << " 0~" << to << " objects 0~" << num
-	     << " snapc " << snapc << " on " << *in << dendl;
 
-    // keep backtrace object
-    if (num > 1) {
-      filer.purge_range(in->ino(), &in->inode.layout, *snapc,
-			1, num - 1, ceph::real_clock::now(),
-			0, gather.new_sub());
-    }
-    filer.zero(in->ino(), &in->inode.layout, *snapc,
-	       0, in->inode.layout.object_size,
-	       ceph::real_clock::now(),
-	       0, true, gather.new_sub());
-  }
+  assert(to > 0);
 
-  assert(gather.has_subs());
-  gather.activate();
+  PurgeItem item;
+  item.ino = in->inode.ino;
+  item.layout = in->inode.layout;
+  item.snapc = *snapc;
+  item.size = to;
+
+  purge_queue.push(item, new C_IO_PurgeStrayPurged(
+        this, dn, true));
 }
 
 void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)

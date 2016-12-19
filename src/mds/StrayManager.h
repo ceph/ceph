@@ -16,7 +16,6 @@
 
 #include "include/elist.h"
 #include <list>
-#include "osdc/Filer.h"
 #include "mds/PurgeQueue.h"
 
 class MDSRank;
@@ -48,8 +47,6 @@ class StrayManager
   // Entries that have entered enqueue() but not been persistently
   // recorded by PurgeQueue yet
   uint64_t num_strays_enqueuing;
-
-  Filer filer;
 
   PurgeQueue &purge_queue;
 
