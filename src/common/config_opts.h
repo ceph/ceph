@@ -999,6 +999,11 @@ OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at
 // get the serial number of Intel(R) Fultondale NVMe controllers.
 // Example:
 // bluestore_block_path = spdk:55cd2e404bd73932
+// If you want to run multiple SPDK instances per node, you must specify the
+// amount of memory per socket each instance will use.
+OPTION(spdk_socket_mem, OPT_STR, "512,512")
+// A hexadecimal bit mask of the cores to run on. Note the core numbering can change between platforms and should be determined beforehand.
+OPTION(spdk_coremask, OPT_STR, "0x3")
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_block_create, OPT_BOOL, true)
