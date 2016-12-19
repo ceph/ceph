@@ -52,9 +52,6 @@ using namespace libradosstriper;
 #include "PoolDump.h"
 #include "RadosImport.h"
 
-int rados_tool_sync(const std::map < std::string, std::string > &opts,
-                             std::vector<const char*> &args);
-
 using namespace librados;
 
 // two steps seem to be necessary to do this right
