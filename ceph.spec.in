@@ -82,7 +82,7 @@ Source99:       ceph-rpmlintrc
 %if 0%{?is_opensuse}
 ExclusiveArch:  x86_64 aarch64 ppc64 ppc64le
 %else
-ExclusiveArch:  x86_64 aarch64
+ExclusiveArch:  x86_64 aarch64 ppc64 ppc64le s390 s390x
 %endif
 %endif
 #################################################################################
