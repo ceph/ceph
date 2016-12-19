@@ -46,7 +46,9 @@
 # LTTng-UST enabled on Fedora, RHEL 6+, and SLE (not openSUSE)
 %if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version}
 %if ! 0%{?is_opensuse}
+%ifarch aarch64 x86_64
 %bcond_without lttng
+%endif
 %endif
 %endif
 
