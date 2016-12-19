@@ -407,7 +407,7 @@ int main(int argc, const char **argv)
 	max_osd = i;
 
     }
-    uint64_t avg = total / in;
+    uint64_t avg = in ? (total / in) : 0;
     double dev = 0;
     for (int i=0; i<n; i++) {
       if (!osdmap.is_in(i))
