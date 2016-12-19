@@ -848,6 +848,8 @@ void JournalMetadata::handle_watch_reset() {
   if (r < 0) {
     if (r == -ENOENT) {
       ldout(m_cct, 5) << __func__ << ": journal header not found" << dendl;
+    } else if (r == -EBLACKLISTED) {
+      ldout(m_cct, 5) << __func__ << ": client blacklisted" << dendl;
     } else {
       lderr(m_cct) << __func__ << ": failed to watch journal: "
                    << cpp_strerror(r) << dendl;
@@ -872,7 +874,7 @@ void JournalMetadata::handle_watch_error(int err) {
   if (err == -ENOTCONN) {
     ldout(m_cct, 5) << "journal watch error: header removed" << dendl;
   } else if (err == -EBLACKLISTED) {
-    ldout(m_cct, 5) << "journal watch error: client blacklisted" << dendl;
+    lderr(m_cct) << "journal watch error: client blacklisted" << dendl;
   } else {
     lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
   }
