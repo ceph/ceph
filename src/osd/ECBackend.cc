@@ -1895,7 +1895,7 @@ bool ECBackend::try_reads_to_commit()
       trans.find(i->shard);
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
-    pg_stat_t stats =
+    const pg_stat_t &stats =
       should_send ?
       get_info().stats :
       parent->get_shard_info().find(*i)->second.stats;
