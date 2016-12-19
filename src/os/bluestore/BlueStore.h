@@ -528,22 +528,31 @@ public:
       }
     }
 #else
-    void bound_encode(size_t& p, uint64_t struct_v, bool include_ref_map) const {
+    void bound_encode(size_t& p, uint64_t struct_v, uint64_t sbid, bool include_ref_map) const {
       denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(sbid, p);
+      }
       if (include_ref_map) {
         ref_map.bound_encode(p);
       }
     }
-    void encode(bufferlist::contiguous_appender& p, uint64_t struct_v,
+    void encode(bufferlist::contiguous_appender& p, uint64_t struct_v, uint64_t sbid,
 		bool include_ref_map) const {
       denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(sbid, p);
+      }
       if (include_ref_map) {
         ref_map.encode(p);
       }
     }
-    void decode(bufferptr::iterator& p, uint64_t struct_v,
+    void decode(bufferptr::iterator& p, uint64_t struct_v, uint64_t* sbid,
 		bool include_ref_map) {
       denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(*sbid, p);
+      }
       if (include_ref_map) {
         ref_map.decode(p);
       }
@@ -1105,9 +1114,9 @@ public:
     //  open = SharedBlob is instantiated
     //  shared = blob_t shared flag is set; SharedBlob is hashed.
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
-    void open_shared_blob(BlobRef b);
+    void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
-    void make_blob_shared(BlobRef b);
+    void make_blob_shared(uint64_t sbid, BlobRef b);
 
     BlobRef new_blob() {
       BlobRef b = new Blob;

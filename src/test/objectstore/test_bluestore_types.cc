@@ -688,7 +688,6 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(0x40118000, 0x7000));
     b.set_flag(bluestore_blob_t::FLAG_SHARED);
     b.init_csum(Checksummer::CSUM_CRC32C, 12, 0x1e000);
-    b.sbid = 0xcf92e;
 
     cout << "before: " << B << std::endl;
     vector<bluestore_pextent_t> r;
