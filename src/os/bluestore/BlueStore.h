@@ -1077,6 +1077,7 @@ public:
 		const ghobject_t& new_oid,
 		const string& new_okey);
     void clear();
+    void clear_pre_split(SharedBlobSet& sbset, uint32_t ps, int bits);
     bool empty();
 
     /// return true if f true for any item

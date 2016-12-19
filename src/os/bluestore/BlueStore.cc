@@ -1218,6 +1218,34 @@ void BlueStore::OnodeSpace::clear()
   onode_map.clear();
 }
 
+void BlueStore::OnodeSpace::clear_pre_split(SharedBlobSet& sbset,
+					    uint32_t ps, int bits)
+{
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  dout(10) << __func__ << dendl;
+
+  auto p = onode_map.begin();
+  while (p != onode_map.end()) {
+    if (p->second->oid.match(bits, ps)) {
+      // this onode stays in the collection post-split
+      ++p;
+    } else {
+      // We have an awkward race here: previous pipelined transactions may
+      // still reference blobs and their shared_blobs.  They will be flushed
+      // shortly by _osr_reap_done, but it's awkward to block for that (and
+      // a waste of time).  Instead, explicitly remove them from the shared blob
+      // map.
+      for (auto& e : p->second->extent_map.extent_map) {
+	if (e.blob->get_blob().is_shared()) {
+	  sbset.remove(e.blob->shared_blob.get());
+	}
+      }
+      cache->_rm_onode(p->second);
+      p = onode_map.erase(p);
+    }
+  }
+}
+
 bool BlueStore::OnodeSpace::empty()
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
@@ -8943,15 +8971,12 @@ int BlueStore::_split_collection(TransContext *txc,
   RWLock::WLocker l2(d->lock);
   int r;
 
-  // blow away src cache
-  c->onode_map.clear();
-
-  // We have an awkward race here: previous pipelinex transactions may
-  // still reference blobs and their shared_blobs.  They will be flushed
-  // shortly by _osr_reap_done, but it's awkward to block for that (and
-  // a waste of time).  Instead, explicitly remove them from the shared blob
-  // map.
-  c->shared_blob_set.violently_clear();
+  // drop any cached items (onodes and referenced shared blobs) that will
+  // not belong to this collection post-split.
+  spg_t pgid;
+  bool is_pg = c->cid.is_pg(&pgid);
+  assert(is_pg);
+  c->onode_map.clear_pre_split(c->shared_blob_set, pgid.ps(), bits);
 
   // the destination should be empty.
   assert(d->onode_map.empty());
