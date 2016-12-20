@@ -6537,7 +6537,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   throttle_wal_ops.put(txc->ops);
-  throttle_wal_bytes.put(txc->bytes);
+  throttle_wal_bytes.put(txc->wal_bytes);
 
   OpSequencerRef osr = txc->osr;
   {
@@ -6963,6 +6963,7 @@ int BlueStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
+  txc->wal_bytes = txc->bytes;
   _txc_write_nodes(txc, txc->t);
 
   // journal wal items
@@ -6974,6 +6975,7 @@ int BlueStore::queue_transactions(
     txc->wal_txn->seq = ++wal_seq;
     bufferlist bl;
     ::encode(*txc->wal_txn, bl);
+    txc->wal_bytes += bl.length();
     string key;
     get_wal_key(txc->wal_txn->seq, &key);
     txc->t->set(PREFIX_WAL, key, bl);
@@ -6985,7 +6987,7 @@ int BlueStore::queue_transactions(
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
   throttle_wal_ops.get(txc->ops);
-  throttle_wal_bytes.get(txc->bytes);
+  throttle_wal_bytes.get(txc->wal_bytes);
 
   if (handle)
     handle->reset_tp_timeout();
