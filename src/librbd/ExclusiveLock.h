@@ -45,8 +45,6 @@ public:
 
   void handle_peer_notification();
 
-  void assert_header_locked(librados::ObjectWriteOperation *op);
-
   static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
 
 private:

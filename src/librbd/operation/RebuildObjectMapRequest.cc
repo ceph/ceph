@@ -215,9 +215,6 @@ void RebuildObjectMapRequest<I>::send_update_header() {
   m_state = STATE_UPDATE_HEADER;
 
   librados::ObjectWriteOperation op;
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    m_image_ctx.exclusive_lock->assert_header_locked(&op);
-  }
 
   uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
   cls_client::set_flags(&op, m_image_ctx.snap_id, 0, flags);
