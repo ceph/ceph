@@ -148,6 +148,13 @@ def generate_iso(ctx, config):
   mount -t xfs /dev/vd{dev_letter} /mnt/test_{dev_letter}
 """.format(dev_letter=dev_letter)
 
+        user_data += """
+- |
+  #!/bin/bash
+  test -d /etc/ceph || mkdir /etc/ceph
+  cp /mnt/cdrom/ceph.* /etc/ceph/
+"""
+
         cloud_config_archive = client_config.get('cloud_config_archive', [])
         if cloud_config_archive:
           user_data += yaml.safe_dump(cloud_config_archive, default_style='|',
@@ -186,6 +193,8 @@ def generate_iso(ctx, config):
                 '-graft-points',
                 'user-data={userdata}'.format(userdata=userdata_path),
                 'meta-data={metadata}'.format(metadata=metadata_path),
+                'ceph.conf=/etc/ceph/ceph.conf',
+                'ceph.keyring=/etc/ceph/ceph.keyring',
                 'test.sh={file}'.format(file=test_file),
                 ],
             )
