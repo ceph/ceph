@@ -6,6 +6,7 @@ from cStringIO import StringIO
 import contextlib
 import logging
 import os
+import yaml
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -135,6 +136,11 @@ def generate_iso(ctx, config):
   mkfs -t xfs /dev/vd{dev_letter}
   mount -t xfs /dev/vd{dev_letter} /mnt/test_{dev_letter}
 """.format(dev_letter=dev_letter)
+
+        cloud_config_archive = client_config.get('cloud_config_archive', [])
+        if cloud_config_archive:
+          user_data += yaml.safe_dump(cloud_config_archive, default_style='|',
+                                      default_flow_style=False)
 
         # this may change later to pass the directories as args to the
         # script or something. xfstests needs that.
@@ -458,6 +464,23 @@ def task(ctx, config):
             client.0:
               test: http://download.ceph.com/qa/test.sh
               clone: true
+
+    If you need to configure additional cloud-config options, set cloud_config
+    to the required data set::
+
+        tasks:
+        - ceph
+        - qemu:
+            client.0:
+                test: http://ceph.com/qa/test.sh
+                cloud_config_archive:
+                    - |
+                      #/bin/bash
+                      touch foo1
+                    - content: |
+                        test data
+                      type: text/plain
+                      filename: /tmp/data
     """
     assert isinstance(config, dict), \
            "task qemu only supports a dictionary for configuration"
