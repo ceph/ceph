@@ -96,6 +96,11 @@ bool OpRequest::may_write() {
   return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
 bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered_forced() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered() {
+  return may_write() || may_cache() || rwordered_forced();
+}
+
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
 bool OpRequest::need_read_cap() {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ);
@@ -132,6 +137,7 @@ void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
 void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
+void OpRequest::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
