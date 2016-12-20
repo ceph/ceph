@@ -973,7 +973,7 @@ public:
       }
     }
   }
-  // replay / delayed pg activation
+  // delayed pg activation
   void queue_for_recovery(PG *pg, bool front = false) {
     Mutex::Locker l(recovery_lock);
     if (front) {

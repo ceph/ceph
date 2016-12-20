@@ -521,8 +521,6 @@ public:
   set<hobject_t, hobject_t::BitwiseComparator> recovering_oids;
 #endif
 
-  utime_t replay_until;
-
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   unsigned    state;   // PG_STATE_*
@@ -592,8 +590,6 @@ public:
 
   friend std::ostream& operator<<(std::ostream& oss,
 				  const struct PriorSet &prior);
-
-  bool may_need_replay(const OSDMapRef osdmap) const;
 
 
 public:    
@@ -2172,7 +2168,6 @@ public:
   bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
-  bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }

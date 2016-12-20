@@ -1637,12 +1637,6 @@ void PrimaryLogPG::do_request(
       op->mark_delayed("waiting for active");
       return;
     }
-    if (is_replay()) {
-      dout(20) << " replay, waiting for active on " << op << dendl;
-      waiting_for_active.push_back(op);
-      op->mark_delayed("waiting for replay end");
-      return;
-    }
     // verify client features
     if ((pool.info.has_tiers() || pool.info.is_tier()) &&
 	!op->has_feature(CEPH_FEATURE_OSD_CACHEPOOL)) {
