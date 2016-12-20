@@ -1716,7 +1716,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_command_thread_timeout,
     cct->_conf->osd_command_thread_suicide_timeout,
     &command_tp),
-  replay_queue_lock("OSD::replay_queue_lock"),
   remove_wq(
     cct,
     store,
@@ -4383,10 +4382,6 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
-  }
-
-  if (is_active()) {
-    check_replay_queue();
   }
 
   do_waiters();
@@ -8447,44 +8442,6 @@ void OSD::_remove_pg(PG *pg)
 
 // =========================================================
 // RECOVERY
-
-/*
- * caller holds osd_lock
- */
-void OSD::check_replay_queue()
-{
-  assert(osd_lock.is_locked());
-
-  utime_t now = ceph_clock_now();
-  list< pair<spg_t,utime_t> > pgids;
-  replay_queue_lock.Lock();
-  while (!replay_queue.empty() &&
-	 replay_queue.front().second <= now) {
-    pgids.push_back(replay_queue.front());
-    replay_queue.pop_front();
-  }
-  replay_queue_lock.Unlock();
-
-  for (list< pair<spg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); ++p) {
-    spg_t pgid = p->first;
-    pg_map_lock.get_read();
-    if (pg_map.count(pgid)) {
-      PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
-      pg_map_lock.unlock();
-      dout(10) << "check_replay_queue " << *pg << dendl;
-      if ((pg->is_active() || pg->is_activating()) &&
-	  pg->is_replay() &&
-          pg->is_primary() &&
-          pg->replay_until == p->second) {
-	pg->replay_queued_ops();
-      }
-      pg->unlock();
-    } else {
-      pg_map_lock.unlock();
-      dout(10) << "check_replay_queue pgid " << pgid << " (not found)" << dendl;
-    }
-  }
-}
 
 void OSDService::_maybe_queue_recovery() {
   assert(recovery_lock.is_locked_by_me());

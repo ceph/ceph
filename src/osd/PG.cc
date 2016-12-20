@@ -1921,41 +1921,6 @@ void PG::queue_op(OpRequestRef& op)
   }
 }
 
-void PG::replay_queued_ops()
-{
-  assert(is_replay());
-  assert(is_active() || is_activating());
-  eversion_t c = info.last_update;
-  list<OpRequestRef> replay;
-  dout(10) << "replay_queued_ops" << dendl;
-  state_clear(PG_STATE_REPLAY);
-
-  for (map<eversion_t,OpRequestRef>::iterator p = replay_queue.begin();
-       p != replay_queue.end();
-       ++p) {
-    if (p->first.version != c.version+1) {
-      dout(10) << "activate replay " << p->first
-	       << " skipping " << c.version+1 - p->first.version 
-	       << " ops"
-	       << dendl;      
-      c = p->first;
-    }
-    dout(10) << "activate replay " << p->first << " "
-             << *p->second->get_req() << dendl;
-    replay.push_back(p->second);
-  }
-  replay_queue.clear();
-  if (is_active()) {
-    requeue_ops(replay);
-    requeue_ops(waiting_for_active);
-    assert(waiting_for_peered.empty());
-  } else {
-    waiting_for_active.splice(waiting_for_active.begin(), replay);
-  }
-
-  publish_stats_to_osd();
-}
-
 void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
 {
   lock();
@@ -2241,24 +2206,6 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   }
 }
 
-static void split_replay_queue(
-  map<eversion_t, OpRequestRef> *from,
-  map<eversion_t, OpRequestRef> *to,
-  unsigned match,
-  unsigned bits)
-{
-  for (map<eversion_t, OpRequestRef>::iterator i = from->begin();
-       i != from->end();
-       ) {
-    if (OSD::split_request(i->second, match, bits)) {
-      to->insert(*i);
-      from->erase(i++);
-    } else {
-      ++i;
-    }
-  }
-}
-
 void PG::split_ops(PG *child, unsigned split_bits) {
   unsigned match = child->info.pgid.ps();
   assert(waiting_for_all_missing.empty());
@@ -2268,7 +2215,6 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_ack.empty());
   assert(waiting_for_ondisk.empty());
   assert(waiting_for_active.empty());
-  split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
 
   osd->dequeue_pg(this, &waiting_for_peered);
 
@@ -5099,15 +5045,6 @@ void PG::start_peering_interval(
     if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
       clear_publish_stats();
-	
-      // take replay queue waiters
-      list<OpRequestRef> ls;
-      for (map<eversion_t,OpRequestRef>::iterator it = replay_queue.begin();
-	   it != replay_queue.end();
-	   ++it)
-	ls.push_back(it->second);
-      replay_queue.clear();
-      requeue_ops(ls);
     }
 
     on_role_change();
