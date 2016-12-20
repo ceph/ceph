@@ -9324,12 +9324,17 @@ int OSD::init_op_flags(OpRequestRef& op)
 
   // set bits based on op codes, called methods.
   for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
-    if (!(iter->op.op == CEPH_OSD_OP_WATCH &&
-	  iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
+    if ((iter->op.op == CEPH_OSD_OP_WATCH &&
+	 iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
       /* This a bit odd.  PING isn't actually a write.  It can't
        * result in an update to the object_info.  PINGs also aren'ty
        * replayed, so there's no reason to write out a log entry
+       *
+       * However, we pipeline them behind writes, so let's force
+       * the write_ordered flag.
        */
+      op->set_force_rwordered();
+    } else {
       if (ceph_osd_op_mode_modify(iter->op.op))
 	op->set_write();
     }

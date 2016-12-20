@@ -65,6 +65,8 @@ struct OpRequest : public TrackedOp {
   bool may_read();
   bool may_write();
   bool may_cache();
+  bool rwordered_forced();
+  bool rwordered();
   bool includes_pg_op();
   bool need_read_cap();
   bool need_write_cap();
@@ -80,6 +82,7 @@ struct OpRequest : public TrackedOp {
   void set_promote();
   void set_skip_handle_cache();
   void set_skip_promote();
+  void set_force_rwordered();
 
   struct ClassInfo {
     ClassInfo(const std::string& name, bool read, bool write,
