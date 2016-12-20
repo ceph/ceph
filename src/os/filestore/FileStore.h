@@ -170,12 +170,6 @@ private:
     // - hammer temp case: cid is pg (or already temp), object pool is -1
     return cid.is_pg() && oid.hobj.pool <= -1;
   }
-  void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
-    // - normal temp case: cid is pg, object is temp (pool < -1)
-    // - hammer temp case: cid is pg (or already temp), object pool is -1
-    if (cid.is_pg() && oid.hobj.pool <= -1)
-      cid = cid.get_temp();
-  }
   void init_temp_collections();
 
   // ObjectMap
