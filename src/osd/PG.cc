@@ -1551,24 +1551,6 @@ void PG::activate(ObjectStore::Transaction& t,
   assert(scrubber.callbacks.empty());
   assert(callbacks_for_degraded_object.empty());
 
-  // -- crash recovery?
-  if (acting.size() >= pool.info.min_size &&
-      is_primary() &&
-      pool.info.crash_replay_interval > 0 &&
-      may_need_replay(get_osdmap())) {
-    replay_until = ceph_clock_now();
-    replay_until += pool.info.crash_replay_interval;
-    dout(10) << "activate starting replay interval for " << pool.info.crash_replay_interval
-	     << " until " << replay_until << dendl;
-    state_set(PG_STATE_REPLAY);
-
-    // TODOSAM: osd->osd-> is no good
-    osd->osd->replay_queue_lock.Lock();
-    osd->osd->replay_queue.push_back(pair<spg_t,utime_t>(
-	info.pgid, replay_until));
-    osd->osd->replay_queue_lock.Unlock();
-  }
-
   // twiddle pg state
   state_clear(PG_STATE_DOWN);
 
@@ -4855,86 +4837,6 @@ void PG::fulfill_log(
 
   osd->share_map_peer(from.osd, con.get(), get_osdmap());
   osd->send_message_osd_cluster(mlog, con.get());
-}
-
-
-// true if all OSDs in prior intervals may have crashed, and we need to replay
-// false positives are okay, false negatives are not.
-bool PG::may_need_replay(const OSDMapRef osdmap) const
-{
-  bool crashed = false;
-
-  for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
-       p != past_intervals.rend();
-       ++p) {
-    const pg_interval_t &interval = p->second;
-    dout(10) << "may_need_replay " << interval << dendl;
-
-    if (interval.last < info.history.last_epoch_started)
-      break;  // we don't care
-
-    if (interval.acting.empty())
-      continue;
-
-    if (!interval.maybe_went_rw)
-      continue;
-
-    // look at whether any of the osds during this interval survived
-    // past the end of the interval (i.e., didn't crash and
-    // potentially fail to COMMIT a write that it ACKed).
-    bool any_survived_interval = false;
-
-    // consider ACTING osds
-    for (unsigned i=0; i<interval.acting.size(); i++) {
-      int o = interval.acting[i];
-      if (o == CRUSH_ITEM_NONE)
-	continue;
-
-      const osd_info_t *pinfo = 0;
-      if (osdmap->exists(o))
-	pinfo = &osdmap->get_info(o);
-
-      // does this osd appear to have survived through the end of the
-      // interval?
-      if (pinfo) {
-	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
-	  dout(10) << "may_need_replay  osd." << o
-		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
-		   << " survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from <= interval.first &&
-		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
-		  std::find(up.begin(), up.end(), o) != up.end())) {
-	  dout(10) << "may_need_replay  osd." << o
-		   << " up_from " << pinfo->up_from << " and is in acting|up,"
-		   << " assumed to have survived the interval" << dendl;
-	  // (if it hasn't, we will rebuild PriorSet)
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from > interval.last &&
-		 pinfo->last_clean_begin <= interval.first &&
-		 pinfo->last_clean_end > interval.last) {
-	  dout(10) << "may_need_replay  prior osd." << o
-		   << " up_from " << pinfo->up_from
-		   << " and last clean interval ["
-		   << pinfo->last_clean_begin << "," << pinfo->last_clean_end
-		   << ") survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-      }
-    }
-
-    if (!any_survived_interval) {
-      dout(3) << "may_need_replay  no known survivors of interval "
-	      << interval.first << "-" << interval.last
-	      << ", may need replay" << dendl;
-      crashed = true;
-      break;
-    }
-  }
-
-  return crashed;
 }
 
 void PG::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
