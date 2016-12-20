@@ -8860,10 +8860,8 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
 bool OSD::op_is_discardable(MOSDOp *op)
 {
   // drop client request if they are not connected and can't get the
-  // reply anyway.  unless this is a replayed op, in which case we
-  // want to do what we can to apply it.
-  if (!op->get_connection()->is_connected() &&
-      op->get_version().version == 0) {
+  // reply anyway.
+  if (!op->get_connection()->is_connected()) {
     return true;
   }
   return false;
