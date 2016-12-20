@@ -2424,7 +2424,8 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
   dout(10) << "_close_replay_guard " << spos << " done" << dendl;
 }
 
-int FileStore::_check_replay_guard(const coll_t& cid, ghobject_t oid, const SequencerPosition& spos)
+int FileStore::_check_replay_guard(const coll_t& cid, const ghobject_t &oid,
+                                   const SequencerPosition& spos)
 {
   if (!replaying || backend->can_checkpoint())
     return 1;
