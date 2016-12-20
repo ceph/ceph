@@ -8660,34 +8660,18 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
  * we keep count of uncommitted sync writes on the inode, so that
  * fsync can DDRT.
  */
-class C_Client_SyncCommit : public Context {
-  Client *cl;
-  InodeRef in;
-public:
-  C_Client_SyncCommit(Client *c, Inode *i) : cl(c), in(i) {}
-  void finish(int) {
-    // Called back by Filter, then Client is responsible for taking its own lock
-    assert(!cl->client_lock.is_locked_by_me()); 
-    cl->sync_write_commit(in);
-  }
-};
-
-void Client::sync_write_commit(InodeRef& in)
+void Client::_sync_write_commit(Inode *in)
 {
-  Mutex::Locker l(client_lock);
-
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
-  put_cap_ref(in.get(), CEPH_CAP_FILE_BUFFER);
+  put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   ldout(cct, 15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
     ldout(cct, 10) << "sync_write_commit -- no more unsafe writes, unmount can proceed" << dendl;
     mount_cond.Signal();
   }
-
-  in.reset(); // put inode inside client_lock
 }
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
@@ -8931,7 +8915,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     Cond cond;
     bool done = false;
     Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-    Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
@@ -8939,7 +8922,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 			   offset, size, bl, ceph::real_clock::now(), 0,
 			   in->truncate_size, in->truncate_seq,
-			   onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
+		       NULL, onfinish);
     client_lock.Unlock();
     flock.Lock();
 
@@ -8947,6 +8930,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       cond.Wait(flock);
     flock.Unlock();
     client_lock.Lock();
+    _sync_write_commit(in);
   }
 
   // if we get here, write was successful, update client metadata
@@ -12281,7 +12265,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       Cond cond;
       bool done = false;
       Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-      Context *onsafe = new C_Client_SyncCommit(this, in);
 
       unsafe_sync_write++;
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -12291,8 +12274,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		      in->snaprealm->get_snap_context(),
 		      offset, length,
 		      ceph::real_clock::now(),
-		      0, true, onfinish,
-		      new C_OnFinisher(onsafe, &objecter_finisher));
+		      0, true, onfinish);
       in->mtime = ceph_clock_now();
       in->change_attr++;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
@@ -12303,6 +12285,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         cond.Wait(flock);
       flock.Unlock();
       client_lock.Lock();
+      _sync_write_commit(in);
     }
   } else if (!(mode & FALLOC_FL_KEEP_SIZE)) {
     uint64_t size = offset + length;
