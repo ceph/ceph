@@ -117,16 +117,27 @@ protected:
   /*
    * The tenant_name is always returned on purpose. May be empty, of course.
    */
-  static void parse_bucket(const string &bucket,
-                           string &tenant_name, string &bucket_name)
+  static void parse_bucket(const string& bucket,
+                           string *tenant_name,
+                           string *bucket_name,
+                           string *bucket_instance = nullptr /* optional */)
   {
     int pos = bucket.find('/');
     if (pos >= 0) {
-      tenant_name = bucket.substr(0, pos);
+      *tenant_name = bucket.substr(0, pos);
     } else {
-      tenant_name.clear();
+      tenant_name->clear();
     }
-    bucket_name = bucket.substr(pos + 1);
+    string bn = bucket.substr(pos + 1);
+    pos = bn.find (':');
+    if (pos < 0) {
+      *bucket_name = std::move(bn);
+      return;
+    }
+    *bucket_name = bn.substr(0, pos);
+    if (bucket_instance) {
+      *bucket_instance = bn.substr(pos + 1);
+    }
   }
 };
 

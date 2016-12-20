@@ -1922,7 +1922,7 @@ public:
     RGWObjectCtx obj_ctx(store);
 
     string tenant_name, bucket_name;
-    parse_bucket(entry, tenant_name, bucket_name);
+    parse_bucket(entry, &tenant_name, &bucket_name);
     int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &ot, &mtime, &attrs);
     if (ret < 0)
       return ret;
@@ -1950,7 +1950,7 @@ public:
     RGWObjectCtx obj_ctx(store);
 
     string tenant_name, bucket_name;
-    parse_bucket(entry, tenant_name, bucket_name);
+    parse_bucket(entry, &tenant_name, &bucket_name);
     int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, old_be, &old_ot, &orig_mtime, &attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
@@ -1988,7 +1988,7 @@ public:
     RGWObjectCtx obj_ctx(store);
 
     string tenant_name, bucket_name;
-    parse_bucket(entry, tenant_name, bucket_name);
+    parse_bucket(entry, &tenant_name, &bucket_name);
     int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, NULL, NULL);
     if (ret < 0)
       return ret;
@@ -2113,10 +2113,12 @@ public:
       rgw_bucket_instance_oid_to_key(key);
       string tenant_name;
       string bucket_name;
-      parse_bucket(key, tenant_name, bucket_name);
+      string bucket_instance;
+      parse_bucket(key, &tenant_name, &bucket_name, &bucket_instance);
 
       RGWZonePlacementInfo rule_info;
       bci.info.bucket.name = bucket_name;
+      bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
       ret = store->select_bucket_location_by_rule(bci.info.placement_rule, bci.info.bucket, &rule_info);
       if (ret < 0) {
