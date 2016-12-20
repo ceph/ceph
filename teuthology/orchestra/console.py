@@ -3,6 +3,7 @@ import os
 import pexpect
 import psutil
 import subprocess
+import sys
 import time
 
 from teuthology import lockstatus as ls
@@ -282,8 +283,12 @@ class PhysicalConsole():
 
         def start():
             console_cmd = self._console_command()
+            # use sys.executable to find python rather than /usr/bin/env.
+            # The latter relies on PATH, which is set in a virtualenv
+            # that's been activated, but is not set when binaries are
+            # run directly from the virtualenv's bin/ directory.
             python_cmd = [
-                '/usr/bin/env', 'python', '-c',
+                sys.executable, '-c',
                 pexpect_templ.format(
                     cmd=console_cmd,
                     log=dest_path,
