@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 DEFAULT_NUM_DISKS = 2
 DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
 DEFAULT_IMAGE_SIZE = 10240 # in megabytes
+DEFAULT_CPUS = 1
 DEFAULT_MEM = 4096 # in megabytes
 
 def create_images(ctx, config, managers):
@@ -371,7 +372,8 @@ def run_qemu(ctx, config):
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'daemon-helper',
             'term',
-            qemu_cmd, '-enable-kvm', '-nographic',
+            qemu_cmd, '-enable-kvm', '-nographic', '-cpu', 'host',
+            '-smp', str(client_config.get('cpus', DEFAULT_CPUS)),
             '-m', str(client_config.get('memory', DEFAULT_MEM)),
             # cd holding metadata for cloud-init
             '-cdrom', '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
@@ -495,13 +497,15 @@ def task(ctx, config):
                 - image_size: 1024
                 - image_size: 2048
 
-    You can set the amount of memory the VM has (default is 1024 MB)::
+    You can set the amount of CPUs and memory the VM has (default is 1 CPU and
+    4096 MB)::
 
         tasks:
         - ceph:
         - qemu:
             client.0:
               test: http://download.ceph.com/qa/test.sh
+              cpus: 4
               memory: 512 # megabytes
 
     If you want to run a test against a cloned rbd image, set clone to true::
