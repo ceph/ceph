@@ -339,6 +339,8 @@ from volume), you must tell Nova (and libvirt) which user and UUID to refer to
 when attaching the device. libvirt will refer to this user when connecting and
 authenticating with the Ceph cluster. ::
 
+    [libvirt]
+    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
