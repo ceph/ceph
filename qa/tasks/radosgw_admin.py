@@ -68,18 +68,25 @@ def task(ctx, config):
     """
     global log
 
-    assert isinstance(config, dict), \
-        "task radosgw-admin only supports a dictionary with a master_client for configuration"
-
-    # regions found just like in the rgw task
+    # regions and config found from rgw task
+    assert ctx.rgw.regions
+        "tasks radosgw_admin needs region(s) declared from the rgw task"
     regions = ctx.rgw.regions
-
     log.debug('regions are: %r', regions)
+
+    assert ctx.rgw.config
+        "tasks radosgw_admin needs a config passed from the rgw task"
+    config = ctx.rgw.config
     log.debug('config is: %r', config)
 
-    client = config["master_client"]
+    clients_from_config = config.keys()
+
+    # choose first client as default
+    client = clients_from_config[0]
 
     multi_region_run = rgw_utils.multi_region_enabled(ctx)
+    if multi_region_run:
+        client = rgw_utils.get_config_master_client(ctx, config, regions)
 
     log.debug('multi_region_run is: %r', multi_region_run)
     log.debug('master_client is: %r', client)
