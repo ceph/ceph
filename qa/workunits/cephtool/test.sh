@@ -801,11 +801,6 @@ function test_mon_mds()
   # the "current_epoch + 1" checking below if they're generating updates
   fail_all_mds $FS_NAME
 
-  # Check for default crash_replay_interval set automatically in 'fs new'
-  #This may vary based on ceph.conf (e.g., it's 5 in teuthology runs)
-  #ceph osd dump | grep fs_data > $TMPFILE
-  #check_response "crash_replay_interval 45 "
-
   ceph mds compat show
   expect_false ceph mds deactivate 2
   ceph mds dump
@@ -1441,7 +1436,7 @@ function test_mon_osd_pool_set()
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_rule crush_ruleset; do
+  for s in pg_num pgp_num size min_size crush_rule crush_ruleset; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
