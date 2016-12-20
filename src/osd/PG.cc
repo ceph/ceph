@@ -5426,15 +5426,6 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if (is_replay()) {
-    if (m->get_version().version > 0) {
-      dout(7) << " queueing replay at " << m->get_version()
-	      << " for " << *m << dendl;
-      replay_queue[m->get_version()] = op;
-      op->mark_delayed("waiting for replay");
-      return true;
-    }
-  }
   return false;
 }
 
