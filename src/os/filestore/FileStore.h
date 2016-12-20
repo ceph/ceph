@@ -538,7 +538,7 @@ public:
    */
   int _check_replay_guard(int fd, const SequencerPosition& spos);
   int _check_replay_guard(const coll_t& cid, const SequencerPosition& spos);
-  int _check_replay_guard(const coll_t& cid, ghobject_t oid, const SequencerPosition& pos);
+  int _check_replay_guard(const coll_t& cid, const ghobject_t &oid, const SequencerPosition& pos);
   int _check_global_replay_guard(const coll_t& cid, const SequencerPosition& spos);
 
   // ------------------
