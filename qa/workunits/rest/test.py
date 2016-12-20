@@ -398,7 +398,7 @@ if __name__ == '__main__':
     expect('osd/reweight?id=0&weight=-1', 'PUT', 400, '')
     expect('osd/reweight?id=0&weight=1', 'PUT', 200, '')
 
-    for v in ['pg_num', 'pgp_num', 'size', 'min_size', 'crash_replay_interval',
+    for v in ['pg_num', 'pgp_num', 'size', 'min_size',
               'crush_ruleset']:
         r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])
