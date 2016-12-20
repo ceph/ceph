@@ -51,7 +51,7 @@ AM_PROG_LIBTOOL
 AM_PROG_AS
 
 
-AM_INIT_AUTOMAKE([foreign parallel-tests tar-ustar])
+AM_INIT_AUTOMAKE([foreign parallel-tests tar-pax])
 # enable make V=0 (if automake >1.11)
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
