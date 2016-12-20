@@ -8492,12 +8492,6 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
       }
       waiting_for_ondisk.erase(repop->v);
     }
-
-    // clear out acks, we sent the commits above
-    if (waiting_for_ack.count(repop->v)) {
-      assert(waiting_for_ack.begin()->first == repop->v);
-      waiting_for_ack.erase(repop->v);
-    }
   }
 
   // applied?
@@ -10033,7 +10027,6 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
   }
 
   waiting_for_ondisk.clear();
-  waiting_for_ack.clear();
 }
 
 void PrimaryLogPG::on_flushed()

@@ -2212,7 +2212,6 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_cache_not_full.empty());
   assert(waiting_for_unreadable_object.empty());
   assert(waiting_for_degraded_object.empty());
-  assert(waiting_for_ack.empty());
   assert(waiting_for_ondisk.empty());
   assert(waiting_for_active.empty());
 
