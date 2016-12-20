@@ -1716,12 +1716,6 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   RGWBucketInfo bucket_info;
 
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-  if (ret == -ENOENT) {
-    if (bucket_id.empty()) {
-      cerr << "ERROR: bucket id specified" << std::endl;
-      return EINVAL;
-    }
-  }
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return -ret;
