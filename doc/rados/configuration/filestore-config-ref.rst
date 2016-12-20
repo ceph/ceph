@@ -34,7 +34,7 @@ xattrs`` threshold is reached.
 
 :Description: The maximimum size of an XATTR stored in the filesystem (i.e., XFS,
               btrfs, ext4, etc.) per object. Should not be larger than the
-              filesytem can handle. Default value of 0 means to use the value
+              filesystem can handle. Default value of 0 means to use the value
               specific to the underlying filesystem.
 :Type: Unsigned 32-bit Integer
 :Required: No
