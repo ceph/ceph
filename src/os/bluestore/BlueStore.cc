@@ -6413,6 +6413,19 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     o->flush_txns.insert(txc);
   }
 
+  // objects we modified but didn't affect the onode
+  auto p = txc->modified_objects.begin();
+  while (p != txc->modified_objects.end()) {
+    if (txc->onodes.count(*p) == 0) {
+      std::lock_guard<std::mutex> l((*p)->flush_lock);
+      (*p)->flush_txns.insert(txc);
+      ++p;
+    } else {
+      // remove dups with onodes list to avoid problems in _txc_finish
+      p = txc->modified_objects.erase(p);
+    }
+  }
+
   // finalize shared_blobs
   for (auto sb : txc->shared_blobs) {
     string key;
@@ -6476,20 +6489,19 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   assert(txc->state == TransContext::STATE_FINISHING);
 
-  for (set<OnodeRef>::iterator p = txc->onodes.begin();
-       p != txc->onodes.end();
-       ++p) {
-    std::lock_guard<std::mutex> l((*p)->flush_lock);
-    dout(20) << __func__ << " onode " << *p << " had " << (*p)->flush_txns
-	     << dendl;
-    assert((*p)->flush_txns.count(txc));
-    (*p)->flush_txns.erase(txc);
-    if ((*p)->flush_txns.empty())
-      (*p)->flush_cond.notify_all();
+  for (auto ls : { &txc->onodes, &txc->modified_objects }) {
+    for (auto& o : *ls) {
+      std::lock_guard<std::mutex> l(o->flush_lock);
+      dout(20) << __func__ << " onode " << o << " had " << o->flush_txns
+	       << dendl;
+      assert(o->flush_txns.count(txc));
+      o->flush_txns.erase(txc);
+      if (o->flush_txns.empty()) {
+	o->flush_cond.notify_all();
+      }
+    }
+    ls->clear();  // clear out refs
   }
-
-  // clear out refs
-  txc->onodes.clear();
 
   while (!txc->removed_collections.empty()) {
     _queue_reap_collection(txc->removed_collections.front());
@@ -6924,6 +6936,7 @@ int BlueStore::queue_transactions(
   }
 
   _txc_write_nodes(txc, txc->t);
+
   // journal wal items
   if (txc->wal_txn) {
     // move releases to after wal
@@ -8275,7 +8288,7 @@ int BlueStore::_do_remove(
   }
   o->exists = false;
   o->onode = bluestore_onode_t();
-  txc->onodes.erase(o);
+  txc->removed(o);
   for (auto &s : o->extent_map.shards) {
     txc->t->rmkey(PREFIX_OBJ, s.key);
   }
@@ -8426,6 +8439,8 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   if (!o->onode.has_omap()) {
     o->onode.set_omap_flag();
     txc->write_onode(o);
+  } else {
+    txc->note_modified_object(o);
   }
   string final_key;
   _key_encode_u64(o->onode.nid, &final_key);
@@ -8458,6 +8473,8 @@ int BlueStore::_omap_setheader(TransContext *txc,
   if (!o->onode.has_omap()) {
     o->onode.set_omap_flag();
     txc->write_onode(o);
+  } else {
+    txc->note_modified_object(o);
   }
   get_omap_header(o->onode.nid, &key);
   txc->t->set(PREFIX_OMAP, key, bl);
@@ -8492,6 +8509,7 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
 	     << " <- " << key << dendl;
     txc->t->rmkey(PREFIX_OMAP, final_key);
   }
+  txc->note_modified_object(o);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -8525,6 +8543,7 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
     it->next();
   }
+  txc->note_modified_object(o);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
