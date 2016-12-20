@@ -6993,7 +6993,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     switch (op->op) {
     case Transaction::OP_RMCOLL:
       {
-        coll_t cid = i.get_cid(op->cid);
+        const coll_t &cid = i.get_cid(op->cid);
 	r = _remove_collection(txc, cid, &c);
 	if (!r)
 	  continue;
@@ -7003,7 +7003,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_MKCOLL:
       {
 	assert(!c);
-	coll_t cid = i.get_cid(op->cid);
+	const coll_t &cid = i.get_cid(op->cid);
 	r = _create_collection(txc, cid, op->split_bits, &c);
 	if (!r)
 	  continue;
@@ -8836,7 +8836,7 @@ int BlueStore::_rename(TransContext *txc,
 
 int BlueStore::_create_collection(
   TransContext *txc,
-  coll_t cid,
+  const coll_t &cid,
   unsigned bits,
   CollectionRef *c)
 {
@@ -8867,7 +8867,7 @@ int BlueStore::_create_collection(
   return r;
 }
 
-int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
+int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
 				  CollectionRef *c)
 {
   dout(15) << __func__ << " " << cid << dendl;
