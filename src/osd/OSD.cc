@@ -9332,6 +9332,9 @@ int OSD::init_op_flags(OpRequestRef& op)
        */
       if (ceph_osd_op_mode_modify(iter->op.op))
 	op->set_write();
+    } else {
+      // ...but PING does need to be RWORDERED!
+      op->set_force_rwordered();
     }
     if (ceph_osd_op_mode_read(iter->op.op))
       op->set_read();
