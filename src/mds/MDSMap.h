@@ -565,7 +565,7 @@ public:
       get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_RECONNECT) == 0 &&
       get_num_mds(STATE_RESOLVE) == 0 &&
-      failed.empty();
+      failed.empty() && damaged.empty();
   }
   bool is_stopped() const {
     return up.empty();
