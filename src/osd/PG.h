@@ -856,7 +856,6 @@ protected:
   map<eversion_t,
       list<pair<OpRequestRef, version_t> > > waiting_for_ack, waiting_for_ondisk;
 
-  map<eversion_t,OpRequestRef>   replay_queue;
   void split_ops(PG *child, unsigned split_bits);
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>& m);
@@ -1032,7 +1031,6 @@ public:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool *history_les_bound);
   void build_might_have_unfound();
-  void replay_queued_ops();
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
