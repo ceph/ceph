@@ -3674,10 +3674,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     }
     string token_value = string(t);
     if (using_qs && (token == "host")) {
-      if (!port.empty() && port != "80" && port != "0") {
-        token_value = token_value + ":" + port;
-      } else if (!secure_port.empty() && secure_port != "443") {
-        token_value = token_value + ":" + secure_port;
+      if (!secure_port.empty()) {
+	if (secure_port != "443")
+	  token_value = token_value + ":" + secure_port;
+      } else if (!port.empty()) {
+	if (port != "80")
+	  token_value = token_value + ":" + port;
       }
     }
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
