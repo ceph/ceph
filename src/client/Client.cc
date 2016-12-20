@@ -6428,15 +6428,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
   }
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
-    if (mask & CEPH_SETATTR_MODE) {
-      in->ctime = ceph_clock_now(cct);
-      in->cap_dirtier_uid = uid;
-      in->cap_dirtier_gid = gid;
-      in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
-      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
-      mask &= ~CEPH_SETATTR_MODE;
-      ldout(cct,10) << "changing mode to " << attr->st_mode << dendl;
-    }
+    bool kill_sguid = false;
+
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
       in->cap_dirtier_uid = uid;
@@ -6444,6 +6437,7 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
+      kill_sguid = true;
       ldout(cct,10) << "changing uid to " << attr->st_uid << dendl;
     }
     if (mask & CEPH_SETATTR_GID) {
@@ -6453,7 +6447,24 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
+      kill_sguid = true;
       ldout(cct,10) << "changing gid to " << attr->st_gid << dendl;
+    }
+
+    if (mask & CEPH_SETATTR_MODE) {
+      in->ctime = ceph_clock_now(cct);
+      in->cap_dirtier_uid = uid;
+      in->cap_dirtier_gid = gid;
+      in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
+      mask &= ~CEPH_SETATTR_MODE;
+      ldout(cct,10) << "changing mode to " << attr->st_mode << dendl;
+    } else if (kill_sguid && S_ISREG(in->mode)) {
+      /* Must squash the any setuid/setgid bits with an ownership change */
+      in->mode &= ~S_ISUID;
+      if ((in->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
+	in->mode &= ~S_ISGID;
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     }
   }
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
