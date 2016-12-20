@@ -1832,10 +1832,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // order this op as a write?
-  bool write_ordered =
-    op->may_write() ||
-    op->may_cache() ||
-    m->has_flag(CEPH_OSD_FLAG_RWORDERED);
+  bool write_ordered = op->rwordered();
 
   // discard due to cluster full transition?  (we discard any op that
   // originates before the cluster or pool is marked full; the client
