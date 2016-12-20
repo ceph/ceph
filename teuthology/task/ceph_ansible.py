@@ -205,6 +205,12 @@ class CephAnsible(Task):
         hosts_file.flush()
         return hosts_file.name
 
+    def teardown(self):
+        log.info("Cleaning up temporary files")
+        os.remove(self.inventory)
+        os.remove(self.playbook_file)
+        os.remove(self.extra_vars_file)
+
     def wait_for_ceph_health(self):
         with contextutil.safe_while(sleep=15, tries=6,
                                     action='check health') as proceed:
