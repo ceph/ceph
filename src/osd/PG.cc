@@ -2435,13 +2435,13 @@ void PG::update_heartbeat_peers()
 
 bool PG::check_in_progress_op(
   const osd_reqid_t &r,
-  eversion_t *replay_version,
+  eversion_t *version,
   version_t *user_version,
   int *return_code) const
 {
   return (
-    projected_log.get_request(r, replay_version, user_version, return_code) ||
-    pg_log.get_log().get_request(r, replay_version, user_version, return_code));
+    projected_log.get_request(r, version, user_version, return_code) ||
+    pg_log.get_log().get_request(r, version, user_version, return_code));
 }
 
 void PG::_update_calc_stats()
