@@ -8241,7 +8241,14 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
 
   inode_backtrace_t backtrace;
   if (err == 0) {
-    ::decode(backtrace, bl);
+    try {
+      ::decode(backtrace, bl);
+    } catch (const buffer::error &decode_exc) {
+      derr << "corrupt backtrace on ino x0" << std::hex << ino
+           << std::dec << ": " << decode_exc << dendl;
+      open_ino_finish(ino, info, -EIO);
+      return;
+    }
     if (backtrace.pool != info.pool && backtrace.pool != -1) {
       dout(10) << " old object in pool " << info.pool
 	       << ", retrying pool " << backtrace.pool << dendl;
