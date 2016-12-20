@@ -2531,7 +2531,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, touch_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2543,7 +2543,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_WRITE:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         uint64_t off = op->off;
         uint64_t len = op->len;
@@ -2560,7 +2560,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_ZERO:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         uint64_t off = op->off;
         uint64_t len = op->len;
@@ -2580,7 +2580,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_TRUNCATE:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         uint64_t off = op->off;
         tracepoint(objectstore, truncate_enter, osr_name, off);
@@ -2593,7 +2593,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_REMOVE:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, remove_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2605,7 +2605,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_SETATTR:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         string name = i.decode_string();
         bufferlist bl;
@@ -2626,7 +2626,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_SETATTRS:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         map<string, bufferptr> aset;
         i.decode_attrset(aset);
@@ -2642,7 +2642,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_RMATTR:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         string name = i.decode_string();
         tracepoint(objectstore, rmattr_enter, osr_name);
@@ -2655,7 +2655,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_RMATTRS:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, rmattrs_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2667,9 +2667,9 @@ void FileStore::_do_transaction(
     case Transaction::OP_CLONE:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
-        ghobject_t noid = i.get_oid(op->dest_oid);
+        const ghobject_t &noid = i.get_oid(op->dest_oid);
         tracepoint(objectstore, clone_enter, osr_name);
         r = _clone(cid, oid, noid, spos);
         tracepoint(objectstore, clone_exit, r);
@@ -2679,9 +2679,9 @@ void FileStore::_do_transaction(
     case Transaction::OP_CLONERANGE:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
         coll_t ncid = cid;
-        ghobject_t noid = i.get_oid(op->dest_oid);
+        const ghobject_t &noid = i.get_oid(op->dest_oid);
 	_kludge_temp_object_collection(cid, oid);
 	_kludge_temp_object_collection(ncid, noid);
         uint64_t off = op->off;
@@ -2695,9 +2695,9 @@ void FileStore::_do_transaction(
     case Transaction::OP_CLONERANGE2:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
         coll_t ncid = cid;
-        ghobject_t noid = i.get_oid(op->dest_oid);
+        const ghobject_t &noid = i.get_oid(op->dest_oid);
 	_kludge_temp_object_collection(cid, oid);
 	_kludge_temp_object_collection(ncid, noid);
         uint64_t srcoff = op->off;
@@ -2755,14 +2755,14 @@ void FileStore::_do_transaction(
       {
         coll_t ocid = i.get_cid(op->cid);
         coll_t ncid = i.get_cid(op->dest_cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 
 	assert(oid.hobj.pool >= -1);
 
         // always followed by OP_COLL_REMOVE
         Transaction::Op *op2 = i.decode_op();
         coll_t ocid2 = i.get_cid(op2->cid);
-        ghobject_t oid2 = i.get_oid(op2->oid);
+        const ghobject_t &oid2 = i.get_oid(op2->oid);
         assert(op2->op == Transaction::OP_COLL_REMOVE);
         assert(ocid2 == ocid);
         assert(oid2 == oid);
@@ -2785,7 +2785,7 @@ void FileStore::_do_transaction(
         // WARNING: this is deprecated and buggy; only here to replay old journals.
         coll_t ocid = i.get_cid(op->cid);
         coll_t ncid = i.get_cid(op->dest_cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
         tracepoint(objectstore, coll_move_enter);
         r = _collection_add(ocid, ncid, oid, spos);
         if (r == 0 &&
@@ -2798,9 +2798,9 @@ void FileStore::_do_transaction(
     case Transaction::OP_COLL_MOVE_RENAME:
       {
         coll_t oldcid = i.get_cid(op->cid);
-        ghobject_t oldoid = i.get_oid(op->oid);
+        const ghobject_t &oldoid = i.get_oid(op->oid);
         coll_t newcid = i.get_cid(op->dest_cid);
-        ghobject_t newoid = i.get_oid(op->dest_oid);
+        const ghobject_t &newoid = i.get_oid(op->dest_oid);
 	_kludge_temp_object_collection(oldcid, oldoid);
 	_kludge_temp_object_collection(newcid, newoid);
         tracepoint(objectstore, coll_move_rename_enter);
@@ -2813,8 +2813,8 @@ void FileStore::_do_transaction(
       {
         coll_t oldcid = i.get_cid(op->cid);
 	coll_t newcid = oldcid;
-        ghobject_t oldoid = i.get_oid(op->oid);
-        ghobject_t newoid = i.get_oid(op->dest_oid);
+        const ghobject_t &oldoid = i.get_oid(op->oid);
+        const ghobject_t &newoid = i.get_oid(op->dest_oid);
 	_kludge_temp_object_collection(oldcid, oldoid);
 	_kludge_temp_object_collection(newcid, newoid);
         tracepoint(objectstore, coll_try_rename_enter);
@@ -2843,7 +2843,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_OMAP_CLEAR:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, omap_clear_enter, osr_name);
         r = _omap_clear(cid, oid, spos);
@@ -2853,7 +2853,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_OMAP_SETKEYS:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         map<string, bufferlist> aset;
         i.decode_attrset(aset);
@@ -2865,7 +2865,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_OMAP_RMKEYS:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         set<string> keys;
         i.decode_keyset(keys);
@@ -2877,7 +2877,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         string first, last;
         first = i.decode_string();
@@ -2890,7 +2890,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_OMAP_SETHEADER:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         bufferlist bl;
         i.decode_bl(bl);
@@ -2919,7 +2919,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_SETALLOCHINT:
       {
         coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        const ghobject_t &oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
