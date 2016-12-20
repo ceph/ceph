@@ -854,7 +854,7 @@ protected:
   map<hobject_t, list<Context*>, hobject_t::BitwiseComparator> callbacks_for_degraded_object;
 
   map<eversion_t,
-      list<pair<OpRequestRef, version_t> > > waiting_for_ack, waiting_for_ondisk;
+      list<pair<OpRequestRef, version_t> > > waiting_for_ondisk;
 
   void split_ops(PG *child, unsigned split_bits);
 
