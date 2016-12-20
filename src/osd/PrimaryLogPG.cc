@@ -1835,6 +1835,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   bool write_ordered =
     op->may_write() ||
     op->may_cache() ||
+    op->force_rwordered() ||
     m->has_flag(CEPH_OSD_FLAG_RWORDERED);
 
   // discard due to cluster full transition?  (we discard any op that
