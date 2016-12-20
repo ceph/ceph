@@ -91,6 +91,10 @@ def task(ctx, config):
     err = p.wait()
     log.info('err is %d' % err)
 
+    # wait for osd.1 and osd.2 to be up
+    manager.wait_till_osd_is_up(1)
+    manager.wait_till_osd_is_up(2)
+
     # cluster must recover
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
