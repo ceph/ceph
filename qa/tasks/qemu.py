@@ -201,9 +201,10 @@ def download_image(ctx, config):
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
+        image_url = client_config.get('image_url', DEFAULT_IMAGE_URL)
         remote.run(
             args=[
-                'wget', '-nv', '-O', base_file, DEFAULT_IMAGE_URL,
+                'wget', '-nv', '-O', base_file, image_url,
                 ]
             )
     try:
@@ -481,6 +482,15 @@ def task(ctx, config):
                         test data
                       type: text/plain
                       filename: /tmp/data
+
+    If you need to override the default cloud image, set image_url:
+
+        tasks:
+        - ceph
+        - qemu:
+            client.0:
+                test: http://ceph.com/qa/test.sh
+                image_url: https://cloud-images.ubuntu.com/releases/16.04/release/ubuntu-16.04-server-cloudimg-amd64-disk1.img
     """
     assert isinstance(config, dict), \
            "task qemu only supports a dictionary for configuration"
