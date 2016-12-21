@@ -159,12 +159,6 @@ struct librados::IoCtxImpl {
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
 		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 
-  struct C_aio_Ack : public Context {
-    librados::AioCompletionImpl *c;
-    explicit C_aio_Ack(AioCompletionImpl *_c);
-    void finish(int r);
-  };
-
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
     time_t *pmtime;
@@ -181,9 +175,9 @@ struct librados::IoCtxImpl {
     void finish(int r);
   };
 
-  struct C_aio_Safe : public Context {
+  struct C_aio_Complete : public Context {
     AioCompletionImpl *c;
-    explicit C_aio_Safe(AioCompletionImpl *_c);
+    explicit C_aio_Complete(AioCompletionImpl *_c);
     void finish(int r);
   };
 
