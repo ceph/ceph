@@ -128,6 +128,18 @@ else
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
+    alpine)
+        # for now we need the testing repo for leveldb
+        TESTREPO="http://nl.alpinelinux.org/alpine/edge/testing"
+        if ! grep -qF "$TESTREPO" /etc/apk/repositories ; then
+            $SUDO echo "$TESTREPO" | sudo tee -a /etc/apk/repositories > /dev/null
+        fi
+        source alpine/APKBUILD.in
+        $SUDO apk --update add abuild build-base ccache $makedepends
+        if id -u build >/dev/null 2>&1 ; then
+           $SUDO addgroup build abuild
+        fi
+        ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."
 	exit 1
