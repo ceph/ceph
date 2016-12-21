@@ -11583,6 +11583,9 @@ void MDCache::force_readonly()
 
 void MDCache::show_subtrees(int dbl)
 {
+  if (g_conf->mds_thrash_exports)
+    dbl += 15;
+
   //dout(10) << "show_subtrees" << dendl;
 
   if (!g_conf->subsys.should_gather(ceph_subsys_mds, dbl))
