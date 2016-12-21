@@ -15,6 +15,7 @@
 #include "common/debug.h"
 #include "mds/mdstypes.h"
 #include "mds/CInode.h"
+#include "mds/MDCache.h"
 
 #include "PurgeQueue.h"
 
@@ -60,14 +61,6 @@ void PurgeItem::decode(bufferlist::iterator &p)
 // TODO: when we're deactivating, lift all limits on
 // how many OSD ops we're allowed to emit at a time to
 // race through the queue as fast as we can.
-// TODO: populate logger here to gather latency stat?
-//       ...and a stat for the size of the queue, if we can
-//       somehow track that?  Could do an initial pass through
-//       the whole queue to count the items at startup?
-// TODO: there is absolutely no reason to consume an inode number
-// for this.  Shoudl just give objects a string name with a rank
-// suffix, like we do for MDSTables.  Requires a little refactor
-// of Journaler.
 // TODO: if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging (keep accepting pushes though)
 PurgeQueue::PurgeQueue(
@@ -90,9 +83,31 @@ PurgeQueue::PurgeQueue(
 {
 }
 
+PurgeQueue::~PurgeQueue()
+{
+  if (logger) {
+    g_ceph_context->get_perfcounters_collection()->remove(logger.get());
+  }
+}
+
+void PurgeQueue::create_logger()
+{
+  PerfCountersBuilder pcb(g_ceph_context,
+          "purge_queue", l_pq_first, l_pq_last);
+    //pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging", "Stray dentries purging");
+   // pcb.add_u64(l_mdc_num_purge_ops, "num_purge_ops", "Purge operations");
+  pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue tasks in flight");
+  pcb.add_u64_counter(l_pq_executed, "pq_executed", "Purge queue tasks executed");
+
+  logger.reset(pcb.create_perf_counters());
+  g_ceph_context->get_perfcounters_collection()->add(logger.get());
+}
+
 void PurgeQueue::init()
 {
   Mutex::Locker l(lock);
+
+  assert(logger != nullptr);
 
   finisher.start();
   timer.init();
@@ -275,6 +290,7 @@ void PurgeQueue::_execute_item(
   assert(lock.is_locked_by_me());
 
   in_flight[expire_to] = item;
+  logger->set(l_pq_executing, in_flight.size());
 
   SnapContext nullsnapc;
 
@@ -341,6 +357,7 @@ void PurgeQueue::_execute_item(
     derr << "Invalid item (action=" << item.action << ") in purge queue, "
             "dropping it" << dendl;
     in_flight.erase(expire_to);
+    logger->set(l_pq_executing, in_flight.size());
     return;
   }
   assert(gather.has_subs());
@@ -371,6 +388,7 @@ void PurgeQueue::execute_item_complete(
            << std::dec << dendl;
 
   in_flight.erase(iter);
+  logger->set(l_pq_executing, in_flight.size());
 
 #if 0
   // Release resources
@@ -381,6 +399,8 @@ void PurgeQueue::execute_item_complete(
   logger->set(l_mdc_num_purge_ops, ops_in_flight);
   files_purging -= 1;
 #endif
+
+  logger->inc(l_pq_executed);
 
   _consume();
 }

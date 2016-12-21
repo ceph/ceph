@@ -53,6 +53,21 @@ public:
 };
 WRITE_CLASS_ENCODER(PurgeItem)
 
+enum {
+  l_pq_first = 3500,
+  // >> TODO populate from PurgeQueue
+  // How many stray dentries are currently enqueued for purge
+  //l_mdc_num_strays_purging,
+  // How many purge RADOS ops might currently be in flight?
+  //l_mdc_num_purge_ops,
+  // << TODO
+
+  // How many items have been finished by PurgeQueue
+  l_pq_executing,
+  l_pq_executed,
+  l_pq_last
+};
+
 /**
  * A persistent queue of PurgeItems.  This class both writes and reads
  * to the queue.  There is one of these per MDS rank.
@@ -76,6 +91,8 @@ protected:
   SafeTimer timer;
   Filer filer;
   Objecter *objecter;
+  std::unique_ptr<PerfCounters> logger;
+
   Journaler journaler;
 
   // Map of Journaler offset to PurgeItem
@@ -88,7 +105,6 @@ protected:
   // Dynamic op limit per MDS based on PG count
   uint64_t max_purge_ops;
 
-  //PerfCounters *logger;
 
   bool can_consume();
 
@@ -103,6 +119,8 @@ protected:
 public:
   void init();
   void shutdown();
+
+  void create_logger();
 
   // Write an empty queue, use this during MDS rank creation
   void create(Context *completion);
@@ -125,8 +143,7 @@ public:
       mds_rank_t rank_,
       const int64_t metadata_pool_,
       Objecter *objecter_);
-  ~PurgeQueue()
-  {}
+  ~PurgeQueue();
 };
 
 

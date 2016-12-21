@@ -7601,7 +7601,7 @@ bool MDCache::shutdown_pass()
     show_cache();
     //dump();
     return false;
-  } 
+  }
   
   // done!
   dout(2) << "shutdown done." << dendl;
@@ -12305,14 +12305,12 @@ void MDCache::register_perfcounters()
     pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
     pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing", "Stray dentries enqueuing for purge");
 
-    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging", "Stray dentries purging");
-    pcb.add_u64(l_mdc_num_purge_ops, "num_purge_ops", "Purge operations");
-
     pcb.add_u64_counter(l_mdc_strays_created, "strays_created", "Stray dentries created");
     pcb.add_u64_counter(l_mdc_strays_enqueued, "strays_enqueued",
-        "Stray dentries enqueued for purge", "purg");
+        "Stray dentries enqueued for purge");
     pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated", "Stray dentries reintegrated");
     pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated", "Stray dentries migrated");
+
 
     /* Recovery queue statistics */
     pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing", "Files currently being recovered");
