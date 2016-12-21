@@ -916,7 +916,7 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
     filer.zero(in->ino(), &in->inode.layout, *snapc,
 	       0, in->inode.layout.object_size,
 	       ceph::real_clock::now(),
-	       0, true, NULL, gather.new_sub());
+	       0, true, gather.new_sub());
   }
 
   assert(gather.has_subs());
