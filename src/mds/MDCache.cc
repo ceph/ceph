@@ -946,33 +946,6 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
 
     if (do_eval)
       eval_subtree_root(dir->get_inode());
-
-    // journal inode? 
-    //  (this is a large hammer to ensure that dirfragtree updates will
-    //   hit the disk before the relevant dirfrags ever close)
-    if (dir->inode->is_auth() &&
-	dir->inode->can_auth_pin() &&
-	(mds->is_clientreplay() || mds->is_active() || mds->is_stopping())) {
-      CInode *in = dir->inode;
-      dout(10) << "try_subtree_merge_at journaling merged bound " << *in << dendl;
-      
-      in->auth_pin(this);
-
-      // journal write-behind.
-      inode_t *pi = in->project_inode();
-      pi->version = in->pre_dirty();
-      
-      auto mut(std::make_shared<MutationImpl>());
-      mut->ls = mds->mdlog->get_current_segment();
-      EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
-      mds->mdlog->start_entry(le);
-
-      le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      journal_dirty_inode(mut.get(), &le->metablob, in);
-      
-      mds->mdlog->submit_entry(le, new C_MDC_SubtreeMergeWB(this, in, mut));
-      mds->mdlog->flush();
-    }
   } 
 
   show_subtrees(15);
