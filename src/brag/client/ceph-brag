@@ -521,7 +521,7 @@ def unpublish():
   params = {'uuid':uuid}
   req = requests.delete(url, params=params)
   if req.status_code != 200:
-    print_stderr("Failed to unpublish, server responsed with code " + str(req.status_code))
+    print_stderr("Failed to unpublish, server responded with code " + str(req.status_code))
     return 1
 
   return 0
