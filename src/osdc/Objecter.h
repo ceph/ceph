@@ -2445,10 +2445,10 @@ public:
   ceph_tid_t _modify(const object_t& oid, const object_locator_t& oloc,
 		     vector<OSDOp>& ops, ceph::real_time mtime,
 		     const SnapContext& snapc, int flags,
-		     Context *onack, Context *oncommit,
+		     Context *oncommit,
 		     version_t *objver = NULL) {
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, NULL, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
