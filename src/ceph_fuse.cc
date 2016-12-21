@@ -80,7 +80,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
-			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS | CINIT_FLAG_NO_PIDFILES);
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
