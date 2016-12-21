@@ -209,6 +209,11 @@ void MonMap::decode(bufferlist::iterator &p)
   }
   if (struct_v >= 5) {
     ::decode(mon_info, p);
+  } else {
+    // we may be decoding to an existing monmap; if we do not
+    // clear the mon_info map now, we will likely incur in problems
+    // later on MonMap::sanitize_mons()
+    mon_info.clear();
   }
   DECODE_FINISH(p);
   sanitize_mons(mon_addr);
