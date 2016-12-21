@@ -203,7 +203,7 @@ class Filer {
       ops[0].op.extent.truncate_seq = truncate_seq;
       ops[0].op.extent.truncate_size = extents[0].offset;
       objecter->_modify(extents[0].oid, extents[0].oloc, ops, mtime, snapc,
-			flags, NULL, oncommit);
+			flags, oncommit);
     } else {
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin();
@@ -214,7 +214,6 @@ class Filer {
 	ops[0].op.extent.truncate_size = p->offset;
 	ops[0].op.extent.truncate_seq = truncate_seq;
 	objecter->_modify(p->oid, p->oloc, ops, mtime, snapc, flags,
-			  NULL,
 			  oncommit ? gcom.new_sub():0);
       }
       gcom.activate();
