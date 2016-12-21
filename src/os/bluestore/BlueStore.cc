@@ -2739,6 +2739,15 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_write_small_new, "bluestore_write_small_new",
 	    "Small write into new (sparse) blob");
 
+  b.add_u64(l_bluestore_cur_ops_in_queue, "bluestore_cur_ops_in_queue",
+        "Current ops in queue");
+  b.add_u64(l_bluestore_cur_bytes_in_queue, "bluestore_cur_bytes_in_queue",
+        "Current bytes in queue");
+  b.add_u64(l_bluestore_cur_ops_in_wal_queue, "bluestore_cur_ops_in_wal_queue",
+        "Current wal ops in wal queue");
+  b.add_u64(l_bluestore_cur_bytes_in_wal_queue, "l_bluestore_cur_bytes_in_wal_queue",
+        "Current wal bytes in wal queue");
+
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
@@ -6469,8 +6478,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     txc->oncommits.pop_front();
   }
 
-  throttle_ops.put(txc->ops);
-  throttle_bytes.put(txc->bytes);
+  op_queue_release_throttle(txc);
 }
 
 void BlueStore::BSPerfTracker::update_from_perfcounters(
@@ -6508,8 +6516,7 @@ void BlueStore::_txc_finish(TransContext *txc)
     txc->removed_collections.pop_front();
   }
 
-  throttle_wal_ops.put(txc->ops);
-  throttle_wal_bytes.put(txc->bytes);
+  op_queue_release_wal_throttle(txc);
 
   OpSequencerRef osr = txc->osr;
   {
@@ -6954,10 +6961,8 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
-  throttle_ops.get(txc->ops);
-  throttle_bytes.get(txc->bytes);
-  throttle_wal_ops.get(txc->ops);
-  throttle_wal_bytes.get(txc->bytes);
+  op_queue_reserve_throttle(txc);
+  op_queue_reserve_wal_throttle(txc);
 
   if (handle)
     handle->reset_tp_timeout();
@@ -6967,6 +6972,42 @@ int BlueStore::queue_transactions(
   // execute (start)
   _txc_state_proc(txc);
   return 0;
+}
+
+void BlueStore::op_queue_reserve_throttle(TransContext *txc)
+{
+  throttle_ops.get(txc->ops);
+  throttle_bytes.get(txc->bytes);
+
+  logger->set(l_bluestore_cur_ops_in_queue, throttle_ops.get_current());
+  logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
+}
+
+void BlueStore::op_queue_release_throttle(TransContext *txc)
+{
+  throttle_ops.put(txc->ops);
+  throttle_bytes.put(txc->bytes);
+
+  logger->set(l_bluestore_cur_ops_in_queue, throttle_ops.get_current());
+  logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
+}
+
+void BlueStore::op_queue_reserve_wal_throttle(TransContext *txc)
+{
+  throttle_wal_ops.get(txc->ops);
+  throttle_wal_bytes.get(txc->bytes);
+
+  logger->set(l_bluestore_cur_ops_in_wal_queue, throttle_wal_ops.get_current());
+  logger->set(l_bluestore_cur_bytes_in_wal_queue, throttle_wal_bytes.get_current());
+}
+
+void BlueStore::op_queue_release_wal_throttle(TransContext *txc)
+{
+  throttle_wal_ops.put(txc->ops);
+  throttle_wal_bytes.put(txc->bytes);
+
+  logger->set(l_bluestore_cur_ops_in_wal_queue, throttle_wal_ops.get_current());
+  logger->set(l_bluestore_cur_bytes_in_wal_queue, throttle_wal_bytes.get_current());
 }
 
 void BlueStore::_txc_aio_submit(TransContext *txc)
