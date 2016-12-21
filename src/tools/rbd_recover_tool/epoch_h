@@ -42,7 +42,7 @@ function get_infos_seq()
   local infos_key=`get_map_header_key $keyword`
 
   if [ "$infos_key"x = ""x ];then
-    echo "$func: keyword not input or infos_key not exisits"
+    echo "$func: keyword not input or infos_key not exists"
     exit 
   fi
   local prefix=`get_map_header_prefix`
@@ -74,7 +74,7 @@ function get_pg_epoch()
 
   pg_epoch=`get_header_kv $prefix $key int`
   if [ "$pg_epoch"x = ""x ];then
-    echo "$func: $key not exisits"
+    echo "$func: $key not exists"
     exit
   fi
 }
