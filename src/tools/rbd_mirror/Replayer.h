@@ -67,7 +67,7 @@ private:
   int mirror_image_status_init();
   void mirror_image_status_shut_down();
 
-  int init_rados(const std::string &cluser_name, const std::string &client_name,
+  int init_rados(const std::string &cluster_name, const std::string &client_name,
                  const std::string &description, RadosRef *rados_ref);
 
   Threads *m_threads;
