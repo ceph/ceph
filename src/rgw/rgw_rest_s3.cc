@@ -523,6 +523,10 @@ void RGWPutObj_ObjStore_S3::send_response()
     dump_epoch_header(s, "Rgwx-Mtime", mtime);
   }
   dump_errno(s);
+  dump_start(s);
+  s->formatter->open_object_section_in_ns("PutObjObjStoreS3Result","http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->dump_string("ETag", etag.c_str());
+  s->formatter->close_section();
   end_header(s, this);
 }
 
