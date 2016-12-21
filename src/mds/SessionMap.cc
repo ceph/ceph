@@ -426,7 +426,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 
   mds->objecter->mutate(oid, oloc, op, snapc,
 			ceph::real_clock::now(),
-			0, NULL,
+			0,
 			new C_OnFinisher(new C_IO_SM_Save(this, version),
 					 mds->finisher));
 }
@@ -761,7 +761,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
 			    ceph::real_clock::now(),
-			    0, NULL, new C_OnFinisher(
+			    0, new C_OnFinisher(
 			      new C_IO_SM_Save_One(this, on_safe),
 			      mds->finisher));
     }

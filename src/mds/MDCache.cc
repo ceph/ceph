@@ -11324,7 +11324,7 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
     }
     mds->objecter->mutate(oid, oloc, op, nullsnapc,
 			  ceph::real_clock::now(),
-			  0, NULL, gather.new_sub());
+			  0, gather.new_sub());
   }
 
   assert(gather.has_subs());
