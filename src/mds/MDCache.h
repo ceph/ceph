@@ -78,13 +78,6 @@ enum {
   // How many stray dentries are currently being enqueued for purge
   l_mdc_num_strays_enqueuing,
 
-  // >> TODO populate from PurgeQueue
-  // How many stray dentries are currently enqueued for purge
-  l_mdc_num_strays_purging,
-  // How many purge RADOS ops might currently be in flight?
-  l_mdc_num_purge_ops,
-  // << TODO
-
   // How many dentries have ever been added to stray dir
   l_mdc_strays_created,
   // How many dentries have been passed on to PurgeQueue
