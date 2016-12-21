@@ -3953,7 +3953,13 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
       << store->ctx()->_conf->rgw_ldap_uri
       << dendl;
 
-    RGWToken token{from_base64(auth_id)};
+    RGWToken token;
+    /* boost filters and/or string_ref may throw on invalid input */
+    try {
+      token = rgw::from_base64(auth_id);
+    } catch(...) {
+      token = std::string("");
+    }
 
     if (! token.valid())
       external_auth_result = -EACCES;

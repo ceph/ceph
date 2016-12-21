@@ -135,7 +135,7 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   }
 
   // if stalled in request state machine -- abort
-  handle_lock_released();
+  handle_peer_notification();
 }
 
 template <typename I>
@@ -209,7 +209,7 @@ void ExclusiveLock<I>::handle_watch_registered() {
 }
 
 template <typename I>
-void ExclusiveLock<I>::handle_lock_released() {
+void ExclusiveLock<I>::handle_peer_notification() {
   Mutex::Locker locker(m_lock);
   if (m_state != STATE_WAITING_FOR_PEER) {
     return;

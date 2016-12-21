@@ -2939,7 +2939,6 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid.pgid, up, acting);
   int role = OSDMap::calc_pg_role(service.whoami, acting);
   pg->set_role(role);
-  pg->reg_next_scrub();
   pg->handle_loaded(rctx);
   pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
@@ -6436,6 +6435,11 @@ void OSD::sched_scrub()
 	break;
       }
 
+      if (!cct->_conf->osd_scrub_during_recovery && is_recovery_active()) {
+        dout(10) << __func__ << "not scheduling scrub of " << scrub.pgid << " due to active recovery ops" << dendl;
+        break;
+      }
+
       PG *pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
@@ -8395,6 +8399,14 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
   recovery_wq._wake();
   recovery_wq.unlock();
+}
+
+bool OSD::is_recovery_active()
+{
+  if (recovery_ops_active > 0)
+    return true;
+
+  return false;
 }
 
 // =========================================================

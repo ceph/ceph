@@ -199,7 +199,7 @@ public:
   ~RGWSimpleRadosReadCR() {
     request_cleanup();
   }
-                                                         
+
   void request_cleanup() {
     if (req) {
       req->finish();
@@ -239,9 +239,17 @@ int RGWSimpleRadosReadCR<T>::request_complete()
     if (ret < 0) {
       return ret;
     }
-    bufferlist::iterator iter = bl.begin();
     try {
-      ::decode(*result, iter);
+      bufferlist::iterator iter = bl.begin();
+      if (iter.end()) {
+        // allow successful reads with empty buffers. ReadSyncStatus coroutines
+        // depend on this to be able to read without locking, because the
+        // cls lock from InitSyncStatus will create an empty object if it didnt
+        // exist
+        *result = T();
+      } else {
+        ::decode(*result, iter);
+      }
     } catch (buffer::error& err) {
       return -EIO;
     }

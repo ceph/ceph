@@ -771,11 +771,8 @@ void Session::notify_cap_release(size_t n_caps)
 {
   if (!recalled_at.is_zero()) {
     recall_release_count += n_caps;
-    if (recall_release_count >= recall_count) {
-      recalled_at = utime_t();
-      recall_count = 0;
-      recall_release_count = 0;
-    }
+    if (recall_release_count >= recall_count)
+      clear_recalled_at();
   }
 }
 
@@ -790,11 +787,20 @@ void Session::notify_recall_sent(int const new_limit)
   if (recalled_at.is_zero()) {
     // Entering recall phase, set up counters so we can later
     // judge whether the client has respected the recall request
-    recalled_at = ceph_clock_now(g_ceph_context);
+    recalled_at = last_recall_sent = ceph_clock_now(g_ceph_context);
     assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
     recall_count = caps.size() - new_limit;
     recall_release_count = 0;
+  } else {
+    last_recall_sent = ceph_clock_now(g_ceph_context);
   }
+}
+
+void Session::clear_recalled_at()
+{
+  recalled_at = last_recall_sent = utime_t();
+  recall_count = 0;
+  recall_release_count = 0;
 }
 
 void Session::set_client_metadata(map<string, string> const &meta)

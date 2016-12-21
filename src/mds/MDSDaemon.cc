@@ -1114,12 +1114,12 @@ void MDSDaemon::respawn()
   }
   new_argv[orig_argc] = NULL;
 
-  /* Determine the path to our executable, try to read
-   * linux-specific /proc/ path first */
-  char exe_path[PATH_MAX];
-  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
-				    sizeof(exe_path) - 1);
-  if (exe_path_bytes < 0) {
+  /* Determine the path to our executable, test if Linux /proc/self/exe exists.
+   * This allows us to exec the same executable even if it has since been
+   * unlinked.
+   */
+  char exe_path[PATH_MAX] = "";
+  if (readlink("/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1127,9 +1127,10 @@ void MDSDaemon::respawn()
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
-    strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
+    strncpy(exe_path, orig_argv[0], PATH_MAX-1);
   } else {
-    exe_path[exe_path_bytes] = '\0';
+    dout(1) << "respawning with exe " << exe_path << dendl;
+    strcpy(exe_path, "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;

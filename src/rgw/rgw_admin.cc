@@ -73,7 +73,6 @@ void _usage()
   cout << "  object rm                  remove object\n";
   cout << "  object unlink              unlink object from bucket index\n";
   cout << "  objects expire             run expired objects cleanup\n";
-  cout << "  period prepare             prepare a new period\n";
   cout << "  period delete              delete a period\n";
   cout << "  period get                 get period info\n";
   cout << "  period get-current         get current period info\n";
@@ -364,7 +363,6 @@ enum {
   OPT_REALM_SET,
   OPT_REALM_DEFAULT,
   OPT_REALM_PULL,
-  OPT_PERIOD_PREPARE,
   OPT_PERIOD_DELETE,
   OPT_PERIOD_GET,
   OPT_PERIOD_GET_CURRENT,
@@ -538,8 +536,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "list") == 0)
       return OPT_BI_LIST;
   } else if (strcmp(prev_cmd, "period") == 0) {
-    if (strcmp(cmd, "prepare") == 0)
-      return OPT_PERIOD_PREPARE;
     if (strcmp(cmd, "delete") == 0)
       return OPT_PERIOD_DELETE;
     if (strcmp(cmd, "get") == 0)
@@ -2421,7 +2417,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
                          opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY || opt_cmd == OPT_ZONE_DEFAULT ||
-			 opt_cmd == OPT_REALM_CREATE || opt_cmd == OPT_PERIOD_PREPARE ||
+			 opt_cmd == OPT_REALM_CREATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
                          raw_period_update || raw_period_pull ||
@@ -2455,29 +2451,6 @@ int main(int argc, char **argv)
 
   if (raw_storage_op) {
     switch (opt_cmd) {
-    case OPT_PERIOD_PREPARE:
-      {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	RGWPeriod period;
-	ret = period.init(g_ceph_context, store, realm.get_id(), realm.get_name(), false);
-	if (ret < 0) {
-	  cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	ret = period.create();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't create period " << ": " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	encode_json("period", period, formatter);
-	formatter->flush(cout);
-      }
-      break;
     case OPT_PERIOD_DELETE:
       {
 	if (period_id.empty()) {

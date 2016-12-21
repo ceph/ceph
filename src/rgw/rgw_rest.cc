@@ -205,12 +205,10 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
     http_status_names[h->code] = h->name;
   }
 
-  if (!cct->_conf->rgw_dns_name.empty()) {
-    hostnames_set.insert(cct->_conf->rgw_dns_name);
-  }
-  hostnames_set.insert(zone_group.hostnames.begin(),  zone_group.hostnames.end());
-  string s;
-  ldout(cct, 20) << "RGW hostnames: " << std::accumulate(hostnames_set.begin(), hostnames_set.end(), s) << dendl;
+  hostnames_set.insert(cct->_conf->rgw_dns_name);
+  hostnames_set.insert(zone_group.hostnames.begin(), zone_group.hostnames.end());
+  hostnames_set.erase(""); // filter out empty hostnames
+  ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
   /* TODO: We should have a sanity check that no hostname matches the end of
    * any other hostname, otherwise we will get ambigious results from
    * rgw_find_host_in_domains.
@@ -221,12 +219,10 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
    * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
    */
 
-  if (!cct->_conf->rgw_dns_s3website_name.empty()) {
-    hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
-  }
+  hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
   hostnames_s3website_set.insert(zone_group.hostnames_s3website.begin(), zone_group.hostnames_s3website.end());
-  s.clear();
-  ldout(cct, 20) << "RGW S3website hostnames: " << std::accumulate(hostnames_s3website_set.begin(), hostnames_s3website_set.end(), s) << dendl;
+  hostnames_s3website_set.erase(""); // filter out empty hostnames
+  ldout(cct, 20) << "RGW S3website hostnames: " << hostnames_s3website_set << dendl;
   /* TODO: we should repeat the hostnames_set sanity check here
    * and ALSO decide about overlap, if any
    */
@@ -1767,10 +1763,12 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
     // As additional checks:
     // - if the Host header is an IP, we're using path-style access without DNS
     // - Also check that the Host header is a valid bucket name before using it.
+    // - Don't enable virtual hosting if no hostnames are configured
     if (subdomain.empty()
         && (domain.empty() || domain != info.host)
         && !looks_like_ip_address(info.host.c_str())
-        && RGWHandler_REST::validate_bucket_name(info.host)) {
+        && RGWHandler_REST::validate_bucket_name(info.host) == 0
+        && !(hostnames_set.empty() && hostnames_s3website_set.empty())) {
       subdomain.append(info.host);
       in_hosted_domain = 1;
     }
