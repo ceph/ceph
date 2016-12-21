@@ -631,7 +631,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     Buffer *b = &*i;
     assert(b->is_clean());
     dout(20) << __func__ << " rm " << *b << dendl;
-    b->space->_rm_buffer(b);
+    b->space->_rm_buffer(this, b);
   }
 
   // onodes
@@ -869,7 +869,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       // adjust evict size before buffer goes invalid
       to_evict_bytes -= b->length;
       evicted += b->length;
-      b->space->_rm_buffer(b);
+      b->space->_rm_buffer(this, b);
     }
 
     if (evicted > 0) {
@@ -883,7 +883,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       Buffer *b = &*buffer_warm_out.rbegin();
       assert(b->is_empty());
       dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
-      b->space->_rm_buffer(b);
+      b->space->_rm_buffer(this, b);
     }
   }
 
@@ -965,16 +965,16 @@ void BlueStore::TwoQCache::_audit(const char *when)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.BufferSpace(" << this << " in " << cache << ") "
 
-void BlueStore::BufferSpace::_clear()
+void BlueStore::BufferSpace::_clear(Cache* cache)
 {
   // note: we already hold cache->lock
   ldout(cache->cct, 10) << __func__ << dendl;
   while (!buffer_map.empty()) {
-    _rm_buffer(buffer_map.begin());
+    _rm_buffer(cache, buffer_map.begin());
   }
 }
 
-int BlueStore::BufferSpace::_discard(uint32_t offset, uint32_t length)
+int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t length)
 {
   // note: we already hold cache->lock
   ldout(cache->cct, 20) << __func__ << std::hex << " 0x" << offset << "~" << length
@@ -999,9 +999,9 @@ int BlueStore::BufferSpace::_discard(uint32_t offset, uint32_t length)
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
+	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, bl), 0, b);
 	} else {
-	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail), 0, b);
+	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail), 0, b);
 	}
 	if (!b->is_writing()) {
 	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
@@ -1021,7 +1021,7 @@ int BlueStore::BufferSpace::_discard(uint32_t offset, uint32_t length)
     }
     if (b->end() <= end) {
       // drop entire buffer
-      _rm_buffer(i++);
+      _rm_buffer(cache, i++);
       continue;
     }
     // drop front
@@ -1029,11 +1029,11 @@ int BlueStore::BufferSpace::_discard(uint32_t offset, uint32_t length)
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
+      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, bl), 0, b);
     } else {
-      _add_buffer(new Buffer(this, b->state, b->seq, end, keep), 0, b);
+      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep), 0, b);
     }
-    _rm_buffer(i);
+    _rm_buffer(cache, i);
     cache->_audit("discard end 2");
     break;
   }
@@ -1041,6 +1041,7 @@ int BlueStore::BufferSpace::_discard(uint32_t offset, uint32_t length)
 }
 
 void BlueStore::BufferSpace::read(
+  Cache* cache, 
   uint32_t offset, uint32_t length,
   BlueStore::ready_regions_t& res,
   interval_set<uint32_t>& res_intervals)
@@ -1101,7 +1102,7 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::finish_write(uint64_t seq)
+void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
 
@@ -1132,10 +1133,9 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
   cache->_audit("finish_write end");
 }
 
-void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
+void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSpace &r)
 {
   std::lock_guard<std::recursive_mutex> lk(cache->lock);
-  assert(r.cache == cache);
   if (buffer_map.empty())
     return;
 
@@ -1151,10 +1151,10 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
       if (p->second->data.length()) {
 	bufferlist bl;
 	bl.substr_of(p->second->data, left, right);
-	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq, 0, bl),
+	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq, 0, bl),
 		      0, p->second.get());
       } else {
-	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq, 0, right),
+	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq, 0, right),
 		      0, p->second.get());
       }
       cache->_adjust_buffer_size(p->second.get(), -right);
@@ -1165,19 +1165,19 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
     assert(p->second->end() > pos);
     ldout(cache->cct, 30) << __func__ << " move " << *p->second << dendl;
     if (p->second->data.length()) {
-      r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
+      r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
                                p->second->offset - pos, p->second->data),
                     0, p->second.get());
     } else {
-      r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
+      r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
                                p->second->offset - pos, p->second->length),
                     0, p->second.get());
     }
     if (p == buffer_map.begin()) {
-      _rm_buffer(p);
+      _rm_buffer(cache, p);
       break;
     } else {
-      _rm_buffer(p--);
+      _rm_buffer(cache, p--);
     }
   }
   assert(writing.empty());
@@ -1329,32 +1329,35 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   return out << ")";
 }
 
-BlueStore::SharedBlob::SharedBlob(uint64_t i, Cache *c)
-  : sbid(i),
-    bc(c)
+BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
+  : sbid(i), coll(_coll)
 {
   assert(sbid > 0);
+  if (get_cache()) {
+    get_cache()->add_blob();
+  }
 }
 
 BlueStore::SharedBlob::~SharedBlob()
 {
-  if (bc.cache) {   // the dummy instances have a nullptr
-    std::lock_guard<std::recursive_mutex> l(bc.cache->lock);
-    bc._clear();
+  if (get_cache()) {   // the dummy instances have a nullptr
+    std::lock_guard<std::recursive_mutex> l(get_cache()->lock);
+    bc._clear(get_cache());
+    get_cache()->rm_blob();
   }
 }
 
 void BlueStore::SharedBlob::put()
 {
   if (--nref == 0) {
-    ldout(bc.cache->cct, 20) << __func__ << " " << this
-			       << " removing self from set " << parent_set
-			       << dendl;
-    if (parent_set) {
-      if (parent_set->remove(this)) {
+    ldout(coll->store->cct, 20) << __func__ << " " << this
+			     << " removing self from set " << get_parent()
+			     << dendl;
+    if (get_parent()) {
+      if (get_parent()->remove(this)) {
 	delete this;
       } else {
-	ldout(bc.cache->cct, 20)
+	ldout(coll->store->cct, 20)
 	  << __func__ << " " << this << " lost race to remove myself from set"
 	  << dendl;
       }
@@ -1396,13 +1399,13 @@ void BlueStore::Blob::discard_unallocated()
     assert(discard == all_invalid); // in case of compressed blob all
 				    // or none pextents are invalid.
     if (discard) {
-      shared_blob->bc.discard(0, blob.get_compressed_payload_original_length());
+      shared_blob->bc.discard(shared_blob->get_cache(), 0, blob.get_compressed_payload_original_length());
     }
   } else {
     size_t pos = 0;
     for (auto e : blob.extents) {
       if (!e.is_valid()) {
-        shared_blob->bc.discard(pos, e.length);
+	shared_blob->bc.discard(shared_blob->get_cache(), pos, e.length);
       }
       pos += e.length;
     }
@@ -1598,7 +1601,7 @@ void BlueStore::Blob::split(size_t blob_offset, Blob *r)
     lb.csum_data = bufferptr(old.c_str(), pos);
   }
 
-  shared_blob->bc.split(blob_offset, r->shared_blob->bc);
+  shared_blob->bc.split(shared_blob->get_cache(), blob_offset, r->shared_blob->bc);
 
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
@@ -2396,7 +2399,7 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
   assert(!b->shared_blob);
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
-    b->shared_blob = new SharedBlob(cache);
+    b->shared_blob = new SharedBlob(this);
     return;
   }
 
@@ -2405,8 +2408,8 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " had " << *b->shared_blob << dendl;
   } else {
-    b->shared_blob = new SharedBlob(sbid, cache);
-    shared_blob_set.add(b->shared_blob.get());
+    b->shared_blob = new SharedBlob(sbid, this);
+    shared_blob_set.add(this, b->shared_blob.get());
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " opened " << *b->shared_blob
 			  << dendl;
@@ -2446,7 +2449,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   // update shared blob
   b->shared_blob->loaded = true;  // we are new and therefore up to date
   b->shared_blob->sbid = sbid;
-  shared_blob_set.add(b->shared_blob.get());
+  shared_blob_set.add(this, b->shared_blob.get());
   for (auto p : blob.extents) {
     if (p.is_valid()) {
       b->shared_blob->shared_blob.ref_map.get(p.offset, p.length);
@@ -5130,7 +5133,7 @@ int BlueStore::_do_read(
 
     ready_regions_t cache_res;
     interval_set<uint32_t> cache_interval;
-    bptr->shared_blob->bc.read(b_off, b_len, cache_res, cache_interval);
+    bptr->shared_blob->bc.read(bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval);
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need 0x" << b_off << "~" << b_len
 	     << " cache has 0x" << cache_interval
@@ -5193,7 +5196,7 @@ int BlueStore::_do_read(
       if (r < 0)
 	return r;
       if (buffered) {
-	bptr->shared_blob->bc.did_read(0, raw_bl);
+	bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), 0, raw_bl);
       }
       for (auto& i : b2r_it->second) {
 	ready_regions[i.logical_offset].substr_of(
@@ -5240,7 +5243,7 @@ int BlueStore::_do_read(
 	  return -EIO;
 	}
 	if (buffered) {
-	  bptr->shared_blob->bc.did_read(r_off, bl);
+	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), r_off, bl);
 	}
 
 	// prune and keep result
@@ -6311,7 +6314,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       for (auto& sb : txc->shared_blobs_written) {
-        sb->bc.finish_write(txc->seq);
+	sb->bc.finish_write(sb->get_cache(), txc->seq);
       }
       txc->shared_blobs_written.clear();
       if (cct->_conf->bluestore_sync_submit_transaction &&
@@ -7513,11 +7516,11 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
       dout(log_level) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
-    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->bc.cache->lock);
+    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->get_cache()->lock);
     for (auto& i : e.blob->shared_blob->bc.buffer_map) {
       dout(log_level) << __func__ << "       0x" << std::hex << i.first
-                      << "~" << i.second->length << std::dec
-                      << " " << *i.second << dendl;
+		      << "~" << i.second->length << std::dec
+		      << " " << *i.second << dendl;
     }
   }
 }
