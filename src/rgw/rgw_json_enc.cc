@@ -1150,7 +1150,7 @@ void KeystoneToken::Token::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("expires", expires_iso8601, obj, true);
 
   if (parse_iso8601(expires_iso8601.c_str(), &t)) {
-    expires = timegm(&t);
+    expires = internal_timegm(&t);
   } else {
     expires = 0;
     throw JSONDecoder::err("Failed to parse ISO8601 expiration date from Keystone response.");
@@ -1199,7 +1199,7 @@ void KeystoneToken::decode_json(JSONObj *root_obj)
       struct tm t;
 
       if (parse_iso8601(expires_iso8601.c_str(), &t)) {
-        token.expires = timegm(&t);
+        token.expires = internal_timegm(&t);
       } else {
         token.expires = 0;
         throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
@@ -1225,7 +1225,7 @@ void KeystoneToken::decode_json(JSONObj *root_obj)
 
       struct tm t;
       if (parse_iso8601(expires_iso8601.c_str(), &t)) {
-        token.expires = timegm(&t);
+        token.expires = internal_timegm(&t);
       } else {
         token.expires = 0;
         throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
