@@ -31,7 +31,7 @@ struct Elem {
 
 // sorted low to high
 struct ElemCompare {
-  bool operator()(const Elem& d1, const Elem& d2) {
+  bool operator()(const Elem& d1, const Elem& d2) const {
     return d1.data < d2.data;
   }
 };
@@ -814,4 +814,28 @@ TEST_F(HeapFixture1, four_tops) {
 
   const std::shared_ptr<Elem> top6 = c_heap.top_ind();
   EXPECT_EQ(-12, top6->data);
+}
+
+
+TEST_F(HeapFixture1, display_sorted) {
+  std::stringstream ss;
+
+  heap.display_sorted(ss);
+
+  std::string s = ss.str();
+
+  EXPECT_GT(s.length(), 0);
+
+  auto negseven = s.find("-7");
+  EXPECT_NE(negseven, std::string::npos);
+
+  auto ninetynine = s.find("99");
+  EXPECT_NE(ninetynine, std::string::npos);
+
+  // index of -7 should be less than index of 99
+  EXPECT_LT(negseven, ninetynine);
+
+#if 0
+  std::cout << s << std::endl;
+#endif
 }
