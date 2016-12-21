@@ -8918,9 +8918,9 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-			   offset, size, bl, ceph::real_clock::now(), 0,
-			   in->truncate_size, in->truncate_seq,
-		       NULL, onfinish);
+		       offset, size, bl, ceph::real_clock::now(), 0,
+		       in->truncate_size, in->truncate_seq,
+		       onfinish);
     client_lock.Unlock();
     flock.Lock();
 
@@ -12269,10 +12269,10 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
       _invalidate_inode_cache(in, offset, length);
       filer->zero(in->ino, &in->layout,
-		      in->snaprealm->get_snap_context(),
-		      offset, length,
-		      ceph::real_clock::now(),
-		      0, true, onfinish);
+		  in->snaprealm->get_snap_context(),
+		  offset, length,
+		  ceph::real_clock::now(),
+		  0, true, onfinish);
       in->mtime = ceph_clock_now();
       in->change_attr++;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
