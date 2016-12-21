@@ -631,8 +631,8 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   string sock_mem = "--socket-mem=";
   string coremask = "-c ";
   prefix += sn_tag;
-  sock_mem += g_conf->spdk_socket_mem;
-  coremask += g_conf->spdk_coremask;
+  sock_mem += g_conf->bluestore_spdk_socket_mem;
+  coremask += g_conf->bluestore_spdk_coremask;
   char *prefix_arg = (char *)prefix.c_str();
   char *sock_mem_arg = (char *)sock_mem.c_str();
   char *coremask_arg = (char *)coremask.c_str();
