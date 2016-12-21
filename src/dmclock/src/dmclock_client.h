@@ -121,9 +121,12 @@ namespace crimson {
 	} else {
 	  Counter delta =
 	    delta_counter - it->second.delta_prev_req;
+#ifdef USE_SEPARATED_RHO_CAL
 	  Counter rho =
 	    rho_counter - it->second.rho_prev_req;
-
+#else
+	  Counter rho = delta;
+#endif
 	  it->second.req_update(delta_counter, rho_counter);
 
 	  return ReqParams(uint32_t(delta), uint32_t(rho));
