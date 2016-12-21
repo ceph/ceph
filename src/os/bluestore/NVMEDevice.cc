@@ -430,7 +430,7 @@ void SharedDriverData::_aio_thread()
         }
         case IOCommand::READ_COMMAND:
         {
-          dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
+          dout(20) << __func__ << " read command issued " << lba_off << "~" << lba_count << dendl;
           r = alloc_buf_from_pool(t, false);
           if (r < 0) {
             logger->inc(l_bluestore_nvmedevice_buffer_alloc_failed);
@@ -455,7 +455,7 @@ void SharedDriverData::_aio_thread()
         }
         case IOCommand::FLUSH_COMMAND:
         {
-          dout(20) << __func__ << " flush command issueed " << dendl;
+          dout(20) << __func__ << " flush command issued " << dendl;
           r = spdk_nvme_ns_cmd_flush(ns, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
