@@ -52,7 +52,7 @@ struct libradosstriper::RadosStriperImpl {
     /// shared lock to be released at completion
     std::string m_lockCookie;
     /// completion handler
-    librados::IoCtxImpl::C_aio_Ack *m_ack;
+    librados::IoCtxImpl::C_aio_Complete *m_ack;
   };
 
   /**
@@ -93,7 +93,7 @@ struct libradosstriper::RadosStriperImpl {
    */
   struct WriteCompletionData : CompletionData {
     /// safe completion handler
-    librados::IoCtxImpl::C_aio_Safe *m_safe;
+    librados::IoCtxImpl::C_aio_Complete *m_safe;
     /// return code of write completion, to be remembered until unlocking happened
     int m_writeRc;
     /// completion object for the unlocking of the striped object at the end of the write
