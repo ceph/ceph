@@ -974,7 +974,7 @@ void BlueStore::BufferSpace::_clear()
   }
 }
 
-int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
+int BlueStore::BufferSpace::_discard(uint32_t offset, uint32_t length)
 {
   // note: we already hold cache->lock
   ldout(cache->cct, 20) << __func__ << std::hex << " 0x" << offset << "~" << length
@@ -982,7 +982,7 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
   int cache_private = 0;
   cache->_audit("discard start");
   auto i = _data_lower_bound(offset);
-  uint64_t end = offset + length;
+  uint32_t end = offset + length;
   while (i != buffer_map.end()) {
     Buffer *b = i->second.get();
     if (b->offset >= end) {
@@ -995,7 +995,7 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
       int64_t front = offset - b->offset;
       if (b->end() > end) {
 	// drop middle (split)
-	uint64_t tail = b->end() - end;
+	uint32_t tail = b->end() - end;
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
@@ -1025,7 +1025,7 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
       continue;
     }
     // drop front
-    uint64_t keep = b->end() - end;
+    uint32_t keep = b->end() - end;
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
@@ -1041,15 +1041,15 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 }
 
 void BlueStore::BufferSpace::read(
-  uint64_t offset, uint64_t length,
+  uint32_t offset, uint32_t length,
   BlueStore::ready_regions_t& res,
-  interval_set<uint64_t>& res_intervals)
+  interval_set<uint32_t>& res_intervals)
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
   res.clear();
   res_intervals.clear();
-  uint64_t want_bytes = length;
-  uint64_t end = offset + length;
+  uint32_t want_bytes = length;
+  uint32_t end = offset + length;
   for (auto i = _data_lower_bound(offset);
        i != buffer_map.end() && offset < end && i->first < end;
        ++i) {
@@ -1057,8 +1057,8 @@ void BlueStore::BufferSpace::read(
     assert(b->end() > offset);
     if (b->is_writing() || b->is_clean()) {
       if (b->offset < offset) {
-	uint64_t skip = offset - b->offset;
-	uint64_t l = MIN(length, b->length - skip);
+	uint32_t skip = offset - b->offset;
+	uint32_t l = MIN(length, b->length - skip);
 	res[offset].substr_of(b->data, skip, l);
 	res_intervals.insert(offset, l);
 	offset += l;
@@ -1069,7 +1069,7 @@ void BlueStore::BufferSpace::read(
 	continue;
       }
       if (b->offset > offset) {
-	uint64_t gap = b->offset - offset;
+	uint32_t gap = b->offset - offset;
 	if (length <= gap) {
 	  break;
 	}
@@ -5129,7 +5129,7 @@ int BlueStore::_do_read(
     unsigned b_len = std::min(left, lp->length - l_off);
 
     ready_regions_t cache_res;
-    interval_set<uint64_t> cache_interval;
+    interval_set<uint32_t> cache_interval;
     bptr->shared_blob->bc.read(b_off, b_len, cache_res, cache_interval);
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need 0x" << b_off << "~" << b_len
