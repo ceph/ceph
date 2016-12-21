@@ -936,7 +936,7 @@ OPTION(osd_max_attr_name_len, OPT_U32, 100)    // max rados attr name len; canno
 OPTION(osd_max_attr_size, OPT_U64, 0)
 
 OPTION(osd_max_omap_entries_per_request, OPT_U64, 131072)
-OPTION(osd_max_omap_bytes_per_request, OPT_U64, 4<<20)
+OPTION(osd_max_omap_bytes_per_request, OPT_U64, 1<<30)
 
 OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 OPTION(osd_objectstore_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
