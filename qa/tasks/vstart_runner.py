@@ -86,12 +86,17 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
     # A list of candidate paths for each package we need
     guesses = [
         ["~/git/teuthology", "~/scm/teuthology", "~/teuthology"],
-        ["~/git/ceph-qa-suite", "~/scm/ceph-qa-suite", "~/ceph-qa-suite"],
         ["lib/cython_modules/lib.2"],
         ["../src/pybind"],
     ]
 
     python_paths = []
+
+    # Up one level so that "tasks.foo.bar" imports work
+    python_paths.append(os.path.abspath(
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+    ))
+
     for package_guesses in guesses:
         for g in package_guesses:
             g_exp = os.path.abspath(os.path.expanduser(g))
