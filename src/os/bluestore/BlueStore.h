@@ -263,7 +263,7 @@ public:
     }
 
     map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
-      uint64_t offset) {
+      uint32_t offset) {
       auto i = buffer_map.lower_bound(offset);
       if (i != buffer_map.begin()) {
 	--i;
@@ -277,13 +277,13 @@ public:
     void _clear();
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
-    int discard(uint64_t offset, uint64_t length) {
+    int discard(uint32_t offset, uint32_t length) {
       std::lock_guard<std::recursive_mutex> l(cache->lock);
       return _discard(offset, length);
     }
-    int _discard(uint64_t offset, uint64_t length);
+    int _discard(uint32_t offset, uint32_t length);
 
-    void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
+    void write(uint64_t seq, uint32_t offset, bufferlist& bl, unsigned flags) {
       std::lock_guard<std::recursive_mutex> l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
@@ -291,19 +291,19 @@ public:
       _add_buffer(b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
     }
     void finish_write(uint64_t seq);
-    void did_read(uint64_t offset, bufferlist& bl) {
+    void did_read(uint32_t offset, bufferlist& bl) {
       std::lock_guard<std::recursive_mutex> l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(offset, bl.length());
       _add_buffer(b, 1, nullptr);
     }
 
-    void read(uint64_t offset, uint64_t length,
+    void read(uint32_t offset, uint32_t length,
 	      BlueStore::ready_regions_t& res,
-	      interval_set<uint64_t>& res_intervals);
+	      interval_set<uint32_t>& res_intervals);
 
-    void truncate(uint64_t offset) {
-      discard(offset, (uint64_t)-1 - offset);
+    void truncate(uint32_t offset) {
+      discard(offset, (uint32_t)-1 - offset);
     }
 
     void split(size_t pos, BufferSpace &r);
