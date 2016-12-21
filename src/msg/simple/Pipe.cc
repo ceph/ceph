@@ -2296,13 +2296,6 @@ int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
 {
   suppress_sigpipe();
   while (len > 0) {
-    if (0) { // sanity
-      unsigned l = 0;
-      for (unsigned i=0; i<msg->msg_iovlen; i++)
-	l += msg->msg_iov[i].iov_len;
-      assert(l == len);
-    }
-
     int r;
 #if defined(MSG_NOSIGNAL)
     r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
