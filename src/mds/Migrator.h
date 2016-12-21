@@ -153,6 +153,9 @@ public:
 
   void show_importing();
   void show_exporting();
+
+  int get_num_exporting() const { return export_state.size(); }
+  int get_export_queue_size() const { return export_queue.size(); }
   
   // -- status --
   int is_exporting(CDir *dir) const {
