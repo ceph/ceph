@@ -3788,12 +3788,19 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   pi = cur->project_inode();
 
-  if (mask & CEPH_SETATTR_MODE)
-    pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   if (mask & CEPH_SETATTR_UID)
     pi->uid = req->head.args.setattr.uid;
   if (mask & CEPH_SETATTR_GID)
     pi->gid = req->head.args.setattr.gid;
+
+  if (mask & CEPH_SETATTR_MODE)
+    pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
+  else if ((mask & (CEPH_SETATTR_UID|CEPH_SETATTR_GID)) &&
+	    S_ISREG(pi->mode)) {
+    pi->mode &= ~S_ISUID;
+    if ((pi->mode & (S_ISGID|S_IXGRP)) == (S_ISGID|S_IXGRP))
+      pi->mode &= ~S_ISGID;
+  }
 
   if (mask & CEPH_SETATTR_MTIME)
     pi->mtime = req->head.args.setattr.mtime;
