@@ -1079,7 +1079,7 @@ void EMetaBlob::dump(Formatter *f) const
   }
   f->close_section(); // roots
 
-  f->open_array_section("tableclient tranactions");
+  f->open_array_section("tableclient transactions");
   for (list<pair<__u8,version_t> >::const_iterator i = table_tids.begin();
        i != table_tids.end(); ++i) {
     f->open_object_section("transaction");
