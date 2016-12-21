@@ -129,12 +129,12 @@ namespace crimson {
 #endif
     }; // class Iterator
 
-    
+
     class ConstIterator {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
       const IndIntruHeap<I, T, heap_info, C, K>& heap;
-      HeapIndex                                     index;
+      HeapIndex                                  index;
 
       ConstIterator(const IndIntruHeap<I, T, heap_info, C, K>& _heap,
 		    HeapIndex _index) :
@@ -195,7 +195,7 @@ namespace crimson {
       }
     }; // class ConstIterator
 
-    
+
   protected:
 
     std::vector<I> data;
@@ -451,9 +451,9 @@ namespace crimson {
     typename std::enable_if<K==2&&EnableBool,void>::type sift_down(HeapIndex i) {
       if (i >= count) return;
       while (true) {
-        const HeapIndex li = lhs(i);
+	const HeapIndex li = lhs(i);
 	const HeapIndex ri = 1 + li;
- 
+
         if (li < count) {
 	  if (comparator(*data[li], *data[i])) {
 	    if (ri < count && comparator(*data[ri], *data[li])) {
