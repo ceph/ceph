@@ -406,7 +406,7 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
   op.rollback(snapid);
   objecter->mutate(oid, oloc,
 		   op, snapc, ceph::real_clock::now(), 0,
-		   onack, NULL, NULL);
+		   onack, NULL);
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
@@ -686,7 +686,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 			 << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
 							  *o, snapc, ut, flags,
-							  NULL, oncommit, &ver);
+							  oncommit, &ver);
   objecter->op_submit(objecter_op);
 
   mylock.Lock();
@@ -770,7 +770,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 
   Objecter::Op *op = objecter->prepare_mutate_op(
     oid, oloc, *o, snap_context, ut, flags,
-    NULL, onack, &c->objver);
+    onack, &c->objver);
   objecter->op_submit(op, &c->tid);
 
   return 0;
@@ -1601,7 +1601,7 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   prepare_assert_ops(&wr);
   wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
-		   snapc, ceph::real_clock::now(), 0, NULL,
+		   snapc, ceph::real_clock::now(), 0,
 		   &onfinish, &ver);
   objecter->linger_cancel(linger_op);
 
@@ -1620,7 +1620,7 @@ int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
   prepare_assert_ops(&wr);
   wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
-		   snapc, ceph::real_clock::now(), 0, NULL,
+		   snapc, ceph::real_clock::now(), 0,
 		   oncomplete, &c->objver);
   return 0;
 }

@@ -2399,7 +2399,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       m.ops.push_back(op);
       client->objecter->mutate(oid, oloc, m, snapc,
 			       ceph::real_clock::now(), 0,
-			       NULL, new C_Ref(lock, cond, &unack));
+			       new C_Ref(lock, cond, &unack));
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;

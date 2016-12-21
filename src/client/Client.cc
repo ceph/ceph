@@ -8310,7 +8310,6 @@ int Client::uninline_data(Inode *in, Context *onfinish)
 		   in->snaprealm->get_snap_context(),
 		   ceph::real_clock::now(),
 		   0,
-		   NULL,
 		   NULL);
 
   bufferlist inline_version_bl;
@@ -8331,7 +8330,6 @@ int Client::uninline_data(Inode *in, Context *onfinish)
 		   in->snaprealm->get_snap_context(),
 		   ceph::real_clock::now(),
 		   0,
-		   NULL,
 		   onfinish);
 
   return 0;
@@ -12888,14 +12886,14 @@ int Client::check_pool_perm(Inode *in, int need)
     rd_op.stat(NULL, (ceph::real_time*)nullptr, NULL);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), rd_op,
-		     nullsnapc, ceph::real_clock::now(), 0, &rd_cond, NULL);
+		     nullsnapc, ceph::real_clock::now(), 0, &rd_cond);
 
     C_SaferCond wr_cond;
     ObjectOperation wr_op;
     wr_op.create(true);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), wr_op,
-		     nullsnapc, ceph::real_clock::now(), 0, &wr_cond, NULL);
+		     nullsnapc, ceph::real_clock::now(), 0, &wr_cond);
 
     client_lock.Unlock();
     int rd_ret = rd_cond.wait();

@@ -55,7 +55,7 @@ class ObjecterWriteback : public WritebackHandler {
 	 ++p)
       op.write(p->first, p->second, trunc_size, trunc_seq);
 
-    return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0, NULL,
+    return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0,
 			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
 					       m_finisher));
   }

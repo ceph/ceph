@@ -2154,11 +2154,11 @@ public:
   Op *prepare_mutate_op(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, NULL, oncommit, objver);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2169,10 +2169,10 @@ public:
   ceph_tid_t mutate(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack,
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
 			      oncommit, objver, reqid);
     ceph_tid_t tid;
     op_submit(o, &tid);
