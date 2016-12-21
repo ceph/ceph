@@ -163,8 +163,7 @@ class Filer {
 	    int op_flags = 0) {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    objecter->sg_write(extents, snapc, bl, mtime, flags, NULL, oncommit,
-		       op_flags);
+    objecter->sg_write(extents, snapc, bl, mtime, flags, oncommit, op_flags);
   }
 
   void write_trunc(inodeno_t ino,
@@ -183,7 +182,7 @@ class Filer {
     Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
 			     extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
-		       truncate_size, truncate_seq, NULL, oncommit, op_flags);
+		       truncate_size, truncate_seq, oncommit, op_flags);
   }
 
   void truncate(inodeno_t ino,
@@ -235,11 +234,10 @@ class Filer {
       if (extents[0].offset == 0 && extents[0].length == layout->object_size
 	  && (!keep_first || extents[0].objectno != 0))
 	objecter->remove(extents[0].oid, extents[0].oloc,
-			 snapc, mtime, flags, NULL, oncommit);
+			 snapc, mtime, flags, oncommit);
       else
 	objecter->zero(extents[0].oid, extents[0].oloc, extents[0].offset,
-		       extents[0].length, snapc, mtime, flags, NULL,
-		       oncommit);
+		       extents[0].length, snapc, mtime, flags, oncommit);
     } else {
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin();
@@ -249,12 +247,10 @@ class Filer {
 	    (!keep_first || p->objectno != 0))
 	  objecter->remove(p->oid, p->oloc,
 			   snapc, mtime, flags,
-			   NULL,
 			   oncommit ? gcom.new_sub():0);
 	else
 	  objecter->zero(p->oid, p->oloc, p->offset, p->length,
 			 snapc, mtime, flags,
-			 NULL,
 			 oncommit ? gcom.new_sub():0);
       }
       gcom.activate();

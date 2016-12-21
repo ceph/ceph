@@ -36,7 +36,7 @@ class ObjecterWriteback : public WritebackHandler {
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
 			   Context *oncommit) {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
-				   trunc_size, trunc_seq, NULL,
+				   trunc_size, trunc_seq,
 				   new C_OnFinisher(new C_Lock(m_lock,
 							       oncommit),
 						    m_finisher));
