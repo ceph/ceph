@@ -878,7 +878,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   Objecter::Op *o = objecter->prepare_write_op(
     oid, oloc,
     off, len, snapc, bl, ut, 0,
-    NULL, onack, &c->objver);
+    onack, &c->objver);
   objecter->op_submit(o, &c->tid);
 
   return 0;
@@ -903,7 +903,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   Objecter::Op *o = objecter->prepare_append_op(
     oid, oloc,
     len, snapc, bl, ut, 0,
-    NULL, onack, &c->objver);
+    onack, &c->objver);
   objecter->op_submit(o, &c->tid);
 
   return 0;
@@ -929,7 +929,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   Objecter::Op *o = objecter->prepare_write_full_op(
     oid, oloc,
     snapc, bl, ut, 0,
-    NULL, onack, &c->objver);
+    onack, &c->objver);
   objecter->op_submit(o, &c->tid);
 
   return 0;
@@ -960,7 +960,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
     oid, oloc,
     write_len, off,
     snapc, bl, ut, 0,
-    NULL, onack, &c->objver);
+    onack, &c->objver);
   objecter->op_submit(o, &c->tid);
 
   return 0;
@@ -982,7 +982,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, i
   Objecter::Op *o = objecter->prepare_remove_op(
     oid, oloc,
     snapc, ut, flags,
-    NULL, onack, &c->objver);
+    onack, &c->objver);
   objecter->op_submit(o, &c->tid);
 
   return 0;

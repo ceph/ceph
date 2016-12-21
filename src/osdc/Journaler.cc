@@ -448,7 +448,7 @@ void Journaler::_write_head(Context *oncommit)
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
   objecter->write_full(oid, oloc, snapc, bl, ceph::real_clock::now(), 0,
-		       NULL, wrap_finisher(new C_WriteHead(
+		       wrap_finisher(new C_WriteHead(
 					     this, last_written,
 					     wrap_finisher(oncommit))),
 		       0, 0, write_iohint);

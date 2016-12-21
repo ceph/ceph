@@ -12061,7 +12061,6 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   Cond cond;
   bool done;
   int r = 0;
-  Context *onack;
   Context *onsafe;
 
   if (length == 0) {
@@ -12070,13 +12069,11 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   if (true || sync) {
     /* if write is stable, the epilogue is waiting on
      * flock */
-    onack = new C_NoopContext;
     onsafe = new C_SafeCond(&flock, &cond, &done, &r);
     done = false;
   } else {
     /* if write is unstable, we just place a barrier for
      * future commits to wait on */
-    onack = new C_NoopContext;
     /*onsafe = new C_Block_Sync(this, vino.ino,
 			      barrier_interval(offset, offset + length), &r);
     */
@@ -12105,7 +12102,6 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 		  bl,
 		  ceph::real_clock::now(),
 		  0,
-		  onack,
 		  onsafe);
 
   client_lock.Unlock();
@@ -12117,9 +12113,9 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   }
 
   if (r < 0) {
-      return r;
+    return r;
   } else {
-      return length;
+    return length;
   }
 }
 
