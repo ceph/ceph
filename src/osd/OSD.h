@@ -1307,7 +1307,7 @@ protected:
   // asok
   friend class OSDSocketHook;
   class OSDSocketHook *asok_hook;
-  bool asok_command(string command, cmdmap_t& cmdmap, string format, ostream& ss);
+  bool asok_command(string admin_command, cmdmap_t& cmdmap, string format, ostream& ss);
 
 public:
   ClassHandler  *class_handler = nullptr;
