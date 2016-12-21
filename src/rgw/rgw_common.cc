@@ -479,7 +479,7 @@ int parse_time(const char *time_str, real_time *time)
     return -EINVAL;
   }
 
-  time_t sec = timegm(&tm);
+  time_t sec = internal_timegm(&tm);
   *time = utime_t(sec, ns).to_real_time();
 
   return 0;
