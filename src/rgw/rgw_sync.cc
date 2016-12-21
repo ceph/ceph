@@ -1269,7 +1269,9 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   bool *reset_backoff;
 
-  map<RGWCoroutinesStack *, string> stack_to_pos;
+  // hold a reference to the cr stack while it's in the map
+  using StackRef = boost::intrusive_ptr<RGWCoroutinesStack>;
+  map<StackRef, string> stack_to_pos;
   map<string, string> pos_to_prev;
 
   bool can_adjust_marker = false;
@@ -1331,7 +1333,7 @@ public:
     int child_ret;
     RGWCoroutinesStack *child;
     while (collect_next(&child_ret, &child)) {
-      map<RGWCoroutinesStack *, string>::iterator iter = stack_to_pos.find(child);
+      auto iter = stack_to_pos.find(child);
       if (iter == stack_to_pos.end()) {
         /* some other stack that we don't care about */
         continue;
@@ -1371,8 +1373,6 @@ public:
 
       ldout(sync_env->cct, 0) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
       stack_to_pos.erase(iter);
-
-      child->put();
     }
   }
 
@@ -1443,8 +1443,7 @@ public:
             // fetch remote and write locally
             yield {
               RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker), false);
-              stack->get();
-
+              // stack_to_pos holds a reference to the stack
               stack_to_pos[stack] = iter->first;
               pos_to_prev[iter->first] = marker;
             }
@@ -1592,8 +1591,7 @@ public:
               yield {
                 RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker), false);
                 assert(stack);
-                stack->get();
-
+                // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
                 pos_to_prev[log_iter->id] = marker;
               }
