@@ -131,7 +131,7 @@ private:
 
   void send_log();
 
-  AuthMethodList *auth_supported;
+  std::unique_ptr<AuthMethodList> auth_supported;
 
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
@@ -164,7 +164,7 @@ private:
 
   list<Message*> waiting_for_session;
   utime_t last_rotating_renew_sent;
-  Context *session_established_context;
+  std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
 
@@ -243,7 +243,7 @@ private:
 
   // auth tickets
 public:
-  AuthClientHandler *auth;
+  std::unique_ptr<AuthClientHandler> auth;
 public:
   void renew_subs() {
     Mutex::Locker l(monc_lock);
@@ -286,8 +286,8 @@ public:
     return false;
   }
   
-  KeyRing *keyring;
-  RotatingKeyRing *rotating_secrets;
+  std::unique_ptr<KeyRing> keyring;
+  std::unique_ptr<RotatingKeyRing> rotating_secrets;
 
  public:
   explicit MonClient(CephContext *cct_);
@@ -331,8 +331,7 @@ public:
   void reopen_session(Context *cb=NULL) {
     Mutex::Locker l(monc_lock);
     if (cb) {
-      delete session_established_context;
-      session_established_context = cb;
+      session_established_context.reset(cb);
     }
     _reopen_session();
   }
