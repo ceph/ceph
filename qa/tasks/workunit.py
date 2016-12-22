@@ -295,11 +295,15 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(
             logger=log.getChild(role),
             args=[
+                'rm',
+                '-rf',
+                clonedir,
+                run.Raw('&&'),
                 'git',
                 'clone',
                 git_url,
                 clonedir,
-                run.Raw(';'),
+                run.Raw('&&'),
                 'cd', '--', clonedir,
                 run.Raw('&&'),
                 'git', 'checkout', refspec,
@@ -316,11 +320,15 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(
             logger=log.getChild(role),
             args=[
+                'rm',
+                '-rf',
+                clonedir,
+                run.Raw('&&'),
                 'git',
                 'clone',
                 alt_git_url,
                 clonedir,
-                run.Raw(';'),
+                run.Raw('&&'),
                 'cd', '--', clonedir,
                 run.Raw('&&'),
                 'git', 'checkout', refspec,
