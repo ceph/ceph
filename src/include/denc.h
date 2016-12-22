@@ -636,563 +636,222 @@ struct denc_traits<
   }
 };
 
-//
-// std::list<T>
-//
-template<typename T>
-struct denc_traits<
-  std::list<T>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
-  typedef denc_traits<T> traits;
+namespace _denc {
+  template<template<class...> class C, typename Details, typename ...Ts>
+  struct container_base {
+  private:
+    using container = C<Ts...>;
+    using T = typename Details::T;
 
-  enum { supported = true };
-  enum { featured = traits::featured };
-  enum { bounded = false };
+  public:
+    using traits = denc_traits<T>;
 
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::bounded &&
-                                 !traits::featured>::type
-  bound_encode(const std::list<T>& s, size_t& p) {
-    p += sizeof(uint32_t);
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::bounded &&
-                                 !traits::featured, void>::type
-  bound_encode(const std::list<T>& s, size_t& p) {
-    size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size);
-    p += sizeof(uint32_t) + elem_size * s.size();
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::bounded &&
-                                 traits::featured, void>::type
-  bound_encode(const std::list<T>& s, size_t& p, uint64_t f) {
-    p += sizeof(uint32_t);
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::bounded &&
-                                 traits::featured>::type
-  bound_encode(const std::list<T>& s, size_t& p, uint64_t f) {
-    size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size, f);
-    p += sizeof(uint32_t) + elem_size * s.size();
-  }
+    enum { supported = true };
+    enum { featured = traits::featured };
+    enum { bounded = false };
 
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::featured>::type
-  encode(const std::list<T>& s, buffer::list::contiguous_appender& p) {
-    denc((uint32_t)s.size(), p);
-    for (const T& e : s) {
-      denc(e, p);
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   !traits::bounded &&
+				   !traits::featured>::type
+    bound_encode(const container& s, size_t& p) {
+      p += sizeof(uint32_t);
+      for (const T& e : s) {
+	denc(e, p);
+      }
     }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::featured>::type
-    encode(const std::list<T>& s, buffer::list::contiguous_appender& p,
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   traits::bounded &&
+				   !traits::featured, void>::type
+    bound_encode(const container& s, size_t& p) {
+      size_t elem_size = 0;
+      denc(*(const T*)nullptr, elem_size);
+      p += sizeof(uint32_t) + elem_size * s.size();
+    }
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   !traits::bounded &&
+				   traits::featured, void>::type
+    bound_encode(const container& s, size_t& p, uint64_t f) {
+      p += sizeof(uint32_t);
+      for (const T& e : s) {
+	denc(e, p, f);
+      }
+    }
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   traits::bounded &&
+				   traits::featured>::type
+    bound_encode(const container& s, size_t& p, uint64_t f) {
+      size_t elem_size = 0;
+      denc(*(const T*)nullptr, elem_size, f);
+      p += sizeof(uint32_t) + elem_size * s.size();
+    }
+
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   !traits::featured>::type
+    encode(const container& s, buffer::list::contiguous_appender& p) {
+      denc((uint32_t)s.size(), p);
+      encode_nohead(s, p);
+    }
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   traits::featured>::type
+    encode(const container& s, buffer::list::contiguous_appender& p,
 	   uint64_t f) {
-    denc((uint32_t)s.size(), p);
-    for (const T& e : s) {
-      denc(e, p, f);
+      denc((uint32_t)s.size(), p);
+      encode_nohead(s, p, f);
     }
-  }
-  static void decode(std::list<T>& s, buffer::ptr::iterator& p,
-		     uint64_t f=0) {
-    s.clear();
-    uint32_t num;
-    denc(num, p);
-    while (num--) {
-      s.emplace_back(T());
-      denc(s.back(), p, f);
+    static void decode(container& s, buffer::ptr::iterator& p, uint64_t f = 0) {
+      uint32_t num;
+      denc(num, p);
+      decode_nohead(num, s, p, f);
     }
-  }
-};
 
-//
-// std::vector<T>
-//
-template<typename T>
+    // nohead
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   !traits::featured>::type
+    encode_nohead(const container& s, buffer::list::contiguous_appender& p) {
+      for (const T& e : s) {
+	denc(e, p);
+      }
+    }
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) &&
+				   traits::featured>::type
+    encode_nohead(const container& s, buffer::list::contiguous_appender& p,
+		  uint64_t f) {
+      for (const T& e : s) {
+	denc(e, p, f);
+      }
+    }
+    static void decode_nohead(size_t num, container& s,
+			      buffer::ptr::iterator& p, uint64_t f=0) {
+      s.clear();
+      Details::reserve(s, num);
+      while (num--) {
+	T t;
+	denc(t, p, f);
+	Details::insert(s, std::move(t));
+      }
+    }
+  };
+
+  template<typename T>
+  class container_has_reserve {
+    template<typename U, U> struct SFINAE_match;
+    template<typename U>
+    static std::true_type test(SFINAE_match<T(*)(typename T::size_type),
+			       &U::reserve>*);
+
+    template<typename U>
+    static std::false_type test(...);
+
+  public:
+    static constexpr bool value = decltype(
+      test<denc_traits<T>>(0))::value;
+  };
+
+
+  template<typename Container,
+	   bool Reserve = container_has_reserve<Container>::value>
+  struct reserve_switch;
+
+  template<typename Container>
+  struct reserve_switch<Container, true> {
+    static void reserve(Container& c, size_t s) {
+      c.reserve(s);
+    }
+  };
+
+  template<typename Container>
+  struct reserve_switch<Container, false> {
+    static void reserve(Container& c, size_t s) {}
+  };
+
+  template<typename Container>
+  struct container_details_base : public reserve_switch<Container> {
+    using T = typename Container::value_type;
+  };
+
+  template<typename Container>
+  struct pushback_details : public container_details_base<Container> {
+    template<typename ...Args>
+    static void insert(Container& c, Args&& ...args) {
+      c.emplace_back(std::forward<Args>(args)...);
+    }
+  };
+}
+
+template<typename T, typename ...Ts>
 struct denc_traits<
-  std::vector<T>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
-  typedef denc_traits<T> traits;
+  std::list<T, Ts...>,
+  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  : public _denc::container_base<std::list,
+				 _denc::pushback_details<std::list<T, Ts...>>,
+				 T, Ts...> {};
 
-  enum { supported = true };
-  enum { featured = traits::featured };
-  enum { bounded = false };
-
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::bounded &&
-                                 !traits::featured>::type
-  bound_encode(const std::vector<T>& s, size_t& p) {
-    p += sizeof(uint32_t);
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::bounded &&
-                                 !traits::featured, void>::type
-  bound_encode(const std::vector<T>& s, size_t& p) {
-    size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size);
-    p += sizeof(uint32_t) + elem_size * s.size();
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::bounded &&
-                                 traits::featured, void>::type
-  bound_encode(const std::vector<T>& s, size_t& p, uint64_t f) {
-    p += sizeof(uint32_t);
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::bounded &&
-                                 traits::featured>::type
-  bound_encode(const std::vector<T>& s, size_t& p, uint64_t f) {
-    size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size, f);
-    p += sizeof(uint32_t) + elem_size * s.size();
-  }
-
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::featured>::type
-  encode(const std::vector<T>& s, buffer::list::contiguous_appender& p) {
-    denc((uint32_t)s.size(), p);
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::featured>::type
-    encode(const std::vector<T>& s, buffer::list::contiguous_appender& p,
-	   uint64_t f) {
-    denc((uint32_t)s.size(), p);
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  static void decode(std::vector<T>& s, buffer::ptr::iterator& p, uint64_t f=0) {
-    s.clear();
-    uint32_t num;
-    denc(num, p);
-    s.resize(num);
-    for (unsigned i=0; i<num; ++i) {
-      denc(s[i], p, f);
-    }
-  }
-
-  // nohead
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::featured>::type
-  encode_nohead(const std::vector<T>& s, buffer::list::contiguous_appender& p) {
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::featured>::type
-  encode_nohead(const std::vector<T>& s, buffer::list::contiguous_appender& p,
-	   uint64_t f) {
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  static void decode_nohead(size_t num, std::vector<T>& s,
-			    buffer::ptr::iterator& p, uint64_t f=0) {
-    s.resize(num);
-    for (unsigned i=0; i<num; ++i) {
-      denc(s[i], p, f);
-    }
-  }
-
-};
-
-//
-// std::set<T>
-//
-template<typename T>
+template<typename T, typename ...Ts>
 struct denc_traits<
-  std::set<T>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
-  typedef denc_traits<T> traits;
+  std::vector<T, Ts...>,
+  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  : public _denc::container_base<std::vector,
+				 _denc::pushback_details<std::vector<T, Ts...>>,
+				 T, Ts...> {};
 
-  enum { supported = true };
-  enum { featured = traits::featured };
-  enum { bounded = false };
+namespace _denc {
+  template<typename Container>
+  struct setlike_details : public container_details_base<Container> {
+    using T = typename Container::value_type;
+    template<typename ...Args>
+    static void insert(Container& c, Args&& ...args) {
+      c.emplace_hint(c.cend(), std::forward<Args>(args)...);
+    }
+  };
+}
 
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::bounded &&
-                                 !traits::featured>::type
-  bound_encode(const std::set<T>& s, size_t& p) {
-    p += sizeof(uint32_t);
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::bounded &&
-                                 !traits::featured, void>::type
-  bound_encode(const std::set<T>& s, size_t& p) {
-    size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size);
-    p += sizeof(uint32_t) + elem_size * s.size();
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::bounded &&
-                                 traits::featured, void>::type
-  bound_encode(const std::set<T>& s, size_t& p, uint64_t f) {
-    p += sizeof(uint32_t);
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::bounded &&
-                                 !traits::featured>::type
-  bound_encode(const std::set<T>& s, size_t& p, uint64_t f) {
-    size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size, f);
-    p += sizeof(uint32_t) + elem_size * s.size();
-  }
-
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::featured>::type
-  encode(const std::set<T>& s, buffer::list::contiguous_appender& p) {
-    denc((uint32_t)s.size(), p);
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::featured>::type
-    encode(const std::set<T>& s, buffer::list::contiguous_appender& p,
-	   uint64_t f) {
-    denc((uint32_t)s.size(), p);
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  static void decode(std::set<T>& s, buffer::ptr::iterator& p, uint64_t f=0) {
-    s.clear();
-    uint32_t num;
-    denc(num, p);
-    while (num--) {
-      T temp;
-      denc(temp, p, f);
-      s.insert(temp);
-    }
-  }
-
-  // nohead
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 !traits::featured>::type
-  encode_nohead(const std::set<T>& s, buffer::list::contiguous_appender& p) {
-    for (const T& e : s) {
-      denc(e, p);
-    }
-  }
-  template<typename U=T>
-  static typename std::enable_if<sizeof(U) &&
-                                 traits::featured>::type
-  encode_nohead(const std::set<T>& s, buffer::list::contiguous_appender& p,
-		uint64_t f) {
-    for (const T& e : s) {
-      denc(e, p, f);
-    }
-  }
-  static void decode_nohead(size_t num, std::set<T>& s,
-			    buffer::ptr::iterator& p, uint64_t f=0) {
-    s.clear();
-    while (num--) {
-      T temp;
-      denc(temp, p, f);
-      s.insert(temp);
-    }
-  }
-
-};
-
-//
-// std::map<A, B>
-//
-template<typename A, typename B>
+template<typename T, typename ...Ts>
 struct denc_traits<
-  std::map<A, B>,
+  std::set<T, Ts...>,
+  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  : public _denc::container_base<std::set,
+				 _denc::setlike_details<std::set<T, Ts...>>,
+				 T, Ts...> {};
+
+namespace _denc {
+  template<typename Container>
+  struct maplike_details : public container_details_base<Container> {
+    using T = std::pair<typename Container::key_type,
+			typename Container::mapped_type>;
+    template<typename ...Args>
+    static void insert(Container& c, Args&& ...args) {
+      c.emplace_hint(c.cend(), std::forward<Args>(args)...);
+    }
+  };
+}
+
+template<typename A, typename B, typename ...Ts>
+struct denc_traits<
+  std::map<A, B, Ts...>,
   typename std::enable_if<denc_traits<A>::supported != 0 &&
-			  denc_traits<B>::supported != 0>::type> {
-  typedef denc_traits<A> a_traits;
-  typedef denc_traits<B> b_traits;
+			  denc_traits<B>::supported != 0>::type>
+  : public _denc::container_base<std::map,
+				 _denc::maplike_details<std::map<A, B, Ts...>>,
+				 A, B, Ts...> {};
 
-  enum { supported = true };
-  enum { featured = a_traits::featured || b_traits::featured };
-  enum { bounded = a_traits::bounded && b_traits::bounded };
-
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !bounded &&
-				 !featured>::type
-  bound_encode(const std::map<A,B>& v, size_t& p) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p);
-      denc(i.second, p);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !bounded &&
-				 featured, void>::type
-  bound_encode(const std::map<A,B>& v, size_t& p, uint64_t f) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p, f);
-      denc(i.second, p, f);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 bounded &&
-				 !featured>::type
-  bound_encode(const std::map<A,B>& v, size_t& p) {
-    denc((uint32_t)v.size(), p);
-    size_t elem_size = 0;
-    denc(*(A*)nullptr, elem_size);
-    denc(*(B*)nullptr, elem_size);
-    p += v.size() * elem_size;
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 bounded &&
-				 featured, void>::type
-  bound_encode(const std::map<A,B>& v, size_t& p, uint64_t f) {
-    denc((uint32_t)v.size(), p);
-    size_t elem_size = 0;
-    denc(*(A*)nullptr, elem_size, f);
-    denc(*(B*)nullptr, elem_size, f);
-    p += v.size() * elem_size;
-  }
-
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !featured>::type
-  encode(const std::map<A,B>& v, bufferlist::contiguous_appender& p) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p);
-      denc(i.second, p);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 featured, void>::type
-  encode(const std::map<A,B>& v, bufferlist::contiguous_appender& p,
-	   uint64_t f) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p, f);
-      denc(i.second, p, f);
-    }
-  }
-
-  static void decode(std::map<A,B>& v, buffer::ptr::iterator& p, uint64_t f=0) {
-    v.clear();
-    uint32_t num;
-    denc(num, p);
-    A key;
-    while (num--) {
-      denc(key, p, f);
-      denc(v[key], p, f);
-    }
-  }
-
-  // nohead variants
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !featured>::type
-  encode_nohead(const std::map<A,B>& v, bufferlist::contiguous_appender& p) {
-    for (const auto& i : v) {
-      denc(i.first, p);
-      denc(i.second, p);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 featured, void>::type
-  encode_nohead(const std::map<A,B>& v, bufferlist::contiguous_appender& p,
-		uint64_t f) {
-    for (const auto& i : v) {
-      denc(i.first, p, f);
-      denc(i.second, p, f);
-    }
-  }
-  static void decode_nohead(size_t num, std::map<A,B>& v,
-			    buffer::ptr::iterator& p,
-			    uint64_t f=0) {
-    v.clear();
-    A key;
-    while (num--) {
-      denc(key, p, f);
-      denc(v[key], p, f);
-    }
-  }
-};
-
-// boost::container::flat_map
-template<typename A, typename B>
+template<typename A, typename B, typename ...Ts>
 struct denc_traits<
-  boost::container::flat_map<A, B>,
+  boost::container::flat_map<A, B, Ts...>,
   typename std::enable_if<denc_traits<A>::supported != 0 &&
-			  denc_traits<B>::supported != 0>::type> {
-  typedef denc_traits<A> a_traits;
-  typedef denc_traits<B> b_traits;
-
-  enum { supported = true };
-  enum { featured = a_traits::featured || b_traits::featured };
-  enum { bounded = a_traits::bounded && b_traits::bounded };
-
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !bounded &&
-				 !featured>::type
-  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p);
-      denc(i.second, p);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !bounded &&
-				 featured, void>::type
-  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p,
-	       uint64_t f) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p, f);
-      denc(i.second, p, f);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 bounded &&
-				 !featured>::type
-  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p) {
-    denc((uint32_t)v.size(), p);
-    size_t elem_size = 0;
-    denc(*(A*)nullptr, elem_size);
-    denc(*(B*)nullptr, elem_size);
-    p += v.size() * elem_size;
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 bounded &&
-				 featured, void>::type
-  bound_encode(const boost::container::flat_map<A,B>& v, size_t& p,
-	       uint64_t f) {
-    denc((uint32_t)v.size(), p);
-    size_t elem_size = 0;
-    denc(*(A*)nullptr, elem_size, f);
-    denc(*(B*)nullptr, elem_size, f);
-    p += v.size() * elem_size;
-  }
-
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !featured>::type
-  encode(const boost::container::flat_map<A,B>& v,
-	 bufferlist::contiguous_appender& p) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p);
-      denc(i.second, p);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 featured, void>::type
-  encode(const boost::container::flat_map<A,B>& v,
-	 bufferlist::contiguous_appender& p,
-	   uint64_t f) {
-    denc((uint32_t)v.size(), p);
-    for (const auto& i : v) {
-      denc(i.first, p, f);
-      denc(i.second, p, f);
-    }
-  }
-
-  static void decode(boost::container::flat_map<A,B>& v,
-		     buffer::ptr::iterator& p) {
-    v.clear();
-    uint32_t num;
-    denc(num, p);
-    A key;
-    while (num--) {
-      denc(key, p);
-      denc(v[key], p);
-    }
-  }
-
-  // nohead variants
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 !featured>::type
-  encode_nohead(const boost::container::flat_map<A,B>& v,
-		bufferlist::contiguous_appender& p) {
-    for (const auto& i : v) {
-      denc(i.first, p);
-      denc(i.second, p);
-    }
-  }
-  template<typename AA=A>
-  static typename std::enable_if<sizeof(AA) &&
-				 featured, void>::type
-  encode_nohead(const boost::container::flat_map<A,B>& v,
-		bufferlist::contiguous_appender& p,
-		uint64_t f) {
-    for (const auto& i : v) {
-      denc(i.first, p, f);
-      denc(i.second, p, f);
-    }
-  }
-  static void decode_nohead(size_t num, boost::container::flat_map<A,B>& v,
-			    buffer::ptr::iterator& p) {
-    v.clear();
-    A key;
-    while (num--) {
-      denc(key, p);
-      denc(v[key], p);
-    }
-  }
-};
+			  denc_traits<B>::supported != 0>::type>
+  : public _denc::container_base<
+  boost::container::flat_map,
+  _denc::maplike_details<boost::container::flat_map<
+			   A, B, Ts...>>,
+  A, B, Ts...> {};
 
 // ----------------------------------------------------------------------
 // class helpers

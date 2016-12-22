@@ -198,11 +198,11 @@ struct legacy_t {
 };
 WRITE_CLASS_ENCODER(legacy_t)
 
-TEST(denc, vector)
-{
+template<template<class> class C>
+void test_common_veclist(const char* c) {
   {
-    cout << "vector<string>" << std::endl;
-    std::vector<string> s;
+    cout << c << "<std::string>" << std::endl;
+    C<std::string> s;
     s.push_back("foo");
     s.push_back("bar");
     s.push_back("baz");
@@ -210,20 +210,32 @@ TEST(denc, vector)
     test_denc(s);
   }
   {
-    cout << "vector<int32_t>" << std::endl;
-    std::vector<int32_t> s;
+    cout << c << "<int32_t>" << std::endl;
+    C<int32_t> s;
     s.push_back(1);
     s.push_back(2);
     s.push_back(3);
     test_denc(s);
   }
   {
-    cout << "vector<legacy_t>" << std::endl;
-    std::vector<legacy_t> s;
+    cout << c << "<legacy_t>" << std::endl;
+    C<legacy_t> s;
     s.push_back(legacy_t(1));
     s.push_back(legacy_t(2));
     test_encode_decode(s);
   }
+}
+
+// We only care about specializing the type, all other template
+// parameters should have the default values. (Like first-class
+// functions, first-class templates do not bring their defaults.)
+
+template<typename T>
+using default_vector = std::vector<T>;
+
+TEST(denc, vector)
+{
+  test_common_veclist<default_vector>("std::vector");
   {
     counts.reset();
     vector<denc_counter_t> v, v2;
@@ -252,31 +264,12 @@ TEST(denc, vector)
   }
 }
 
+template<typename T>
+using default_list = std::list<T>;
+
 TEST(denc, list)
 {
-  {
-    cout << "list<string>" << std::endl;
-    std::list<string> s;
-    s.push_back("foo");
-    s.push_back("bar");
-    s.push_back("baz");
-    test_denc(s);
-  }
-  {
-    cout << "list<int32_t>" << std::endl;
-    std::list<int32_t> s;
-    s.push_back(1);
-    s.push_back(2);
-    s.push_back(3);
-    test_denc(s);
-  }
-  {
-    cout << "list<legacy_t>" << std::endl;
-    std::list<legacy_t> s;
-    s.push_back(legacy_t(1));
-    s.push_back(legacy_t(2));
-    test_encode_decode(s);
-  }
+  test_common_veclist<default_list>("std::list");
   {
     counts.reset();
     list<denc_counter_bounded_t> l, l2;
@@ -402,34 +395,48 @@ TEST(denc, pair)
   ::encode(lp, bl);
 }
 
-TEST(denc, map)
-{
+template<template<class, class> class C>
+void test_common_maplike(const char* c) {
   {
-    cout << "map<string,foo_t>" << std::endl;
-    std::map<string,foo_t> s;
+    cout << c << "<std::string, foo_t>" << std::endl;
+    C<string, foo_t> s;
     s["foo"] = foo_t();
     s["bar"] = foo_t();
     s["baz"] = foo_t();
     test_denc(s);
   }
   {
-    cout << "map<string,bar_t>" << std::endl;
-    std::map<string,bar_t> s;
+    cout << c << "<std::string, bar_t>" << std::endl;
+    C<string, bar_t> s;
     s["foo"] = bar_t();
     s["bar"] = bar_t();
     s["baz"] = bar_t();
     test_denc_featured(s);
   }
   {
-    cout << "map<legacy_t>" << std::endl;
-    std::map<string,legacy_t> s;
+    cout << c << "<std::string, legacy_t>" << std::endl;
+    C<std::string, legacy_t> s;
     s["foo"] = legacy_t(1);
     s["bar"] = legacy_t(2);
     test_encode_decode(s);
   }
 }
 
+template<typename U, typename V>
+using default_map = std::map<U, V>;
 
+TEST(denc, map)
+{
+  test_common_maplike<default_map>("std::map");
+}
+
+template<typename U, typename V>
+using default_flat_map = boost::container::flat_map<U, V>;
+
+TEST(denc, flat_map)
+{
+  test_common_maplike<default_flat_map>("boost::container::flat_map");
+}
 
 TEST(denc, bufferptr_shallow_and_deep) {
   // shallow encode
