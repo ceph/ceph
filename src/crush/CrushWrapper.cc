@@ -577,27 +577,27 @@ int CrushWrapper::get_children(int id, list<int> *children)
 }
 
 
-int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
+int CrushWrapper::insert_item　(CephContext *cct, int item, float weight, string name,
 			      const map<string,string>& loc)  // typename -> bucketname
 {
 
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
 
-  if (!is_valid_crush_name(name))
+  if (!is_valid_crush_name(name))//检查是否合法名称
     return -EINVAL;
 
-  if (!is_valid_crush_loc(cct, loc))
+  if (!is_valid_crush_loc(cct, loc))//检查loc是否合法名称
     return -EINVAL;
 
-  if (name_exists(name)) {
+  if (name_exists(name)) {//如果名称已存在，则要求item与此名称对应的id相同
     if (get_item_id(name) != item) {
       ldout(cct, 10) << "device name '" << name << "' already exists as id "
 		     << get_item_id(name) << dendl;
       return -EEXIST;
     }
   } else {
-    set_item_name(item, name);
+    set_item_name(item, name);//设置名称对应的id号
   }
 
   int cur = item;
@@ -606,12 +606,12 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   // the more detail in the insert_item method declaration in CrushWrapper.h
   for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); ++p) {
     // ignore device type
-    if (p->first == 0)
+    if (p->first == 0)//默认osd的id为０
       continue;
 
     // skip types that are unspecified
     map<string,string>::const_iterator q = loc.find(p->second);
-    if (q == loc.end()) {
+    if (q == loc.end()) {//loc中没有包含type_map中的类型，警告
       ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
@@ -626,7 +626,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
         ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r) << dendl;
         return r;
       }
-      set_item_name(newid, q->second);
+      set_item_name(newid, q->second);//设置bucket的id号
       
       cur = newid;
       continue;
@@ -1782,6 +1782,7 @@ bool CrushWrapper::is_valid_crush_name(const string& s)
 {
   if (s.empty())
     return false;
+  //crash名称中仅容许含有[-,_,.,0-9,A-Z,a-z]
   for (string::const_iterator p = s.begin(); p != s.end(); ++p) {
     if (!(*p == '-') &&
 	!(*p == '_') &&

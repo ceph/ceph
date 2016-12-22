@@ -111,7 +111,7 @@ struct ceph_eversion {
 
 /* status bits */
 #define CEPH_OSD_EXISTS  (1<<0)
-#define CEPH_OSD_UP      (1<<1)
+#define CEPH_OSD_UP      (1<<1)　　//用于标注osd处于up状态
 #define CEPH_OSD_AUTOOUT (1<<2)  /* osd was automatically marked out */
 #define CEPH_OSD_NEW     (1<<3)  /* osd is new, never marked in */
 
@@ -119,7 +119,7 @@ extern const char *ceph_osd_state_name(int s);
 
 /* osd weights.  fixed point value: 0x10000 == 1.0 ("in"), 0 == "out" */
 #define CEPH_OSD_IN  0x10000
-#define CEPH_OSD_OUT 0
+#define CEPH_OSD_OUT 0　//权重为０时，标明处于out状态
 
 #define CEPH_OSD_MAX_PRIMARY_AFFINITY 0x10000
 #define CEPH_OSD_DEFAULT_PRIMARY_AFFINITY 0x10000

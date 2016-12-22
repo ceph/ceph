@@ -24,18 +24,19 @@
 
 #define dout_subsys ceph_subsys_
 
+//在ifa中找一个属于networks网络中的ip{netowrks可能有多个子网，用';,= \t'隔开
 static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 						     const struct ifaddrs *ifa,
 						     const std::string &networks)
 {
   std::list<string> nets;
-  get_str_list(networks, nets);
+  get_str_list(networks, nets);//split string by ',;'
 
   for(std::list<string>::iterator s = nets.begin(); s != nets.end(); ++s) {
       struct sockaddr net;
       unsigned int prefix_len;
 
-      if (!parse_network(s->c_str(), &net, &prefix_len)) {
+      if (!parse_network(s->c_str(), &net, &prefix_len)) {//解释格式a.a.a.a/32
 	lderr(cct) << "unable to parse network: " << *s << dendl;
 	exit(1);
       }
@@ -71,7 +72,7 @@ static void fill_in_one_address(CephContext *cct,
 				const char *conf_var)
 {
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks);
-  if (!found) {
+  if (!found) {//如果没有找到，退出
     lderr(cct) << "unable to find any IP address in networks: " << networks << dendl;
     exit(1);
   }
@@ -105,7 +106,7 @@ static void fill_in_one_address(CephContext *cct,
 void pick_addresses(CephContext *cct, int needs)
 {
   struct ifaddrs *ifa;
-  int r = getifaddrs(&ifa);
+  int r = getifaddrs(&ifa);//拿到所有接口
   if (r<0) {
     string err = cpp_strerror(errno);
     lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
@@ -113,12 +114,14 @@ void pick_addresses(CephContext *cct, int needs)
   }
 
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC)
+		  //如果要选public地址，且没有给出public_addr,给出了public_network
       && cct->_conf->public_addr.is_blank_ip()
       && !cct->_conf->public_network.empty()) {
     fill_in_one_address(cct, ifa, cct->_conf->public_network, "public_addr");
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER)
+		  //如果要选cluster地址，且没有给出cluster_addr,给出了cluster_network
       && cct->_conf->cluster_addr.is_blank_ip()
       && !cct->_conf->cluster_network.empty()) {
     fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");

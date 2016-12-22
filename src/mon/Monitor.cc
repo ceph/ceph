@@ -162,7 +162,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader_supported_mon_commands_size(0),
   store(s),
   
-  state(STATE_PROBING),
+  state(STATE_PROBING),//设置为探测状态
   
   elector(this),
   required_features(0),
@@ -745,7 +745,7 @@ int Monitor::preinit()
   {
     int r = check_fsid();
     if (r == -ENOENT)
-      r = write_fsid();
+      r = write_fsid();//如果不存在，就写
     if (r < 0) {
       lock.Unlock();
       return r;
@@ -768,7 +768,8 @@ int Monitor::preinit()
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
       monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
-				  &extra_probe_peers);
+				  &extra_probe_peers);//将monmap变更为inital_members中指出的成员，针对自身当前记录的monmap
+      //计算出需额外探测的mon
 
       dout(10) << " monmap is " << *monmap << dendl;
       dout(10) << " extra probe peers " << extra_probe_peers << dendl;
@@ -810,7 +811,7 @@ int Monitor::preinit()
   sync_last_committed_floor = store->get("mon_sync", "last_committed_floor");
   dout(10) << "sync_last_committed_floor " << sync_last_committed_floor << dendl;
 
-  init_paxos();
+  init_paxos();//调用paxos-service的init,flush,post_flush
   health_monitor->init();
 
   if (is_keyring_required()) {
@@ -949,7 +950,7 @@ int Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
-  bootstrap();
+  bootstrap();//monitor启动
 
   // encode command sets
   const MonCommand *cmds;
@@ -1116,14 +1117,14 @@ void Monitor::bootstrap()
 
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddr());
-  if (newrank < 0 && rank >= 0) {
+  if (newrank < 0 && rank >= 0) {//之前有，现在没有，自杀
     // was i ever part of the quorum?
     if (has_ever_joined) {
       dout(0) << " removed from monmap, suicide." << dendl;
       exit(0);
     }
   }
-  if (newrank != rank) {
+  if (newrank != rank) {//更新
     dout(0) << " my rank is now " << newrank << " (was " << rank << ")" << dendl;
     messenger->set_myname(entity_name_t::MON(newrank));
     rank = newrank;
@@ -1133,7 +1134,7 @@ void Monitor::bootstrap()
   }
 
   // reset
-  state = STATE_PROBING;
+  state = STATE_PROBING;//置为probing状态
 
   _reset();
 
@@ -1145,7 +1146,7 @@ void Monitor::bootstrap()
   }
 
   // singleton monitor?
-  if (monmap->size() == 1 && rank == 0) {
+  if (monmap->size() == 1 && rank == 0) {//只有一个monitor，直接为leader
     win_standalone_election();
     return;
   }
@@ -1156,6 +1157,7 @@ void Monitor::bootstrap()
   if (monmap->contains(name))
     outside_quorum.insert(name);
 
+  //有多个monitors时，先与其它monitor进行探测，发OP_PROBE消息
   // probe monitors
   dout(10) << "probing other monitors" << dendl;
   for (unsigned i = 0; i < monmap->size(); i++) {
@@ -1163,6 +1165,7 @@ void Monitor::bootstrap()
       messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
 			      monmap->get_inst(i));
   }
+  //向额外需要探测的发送
   for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
        p != extra_probe_peers.end();
        ++p) {
@@ -1326,7 +1329,7 @@ void Monitor::sync_reset_provider()
   sync_providers.clear();
 }
 
-void Monitor::sync_start(entity_inst_t &other, bool full)
+void Monitor::sync_start(entity_inst_t &other, bool full)//开始同步状态
 {
   dout(10) << __func__ << " " << other << (full ? " full" : " recent") << dendl;
 
@@ -1339,16 +1342,16 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
   sync_full = full;
 
-  if (sync_full) {
+  if (sync_full) {//全同步
     // stash key state, and mark that we are syncing
     MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
     sync_stash_critical_state(t);
-    t->put("mon_sync", "in_sync", 1);
+    t->put("mon_sync", "in_sync", 1);//同步标记
 
     sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
     dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
-    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);
+    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);//记录同步版本
 
     store->apply_transaction(t);
 
@@ -1373,6 +1376,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
   sync_reset_timeout();
 
+  //发送全同步或者cookie
   MMonSync *m = new MMonSync(sync_full ? MMonSync::OP_GET_COOKIE_FULL : MMonSync::OP_GET_COOKIE_RECENT);
   if (!sync_full)
     m->last_committed = paxos->get_version();
@@ -1436,7 +1440,7 @@ void Monitor::sync_finish(version_t last_committed)
   bootstrap();
 }
 
-void Monitor::handle_sync(MonOpRequestRef op)
+void Monitor::handle_sync(MonOpRequestRef op)//处理同步消息
 {
   MMonSync *m = static_cast<MMonSync*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
@@ -1455,7 +1459,7 @@ void Monitor::handle_sync(MonOpRequestRef op)
     // client -----------
 
   case MMonSync::OP_COOKIE:
-    handle_sync_cookie(op);
+    handle_sync_cookie(op);//发送cookie
     break;
 
   case MMonSync::OP_CHUNK:
@@ -1607,7 +1611,7 @@ void Monitor::handle_sync_cookie(MonOpRequestRef op)
 {
   MMonSync *m = static_cast<MMonSync*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
-  if (sync_cookie) {
+  if (sync_cookie) {//非０，表示已开始同步
     dout(10) << __func__ << " already have a cookie, ignoring" << dendl;
     return;
   }
@@ -1631,7 +1635,7 @@ void Monitor::sync_get_next_chunk()
     dout(20) << __func__ << " injecting delay of " << g_conf->mon_inject_sync_get_chunk_delay << dendl;
     usleep((long long)(g_conf->mon_inject_sync_get_chunk_delay * 1000000.0));
   }
-  MMonSync *r = new MMonSync(MMonSync::OP_GET_CHUNK, sync_cookie);
+  MMonSync *r = new MMonSync(MMonSync::OP_GET_CHUNK, sync_cookie);//发送get_chunk
   messenger->send_message(r, sync_provider);
 
   assert(g_conf->mon_sync_requester_kill_at != 4);
@@ -1746,22 +1750,22 @@ void Monitor::probe_timeout(int r)
   bootstrap();
 }
 
-void Monitor::handle_probe(MonOpRequestRef op)
+void Monitor::handle_probe(MonOpRequestRef op)//处理探测消息
 {
   MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
   dout(10) << "handle_probe " << *m << dendl;
 
-  if (m->fsid != monmap->fsid) {
+  if (m->fsid != monmap->fsid) {//如果两个不是一个fsid,则不处理。
     dout(0) << "handle_probe ignoring fsid " << m->fsid << " != " << monmap->fsid << dendl;
     return;
   }
 
   switch (m->op) {
-  case MMonProbe::OP_PROBE:
+  case MMonProbe::OP_PROBE://对方发送过来探测消息
     handle_probe_probe(op);
     break;
 
-  case MMonProbe::OP_REPLY:
+  case MMonProbe::OP_REPLY://对端响应的控测消息
     handle_probe_reply(op);
     break;
 
@@ -1793,7 +1797,7 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
     goto out;
   }
 
-  if (!is_probing() && !is_synchronizing()) {
+  if (!is_probing() && !is_synchronizing()) {//我们当前不处于probing,synchronizing状态
     // If the probing mon is way ahead of us, we need to re-bootstrap.
     // Normally we capture this case when we initially bootstrap, but
     // it is possible we pass those checks (we overlap with
@@ -1813,13 +1817,13 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
-  monmap->encode(r->monmap_bl, m->get_connection()->get_features());
+  monmap->encode(r->monmap_bl, m->get_connection()->get_features());//将自已的monmap发送给对方
   r->paxos_first_version = paxos->get_first_committed();
   r->paxos_last_version = paxos->get_version();
-  m->get_connection()->send_message(r);
+  m->get_connection()->send_message(r);//发送响应消息
 
   // did we discover a peer here?
-  if (!monmap->contains(m->get_source_addr())) {
+  if (!monmap->contains(m->get_source_addr())) {//如果我们的mon中没有包含这个source_addr,我们保存对端
     dout(1) << " adding peer " << m->get_source_addr()
 	    << " to list of hints" << dendl;
     extra_probe_peers.insert(m->get_source_addr());
@@ -1829,14 +1833,14 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   return;
 }
 
-void Monitor::handle_probe_reply(MonOpRequestRef op)
+void Monitor::handle_probe_reply(MonOpRequestRef op)//probe消息响应
 {
   MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
   dout(10) << "handle_probe_reply " << m->get_source_inst() << *m << dendl;
   dout(10) << " monmap is " << *monmap << dendl;
 
   // discover name and addrs during probing or electing states.
-  if (!is_probing() && !is_electing()) {
+  if (!is_probing() && !is_electing()) {//非probing,electing状态不处理
     return;
   }
 
@@ -1846,6 +1850,8 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
   // make sure it's actually different; the checks below err toward
   // taking the other guy's map, which could cause us to loop.
   if (!mybl.contents_equal(m->monmap_bl)) {
+	  //如果对方的monmap与自身的monmap不同
+	  //如果别的人版本大于自身，且自已没有加入，别人加入了，用别人的。
     MonMap *newmap = new MonMap;
     newmap->decode(m->monmap_bl);
     if (m->has_ever_joined && (newmap->get_epoch() > monmap->get_epoch() ||
@@ -1855,10 +1861,10 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       delete newmap;
       monmap->decode(m->monmap_bl);
 
-      bootstrap();
+      bootstrap();//换成新的monmap,重新启动
       return;
     }
-    delete newmap;
+    delete newmap;//删除掉，不用它的。
   }
 
   // rename peer?
@@ -1867,9 +1873,9 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     dout(10) << " renaming peer " << m->get_source_addr() << " "
 	     << peer_name << " -> " << m->name << " in my monmap"
 	     << dendl;
-    monmap->rename(peer_name, m->name);
+    monmap->rename(peer_name, m->name);//更正对方的名字
 
-    if (is_electing()) {
+    if (is_electing()) {//如果处于选举状态，重新boot
       bootstrap();
       return;
     }
@@ -1880,7 +1886,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
   // new initial peer?
   if (monmap->get_epoch() == 0 &&
       monmap->contains(m->name) &&
-      monmap->get_addr(m->name).is_blank_ip()) {
+      monmap->get_addr(m->name).is_blank_ip()) {//自身是0,对方有名字，但地址为空，加入地址，重启
     dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
     monmap->set_addr(m->name, m->get_source_addr());
 
@@ -1895,7 +1901,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 
   assert(paxos != NULL);
 
-  if (is_synchronizing()) {
+  if (is_synchronizing()) {//如果正同步，则返回
     dout(10) << " currently syncing" << dendl;
     return;
   }
@@ -1916,7 +1922,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 	       << " (too far ahead)"
 	       << dendl;
       cancel_probe_timeout();
-      sync_start(other, true);
+      sync_start(other, true);//同步开始
       return;
     }
     if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
@@ -1942,7 +1948,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     if (monmap->contains(name) &&
         !monmap->get_addr(name).is_blank_ip()) {
       // i'm part of the cluster; just initiate a new election
-      start_election();
+      start_election();//开始leader选举
     } else {
       dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
       messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
@@ -1962,7 +1968,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     if (outside_quorum.size() >= need) {
       if (outside_quorum.count(name)) {
         dout(10) << " that's enough to form a new quorum, calling election" << dendl;
-        start_election();
+        start_election();//足够一次新的leader选举
       } else {
         dout(10) << " that's enough to form a new quorum, but it does not include me; waiting" << dendl;
       }
@@ -1982,7 +1988,7 @@ void Monitor::join_election()
   logger->inc(l_mon_num_elections);
 }
 
-void Monitor::start_election()
+void Monitor::start_election()//开始选举
 {
   dout(10) << "start_election" << dendl;
   wait_for_paxos_write();
@@ -2067,7 +2073,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   if (classic_monitors)
     classic_mons = *classic_monitors;
 
-  paxos->leader_init();
+  paxos->leader_init();//针对leader进行初始化。
   // NOTE: tell monmap monitor first.  This is important for the
   // bootstrap case to ensure that the very first paxos proposal
   // codifies the monmap.  Otherwise any manner of chaos can ensue
@@ -2110,7 +2116,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
            << " mon_features are " << quorum_mon_features
            << dendl;
 
-  paxos->peon_init();
+  paxos->peon_init();//启动peon初始化
   _finish_svc_election();
   health_monitor->start(epoch);
 
@@ -5161,16 +5167,16 @@ int Monitor::check_fsid()
   // only keep the first line
   size_t pos = es.find_first_of('\n');
   if (pos != string::npos)
-    es.resize(pos);
+    es.resize(pos);//仅仅要'\n'之前的。
 
   dout(10) << "check_fsid cluster_uuid contains '" << es << "'" << dendl;
   uuid_d ondisk;
-  if (!ondisk.parse(es.c_str())) {
+  if (!ondisk.parse(es.c_str())) {//检查是否为合法uuid
     derr << "error: unable to parse uuid" << dendl;
     return -EINVAL;
   }
 
-  if (monmap->get_fsid() != ondisk) {
+  if (monmap->get_fsid() != ondisk) {//如果monmap中的uuid不等，则报错
     derr << "error: cluster_uuid file exists with value " << ondisk
 	 << ", != our uuid " << monmap->get_fsid() << dendl;
     return -EEXIST;
@@ -5210,13 +5216,13 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   // verify cluster fsid
   int r = check_fsid();
-  if (r < 0 && r != -ENOENT)
+  if (r < 0 && r != -ENOENT)//如果存在，但读取时有误，则返回失败
     return r;
 
   bufferlist magicbl;
-  magicbl.append(CEPH_MON_ONDISK_MAGIC);
+  magicbl.append(CEPH_MON_ONDISK_MAGIC);//写入magic value
   magicbl.append("\n");
-  t->put(MONITOR_NAME, "magic", magicbl);
+  t->put(MONITOR_NAME, "magic", magicbl);//加入magic
 
 
   features = get_initial_supported_features();
@@ -5226,10 +5232,11 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist monmapbl;
   monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
-  t->put("mkfs", "monmap", monmapbl);
+  t->put("mkfs", "monmap", monmapbl);//放入monmap
 
   if (osdmapbl.length()) {
     // make sure it's a valid osdmap
+	//检查传入的pbl是合法的osdmap
     try {
       OSDMap om;
       om.decode(osdmapbl);
@@ -5238,7 +5245,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       derr << "error decoding provided osdmap: " << e.what() << dendl;
       return -EINVAL;
     }
-    t->put("mkfs", "osdmap", osdmapbl);
+    t->put("mkfs", "osdmap", osdmapbl);//放入osdmap
   }
 
   if (is_keyring_required()) {
@@ -5279,10 +5286,10 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
     bufferlist keyringbl;
     keyring.encode_plaintext(keyringbl);
-    t->put("mkfs", "keyring", keyringbl);
+    t->put("mkfs", "keyring", keyringbl);//存入keyring
   }
-  write_fsid(t);
-  store->apply_transaction(t);
+  write_fsid(t);//存入uuid
+  store->apply_transaction(t);//固化
 
   return 0;
 }

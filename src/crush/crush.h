@@ -30,6 +30,8 @@
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
+//从undef用来标记出来，还没有处理过，none用来标记处理过了，还没有选择出来，所以需要两个。（第一眼看，觉得仅需要一个）
+//但我还是认为仅需要一个就能搞定（用一层循环来保证？）
 #define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
 #define CRUSH_ITEM_NONE   0x7fffffff  /* no result */
 
@@ -47,20 +49,20 @@ struct crush_rule_step {
 /* step op codes */
 enum {
 	CRUSH_RULE_NOOP = 0,
-	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */
-	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */
+	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */　//take子规则
+	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */ //choose子规则中的firstn模式
 				      /* arg2 = type */
-	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */
-	CRUSH_RULE_EMIT = 4,          /* no args */
-	CRUSH_RULE_CHOOSELEAF_FIRSTN = 6,
-	CRUSH_RULE_CHOOSELEAF_INDEP = 7,
+	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */ //choose子规则中indep模式
+	CRUSH_RULE_EMIT = 4,          /* no args */ //emit模式
+	CRUSH_RULE_CHOOSELEAF_FIRSTN = 6,//chooseleaf子规则中的firstn模式
+	CRUSH_RULE_CHOOSELEAF_INDEP = 7,//chooseleaf子规则中的indep模式
 
-	CRUSH_RULE_SET_CHOOSE_TRIES = 8, /* override choose_total_tries */
-	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */
-	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,
-	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,
-	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,
-	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13
+	CRUSH_RULE_SET_CHOOSE_TRIES = 8, /* override choose_total_tries */　//set_choose_tries子规则
+	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */ //set_chooseleaf_tries 子规则
+	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,//set_choose_local_tries 子规则
+	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,//set_choose_local_fallback_tries子规则
+	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,//set_chooseleaf_vary_r 子规则
+	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13//set_chooseleaf_stable子规则
 };
 
 /*
@@ -83,7 +85,7 @@ struct crush_rule_mask {
 };
 
 struct crush_rule {
-	__u32 len;
+	__u32 len;//steps数组的大小，step数组对应的是规则匹配后的action操作
 	struct crush_rule_mask mask;
 	struct crush_rule_step steps[0];
 };
@@ -132,7 +134,7 @@ struct crush_bucket {
 	__u8 alg;        /* one of CRUSH_BUCKET_* */
 	__u8 hash;       /* which hash function to use, CRUSH_HASH_* */
 	__u32 weight;    /* 16-bit fixed point */
-	__u32 size;      /* num items */
+	__u32 size;      /* num items */ //其下有多少个子项
 	__s32 *items;
 
 };
@@ -173,12 +175,12 @@ struct crush_bucket_straw2 {
  * CRUSH map includes all buckets, rules, etc.
  */
 struct crush_map {
-	struct crush_bucket **buckets;
-	struct crush_rule **rules;
+	struct crush_bucket **buckets;//保存bucket(按id索引）
+	struct crush_rule **rules;//保存规则（按id索引）
 
-	__s32 max_buckets;
-	__u32 max_rules;
-	__s32 max_devices;
+	__s32 max_buckets;//buckets内存当前最大容量
+	__u32 max_rules;//规则最大容量
+	__s32 max_devices;//最大的osd数目
 
 	/* choose local retries before re-descent */
 	__u32 choose_local_tries;
@@ -215,7 +217,7 @@ struct crush_map {
 
 	   Nothing stops the caller from allocating both in one swell
 	   foop and passing in two points, though. */
-	size_t working_size;
+	size_t working_size;//工作所需要的内存大小
 
 #ifndef __KERNEL__
 	/*
@@ -231,7 +233,7 @@ struct crush_map {
 	 * << CRUSH_BUCKET_WHATEVER).  The 0th bit is not used to
 	 * minimize confusion (bucket type values start at 1).
 	 */
-	__u32 allowed_bucket_algs;
+	__u32 allowed_bucket_algs;//指出容许bucket采用哪些算法
 
 	__u32 *choose_tries;
 #endif

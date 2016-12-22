@@ -106,7 +106,7 @@ int check_mon_data_exists()
 {
   string mon_data = g_conf->mon_data;
   struct stat buf;
-  if (::stat(mon_data.c_str(), &buf)) {
+  if (::stat(mon_data.c_str(), &buf)) {//检查文件是否存在
     if (errno != ENOENT) {
       cerr << "stat(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
     }
@@ -126,7 +126,7 @@ int check_mon_data_exists()
  *
  * @return **0** on success, -ENOTEMPTY if not empty or **-errno** otherwise.
  */
-int check_mon_data_empty()
+int check_mon_data_empty()//检查data目录是否为空，code为０时表示不为空
 {
   string mon_data = g_conf->mon_data;
 
@@ -141,12 +141,12 @@ int check_mon_data_empty()
   while ((de = ::readdir(dir))) {
     if (string(".") != de->d_name &&
 	string("..") != de->d_name &&
-	string("kv_backend") != de->d_name) {
+	string("kv_backend") != de->d_name) {//排除掉'.','..'.'kv_backend'后还有文件，则break
       code = -ENOTEMPTY;
       break;
     }
   }
-  if (!de && errno) {
+  if (!de && errno) {//读目录失败
     cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
     code = -errno;
   }
@@ -196,8 +196,8 @@ int main(int argc, const char **argv)
   std::string osdmapfn, inject_monmap, extract_monmap;
 
   vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  argv_to_vec(argc, argv, args);//将参数合入args中
+  env_to_vec(args);//将env合入args中
 
   // We need to specify some default values that may be overridden by the
   // user, that are specific to the monitor.  The options we are overriding
@@ -214,7 +214,7 @@ int main(int argc, const char **argv)
   //  leveldb_block_size        = 64*1024       = 65536     // 64KB
   //  leveldb_compression       = false
   //  leveldb_log               = ""
-  vector<const char*> def_args;
+  vector<const char*> def_args;//添加此参数，这些参数取消掉osd中的配置设定
   def_args.push_back("--leveldb-write-buffer-size=33554432");
   def_args.push_back("--leveldb-cache-size=536870912");
   def_args.push_back("--leveldb-block-size=65536");
@@ -271,7 +271,7 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
-  if (!args.empty()) {
+  if (!args.empty()) {//存在有不认识的命令行参数
     cerr << "too many arguments: " << args << std::endl;
     usage();
   }
@@ -295,26 +295,26 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
 
-    int err = check_mon_data_exists();
+    int err = check_mon_data_exists();//检查数据是否存在
     if (err == -ENOENT) {
-      if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
+      if (::mkdir(g_conf->mon_data.c_str(), 0755)) {//创建相应目录
 	cerr << "mkdir(" << g_conf->mon_data << ") : "
 	     << cpp_strerror(errno) << std::endl;
 	exit(1);
       }
-    } else if (err < 0) {
+    } else if (err < 0) {//已存在
       cerr << "error opening '" << g_conf->mon_data << "': "
            << cpp_strerror(-err) << std::endl;
       exit(-err);
     }
 
-    err = check_mon_data_empty();
-    if (err == -ENOTEMPTY) {
+    err = check_mon_data_empty();//检查数据是否为空
+    if (err == -ENOTEMPTY) {//不为空
       // Mon may exist.  Let the user know and exit gracefully.
       cerr << "'" << g_conf->mon_data << "' already exists and is not empty"
            << ": monitor may already exist" << std::endl;
       exit(0);
-    } else if (err < 0) {
+    } else if (err < 0) {//检查时出错
       cerr << "error checking if '" << g_conf->mon_data << "' is empty: "
            << cpp_strerror(-err) << std::endl;
       exit(-err);
@@ -330,40 +330,40 @@ int main(int argc, const char **argv)
     MonMap monmap;
 
     // load or generate monmap
-    if (g_conf->monmap.length()) {
+    if (g_conf->monmap.length()) {//如果monmap配置了
       int err = monmapbl.read_file(g_conf->monmap.c_str(), &error);
       if (err < 0) {
 	cerr << argv[0] << ": error reading " << g_conf->monmap << ": " << error << std::endl;
 	exit(1);
       }
       try {
-	monmap.decode(monmapbl);
+	monmap.decode(monmapbl);//尝试着解码
 
 	// always mark seed/mkfs monmap as epoch 0
-	monmap.set_epoch(0);
+	monmap.set_epoch(0);//设置为epoch
       }
       catch (const buffer::error& e) {
 	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << std::endl;
 	exit(1);
       }      
-    } else {
+    } else {//如果没有配置
       int err = monmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
 	cerr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << std::endl;
       }
 
       // am i part of the initial quorum?
-      if (monmap.contains(g_conf->name.get_id())) {
+      if (monmap.contains(g_conf->name.get_id())) {//检查自已是否被加入
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
       } else if (!g_conf->public_addr.is_blank_ip()) {
 	entity_addr_t a = g_conf->public_addr;
 	if (a.get_port() == 0)
 	  a.set_port(CEPH_MON_PORT);
-	if (monmap.contains(a)) {
+	if (monmap.contains(a)) {//monmap是否包含此地址
 	  string name;
 	  monmap.get_addr_name(a, name);
-	  monmap.rename(name, g_conf->name.get_id());
+	  monmap.rename(name, g_conf->name.get_id());//重命名
 	  cout << argv[0] << ": renaming mon." << name << " " << a
 	       << " to mon." << g_conf->name.get_id() << std::endl;
 	}
@@ -373,7 +373,7 @@ int main(int argc, const char **argv)
 	monmap.list_addrs(ls);
 	entity_addr_t local;
 
-	if (have_local_addr(g_ceph_context, ls, &local)) {
+	if (have_local_addr(g_ceph_context, ls, &local)) {//是否有合本地（配置在接口上）相同的ip地址，如果有，则返回到local
 	  string name;
 	  monmap.get_addr_name(local, name);
 
@@ -389,7 +389,7 @@ int main(int argc, const char **argv)
       }
     }
 
-    if (!g_conf->fsid.is_zero()) {
+    if (!g_conf->fsid.is_zero()) {//设置fsid
       monmap.fsid = g_conf->fsid;
       cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
     }
@@ -401,8 +401,9 @@ int main(int argc, const char **argv)
 
     //monmap.print(cout);
 
+    //开始处理osdmap
     // osdmap
-    if (osdmapfn.length()) {
+    if (osdmapfn.length()) {//配置了文件，则读取文件
       err = osdmapbl.read_file(osdmapfn.c_str(), &error);
       if (err < 0) {
 	cerr << argv[0] << ": error reading " << osdmapfn << ": "
@@ -412,18 +413,20 @@ int main(int argc, const char **argv)
     }
 
     // go
+    //读取创建monitor-db-store
     MonitorDBStore store(g_conf->mon_data);
     int r = store.create_and_open(cerr);
-    if (r < 0) {
+    if (r < 0) {//创建打开失败
       cerr << argv[0] << ": error opening mon data directory at '"
            << g_conf->mon_data << "': " << cpp_strerror(r) << std::endl;
       exit(1);
     }
     assert(r == 0);
 
+    //构造mon
     Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
     r = mon.mkfs(osdmapbl);
-    if (r < 0) {
+    if (r < 0) {//如果mkfs失败
       cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
       exit(1);
     }
@@ -431,25 +434,25 @@ int main(int argc, const char **argv)
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
     return 0;
-  }
+  }//mkfs选项执行完成
 
   err = check_mon_data_exists();
-  if (err < 0 && err == -ENOENT) {
+  if (err < 0 && err == -ENOENT) {//目录不存在
     cerr << "monitor data directory at '" << g_conf->mon_data << "'"
          << " does not exist: have you run 'mkfs'?" << std::endl;
     exit(1);
-  } else if (err < 0) {
+  } else if (err < 0) {//目录获取状态出错
     cerr << "error accessing monitor data directory at '"
          << g_conf->mon_data << "': " << cpp_strerror(-err) << std::endl;
     exit(1);
   }
 
   err = check_mon_data_empty();
-  if (err == 0) {
+  if (err == 0) {//空目录，则退出
     derr << "monitor data directory at '" << g_conf->mon_data
       << "' is empty: have you run 'mkfs'?" << dendl;
     exit(1);
-  } else if (err < 0 && err != -ENOTEMPTY) {
+  } else if (err < 0 && err != -ENOTEMPTY) {//读文件夹失败，则退出
     // we don't want an empty data dir by now
     cerr << "error accessing '" << g_conf->mon_data << "': "
          << cpp_strerror(-err) << std::endl;
@@ -458,6 +461,7 @@ int main(int argc, const char **argv)
 
   {
     // check fs stats. don't start if it's critically close to full.
+	//检查mon挂载点可用磁盘空间是否达到上限，如果达到，则不再启动
     ceph_data_stats_t stats;
     int err = get_fs_stats(stats, g_conf->mon_data.c_str());
     if (err < 0) {
@@ -465,7 +469,7 @@ int main(int argc, const char **argv)
            << std::endl;
       exit(-err);
     }
-    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
+    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {//mon挂载点的可用百分比过小，不启动
       cerr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
            << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
@@ -479,7 +483,7 @@ int main(int argc, const char **argv)
   // we fork early to prevent leveldb's environment static state from
   // screwing us over
   Preforker prefork;
-  if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
+  if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {//如果没有此标记，则需要变化为demon
     if (global_init_prefork(g_ceph_context) >= 0) {
       string err_msg;
       err = prefork.prefork(err_msg);
@@ -505,6 +509,7 @@ int main(int argc, const char **argv)
 #endif
   }
 
+  //找开db
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
   err = store->open(std::cerr);
   if (err < 0) {
@@ -514,29 +519,29 @@ int main(int argc, const char **argv)
   }
 
   bufferlist magicbl;
-  err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
+  err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);//读取magic
   if (err || !magicbl.length()) {
     derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
   string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n
-  if (strcmp(magic.c_str(), CEPH_MON_ONDISK_MAGIC)) {
+  if (strcmp(magic.c_str(), CEPH_MON_ONDISK_MAGIC)) {//版本不正确，退出
     derr << "mon fs magic '" << magic << "' != current '" << CEPH_MON_ONDISK_MAGIC << "'" << dendl;
     prefork.exit(1);
   }
 
-  err = Monitor::check_features(store);
+  err = Monitor::check_features(store);//检查功能
   if (err < 0) {
     derr << "error checking features: " << cpp_strerror(err) << dendl;
     prefork.exit(1);
   }
 
   // inject new monmap?
-  if (!inject_monmap.empty()) {
+  if (!inject_monmap.empty()) {//注入新的monmap
     bufferlist bl;
     std::string error;
     int r = bl.read_file(inject_monmap.c_str(), &error);
-    if (r) {
+    if (r) {//解析出错
       derr << "unable to read monmap from " << inject_monmap << ": "
 	   << error << dendl;
       prefork.exit(1);
@@ -546,7 +551,7 @@ int main(int argc, const char **argv)
     version_t v = store->get("monmap", "last_committed");
     dout(0) << "last committed monmap epoch is " << v << ", injected map will be " << (v+1)
             << dendl;
-    v++;
+    v++;//增加版本号
 
     // set the version
     MonMap tmp;
@@ -554,10 +559,10 @@ int main(int argc, const char **argv)
     if (tmp.get_epoch() != v) {
       dout(0) << "changing monmap epoch from " << tmp.get_epoch()
            << " to " << v << dendl;
-      tmp.set_epoch(v);
+      tmp.set_epoch(v);//注入的monmap版本可能不一样，变更版本
     }
     bufferlist mapbl;
-    tmp.encode(mapbl, CEPH_FEATURES_ALL);
+    tmp.encode(mapbl, CEPH_FEATURES_ALL);//编码后，准备写入
     bufferlist final;
     ::encode(v, final);
     ::encode(mapbl, final);
@@ -567,11 +572,11 @@ int main(int argc, const char **argv)
     t->put("monmap", v, mapbl);
     t->put("monmap", "latest", final);
     t->put("monmap", "last_committed", v);
-    store->apply_transaction(t);
+    store->apply_transaction(t);//完成写入
 
     dout(0) << "done." << dendl;
     prefork.exit(0);
-  }
+  }//完成注入monmap
 
   // monmap?
   MonMap monmap;
@@ -579,80 +584,83 @@ int main(int argc, const char **argv)
     // note that even if we don't find a viable monmap, we should go ahead
     // and try to build it up in the next if-else block.
     bufferlist mapbl;
-    int err = obtain_monmap(*store, mapbl);
+    int err = obtain_monmap(*store, mapbl);//看查看db中是否有monmap
     if (err >= 0) {
       try {
-        monmap.decode(mapbl);
+        monmap.decode(mapbl);//解码
       } catch (const buffer::error& e) {
         cerr << "can't decode monmap: " << e.what() << std::endl;
       }
     } else {
       derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
     }
-    if (!extract_monmap.empty()) {
-      int r = mapbl.write_file(extract_monmap.c_str());
-      if (r < 0) {
+    if (!extract_monmap.empty()) {//要求导出monmap
+      int r = mapbl.write_file(extract_monmap.c_str());//将当前monmap写入文件“解码失败的话，可以导出的不能用“
+      if (r < 0) {//写入失败
 	r = -errno;
 	derr << "error writing monmap to " << extract_monmap << ": " << cpp_strerror(r) << dendl;
 	prefork.exit(1);
       }
       derr << "wrote monmap to " << extract_monmap << dendl;
       prefork.exit(0);
-    }
-  }
+    }//要求导出mon处理完成
+  }//完成monmap加载（自db中读取）
 
   // this is what i will bind to
   entity_addr_t ipaddr;
 
-  if (monmap.contains(g_conf->name.get_id())) {
+  if (monmap.contains(g_conf->name.get_id())) {//如果mon中有自身
     ipaddr = monmap.get_addr(g_conf->name.get_id());
 
     // print helpful warning if the conf file doesn't match
     entity_addr_t conf_addr;
     std::vector <std::string> my_sections;
-    g_conf->get_my_sections(my_sections);
+    g_conf->get_my_sections(my_sections);//拿到我自已的配置段
     std::string mon_addr_str;
     if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
-				       mon_addr_str, true) == 0) {
+				       mon_addr_str, true) == 0) {//从段里取配置的mon addr
       if (conf_addr.parse(mon_addr_str.c_str()) && (ipaddr != conf_addr)) {
+    	  //如果monmap中的地址与自身配置不一致，报错
 	derr << "WARNING: 'mon addr' config option " << conf_addr
 	     << " does not match monmap file" << std::endl
 	     << "         continuing with monmap configuration" << dendl;
       }
     }
   } else {
+	//如果mon中没有自已
+	//将自已加入
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
-    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-    if (!g_conf->public_addr.is_blank_ip()) {
+    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);//选public_addr地址
+    if (!g_conf->public_addr.is_blank_ip()) {//如果选择出来了
       ipaddr = g_conf->public_addr;
       if (ipaddr.get_port() == 0)
-	ipaddr.set_port(CEPH_MON_PORT);
+	ipaddr.set_port(CEPH_MON_PORT);//设port
       dout(0) << "using public_addr " << g_conf->public_addr << " -> "
 	      << ipaddr << dendl;
-    } else {
+    } else {//如果没有选择出来public addr
       MonMap tmpmap;
-      int err = tmpmap.build_initial(g_ceph_context, cerr);
-      if (err < 0) {
+      int err = tmpmap.build_initial(g_ceph_context, cerr);//自配置文件等中获取mon列表
+      if (err < 0) {//初始化失败
 	derr << argv[0] << ": error generating initial monmap: "
              << cpp_strerror(err) << dendl;
 	usage();
 	prefork.exit(1);
       }
-      if (tmpmap.contains(g_conf->name.get_id())) {
+      if (tmpmap.contains(g_conf->name.get_id())) {//再检查自身
 	ipaddr = tmpmap.get_addr(g_conf->name.get_id());
-      } else {
+      } else {//仍不存在，退出
 	derr << "no public_addr or public_network specified, and " << g_conf->name
 	     << " not present in monmap or ceph.conf" << dendl;
 	prefork.exit(1);
       }
     }
-  }
+  }//检查自身是否在monmap中
 
   // bind
-  int rank = monmap.get_rank(g_conf->name.get_id());
-  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
-				      entity_name_t::MON(rank), "mon",
+  int rank = monmap.get_rank(g_conf->name.get_id());//获取rank
+  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,//创建指定类型的消息
+				      entity_name_t::MON(rank), "mon",//rank的entity_name_t
 				      0, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
@@ -704,7 +712,7 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << dendl;
 
-  err = msgr->bind(ipaddr);
+  err = msgr->bind(ipaddr);//消息绑定ip地址
   if (err < 0) {
     derr << "unable to bind monitor to " << ipaddr << dendl;
     prefork.exit(1);
@@ -716,6 +724,7 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << std::endl;
 
+  //创建完消息，构造monitor
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
 		    msgr, &monmap);
@@ -742,7 +751,7 @@ int main(int argc, const char **argv)
     prefork.daemonize();
   }
 
-  msgr->start();
+  msgr->start();//消息启动
 
   mon->init();
 

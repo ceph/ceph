@@ -248,7 +248,7 @@ static void dashes_to_underscores(const char *input, char *output)
 /** Once we see a standalone double dash, '--', we should remove it and stop
  * looking for any other options and flags. */
 bool ceph_argparse_double_dash(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i)
+	std::vector<const char*>::iterator &i)//如果遇到"--"返回True
 {
   if (strcmp(*i, "--") == 0) {
     i = args.erase(i);

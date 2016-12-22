@@ -34,11 +34,12 @@ class CrushCompiler {
   typedef parse_tree_match_t::tree_iterator iter_t;
   typedef parse_tree_match_t::node_t node_t;
 
-  map<string, int> item_id;
-  map<int, string> id_item;
-  map<int, unsigned> item_weight;
-  map<string, int> type_id;
-  map<string, int> rule_id;
+  //相当于编译器中的符号表
+  map<string, int> item_id;//device/bucket名称与id对应关系
+  map<int, string> id_item;//device/bucket　id与名称对应关系
+  map<int, unsigned> item_weight;//device/bucket id与其对应的权重关系表（如果是bucket，则为所有item和起来的权重）
+  map<string, int> type_id;//自定义type与id对应关系
+  map<string, int> rule_id;//规则id到规则名称
 
   string string_node(node_t &node);
   int int_node(node_t &node); 

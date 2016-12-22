@@ -49,7 +49,7 @@ void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
   t->put(STORE_PREFIX, key, bl);
   if (cb)
     paxos->queue_pending_finisher(cb);
-  paxos->trigger_propose();
+  paxos->trigger_propose();//触发提案
 }
 
 void ConfigKeyService::store_delete(const string &key, Context *cb)
@@ -149,6 +149,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       goto out;
     }
     // we'll reply to the message once the proposal has been handled
+    //产生对key的一次提议
     store_put(key, data,
         new Monitor::C_Command(mon, op, 0, "value stored", 0));
     // return for now; we'll put the message once it's done.

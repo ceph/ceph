@@ -58,17 +58,18 @@ inline ostream& operator<<(ostream& out, const mon_info_t& mon) {
   return out;
 }
 
+//monmap　这张表来源于配置属于静态表。每个mon启动后，都会去读取，并产生这张表。
 class MonMap {
  public:
-  epoch_t epoch;       // what epoch/version of the monmap
+  epoch_t epoch;       // what epoch/version of the monmap　//版本号
   uuid_d fsid;
   utime_t last_changed;
   utime_t created;
 
-  map<string, mon_info_t> mon_info;
-  map<entity_addr_t, string> addr_mons;
+  map<string, mon_info_t> mon_info;//名称到地址
+  map<entity_addr_t, string> addr_mons;//地址到mons信息
 
-  vector<string> ranks;
+  vector<string> ranks;//所有mon名称
 
   /**
    * Persistent Features are all those features that once set on a
@@ -128,7 +129,7 @@ public:
    *
    * @param ls list to populate with the monitors' addresses
    */
-  void list_addrs(list<entity_addr_t>& ls) const {
+  void list_addrs(list<entity_addr_t>& ls) const {//列出mon_info中的所有public_addr
     for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
          p != mon_info.end();
          ++p) {
@@ -201,11 +202,11 @@ public:
     return false;
   }
 
-  string get_name(unsigned n) const {
+  string get_name(unsigned n) const {//给定id取对应的Ｍon名称
     assert(n < ranks.size());
     return ranks[n];
   }
-  string get_name(const entity_addr_t& a) const {
+  string get_name(const entity_addr_t& a) const {//给定地址，取mon名称
     map<entity_addr_t,string>::const_iterator p = addr_mons.find(a);
     if (p == addr_mons.end())
       return string();
@@ -213,13 +214,13 @@ public:
       return p->second;
   }
 
-  int get_rank(const string& n) {
+  int get_rank(const string& n) {//给定mon名称，取此mon对应的id,没有找到返回－１
     for (unsigned i = 0; i < ranks.size(); i++)
       if (ranks[i] == n)
 	return i;
     return -1;
   }
-  int get_rank(const entity_addr_t& a) {
+  int get_rank(const entity_addr_t& a) {//给定地址，取mon对应的id,找不到返回-1
     string n = get_name(a);
     if (n.empty())
       return -1;
@@ -229,34 +230,34 @@ public:
 	return i;
     return -1;
   }
-  bool get_addr_name(const entity_addr_t& a, string& name) {
+  bool get_addr_name(const entity_addr_t& a, string& name) {//给定地址，取mon以应名称
     if (addr_mons.count(a) == 0)
       return false;
     name = addr_mons[a];
     return true;
   }
 
-  const entity_addr_t& get_addr(const string& n) const {
+  const entity_addr_t& get_addr(const string& n) const {//给定mon取ip地址
     assert(mon_info.count(n));
     map<string,mon_info_t>::const_iterator p = mon_info.find(n);
     return p->second.public_addr;
   }
-  const entity_addr_t& get_addr(unsigned m) const {
+  const entity_addr_t& get_addr(unsigned m) const {//给定mon编号，取对应ip地址
     assert(m < ranks.size());
     return get_addr(ranks[m]);
   }
-  void set_addr(const string& n, const entity_addr_t& a) {
+  void set_addr(const string& n, const entity_addr_t& a) {//给定名称，取地址
     assert(mon_info.count(n));
     mon_info[n].public_addr = a;
     calc_ranks();
   }
-  entity_inst_t get_inst(const string& n) {
+  entity_inst_t get_inst(const string& n) {//给定名称，获取entity_inst_t类型
     assert(mon_info.count(n));
     int m = get_rank(n);
     assert(m >= 0); // vector can't take negative indicies
     return get_inst(m);
   }
-  entity_inst_t get_inst(unsigned m) const {
+  entity_inst_t get_inst(unsigned m) const {//给定id取entity_inst_t类型
     assert(m < ranks.size());
     entity_inst_t i;
     i.addr = get_addr(m);
@@ -271,7 +272,7 @@ public:
   }
   void decode(bufferlist::iterator &p);
 
-  void generate_fsid() {
+  void generate_fsid() {//随机生成fsid
     fsid.generate_random();
   }
 
@@ -292,7 +293,7 @@ public:
    * @param cct context (and associated config)
    * @param errout ostream to send error messages too
    */
-  int build_initial(CephContext *cct, ostream& errout);
+  int build_initial(CephContext *cct, ostream& errout);//自配置文件等中获取mon列表
 
   /**
    * build a monmap from a list of hosts or ips
@@ -303,7 +304,7 @@ public:
    * @param prefix prefix to prepend to generated mon names
    * @return 0 for success, -errno on error
    */
-  int build_from_host_list(std::string hosts, std::string prefix);
+  int build_from_host_list(std::string hosts, std::string prefix);//给一组列表，构造mon列表
 
   /**
    * filter monmap given a set of initial members.
@@ -327,7 +328,7 @@ public:
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(list<MonMap*>& o);
+  static void generate_test_instances(list<MonMap*>& o);//测试代码不看
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 

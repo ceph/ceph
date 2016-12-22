@@ -2256,7 +2256,7 @@ int OSD::init()
   }
 
   service.init();
-  service.publish_map(osdmap);
+  service.publish_map(osdmap);//启动时设置osd对应的osdmap{各PG将使用此版本}
   service.publish_superblock(superblock);
   service.max_oldest_map = superblock.oldest_map;
 
@@ -2299,7 +2299,7 @@ int OSD::init()
   check_config();
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
-  consume_map();
+  consume_map();//启动完成，设置osdmap
   peering_wq.drain();
 
   dout(0) << "done with init, starting boot process" << dendl;
@@ -6426,7 +6426,7 @@ void OSD::_dispatch(Message *m)
 
     // map and replication
   case CEPH_MSG_OSD_MAP:
-    handle_osd_map(static_cast<MOSDMap*>(m));
+    handle_osd_map(static_cast<MOSDMap*>(m));//处理osdmap消息
     break;
 
     // osd
@@ -7322,7 +7322,7 @@ void OSD::check_osdmap_features(ObjectStore *fs)
 }
 
 bool OSD::advance_pg(
-  epoch_t osd_epoch, PG *pg,
+  epoch_t osd_epoch, PG *pg,//osd_epoch是比当前记录在pg中的osdmap更大的版本
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
   set<boost::intrusive_ptr<PG> > *new_pgs)
@@ -7346,7 +7346,7 @@ bool OSD::advance_pg(
   for (;
        next_epoch <= osd_epoch && next_epoch <= max;
        ++next_epoch) {
-    OSDMapRef nextmap = service.try_get_map(next_epoch);
+    OSDMapRef nextmap = service.try_get_map(next_epoch);//获取next_epoch对应版本的osdmap(此时已写入硬盘，从硬盘中读取）
     if (!nextmap) {
       dout(20) << __func__ << " missing map " << next_epoch << dendl;
       // make sure max is bumped up so that we can get past any

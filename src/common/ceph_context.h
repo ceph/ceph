@@ -70,7 +70,7 @@ public:
   }
   void put();
 
-  md_config_t *_conf;
+  md_config_t *_conf;//配置
   ceph::logging::Log *_log;
 
   /* init ceph::crypto */

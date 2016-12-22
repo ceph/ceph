@@ -198,7 +198,7 @@ public:
   };
   
 private:
-  uuid_d fsid;
+  uuid_d fsid;//fs id号
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
   utime_t created, modified; // epoch start time
   int32_t pool_max;     // the largest pool num, ever
@@ -206,11 +206,11 @@ private:
   uint32_t flags;
 
   int num_osd;         // not saved; see calc_num_osds
-  int num_up_osd;      // not saved; see calc_num_osds
-  int num_in_osd;      // not saved; see calc_num_osds
+  int num_up_osd;      // not saved; see calc_num_osds //up的osd数目
+  int num_in_osd;      // not saved; see calc_num_osds //in的osd数目
 
   int32_t max_osd;
-  vector<uint8_t> osd_state;
+  vector<uint8_t> osd_state;//记录各osd的状态（状态是几个位的掩码，例如CEPH_OSD_UP）
 
   struct addrs_s {
     vector<ceph::shared_ptr<entity_addr_t> > client_addr;
@@ -221,6 +221,7 @@ private:
   };
   ceph::shared_ptr<addrs_s> osd_addrs;
 
+  //用于标记in,out
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
   ceph::shared_ptr< map<pg_t,vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)

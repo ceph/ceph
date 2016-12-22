@@ -266,7 +266,7 @@ private:
   /**
    * The state we are in.
    */
-  int state;
+  int state;//记录状态用
   /**
    * @}
    */
@@ -353,13 +353,13 @@ private:
    * and it will only be updated iif its value is higher than the one
    * already known by the Peon.
    */
-  version_t accepted_pn;
+  version_t accepted_pn;//我们接受的上一个提案号
   /**
    * The last_committed epoch of the leader at the time we accepted the last pn.
    *
    * This has NO SEMANTIC MEANING, and is there only for the debug output.
    */
-  version_t accepted_pn_from;
+  version_t accepted_pn_from;//我们接受的上一个按案号来自谁？
   /**
    * Map holding the first committed version by each quorum member.
    *
@@ -367,7 +367,7 @@ private:
    * When the Leader starts the collect phase, each Peon will reply with its
    * first committed version, which will then be kept in this map.
    */
-  map<int,version_t> peer_first_committed;
+  map<int,version_t> peer_first_committed;//记录对端的first_committed,键值为osd id
   /**
    * Map holding the last committed version by each quorum member.
    *
@@ -375,7 +375,7 @@ private:
    * When the Leader starts the collect phase, each Peon will reply with its
    * last committed version, which will then be kept in this map.
    */
-  map<int,version_t> peer_last_committed;
+  map<int,version_t> peer_last_committed;//记录对端的last_committed,键值为osd id
   /**
    * @}
    */
@@ -431,7 +431,7 @@ private:
    * is used to determine whether or not we have received replies from the
    * whole quorum.
    */
-  unsigned   num_last;
+  unsigned   num_last;//在collect阶段，我们需要收集多个响应，此值用于collect-reply标记有多少人进行了响应
   /**
    * Uncommitted value's version.
    *
@@ -471,7 +471,7 @@ private:
   /**
    * Used to specify when an on-going collect phase times out.
    */
-  Context    *collect_timeout_event;
+  Context    *collect_timeout_event;//收集阶段的timeout定时器
   /**
    * @}
    */
@@ -537,7 +537,7 @@ private:
    * participants has accepted the proposal), and when to extend the lease
    * (when all the quorum members have accepted the proposal).
    */
-  set<int>   accepted;
+  set<int>   accepted;//标记谁已确认此值
   /**
    * Callback to trigger a new election if the proposal is not accepted by the
    * full quorum within a given timeframe.

@@ -32,8 +32,8 @@
 
 class MonitorDBStore
 {
-  string path;
-  boost::scoped_ptr<KeyValueDB> db;
+  string path;//db位置
+  boost::scoped_ptr<KeyValueDB> db;//db操作类
   bool do_dump;
   int dump_fd_binary;
   std::ofstream dump_fd_json;
@@ -583,6 +583,7 @@ class MonitorDBStore
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
+    	//如果后面有一个'/'符，则跳过
       if (*rit != '/')
 	break;
     }
@@ -592,8 +593,8 @@ class MonitorDBStore
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
 					    kv_type,
-					    full_path);
-    if (!db_ptr) {
+					    full_path);//创建指定类型的kv db
+    if (!db_ptr) {//初始化db失败
       derr << __func__ << " error initializing "
 	   << kv_type << " db back storage in "
 	   << full_path << dendl;
@@ -621,7 +622,7 @@ class MonitorDBStore
     if (kv_type == "rocksdb")
       db->init(g_conf->mon_rocksdb_options);
     else
-      db->init();
+      db->init();//db初始化
   }
 
   int open(ostream &out) {
@@ -643,12 +644,12 @@ class MonitorDBStore
     // record the type before open
     string kv_type;
     int r = read_meta("kv_backend", &kv_type);
-    if (r < 0) {
+    if (r < 0) {//如果读取失败，则假设其为leveldb,并写入
       // assume old monitors that did not mark the type were leveldb.
       kv_type = "leveldb";
       r = write_meta("kv_backend", kv_type);
       if (r < 0)
-	return r;
+	return r;//写失败，返回r
     }
     _open(kv_type);
     r = db->create_and_open(out);
@@ -714,6 +715,7 @@ class MonitorDBStore
    * @param value pointer to value string
    * @returns 0 for success, or an error code
    */
+  //读取文件key中的内容，key文件位置由path指定，读取时，忽略末尾的空行
   int read_meta(const std::string& key,
 		std::string *value) const {
     char buf[4096];
@@ -722,10 +724,10 @@ class MonitorDBStore
     if (r <= 0)
       return r;
     // drop trailing newlines
-    while (r && isspace(buf[r-1])) {
+    while (r && isspace(buf[r-1])) {//丢弃掉末尾的空行
       --r;
     }
-    *value = string(buf, r);
+    *value = string(buf, r);//取前r行
     return 0;
   }
 

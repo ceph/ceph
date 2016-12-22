@@ -27,24 +27,25 @@ const struct sockaddr *find_ipv4_in_subnet(const struct ifaddrs *addrs,
 					   unsigned int prefix_len) {
   struct in_addr want, temp;
 
-  netmask_ipv4(&net->sin_addr, prefix_len, &want);
+  netmask_ipv4(&net->sin_addr, prefix_len, &want);//将net正式化，例如1.1.1.1/8=>1.0.0.0/8
 
-  for (; addrs != NULL; addrs = addrs->ifa_next) {
+  for (; addrs != NULL; addrs = addrs->ifa_next) {//遍历每个地址
 
     if (addrs->ifa_addr == NULL)
       continue;
 
-    if (strcmp(addrs->ifa_name, "lo") == 0)
+    if (strcmp(addrs->ifa_name, "lo") == 0)//跳过loop口
       continue;
 
-    if (addrs->ifa_addr->sa_family != net->sin_family)
+    if (addrs->ifa_addr->sa_family != net->sin_family)//跳过地址类型不一致的
       continue;
 
     struct in_addr *cur = &((struct sockaddr_in*)addrs->ifa_addr)->sin_addr;
     netmask_ipv4(cur, prefix_len, &temp);
+    //这种处理方式比较不推荐，这个prefix_len是由上层传入的，并没有取此接口对应的prefix_len
 
     if (temp.s_addr == want.s_addr) {
-      return addrs->ifa_addr;
+      return addrs->ifa_addr;//用第一个找到的地址
     }
   }
 
@@ -94,7 +95,7 @@ const struct sockaddr *find_ipv6_in_subnet(const struct ifaddrs *addrs,
   return NULL;
 }
 
-
+//找一个地址
 const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
 					 const struct sockaddr *net,
 					 unsigned int prefix_len) {
@@ -110,6 +111,7 @@ const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
 }
 
 
+//解释a.a.a.a/len格式，将解析结果放入netowrk,prefix_len中，解释失败返回false
 bool parse_network(const char *s, struct sockaddr *network, unsigned int *prefix_len) {
   char *slash = strchr((char*)s, '/');
   if (!slash) {

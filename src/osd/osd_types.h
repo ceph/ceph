@@ -1207,9 +1207,9 @@ struct pg_pool_t {
   }
 
   uint64_t flags;           ///< FLAG_*
-  __u8 type;                ///< TYPE_*
-  __u8 size, min_size;      ///< number of osds in each pg
-  __u8 crush_ruleset;       ///< crush placement rule set
+  __u8 type;                ///< TYPE_* //类型
+  __u8 size, min_size;      ///< number of osds in each pg //pg中需要的osd数量
+  __u8 crush_ruleset;       ///< crush placement rule set //crush规则集.
   __u8 object_hash;         ///< hash mapping object name to ps
 private:
   __u32 pg_num, pgp_num;    ///< number of pgs
@@ -1789,7 +1789,7 @@ struct object_stat_collection_t {
   void add(const object_stat_collection_t& o) {
     sum.add(o.sum);
   }
-  void sub(const object_stat_collection_t& o) {
+  void sub(const object_stat_collection_t& o) {//减去o对应的状态信息
     sum.sub(o.sum);
   }
 };
@@ -1879,6 +1879,7 @@ struct pg_stat_t {
       pin_stats_invalid(false)
   { }
 
+  //返回上一次达到clean状态时的版本。如果当前处于clean状态，则版本的版本是report时的版本
   epoch_t get_effective_last_epoch_clean() const {
     if (state & PG_STATE_CLEAN) {
       // we are clean as of this report, and should thus take the
@@ -1930,8 +1931,8 @@ struct pool_stat_t {
   object_stat_collection_t stats;
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
-  int32_t up;       ///< number of up replicas or shards
-  int32_t acting;   ///< number of acting replicas or shards
+  int32_t up;       ///< number of up replicas or shards //up集合数
+  int32_t acting;   ///< number of acting replicas or shards //acting集合数
 
   pool_stat_t() : log_size(0), ondisk_log_size(0), up(0), acting(0)
   { }
@@ -1948,6 +1949,7 @@ struct pool_stat_t {
       acting = f;
   }
 
+  //添加pg状态信息到pool
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
@@ -1955,6 +1957,7 @@ struct pool_stat_t {
     up += o.up.size();
     acting += o.acting.size();
   }
+  //自pool的状态信息中移除指定pg对应的状态信息
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
     log_size -= o.log_size;

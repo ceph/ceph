@@ -38,6 +38,7 @@
  * @type: storage ruleset type (user defined)
  * @size: output set size
  */
+//遍历map中的rules,如果找到第一个ruleset,type,size时返回索引
 int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size)
 {
 	__u32 i;
@@ -46,8 +47,8 @@ int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size
 		if (map->rules[i] &&
 		    map->rules[i]->mask.ruleset == ruleset &&
 		    map->rules[i]->mask.type == type &&
-		    map->rules[i]->mask.min_size <= size &&
-		    map->rules[i]->mask.max_size >= size)
+		    map->rules[i]->mask.min_size <= size && //size 要大于min_size
+		    map->rules[i]->mask.max_size >= size)   //size 要少于max_size
 			return i;
 	}
 	return -1;
@@ -386,11 +387,11 @@ static int is_out(const struct crush_map *map,
 		  const __u32 *weight, int weight_max,
 		  int item, int x)
 {
-	if (item >= weight_max)
+	if (item >= weight_max)//item比权重表的大小还要大，说明item是无效的
 		return 1;
 	if (weight[item] >= 0x10000)
 		return 0;
-	if (weight[item] == 0)
+	if (weight[item] == 0)//如果权重为０，则表示out
 		return 1;
 	if ((crush_hash32_2(CRUSH_HASH_RJENKINS1, x, item) & 0xffff)
 	    < weight[item])
@@ -418,18 +419,28 @@ static int is_out(const struct crush_map *map,
  * @out2: second output vector for leaf items (if @recurse_to_leaf)
  * @parent_r: r value passed from the parent
  */
+//看着这一堆参数，还有恶心的三层循环，不知道作者维护这段代码时，心中是何感想？
+
+//从要完成的工作上来讲：
+//１。针对相同的输入，必须要有相同的输出
+//2. 会存在一些情况，选择出来后不能用，比如out掉了，或者已包含在结果里了
+//3.按map的定义，传入的bucket可能不直接包含所需要的type
+//４.作者人为的在里面加杂了递归到叶子，多次失败后，使用另一种hash（全面检查）
+//5.stable 参数，vary_r参数，等
+//６。这个函数的实现太屎了。
+
 static int crush_choose_firstn(const struct crush_map *map,
 			       struct crush_work *work,
 			       const struct crush_bucket *bucket,
 			       const __u32 *weight, int weight_max,
 			       int x, int numrep, int type,
-			       int *out, int outpos,
-			       int out_size,
+			       int *out, int outpos,//输出缓冲，outpos输出在输出缓冲区中的位置
+			       int out_size,//需要输出多少个
 			       unsigned int tries,
 			       unsigned int recurse_tries,
 			       unsigned int local_retries,
 			       unsigned int local_fallback_retries,
-			       int recurse_to_leaf,
+			       int recurse_to_leaf,//标记变量，如果需要递归到叶子，则置为１
 			       unsigned int vary_r,
 			       unsigned int stable,
 			       int *out2,
@@ -438,13 +449,16 @@ static int crush_choose_firstn(const struct crush_map *map,
 	int rep;
 	unsigned int ftotal, flocal;
 	int retry_descent, retry_bucket, skip_rep;
+	//retry_bucket,标记变量，需要继续对in变量执行select时，置为１
+	//skip_rep 给定的item有误时，置为１
 	const struct crush_bucket *in = bucket;
 	int r;
 	int i;
 	int item = 0;
 	int itemtype;
-	int collide, reject;
-	int count = out_size;
+	int collide, reject;//collide标记变量，如果选择出来的与已知的item相冲突，置为１
+	//reject标记变量，如果从bucket中无法选出指定类型，reject置为１
+	int count = out_size;//需要输出多少个
 
 	dprintk("CHOOSE%s bucket %d x %d outpos %d numrep %d tries %d \
 recurse_tries %d local_retries %d local_fallback_retries %d \
@@ -454,7 +468,7 @@ parent_r %d stable %d\n",
 		tries, recurse_tries, local_retries, local_fallback_retries,
 		parent_r, stable);
 
-	for (rep = stable ? 0 : outpos; rep < numrep && count > 0 ; rep++) {
+	for (rep = stable ? 0 : outpos; rep < numrep && count > 0 ; rep++) {//一共需要numrep,还需要输出count个
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
 		skip_rep = 0;
@@ -467,54 +481,55 @@ parent_r %d stable %d\n",
 			do {
 				collide = 0;
 				retry_bucket = 0;
-				r = rep + parent_r;
+				r = rep + parent_r;//合入第i个副本，合入prarent_r(由于它不会变可以认为是常量）
 				/* r' = r + f_total */
-				r += ftotal;
+				r += ftotal;//合入总失败次数
 
 				/* bucket choose */
-				if (in->size == 0) {
+				if (in->size == 0) {//桶里没有item
 					reject = 1;
-					goto reject;
+					goto reject;//从这个桶里无法选择出来。（这个bucket需要拒绝），＊＊＊这个分支会在重复多次后，返回０
 				}
 				if (local_fallback_retries > 0 &&
 				    flocal >= (in->size>>1) &&
-				    flocal > local_fallback_retries)
+				    flocal > local_fallback_retries)//失败次数过多，换一种新的hash试试？
 					item = bucket_perm_choose(
 						in, work->work[-1-in->id],
 						x, r);
 				else
-					item = crush_bucket_choose(
+					item = crush_bucket_choose(//在in桶上选择一个子项
 						in, work->work[-1-in->id],
 						x, r);
-				if (item >= map->max_devices) {
+				if (item >= map->max_devices) {//item可能是桶，也可能是device,如果是device需要检查有效性
 					dprintk("   bad item %d\n", item);
-					skip_rep = 1;
+					skip_rep = 1;//这个item的id有误，跳过这个item，这个item不会被考虑
 					break;
 				}
 
-				/* desired type? */
-				if (item < 0)
+				/* desired type? */　//拿到类型
+				if (item < 0) //选择的是桶，取它的类型
 					itemtype = map->buckets[-1-item]->type;
 				else
-					itemtype = 0;
+					itemtype = 0;//选择的是device
 				dprintk("  item %d type %d\n", item, itemtype);
 
 				/* keep going? */
-				if (itemtype != type) {
-					if (item >= 0 ||
+				if (itemtype != type) {//如果item的类型与bucket类型不一致
+					if (item >= 0 || //(类型不一致，当item>=0时说明我们要的不是osd,或者bucket的id有问题，跳过，不考虑这个item)
 					    (-1-item) >= map->max_buckets) {
 						dprintk("   bad item type %d\n", type);
 						skip_rep = 1;
 						break;
 					}
-					in = map->buckets[-1-item];
+					in = map->buckets[-1-item];//是合法的桶类型，在这个分支还没有找到我们要的类型，取出对应的桶，并更换成in，继续考察
 					retry_bucket = 1;
 					continue;
 				}
 
 				/* collision? */
-				for (i = 0; i < outpos; i++) {
-					if (out[i] == item) {
+				//与要求的类型一致，则选择完成，在使用此选择前，需要检查是否冲突
+				for (i = 0; i < outpos; i++) {//检查和已计划输出的结果是否有相同的item,如果有，则冲突
+					if (out[i] == item) {//XXX 这里有bug,上层总是传入out加过的地址进来，这样就检查不出来?
 						collide = 1;
 						break;
 					}
@@ -522,7 +537,7 @@ parent_r %d stable %d\n",
 
 				reject = 0;
 				if (!collide && recurse_to_leaf) {
-					if (item < 0) {
+					if (item < 0) {//这是一个bucket类型
 						int sub_r;
 						if (vary_r)
 							sub_r = r >> (vary_r-1);
@@ -533,38 +548,38 @@ parent_r %d stable %d\n",
 							    work,
 							    map->buckets[-1-item],
 							    weight, weight_max,
-							    x, stable ? 1 : outpos+1, 0,
+							    x, stable ? 1 : outpos+1, 0,//传入０，表示找devices
 							    out2, outpos, count,
 							    recurse_tries, 0,
 							    local_retries,
 							    local_fallback_retries,
-							    0,
+							    0,//要找的是osd,type为０，故这里没有必要再令recurse_to_leaf为１了
 							    vary_r,
 							    stable,
 							    NULL,
-							    sub_r) <= outpos)
+							    sub_r) <= outpos)//返回值小于outpos，说明没有选到devices,能选到osd,则加入
 							/* didn't get leaf */
 							reject = 1;
-					} else {
+					} else {//这里一个叶子类型
 						/* we already have a leaf! */
-						out2[outpos] = item;
-		}
-				}
+						out2[outpos] = item;//能选到item,加入到out2
+						}
+				}//if (!collide && recurse_to_leaf)
 
 				if (!reject) {
 					/* out? */
-					if (itemtype == 0)
+					if (itemtype == 0)//检查osd是否被标记为out状态
 						reject = is_out(map, weight,
 								weight_max,
-								item, x);
+								item, x);//如果被标记出out,则reject置为１
 					else
 						reject = 0;
 				}
 
 reject:
-				if (reject || collide) {
-					ftotal++;
-					flocal++;
+				if (reject || collide) {//已冲突或者需要拒绝
+					ftotal++;//总失败计数加１
+					flocal++;//
 
 					if (collide && flocal <= local_retries)
 						/* retry locally a few times */
@@ -572,13 +587,13 @@ reject:
 					else if (local_fallback_retries > 0 &&
 						 flocal <= in->size + local_fallback_retries)
 						/* exhaustive bucket search */
-						retry_bucket = 1;
-					else if (ftotal < tries)
+						retry_bucket = 1;//尝试的变更hash进行osd尝试
+					else if (ftotal < tries)//最失败次数小于tries时，继续尝试，尝试生成新的hash
 						/* then retry descent */
 						retry_descent = 1;
 					else
 						/* else give up */
-						skip_rep = 1;
+						skip_rep = 1;//放弃
 					dprintk("  reject %d  collide %d  "
 						"ftotal %u  flocal %u\n",
 						reject, collide, ftotal,
@@ -593,7 +608,7 @@ reject:
 		}
 
 		dprintk("CHOOSE got %d\n", item);
-		out[outpos] = item;
+		out[outpos] = item;//这个item可以用。
 		outpos++;
 		count--;
 #ifndef __KERNEL__
@@ -611,13 +626,14 @@ reject:
  * crush_choose_indep: alternative breadth-first positionally stable mapping
  *
  */
+//另一种宽度优先的选择方式（firstn是在选择时，是从第一个到第n个按序选，结果集中２如果没有，则３一定没有，而indep在选择时，２没有，３可能会有）
 static void crush_choose_indep(const struct crush_map *map,
 			       struct crush_work *work,
 			       const struct crush_bucket *bucket,
 			       const __u32 *weight, int weight_max,
 			       int x, int left, int numrep, int type,
 			       int *out, int outpos,
-			       unsigned int tries,
+			       unsigned int tries,//尝试次数
 			       unsigned int recurse_tries,
 			       int recurse_to_leaf,
 			       int *out2,
@@ -637,7 +653,7 @@ static void crush_choose_indep(const struct crush_map *map,
 		bucket->id, x, outpos, numrep);
 
 	/* initially my result is undefined */
-	for (rep = outpos; rep < endpos; rep++) {
+	for (rep = outpos; rep < endpos; rep++) {//先全部定义为undefine
 		out[rep] = CRUSH_ITEM_UNDEF;
 		if (out2)
 			out2[rep] = CRUSH_ITEM_UNDEF;
@@ -660,7 +676,7 @@ static void crush_choose_indep(const struct crush_map *map,
 #endif
 		for (rep = outpos; rep < endpos; rep++) {
 			if (out[rep] != CRUSH_ITEM_UNDEF)
-				continue;
+				continue;//查找一个空位置
 
 			in = bucket;  /* initial bucket */
 
@@ -680,13 +696,13 @@ static void crush_choose_indep(const struct crush_map *map,
 				if (in->alg == CRUSH_BUCKET_UNIFORM &&
 				    in->size % numrep == 0)
 					/* r'=r+(n+1)*f_total */
-					r += (numrep+1) * ftotal;
+					r += (numrep+1) * ftotal;//混合进ftotal,numrep+1
 				else
 					/* r' = r + n*f_total */
 					r += numrep * ftotal;
 
 				/* bucket choose */
-				if (in->size == 0) {
+				if (in->size == 0) {//空的bucket,无法选出
 					dprintk("   empty bucket\n");
 					break;
 				}
@@ -694,7 +710,7 @@ static void crush_choose_indep(const struct crush_map *map,
 				item = crush_bucket_choose(
 					in, work->work[-1-in->id],
 					x, r);
-				if (item >= map->max_devices) {
+				if (item >= map->max_devices) {//选择出来错误的item
 					dprintk("   bad item %d\n", item);
 					out[rep] = CRUSH_ITEM_NONE;
 					if (out2)
@@ -703,7 +719,7 @@ static void crush_choose_indep(const struct crush_map *map,
 					break;
 				}
 
-				/* desired type? */
+				/* desired type? */ //确定类型
 				if (item < 0)
 					itemtype = map->buckets[-1-item]->type;
 				else
@@ -711,9 +727,9 @@ static void crush_choose_indep(const struct crush_map *map,
 				dprintk("  item %d type %d\n", item, itemtype);
 
 				/* keep going? */
-				if (itemtype != type) {
+				if (itemtype != type) { //不是我们要找的类型
 					if (item >= 0 ||
-					    (-1-item) >= map->max_buckets) {
+					    (-1-item) >= map->max_buckets) {//当前不找osd　或者当前找的bucket　id有问题
 						dprintk("   bad item type %d\n", type);
 						out[rep] = CRUSH_ITEM_NONE;
 						if (out2)
@@ -722,11 +738,12 @@ static void crush_choose_indep(const struct crush_map *map,
 						left--;
 						break;
 					}
-					in = map->buckets[-1-item];
+					in = map->buckets[-1-item];//没有找到了我们需要的bucket类型,继续向下探测
 					continue;
 				}
 
-				/* collision? */
+				//找到了我们所需要的那种类型
+				/* collision? */ //检查下，看是否和已知的相互冲突
 				collide = 0;
 				for (i = outpos; i < endpos; i++) {
 					if (out[i] == item) {
@@ -734,10 +751,10 @@ static void crush_choose_indep(const struct crush_map *map,
 						break;
 					}
 				}
-				if (collide)
+				if (collide)//冲突了，不算，重来
 					break;
 
-				if (recurse_to_leaf) {
+				if (recurse_to_leaf) {//如果需要递归到叶子上去，则继续考察这个bucket直到叶子上去
 					if (item < 0) {
 						crush_choose_indep(
 							map,
@@ -748,7 +765,7 @@ static void crush_choose_indep(const struct crush_map *map,
 							out2, rep,
 							recurse_tries, 0,
 							0, NULL, r);
-						if (out2[rep] == CRUSH_ITEM_NONE) {
+						if (out2[rep] == CRUSH_ITEM_NONE) {//没有找到item
 							/* placed nothing; no leaf */
 							break;
 						}
@@ -758,13 +775,13 @@ static void crush_choose_indep(const struct crush_map *map,
 					}
 				}
 
-				/* out? */
+				/* out? */ //检查是否out了
 				if (itemtype == 0 &&
 				    is_out(map, weight, weight_max, item, x))
 					break;
 
 				/* yay! */
-				out[rep] = item;
+				out[rep] = item; //这个item可以用，记录
 				left--;
 				break;
 			}
@@ -853,6 +870,9 @@ void crush_init_workspace(const struct crush_map *m, void *v) {
  * @weight_max: size of weight vector
  * @cwin: Pointer to at least map->working_size bytes of memory or NULL.
  */
+//这个函数实际上要完成规则的原语，规则给出了怎么选，但选谁由随机函数说了算（相当于规则解析器）
+//take　操作用于选择根（定义域），choose用于(完成映射），choose_leaf用于选osd,emit用于输出结果
+//其它用于控制选择的细节。提供了两种选择
 int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
 		  const __u32 *weight, int weight_max,
@@ -890,69 +910,71 @@ int crush_do_rule(const struct crush_map *map,
 	int vary_r = map->chooseleaf_vary_r;
 	int stable = map->chooseleaf_stable;
 
-	if ((__u32)ruleno >= map->max_rules) {
+	if ((__u32)ruleno >= map->max_rules) {//规则编号过大
 		dprintk(" bad ruleno %d\n", ruleno);
 		return 0;
 	}
 
-	rule = map->rules[ruleno];
-	result_len = 0;
+	rule = map->rules[ruleno];//取出规则
+	result_len = 0;//结果集清空
 
-	for (step = 0; step < rule->len; step++) {
+	for (step = 0; step < rule->len; step++) {//针对规则约定的每一个step进行遍历
+
 		int firstn = 0;
 		const struct crush_rule_step *curstep = &rule->steps[step];
 
 		switch (curstep->op) {
-		case CRUSH_RULE_TAKE:
-			if ((curstep->arg1 >= 0 &&
+		case CRUSH_RULE_TAKE://向w中写入arg1,wsize置为１
+			if ((curstep->arg1 >= 0 && //>=0表示devices,<0表示buckets
 			     curstep->arg1 < map->max_devices) ||
 			    (-1-curstep->arg1 >= 0 &&
 			     -1-curstep->arg1 < map->max_buckets &&
 			     map->buckets[-1-curstep->arg1])) {
-				w[0] = curstep->arg1;
-				wsize = 1;
+				w[0] = curstep->arg1;//桶或者devices
+				wsize = 1;//写入一个单位（如果有多条连续take,则仅最后一个take生效
+
 			} else {
 				dprintk(" bad take value %d\n", curstep->arg1);
 			}
 			break;
 
-		case CRUSH_RULE_SET_CHOOSE_TRIES:
+		case CRUSH_RULE_SET_CHOOSE_TRIES://choose_tries置为arg1
 			if (curstep->arg1 > 0)
 				choose_tries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
+		case CRUSH_RULE_SET_CHOOSELEAF_TRIES://choose_leaf_tries置为arg1
 			if (curstep->arg1 > 0)
 				choose_leaf_tries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES:
+		case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES://choose_local_retries置为arg1
 			if (curstep->arg1 >= 0)
 				choose_local_retries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES:
+		case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES://choose_local_fallback_retries置为arg1
 			if (curstep->arg1 >= 0)
 				choose_local_fallback_retries = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSELEAF_VARY_R:
+		case CRUSH_RULE_SET_CHOOSELEAF_VARY_R://vary_r置为arg1
 			if (curstep->arg1 >= 0)
 				vary_r = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_SET_CHOOSELEAF_STABLE:
+		case CRUSH_RULE_SET_CHOOSELEAF_STABLE://stable置为arg1
 			if (curstep->arg1 >= 0)
 				stable = curstep->arg1;
 			break;
 
-		case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+		case CRUSH_RULE_CHOOSELEAF_FIRSTN://firstn置为１
 		case CRUSH_RULE_CHOOSE_FIRSTN:
 			firstn = 1;
 			/* fall through */
-		case CRUSH_RULE_CHOOSELEAF_INDEP:
+		case CRUSH_RULE_CHOOSELEAF_INDEP://如果wsize ==0 则忽略，否则继续，置recurse_to_leaf
 		case CRUSH_RULE_CHOOSE_INDEP:
-			if (wsize == 0)
+			if (wsize == 0)//如果wsize为０，则无集合可执行select,忽略此操作
 				break;
 
 			recurse_to_leaf =
@@ -971,21 +993,21 @@ int crush_do_rule(const struct crush_map *map,
 				 * basically, numrep <= 0 means relative to
 				 * the provided result_max
 				 */
-				numrep = curstep->arg1;
+				numrep = curstep->arg1;//选择多少个
 				if (numrep <= 0) {
-					numrep += result_max;
+					numrep += result_max;//如果numrep=0,则选result_max个，否则(result_max - |numrep|) 个
 					if (numrep <= 0)
-						continue;
+						continue;//如果选择太少，则跳过（有集合，但要求选择小于０个，跳过此操作）
 				}
-				j = 0;
+				j = 0;//不知道这个参数的意义是什么，这里它总是０
 				/* make sure bucket id is valid */
-				bno = -1 - w[i];
-				if (bno < 0 || bno >= map->max_buckets) {
+				bno = -1 - w[i];//take后执行select时，take中放置的是bucket
+				if (bno < 0 || bno >= map->max_buckets) {//w[i]中必须是bucket,不能是device
 					// w[i] is probably CRUSH_ITEM_NONE
 					dprintk("  bad w[i] %d\n", w[i]);
 					continue;
 				}
-				if (firstn) {
+				if (firstn) {//firstn情况
 					int recurse_tries;
 					if (choose_leaf_tries)
 						recurse_tries =
@@ -997,32 +1019,32 @@ int crush_do_rule(const struct crush_map *map,
 					osize += crush_choose_firstn(
 						map,
 						cw,
-						map->buckets[bno],
-						weight, weight_max,
-						x, numrep,
-						curstep->arg2,
-						o+osize, j,
-						result_max-osize,
+						map->buckets[bno],//对应的桶
+						weight, weight_max,//权重数组及权重数组大小
+						x, numrep,//要选多少个
+						curstep->arg2,//select的第二个参数,选择的类型
+						o+osize, j,//o的位置向前移，j=0
+						result_max-osize,//需要多少个
 						choose_tries,
 						recurse_tries,
-						choose_local_retries,
-						choose_local_fallback_retries,
-						recurse_to_leaf,
-						vary_r,
-						stable,
+						choose_local_retries,//step控制参数
+						choose_local_fallback_retries,//step控制参数
+						recurse_to_leaf,//step控制参数，要求选叶子
+						vary_r,//step控制参数
+						stable,//step控制参数
 						c+osize,
 						0);
 				} else {
 					out_size = ((numrep < (result_max-osize)) ?
 						    numrep : (result_max-osize));
-					crush_choose_indep(
+					crush_choose_indep(//这种选择可能会出来没选到的情况，但out_size并没有计数，全加上去了
 						map,
 						cw,
-						map->buckets[bno],
+						map->buckets[bno],//对应的桶
 						weight, weight_max,
-						x, out_size, numrep,
-						curstep->arg2,
-						o+osize, j,
+						x, out_size, numrep,//已经输出了多少个，一共需要多少个
+						curstep->arg2,//选什么类型
+						o+osize, j,//o的位置向前移，j=0
 						choose_tries,
 						choose_leaf_tries ?
 						   choose_leaf_tries : 1,
@@ -1031,7 +1053,7 @@ int crush_do_rule(const struct crush_map *map,
 						0);
 					osize += out_size;
 				}
-			}
+			}//for结束
 
 			if (recurse_to_leaf)
 				/* copy final _leaf_ values to output set */
@@ -1046,11 +1068,12 @@ int crush_do_rule(const struct crush_map *map,
 
 
 		case CRUSH_RULE_EMIT:
-			for (i = 0; i < wsize && result_len < result_max; i++) {
+			//从这里可以看出w中take后为emit时，必须是device
+			for (i = 0; i < wsize && result_len < result_max; i++) {//输出结果
 				result[result_len] = w[i];
 				result_len++;
 			}
-			wsize = 0;
+			wsize = 0;//结果已放入，将wsize清空
 			break;
 
 		default:

@@ -505,7 +505,7 @@ public:
 
   std::atomic<epoch_t> max_oldest_map;
 private:
-  OSDMapRef osdmap;
+  OSDMapRef osdmap;//记录整个osd中最新的osdmap
 
 public:
   OSDMapRef get_osdmap() {

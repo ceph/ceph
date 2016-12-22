@@ -51,14 +51,14 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
 using namespace std;
 class CrushWrapper {
 public:
-  std::map<int32_t, string> type_map; /* bucket/device type names */
-  std::map<int32_t, string> name_map; /* bucket/device names */
-  std::map<int32_t, string> rule_name_map;
+  std::map<int32_t, string> type_map; /* bucket/device type names */ //类型名称，这些类型定义了层次关系（region,datacenter,host,osd)，
+  std::map<int32_t, string> name_map; /* bucket/device names id到名字映射　*/
+  std::map<int32_t, string> rule_name_map;//规则id到规则名称索引
 
 private:
-  struct crush_map *crush;
+  struct crush_map *crush;//crush表(前面为内置数的类型及符号表，这些与compiler中定义的内容有重复，不好）
   /* reverse maps */
-  mutable bool have_rmaps;
+  mutable bool have_rmaps;//是否有反向map
   mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
   void build_rmaps() const {
     if (have_rmaps) return;
@@ -67,6 +67,7 @@ private:
     build_rmap(rule_name_map, rule_name_rmap);
     have_rmaps = true;
   }
+  //将f设置入r中(map项反序）
   void build_rmap(const map<int, string> &f, std::map<string, int> &r) const {
     r.clear();
     for (std::map<int, string>::const_iterator p = f.begin(); p != f.end(); ++p)
@@ -796,6 +797,7 @@ public:
   int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
 
   /* modifiers */
+  //添加一条规则
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
     crush_rule *n = crush_make_rule(len, ruleset, type, minsize, maxsize);
@@ -815,6 +817,7 @@ public:
     crush_rule_set_step(n, step, op, arg1, arg2);
     return 0;
   }
+  //设置take操作
   int set_rule_step_take(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_TAKE, val, 0);
   }
@@ -1005,6 +1008,7 @@ public:
   }
 
   /* modifiers */
+  //构造bucket并将其加入idout
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
 		 int *items, int *weights, int *idout) {
     if (alg == 0) {
@@ -1084,6 +1088,11 @@ public:
     return result;
   }
 
+  //rule 规则编号
+  //x pg对应的hash值
+  //out 输出的结果集
+  //maxout 需要的结果集大小
+  //weight 权重，暂不清楚（来源于osdmap)
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     int rawout[maxout];

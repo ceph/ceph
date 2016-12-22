@@ -192,7 +192,7 @@ void Paxos::dump_info(Formatter *f)
 // PHASE 1
 
 // leader
-void Paxos::collect(version_t oldpn)
+void Paxos::collect(version_t oldpn)//发送请求，准备paxos第一阶段
 {
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
@@ -216,7 +216,7 @@ void Paxos::collect(version_t oldpn)
 	       << " and crossing our fingers" << dendl;
       uncommitted_pn = accepted_pn;
     }
-    uncommitted_v = last_committed+1;
+    uncommitted_v = last_committed+1;//增加自已未提交的数目
 
     get_store()->get(get_name(), last_committed+1, uncommitted_value);
     assert(uncommitted_value.length());
@@ -228,28 +228,28 @@ void Paxos::collect(version_t oldpn)
     logger->inc(l_paxos_collect_uncommitted);
   }
 
-  // pick new pn
+  // pick new pn(传入已接受的与oldpn之间最大的一个）
   accepted_pn = get_new_proposal_number(MAX(accepted_pn, oldpn));
   accepted_pn_from = last_committed;
-  num_last = 1;
+  num_last = 1;//需要知道有多少人进行了响应，所以这个值被赋为１（算上自已）
   dout(10) << "collect with pn " << accepted_pn << dendl;
 
   // send collect
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (set<int>::const_iterator p = mon->get_quorum().begin();//发给其它mon
        p != mon->get_quorum().end();
        ++p) {
-    if (*p == mon->rank) continue;
+    if (*p == mon->rank) continue;//跳过自已
     
     MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT,
 				       ceph_clock_now(g_ceph_context));
     collect->last_committed = last_committed;
     collect->first_committed = first_committed;
-    collect->pn = accepted_pn;
+    collect->pn = accepted_pn;//选出来提案号
     mon->messenger->send_message(collect, mon->monmap->get_inst(*p));
   }
 
   // set timeout event
-  collect_timeout_event = new C_CollectTimeout(this);
+  collect_timeout_event = new C_CollectTimeout(this);//处理collect超时问题
   mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
 			     g_conf->mon_lease,
 			     collect_timeout_event);
@@ -257,7 +257,7 @@ void Paxos::collect(version_t oldpn)
 
 
 // peon
-void Paxos::handle_collect(MonOpRequestRef op)
+void Paxos::handle_collect(MonOpRequestRef op)//第一阶段，收到提案编号，回复同意或者拒绝提案编号
 {
   
   op->mark_paxos_event("handle_collect");
@@ -273,7 +273,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   //update the peon recovery timeout 
   reset_lease_timeout();
 
-  if (collect->first_committed > last_committed+1) {
+  if (collect->first_committed > last_committed+1) {//leader的最小的commited比我们的最大的committed还要大?
     dout(2) << __func__
             << " leader's lowest version is too high for our last committed"
             << " (theirs: " << collect->first_committed
@@ -286,21 +286,22 @@ void Paxos::handle_collect(MonOpRequestRef op)
   // reply
   MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST,
 				  ceph_clock_now(g_ceph_context));
-  last->last_committed = last_committed;
+  last->last_committed = last_committed;//回复我们的first,last committed
   last->first_committed = first_committed;
   
   version_t previous_pn = accepted_pn;
 
   // can we accept this pn?
   if (collect->pn > accepted_pn) {
+	//如果生成的提案号，比我们之前接受的提案要大，则我们可以按受着这个接案
     // ok, accept it
-    accepted_pn = collect->pn;
+    accepted_pn = collect->pn;//更新可接受的提案号
     accepted_pn_from = collect->pn_from;
     dout(10) << "accepting pn " << accepted_pn << " from " 
 	     << accepted_pn_from << dendl;
   
     MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-    t->put(get_name(), "accepted_pn", accepted_pn);
+    t->put(get_name(), "accepted_pn", accepted_pn);//将我们按受的提案写入数据库
 
     dout(30) << __func__ << " transaction dump:\n";
     JSONFormatter f(true);
@@ -318,23 +319,24 @@ void Paxos::handle_collect(MonOpRequestRef op)
     utime_t end = ceph_clock_now(NULL);
     logger->tinc(l_paxos_collect_latency, end - start);
   } else {
+	  //这个我们没法接受，我们不更新自身，但我们一会会回复自身的决定
     // don't accept!
     dout(10) << "NOT accepting pn " << collect->pn << " from " << collect->pn_from
 	     << ", we already accepted " << accepted_pn
 	     << " from " << accepted_pn_from << dendl;
   }
-  last->pn = accepted_pn;
+  last->pn = accepted_pn;//给出结论（同意还是不同意）
   last->pn_from = accepted_pn_from;
 
   // share whatever committed values we have
-  if (collect->last_committed < last_committed)
+  if (collect->last_committed < last_committed)//如果对方比自已的知识少，为对方补给知识
     share_state(last, collect->first_committed, collect->last_committed);
 
   // do we have an accepted but uncommitted value?
   //  (it'll be at last_committed+1)
   bufferlist bl;
   if (collect->last_committed <= last_committed &&
-      get_store()->exists(get_name(), last_committed+1)) {
+      get_store()->exists(get_name(), last_committed+1)) {//分享未提交的值
     get_store()->get(get_name(), last_committed+1, bl);
     assert(bl.length() > 0);
     dout(10) << " sharing our accepted but uncommitted value for " 
@@ -357,7 +359,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   }
 
   // send reply
-  collect->get_connection()->send_message(last);
+  collect->get_connection()->send_message(last);//回复响应消息
 }
 
 /**
@@ -379,24 +381,24 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
 
   dout(10) << "share_state peer has fc " << peer_first_committed 
 	   << " lc " << peer_last_committed << dendl;
-  version_t v = peer_last_committed + 1;
+  version_t v = peer_last_committed + 1;//从对端最后一个提交开始
 
   // include incrementals
   uint64_t bytes = 0;
   for ( ; v <= last_committed; v++) {
-    if (get_store()->exists(get_name(), v)) {
+    if (get_store()->exists(get_name(), v)) {//如果有这个版本，读取这个版本
       get_store()->get(get_name(), v, m->values[v]);
       assert(m->values[v].length());
       dout(10) << " sharing " << v << " ("
 	       << m->values[v].length() << " bytes)" << dendl;
-      bytes += m->values[v].length() + 16;  // paxos_ + 10 digits = 16
+      bytes += m->values[v].length() + 16;  // paxos_ + 10 digits = 16　//为消息加上长度
     }
   }
   logger->inc(l_paxos_share_state);
   logger->inc(l_paxos_share_state_keys, m->values.size());
   logger->inc(l_paxos_share_state_bytes, bytes);
 
-  m->last_committed = last_committed;
+  m->last_committed = last_committed;//将自已的last_committed
 }
 
 /**
@@ -503,7 +505,7 @@ void Paxos::_sanity_check_store()
 
 
 // leader
-void Paxos::handle_last(MonOpRequestRef op)
+void Paxos::handle_last(MonOpRequestRef op)//收到提案响应
 {
   op->mark_paxos_event("handle_last");
   MMonPaxos *last = static_cast<MMonPaxos*>(op->get_req());
@@ -522,7 +524,7 @@ void Paxos::handle_last(MonOpRequestRef op)
   peer_first_committed[from] = last->first_committed;
   peer_last_committed[from] = last->last_committed;
 
-  if (last->first_committed > last_committed + 1) {
+  if (last->first_committed > last_committed + 1) {//对端first比自已的last还要大，需要生新boot
     dout(5) << __func__
             << " mon." << from
 	    << " lowest version is too high for our last committed"
@@ -574,10 +576,10 @@ void Paxos::handle_last(MonOpRequestRef op)
     mon->timer.cancel_event(collect_timeout_event);
     collect_timeout_event = 0;
 
-    collect(last->pn);
-  } else if (last->pn == accepted_pn) {
+    collect(last->pn);//重新收集
+  } else if (last->pn == accepted_pn) {//同意
     // yes, they accepted our pn.  great.
-    num_last++;
+    num_last++;//增加同意我们的人员数量
     dout(10) << " they accepted our pn, we now have " 
 	     << num_last << " peons" << dendl;
 
@@ -602,7 +604,7 @@ void Paxos::handle_last(MonOpRequestRef op)
     }
     
     // is that everyone?
-    if (num_last == mon->get_quorum().size()) {
+    if (num_last == mon->get_quorum().size()) {//检查是否所有人回复了我们
       // cancel timeout event
       mon->timer.cancel_event(collect_timeout_event);
       collect_timeout_event = 0;
@@ -628,7 +630,7 @@ void Paxos::handle_last(MonOpRequestRef op)
 	}
       }
     }
-  } else {
+  } else {//回复我们的消息，比我们的小，说明消息来晚了，丢弃
     // no, this is an old message, discard
     dout(10) << "old pn, ignoring" << dendl;
   }
@@ -648,7 +650,7 @@ void Paxos::collect_timeout()
 
 
 // leader
-void Paxos::begin(bufferlist& v)
+void Paxos::begin(bufferlist& v)//leader提议变化某值
 {
   dout(10) << "begin for " << last_committed+1 << " " 
 	   << v.length() << " bytes"
@@ -723,15 +725,15 @@ void Paxos::begin(bufferlist& v)
   // ask others to accept it too!
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
-       ++p) {
-    if (*p == mon->rank) continue;
+       ++p) {//要求大家接收此值
+    if (*p == mon->rank) continue;//跳过自已
     
     dout(10) << " sending begin to mon." << *p << dendl;
     MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN,
 				     ceph_clock_now(g_ceph_context));
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
-    begin->pn = accepted_pn;
+    begin->pn = accepted_pn;//向其发送accepted_pn及对应的值
     
     mon->messenger->send_message(begin, mon->monmap->get_inst(*p));
   }
@@ -751,13 +753,14 @@ void Paxos::handle_begin(MonOpRequestRef op)
   dout(10) << "handle_begin " << *begin << dendl;
 
   // can we accept this?
-  if (begin->pn < accepted_pn) {
+  if (begin->pn < accepted_pn) {//因为我们已经同意更大的提案，所以我们忽略这个提议
     dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << dendl;
     op->mark_paxos_event("have higher pn, ignore");
     return;
   }
   assert(begin->pn == accepted_pn);
-  assert(begin->last_committed == last_committed);
+  //由于，我们在prepare阶段，没有人打扰（否则不会走到这），所以两者一定是相等的
+  assert(begin->last_committed == last_committed);//在批准这个之前，我们一定没有批准过其它的
   
   assert(g_conf->paxos_kill_at != 4);
 
@@ -768,12 +771,12 @@ void Paxos::handle_begin(MonOpRequestRef op)
   lease_expire = utime_t();  // cancel lease
 
   // yes.
-  version_t v = last_committed+1;
+  version_t v = last_committed+1;//我们已批准的提案加１（v增加）
   dout(10) << "accepting value for " << v << " pn " << accepted_pn << dendl;
   // store the accepted value onto our store. We will have to decode it and
   // apply its transaction once we receive permission to commit.
   MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  t->put(get_name(), v, begin->values[v]);
+  t->put(get_name(), v, begin->values[v]);//放入这个值
 
   // note which pn this pending value is for.
   t->put(get_name(), "pending_v", v);
@@ -828,7 +831,7 @@ void Paxos::handle_accept(MonOpRequestRef op)
 
   assert(is_updating() || is_updating_previous());
   assert(accepted.count(from) == 0);
-  accepted.insert(from);
+  accepted.insert(from);//加入accepted
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
   assert(g_conf->paxos_kill_at != 6);
@@ -838,7 +841,7 @@ void Paxos::handle_accept(MonOpRequestRef op)
   // stale state.
   // FIXME: we can improve this with an additional lease revocation message
   // that doesn't block for the persist.
-  if (accepted == mon->get_quorum()) {
+  if (accepted == mon->get_quorum()) {//如果已被所有成员接受，则commit_start
     // yay, commit!
     dout(10) << " got majority, committing, done with update" << dendl;
     op->mark_paxos_event("commit_start");
@@ -922,7 +925,7 @@ void Paxos::commit_finish()
   //   leader still got a majority and committed with out us.)
   lease_expire = utime_t();  // cancel lease
 
-  last_committed++;
+  last_committed++;//增加commited计数
   last_commit_time = ceph_clock_now(NULL);
 
   // refresh first_committed; this txn may have trimmed.
@@ -931,15 +934,16 @@ void Paxos::commit_finish()
   _sanity_check_store();
 
   // tell everyone
+  //通知所有其它成员
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
-    if (*p == mon->rank) continue;
+    if (*p == mon->rank) continue;//跳过自已
 
     dout(10) << " sending commit to mon." << *p << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT,
 				      ceph_clock_now(g_ceph_context));
-    commit->values[last_committed] = new_value;
+    commit->values[last_committed] = new_value;//发送新值
     commit->pn = accepted_pn;
     commit->last_committed = last_committed;
 
@@ -957,7 +961,7 @@ void Paxos::commit_finish()
   assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
 
-  if (do_refresh()) {
+  if (do_refresh()) {//调用上层回调进行refresh处理
     commit_proposal();
     if (mon->get_quorum().size() > 1) {
       extend_lease();
@@ -1277,11 +1281,11 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn /= 100;
   last_pn++;
   last_pn *= 100;
-  last_pn += (version_t)mon->rank;
+  last_pn += (version_t)mon->rank;//当mon数量在100个以下时，可保证相同的gt生成不同的提案编号
 
   // write
   MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  t->put(get_name(), "last_pn", last_pn);
+  t->put(get_name(), "last_pn", last_pn);//将这个提案号，写入数据库
 
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
@@ -1365,7 +1369,7 @@ void Paxos::leader_init()
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
-  collect(0);
+  collect(0);//开始执行paxos事务
 }
 
 void Paxos::peon_init()
@@ -1425,13 +1429,13 @@ void Paxos::dispatch(MonOpRequestRef op)
   op->mark_paxos_event("dispatch");
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   // election in progress?
-  if (!mon->is_leader() && !mon->is_peon()) {
+  if (!mon->is_leader() && !mon->is_peon()) {//只有leader,peon两个状态，才能处理消息
     dout(5) << "election in progress, dropping " << *m << dendl;
     return;    
   }
 
   // check sanity
-  assert(mon->is_leader() || 
+  assert(mon->is_leader() || //如果处于peon状态，只收取leader发来的消息
 	 (mon->is_peon() && m->get_source().num() == mon->get_leader()));
   
   switch (m->get_type()) {
@@ -1443,20 +1447,20 @@ void Paxos::dispatch(MonOpRequestRef op)
       // NOTE: these ops are defined in messages/MMonPaxos.h
       switch (pm->op) {
 	// learner
-      case MMonPaxos::OP_COLLECT:
-	handle_collect(op);
+      case MMonPaxos::OP_COLLECT://paxos的第一阶段，收集最大的可接受id
+	handle_collect(op);//仅处于peon状态时处理此消息，转probe状态
 	break;
       case MMonPaxos::OP_LAST:
-	handle_last(op);
+	handle_last(op);//处于learder状态时处理此消息
 	break;
       case MMonPaxos::OP_BEGIN:
-	handle_begin(op);
+	handle_begin(op);//转updating状态
 	break;
       case MMonPaxos::OP_ACCEPT:
 	handle_accept(op);
 	break;		
       case MMonPaxos::OP_COMMIT:
-	handle_commit(op);
+	handle_commit(op);//仅peon状态处理
 	break;
       case MMonPaxos::OP_LEASE:
 	handle_lease(op);
