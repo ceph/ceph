@@ -8,6 +8,7 @@
 #include "rgw_rest.h"
 #include "rgw_auth.h"
 #include "rgw_auth_keystone.h"
+#include "rgw_auth_filters.h"
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
@@ -61,18 +62,30 @@ public:
 };
 
 
+namespace rgw {
+namespace auth {
+namespace swift {
+
 /* AUTH_rgwtk */
-class RGWSignedTokenAuthEngine : public RGWTokenBasedAuthEngine {
-protected:
-  /* const */ RGWRados * const store;
-  const RGWLocalAuthApplier::Factory * apl_factory;
+class SignedTokenEngine : public rgw::auth::Engine {
+  using result_t = rgw::auth::Engine::result_t;
+
+  CephContext* const cct;
+  RGWRados* const store;
+  const rgw::auth::TokenExtractor* const extractor;
+  const rgw::auth::LocalApplier::Factory* const apl_factory;
+
+  bool is_applicable(const std::string& token) const noexcept;
+  result_t authenticate(const std::string& token) const;
+
 public:
-  RGWSignedTokenAuthEngine(CephContext * const cct,
-                           /* const */RGWRados * const store,
-                           const Extractor& extr,
-                           const RGWLocalAuthApplier::Factory * const apl_factory)
-    : RGWTokenBasedAuthEngine(cct, extr),
+  SignedTokenEngine(CephContext* const cct,
+                    /* const */RGWRados* const store,
+                    const rgw::auth::TokenExtractor* const extractor,
+                    const rgw::auth::LocalApplier::Factory* const apl_factory)
+    : cct(cct),
       store(store),
+      extractor(extractor),
       apl_factory(apl_factory) {
   }
 
@@ -80,54 +93,43 @@ public:
     return "RGWSignedTokenAuthEngine";
   }
 
-  bool is_applicable() const noexcept override;
-  RGWAuthApplier::aplptr_t authenticate() const override;
+  result_t authenticate(const req_state* const s) const override {
+    return authenticate(extractor->get_token(s));
+  }
 };
 
 
 /* External token */
-class RGWExternalTokenAuthEngine : public RGWTokenBasedAuthEngine {
-protected:
-  /* const */ RGWRados * const store;
-  const RGWLocalAuthApplier::Factory * const apl_factory;
+class ExternalTokenEngine : public rgw::auth::Engine {
+  using result_t = rgw::auth::Engine::result_t;
+
+  CephContext* const cct;
+  RGWRados* const store;
+  const rgw::auth::TokenExtractor* const extractor;
+  const rgw::auth::LocalApplier::Factory* const apl_factory;
+
+  bool is_applicable(const std::string& token) const noexcept;
+  result_t authenticate(const std::string& token) const;
+
 public:
-  RGWExternalTokenAuthEngine(CephContext * const cct,
-                             /* const */RGWRados * const store,
-                             const Extractor& extr,
-                             const RGWLocalAuthApplier::Factory * const apl_factory)
-    : RGWTokenBasedAuthEngine(cct, extr),
+  ExternalTokenEngine(CephContext* const cct,
+                      /* const */RGWRados* const store,
+                      const rgw::auth::TokenExtractor* const extractor,
+                      const rgw::auth::LocalApplier::Factory* const apl_factory)
+    : cct(cct),
       store(store),
+      extractor(extractor),
       apl_factory(apl_factory) {
   }
 
   const char* get_name() const noexcept override {
-    return "RGWExternalTokenAuthEngine";
+    return "rgw::auth::swift::ExternalTokenEngine";
   }
 
-  bool is_applicable() const noexcept override;
-  RGWAuthApplier::aplptr_t authenticate() const override;
-};
-
-
-/* Extractor for X-Auth-Token present in req_state. */
-class RGWXAuthTokenExtractor : public RGWTokenBasedAuthEngine::Extractor {
-protected:
-  const req_state * const s;
-public:
-  RGWXAuthTokenExtractor(const req_state * const s)
-    : s(s) {
-  }
-  std::string get_token() const override {
-    /* Returning a reference here would end in GCC complaining about a reference
-     * to temporary. */
-    return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
+  result_t authenticate(const req_state* const s) const override {
+    return authenticate(extractor->get_token(s));
   }
 };
-
-
-namespace rgw {
-namespace auth {
-namespace swift {
 
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
