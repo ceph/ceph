@@ -6875,8 +6875,10 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
       for (auto& e : wo.extents) {
 	bufferlist bl;
 	p.copy(e.length, bl);
-	int r = bdev->aio_write(e.offset, bl, &txc->ioc, false);
-	assert(r == 0);
+        if (!g_conf->bluestore_debug_omit_block_device_write) {
+	  int r = bdev->aio_write(e.offset, bl, &txc->ioc, false);
+	  assert(r == 0);
+        }
       }
     }
     break;
@@ -7632,12 +7634,14 @@ void BlueStore::_do_write_small(
       _buffer_cache_write(txc, b, b_off, padded,
 			  wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-      b->get_blob().map_bl(
-	b_off, padded,
-	[&](uint64_t offset, uint64_t length, bufferlist& t) {
-	  bdev->aio_write(offset, t,
-			  &txc->ioc, wctx->buffered);
-	});
+      if (!g_conf->bluestore_debug_omit_block_device_write) {
+        b->get_blob().map_bl(
+	  b_off, padded,
+	  [&](uint64_t offset, uint64_t length, bufferlist& t) {
+	    bdev->aio_write(offset, t,
+			    &txc->ioc, wctx->buffered);
+	  });
+      }
       b->dirty_blob().calc_csum(b_off, padded);
       dout(20) << __func__ << "  lex old " << *ep << dendl;
       Extent *le = o->extent_map.set_lextent(offset, b_off + head_pad, length,
@@ -7956,11 +7960,13 @@ int BlueStore::_do_alloc_write(
     }
 
     // queue io
-    b->get_blob().map_bl(
-      b_off, *l,
-      [&](uint64_t offset, uint64_t length, bufferlist& t) {
-	bdev->aio_write(offset, t, &txc->ioc, false);
-      });
+    if (!g_conf->bluestore_debug_omit_block_device_write) {
+      b->get_blob().map_bl(
+        b_off, *l,
+        [&](uint64_t offset, uint64_t length, bufferlist& t) {
+  	  bdev->aio_write(offset, t, &txc->ioc, false);
+        });
+    }
   }
   if (need > 0) {
     alloc->unreserve(need);
