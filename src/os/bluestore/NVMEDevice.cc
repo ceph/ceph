@@ -626,6 +626,17 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 {
   Mutex::Locker l(lock);
   int r = 0;
+
+  string prefix = "--file-prefix=";
+  string sock_mem = "--socket-mem=";
+  string coremask = "-c ";
+  prefix += sn_tag;
+  sock_mem += g_conf->bluestore_spdk_socket_mem;
+  coremask += g_conf->bluestore_spdk_coremask;
+  char *prefix_arg = (char *)prefix.c_str();
+  char *sock_mem_arg = (char *)sock_mem.c_str();
+  char *coremask_arg = (char *)coremask.c_str();
+
   if (sn_tag.empty()) {
     r = -ENOENT;
     derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
@@ -642,11 +653,13 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   if (!init) {
     init = true;
     dpdk_thread = std::thread(
-      [this]() {
+      [this, prefix_arg, sock_mem_arg, coremask_arg]() {
         static const char *ealargs[] = {
             "ceph-osd",
-            "-c 0x3", /* This must be the second parameter. It is overwritten by index in main(). */
+            coremask_arg, /* This must be the second parameter. It is overwritten by index in main(). */
             "-n 4",
+	    socket_mem_arg,
+	    prefix_arg
         };
 
         int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
