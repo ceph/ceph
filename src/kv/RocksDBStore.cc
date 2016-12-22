@@ -869,6 +869,16 @@ bufferlist RocksDBStore::RocksDBWholeSpaceIteratorImpl::value()
   return to_bufferlist(dbiter->value());
 }
 
+size_t RocksDBStore::RocksDBWholeSpaceIteratorImpl::key_size()
+{
+  return dbiter->key().size();
+}
+
+size_t RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_size()
+{
+  return dbiter->value().size();
+}
+
 bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
 {
   rocksdb::Slice val = dbiter->value();

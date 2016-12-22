@@ -313,6 +313,8 @@ public:
     bufferlist value();
     bufferptr value_as_ptr();
     int status();
+    size_t key_size();
+    size_t value_size();
   };
 
   /// Utility
