@@ -96,7 +96,9 @@ bool OpRequest::may_write() {
   return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
 bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
-bool OpRequest::rwordered_forced() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered_forced() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
+}
 bool OpRequest::rwordered() {
   return may_write() || may_cache() || rwordered_forced();
 }
