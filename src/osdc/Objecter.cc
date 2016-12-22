@@ -553,9 +553,7 @@ void Objecter::_send_linger(LingerOp *info,
   watchl.unlock();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 NULL,
-		 info->pobjver);
-  o->oncommit_sync = oncommit;
+		 oncommit, info->pobjver);
   o->outbl = poutbl;
   o->snapid = info->snap;
   o->snapc = info->snapc;
@@ -689,8 +687,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 NULL, NULL, NULL);
-  o->oncommit_sync = onack;
+		 onack, NULL, NULL);
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
@@ -1458,9 +1455,6 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
       if (op->onfinish) {
 	op->onfinish->complete(-ENOENT);
       }
-      if (op->oncommit_sync) {
-	op->oncommit_sync->complete(-ENOENT);
-      }
 
       OSDSession *s = op->session;
       assert(s != NULL);
@@ -2206,7 +2200,7 @@ void Objecter::_send_op_account(Op *op)
   inflight_ops.inc();
 
   // add to gather set(s)
-  if (op->onfinish || op->oncommit_sync) {
+  if (op->onfinish) {
     num_in_flight.inc();
   } else {
     ldout(cct, 20) << " note: not requesting reply" << dendl;
@@ -2413,15 +2407,10 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
   ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
 		 << dendl;
   Op *op = p->second;
-  if (op->onfinish || op->oncommit_sync)
-    num_in_flight.dec();
   if (op->onfinish) {
+    num_in_flight.dec();
     op->onfinish->complete(r);
     op->onfinish = NULL;
-  }
-  if (op->oncommit_sync) {
-    op->oncommit_sync->complete(r);
-    op->oncommit_sync = NULL;
   }
   _op_cancel_map_check(op);
   _finish_op(op, r);
@@ -2970,9 +2959,8 @@ void Objecter::_cancel_linger_op(Op *op)
   ldout(cct, 15) << "cancel_op " << op->tid << dendl;
 
   assert(!op->should_resend);
-  if (op->onfinish || op->oncommit_sync) {
+  if (op->onfinish) {
     delete op->onfinish;
-    delete op->oncommit_sync;
     num_in_flight.dec();
   }
 
@@ -3024,7 +3012,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
-  if (op->onfinish || op->oncommit_sync)
+  if (op->onfinish)
     flags |= CEPH_OSD_FLAG_ONDISK;
 
   if (!honor_osdmap_full)
@@ -3217,7 +3205,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (retry_writes_after_first_reply && op->attempts == 1 &&
       (op->target.flags & CEPH_OSD_FLAG_WRITE)) {
     ldout(cct, 7) << "retrying write after first reply: " << tid << dendl;
-    if (op->onfinish || op->oncommit_sync) {
+    if (op->onfinish) {
       num_in_flight.dec();
     }
     _session_op_remove(s, op);
@@ -3253,7 +3241,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (m->is_redirect_reply()) {
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
-    if (op->onfinish || op->oncommit_sync)
+    if (op->onfinish)
       num_in_flight.dec();
     _session_op_remove(s, op);
     sl.unlock();
@@ -3337,29 +3325,18 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.
 
-  if (op->onfinish || op->oncommit_sync) {
-    num_in_flight.dec();
-  }
   if (op->onfinish) {
-    ldout(cct, 15) << "handle_osd_op_reply finish" << dendl;
+    num_in_flight.dec();
     onfinish = op->onfinish;
     op->onfinish = NULL;
-  }
-  if (op->oncommit_sync) {
-    ldout(cct, 15) << "handle_osd_op_reply finish (sync)" << dendl;
-    op->oncommit_sync->complete(rc);
-    op->oncommit_sync = NULL;
   }
   logger->inc(l_osdc_op_reply);
 
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  // done with this tid?
-  if (!op->onfinish && !op->oncommit_sync) {
-    ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
-    _finish_op(op, 0);
-  }
+  ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
+  _finish_op(op, 0);
 
   ldout(cct, 5) << num_in_flight.read() << " in flight" << dendl;
 
