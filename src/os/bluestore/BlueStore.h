@@ -2174,9 +2174,10 @@ private:
 	      OnodeRef& oldo,
 	      OnodeRef& newo,
 	      const ghobject_t& new_oid);
-  int _create_collection(TransContext *txc, coll_t cid, unsigned bits,
-			 CollectionRef *c);
-  int _remove_collection(TransContext *txc, coll_t cid, CollectionRef *c);
+  int _create_collection(TransContext *txc, const coll_t &cid,
+			 unsigned bits, CollectionRef *c);
+  int _remove_collection(TransContext *txc, const coll_t &cid,
+                         CollectionRef *c);
   int _split_collection(TransContext *txc,
 			CollectionRef& c,
 			CollectionRef& d,
