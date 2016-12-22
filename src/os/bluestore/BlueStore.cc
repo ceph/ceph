@@ -1661,7 +1661,6 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
-	p->shard_info->extents = nn;
 	t->set(PREFIX_OBJ, p->key, bl);
 	p->dirty = false;
       }
