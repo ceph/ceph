@@ -271,19 +271,30 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
 }
 
 
-/* External token */
-bool RGWExternalTokenAuthEngine::is_applicable() const noexcept
-{
-  if (false == RGWTokenBasedAuthEngine::is_applicable()) {
-    return false;
-  }
+namespace rgw {
+namespace auth {
+namespace swift {
 
-  return false == g_conf->rgw_swift_auth_url.empty();
+/* External token */
+bool ExternalTokenEngine::is_applicable(const std::string& token) const noexcept
+{
+  if (token.empty()) {
+    return false;
+  } else if (g_conf->rgw_swift_auth_url.empty()) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
-RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
+ExternalTokenEngine::result_t
+ExternalTokenEngine::authenticate(const std::string& token) const
 {
-  string auth_url = g_conf->rgw_swift_auth_url;
+  if (! is_applicable(token)) {
+    return std::make_pair(nullptr, nullptr);
+  }
+
+  std::string auth_url = g_conf->rgw_swift_auth_url;
   if (auth_url[auth_url.length() - 1] != '/') {
     auth_url.append("/");
   }
@@ -308,17 +319,17 @@ RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
                 ",", swift_groups);
 
     if (0 == swift_groups.size()) {
-      return nullptr;
+      return std::make_pair(nullptr, nullptr);
     } else {
       swift_user = std::move(swift_groups[0]);
     }
   } catch (std::out_of_range) {
     /* The X-Auth-Groups header isn't present in the response. */
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   if (swift_user.empty()) {
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   ldout(cct, 10) << "swift user=" << swift_user << dendl;
@@ -330,10 +341,10 @@ RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
     throw ret;
   }
 
-  return apl_factory->create_apl_local(cct, tmp_uinfo,
-                                       extract_swift_subuser(swift_user));
+  auto apl = apl_factory->create_apl_local(cct, tmp_uinfo,
+                                           extract_swift_subuser(swift_user));
+  return std::make_pair(std::move(apl), nullptr);
 }
-
 
 static int build_token(const string& swift_user,
                        const string& key,
@@ -382,17 +393,22 @@ static int encode_token(CephContext *cct, string& swift_user, string& key,
 
 
 /* AUTH_rgwtk (signed token): engine */
-bool RGWSignedTokenAuthEngine::is_applicable() const noexcept
+bool SignedTokenEngine::is_applicable(const std::string& token) const noexcept
 {
-  if (false == RGWTokenBasedAuthEngine::is_applicable()) {
+  if (token.empty()) {
     return false;
+  } else {
+    return token.compare(0, 10, "AUTH_rgwtk") == 0;
   }
-
-  return token.compare(0, 10, "AUTH_rgwtk") == 0;
 }
 
-RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
+SignedTokenEngine::result_t
+SignedTokenEngine::authenticate(const std::string& token) const
 {
+  if (! is_applicable(token)) {
+    return std::make_pair(nullptr, nullptr);
+  }
+
   /* Effective token string is the part after the prefix. */
   const std::string etoken = token.substr(strlen("AUTH_rgwtk"));
   const size_t etoken_len = etoken.length();
@@ -403,13 +419,13 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
     throw -EINVAL;
   }
 
-  bufferptr p(etoken_len/2);
+  ceph::bufferptr p(etoken_len/2);
   int ret = hex_to_buf(etoken.c_str(), p.c_str(), etoken_len);
   if (ret < 0) {
     throw ret;
   }
 
-  bufferlist tok_bl;
+  ceph::bufferlist tok_bl;
   tok_bl.append(p);
 
   uint64_t nonce;
@@ -432,7 +448,7 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
     ldout(cct, 0) << "NOTICE: old timed out token was used now=" << now
 	          << " token.expiration=" << expiration
                   << dendl;
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   RGWUserInfo user_info;
@@ -445,7 +461,7 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
 
   const auto siter = user_info.swift_keys.find(swift_user);
   if (siter == std::end(user_info.swift_keys)) {
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   const auto swift_key = siter->second;
@@ -461,7 +477,7 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
                   << " tok_bl.length()=" << tok_bl.length()
 	          << " local_tok_bl.length()=" << local_tok_bl.length()
                   << dendl;
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
@@ -472,12 +488,17 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
                local_tok_bl.length(), buf);
 
     ldout(cct, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
-  return apl_factory->create_apl_local(cct, user_info,
-                                       extract_swift_subuser(swift_user));
+  auto apl = apl_factory->create_apl_local(cct, user_info,
+                                           extract_swift_subuser(swift_user));
+  return std::make_pair(std::move(apl), nullptr);
 }
+
+} /* namespace swift */
+} /* namespace auth */
+} /* namespace rgw */
 
 
 void RGW_SWIFT_Auth_Get::execute()
@@ -577,6 +598,7 @@ void RGW_SWIFT_Auth_Get::execute()
   dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
               tenant_path);
 
+  using rgw::auth::swift::encode_token;
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
 
