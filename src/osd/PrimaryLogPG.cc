@@ -3542,7 +3542,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
 	MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
 	get_osdmap()->get_epoch(),
 	m->query_epoch,
-	spg_t(info.pgid.pgid, primary.shard));
+	spg_t(info.pgid.pgid, get_primary().shard));
       reply->set_priority(get_recovery_op_priority());
       osd->send_message_osd_cluster(reply, m->get_connection());
       queue_peering_event(
@@ -9691,7 +9691,7 @@ void PrimaryLogPG::_committed_pushed_object(
 	  get_primary().osd,
 	  new MOSDPGTrim(
 	    get_osdmap()->get_epoch(),
-	    spg_t(info.pgid.pgid, primary.shard),
+	    spg_t(info.pgid.pgid, get_primary().shard),
 	    last_complete_ondisk),
 	  get_osdmap()->get_epoch());
       } else {
