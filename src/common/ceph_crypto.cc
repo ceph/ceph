@@ -59,7 +59,11 @@ void ceph::crypto::shutdown(bool shared)
   pthread_mutex_lock(&crypto_init_mutex);
   ceph_assert(crypto_refs > 0);
   if (--crypto_refs == 0) {
-    NSS_ShutdownContext(crypto_context);
+    int r = NSS_ShutdownContext(crypto_context);
+    if (r) {
+      cerr << "NSS_ShutdownContext failed; leaked objects?" << std::endl;
+      assert(0 == "NSS_ShutdownContext failed");
+    }
     if (!shared) {
       PR_Cleanup();
     }
