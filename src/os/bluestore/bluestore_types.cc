@@ -546,13 +546,12 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
 {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("bytes", bytes);
-  f->dump_unsigned("extents", extents);
 }
 
 ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si)
 {
-  return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes, "
-	     << std::dec << si.extents << " extents)";
+  return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes"
+	     << std::dec << ")";
 }
 
 void bluestore_onode_t::dump(Formatter *f) const
