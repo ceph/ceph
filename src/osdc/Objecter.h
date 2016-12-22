@@ -1234,7 +1234,6 @@ public:
     int priority;
     Context *onfinish;
     uint64_t ontimeout;
-    Context *oncommit_sync; // used internally by watch/notify
 
     ceph_tid_t tid;
     eversion_t replay_version; // for op replay
@@ -1275,7 +1274,6 @@ public:
       priority(0),
       onfinish(fin),
       ontimeout(0),
-      oncommit_sync(NULL),
       tid(0),
       attempts(0),
       objver(ov),
