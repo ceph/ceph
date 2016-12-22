@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "librbd/ImageCtx.h"
-#include "msg/msg_types.h"
+#include "librbd/exclusive_lock/Types.h"
 #include <string>
 
 class Context;
@@ -94,10 +94,7 @@ private:
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
-  entity_name_t m_locker_entity;
-  std::string m_locker_cookie;
-  std::string m_locker_address;
-  uint64_t m_locker_handle;
+  Locker m_locker;
 
   int m_error_result;
   bool m_prepare_lock_completed = false;
@@ -132,8 +129,8 @@ private:
   void send_unlock();
   Context *handle_unlock(int *ret_val);
 
-  void send_get_lockers();
-  Context *handle_get_lockers(int *ret_val);
+  void send_get_locker();
+  Context *handle_get_locker(int *ret_val);
 
   void send_get_watchers();
   Context *handle_get_watchers(int *ret_val);

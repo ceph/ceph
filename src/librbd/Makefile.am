@@ -33,6 +33,7 @@ librbd_internal_la_SOURCES = \
 	librbd/Utils.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
 	librbd/exclusive_lock/AutomaticPolicy.cc \
+	librbd/exclusive_lock/GetLockerRequest.cc \
 	librbd/exclusive_lock/ReacquireRequest.cc \
 	librbd/exclusive_lock/ReleaseRequest.cc \
 	librbd/exclusive_lock/StandardPolicy.cc \
@@ -122,10 +123,12 @@ noinst_HEADERS += \
 	librbd/WatchNotifyTypes.h \
 	librbd/exclusive_lock/AcquireRequest.h \
 	librbd/exclusive_lock/AutomaticPolicy.h \
+	librbd/exclusive_lock/GetLockerRequest.h \
 	librbd/exclusive_lock/Policy.h \
 	librbd/exclusive_lock/ReacquireRequest.h \
 	librbd/exclusive_lock/ReleaseRequest.h \
 	librbd/exclusive_lock/StandardPolicy.h \
+	librbd/exclusive_lock/Types.h \
 	librbd/image/CloseRequest.h \
 	librbd/image/OpenRequest.h \
 	librbd/image/RefreshParentRequest.h \
