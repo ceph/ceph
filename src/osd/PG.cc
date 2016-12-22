@@ -4825,6 +4825,9 @@ void PG::fulfill_log(
   dout(10) << "log request from " << from << dendl;
   assert(from == primary);
   assert(query.type != pg_query_t::INFO);
+  ConnectionRef con = osd->get_con_osd_cluster(
+    from.osd, get_osdmap()->get_epoch());
+  if (!con) return;
 
   MOSDPGLog *mlog = new MOSDPGLog(
     from.shard, pg_whoami.shard,
@@ -4851,14 +4854,8 @@ void PG::fulfill_log(
 
   dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
 
-  ConnectionRef con = osd->get_con_osd_cluster(
-    from.osd, get_osdmap()->get_epoch());
-  if (con) {
-    osd->share_map_peer(from.osd, con.get(), get_osdmap());
-    osd->send_message_osd_cluster(mlog, con.get());
-  } else {
-    mlog->put();
-  }
+  osd->share_map_peer(from.osd, con.get(), get_osdmap());
+  osd->send_message_osd_cluster(mlog, con.get());
 }
 
 
