@@ -40,24 +40,24 @@ private:
    *    v
    * FLUSH_NOTIFIES
    *    |
-   *    |     /-----------------------------------------------------------\
-   *    |     |                                                           |
-   *    |     |             (no lockers)                                  |
-   *    |     |   . . . . . . . . . . . . . . . . . . . . . .             |
-   *    |     |   .                                         .             |
-   *    |     v   v      (EBUSY)                            .             |
-   *    \--> LOCK_IMAGE * * * * * * * * > GET_LOCKERS . . . .             |
-   *              |                         |                             |
-   *              v                         v                             |
-   *         REFRESH (skip if not         GET_WATCHERS                    |
-   *              |   needed)               |                             |
-   *              v                         v                             |
-   *         OPEN_OBJECT_MAP (skip if     BLACKLIST (skip if blacklist    |
-   *              |           disabled)     |        disabled)            |
-   *              v                         v                             |
-   *         OPEN_JOURNAL (skip if        BREAK_LOCK                      |
-   *              |   *     disabled)       |                             |
-   *              |   *                     \-----------------------------/
+   *    v
+   * GET_LOCKERS <--------------------------------------\
+   *    |     ^                                         |
+   *    |     . (EBUSY && no cached locker)             |
+   *    |     .                                         |
+   *    |     .          (EBUSY && cached locker)       |
+   *    \--> LOCK_IMAGE * * * * * * * * > BREAK_LOCK ---/
+   *              |
+   *              v
+   *         REFRESH (skip if not
+   *              |   needed)
+   *              v
+   *         OPEN_OBJECT_MAP (skip if
+   *              |           disabled)
+   *              v
+   *         OPEN_JOURNAL (skip if
+   *              |   *     disabled)
+   *              |   *
    *              |   * * * * * * * *
    *              v                 *
    *          ALLOCATE_JOURNAL_TAG  *
@@ -86,11 +86,6 @@ private:
   Context *m_on_acquire;
   Context *m_on_finish;
 
-  bufferlist m_out_bl;
-
-  std::list<obj_watch_t> m_watchers;
-  int m_watchers_ret_val;
-
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
@@ -104,6 +99,9 @@ private:
 
   void send_flush_notifies();
   Context *handle_flush_notifies(int *ret_val);
+
+  void send_get_locker();
+  Context *handle_get_locker(int *ret_val);
 
   void send_lock();
   Context *handle_lock(int *ret_val);
@@ -128,15 +126,6 @@ private:
 
   void send_unlock();
   Context *handle_unlock(int *ret_val);
-
-  void send_get_locker();
-  Context *handle_get_locker(int *ret_val);
-
-  void send_get_watchers();
-  Context *handle_get_watchers(int *ret_val);
-
-  void send_blacklist();
-  Context *handle_blacklist(int *ret_val);
 
   void send_break_lock();
   Context *handle_break_lock(int *ret_val);
