@@ -322,6 +322,21 @@ void RocksDBStore::close()
     cct->get_perfcounters_collection()->remove(logger);
 }
 
+void RocksDBStore::split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss;
+    ss.str(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+}
+
+std::vector<std::string> RocksDBStore::split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, elems);
+    return elems;
+}
+
 void RocksDBStore::get_statistics(Formatter *f)
 {
   if (!g_conf->rocksdb_perf)  {
@@ -331,18 +346,29 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
 
   if (g_conf->rocksdb_collect_compaction_stats) {
-    std::string stats;
-    bool status = db->GetProperty("rocksdb.stats", &stats);
+    std::string stat_str;
+    bool status = db->GetProperty("rocksdb.stats", &stat_str);
     if (status) {
       f->open_object_section("rocksdb_statistics");
-      f->dump_string("rocksdb_compaction_statistics", stats);
+      f->dump_string("rocksdb_compaction_statistics", "");
+      vector<string> stats;
+      split(stat_str, '\n', stats);
+      for (auto st :stats) {
+        f->dump_string("", st);
+      }
       f->close_section();
     }
   }
   if (g_conf->rocksdb_collect_extended_stats) {
     if (dbstats) {
       f->open_object_section("rocksdb_extended_statistics");
-      f->dump_string("rocksdb_extended_statistics", dbstats->ToString().c_str());
+      string stat_str = dbstats->ToString();
+      vector<string> stats;
+      split(stat_str, '\n', stats);
+      f->dump_string("rocksdb_extended_statistics", "");
+      for (auto st :stats) {
+        f->dump_string(".", st);
+      }
       f->close_section();
     }
     f->open_object_section("rocksdbstore_perf_counters");
