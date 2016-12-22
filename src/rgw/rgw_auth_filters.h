@@ -93,6 +93,88 @@ public:
 };
 
 
+template <typename T>
+class ThirdPartyAccountApplier : public DecoratedApplier<T> {
+  /* const */RGWRados* const store;
+  const rgw_user acct_user_override;
+
+public:
+  /* A value representing situations where there is no requested account
+   * override. In other words, acct_user_override will be equal to this
+   * constant where the request isn't a cross-tenant one. */
+  static const rgw_user UNKNOWN_ACCT;
+
+  template <typename U>
+  ThirdPartyAccountApplier(RGWRados* const store,
+                           const rgw_user acct_user_override,
+                           U&& decoratee)
+    : DecoratedApplier<T>(std::move(decoratee)),
+      store(store),
+      acct_user_override(acct_user_override) {
+  }
+
+  void to_str(std::ostream& out) const override;
+  void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
+};
+
+/* static declaration: UNKNOWN_ACCT will be an empty rgw_user that is a result
+ * of the default construction. */
+template <typename T>
+const rgw_user ThirdPartyAccountApplier<T>::UNKNOWN_ACCT;
+
+template <typename T>
+void ThirdPartyAccountApplier<T>::to_str(std::ostream& out) const
+{
+  out << "rgw::auth::ThirdPartyAccountApplier(" + acct_user_override.to_str() + ")"
+      <<   " -> ";
+  DecoratedApplier<T>::to_str(out);
+}
+
+template <typename T>
+void ThirdPartyAccountApplier<T>::load_acct_info(RGWUserInfo& user_info) const
+{
+  if (UNKNOWN_ACCT == acct_user_override) {
+    /* There is no override specified by the upper layer. This means that we'll
+     * load the account owned by the authenticated identity (aka auth_user). */
+    DecoratedApplier<T>::load_acct_info(user_info);
+  } else if (DecoratedApplier<T>::is_owner_of(acct_user_override)) {
+    /* The override has been specified but the account belongs to the authenticated
+     * identity. We may safely forward the call to a next stage. */
+    DecoratedApplier<T>::load_acct_info(user_info);
+  } else {
+    /* Compatibility mechanism for multi-tenancy. For more details refer to
+     * load_acct_info method of RGWRemoteAuthApplier. */
+    if (acct_user_override.tenant.empty()) {
+      const rgw_user tenanted_uid(acct_user_override.id, acct_user_override.id);
+
+      if (rgw_get_user_info_by_uid(store, tenanted_uid, user_info) >= 0) {
+        /* Succeeded. */
+        return;
+      }
+    }
+
+    const int ret = rgw_get_user_info_by_uid(store, acct_user_override, user_info);
+    if (ret < 0) {
+      /* We aren't trying to recover from ENOENT here. It's supposed that creating
+       * someone else's account isn't a thing we want to support in this filter. */
+      if (ret == -ENOENT) {
+        throw -EACCES;
+      } else {
+        throw ret;
+      }
+    }
+
+  }
+}
+
+template <typename T> static inline
+ThirdPartyAccountApplier<T> add_3rdparty(RGWRados* const store,
+                                         const rgw_user acct_user_override,
+                                         T&& t) {
+  return ThirdPartyAccountApplier<T>(store, acct_user_override,
+                                     std::forward<T>(t));
+}
+
 } /* namespace auth */
 } /* namespace rgw */
 
