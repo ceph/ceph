@@ -686,11 +686,11 @@ public:
       return p->second;
     }
 
-    bool update(Onode *on, KeyValueDB::Transaction t, bool force);
-    void reshard(Onode *on, uint64_t min_alloc_size);
+    bool update(KeyValueDB::Transaction t, bool force);
+    void reshard(uint64_t min_alloc_size);
 
     /// initialize Shards from the onode
-    void init_shards(Onode *on, bool loaded, bool dirty);
+    void init_shards(bool loaded, bool dirty);
 
     /// return index of shard containing offset
     /// or -1 if not found
