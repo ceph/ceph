@@ -9322,6 +9322,10 @@ int OSD::init_op_flags(OpRequestRef& op)
   // client flags have no bearing on whether an op is a read, write, etc.
   op->rmw_flags = 0;
 
+  if (m->has_flag(CEPH_OSD_FLAG_RWORDERED)) {
+    op->set_force_rwordered();
+  }
+
   // set bits based on op codes, called methods.
   for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
     if ((iter->op.op == CEPH_OSD_OP_WATCH &&
