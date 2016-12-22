@@ -1681,7 +1681,6 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
-	p->shard_info->extents = nn;
         
         encoded_shards[pos].key = &p->key;
         dirty_shards.push_back(encoded_shards[pos]);
