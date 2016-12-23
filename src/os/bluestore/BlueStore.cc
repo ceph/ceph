@@ -18,7 +18,7 @@
 #include <fcntl.h>
 
 #include "BlueStore.h"
-#include "kv.h"
+#include "os/kv.h"
 #include "include/compat.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
