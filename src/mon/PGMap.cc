@@ -12,6 +12,8 @@
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 
+#define dout_context g_ceph_context
+
 // --
 
 void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
@@ -2171,7 +2173,7 @@ void PGMapUpdater::register_pg(
     stats.last_deep_scrub_stamp = ps.last_deep_scrub_stamp;
     stats.last_clean_scrub_stamp = ps.last_clean_scrub_stamp;
   } else {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     stats.last_fresh = now;
     stats.last_active = now;
     stats.last_change = now;

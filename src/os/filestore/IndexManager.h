@@ -49,6 +49,7 @@ struct Index {
  * This is enforced by using CollectionIndex::access_lock
  */
 class IndexManager {
+  CephContext* cct;
   RWLock lock; ///< Lock for Index Manager
   bool upgrade;
   ceph::unordered_map<coll_t, CollectionIndex* > col_indices;
@@ -68,8 +69,10 @@ class IndexManager {
   bool get_index_optimistic(coll_t c, Index *index);
 public:
   /// Constructor
-  explicit IndexManager(bool upgrade) : lock("IndexManager lock"),
-		    		        upgrade(upgrade) {}
+  explicit IndexManager(CephContext* cct,
+			bool upgrade) : cct(cct),
+					lock("IndexManager lock"),
+					upgrade(upgrade) {}
 
   ~IndexManager();
 

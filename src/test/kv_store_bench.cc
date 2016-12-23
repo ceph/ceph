@@ -326,7 +326,7 @@ void KvStoreBench::aio_callback_timed(int * err, void *arg) {
   //throughput
   args->kvsb->data.throughput_jf.open_object_section("throughput");
   args->kvsb->data.throughput_jf.dump_unsigned(string(1, args->op).c_str(),
-      ceph_clock_now(g_ceph_context));
+      ceph_clock_now());
   args->kvsb->data.throughput_jf.close_section();
 
   data_lock->Unlock();

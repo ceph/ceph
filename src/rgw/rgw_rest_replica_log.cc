@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 #define REPLICA_INPUT_MAX_LEN (512*1024)
 

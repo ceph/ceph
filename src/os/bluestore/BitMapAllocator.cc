@@ -12,12 +12,15 @@
 #include "bluestore_types.h"
 #include "common/debug.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "bitmapalloc:"
 
 
-BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
+BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
+				 int64_t block_size)
+  : cct(cct)
 {
   assert(ISP2(block_size));
   if (!ISP2(block_size)) {
@@ -27,7 +30,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
     return;
   }
 
-  int64_t zone_size_blks = g_conf->bluestore_bitmapallocator_blocks_per_zone;
+  int64_t zone_size_blks = cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
   assert(ISP2(zone_size_blks));
   if (!ISP2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
@@ -36,7 +39,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
     return;
   }
 
-  int64_t span_size = g_conf->bluestore_bitmapallocator_span_size;
+  int64_t span_size = cct->_conf->bluestore_bitmapallocator_span_size;
   assert(ISP2(span_size));
   if (!ISP2(span_size)) {
     derr << __func__ << " span_size " << span_size
@@ -46,8 +49,8 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   }
 
   m_block_size = block_size;
-  m_bit_alloc = new BitAllocator(device_size / block_size,
-        zone_size_blks, CONCURRENT, true);
+  m_bit_alloc = new BitAllocator(cct, device_size / block_size,
+				 zone_size_blks, CONCURRENT, true);
   assert(m_bit_alloc);
   if (!m_bit_alloc) {
     derr << __func__ << " Unable to intialize Bit Allocator" << dendl;

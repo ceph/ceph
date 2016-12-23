@@ -24,7 +24,8 @@ public:
     AllocTest(): alloc(0) { }
     void init_alloc(int64_t size, uint64_t min_alloc_size) {
       std::cout << "Creating alloc type " << string(GetParam()) << " \n";
-      alloc.reset(Allocator::create(string(GetParam()), size, min_alloc_size));
+      alloc.reset(Allocator::create(g_ceph_context, string(GetParam()), size,
+				    min_alloc_size));
     }
 
     void init_close() {
@@ -224,7 +225,7 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   if (GetParam() == std::string("stupid")) {
     return;
   }
-  int64_t blocks = BitMapArea::get_level_factor(2) * 4;
+  int64_t blocks = BitMapArea::get_level_factor(g_ceph_context, 2) * 4;
   int count = 0;
   int64_t allocated = 0;
   int64_t zone_size = 1024;

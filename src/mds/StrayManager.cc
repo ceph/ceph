@@ -27,6 +27,7 @@
 
 #include "StrayManager.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
@@ -118,7 +119,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
       object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
       dout(10) << __func__ << " remove dirfrag " << oid << dendl;
       mds->objecter->remove(oid, oloc, nullsnapc,
-			    ceph::real_clock::now(g_ceph_context),
+			    ceph::real_clock::now(),
 			    0, NULL, gather.new_sub());
     }
     assert(gather.has_subs());
@@ -149,7 +150,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
       dout(10) << __func__ << " 0~" << to << " objects 0~" << num
 	       << " snapc " << snapc << " on " << *in << dendl;
       filer.purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			0, num, ceph::real_clock::now(g_ceph_context), 0,
+			0, num, ceph::real_clock::now(), 0,
 			gather.new_sub());
     }
   }
@@ -162,7 +163,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
-			  ceph::real_clock::now(g_ceph_context), 0,
+			  ceph::real_clock::now(), 0,
 			  NULL, gather.new_sub());
   }
   // remove old backtrace objects
@@ -173,7 +174,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " old pool " << *p << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
-			  ceph::real_clock::now(g_ceph_context), 0,
+			  ceph::real_clock::now(), 0,
 			  NULL, gather.new_sub());
   }
   assert(gather.has_subs());
@@ -909,12 +910,12 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
     // keep backtrace object
     if (num > 1) {
       filer.purge_range(in->ino(), &in->inode.layout, *snapc,
-			1, num - 1, ceph::real_clock::now(g_ceph_context),
+			1, num - 1, ceph::real_clock::now(),
 			0, gather.new_sub());
     }
     filer.zero(in->ino(), &in->inode.layout, *snapc,
 	       0, in->inode.layout.object_size,
-	       ceph::real_clock::now(g_ceph_context),
+	       ceph::real_clock::now(),
 	       0, true, NULL, gather.new_sub());
   }
 

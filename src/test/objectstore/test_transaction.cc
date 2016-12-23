@@ -186,7 +186,7 @@ void bench_num_bytes(bool legacy)
     cout << "get_encoded_bytes: ";
   }
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   if (legacy) {
     for (int i = 0; i < max; ++i) {
       a.get_encoded_bytes_test();
@@ -197,7 +197,7 @@ void bench_num_bytes(bool legacy)
     }
   }
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   cout << max << " encodes in " << (end - start) << std::endl;
 
 }

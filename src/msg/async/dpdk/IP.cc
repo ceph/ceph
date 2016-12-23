@@ -191,7 +191,7 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
     // This is a newly created frag_id
     if (frag.mem_size == 0) {
       _frags_age.push_back(frag_id);
-      frag.rx_time = ceph_clock_now(cct);
+      frag.rx_time = ceph_clock_now();
     }
     auto added_size = frag.merge(h, offset, std::move(p));
     _frag_mem += added_size;
@@ -374,7 +374,7 @@ void ipv4::frag_timeout() {
   if (_frags.empty()) {
     return;
   }
-  auto now = ceph_clock_now(cct);
+  auto now = ceph_clock_now();
   for (auto it = _frags_age.begin(); it != _frags_age.end();) {
     auto frag_id = *it;
     auto& frag = _frags[frag_id];

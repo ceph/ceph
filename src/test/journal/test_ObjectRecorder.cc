@@ -372,7 +372,6 @@ TEST_F(TestObjectRecorder, Close) {
     Mutex::Locker locker(m_handler.lock);
     while (!m_handler.is_closed) {
       if (m_handler.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
             m_handler.lock, utime_t(10, 0)) != 0) {
         break;
       }
@@ -423,7 +422,6 @@ TEST_F(TestObjectRecorder, Overflow) {
     Mutex::Locker locker(m_handler.lock);
     while (m_handler.overflows == 0) {
       if (m_handler.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
             m_handler.lock, utime_t(10, 0)) != 0) {
         break;
       }

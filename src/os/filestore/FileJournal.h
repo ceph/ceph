@@ -388,14 +388,15 @@ private:
   }
 
  public:
-  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
-    Journal(fsid, fin, sync_cond),
-    finisher_lock("FileJournal::finisher_lock", false, true, false, g_ceph_context),
+  FileJournal(CephContext* cct, uuid_d fsid, Finisher *fin, Cond *sync_cond,
+	      const char *f, bool dio=false, bool ai=true, bool faio=false) :
+    Journal(cct, fsid, fin, sync_cond),
+    finisher_lock("FileJournal::finisher_lock", false, true, false, cct),
     journaled_seq(0),
     plug_journal_completions(false),
-    writeq_lock("FileJournal::writeq_lock", false, true, false, g_ceph_context),
+    writeq_lock("FileJournal::writeq_lock", false, true, false, cct),
     completions_lock(
-      "FileJournal::completions_lock", false, true, false, g_ceph_context),
+      "FileJournal::completions_lock", false, true, false, cct),
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
@@ -415,30 +416,30 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle(g_conf->filestore_caller_concurrency),
-    write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
+    throttle(cct->_conf->filestore_caller_concurrency),
+    write_lock("FileJournal::write_lock", false, true, false, cct),
     write_stop(true),
     aio_stop(true),
     write_thread(this),
     write_finish_thread(this) {
 
       if (aio && !directio) {
-        derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
+	lderr(cct) << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
         aio = false;
       }
 #ifndef HAVE_LIBAIO
       if (aio) {
-        derr << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
+	lderr(cct) << "FileJournal::_open_any: libaio not compiled in; disabling aio" << dendl;
         aio = false;
       }
 #endif
 
-      g_conf->add_observer(this);
+      cct->_conf->add_observer(this);
   }
   ~FileJournal() {
     assert(fd == -1);
     delete[] zero_buf;
-    g_conf->remove_observer(this);
+    cct->_conf->remove_observer(this);
   }
 
   int check();

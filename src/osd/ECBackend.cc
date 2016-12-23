@@ -26,6 +26,7 @@
 
 #include "PrimaryLogPG.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
@@ -196,8 +197,7 @@ ECBackend::ECBackend(
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll, ch),
-    cct(cct),
+  : PGBackend(cct, pg, store, coll, ch),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   assert((ec_impl->get_data_chunk_count() *

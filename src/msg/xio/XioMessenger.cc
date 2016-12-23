@@ -52,8 +52,6 @@ static const level_pair LEVELS[] = {
   make_pair("trace", 20)
 };
 
-// maintain our own global context, we can't rely on g_ceph_context
-// for things like librados
 static CephContext *context;
 
 int get_level()

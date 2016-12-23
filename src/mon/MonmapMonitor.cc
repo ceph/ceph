@@ -78,7 +78,7 @@ void MonmapMonitor::create_pending()
 {
   pending_map = *mon->monmap;
   pending_map.epoch++;
-  pending_map.last_changed = ceph_clock_now(g_ceph_context);
+  pending_map.last_changed = ceph_clock_now();
   dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
 }
 
@@ -455,7 +455,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      */
 
     pending_map.add(name, addr);
-    pending_map.last_changed = ceph_clock_now(g_ceph_context);
+    pending_map.last_changed = ceph_clock_now();
     ss << "adding mon." << name << " at " << addr;
     propose = true;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
@@ -507,7 +507,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     entity_addr_t addr = pending_map.get_addr(name);
     pending_map.remove(name);
-    pending_map.last_changed = ceph_clock_now(g_ceph_context);
+    pending_map.last_changed = ceph_clock_now();
     ss << "removing mon." << name << " at " << addr
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
@@ -556,7 +556,7 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   if (pending_map.contains(join->addr))
     pending_map.remove(pending_map.get_name(join->addr));
   pending_map.add(join->name, join->addr);
-  pending_map.last_changed = ceph_clock_now(g_ceph_context);
+  pending_map.last_changed = ceph_clock_now();
   return true;
 }
 

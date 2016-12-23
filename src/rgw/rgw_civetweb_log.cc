@@ -6,6 +6,7 @@
 #define dout_subsys ceph_subsys_civetweb
 
 
+#define dout_context g_ceph_context
 int rgw_civetweb_log_callback(const struct mg_connection *conn, const char *buf) {
   dout(0) << "civetweb: " << (void *)conn << ": " << buf << dendl;
   return 0;

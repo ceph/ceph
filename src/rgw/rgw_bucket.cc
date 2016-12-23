@@ -25,6 +25,7 @@
 
 #include "cls/user/cls_user_types.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define BUCKET_TAG_TIMEOUT 30
@@ -1873,7 +1874,7 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
 
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(interval, 0));
+    cond.WaitInterval(lock, utime_t(interval, 0));
     lock.Unlock();
   } while (!log->going_down());
 

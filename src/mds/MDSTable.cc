@@ -28,6 +28,7 @@
 #include "include/assert.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
@@ -81,7 +82,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, ceph::real_clock::now(g_ceph_context), 0,
+			    bl, ceph::real_clock::now(), 0,
 			    NULL,
 			    new C_OnFinisher(new C_IO_MT_Save(this, version),
 					     mds->finisher));

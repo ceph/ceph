@@ -66,7 +66,8 @@ public:
   virtual uint64_t get_free() = 0;
 
   virtual void shutdown() = 0;
-  static Allocator *create(string type, int64_t size, int64_t block_size);
+  static Allocator *create(CephContext* cct, string type, int64_t size,
+			   int64_t block_size);
 };
 
 #endif

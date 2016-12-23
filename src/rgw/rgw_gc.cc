@@ -10,6 +10,7 @@
 
 #include <list>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -131,7 +132,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 int RGWGC::process(int index, int max_secs)
 {
   rados::cls::lock::Lock l(gc_index_lock_name);
-  utime_t end = ceph_clock_now(g_ceph_context);
+  utime_t end = ceph_clock_now();
   std::list<string> remove_tags;
 
   /* max_secs should be greater than zero. We don't want a zero max_secs
@@ -175,7 +176,7 @@ int RGWGC::process(int index, int max_secs)
       std::list<cls_rgw_obj>::iterator liter;
       cls_rgw_obj_chain& chain = info.chain;
 
-      utime_t now = ceph_clock_now(g_ceph_context);
+      utime_t now = ceph_clock_now();
       if (now >= end)
         goto done;
 
@@ -275,7 +276,7 @@ void RGWGC::stop_processor()
 
 void *RGWGC::GCWorker::entry() {
   do {
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     dout(2) << "garbage collection: start" << dendl;
     int r = gc->process();
     if (r < 0) {
@@ -286,7 +287,7 @@ void *RGWGC::GCWorker::entry() {
     if (gc->going_down())
       break;
 
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
     end -= start;
     int secs = cct->_conf->rgw_gc_processor_period;
 
@@ -296,7 +297,7 @@ void *RGWGC::GCWorker::entry() {
     secs -= end.sec();
 
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(secs, 0));
+    cond.WaitInterval(lock, utime_t(secs, 0));
     lock.Unlock();
   } while (!gc->going_down());
 

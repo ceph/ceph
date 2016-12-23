@@ -16,6 +16,7 @@ struct CancelableContext : public Context {
   virtual void cancel() = 0;
 };
 
+#define dout_context osd->cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -240,9 +241,9 @@ public:
   }
   void finish(int) { ceph_abort(); /* not used */ }
   void complete(int) {
-    dout(10) << "HandleWatchTimeout" << dendl;
-    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     OSDService *osd(watch->osd);
+    ldout(osd->cct, 10) << "HandleWatchTimeout" << dendl;
+    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     osd->watch_lock.Unlock();
     pg->lock();
     watch->cb = NULL;
@@ -263,6 +264,7 @@ public:
     canceled = true;
   }
   void finish(int) {
+    OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
     assert(watch->pg->is_locked());
     watch->cb = NULL;
@@ -377,7 +379,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
     }
   }
   if (will_ping) {
-    last_ping = ceph_clock_now(NULL);
+    last_ping = ceph_clock_now();
     register_cb();
   } else {
     unregister_cb();
@@ -449,7 +451,7 @@ void Watch::start_notify(NotifyRef notif)
   assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
   if (will_ping) {
-    utime_t cutoff = ceph_clock_now(NULL);
+    utime_t cutoff = ceph_clock_now();
     cutoff.sec_ref() -= timeout;
     if (last_ping < cutoff) {
       dout(10) << __func__ << " " << notif->notify_id
@@ -529,7 +531,7 @@ void WatchConState::reset(Connection *con)
       if ((*i)->is_connected(con)) {
 	(*i)->disconnect();
       } else {
-	generic_derr << __func__ << " not still connected to " << (*i) << dendl;
+	lgeneric_derr(cct) << __func__ << " not still connected to " << (*i) << dendl;
       }
     }
     pg->unlock();

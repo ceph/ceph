@@ -559,7 +559,6 @@ public:
   bool try_finish_rmw();
   void check_ops();
 
-  CephContext *cct;
   ErasureCodeInterfaceRef ec_impl;
 
 

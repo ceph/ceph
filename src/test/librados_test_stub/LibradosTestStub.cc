@@ -24,6 +24,7 @@
 #include "include/assert.h"
 #include "include/compat.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
 namespace {

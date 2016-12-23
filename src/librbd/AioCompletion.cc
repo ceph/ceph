@@ -77,7 +77,7 @@ void AioCompletion::complete() {
 
   tracepoint(librbd, aio_complete_enter, this, rval);
   utime_t elapsed;
-  elapsed = ceph_clock_now(cct) - start_time;
+  elapsed = ceph_clock_now() - start_time;
   switch (aio_type) {
   case AIO_TYPE_OPEN:
   case AIO_TYPE_CLOSE:
@@ -130,7 +130,7 @@ void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
   if (ictx == nullptr) {
     ictx = i;
     aio_type = t;
-    start_time = ceph_clock_now(ictx->cct);
+    start_time = ceph_clock_now();
   }
 }
 

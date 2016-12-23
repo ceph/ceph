@@ -121,8 +121,8 @@ public:
     return target_version;
   }
 
-  static int get_block_device_fsid(const string& path, uuid_d *fsid);
-
+  static int get_block_device_fsid(CephContext* cct, const string& path,
+				   uuid_d *fsid);
   struct FSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;
     PerfCounters::avg_tracker<uint64_t> os_apply_latency;
@@ -314,7 +314,7 @@ private:
     void flush() {
       Mutex::Locker l(qlock);
 
-      while (g_conf->filestore_blackhole)
+      while (cct->_conf->filestore_blackhole)
 	cond.Wait(qlock);  // wait forever
 
 
@@ -343,8 +343,9 @@ private:
       }
     }
 
-    explicit OpSequencer(int i)
-      : qlock("FileStore::OpSequencer::qlock", false, false),
+    OpSequencer(CephContext* cct, int i)
+      : Sequencer_impl(cct),
+	qlock("FileStore::OpSequencer::qlock", false, false),
 	parent(0),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
         id(i) {}
@@ -438,8 +439,8 @@ public:
 		 bool force_clear_omap=false);
 
 public:
-  FileStore(const std::string &base, const std::string &jdev,
-    osflagbits_t flags = 0,
+  FileStore(CephContext* cct, const std::string &base, const std::string &jdev,
+	    osflagbits_t flags = 0,
     const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 
@@ -829,6 +830,10 @@ protected:
 public:
   explicit FileStoreBackend(FileStore *fs) : filestore(fs) {}
   virtual ~FileStoreBackend() {}
+
+  CephContext* cct() const {
+    return filestore->cct;
+  }
 
   static FileStoreBackend *create(long f_type, FileStore *fs);
 

@@ -31,6 +31,8 @@
 extern char *sys_siglist[]; 
 #endif 
 
+#define dout_context g_ceph_context
+
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;

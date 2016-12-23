@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore "
@@ -148,7 +149,8 @@ string DBObjectMap::ghobject_key(const ghobject_t &oid)
 //   bad: plana8923501-10...4c.3.ffffffffffffffff.2
 // fixed: plana8923501-10...4c.3.CB767F2D.ffffffffffffffff.2
 // returns 0 for false, 1 for true, negative for error
-int DBObjectMap::is_buggy_ghobject_key_v1(const string &in)
+int DBObjectMap::is_buggy_ghobject_key_v1(CephContext* cct,
+					  const string &in)
 {
   int dots = 5;  // skip 5 .'s
   const char *s = in.c_str();
@@ -950,7 +952,7 @@ int DBObjectMap::upgrade_to_v2()
         iter->valid() && count < 300;
         iter->next()) {
       dout(20) << __func__ << " key is " << iter->key() << dendl;
-      int r = is_buggy_ghobject_key_v1(iter->key());
+      int r = is_buggy_ghobject_key_v1(cct, iter->key());
       if (r < 0) {
 	derr << __func__ << " bad key '" << iter->key() << "'" << dendl;
 	return r;

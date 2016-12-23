@@ -21,6 +21,7 @@
 #define def_dout_subsys
 #endif
 
+#define dout_context g_ceph_context
 
 extern void signal_shutdown();
 
@@ -198,5 +199,6 @@ extern int rgw_process_authenticated(RGWHandler_REST* handler,
 #undef def_dout_subsys
 #undef dout_subsys
 #endif
+#undef dout_context
 
 #endif /* RGW_PROCESS_H */

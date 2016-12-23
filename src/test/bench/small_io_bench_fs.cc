@@ -132,7 +132,7 @@ int main(int argc, char **argv)
   ops.insert(make_pair(vm["write-ratio"].as<double>(), Bencher::WRITE));
   ops.insert(make_pair(1-vm["write-ratio"].as<double>(), Bencher::READ));
 
-  FileStore fs(vm["filestore-path"].as<string>(),
+  FileStore fs(g_ceph_context, vm["filestore-path"].as<string>(),
 	       vm["journal-path"].as<string>());
   ObjectStore::Sequencer osr(__func__);
 

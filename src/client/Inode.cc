@@ -175,7 +175,7 @@ bool Inode::cap_is_valid(Cap* cap) const
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
   if ((cap->session->cap_gen <= cap->gen)
-      && (ceph_clock_now(client->cct) < cap->session->cap_ttl)) {
+      && (ceph_clock_now() < cap->session->cap_ttl)) {
     return true;
   }
   return false;

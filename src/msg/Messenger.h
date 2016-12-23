@@ -556,7 +556,7 @@ public:
    * of one reference to it.
    */
   void ms_fast_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
+    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
@@ -586,7 +586,7 @@ public:
    *  one reference to it.
    */
   void ms_deliver_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
+    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {

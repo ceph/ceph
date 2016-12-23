@@ -28,6 +28,7 @@
 #include <sstream>
 #include <string>
 
+#define dout_context g_ceph_context
 using std::string;
 
 // avoid compiler warning about dereferencing NULL pointer
