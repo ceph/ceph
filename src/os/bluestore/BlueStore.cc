@@ -5456,7 +5456,7 @@ int BlueStore::getattr(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    string k(name);
+    mempool::bluestore_meta_other::string k(name);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -5513,7 +5513,9 @@ int BlueStore::getattrs(
       r = -ENOENT;
       goto out;
     }
-    aset = o->onode.attrs;
+    for (auto& i : o->onode.attrs) {
+      aset.emplace(i.first.c_str(), i.second);
+    }
     r = 0;
   }
 
@@ -7482,7 +7484,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 		  << " expected_write_size " << o->onode.expected_write_size
 		  << " in " << o->onode.extent_map_shards.size() << " shards"
 		  << dendl;
-  for (map<string,bufferptr>::iterator p = o->onode.attrs.begin();
+  for (auto p = o->onode.attrs.begin();
        p != o->onode.attrs.end();
        ++p) {
     dout(log_level) << __func__ << "  attr " << p->first
@@ -8449,9 +8451,9 @@ int BlueStore::_setattr(TransContext *txc,
 	   << dendl;
   int r = 0;
   if (val.is_partial())
-    o->onode.attrs[name] = bufferptr(val.c_str(), val.length());
+    o->onode.attrs[name.c_str()] = bufferptr(val.c_str(), val.length());
   else
-    o->onode.attrs[name] = val;
+    o->onode.attrs[name.c_str()] = val;
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
@@ -8471,9 +8473,10 @@ int BlueStore::_setattrs(TransContext *txc,
   for (map<string,bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p) {
     if (p->second.is_partial())
-      o->onode.attrs[p->first] = bufferptr(p->second.c_str(), p->second.length());
+      o->onode.attrs[p->first.c_str()] =
+	bufferptr(p->second.c_str(), p->second.length());
     else
-      o->onode.attrs[p->first] = p->second;
+      o->onode.attrs[p->first.c_str()] = p->second;
   }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -8491,7 +8494,7 @@ int BlueStore::_rmattr(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << dendl;
   int r = 0;
-  map<string, bufferptr>::iterator it = o->onode.attrs.find(name);
+  auto it = o->onode.attrs.find(name.c_str());
   if (it == o->onode.attrs.end())
     goto out;
 
