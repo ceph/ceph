@@ -812,8 +812,14 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
   // gather queued writes
   off64_t queue_pos = write_pos;
 
-  int eleft = g_conf->journal_max_write_entries;
+  unsigned eleft = g_conf->journal_max_write_entries;
   unsigned bmax = g_conf->journal_max_write_bytes;
+  if (eleft == 0) { // if journal_max_write_entries is 0, means infinitely great
+    eleft = -1;          
+  }
+  if (bmax == 0) { // if journal_max_write_bytes is 0, means infinitely great
+    bmax = -1;
+  }
 
   if (full_state != FULL_NOTFULL)
     return -ENOSPC;
@@ -862,19 +868,15 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
         
         return -ENOSPC;  // hrm, full on first op
       }
-      if (eleft) {
-        if (--eleft == 0) {
+      if (--eleft == 0) {
           dout(20) << "prepare_multi_write hit max events per write " << g_conf->journal_max_write_entries << dendl;
           batch_unpop_write(items);
           goto out;
-        }
       }
-      if (bmax) {
-        if (bl.length() >= bmax) {
+      if (bl.length() >= bmax) {
           dout(20) << "prepare_multi_write hit max write size " << g_conf->journal_max_write_bytes << dendl;
           batch_unpop_write(items);
           goto out;
-        }
       }
     }
   }
