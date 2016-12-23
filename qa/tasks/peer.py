@@ -78,8 +78,8 @@ def task(ctx, config):
             num_down_pgs += 1
             # verify that it is blocked on osd.1
             rs = j['recovery_state']
-            assert len(rs) > 0
-            assert rs[0]['name'] == 'Started/Primary/Peering/GetInfo'
+            assert len(rs) >= 2
+            assert rs[0]['name'] == 'Started/Primary/Peering/Down'
             assert rs[1]['name'] == 'Started/Primary/Peering'
             assert rs[1]['blocked']
             assert rs[1]['down_osds_we_would_probe'] == [1]
