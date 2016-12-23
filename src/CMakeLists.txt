@@ -793,6 +793,7 @@ install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
+  ${CMAKE_SOURCE_DIR}/src/ceph-watcher
   DESTINATION bin)
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
