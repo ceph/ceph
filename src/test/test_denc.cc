@@ -287,31 +287,47 @@ TEST(denc, list)
   }
 }
 
-TEST(denc, set)
-{
+template<template<class> class C>
+void test_setlike(const char* c) {
   {
-    cout << "set<string>" << std::endl;
-    std::set<string> s;
+    cout << c << "<std::string>" << std::endl;
+    C<std::string> s;
     s.insert("foo");
     s.insert("bar");
     s.insert("baz");
     test_denc(s);
   }
   {
-    cout << "set<int32_t>" << std::endl;
-    std::set<int32_t> s;
+    cout << c << "<int32_t>" << std::endl;
+    C<int32_t> s;
     s.insert(1);
     s.insert(2);
     s.insert(3);
     test_denc(s);
   }
   {
-    cout << "set<legacy_t>" << std::endl;
-    std::set<legacy_t> s;
+    cout << c << "<legacy_t>" << std::endl;
+    C<legacy_t> s;
     s.insert(legacy_t(1));
     s.insert(legacy_t(2));
     test_encode_decode(s);
   }
+}
+
+template<typename T>
+using default_set = std::set<T>;
+
+TEST(denc, set)
+{
+  test_setlike<default_set>("std::set");
+}
+
+template<typename T>
+using default_flat_set= boost::container::flat_set<T>;
+
+TEST(denc, flat_set)
+{
+  test_setlike<default_flat_set>("std::set");
 }
 
 struct foo_t {

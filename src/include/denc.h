@@ -32,6 +32,7 @@
 #include <type_traits>
 #include <boost/intrusive/set.hpp>
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include "include/int_types.h"
 #include "include/intarith.h"
@@ -820,6 +821,15 @@ struct denc_traits<
   : public _denc::container_base<std::set,
 				 _denc::setlike_details<std::set<T, Ts...>>,
 				 T, Ts...> {};
+
+template<typename T, typename ...Ts>
+struct denc_traits<
+  boost::container::flat_set<T, Ts...>,
+  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  : public _denc::container_base<
+  boost::container::flat_set,
+  _denc::setlike_details<boost::container::flat_set<T, Ts...>>,
+  T, Ts...> {};
 
 namespace _denc {
   template<typename Container>
