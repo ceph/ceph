@@ -352,9 +352,10 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
-    // StrayManager
+    // PurgeQueue
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
+    "mds_max_purge_files",
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",

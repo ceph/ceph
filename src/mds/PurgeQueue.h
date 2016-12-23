@@ -55,14 +55,9 @@ WRITE_CLASS_ENCODER(PurgeItem)
 
 enum {
   l_pq_first = 3500,
-  // >> TODO populate from PurgeQueue
-  // How many stray dentries are currently enqueued for purge
-  //l_mdc_num_strays_purging,
-  // How many purge RADOS ops might currently be in flight?
-  //l_mdc_num_purge_ops,
-  // << TODO
 
   // How many items have been finished by PurgeQueue
+  l_pq_executing_ops,
   l_pq_executing,
   l_pq_executed,
   l_pq_last
@@ -100,11 +95,11 @@ protected:
 
   // Throttled allowances
   uint64_t ops_in_flight;
-  uint64_t files_purging;
 
   // Dynamic op limit per MDS based on PG count
   uint64_t max_purge_ops;
 
+  uint32_t _calculate_ops(const PurgeItem &item) const;
 
   bool can_consume();
 
@@ -131,6 +126,10 @@ public:
   // Submit one entry to the work queue.  Call back when it is persisted
   // to the queue (there is no callback for when it is executed)
   void push(const PurgeItem &pi, Context *completion);
+
+  // If the on-disk queue is empty and we are not currently processing
+  // anything.
+  bool is_idle() const;
 
   void update_op_limit(const MDSMap &mds_map);
 
