@@ -1996,17 +1996,23 @@ public:
 
     struct Down : boost::statechart::state< Down, Peering>, NamedState {
       explicit Down(my_context ctx);
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< QueryState >
+	> reactions;
+      boost::statechart::result react(const QueryState& infoevt);
       void exit();
     };
 
     struct Incomplete : boost::statechart::state< Incomplete, Peering>, NamedState {
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::custom_reaction< MNotifyRec >
+	boost::statechart::custom_reaction< MNotifyRec >,
+	boost::statechart::custom_reaction< QueryState >
 	> reactions;
       explicit Incomplete(my_context ctx);
       boost::statechart::result react(const AdvMap &advmap);
       boost::statechart::result react(const MNotifyRec& infoevt);
+      boost::statechart::result react(const QueryState& infoevt);
       void exit();
     };
 
