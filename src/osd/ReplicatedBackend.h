@@ -27,8 +27,6 @@ class ReplicatedBackend : public PGBackend {
   };
   friend struct C_ReplicatedBackend_OnPullComplete;
 public:
-  CephContext *cct;
-
   ReplicatedBackend(
     PGBackend::Listener *pg,
     coll_t coll,

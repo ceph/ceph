@@ -344,7 +344,7 @@ void AsyncConnection::process()
 
           if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
             ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE" << dendl;
-	    set_last_keepalive(ceph_clock_now(NULL));
+	    set_last_keepalive(ceph_clock_now());
           } else if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
             state = STATE_OPEN_KEEPALIVE2;
           } else if (tag == CEPH_MSGR_TAG_KEEPALIVE2_ACK) {
@@ -381,7 +381,7 @@ void AsyncConnection::process()
           _append_keepalive_or_ack(true, &kp_t);
 	  write_lock.unlock();
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
-	  set_last_keepalive(ceph_clock_now(NULL));
+	  set_last_keepalive(ceph_clock_now());
           need_dispatch_writer = true;
           state = STATE_OPEN;
           break;
@@ -480,7 +480,7 @@ void AsyncConnection::process()
           front.clear();
           middle.clear();
           data.clear();
-          recv_stamp = ceph_clock_now(async_msgr->cct);
+          recv_stamp = ceph_clock_now();
           current_header = header;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
           break;
@@ -548,7 +548,7 @@ void AsyncConnection::process()
             }
           }
 
-          throttle_stamp = ceph_clock_now(msgr->cct);
+          throttle_stamp = ceph_clock_now();
           state = STATE_OPEN_MESSAGE_READ_FRONT;
           break;
         }
@@ -714,7 +714,7 @@ void AsyncConnection::process()
 
           message->set_recv_stamp(recv_stamp);
           message->set_throttle_stamp(throttle_stamp);
-          message->set_recv_complete_stamp(ceph_clock_now(async_msgr->cct));
+          message->set_recv_complete_stamp(ceph_clock_now());
 
           // check received seq#.  if it is old, drop the message.  
           // note that incoming messages may skip ahead.  this is convenient for the client
@@ -2314,7 +2314,7 @@ void AsyncConnection::DelayedDelivery::do_request(int id)
     utime_t release = delay_queue.front().first;
     m = delay_queue.front().second;
     string delay_msg_type = msgr->cct->_conf->ms_inject_delay_msg_type;
-    utime_t now = ceph_clock_now(msgr->cct);
+    utime_t now = ceph_clock_now();
     if ((release > now &&
         (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
       utime_t t = release - now;
@@ -2378,7 +2378,7 @@ void AsyncConnection::_append_keepalive_or_ack(bool ack, utime_t *tp)
     outcoming_bl.append((char*)&ts, sizeof(ts));
   } else if (has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
     struct ceph_timespec ts;
-    utime_t t = ceph_clock_now(async_msgr->cct);
+    utime_t t = ceph_clock_now();
     t.encode_timeval(&ts);
     outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2);
     outcoming_bl.append((char*)&ts, sizeof(ts));

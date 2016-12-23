@@ -19,6 +19,7 @@
 #include "mds/events/ESession.h"
 #include "mds/events/EUpdate.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 

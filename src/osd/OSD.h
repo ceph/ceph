@@ -632,6 +632,7 @@ private:
 
 public:
   struct ScrubJob {
+    CephContext* cct;
     /// pg to be scrubbed
     spg_t pgid;
     /// a time scheduled for scrub. but the scrub could be delayed if system
@@ -640,7 +641,8 @@ public:
     /// the hard upper bound of scrub time
     utime_t deadline;
     ScrubJob() {}
-    explicit ScrubJob(const spg_t& pg, const utime_t& timestamp,
+    explicit ScrubJob(CephContext* cct, const spg_t& pg,
+		      const utime_t& timestamp,
 		      double pool_scrub_min_interval = 0,
 		      double pool_scrub_max_interval = 0, bool must = true);
     /// order the jobs by sched_time
@@ -651,7 +653,7 @@ public:
   /// @returns the scrub_reg_stamp used for unregister the scrub job
   utime_t reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
 		       double pool_scrub_max_interval, bool must) {
-    ScrubJob scrub(pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
+    ScrubJob scrub(cct, pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
 		   must);
     Mutex::Locker l(sched_scrub_lock);
     sched_scrub_pg.insert(scrub);
@@ -659,7 +661,7 @@ public:
   }
   void unreg_pg_scrub(spg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
-    size_t removed = sched_scrub_pg.erase(ScrubJob(pgid, t));
+    size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
     assert(removed);
   }
   bool first_scrub_stamp(ScrubJob *out) {
@@ -898,7 +900,7 @@ public:
 	  PGScrub(pg->get_osdmap()->get_epoch()),
 	  cct->_conf->osd_scrub_cost,
 	  pg->get_scrub_priority(),
-	  ceph_clock_now(cct),
+	  ceph_clock_now(),
 	  entity_inst_t())));
   }
 
@@ -925,7 +927,7 @@ private:
 	PGRecovery(p.first, reserved_pushes),
 	cct->_conf->osd_recovery_cost,
 	cct->_conf->osd_recovery_priority,
-	ceph_clock_now(cct),
+	ceph_clock_now(),
 	entity_inst_t()));
     op_wq.queue(to_queue);
   }
@@ -940,7 +942,7 @@ public:
     _maybe_queue_recovery();
   }
   void defer_recovery(float defer_for) {
-    defer_recovery_until = ceph_clock_now(cct);
+    defer_recovery_until = ceph_clock_now();
     defer_recovery_until += defer_for;
   }
   void pause_recovery() {
@@ -1273,7 +1275,8 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return ghobject_t(oid);
   }
-  static void recursive_remove_collection(ObjectStore *store,
+  static void recursive_remove_collection(CephContext* cct,
+					  ObjectStore *store,
 					  spg_t pgid,
 					  coll_t tmp);
 
@@ -1425,7 +1428,7 @@ public:
 
     explicit Session(CephContext *cct) :
       RefCountedObject(cct),
-      auid(-1), con(0),
+      auid(-1), con(0), wstate(cct),
       session_dispatch_lock("Session::session_dispatch_lock"), 
       last_sent_epoch(0), received_map_epoch(0)
     {}
@@ -2324,12 +2327,13 @@ protected:
   // -- removing --
   struct RemoveWQ :
     public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
+    CephContext* cct;
     ObjectStore *&store;
     list<pair<PGRef, DeletingStateRef> > remove_queue;
-    RemoveWQ(ObjectStore *&o, time_t ti, time_t si, ThreadPool *tp)
+    RemoveWQ(CephContext* cct, ObjectStore *&o, time_t ti, time_t si,
+	     ThreadPool *tp)
       : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
-	"OSD::RemoveWQ", ti, si, tp),
-	store(o) {}
+	"OSD::RemoveWQ", ti, si, tp), cct(cct), store(o) {}
 
     bool _empty() override {
       return remove_queue.empty();

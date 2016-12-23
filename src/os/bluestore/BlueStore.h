@@ -110,7 +110,6 @@ class BlueStore : public ObjectStore,
   // -----------------------------------------------------
   // types
 public:
-
   // config observer
   virtual const char** get_tracked_conf_keys() const override;
   virtual void handle_conf_change(const struct md_config_t *conf,
@@ -420,6 +419,7 @@ public:
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
+    CephContext* cct;
 
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
@@ -435,7 +435,7 @@ public:
     bluestore_extent_ref_map_t ref_map;
 
   public:
-    Blob() {}
+    Blob(CephContext* cct) : cct(cct) {}
     ~Blob() {
     }
 
@@ -639,6 +639,7 @@ public:
 
   /// a sharded extent map, mapping offsets to lextents to blobs
   struct ExtentMap {
+    CephContext* cct;
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
@@ -660,7 +661,7 @@ public:
       void operator()(Extent *e) { delete e; }
     };
 
-    ExtentMap(Onode *o);
+    ExtentMap(CephContext* cct, Onode *o);
     ~ExtentMap() {
       extent_map.clear_and_dispose(DeleteDisposer());
     }
@@ -814,7 +815,7 @@ public:
 	oid(o),
 	key(k),
 	exists(false),
-	extent_map(this) {
+	extent_map(c->store->cct, this) {
     }
 
     void flush();
@@ -831,6 +832,7 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
+    CephContext* cct;
     PerfCounters *logger;
     std::recursive_mutex lock;          ///< protect lru and other structures
 
@@ -839,8 +841,9 @@ public:
 
     size_t last_trim_seq = 0;
 
-    static Cache *create(string type, PerfCounters *logger);
+    static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
+    Cache(CephContext* cct) : cct(cct) {}
     virtual ~Cache() {}
 
     virtual void _add_onode(OnodeRef& o, int level) = 0;
@@ -908,6 +911,7 @@ public:
     uint64_t buffer_size = 0;
 
   public:
+    LRUCache(CephContext* cct) : Cache(cct) {}
     uint64_t _get_num_onodes() override {
       return onode_lru.size();
     }
@@ -1008,6 +1012,7 @@ public:
     uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
 
   public:
+    TwoQCache(CephContext* cct) : Cache(cct) {}
     uint64_t _get_num_onodes() override {
       return onode_lru.size();
     }
@@ -1126,7 +1131,7 @@ public:
     void make_blob_shared(uint64_t sbid, BlobRef b);
 
     BlobRef new_blob() {
-      BlobRef b = new Blob;
+      BlobRef b = new Blob(store->cct);
       b->shared_blob = new SharedBlob(cache);
       return b;
     }
@@ -1213,7 +1218,7 @@ public:
     }
 
     void log_state_latency(PerfCounters *logger, int state) {
-      utime_t lat, now = ceph_clock_now(g_ceph_context);
+      utime_t lat, now = ceph_clock_now();
       lat = now - last_stamp;
       logger->tinc(state, lat);
       last_stamp = now;
@@ -1304,7 +1309,7 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
-    explicit TransContext(OpSequencer *o)
+    explicit TransContext(CephContext* cct, OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
 	ops(0),
@@ -1313,8 +1318,8 @@ public:
 	onreadable(NULL),
 	onreadable_sync(NULL),
 	wal_txn(NULL),
-	ioc(this),
-	start(ceph_clock_now(g_ceph_context)) {
+	ioc(cct, this),
+	start(ceph_clock_now()) {
         last_stamp = start;
     }
     ~TransContext() {
@@ -1370,9 +1375,10 @@ public:
 
     std::atomic_int kv_committing_serially = {0};
 
-    OpSequencer()
+    OpSequencer(CephContext* cct)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL) {
+      : Sequencer_impl(cct),
+	parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -1505,7 +1511,6 @@ public:
   // --------------------------------------------------------
   // members
 private:
-  CephContext *cct;
   BlueFS *bluefs;
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
@@ -1647,7 +1652,8 @@ private:
 				   bool create);
 
   int _write_bdev_label(string path, bluestore_bdev_label_t label);
-  static int _read_bdev_label(string path, bluestore_bdev_label_t *label);
+  static int _read_bdev_label(CephContext* cct, string path,
+			      bluestore_bdev_label_t *label);
   int _check_or_set_bdev_label(string path, uint64_t size, string desc,
 			       bool create);
 
@@ -1751,7 +1757,8 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
-  static int get_block_device_fsid(const string& path, uuid_d *fsid);
+  static int get_block_device_fsid(CephContext* cct, const string& path,
+				   uuid_d *fsid);
 
   bool test_mount_in_use() override;
 
@@ -1976,21 +1983,21 @@ public:
   }
 private:
   bool _debug_data_eio(const ghobject_t& o) {
-    if (!g_conf->bluestore_debug_inject_read_err) {
+    if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
     RWLock::RLocker l(debug_read_error_lock);
     return debug_data_error_objects.count(o);
   }
   bool _debug_mdata_eio(const ghobject_t& o) {
-    if (!g_conf->bluestore_debug_inject_read_err) {
+    if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
     RWLock::RLocker l(debug_read_error_lock);
     return debug_mdata_error_objects.count(o);
   }
   void _debug_obj_on_delete(const ghobject_t& o) {
-    if (g_conf->bluestore_debug_inject_read_err) {
+    if (cct->_conf->bluestore_debug_inject_read_err) {
       RWLock::WLocker l(debug_read_error_lock);
       debug_data_error_objects.erase(o);
       debug_mdata_error_objects.erase(o);

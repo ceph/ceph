@@ -377,7 +377,7 @@ int finish_remove_pgs(ObjectStore *store)
     if (it->is_temp(&pgid) ||
        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       cout << "finish_remove_pgs " << *it << " removing " << pgid << std::endl;
-      OSD::recursive_remove_collection(store, pgid, *it);
+      OSD::recursive_remove_collection(g_ceph_context, store, pgid, *it);
       continue;
     }
 
@@ -450,6 +450,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   map<string,bufferlist> km;
   pg_info_t last_written_info;
   int ret = PG::_prepare_write_info(
+    g_ceph_context,
     &km, epoch,
     info,
     last_written_info,
@@ -890,7 +891,7 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     OSD::make_snapmapper_oid());
   spg_t pg;
   coll.is_pg_prefix(&pg);
-  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+  SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pg.shard);
 
   if (ob.hoid.hobj.is_temp()) {
     cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
@@ -1445,7 +1446,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     store,
     coll_t(),
     OSD::make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+  SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pg.shard);
   struct stat st;
 
   int r = store->stat(coll, ghobj, &st);
@@ -2227,7 +2228,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
   if (!journalpath.length())
     return -EINVAL;
 
-  FileJournal *journal = new FileJournal(uuid_d(), NULL, NULL, journalpath.c_str(), m_journal_dio);
+  FileJournal *journal = new FileJournal(g_ceph_context, uuid_d(), NULL, NULL,
+					 journalpath.c_str(), m_journal_dio);
   r = journal->_fdump(*f, false);
   delete journal;
   return r;

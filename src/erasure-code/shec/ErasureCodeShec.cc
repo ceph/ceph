@@ -35,6 +35,7 @@ extern int calc_determinant(int *matrix, int dim);
 extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);
 }
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)

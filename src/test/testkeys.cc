@@ -4,6 +4,8 @@
 #include "common/config.h"
 #include "common/debug.h"
 
+#define dout_context g_ceph_context
+
 #define AES_KEY_LEN	16
 
 int main(int argc, const char **argv)
@@ -26,7 +28,7 @@ int main(int argc, const char **argv)
   char aes_key[AES_KEY_LEN];
   memset(aes_key, 0x77, sizeof(aes_key));
   bufferptr keybuf(aes_key, sizeof(aes_key));
-  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(g_ceph_context), keybuf);
+  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(), keybuf);
 
   const char *msg="hello! this is a message\n";
   char pad[16];

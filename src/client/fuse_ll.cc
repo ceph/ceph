@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <sys/file.h>
@@ -37,6 +37,8 @@
 #include "fuse_ll.h"
 #include <fuse.h>
 #include <fuse_lowlevel.h>
+
+#define dout_context g_ceph_context
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
 #define FINO_STAG(x) ((x) >> 48)

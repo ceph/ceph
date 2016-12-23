@@ -289,7 +289,7 @@ class ipv4 {
     frag_timefd.construct(center->create_time_event(tp.to_nsec() / 1000, frag_handler));
   }
   void frag_arm() {
-    auto now = ceph_clock_now(cct);
+    auto now = ceph_clock_now();
     frag_timefd.construct(center->create_time_event(now.to_nsec() / 1000, frag_handler));
   }
 

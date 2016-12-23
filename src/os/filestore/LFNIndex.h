@@ -127,11 +127,12 @@ private:
 public:
   /// Constructor
   LFNIndex(
+    CephContext* cct,
     coll_t collection,
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version,
     double _error_injection_probability=0)
-    : CollectionIndex(collection),
+    : CollectionIndex(cct, collection),
       base_path(base_path),
       index_version(index_version),
       error_injection_enabled(false),

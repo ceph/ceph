@@ -31,6 +31,8 @@
 
 #include "TestObjectStoreState.h"
 
+#define dout_context g_ceph_context
+
 static const char *our_name = NULL;
 void usage();
 
@@ -387,7 +389,7 @@ TestObjectStoreState::coll_entry_t
 
 void WorkloadGenerator::do_stats()
 {
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   m_stats_lock.Lock();
 
   utime_t duration = (now - m_stats_begin);
@@ -412,7 +414,7 @@ void WorkloadGenerator::run()
   int ops_run = 0;
 
   utime_t stats_interval(m_stats_show_secs, 0);
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   utime_t stats_time = now;
   m_stats_begin = now;
 
@@ -441,7 +443,7 @@ void WorkloadGenerator::run()
 
 
     if (m_do_stats) {
-      utime_t now = ceph_clock_now(NULL);
+      utime_t now = ceph_clock_now();
       utime_t elapsed = now - stats_time;
       if (elapsed >= stats_interval) {
 	do_stats();

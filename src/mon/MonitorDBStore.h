@@ -30,6 +30,8 @@
 #include "common/debug.h"
 #include "common/safe_io.h"
 
+#define dout_context g_ceph_context
+
 class MonitorDBStore
 {
   string path;

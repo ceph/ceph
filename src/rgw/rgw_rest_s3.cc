@@ -33,6 +33,7 @@
 #include "rgw_token.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace rgw;
@@ -3526,7 +3527,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   bool using_qs;
 
   uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now(s->cct);
+  uint64_t now = ceph_clock_now();
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {

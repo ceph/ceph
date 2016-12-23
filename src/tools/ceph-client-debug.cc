@@ -23,6 +23,7 @@
 #include "client/Dir.h"
 #include "include/cephfs/libcephfs.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_client
 
 void usage()
