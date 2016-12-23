@@ -7718,6 +7718,17 @@ void PG::RecoveryState::Down::exit()
   pg->publish_stats_to_osd();
 }
 
+boost::statechart::result PG::RecoveryState::Down::react(const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->dump_string("comment",
+		   "not enough up instances of this PG to go active");
+  q.f->close_section();
+  return forward_event();
+}
+
 /*------Incomplete--------*/
 PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
   : my_base(ctx),
@@ -7763,6 +7774,17 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec&
     // try again!
     return transit< GetLog >();
   }
+}
+
+boost::statechart::result PG::RecoveryState::Incomplete::react(
+  const QueryState& q)
+{
+  q.f->open_object_section("state");
+  q.f->dump_string("name", state_name);
+  q.f->dump_stream("enter_time") << enter_time;
+  q.f->dump_string("comment", "not enough complete instances of this PG");
+  q.f->close_section();
+  return forward_event();
 }
 
 void PG::RecoveryState::Incomplete::exit()
