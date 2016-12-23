@@ -121,7 +121,8 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  * and will get escaped if it is present in the string.
  *
  */
-static void append_escaped(const string &in, string *out)
+template<typename S>
+static void append_escaped(const string &in, S *out)
 {
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
@@ -158,7 +159,8 @@ static int decode_escaped(const char *p, string *out)
 
 // some things we encode in binary (as le32 or le64); print the
 // resulting key strings nicely
-static string pretty_binary_string(const string& in)
+template<typename S>
+static string pretty_binary_string(const S& in)
 {
   char buf[10];
   string out;
@@ -207,10 +209,12 @@ static string pretty_binary_string(const string& in)
   return out;
 }
 
-static void _key_encode_shard(shard_id_t shard, string *key)
+template<typename T>
+static void _key_encode_shard(shard_id_t shard, T *key)
 {
   key->push_back((char)((uint8_t)shard.id + (uint8_t)0x80));
 }
+
 static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
 {
   pshard->id = (uint8_t)*key - (uint8_t)0x80;
@@ -275,65 +279,8 @@ static int get_key_shared_blob(const string& key, uint64_t *sbid)
   return 0;
 }
 
-static int get_key_object(const string& key, ghobject_t *oid);
-
-static void get_object_key(CephContext* cct, const ghobject_t& oid,
-			   string *key)
-{
-  key->clear();
-
-  size_t max_len = 1 + 8 + 4 +
-                  (oid.hobj.nspace.length() * 3 + 1) +
-                  (oid.hobj.get_key().length() * 3 + 1) +
-                   1 + // for '<', '=', or '>'
-                  (oid.hobj.oid.name.length() * 3 + 1) +
-                   8 + 8 + 1;
-  key->reserve(max_len);
-
-  _key_encode_shard(oid.shard_id, key);
-  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
-  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
-
-  append_escaped(oid.hobj.nspace, key);
-
-  if (oid.hobj.get_key().length()) {
-    // is a key... could be < = or >.
-    append_escaped(oid.hobj.get_key(), key);
-    // (ASCII chars < = and > sort in that order, yay)
-    int r = oid.hobj.get_key().compare(oid.hobj.oid.name);
-    if (r) {
-      key->append(r > 0 ? ">" : "<");
-      append_escaped(oid.hobj.oid.name, key);
-    } else {
-      // same as no key
-      key->append("=");
-    }
-  } else {
-    // no key
-    append_escaped(oid.hobj.oid.name, key);
-    key->append("=");
-  }
-
-  _key_encode_u64(oid.hobj.snap, key);
-  _key_encode_u64(oid.generation, key);
-
-  key->push_back(ONODE_KEY_SUFFIX);
-
-  // sanity check
-  if (true) {
-    ghobject_t t;
-    int r = get_key_object(*key, &t);
-    if (r || t != oid) {
-      derr << "  r " << r << dendl;
-      derr << "key " << pretty_binary_string(*key) << dendl;
-      derr << "oid " << oid << dendl;
-      derr << "  t " << t << dendl;
-      assert(r == 0 && t == oid);
-    }
-  }
-}
-
-static int get_key_object(const string& key, ghobject_t *oid)
+template<typename S>
+static int get_key_object(const S& key, ghobject_t *oid)
 {
   int r;
   const char *p = key.c_str();
@@ -394,15 +341,73 @@ static int get_key_object(const string& key, ghobject_t *oid)
   return 0;
 }
 
+template<typename S>
+static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
+{
+  key->clear();
+
+  size_t max_len = 1 + 8 + 4 +
+                  (oid.hobj.nspace.length() * 3 + 1) +
+                  (oid.hobj.get_key().length() * 3 + 1) +
+                   1 + // for '<', '=', or '>'
+                  (oid.hobj.oid.name.length() * 3 + 1) +
+                   8 + 8 + 1;
+  key->reserve(max_len);
+
+  _key_encode_shard(oid.shard_id, key);
+  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
+  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+
+  append_escaped(oid.hobj.nspace, key);
+
+  if (oid.hobj.get_key().length()) {
+    // is a key... could be < = or >.
+    append_escaped(oid.hobj.get_key(), key);
+    // (ASCII chars < = and > sort in that order, yay)
+    int r = oid.hobj.get_key().compare(oid.hobj.oid.name);
+    if (r) {
+      key->append(r > 0 ? ">" : "<");
+      append_escaped(oid.hobj.oid.name, key);
+    } else {
+      // same as no key
+      key->append("=");
+    }
+  } else {
+    // no key
+    append_escaped(oid.hobj.oid.name, key);
+    key->append("=");
+  }
+
+  _key_encode_u64(oid.hobj.snap, key);
+  _key_encode_u64(oid.generation, key);
+
+  key->push_back(ONODE_KEY_SUFFIX);
+
+  // sanity check
+  if (true) {
+    ghobject_t t;
+    int r = get_key_object(*key, &t);
+    if (r || t != oid) {
+      derr << "  r " << r << dendl;
+      derr << "key " << pretty_binary_string(*key) << dendl;
+      derr << "oid " << oid << dendl;
+      derr << "  t " << t << dendl;
+      assert(r == 0 && t == oid);
+    }
+  }
+}
+
+
 // extent shard keys are the onode key, plus a u32, plus 'x'.  the trailing
 // char lets us quickly test whether it is a shard key without decoding any
 // of the prefix bytes.
-static void get_extent_shard_key(const string& onode_key, uint32_t offset,
+template<typename S>
+static void get_extent_shard_key(const S& onode_key, uint32_t offset,
 				 string *key)
 {
   key->clear();
   key->reserve(onode_key.length() + 4 + 1);
-  key->append(onode_key);
+  key->append(onode_key.c_str(), onode_key.size());
   _key_encode_u32(offset, key);
   key->push_back(EXTENT_SHARD_KEY_SUFFIX);
 }
@@ -1265,10 +1270,11 @@ bool BlueStore::OnodeSpace::empty()
   return onode_map.empty();
 }
 
-void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
-				     const ghobject_t& old_oid,
-				     const ghobject_t& new_oid,
-				     const string& new_okey)
+void BlueStore::OnodeSpace::rename(
+  OnodeRef& oldo,
+  const ghobject_t& old_oid,
+  const ghobject_t& new_oid,
+  const mempool::bluestore_meta_other::string& new_okey)
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
@@ -2474,14 +2480,14 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (o)
     return o;
 
-  string key;
+  mempool::bluestore_meta_other::string key;
   get_object_key(store->cct, oid, &key);
 
   ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
 			<< pretty_binary_string(key) << dendl;
 
   bufferlist v;
-  int r = store->db->get(PREFIX_OBJ, key, &v);
+  int r = store->db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
   ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
   Onode *on;
   if (v.length() == 0) {
@@ -6499,7 +6505,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 	     << blob_part << " bytes spanning blobs + "
 	     << extent_part << " bytes inline extents)"
 	     << dendl;
-    t->set(PREFIX_OBJ, o->key, bl);
+    t->set(PREFIX_OBJ, o->key.c_str(), o->key.size(), bl);
 
     std::lock_guard<std::mutex> l(o->flush_lock);
     o->flush_txns.insert(txc);
@@ -8424,7 +8430,7 @@ int BlueStore::_do_remove(
     get_extent_shard_key(o->key, s.offset, &key);
     txc->t->rmkey(PREFIX_OBJ, key);
   }
-  txc->t->rmkey(PREFIX_OBJ, o->key);
+  txc->t->rmkey(PREFIX_OBJ, o->key.c_str(), o->key.size());
   o->extent_map.clear();
   _debug_obj_on_delete(o->oid);
   return 0;
@@ -8949,7 +8955,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  string new_okey;
+  mempool::bluestore_meta_other::string new_okey;
 
   if (newo) {
     if (newo->exists) {
@@ -8959,7 +8965,7 @@ int BlueStore::_rename(TransContext *txc,
     assert(txc->onodes.count(newo) == 0);
   }
 
-  txc->t->rmkey(PREFIX_OBJ, oldo->key);
+  txc->t->rmkey(PREFIX_OBJ, oldo->key.c_str(), oldo->key.size());
 
   // rewrite shards
   oldo->extent_map.fault_range(db, 0, oldo->onode.size);
