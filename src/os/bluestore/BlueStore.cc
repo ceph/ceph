@@ -173,7 +173,7 @@ static string pretty_binary_string(const string& in)
 	  (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
 	  (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
       if (mode == STRING) {
-	out.append(in.substr(from, i - from));
+	out.append(in.c_str() + from, i - from);
 	out.push_back('\'');
       }
       if (mode != HEX) {
@@ -201,7 +201,7 @@ static string pretty_binary_string(const string& in)
     }
   }
   if (mode == STRING) {
-    out.append(in.substr(from, i - from));
+    out.append(in.c_str() + from, i - from);
     out.push_back('\'');
   }
   return out;
@@ -451,7 +451,7 @@ static void get_omap_key(uint64_t id, const string& key, string *out)
 static void rewrite_omap_key(uint64_t id, string old, string *out)
 {
   _key_encode_u64(id, out);
-  out->append(old.substr(out->length()));
+  out->append(old.c_str() + out->length(), old.size() - out->length());
 }
 
 static void decode_omap_key(const string& key, string *user_key)
