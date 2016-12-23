@@ -45,7 +45,7 @@ void test_denc(T v) {
   // encode
   bufferlist bl;
   {
-    auto a = bl.get_contiguous_appender(sizeof(T) * 3);
+    auto a = bl.get_contiguous_appender(s);
     denc(v, a);
   }
   ASSERT_LE(bl.length(), s);
@@ -82,7 +82,7 @@ void test_denc_featured(T v) {
   // encode
   bufferlist bl;
   {
-    auto a = bl.get_contiguous_appender(sizeof(T) * 3);
+    auto a = bl.get_contiguous_appender(s);
     denc(v, a, 1);
   }
   ASSERT_LE(bl.length(), s);
