@@ -21,7 +21,6 @@ set(libos_srcs
   filestore/WBThrottle.cc
   filestore/ZFSFileStoreBackend.cc
   memstore/MemStore.cc
-  kstore/kv.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
   fs/FS.cc
