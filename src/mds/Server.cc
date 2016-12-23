@@ -2661,13 +2661,14 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
   }
 
   mdr->dn[n].push_back(dn);
-  mdr->in[n] = dn->get_projected_linkage()->get_inode();
+  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
+  mdr->in[n] = dnl->get_inode();
 
   // -- lock --
   // NOTE: rename takes the same set of locks for srcdn
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
-  if (alwaysxlock || dn->get_linkage(client, mdr)->is_null())
+  if (alwaysxlock || dnl->is_null())
     xlocks.insert(&dn->lock);                 // new dn, xlock
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
