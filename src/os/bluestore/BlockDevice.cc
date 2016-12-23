@@ -23,6 +23,7 @@
 #endif
 
 #include "common/debug.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -30,6 +31,7 @@
 
 void IOContext::aio_wait()
 {
+  FUNCTRACE();
   std::unique_lock<std::mutex> l(lock);
   // see _aio_thread for waker logic
   ++num_waiting;

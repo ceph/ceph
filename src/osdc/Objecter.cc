@@ -48,6 +48,7 @@
 #include "common/scrub_types.h"
 #include "include/str_list.h"
 #include "common/errno.h"
+#include "common/EventTrace.h"
 
 using ceph::real_time;
 using ceph::real_clock;
@@ -3970,6 +3971,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
+  FUNCTRACE();
   shunique_lock sul(rwlock, acquire_shared);
   if (!initialized.read()) {
     sul.unlock();

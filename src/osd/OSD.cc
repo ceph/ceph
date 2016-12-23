@@ -138,6 +138,7 @@
 
 #include "include/assert.h"
 #include "common/config.h"
+#include "common/EventTrace.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -1442,6 +1443,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
 void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
 {
+  FUNCTRACE();
   if (dequeued)
     osd->op_shardedwq.dequeue_and_get_ops(pg, dequeued);
   else
@@ -4762,6 +4764,7 @@ void OSD::RemoveWQ::_process(
   pair<PGRef, DeletingStateRef> item,
   ThreadPool::TPHandle &handle)
 {
+  FUNCTRACE();
   PGRef pg(item.first);
   SnapMapper &mapper = pg->snap_mapper;
   OSDriver &driver = pg->osdriver;
@@ -6079,6 +6082,7 @@ void OSD::session_notify_pg_cleared(
 
 void OSD::ms_fast_dispatch(Message *m)
 {
+  FUNCTRACE();
   if (service.is_stopping()) {
     m->put();
     return;
@@ -6103,6 +6107,7 @@ void OSD::ms_fast_dispatch(Message *m)
     session->put();
   }
   service.release_map(nextmap);
+  OID_EVENT_TRACE_WITH_MSG(m, "MS_FAST_DISPATCH_END", false); 
 }
 
 void OSD::ms_fast_preprocess(Message *m)
@@ -9022,6 +9027,9 @@ void OSD::dequeue_op(
   PGRef pg, OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
+  FUNCTRACE();
+  OID_EVENT_TRACE_WITH_MSG(op->get_req(), "DEQUEUE_OP_BEGIN", false);
+
   utime_t now = ceph_clock_now(cct);
   op->set_dequeued_time(now);
   utime_t latency = now - op->get_req()->get_recv_stamp();
@@ -9066,6 +9074,7 @@ void OSD::dequeue_op(
 
   // finish
   dout(10) << "dequeue_op " << op << " finish" << dendl;
+  OID_EVENT_TRACE_WITH_MSG(op->get_req(), "DEQUEUE_OP_END", true);
 }
 
 
