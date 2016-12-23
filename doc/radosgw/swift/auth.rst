@@ -7,7 +7,8 @@ Swift API requests that require authentication must contain an
 The token may be retrieved from RADOS Gateway, or from another authenticator.
 To obtain a token from RADOS Gateway, you must create a user. For example:: 
 
-	sudo radosgw-admin user create --uid="{username}" --display-name="{Display Name}"
+    sudo radosgw-admin user create --subuser="{username}:{subusername}" --uid="{username}" 
+    --display-name="{Display Name}" --key-type=swift --secret="{password}" --access=full
 
 For details on RADOS Gateway administration, see `radosgw-admin`_. 
 
@@ -73,4 +74,4 @@ A typical response looks like this::
   	X-Storage-Url: https://swift.radosgwhost.com/v1/ACCT-12345
 	X-Auth-Token: UOlCCC8TahFKlWuv9DB09TWHF0nDjpPElha0kAa
 	Content-Length: 0
-	Content-Type: text/plain; charset=UTF-8
+    Content-Type: text/plain; charset=UTF-8
