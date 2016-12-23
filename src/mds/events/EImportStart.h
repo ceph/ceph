@@ -41,7 +41,7 @@ protected:
 				       metablob(log) { }
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
-  void print(ostream& out) const {
+  void print(ostream& out) {
     out << "EImportStart " << base << " " << metablob;
   }
 
