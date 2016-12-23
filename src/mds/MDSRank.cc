@@ -222,6 +222,28 @@ void MDSRankDispatcher::tick()
       snapserver->check_osd_map(false);
   }
 
+  // shut down?
+  if (is_stopping()) {
+    mdlog->trim();
+    if (mdcache->shutdown_pass()) {
+      if (!purge_queue.is_idle()) {
+        dout(7) << "shutdown_pass=true, but still waiting for purge queue"
+                << dendl;
+        // This takes unbounded time, so we must indicate progress
+        // to the administrator
+        // TODO include progress in message
+        clog->info() << "MDS rank " << whoami << " waiting for purge queue";
+      } else {
+        dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to "
+                   "down:stopped" << dendl;
+        stopping_done();
+      }
+    }
+    else {
+      dout(7) << "shutdown_pass=false" << dendl;
+    }
+  }
+
   // Expose ourselves to Beacon to update health indicators
   beacon.notify_health(this);
 }
@@ -571,17 +593,6 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     mlogger->set(l_mdm_buf, buffer::get_total_alloc());
   }
 
-  // shut down?
-  if (is_stopping()) {
-    mdlog->trim();
-    if (mdcache->shutdown_pass()) {
-      dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to down:stopped" << dendl;
-      stopping_done();
-    }
-    else {
-      dout(7) << "shutdown_pass=false" << dendl;
-    }
-  }
   return true;
 }
 
