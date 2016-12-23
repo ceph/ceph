@@ -68,6 +68,9 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
     return std::make_shared<DPDKStack>(c, t);
 #endif
 
+  lderr(c) << __func__ << " ms_async_transport_type " << t <<
+    " is not supported! " << dendl;
+  ceph_abort();
   return nullptr;
 }
 
@@ -83,6 +86,10 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
   else if (type == "dpdk")
     return new DPDKWorker(c, i);
 #endif
+
+  lderr(c) << __func__ << " ms_async_transport_type " << type <<
+    " is not supported! " << dendl;
+  ceph_abort();
   return nullptr;
 }
 
