@@ -4608,9 +4608,8 @@ int BlueStore::fsck(bool deep)
   it = db->get_iterator(PREFIX_OMAP);
   if (it) {
     for (it->lower_bound(string()); it->valid(); it->next()) {
-      string key = it->key();
       uint64_t omap_head;
-      _key_decode_u64(key.c_str(), &omap_head);
+      _key_decode_u64(it->key().c_str(), &omap_head);
       if (used_omap_head.count(omap_head) == 0) {
 	derr << __func__ << " found stray omap data on omap_head " << omap_head
 	     << dendl;
