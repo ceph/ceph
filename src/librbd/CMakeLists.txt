@@ -32,6 +32,8 @@ set(librbd_internal_srcs
   watcher/Types.cc
   watcher/RewatchRequest.cc
   managed_lock/AcquireRequest.cc
+  managed_lock/BreakLockRequest.cc
+  managed_lock/GetLockOwnerRequest.cc
   managed_lock/ReleaseRequest.cc
   managed_lock/ReacquireRequest.cc
   ManagedLock.cc

@@ -25,6 +25,13 @@ private:
   typedef typename TypeTraits::Watcher Watcher;
 
 public:
+  struct LockOwner {
+    entity_name_t entity;
+    std::string cookie;
+    std::string address;
+    uint64_t handle = 0;
+  };
+
   static const std::string WATCHER_LOCK_TAG;
 
   static ManagedLock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
@@ -37,12 +44,16 @@ public:
   virtual ~ManagedLock();
 
   bool is_lock_owner() const;
+  bool is_lock_owner(Mutex &lock) const;
 
   void shut_down(Context *on_shutdown);
   void acquire_lock(Context *on_acquired);
   void try_acquire_lock(Context *on_acquired);
   void release_lock(Context *on_released);
   void reacquire_lock(Context *on_reacquired = nullptr);
+  void get_lock_owner(LockOwner *lock_owner, Context *on_finish);
+  void break_lock(const LockOwner &lock_owner, bool blacklist_lock_owner,
+                  Context *on_finish);
 
   void assert_locked(librados::ObjectWriteOperation *op, ClsLockType type);
 

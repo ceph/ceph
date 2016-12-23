@@ -8,6 +8,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "msg/msg_types.h"
+#include "librbd/ManagedLock.h"
 #include "librbd/watcher/Types.h"
 #include <string>
 
@@ -49,14 +50,8 @@ private:
    *    |     |   . . . . . . . . . . . . . . . . . . . . . .             |
    *    |     |   .                                         .             |
    *    |     v   v      (EBUSY)                            .             |
-   *    \--> LOCK_IMAGE * * * * * * * * > GET_LOCKERS . . . .             |
+   *    \--> LOCK_IMAGE * * * * * * * * > GET_LOCK_OWNER  . .             |
    *              |                         |                             |
-   *              |                         v                             |
-   *              |                       GET_WATCHERS                    |
-   *              |                         |                             |
-   *              |                         v                             |
-   *              |                       BLACKLIST (skip if blacklist    |
-   *              |                         |        disabled)            |
    *              |                         v                             |
    *              |                       BREAK_LOCK                      |
    *              |                         |                             |
@@ -84,10 +79,7 @@ private:
   std::list<obj_watch_t> m_watchers;
   int m_watchers_ret_val;
 
-  entity_name_t m_locker_entity;
-  std::string m_locker_cookie;
-  std::string m_locker_address;
-  uint64_t m_locker_handle;
+  typename ManagedLock<ImageCtxT>::LockOwner m_lock_owner;
 
   int m_error_result;
 
@@ -97,14 +89,8 @@ private:
   void send_unlock();
   void handle_unlock(int r);
 
-  void send_get_lockers();
-  void handle_get_lockers(int r);
-
-  void send_get_watchers();
-  void handle_get_watchers(int r);
-
-  void send_blacklist();
-  void handle_blacklist(int r);
+  void send_get_lock_owner();
+  void handle_get_lock_owner(int r);
 
   void send_break_lock();
   void handle_break_lock(int r);
