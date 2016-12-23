@@ -973,6 +973,14 @@ class Filesystem(MDSCluster):
             log.info("All objects for ino {0} size {1} are absent".format(ino, size))
             return True
 
+    def dirfrag_exists(self, ino, frag):
+        try:
+            self.rados(["stat", "{0:x}.{1:08x}".format(ino, frag)])
+        except CommandFailedError as e:
+            return False
+        else:
+            return True
+
     def rados(self, args, pool=None, namespace=None, stdin_data=None):
         """
         Call into the `rados` CLI from an MDS
