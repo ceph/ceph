@@ -2443,7 +2443,17 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   }
 }
 
-
+class C_MDS_TryFindInode : public ServerContext {
+  MDRequestRef mdr;
+public:
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
+  virtual void finish(int r) {
+    if (r == -ESTALE) // :( find_ino_peers failed
+      server->respond_to_request(mdr, r);
+    else
+      server->dispatch_client_request(mdr);
+  }
+};
 
 CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath)
 {
@@ -2463,6 +2473,11 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return 0;
+    }
     respond_to_request(mdr, r);
     return 0;
   }
@@ -2475,18 +2490,6 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   dout(10) << "traverse_to_auth_dir " << *dir << dendl;
   return dir;
 }
-
-class C_MDS_TryFindInode : public ServerContext {
-  MDRequestRef mdr;
-public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
-  virtual void finish(int r) {
-    if (r == -ESTALE) // :( find_ino_peers failed
-      server->respond_to_request(mdr, r);
-    else
-      server->dispatch_client_request(mdr);
-  }
-};
 
 /* If this returns null, the request has been handled
  * as appropriate: forwarded on, or the client's been replied to */
@@ -5469,6 +5472,11 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (r < 0) {
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      mdcache->find_ino_peers(req->get_filepath().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return;
+    }
     respond_to_request(mdr, r);
     return;
   }
