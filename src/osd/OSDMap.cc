@@ -1756,8 +1756,6 @@ int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
 
 int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
 {
-  if (!nrep)
-    nrep = acting.size();
   return calc_pg_rank(osd, acting, nrep);
 }
 
