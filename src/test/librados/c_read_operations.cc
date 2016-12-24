@@ -428,6 +428,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
 			      sizeof(features) - 1, &bytes_read, &rval);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
   EXPECT_EQ(0u, bytes_read);
   EXPECT_EQ(-ERANGE, rval);
 
