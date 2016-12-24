@@ -275,12 +275,10 @@ private:
   }
 
   // no copying
-  /* oh, how i long for c++11...
 private:
   OSDMap(const OSDMap& other) = default;
-  const OSDMap& operator=(const OSDMap& other) = default;
+  OSDMap& operator=(const OSDMap& other) = default;
 public:
-  */
 
   void deepish_copy_from(const OSDMap& o) {
     *this = o;
