@@ -17,8 +17,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bitmapalloc:"
 
-
-BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
+BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
+				 int64_t block_size)
+  : cct(cct)
 {
   assert(ISP2(block_size));
   if (!ISP2(block_size)) {

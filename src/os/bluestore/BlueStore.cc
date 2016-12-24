@@ -7001,7 +7001,7 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
         }
 
       }*/
-      utime_t start = ceph_clock_now(NULL);
+      utime_t start = ceph_clock_now();
       l.unlock();
 
       //Try to acquire lock and check again.
@@ -7100,7 +7100,7 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
         dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
       }
 
-      utime_t finish = ceph_clock_now(NULL);
+      utime_t finish = ceph_clock_now();
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing_local.size()
                << " cleaned " << wal_cleaning.size()
