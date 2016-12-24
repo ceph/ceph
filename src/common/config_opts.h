@@ -383,6 +383,7 @@ OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd d
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
 OPTION(auth_client_required, OPT_STR, "cephx, none")     // what clients require of daemons
 OPTION(auth_supported, OPT_STR, "")               // deprecated; default value for above if they are not defined.
+OPTION(max_rotating_auth_attempts, OPT_INT, 10)
 OPTION(cephx_require_signatures, OPT_BOOL, false) //  If true, don't talk to Cephx partners if they don't support message signing; off by default
 OPTION(cephx_cluster_require_signatures, OPT_BOOL, false)
 OPTION(cephx_service_require_signatures, OPT_BOOL, false)

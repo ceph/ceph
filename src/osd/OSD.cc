@@ -2061,7 +2061,6 @@ int OSD::init()
   }
 
   int rotating_auth_attempts = 0;
-  const int max_rotating_auth_attempts = 10;
 
   // sanity check long object name handling
   {
@@ -2275,7 +2274,7 @@ int OSD::init()
   while (monc->wait_auth_rotating(30.0) < 0) {
     derr << "unable to obtain rotating service keys; retrying" << dendl;
     ++rotating_auth_attempts;
-    if (rotating_auth_attempts > max_rotating_auth_attempts) {
+    if (rotating_auth_attempts > g_conf->max_rotating_auth_attempts) {
         osd_lock.Lock(); // make locker happy
         if (!is_stopping()) {
             r = - ETIMEDOUT;
