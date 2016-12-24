@@ -282,6 +282,14 @@ static void get_object_key(CephContext* cct, const ghobject_t& oid,
 {
   key->clear();
 
+  size_t max_len = 1 + 8 + 4 +
+                  (oid.hobj.nspace.length() * 3 + 1) +
+                  (oid.hobj.get_key().length() * 3 + 1) +
+                   1 + // for '<', '=', or '>'
+                  (oid.hobj.oid.name.length() * 3 + 1) +
+                   8 + 8 + 1;
+  key->reserve(max_len);
+
   _key_encode_shard(oid.shard_id, key);
   _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
   _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
@@ -393,6 +401,7 @@ static void get_extent_shard_key(const string& onode_key, uint32_t offset,
 				 string *key)
 {
   key->clear();
+  key->reserve(onode_key.length() + 4 + 1);
   key->append(onode_key);
   _key_encode_u32(offset, key);
   key->push_back(EXTENT_SHARD_KEY_SUFFIX);
