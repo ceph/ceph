@@ -645,9 +645,8 @@ public:
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
-      string key;            ///< kv key
-      uint32_t offset;       ///< starting logical offset
       bluestore_onode_t::shard_info *shard_info;
+      uint32_t offset = 0;   ///< starting logical offset
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };

@@ -1645,7 +1645,7 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
   } else {
 
     struct dirty_shard_t{
-      string* key = nullptr;
+      uint32_t offset = 0;
       bufferlist bl;
       boost::intrusive::list_member_hook<> dirty_list_item;
     };
@@ -1699,7 +1699,7 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
         
-        encoded_shards[pos].key = &p->key;
+        encoded_shards[pos].offset = p->offset;
         dirty_shards.push_back(encoded_shards[pos]);
 	p->dirty = false;
       }
@@ -1708,8 +1708,10 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     }
     //schedule DB update for dirty shards
     auto it = dirty_shards.begin();
-    while(it != dirty_shards.end()) {
-      t->set(PREFIX_OBJ, *(it->key), it->bl);
+    while (it != dirty_shards.end()) {
+      string key;
+      get_extent_shard_key(onode->key, it->offset, &key);
+      t->set(PREFIX_OBJ, key, it->bl);
       ++it;
     }
   }
@@ -2065,7 +2067,6 @@ void BlueStore::ExtentMap::init_shards(bool loaded, bool dirty)
   shards.resize(onode->onode.extent_map_shards.size());
   unsigned i = 0;
   for (auto &s : onode->onode.extent_map_shards) {
-    get_extent_shard_key(onode->key, s.offset, &shards[i].key);
     shards[i].offset = s.offset;
     shards[i].shard_info = &s;
     shards[i].loaded = loaded;
@@ -4482,7 +4483,8 @@ int BlueStore::fsck(bool deep)
       }
       for (auto& s : o->extent_map.shards) {
 	dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
-	expecting_shards.push_back(s.key);
+	expecting_shards.push_back(string());
+	get_extent_shard_key(o->key, s.offset, &expecting_shards.back());
       }
       // lextents
       uint64_t pos = 0;
@@ -6453,7 +6455,9 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     if (reshard) {
       dout(20) << __func__ << "  resharding extents for " << o->oid << dendl;
       for (auto &s : o->extent_map.shards) {
-	t->rmkey(PREFIX_OBJ, s.key);
+	string key;
+	get_extent_shard_key(o->key, s.offset, &key);
+	t->rmkey(PREFIX_OBJ, key);
       }
       o->extent_map.fault_range(db, 0, o->onode.size);
       o->extent_map.reshard(min_alloc_size);
@@ -8414,7 +8418,9 @@ int BlueStore::_do_remove(
   o->onode = bluestore_onode_t();
   txc->removed(o);
   for (auto &s : o->extent_map.shards) {
-    txc->t->rmkey(PREFIX_OBJ, s.key);
+    string key;
+    get_extent_shard_key(o->key, s.offset, &key);
+    txc->t->rmkey(PREFIX_OBJ, key);
   }
   txc->t->rmkey(PREFIX_OBJ, o->key);
   o->extent_map.clear();
@@ -8956,8 +8962,9 @@ int BlueStore::_rename(TransContext *txc,
   oldo->extent_map.fault_range(db, 0, oldo->onode.size);
   get_object_key(cct, new_oid, &new_okey);
   for (auto &s : oldo->extent_map.shards) {
-    txc->t->rmkey(PREFIX_OBJ, s.key);
-    get_extent_shard_key(new_okey, s.offset, &s.key);
+    string key;
+    get_extent_shard_key(oldo->key, s.offset, &key);
+    txc->t->rmkey(PREFIX_OBJ, key);
     s.dirty = true;
   }
 
