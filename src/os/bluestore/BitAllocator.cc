@@ -581,6 +581,9 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
           m_bmap_list, bmap_idx);
   bmap = iter.next();
+  if (!bmap) {
+    return 0;
+  }
 
   while (allocated < num_blocks) {
     blk_off = zone_blk_off + bmap_idx * bmap->size();
