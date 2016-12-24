@@ -23,6 +23,8 @@
 
 #include "include/assert.h" // fio.h clobbers our assert.h
 
+#define dout_context g_ceph_context
+
 namespace {
 
 /// fio configuration options read from the job file
