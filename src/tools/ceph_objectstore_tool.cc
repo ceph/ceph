@@ -1045,7 +1045,7 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     bufferlist findmap_bl;
     int ret = get_osdmap(store, ms.map_epoch, findmap, findmap_bl);
     if (ret == 0) {
-      ms.osdmap = findmap;
+      ms.osdmap.deepish_copy_from(findmap);
     } else {
       cerr << "WARNING: No OSDMap in old export,"
            " some objects may be ignored due to a split" << std::endl;
