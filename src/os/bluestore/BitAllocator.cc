@@ -373,7 +373,7 @@ int BmapEntry::find_any_free_bits(int start_offset, int64_t num_blocks,
 
 void BmapEntry::dump_state(int& count)
 {
-  dout(0) << count << ":: 0x" << std::hex << m_bits << dendl;
+  dout(0) << count << ":: 0x" << std::hex << m_bits << std::dec << dendl;
 }
 
 /*
