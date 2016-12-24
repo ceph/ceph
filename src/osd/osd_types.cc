@@ -5313,6 +5313,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 	out << " gen " << op.op.watch.gen;
       break;
     case CEPH_OSD_OP_NOTIFY:
+    case CEPH_OSD_OP_NOTIFY_ACK:
       out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
