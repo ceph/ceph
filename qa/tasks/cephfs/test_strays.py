@@ -881,3 +881,16 @@ class TestStrays(CephFSTestCase):
         path=self.mount_a.mountpoint,
         file_count=LOW_LIMIT
         )))
+
+    def test_purge_queue_upgrade(self):
+        """
+        That when starting on a system with no purge queue in the metadata
+        pool, we silently create one.
+        :return:
+        """
+
+        self.mds_cluster.mds_stop()
+        self.mds_cluster.mds_fail()
+        self.fs.rados(["rm", "500.00000000"])
+        self.mds_cluster.mds_restart()
+        self.fs.wait_for_daemons()
