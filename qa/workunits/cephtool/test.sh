@@ -626,7 +626,6 @@ function test_mon_misc()
   grep GLOBAL $TMPFILE
   grep -v DIRTY $TMPFILE
   ceph df detail > $TMPFILE
-  grep CATEGORY $TMPFILE
   grep DIRTY $TMPFILE
   ceph df --format json > $TMPFILE
   grep 'total_bytes' $TMPFILE
@@ -1884,8 +1883,8 @@ function test_mon_cephdf_commands()
     sleep 1
   done
 
-  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
-  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
+  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $3}'`
+  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $10}'`
 
   ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
   rm ./cephdf_for_test
