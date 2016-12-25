@@ -343,6 +343,25 @@ class LocalDaemon(object):
         pid = self._get_pid()
         log.info("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGKILL)
+
+        waited = 0
+        while pid is not None:
+            new_pid = self._get_pid()
+            if new_pid is not None and new_pid != pid:
+                log.info("Killing new PID {0}".format(new_pid))
+                pid = new_pid
+                os.kill(pid, signal.SIGKILL)
+
+            if new_pid is None:
+                break
+            else:
+                if waited > timeout:
+                    raise MaxWhileTries(
+                        "Timed out waiting for daemon {0}.{1}".format(
+                            self.daemon_type, self.daemon_id))
+                time.sleep(1)
+                waited += 1
+
         self.wait(timeout=timeout)
 
     def restart(self):
