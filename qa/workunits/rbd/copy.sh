@@ -165,6 +165,7 @@ test_remove() {
     echo "testing remove..."
     remove_images
 
+    rbd remove "NOT_EXIST" && exit 1 || true	# remove should fail
     rbd create --image-format 1 -s 1 test1
     rbd rm test1
     rbd ls | wc -l | grep "^0$"
