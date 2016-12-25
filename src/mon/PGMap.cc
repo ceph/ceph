@@ -1641,7 +1641,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 
   overall_cache_io_rate_summary(f, &ssr);
   if (!f && ssr.str().length())
-    *out << "  cache io " << ssr.str() << "\n";
+    *out << "   cache io " << ssr.str() << "\n";
 }
 
 void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
