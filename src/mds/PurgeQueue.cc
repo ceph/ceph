@@ -54,8 +54,6 @@ void PurgeItem::decode(bufferlist::iterator &p)
   DECODE_FINISH(p);
 }
 
-// TODO: implement purge queue creation on startup
-// if we are on a filesystem created before purge queues existed
 // TODO: when we're deactivating, lift all limits on
 // how many OSD ops we're allowed to emit at a time to
 // race through the queue as fast as we can.
@@ -128,12 +126,18 @@ void PurgeQueue::open(Context *completion)
   Mutex::Locker l(lock);
 
   journaler.recover(new FunctionContext([this, completion](int r){
-    Mutex::Locker l(lock);
-    dout(4) << "open complete" << dendl;
-    if (r == 0) {
-      journaler.set_writeable();
+    if (r == -ENOENT) {
+      dout(1) << "Purge Queue not found, assuming this is an upgrade and "
+                 "creating it." << dendl;
+      create(completion);
+    } else {
+      Mutex::Locker l(lock);
+      dout(4) << "open complete" << dendl;
+      if (r == 0) {
+        journaler.set_writeable();
+      }
+      completion->complete(r);
     }
-    completion->complete(r);
   }));
 }
 
