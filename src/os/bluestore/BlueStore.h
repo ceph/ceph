@@ -1668,9 +1668,24 @@ public:
     std::atomic_bool registered = {true}; ///< registered in BlueStore's osr_set
     std::atomic_bool zombie = {false};    ///< owning Sequencer has gone away
 
+    /// txcs with completions in finisher
+    std::atomic_int txc_completions_queued = {0};
+
+    struct CompletionFlushed : public Context {
+      OpSequencer *osr;
+      CompletionFlushed(OpSequencer *o) : osr(o) {}
+      void finish(int r) {
+	ceph_abort();
+      }
+      void complete(int r) {
+	--osr->txc_completions_queued;
+      }
+    } completion_finished_context;
+
     OpSequencer(CephContext* cct, BlueStore *store)
       : Sequencer_impl(cct),
-	parent(NULL), store(store) {
+	parent(NULL), store(store),
+	completion_finished_context(this) {
       store->register_osr(this);
     }
     ~OpSequencer() override {
