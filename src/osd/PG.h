@@ -376,6 +376,16 @@ public:
       return ret;
     }
 
+    bool have_unfound() const {
+      for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i =
+	     needs_recovery_map.begin();
+	   i != needs_recovery_map.end();
+	   ++i) {
+	if (is_unfound(i->first))
+	  return true;
+      }
+      return false;
+    }
     void clear() {
       needs_recovery_map.clear();
       missing_loc.clear();
@@ -1041,7 +1051,7 @@ public:
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
-    return missing_loc.num_unfound() > 0;
+    return missing_loc.have_unfound();
   }
   int get_num_unfound() const {
     return missing_loc.num_unfound();
