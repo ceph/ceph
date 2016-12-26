@@ -1043,7 +1043,7 @@ public:
   bool have_unfound() const { 
     return missing_loc.num_unfound() > 0;
   }
-  int get_num_unfound() const {
+  uint64_t get_num_unfound() const {
     return missing_loc.num_unfound();
   }
 
