@@ -56,6 +56,7 @@ using GenContextURef = std::unique_ptr<GenContext<T> >;
 /*
  * Context - abstract callback class
  */
+class Finisher;
 class Context {
   Context(const Context& other);
   const Context& operator=(const Context& other);
@@ -63,12 +64,25 @@ class Context {
  protected:
   virtual void finish(int r) = 0;
 
+  // variant of finish that is safe to call "synchronously."  override should
+  // return true.
+  virtual bool sync_finish(int r) {
+    return false;
+  }
+
  public:
   Context() {}
   virtual ~Context() {}       // we want a virtual destructor!!!
   virtual void complete(int r) {
     finish(r);
     delete this;
+  }
+  virtual bool sync_complete(int r) {
+    if (sync_finish(r)) {
+      delete this;
+      return true;
+    }
+    return false;
   }
 };
 
