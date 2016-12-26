@@ -4179,7 +4179,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
       handler = new RGWHandler_REST_Obj_S3;
     }
   }
-
+ 
   ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
