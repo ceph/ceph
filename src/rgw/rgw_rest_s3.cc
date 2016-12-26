@@ -3731,7 +3731,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
           string key_decoded;
           url_decode(key, key_decoded);
 	  aws4_uri_encode(key_decoded, encoded_key);
-          
           string val_decoded;
           url_decode(val, val_decoded);
           aws4_uri_encode(val_decoded, encoded_val);
