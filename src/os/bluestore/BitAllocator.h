@@ -491,9 +491,11 @@ private:
   virtual void child_unlock(BitMapArea *child);
 
   void serial_lock();
+  bool try_serial_lock();
   void serial_unlock();
   void lock_excl();
   void lock_shared();
+  bool try_lock();
   void unlock();
 
   bool check_input(int64_t num_blocks);
