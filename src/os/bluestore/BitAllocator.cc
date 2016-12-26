@@ -813,7 +813,7 @@ void BitMapAreaIN::shutdown()
   unlock();
 }
 
-bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
+bool BitMapAreaIN::child_check_n_lock(BitMapArea *child)
 {
   child->lock_shared();
 
@@ -925,7 +925,7 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
         m_child_list, hint / m_child_size_blocks, wrap);
 
   while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1)) {
+    if (!child_check_n_lock(child)) {
       hint = 0;
       continue;
     }
@@ -1114,7 +1114,7 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
   unlock();
 }
 
-bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, int64_t required, bool lock)
+bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, bool lock)
 {
   if (lock) {
     child->lock_excl();
@@ -1145,7 +1145,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
         m_child_list, hint / m_child_size_blocks, false);
 
   while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1, false)) {
+    if (!child_check_n_lock(child, false)) {
       hint = 0;
       continue;
     }
@@ -1328,7 +1328,7 @@ void BitAllocator::serial_unlock()
   }
 }
 
-bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
+bool BitAllocator::child_check_n_lock(BitMapArea *child)
 {
   child->lock_shared();
 
