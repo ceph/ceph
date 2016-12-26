@@ -1441,7 +1441,7 @@ function test_mon_osd_pool_set()
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+  for s in pg_num pgp_num size min_size crash_replay_interval crush_rule crush_ruleset; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
@@ -1545,6 +1545,7 @@ function test_mon_osd_pool_set()
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
   ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+  ceph osd pool get rbd crush_rule | grep 'crush_rule: '
 }
 
 function test_mon_osd_tiered_pool_set()
