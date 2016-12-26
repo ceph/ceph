@@ -1279,6 +1279,16 @@ void BitAllocator::lock_shared()
   pthread_rwlock_rdlock(&m_rw_lock);
 }
 
+bool BitAllocator::try_lock()
+{
+  bool get_lock = false;
+  if (pthread_rwlock_trywrlock(&m_rw_lock) == 0) {
+    get_lock = true;
+  }
+
+  return get_lock;
+}
+
 void BitAllocator::unlock()
 {
   pthread_rwlock_unlock(&m_rw_lock);
@@ -1304,8 +1314,11 @@ BitAllocator::~BitAllocator()
 void
 BitAllocator::shutdown()
 {
-  lock_excl();
-  serial_lock();
+  bool get_lock = try_lock();
+  assert(get_lock);
+  bool get_serial_lock = try_serial_lock();
+  assert(get_serial_lock);
+  serial_unlock();
   unlock();
 }
 
@@ -1326,6 +1339,19 @@ void BitAllocator::serial_unlock()
   if (m_alloc_mode == SERIAL) {
     m_serial_mutex.unlock();
   }
+}
+
+bool BitAllocator::try_serial_lock()
+{
+  bool get_lock = false;
+  if (m_alloc_mode == SERIAL) {
+    if (m_serial_mutex.try_lock() == 0) {
+      get_lock = true;
+    }
+  } else {
+    get_lock = true;
+  }
+  return get_lock;
 }
 
 bool BitAllocator::child_check_n_lock(BitMapArea *child)
