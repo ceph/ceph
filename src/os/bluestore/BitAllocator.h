@@ -133,10 +133,6 @@ public:
   int64_t index() {
     return m_cur_idx;
   }
-  void decr_idx() {
-    m_cur_idx--;
-    alloc_assert(m_cur_idx >= 0);
-  }
 };
 
 typedef unsigned long bmap_t;
@@ -314,7 +310,6 @@ public:
 
   BitMapArea *next();
   int64_t index();
-  void decr_idx();
 };
 
 typedef mempool::bluestore_alloc::vector<BmapEntry> BmapEntryVector;

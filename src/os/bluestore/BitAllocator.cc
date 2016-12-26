@@ -104,12 +104,6 @@ int64_t BmapEntityListIter::index()
   return m_cur_idx;
 }
 
-void BmapEntityListIter::decr_idx()
-{
-  m_cur_idx--;
-  alloc_assert(m_cur_idx >= 0);
-}
-
 /*
  * Bitmap Entry functions.
  */
