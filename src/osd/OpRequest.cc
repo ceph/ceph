@@ -52,9 +52,11 @@ void OpRequest::_dump(Formatter *f) const
   f->dump_string("flag_point", state_string());
   if (m->get_orig_source().is_client()) {
     f->open_object_section("client_info");
-    stringstream client_name;
+    stringstream client_name, client_addr;
     client_name << m->get_orig_source();
+    client_addr << m->get_orig_source_addr();
     f->dump_string("client", client_name.str());
+    f->dump_string("client_addr", client_addr.str());
     f->dump_unsigned("tid", m->get_tid());
     f->close_section(); // client_info
   }
