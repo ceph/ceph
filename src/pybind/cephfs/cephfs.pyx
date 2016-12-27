@@ -198,17 +198,18 @@ class WouldBlock(Error):
 class OutOfRange(Error):
     pass
 
+# FreeBSD does not have ENODATA
 cdef errno_to_exception =  {
     errno.EPERM      : PermissionError,
     errno.ENOENT     : ObjectNotFound,
     errno.EIO        : IOError,
     errno.ENOSPC     : NoSpace,
     errno.EEXIST     : ObjectExists,
-    errno.ENODATA    : NoData,
     errno.EINVAL     : InvalidValue,
     errno.EOPNOTSUPP : OperationNotSupported,
     errno.ERANGE     : OutOfRange,
     errno.EWOULDBLOCK: WouldBlock,
+    87		     : NoData,
 }
 
 
