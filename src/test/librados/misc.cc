@@ -651,6 +651,7 @@ TEST_F(LibRadosMiscPP, AioOperatePP) {
   ASSERT_EQ(0, ioctx.aio_operate("foo", my_completion, &o));
   ASSERT_EQ(0, my_completion->wait_for_complete_and_cb());
   ASSERT_EQ(my_aio_complete, true);
+  my_completion->release();
 
   uint64_t size;
   time_t mtime;
