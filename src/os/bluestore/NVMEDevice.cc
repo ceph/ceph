@@ -47,6 +47,7 @@
 
 #include "NVMEDevice.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
@@ -110,7 +111,7 @@ struct Task {
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
     : device(dev), command(c), offset(off), len(l),
       return_code(rc),
-      start(ceph::coarse_real_clock::now(cct)) {}
+      start(ceph::coarse_real_clock::now()) {}
   ~Task() {
     assert(!io_request.nseg);
   }
@@ -205,7 +206,7 @@ class SharedDriverData {
     size = spdk_nvme_ns_get_sector_size(ns) * spdk_nvme_ns_get_num_sectors(ns);
     zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
 
-    PerfCountersBuilder b(cct, string("NVMEDevice-AIOThread-"+stringify(this)),
+    PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
     b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
     b.add_time_avg(l_bluestore_nvmedevice_read_lat, "read_lat", "Average read completing latency");
@@ -217,11 +218,11 @@ class SharedDriverData {
     b.add_time_avg(l_bluestore_nvmedevice_flush_queue_lat, "flush_queue_lat", "Average queue flush request latency");
     b.add_u64_counter(l_bluestore_nvmedevice_buffer_alloc_failed, "buffer_alloc_failed", "Alloc data buffer failed count");
     logger = b.create_perf_counters();
-    cct->get_perfcounters_collection()->add(logger);
+    g_ceph_context->get_perfcounters_collection()->add(logger);
     _aio_start();
   }
   ~SharedDriverData() {
-    cct->get_perfcounters_collection()->remove(logger);
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
   }
 
@@ -448,7 +449,7 @@ void SharedDriverData::_aio_thread()
             std::unique_lock<std::mutex> l(t->ctx->lock);
             t->ctx->cond.notify_all();
           } else {
-            cur = ceph::coarse_real_clock::now(cct);
+            cur = ceph::coarse_real_clock::now();
             auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
             logger->tinc(l_bluestore_nvmedevice_read_queue_lat, dur);
           }
@@ -496,7 +497,7 @@ void SharedDriverData::_aio_thread()
 
         Mutex::Locker l(queue_lock);
         if (queue_empty.load()) {
-	  cur = ceph::coarse_real_clock::now(cct);
+	  cur = ceph::coarse_real_clock::now();
           auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
           logger->tinc(l_bluestore_nvmedevice_polling_lat, dur);
           if (aio_stop)
@@ -588,7 +589,7 @@ static bool probe_cb(void *cb_ctx, struct spdk_pci_device *pci_dev)
 
   if (spdk_pci_device_has_non_uio_driver(pci_dev)) {
     /*NVMe kernel driver case*/
-    if (cct->_conf->bdev_nvme_unbind_from_kernel) {
+    if (g_ceph_context->_conf->bdev_nvme_unbind_from_kernel) {
       r =  spdk_pci_device_switch_to_uio_driver(pci_dev);
       if (r < 0) {
         derr << __func__ << " device " << name
@@ -659,7 +660,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
             "ceph-osd",
             coremask_arg, /* This must be the second parameter. It is overwritten by index in main(). */
             "-n 4",
-	    socket_mem_arg,
+	    sock_mem_arg,
 	    prefix_arg
         };
 
@@ -679,7 +680,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
         }
 
         pci_system_init();
-        spdk_nvme_retry_count = cct->_conf->bdev_nvme_retry_count;
+        spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)
           spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
 
@@ -973,7 +974,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
   dout(5) << __func__ << " " << off << "~" << len
           << " aligned " << aligned_off << "~" << aligned_len << dendl;
-  IOContext ioc(nullptr);
+  IOContext ioc(g_ceph_context, nullptr);
   Task *t = new Task(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
   int r = 0;
   t->ctx = &ioc;
