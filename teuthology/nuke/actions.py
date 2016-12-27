@@ -75,11 +75,7 @@ def shutdown_daemons(ctx):
 def kill_hadoop(ctx):
     log.info("Terminating Hadoop services...")
     ctx.cluster.run(args=[
-        "ps", "-ef",
-        run.Raw("|"), "grep", "java.*hadoop",
-        run.Raw("|"), "grep", "-v", "grep",
-        run.Raw("|"), 'awk', '{print $2}',
-        run.Raw("|"), 'xargs', 'kill', '-9',
+        "pkill", "-f", "-KILL", "java.*hadoop",
         ],
         check_status=False,
         timeout=60
