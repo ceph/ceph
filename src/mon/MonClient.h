@@ -131,7 +131,7 @@ private:
 
   void send_log();
 
-  AuthMethodList *auth_supported;
+  AuthMethodList *auth_supported = nullptr;
 
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
@@ -286,8 +286,8 @@ public:
     return false;
   }
   
-  KeyRing *keyring;
-  RotatingKeyRing *rotating_secrets;
+  KeyRing *keyring = nullptr;
+  RotatingKeyRing *rotating_secrets = nullptr;
 
  public:
   explicit MonClient(CephContext *cct_);
