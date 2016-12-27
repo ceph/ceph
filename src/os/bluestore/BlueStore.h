@@ -123,6 +123,7 @@ public:
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
+  struct Collection;
 
   /// cached buffer
   struct Buffer {
@@ -327,7 +328,7 @@ public:
 
     // these are defined/set if the blob is marked 'shared'
     uint64_t sbid = 0;          ///< shared blob id
-    Collection* coll = nullptr;
+    Collection *coll = nullptr;
     BufferSpace bc;             ///< buffer cache
 
     SharedBlob(Collection *_coll) : coll(_coll) {
@@ -408,7 +409,6 @@ public:
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
-    CephContext* cct;
 
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
@@ -424,9 +424,6 @@ public:
     bluestore_extent_ref_map_t ref_map;
 
   public:
-    Blob(CephContext* cct) : cct(cct) {}
-    ~Blob() {
-    }
 
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
@@ -468,18 +465,18 @@ public:
     }
 
     /// discard buffers for unallocated regions
-    void discard_unallocated();
+    void discard_unallocated(Collection *coll);
 
     /// get logical references
     void get_ref(uint64_t offset, uint64_t length);
     /// put logical references, and get back any released extents
-    bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+    bool put_ref(Collection *coll, uint64_t offset, uint64_t length,
 		 vector<bluestore_pextent_t> *r);
     /// pass references for specific range to other blob
     void pass_ref(Blob* other, uint64_t src_offset, uint64_t length, uint64_t dest_offset);
 
     /// split the blob
-    void split(size_t blob_offset, Blob *o);
+    void split(Collection *coll, size_t blob_offset, Blob *o);
 
     void get() {
       ++nref;
@@ -623,12 +620,10 @@ public:
 
   friend ostream& operator<<(ostream& out, const Extent& e);
 
-  struct Collection;
   struct Onode;
 
   /// a sharded extent map, mapping offsets to lextents to blobs
   struct ExtentMap {
-    CephContext* cct;
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
@@ -649,7 +644,7 @@ public:
       void operator()(Extent *e) { delete e; }
     };
 
-    ExtentMap(CephContext* cct, Onode *o);
+    ExtentMap(Onode *o);
     ~ExtentMap() {
       extent_map.clear_and_dispose(DeleteDisposer());
     }
@@ -667,7 +662,7 @@ public:
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(bufferlist::contiguous_appender& p);
-    void decode_spanning_blobs(Collection *c, bufferptr::iterator& p);
+    void decode_spanning_blobs(bufferptr::iterator& p);
 
     BlobRef get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
@@ -676,7 +671,7 @@ public:
     }
 
     bool update(KeyValueDB::Transaction t, bool force);
-    void reshard(uint64_t min_alloc_size);
+    void reshard();
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
@@ -796,7 +791,7 @@ public:
 	oid(o),
 	key(k),
 	exists(false),
-	extent_map(c->store->cct, this) {
+	extent_map(this) {
     }
 
     void flush();
@@ -1112,7 +1107,7 @@ public:
     void make_blob_shared(uint64_t sbid, BlobRef b);
 
     BlobRef new_blob() {
-      BlobRef b = new Blob(store->cct);
+      BlobRef b = new Blob();
       b->shared_blob = new SharedBlob(this);
       return b;
     }
@@ -1728,6 +1723,7 @@ private:
   }
 public:
   BlueStore(CephContext *cct, const string& path);
+  BlueStore(CephContext *cct, const string& path, uint64_t min_alloc_size); // Ctor for UT only
   ~BlueStore();
 
   string get_type() override {
