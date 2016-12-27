@@ -45,6 +45,11 @@ int ConfigKeyService::store_get(string key, bufferlist &bl)
   return mon->store->get(STORE_PREFIX, key, bl);
 }
 
+void ConfigKeyService::get_store_prefixes(set<string>& s)
+{
+  s.insert(STORE_PREFIX);
+}
+
 void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
 {
   bufferlist proposal_bl;
