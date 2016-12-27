@@ -320,13 +320,13 @@ test_rmobj() {
     $CEPH_TOOL osd pool create $p 1
     $CEPH_TOOL osd pool set-quota $p max_objects 1
     V1=`mktemp fooattrXXXXXXX`
-    rados put $OBJ $V1 -p $p
+    $RADOS_TOOL put $OBJ $V1 -p $p
     while ! $CEPH_TOOL osd dump | grep 'full max_objects'
     do
 	sleep 2
     done
-    rados -p $p rm $OBJ --force-full
-    rados rmpool $p $p --yes-i-really-really-mean-it
+    $RADOS_TOOL -p $p rm $OBJ --force-full
+    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
     rm $V1
 }
 
@@ -437,13 +437,13 @@ function test_append()
 {
   # rados append test:
   # replicated pool
-  ceph osd pool create rados_append 100 100 replicated
+  $CEPH_TOOL osd pool create rados_append 100 100 replicated
   # create object
   touch ./rados_append_null
-  rados -p rados_append append rados_append_obj ./rados_append_null
-  rados -p rados_append get rados_append_obj ./rados_append_0_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_null
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_0_out
   orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
-  rados -p rados_append get rados_append_obj ./rados_append_0_out
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_0_out
   orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
   read_size=`ls -l ./rados_append_0_out | awk -F ' '  '{print $5}'`
   if [ $orig_size -ne $read_size ];
@@ -453,8 +453,8 @@ function test_append()
 
   # append 4k, total size 4k
   dd if=/dev/zero of=./rados_append_4k bs=4k count=1
-  rados -p rados_append append rados_append_obj ./rados_append_4k
-  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
   orig_size=`ls -l ./rados_append_4k  | awk -F ' '  '{print $5}'`
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
   if [ $orig_size -ne $read_size ];
@@ -463,10 +463,10 @@ function test_append()
   fi
 
   # append 4k, total size 8k
-  rados -p rados_append append rados_append_obj ./rados_append_4k
-  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
-  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
   if [ 8192 -ne $read_size ];
   then
@@ -475,8 +475,8 @@ function test_append()
 
   # append 10M, total size 10493952
   dd if=/dev/zero of=./rados_append_10m bs=10M count=1
-  rados -p rados_append append rados_append_obj ./rados_append_10m
-  rados -p rados_append get rados_append_obj ./rados_append_10m_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_10m
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_10m_out
   read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
   if [ 10493952 -ne $read_size ];
   then
@@ -484,15 +484,15 @@ function test_append()
   fi
 
   # cleanup
-  ceph osd pool delete rados_append rados_append --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool delete rados_append rados_append --yes-i-really-really-mean-it
 
   #erasure coded pool
-  ceph osd erasure-code-profile set myprofile k=2 m=1 ruleset-failure-domain=osd
-  ceph osd pool create rados_append 100 100 erasure myprofile
+  $CEPH_TOOL osd erasure-code-profile set myprofile k=2 m=1 ruleset-failure-domain=osd
+  $CEPH_TOOL osd pool create rados_append 100 100 erasure myprofile
 
   # create object
-  rados -p rados_append append rados_append_obj ./rados_append_null
-  rados -p rados_append get rados_append_obj ./rados_append_0_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_null
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_0_out
   orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
   read_size=`ls -l ./rados_append_0_out | awk -F ' '  '{print $5}'`
   if [ $orig_size -ne $read_size ];
@@ -501,8 +501,8 @@ function test_append()
   fi
 
   # append 4k, total size 4k
-  rados -p rados_append append rados_append_obj ./rados_append_4k
-  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
   orig_size=`ls -l ./rados_append_4k  | awk -F ' '  '{print $5}'`
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
   if [ $orig_size -ne $read_size ];
@@ -511,8 +511,8 @@ function test_append()
   fi
 
   # append 4k, total size 8k
-  rados -p rados_append append rados_append_obj ./rados_append_4k
-  rados -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
   if [ 8192 -ne $read_size ];
   then
@@ -520,8 +520,8 @@ function test_append()
   fi
 
   # append 10M, total size 10493952
-  rados -p rados_append append rados_append_obj ./rados_append_10m
-  rados -p rados_append get rados_append_obj ./rados_append_10m_out
+  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_10m
+  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_10m_out
   read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
   if [ 10493952 -ne $read_size ];
   then
@@ -529,7 +529,7 @@ function test_append()
   fi
 
   # cleanup
-  ceph osd pool delete rados_append rados_append --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool delete rados_append rados_append --yes-i-really-really-mean-it
   rm -rf ./rados_append_null ./rados_append_0_out
   rm -rf ./rados_append_4k ./rados_append_4k_out ./rados_append_10m ./rados_append_10m_out
 }
