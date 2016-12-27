@@ -998,6 +998,29 @@ inline void decode(std::deque<T,Alloc>& ls, bufferlist::iterator& p)
   }
 }
 
+// std::array<T, N>
+template<class T, size_t N, typename traits = denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+encode(const std::array<T, N>& v, bufferlist& bl, uint64_t features)
+{
+  for (const auto& e : v)
+    encode(e, bl, features);
+}
+template<class T, size_t N, typename traits = denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+encode(const std::array<T, N>& v, bufferlist& bl)
+{
+  for (const auto& e : v)
+    encode(e, bl);
+}
+template<class T, size_t N, typename traits = denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+decode(std::array<T, N>& v, bufferlist::iterator& p)
+{
+  for (auto& e : v)
+    decode(e, p);
+}
+
 
 /*
  * guards

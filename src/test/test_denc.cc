@@ -504,3 +504,23 @@ TEST(denc, bufferptr_shallow_and_deep) {
     ASSERT_EQ('f', op[0]);
   }
 }
+
+TEST(denc, array)
+{
+  {
+    cout << "std::array<std::string, 3>" << std::endl;
+    std::array<std::string, 3> s = { "foo", "bar", "baz" };
+    counts.reset();
+    test_denc(s);
+  }
+  {
+    cout << "std::array<uint32_t, 3>" << std::endl;
+    std::array<uint32_t, 3> s = { 1UL, 2UL, 3UL };
+    test_denc(s);
+  }
+  {
+    cout << "std::array<legacy_t, 3>" << std::endl;
+    std::array<legacy_t, 2> s = { legacy_t(1), legacy_t(2) };
+    test_encode_decode(s);
+  }
+}
