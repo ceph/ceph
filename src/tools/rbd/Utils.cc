@@ -558,7 +558,7 @@ int get_pool_journal_names(const po::variables_map &vm,
     librados::Rados rados;
     librados::IoCtx io_ctx;
     librbd::Image image;
-    int r = init_and_open_image(*pool_name, image_name, "", "", true, &rados,
+    int r = init_and_open_image(*pool_name, "", image_name, "", "", true, &rados,
                                 &io_ctx, &image);
     if (r < 0) {
       std::cerr << "rbd: failed to open image " << image_name
@@ -840,8 +840,27 @@ void init_context() {
   common_init_finish(g_ceph_context);
 }
 
-int init(const std::string &pool_name, librados::Rados *rados,
-         librados::IoCtx *io_ctx) {
+int set_namespace(librados::IoCtx *io_ctx, const std::string &nspace) {
+  librbd::RBD rbd;
+  bool exists = false;
+
+  int r = rbd.namespace_exists(*io_ctx, nspace, &exists);
+  if (r < 0) {
+    std::cerr << "rbd: couldn't check the namespace!" << std::endl;
+    return r;
+  }
+
+  if (!exists) {
+    std::cerr << "rbd: No namespace " << nspace << " exists!" << std::endl;
+    return -ENOENT;
+  }
+  io_ctx->set_namespace(nspace);
+
+  return 0;
+}
+
+int init(const std::string &pool_name, const std::string &nspace,
+	 librados::Rados *rados, librados::IoCtx *io_ctx) {
   init_context();
 
   int r = rados->init_with_context(g_ceph_context);
@@ -856,20 +875,35 @@ int init(const std::string &pool_name, librados::Rados *rados,
     return r;
   }
 
-  r = init_io_ctx(*rados, pool_name, io_ctx);
+  r = init_io_ctx(*rados, pool_name, "", io_ctx);
   if (r < 0) {
     return r;
   }
+
+  if (nspace != "") {
+    r = set_namespace(io_ctx, nspace);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   return 0;
 }
 
 int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
-                librados::IoCtx *io_ctx) {
+                const std::string &nspace, librados::IoCtx *io_ctx) {
   int r = rados.ioctx_create(pool_name.c_str(), *io_ctx);
   if (r < 0) {
     std::cerr << "rbd: error opening pool " << pool_name << ": "
               << cpp_strerror(r) << std::endl;
     return r;
+  }
+
+  if (nspace != "") {
+    r = set_namespace(io_ctx, nspace);
+    if (r < 0) {
+      return r;
+    }
   }
   return 0;
 }
@@ -911,12 +945,13 @@ int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
 }
 
 int init_and_open_image(const std::string &pool_name,
+			const std::string &nspace,
                         const std::string &image_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image) {
-  int r = init(pool_name, rados, io_ctx);
+  int r = init(pool_name, nspace, rados, io_ctx);
   if (r < 0) {
     return r;
   }

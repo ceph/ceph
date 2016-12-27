@@ -60,13 +60,13 @@ int execute(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx dst_io_ctx;
-  r = utils::init_io_ctx(rados, dst_pool_name, &dst_io_ctx);
+  r = utils::init_io_ctx(rados, dst_pool_name, "", &dst_io_ctx);
   if (r < 0) {
     return r;
   }

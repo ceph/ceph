@@ -72,14 +72,14 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", snap_name, true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx dst_io_ctx;
-  r = utils::init_io_ctx(rados, dst_pool_name, &dst_io_ctx);
+  r = utils::init_io_ctx(rados, dst_pool_name, "", &dst_io_ctx);
   if (r < 0) {
     return r;
   }

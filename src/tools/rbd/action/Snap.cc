@@ -230,7 +230,7 @@ int execute_list(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, image_id, "", true,
+  r = utils::init_and_open_image(pool_name, "", image_name, image_id, "", true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -265,7 +265,7 @@ int execute_create(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -331,7 +331,7 @@ int execute_remove(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -407,7 +407,7 @@ int execute_purge(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -454,7 +454,7 @@ int execute_rollback(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -489,7 +489,7 @@ int execute_protect(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -561,7 +561,7 @@ int execute_unprotect(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -626,7 +626,7 @@ int execute_set_limit(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false, &rados,
 				 &io_ctx, &image);
   if (r < 0) {
       return r;
@@ -662,7 +662,7 @@ int execute_clear_limit(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false, &rados,
 				 &io_ctx, &image);
   if (r < 0) {
       return r;
@@ -720,7 +720,7 @@ int execute_rename(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
