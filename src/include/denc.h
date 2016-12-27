@@ -24,21 +24,24 @@
 #ifndef _ENC_DEC_H
 #define _ENC_DEC_H
 
-#include <set>
+#include <array>
+#include <cstring>
 #include <map>
-#include <vector>
+#include <set>
 #include <string>
-#include <string.h>
 #include <type_traits>
-#include <boost/intrusive/set.hpp>
+#include <vector>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/intrusive/set.hpp>
 
-#include "include/int_types.h"
 #include "include/intarith.h"
+#include "include/int_types.h"
 #include "include/memory.h"
-#include "byteorder.h"
+
 #include "buffer.h"
+#include "byteorder.h"
 
 template<typename T, typename VVV=void>
 struct denc_traits {
@@ -862,6 +865,76 @@ struct denc_traits<
   _denc::maplike_details<boost::container::flat_map<
 			   A, B, Ts...>>,
   A, B, Ts...> {};
+
+template<typename T, size_t N>
+struct denc_traits<
+  std::array<T, N>,
+  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
+private:
+  using container = std::array<T, N>;
+public:
+  using traits = denc_traits<T>;
+
+  enum { supported = true };
+  enum { featured = traits::featured };
+  enum { bounded = traits::bounded };
+
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+				 !traits::bounded &&
+				 !traits::featured>::type
+  bound_encode(const container& s, size_t& p) {
+    for (const auto& e : s)
+      denc(e, p);
+  }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+				 traits::bounded &&
+				 !traits::featured, void>::type
+  bound_encode(const container& s, size_t& p) {
+    size_t elem_size = 0;
+    denc(*(const T*)nullptr, elem_size);
+    p += elem_size * N;
+  }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+				 !traits::bounded &&
+				 traits::featured, void>::type
+  bound_encode(const container& s, size_t& p, uint64_t f) {
+    for (const auto& e : s)
+      denc(e, p, f);
+  }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+				 traits::bounded &&
+				 traits::featured>::type
+  bound_encode(const container& s, size_t& p, uint64_t f) {
+    size_t elem_size = 0;
+    denc(*(const T*)nullptr, elem_size, f);
+    p += sizeof(uint32_t) + elem_size * s.size();
+  }
+
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+				 !traits::featured>::type
+  encode(const container& s, buffer::list::contiguous_appender& p) {
+    for (const auto& e : s)
+      denc(e, p);
+  }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+				 traits::featured>::type
+    encode(const container& s, buffer::list::contiguous_appender& p,
+	   uint64_t f) {
+    for (const auto& e : s)
+      denc(e, p, f);
+  }
+  static void decode(container& s, buffer::ptr::iterator& p, uint64_t f = 0) {
+    for (auto& e : s)
+      denc(e, p, f);
+  }
+};
+
 
 // ----------------------------------------------------------------------
 // class helpers
