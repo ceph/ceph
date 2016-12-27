@@ -170,6 +170,7 @@ for i in `seq 1 5`; do
   rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
   run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapheader $objname "$rand_str"
   run_expect_succ --tee "$fname.omap.header" "$RADOS_TOOL" -p "$POOL" getomapheader $objname
+
 # a few random omap keys
   for j in `seq 1 4`; do
     rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
@@ -534,12 +535,42 @@ function test_append()
   rm -rf ./rados_append_4k ./rados_append_4k_out ./rados_append_10m ./rados_append_10m_out
 }
 
+function test_put()
+{
+  # rados put test:
+  cleanup
+
+  # create file in local fs
+  dd if=/dev/urandom of=rados_object_10k bs=1KB count=10
+
+  # test put command
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_object_10k_out
+  cmp ./rados_object_10k ./rados_object_10k_out
+  cleanup
+
+  # test put command with offset 0
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k --offset 0
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_object_offset_0_out
+  cmp ./rados_object_10k ./rados_object_offset_0_out
+  cleanup
+
+  # test put command with offset 1000
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k --offset 1000
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_object_offset_1000_out
+  cmp ./rados_object_10k ./rados_object_offset_1000_out 0 1000
+  cleanup
+
+  rm -rf ./rados_object_10k ./rados_object_10k_out ./rados_object_offset_0_out ./rados_object_offset_1000_out
+}
+
 test_xattr
 test_omap
 test_rmobj
 test_ls
 test_cleanup
 test_append
+test_put
 
 echo "SUCCESS!"
 exit 0
