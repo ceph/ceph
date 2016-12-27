@@ -1385,7 +1385,7 @@ public:
     bool sort_bitwise;
 
     int64_t pool_id;
-    int pool_snap_seq;
+    uint64_t pool_snap_seq;
     int max_entries;
     string nspace;
 
@@ -2214,7 +2214,8 @@ public:
   }
   Op *prepare_pg_read_op(
     uint32_t hash, object_locator_t oloc,
-    ObjectOperation& op, bufferlist *pbl, int flags,
+    ObjectOperation& op, snapid_t snapid,
+    bufferlist *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
     Op *o = new Op(object_t(), oloc,
@@ -2223,7 +2224,7 @@ public:
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
     o->priority = op.priority;
-    o->snapid = CEPH_NOSNAP;
+    o->snapid = snapid;
     o->outbl = pbl;
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
@@ -2237,10 +2238,11 @@ public:
   }
   ceph_tid_t pg_read(
     uint32_t hash, object_locator_t oloc,
-    ObjectOperation& op, bufferlist *pbl, int flags,
+    ObjectOperation& op, snapid_t snapid,
+    bufferlist *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
-    Op *o = prepare_pg_read_op(hash, oloc, op, pbl, flags,
+    Op *o = prepare_pg_read_op(hash, oloc, op, snapid, pbl, flags,
 			       onack, reply_epoch, ctx_budget);
     ceph_tid_t tid;
     op_submit(o, &tid, ctx_budget);
@@ -2764,6 +2766,7 @@ public:
   void enumerate_objects(
     int64_t pool_id,
     const std::string &ns,
+    snapid_t& snapid,
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,

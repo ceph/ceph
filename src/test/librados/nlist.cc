@@ -31,6 +31,20 @@ TEST_F(LibRadosList, ListObjects) {
     ASSERT_EQ(std::string(entry), "foo");
   }
   ASSERT_TRUE(foundit);
+
+  // list objects for a specify snapshot
+  foundit = false;
+  uint64_t snapid;
+  ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "now"));
+  ASSERT_EQ(0, rados_ioctx_snap_lookup(ioctx, "now", &snapid));
+  ASSERT_EQ(0, rados_remove(ioctx, "foo"));
+  ASSERT_EQ(-ENOENT, rados_nobjects_list_next(ctx, &entry, NULL, NULL));
+  rados_ioctx_snap_set_read(ioctx, snapid);
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
+    foundit = true;
+    ASSERT_EQ(std::string(entry), "foo");
+  }
+  ASSERT_TRUE(foundit);
   rados_nobjects_list_close(ctx);
 }
 
@@ -42,6 +56,23 @@ TEST_F(LibRadosListPP, ListObjectsPP) {
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   NObjectIterator iter(ioctx.nobjects_begin());
   bool foundit = false;
+  while (iter != ioctx.nobjects_end()) {
+    foundit = true;
+    ASSERT_EQ((*iter).get_oid(), "foo");
+    ++iter;
+  }
+
+  ASSERT_TRUE(foundit);
+
+  // list objects for a specify snapshot
+  foundit = false;
+  uint64_t snapid;
+  ASSERT_EQ(0, ioctx.snap_create("now"));
+  ASSERT_EQ(0, ioctx.snap_lookup("now", &snapid));
+  ASSERT_EQ(0, ioctx.remove("foo"));
+  ASSERT_EQ(iter, ioctx.nobjects_end());
+
+  ioctx.snap_set_read(snapid);
   while (iter != ioctx.nobjects_end()) {
     foundit = true;
     ASSERT_EQ((*iter).get_oid(), "foo");
