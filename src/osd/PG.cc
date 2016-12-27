@@ -1876,9 +1876,9 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   OSDCap& caps = session->caps;
   session->put();
 
-  string key = req->get_object_locator().key;
-  if (key.length() == 0)
-    key = req->get_oid().name;
+  const string &key = req->get_object_locator().key.empty() ?
+                      req->get_oid().name :
+                      req->get_object_locator().key;
 
   bool cap = caps.is_capable(pool.name, req->get_object_locator().nspace,
                              pool.auid, key,
