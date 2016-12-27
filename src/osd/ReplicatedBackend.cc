@@ -1669,7 +1669,8 @@ void ReplicatedBackend::submit_push_data(
     t->remove(coll, ghobject_t(target_oid));
     t->touch(coll, ghobject_t(target_oid));
     t->truncate(coll, ghobject_t(target_oid), recovery_info.size);
-    t->omap_setheader(coll, ghobject_t(target_oid), omap_header);
+    if (omap_header.length()) 
+      t->omap_setheader(coll, ghobject_t(target_oid), omap_header);
 
     bufferlist bv = attrs[OI_ATTR];
     object_info_t oi(bv);
