@@ -314,6 +314,30 @@ class TestCephDisk(object):
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk --verbose zap " + disk)
 
+    def test_activate_with_journal_dev_is_symlink(self):
+        c = CephDisk()
+        disk = c.unused_disks()[0]
+        osd_uuid = str(uuid.uuid1())
+        tempdir = tempfile.mkdtemp()
+        symlink = os.path.join(tempdir,'osd')
+        os.symlink(disk, symlink)
+        c.sh("ceph-disk zap " + symlink)
+        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+             " " + symlink)
+        c.wait_for_osd_up(osd_uuid)
+        device = json.loads(c.sh("ceph-disk list --format json " + symlink))[0]
+        assert len(device['partitions']) == 2
+        data_partition = c.get_osd_partition(osd_uuid)
+        assert data_partition['type'] == 'data'
+        assert data_partition['state'] == 'active'
+        journal_partition = c.get_journal_partition(osd_uuid)
+        assert journal_partition
+        c.helper("pool_read_write")
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk zap " + symlink)
+        os.unlink(symlink)
+        os.rmdir(tempdir)
+
     def test_activate_separated_journal(self):
         c = CephDisk()
         disks = c.unused_disks()
@@ -323,6 +347,25 @@ class TestCephDisk(object):
         c.helper("pool_read_write 1") # 1 == pool size
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk --verbose zap " + data_disk + " " + journal_disk)
+
+    def test_activate_separated_journal_dev_is_symlink(self):
+        c = CephDisk()
+        disks = c.unused_disks()
+        data_disk = disks[0]
+        journal_disk = disks[1]
+        tempdir = tempfile.mkdtemp()
+        data_symlink = os.path.join(tempdir, 'osd')
+        os.symlink(data_disk, data_symlink)
+        journal_symlink = os.path.join(tempdir, 'journal')
+        os.symlink(journal_disk, journal_symlink)
+        osd_uuid = self.activate_separated_journal(
+            data_symlink, journal_symlink)
+        c.helper("pool_read_write 1")  # 1 == pool size
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk zap " + data_symlink + " " + journal_symlink)
+        os.unlink(data_symlink)
+        os.unlink(journal_symlink)
+        os.rmdir(tempdir)
 
     def activate_separated_journal(self, data_disk, journal_disk):
         c = CephDisk()
