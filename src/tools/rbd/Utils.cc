@@ -202,6 +202,19 @@ std::string get_pool_name(const po::variables_map &vm,
   return pool_name;
 }
 
+std::string get_namespace(const po::variables_map &vm)
+{
+  std::string nspace;
+  if (vm.count(at::NAMESPACE)) {
+    nspace = vm[at::NAMESPACE].as<std::string>();
+  }
+
+  if (nspace.empty()) {
+    nspace = at::DEFAULT_NAMESPACE;
+  }
+  return nspace;
+}
+
 int get_special_pool_group_names(const po::variables_map &vm,
 				 size_t *arg_index,
 				 std::string *group_pool_name,
