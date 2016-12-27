@@ -822,10 +822,11 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   // rename it to another mds.
   filepath src;
   dn->make_path(src);
+  assert(src.depth() == 2);
 
-  string dname;
-  in->name_stray_dentry(dname);
-  filepath dst(dname, MDS_INO_STRAY(to, 0));
+  filepath dst(MDS_INO_MDSDIR(to));
+  dst.push_dentry(src[0]);
+  dst.push_dentry(src[1]);
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
