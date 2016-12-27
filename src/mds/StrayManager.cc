@@ -127,16 +127,14 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   }
 
   if (in->is_file()) {
-    uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
-		      (uint64_t)in->inode.layout.fl_stripe_count;
     uint64_t to = in->inode.get_max_size();
     to = MAX(in->inode.size, to);
     // when truncating a file, the filer does not delete stripe objects that are
     // truncated to zero. so we need to purge stripe objects up to the max size
     // the file has ever been.
     to = MAX(in->inode.max_size_ever, to);
-    if (to && period) {
-      uint64_t num = (to + period - 1) / period;
+    if (to > 0) {
+      uint64_t num = Striper::get_num_objects(in->inode.layout, to);
       dout(10) << __func__ << " 0~" << to << " objects 0~" << num
 	       << " snapc " << snapc << " on " << *in << dendl;
       filer.purge_range(in->inode.ino, &in->inode.layout, *snapc,
@@ -441,12 +439,10 @@ uint32_t StrayManager::_calculate_ops_required(CInode *in, bool trunc)
     ops_required = 1 + ls.size();
   } else {
     // File, work out concurrent Filer::purge deletes
-    const uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
-		      (uint64_t)in->inode.layout.fl_stripe_count;
     const uint64_t to = MAX(in->inode.max_size_ever,
             MAX(in->inode.size, in->inode.get_max_size()));
 
-    const uint64_t num = MAX(1, (to + period - 1) / period);
+    const uint64_t num = (to > 0) ? Striper::get_num_objects(in->inode.layout, to) : 1;
     ops_required = MIN(num, g_conf->filer_max_purge_ops);
 
     // Account for removing (or zeroing) backtrace
@@ -801,28 +797,28 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   dout(10) << " realm " << *realm << dendl;
   const SnapContext *snapc = &realm->get_snap_context();
 
-  uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
-		    (uint64_t)in->inode.layout.fl_stripe_count;
   uint64_t to = in->inode.get_max_size();
   to = MAX(in->inode.size, to);
   // when truncating a file, the filer does not delete stripe objects that are
   // truncated to zero. so we need to purge stripe objects up to the max size
   // the file has ever been.
   to = MAX(in->inode.max_size_ever, to);
-  if (period && to > period) {
-    uint64_t num = (to - 1) / period;
+  if (to > 0) {
+    uint64_t num = Striper::get_num_objects(in->inode.layout, to);
     dout(10) << __func__ << " 0~" << to << " objects 0~" << num
-      << " snapc " << snapc << " on " << *in << dendl;
-    filer.purge_range(in->ino(), &in->inode.layout, *snapc,
-			    1, num, ceph_clock_now(g_ceph_context),
-			    0, gather.new_sub());
-  }
+	     << " snapc " << snapc << " on " << *in << dendl;
 
-  // keep backtrace object
-  if (period && to > 0) {
+    // keep backtrace object
+    if (num > 1) {
+      filer.purge_range(in->ino(), &in->inode.layout, *snapc,
+			1, num - 1, ceph_clock_now(g_ceph_context),
+			0, gather.new_sub());
+    }
+
     filer.zero(in->ino(), &in->inode.layout, *snapc,
-		     0, period, ceph_clock_now(g_ceph_context),
-		     0, true, NULL, gather.new_sub());
+		0, (uint64_t)in->inode.layout.fl_object_size,
+		ceph_clock_now(g_ceph_context),
+		0, true, NULL, gather.new_sub());
   }
 
   assert(gather.has_subs());
