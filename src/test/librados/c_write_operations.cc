@@ -221,6 +221,7 @@ TEST(LibRadosCWriteOps, WriteSame) {
   ASSERT_TRUE(op);
   rados_write_op_remove(op);
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  rados_release_write_op(op);
 
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
