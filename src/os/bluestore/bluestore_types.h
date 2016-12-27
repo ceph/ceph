@@ -284,14 +284,12 @@ struct bluestore_blob_t {
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
 
+  uint16_t unused = 0;     ///< portion that has never been written to (bitmap)
+
   uint8_t csum_type = Checksummer::CSUM_NONE;      ///< CSUM_*
   uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
 
   bufferptr csum_data;                ///< opaque vector of csum data
-
-  typedef uint16_t unused_uint_t;
-  typedef std::bitset<sizeof(unused_uint_t) * 8> unused_t;
-  unused_t unused;                    ///< portion that has never been written to
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
@@ -325,7 +323,7 @@ struct bluestore_blob_t {
 	     csum_data.length());
     }
     if (has_unused()) {
-      denc(unused_uint_t(unused.to_ullong()), p);
+      denc(unused, p);
     }
   }
 
@@ -345,9 +343,7 @@ struct bluestore_blob_t {
       csum_data = p.get_ptr(len);
     }
     if (has_unused()) {
-      unused_uint_t val;
-      denc(val, p);
-      unused = unused_t(val);
+      denc(unused, p);
     }
   }
 
@@ -455,14 +451,13 @@ struct bluestore_blob_t {
       return false;
     }
     uint64_t blob_len = get_logical_length();
-    assert((blob_len % unused.size()) == 0);
+    assert((blob_len % (sizeof(unused)*8)) == 0);
     assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / unused.size();
+    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
     uint64_t start = offset / chunk_size;
     uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
-    assert(end <= unused.size());
     auto i = start;
-    while (i < end && unused[i]) {
+    while (i < end && (unused & (1u << i))) {
       i++;
     }
     return i >= end;
@@ -471,14 +466,13 @@ struct bluestore_blob_t {
   /// mark a range that has never been used
   void add_unused(uint64_t offset, uint64_t length) {
     uint64_t blob_len = get_logical_length();
-    assert((blob_len % unused.size()) == 0);
+    assert((blob_len % (sizeof(unused)*8)) == 0);
     assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / unused.size();
+    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
     uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
-    assert(end <= unused.size());
     for (auto i = start; i < end; ++i) {
-      unused[i] = 1;
+      unused |= (1u << i);
     }
     if (start != end) {
       set_flag(FLAG_HAS_UNUSED);
@@ -489,16 +483,15 @@ struct bluestore_blob_t {
   void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
       uint64_t blob_len = get_logical_length();
-      assert((blob_len % unused.size()) == 0);
+      assert((blob_len % (sizeof(unused)*8)) == 0);
       assert(offset + length <= blob_len);
-      uint64_t chunk_size = blob_len / unused.size();
+      uint64_t chunk_size = blob_len / (sizeof(unused)*8);
       uint64_t start = offset / chunk_size;
       uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
-      assert(end <= unused.size());
       for (auto i = start; i < end; ++i) {
-        unused[i] = 0;
+        unused &= ~(1u << i);
       }
-      if (unused.none()) {
+      if (unused == 0) {
         clear_flag(FLAG_HAS_UNUSED);
       }
     }
@@ -664,11 +657,6 @@ struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  uint8_t flags = 0;
-
-  enum {
-    FLAG_OMAP = 1,
-  };
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
@@ -684,6 +672,12 @@ struct bluestore_onode_t {
   uint32_t expected_object_size = 0;
   uint32_t expected_write_size = 0;
   uint32_t alloc_hint_flags = 0;
+
+  uint8_t flags = 0;
+
+  enum {
+    FLAG_OMAP = 1,
+  };
 
   string get_flags_string() const {
     string s;
