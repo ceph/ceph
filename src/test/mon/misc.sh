@@ -118,6 +118,27 @@ function TEST_mon_add_to_single_mon() {
     teardown $dir || return 1
 }
 
+function TEST_no_segfault_for_bad_keyring() {
+    local dir=$1
+    setup $dir || return 1
+    # create a client.admin key and add it to ceph.mon.keyring
+    ceph-authtool --create-keyring $dir/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+    ceph-authtool --create-keyring $dir/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *'
+    ceph-authtool $dir/ceph.mon.keyring --import-keyring $dir/ceph.client.admin.keyring
+    CEPH_ARGS_TMP="--fsid=$(uuidgen) --mon-host=127.0.0.1:7102 --auth-supported=cephx "
+    CEPH_ARGS_orig=$CEPH_ARGS
+    CEPH_ARGS="$CEPH_ARGS_TMP --keyring=$dir/ceph.mon.keyring "
+    run_mon $dir a
+    # create a bad keyring and make sure no segfault occurs when using the bad keyring
+    echo -e "[client.admin]\nkey = BQAUlgtWoFePIxAAQ9YLzJSVgJX5V1lh5gyctg==" > $dir/bad.keyring
+    CEPH_ARGS="$CEPH_ARGS_TMP --keyring=$dir/bad.keyring"
+    ceph osd dump 2> /dev/null
+    # 139(11|128) means segfault and core dumped
+    [ $? -eq 139 ] && return 1
+    CEPH_ARGS=$CEPH_ARGS_orig
+    teardown $dir || return 1
+}
+
 main misc "$@"
 
 # Local Variables:
