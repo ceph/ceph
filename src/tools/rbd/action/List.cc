@@ -20,7 +20,7 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
-                   Formatter *f) {
+            const std::string nspace, Formatter *f) {
   std::vector<std::string> names;
   int r = rbd.list(io_ctx, names);
   if (r == -ENOENT)
@@ -56,6 +56,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     tbl.define_column("FMT", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("PROT", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("LOCK", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
   }
 
   std::string pool, image, snap, parent;
@@ -122,6 +123,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
       f->dump_int("format", old_format ? 1 : 2);
       if (!lockers.empty())
         f->dump_string("lock_type", exclusive ? "exclusive" : "shared");
+        f->dump_string("namespace", nspace == "" ? "default" : nspace);
       f->close_section();
     } else {
       tbl << *i
@@ -130,6 +132,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
           << ((old_format) ? '1' : '2')
           << ""                         // protect doesn't apply to images
           << lockstr
+	  << (nspace == "" ? "default" : nspace)
           << TextTable::endrow;
     }
 
@@ -162,6 +165,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
           }
           f->dump_int("format", old_format ? 1 : 2);
           f->dump_string("protected", is_protected ? "true" : "false");
+	  f->dump_string("namespace", nspace == "" ? "default" : nspace);
           f->close_section();
         } else {
           tbl << *i + "@" + s->name
@@ -170,6 +174,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
               << ((old_format) ? '1' : '2')
               << (is_protected ? "yes" : "")
               << ""                     // locks don't apply to snaps
+	      << (nspace == "" ? "default" : nspace)
               << TextTable::endrow;
         }
       }
@@ -215,7 +220,7 @@ int execute(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = do_list(rbd, io_ctx, vm["long"].as<bool>(), formatter.get());
+  r = do_list(rbd, io_ctx, vm["long"].as<bool>(), nspace, formatter.get());
   if (r < 0) {
     std::cerr << "rbd: list: " << cpp_strerror(r) << std::endl;
     return r;
