@@ -6,6 +6,7 @@ class RGWRole
   static const string role_name_oid_prefix;
   static const string role_oid_prefix;
   static const string role_path_oid_prefix;
+  static const string role_arn_prefix;
 
   CephContext *cct;
   RGWRados *store;
@@ -16,6 +17,7 @@ class RGWRole
   string creation_date;
   string trust_policy;
   map<string, string> perm_policy_map;
+  string uid;
 
   int store_info(bool exclusive);
   int store_name(bool exclusive);
@@ -30,12 +32,14 @@ public:
           RGWRados *store,
           string name,
           string path,
-          string trust_policy)
+          string trust_policy,
+          string uid)
   : cct(cct),
     store(store),
     name(std::move(name)),
     path(std::move(path)),
-    trust_policy(std::move(trust_policy)) {
+    trust_policy(std::move(trust_policy)),
+    uid(std::move(uid)) {
     if (this->path.empty())
       this->path = "/";
   }
