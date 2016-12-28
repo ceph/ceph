@@ -1708,6 +1708,8 @@ protected:
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
+  int send_boot_count;
+  
   PGPool _get_pool(int id, OSDMapRef createmap);
 
   PG *get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op);
