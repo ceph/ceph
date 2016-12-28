@@ -350,6 +350,10 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   } else {
     bench_io_size = 4096;
   }
+  if (bench_io_size == 0) {
+    std::cerr << "rbd: --io-size should be greater than zero." << std::endl;
+    return -EINVAL;
+  }
 
   uint32_t bench_io_threads;
   if (vm.count("io-threads")) {
