@@ -23,12 +23,10 @@ void ExtentList::add_extents(int64_t start, int64_t count) {
 
   if (m_num_extents > 0) {
     last_extent = &((*m_extents)[m_num_extents - 1]);
-    uint64_t last_offset = (last_extent->offset + last_extent->length) / 
-			m_block_size; 
-    uint32_t last_length = last_extent->length / m_block_size; 
-    int64_t max_blocks = m_max_alloc_size / m_block_size;
+    uint64_t last_offset = last_extent->end() / m_block_size;
+    uint32_t last_length = last_extent->length / m_block_size;
     if ((last_offset == (uint64_t) start) &&
-        (!max_blocks || (last_length + count) <= max_blocks)) {
+        (!m_max_blocks || (last_length + count) <= m_max_blocks)) {
       can_merge = true;
     }
   }
