@@ -582,34 +582,38 @@ public:
 }; /* RGWBulkUploadOp::AlignedStreamGetter */
 
 
+struct RGWUsageStats {
+  uint64_t bytes_used = 0;
+  uint64_t bytes_used_rounded = 0;
+  uint64_t buckets_count = 0;
+  uint64_t objects_count = 0;
+};
+
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
 
 class RGWListBuckets : public RGWOp {
 protected:
   bool sent_data;
-  string marker;
-  string end_marker;
+  std::string marker;
+  std::string end_marker;
   int64_t limit;
   uint64_t limit_max;
-  uint32_t buckets_count;
-  uint64_t buckets_objcount;
-  uint64_t buckets_size;
-  uint64_t buckets_size_rounded;
-  map<string, bufferlist> attrs;
+  std::map<std::string, ceph::bufferlist> attrs;
   bool is_truncated;
+
+  RGWUsageStats global_stats;
+  std::map<std::string, RGWUsageStats> policies_stats;
 
   virtual uint64_t get_default_max() const {
     return 1000;
   }
 
 public:
-  RGWListBuckets() : sent_data(false) {
-    limit = limit_max = RGW_LIST_BUCKETS_LIMIT_MAX;
-    buckets_count = 0;
-    buckets_objcount = 0;
-    buckets_size = 0;
-    buckets_size_rounded = 0;
-    is_truncated = false;
+  RGWListBuckets()
+    : sent_data(false),
+      limit(RGW_LIST_BUCKETS_LIMIT_MAX),
+      limit_max(RGW_LIST_BUCKETS_LIMIT_MAX),
+      is_truncated(false) {
   }
 
   int verify_permission() override;
@@ -666,24 +670,17 @@ public:
 
 class RGWStatAccount : public RGWOp {
 protected:
-  uint32_t buckets_count;
-  uint64_t buckets_objcount;
-  uint64_t buckets_size;
-  uint64_t buckets_size_rounded;
+  RGWUsageStats global_stats;
+  std::map<std::string, RGWUsageStats> policies_stats;
 
 public:
-  RGWStatAccount() {
-    buckets_count = 0;
-    buckets_objcount = 0;
-    buckets_size = 0;
-    buckets_size_rounded = 0;
-  }
+  RGWStatAccount() = default;
 
   int verify_permission() override;
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "stat_account"; }
+  const std::string name() override { return "stat_account"; }
   RGWOpType get_type() override { return RGW_OP_STAT_ACCOUNT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
