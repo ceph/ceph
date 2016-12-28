@@ -180,13 +180,19 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const
   return 0;
 }
 
-int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, real_time creation_time, bool update_entrypoint)
+int rgw_link_bucket(RGWRados* const store,
+                    const rgw_user& user_id,
+                    rgw_bucket& bucket,
+                    ceph::real_time creation_time,
+                    std::string placement_rule,
+                    bool update_entrypoint)
 {
   int ret;
   string& tenant_name = bucket.tenant;
   string& bucket_name = bucket.name;
 
   cls_user_bucket_entry new_bucket;
+  new_bucket.placement_rule = placement_rule;
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
@@ -478,7 +484,9 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-          r = rgw_link_bucket(store, user_id, actual_bucket, bucket_info.creation_time);
+          r = rgw_link_bucket(store, user_id, actual_bucket,
+                              bucket_info.creation_time,
+                              bucket_info.placement_rule);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -895,7 +903,8 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
       return r;
     }
 
-    r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket, real_time());
+    r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
+                        ceph::real_time(), bucket_info.placement_rule);
     if (r < 0) {
       return r;
     }
@@ -2121,9 +2130,17 @@ public:
 
     /* link bucket */
     if (be.linked) {
-      ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time, false);
+      RGWBucketInfo bucket_info;
+      ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name,
+                                   bucket_info, nullptr, nullptr);
+      if (ret < 0) {
+        return ret;
+      }
+      ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time,
+                            bucket_info.placement_rule, false);
     } else {
-      ret = rgw_unlink_bucket(store, be.owner, be.bucket.tenant, be.bucket.name, false);
+      ret = rgw_unlink_bucket(store, be.owner, be.bucket.tenant,
+                              be.bucket.name, false);
     }
 
     return ret;
