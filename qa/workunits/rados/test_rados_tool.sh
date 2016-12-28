@@ -560,7 +560,7 @@ function test_put()
   cleanup
 
   # create file in local fs
-  dd if=/dev/urandom of=rados_object_10k bs=1KB count=10
+  dd if=/dev/urandom of=rados_object_10k bs=1K count=10
 
   # test put command
   $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k
