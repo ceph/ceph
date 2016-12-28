@@ -21,6 +21,7 @@ using namespace std;
 const string RGWRole::role_name_oid_prefix = "role_names.";
 const string RGWRole::role_oid_prefix = "roles.";
 const string RGWRole::role_path_oid_prefix = "role_paths.";
+const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 int RGWRole::store_info(bool exclusive)
 {
@@ -77,7 +78,7 @@ int RGWRole::create(bool exclusive)
   id = uuid_str;
 
   //arn
-  arn = "arn:aws:iam::role" + path + name;
+  arn = role_arn_prefix + uid + ":role" + path + name;
 
   // Creation time
   real_clock::time_point t = real_clock::now();

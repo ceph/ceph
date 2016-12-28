@@ -4592,8 +4592,10 @@ int main(int argc, const char **argv)
     return 0;
   case OPT_ROLE_CREATE:
     {
-      if (role_name.empty() || assume_role_doc.empty()) {
-        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+      string uid;
+      user_id.to_str(uid);
+      if (role_name.empty() || assume_role_doc.empty() || uid.empty()) {
+        cerr << "ERROR: one of role name or assume role policy document or uid is empty" << std::endl;
         return -EINVAL;
       }
       /* The following two calls will be replaced by read_decode_json or something
@@ -4610,7 +4612,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       string trust_policy = bl.to_str();
-      RGWRole role(g_ceph_context, store, role_name, path, trust_policy);
+      RGWRole role(g_ceph_context, store, role_name, path, trust_policy, uid);
       ret = role.create(true);
       if (ret < 0) {
         return -ret;
