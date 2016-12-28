@@ -540,3 +540,41 @@ TEST(denc, tuple)
     test_denc(s);
   }
 }
+
+TEST(denc, optional)
+{
+  {
+    cout << "boost::optional<uint64_t>" << std::endl;
+    boost::optional<uint64_t> s = 97, t = boost::none;
+    counts.reset();
+    test_denc(s);
+    test_denc(t);
+  }
+  {
+    cout << "boost::optional<std::string>" << std::endl;
+    boost::optional<std::string> s = std::string("Meow"), t = boost::none;
+    counts.reset();
+    test_denc(s);
+    test_denc(t);
+  }
+  {
+    size_t s = 0;
+    denc(boost::none, s);
+    ASSERT_NE(s, 0u);
+
+    // encode
+    bufferlist bl;
+    {
+      auto a = bl.get_contiguous_appender(s);
+      denc(boost::none, a);
+    }
+    ASSERT_LE(bl.length(), s);
+
+    bl.rebuild();
+    boost::optional<uint32_t> out = 5;
+    auto bpi = bl.front().begin();
+    denc(out, bpi);
+    ASSERT_FALSE(!!out);
+    ASSERT_EQ(bpi.get_pos(), bl.c_str() + bl.length());
+  }
+}
