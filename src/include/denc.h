@@ -35,6 +35,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/intrusive/set.hpp>
+#include <boost/optional.hpp>
 
 #include "include/intarith.h"
 #include "include/int_types.h"
@@ -231,6 +232,7 @@ WRITE_INT_DENC(uint32_t, __le32);
 WRITE_INT_DENC(int32_t, __le32);
 WRITE_INT_DENC(uint64_t, __le64);
 WRITE_INT_DENC(int64_t, __le64);
+WRITE_INT_DENC(bool, uint8_t);
 
 
 // varint
@@ -1131,6 +1133,105 @@ public:
 
   static void decode(container& s, buffer::ptr::iterator& p, uint64_t f = 0) {
     decode_helper(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+  }
+};
+
+//
+// boost::optional<T>
+//
+template<typename T>
+struct denc_traits<
+  boost::optional<T>,
+  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
+  using traits = denc_traits<T>;
+
+  enum { supported = true };
+  enum { featured = traits::featured };
+  enum { bounded = false };
+
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && !featured>::type
+  bound_encode(const boost::optional<T>& v, size_t& p) {
+    denc(*(bool *)nullptr, p);
+    if (v)
+      denc(*v, p);
+  }
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && featured>::type
+  bound_encode(const boost::optional<T>& v, size_t& p, uint64_t f) {
+    denc(*(bool *)nullptr, p);
+    if (v)
+      denc(*v, p);
+  }
+
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && !featured>::type
+  encode(const boost::optional<T>& v, bufferlist::contiguous_appender& p) {
+    denc((bool)v, p);
+    if (v)
+      denc(*v, p);
+  }
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && featured>::type
+  encode(const boost::optional<T>& v, bufferlist::contiguous_appender& p,
+	 uint64_t f) {
+    denc((bool)v, p, f);
+    if (v)
+      denc(*v, p, f);
+  }
+
+  static void decode(boost::optional<T>& v, buffer::ptr::iterator& p,
+		     uint64_t f = 0) {
+    bool x;
+    denc(x, p, f);
+    if (x) {
+      v = T{};
+      denc(*v, p, f);
+    } else {
+      v = boost::none;
+    }
+  }
+
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && !featured>::type
+  encode_nohead(const boost::optional<T>& v,
+		bufferlist::contiguous_appender& p) {
+    if (v)
+      denc(*v, p);
+  }
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && featured>::type
+  encode_nohead(const boost::optional<T>& v,
+		bufferlist::contiguous_appender& p,
+		uint64_t f) {
+    if (v)
+      denc(*v, p, f);
+  }
+
+  static void decode_nohead(bool num, boost::optional<T>& v,
+			    buffer::ptr::iterator& p, uint64_t f = 0) {
+    if (num) {
+      v = T();
+      denc(*v, p, f);
+    } else {
+      v = boost::none;
+    }
+  }
+};
+
+template<>
+struct denc_traits<boost::none_t> {
+  enum { supported = true };
+  enum { featured = false };
+  enum { bounded = true };
+
+  static void bound_encode(const boost::none_t& v, size_t& p) {
+    denc(*(bool *)nullptr, p);
+  }
+
+  static void encode(const boost::none_t& v,
+		     bufferlist::contiguous_appender& p) {
+    denc(false, p);
   }
 };
 
