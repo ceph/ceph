@@ -288,7 +288,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
       is_server(false), con_handler(new C_handle_connection(this)),
       active(false), detached(false) {
     qp = infiniband->create_queue_pair(
-        cct, s->get_rx_cq(), s->get_rx_cq(), IBV_QPT_RC);
+        cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC);
     my_msg.qpn = qp->get_local_qp_number();
     my_msg.psn = qp->get_initial_psn();
     my_msg.lid = infiniband->get_lid();
