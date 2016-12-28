@@ -278,6 +278,7 @@ void get_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -327,7 +328,8 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, image_id, snap_name,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, image_id, snap_name,
                                  true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;

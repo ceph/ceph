@@ -807,6 +807,7 @@ static int do_import_journal(librados::IoCtx& io_ctx,
 void get_info_arguments(po::options_description *positional,
 			po::options_description *options) {
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -828,7 +829,8 @@ int execute_info(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -845,6 +847,7 @@ int execute_info(const po::variables_map &vm) {
 void get_status_arguments(po::options_description *positional,
 			  po::options_description *options) {
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -866,7 +869,8 @@ int execute_status(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -882,6 +886,7 @@ int execute_status(const po::variables_map &vm) {
 void get_reset_arguments(po::options_description *positional,
 			 po::options_description *options) {
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 int execute_reset(const po::variables_map &vm) {
@@ -896,7 +901,8 @@ int execute_reset(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -912,6 +918,7 @@ int execute_reset(const po::variables_map &vm) {
 void get_client_disconnect_arguments(po::options_description *positional,
 				     po::options_description *options) {
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   options->add_options()
     ("client-id", po::value<std::string>(),
      "client ID (or leave unspecified to disconnect all)");
@@ -934,7 +941,8 @@ int execute_client_disconnect(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -951,6 +959,7 @@ int execute_client_disconnect(const po::variables_map &vm) {
 void get_inspect_arguments(po::options_description *positional,
 			   po::options_description *options) {
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_verbose_option(options);
 }
 
@@ -966,7 +975,8 @@ int execute_inspect(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -983,6 +993,7 @@ void get_export_arguments(po::options_description *positional,
 			  po::options_description *options) {
   at::add_journal_spec_options(positional, options,
 			       at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_namespace_options(positional, options);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
   at::add_verbose_option(options);
@@ -1007,7 +1018,8 @@ int execute_export(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -1026,6 +1038,7 @@ void get_import_arguments(po::options_description *positional,
   at::add_path_options(positional, options,
                        "import file (or '-' for stdin)");
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
+  at::add_namespace_options(positional, options);
   at::add_verbose_option(options);
   at::add_no_error_option(options);
 }
@@ -1048,7 +1061,8 @@ int execute_import(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

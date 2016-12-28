@@ -239,6 +239,7 @@ void get_arguments_diff(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_namespace_options(positional, options);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
   options->add_options()
@@ -275,7 +276,8 @@ int execute_diff(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", snap_name, true,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", snap_name, true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -540,6 +542,7 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_namespace_options(positional, options);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
   at::add_no_progress_option(options);
@@ -568,7 +571,8 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", snap_name, true,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", snap_name, true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
