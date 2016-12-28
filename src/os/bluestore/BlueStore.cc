@@ -6833,6 +6833,7 @@ void BlueStore::_kv_sync_thread()
       }
       while (!wal_cleaning.empty()) {
 	TransContext *txc = wal_cleaning.front();
+	_txc_release_alloc(txc);
 	_txc_state_proc(txc);
 	wal_cleaning.pop_front();
       }
