@@ -361,6 +361,10 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   } else {
     bench_io_threads = 16;
   }
+  if (bench_io_threads == 0) {
+    std::cerr << "rbd: --io-threads should be greater than zero." << std::endl;
+    return -EINVAL;
+  }
 
   uint64_t bench_bytes;
   if (vm.count("io-total")) {
