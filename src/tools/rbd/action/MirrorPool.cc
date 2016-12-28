@@ -495,6 +495,7 @@ private:
 void get_peer_add_arguments(po::options_description *positional,
                             po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   positional->add_options()
     ("remote-cluster-spec", "remote cluster spec\n"
      "(example: [<client name>@]<cluster name>");
@@ -523,7 +524,8 @@ int execute_peer_add(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -556,6 +558,7 @@ int execute_peer_add(const po::variables_map &vm) {
 void get_peer_remove_arguments(po::options_description *positional,
                                po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   add_uuid_option(positional);
 }
 
@@ -571,7 +574,8 @@ int execute_peer_remove(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -588,6 +592,7 @@ int execute_peer_remove(const po::variables_map &vm) {
 void get_peer_set_arguments(po::options_description *positional,
                             po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   add_uuid_option(positional);
   positional->add_options()
     ("key", "peer parameter [client or cluster]")
@@ -617,7 +622,8 @@ int execute_peer_set(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -637,23 +643,26 @@ int execute_peer_set(const po::variables_map &vm) {
 void get_disable_arguments(po::options_description *positional,
                            po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
 }
 
 void get_enable_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   positional->add_options()
     ("mode", "mirror mode [image or pool]");
 }
 
 int execute_enable_disable(const std::string &pool_name,
+			   const std::string &nspace,
                            rbd_mirror_mode_t next_mirror_mode,
                            const std::string &mode) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   rbd_mirror_mode_t current_mirror_mode;
 
-  int r = utils::init(pool_name, "", &rados, &io_ctx);
+  int r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -694,14 +703,16 @@ int execute_enable_disable(const std::string &pool_name,
 int execute_disable(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  std::string nspace = utils::get_namespace(vm);
 
-  return execute_enable_disable(pool_name, RBD_MIRROR_MODE_DISABLED,
+  return execute_enable_disable(pool_name, nspace, RBD_MIRROR_MODE_DISABLED,
                                 "disabled");
 }
 
 int execute_enable(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  std::string nspace = utils::get_namespace(vm);
 
   rbd_mirror_mode_t mirror_mode;
   std::string mode = utils::get_positional_argument(vm, arg_index++);
@@ -714,12 +725,13 @@ int execute_enable(const po::variables_map &vm) {
     return -EINVAL;
   }
 
-  return execute_enable_disable(pool_name, mirror_mode, mode);
+  return execute_enable_disable(pool_name, nspace, mirror_mode, mode);
 }
 
 void get_info_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -740,7 +752,8 @@ int execute_info(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -794,6 +807,7 @@ int execute_info(const po::variables_map &vm) {
 void get_status_arguments(po::options_description *positional,
 			  po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
   at::add_verbose_option(options);
 }
@@ -817,7 +831,8 @@ int execute_status(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -902,6 +917,7 @@ void get_promote_arguments(po::options_description *positional,
     ("force", po::bool_switch(),
      "promote even if not cleanly demoted by remote cluster");
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
 }
 
 int execute_promote(const po::variables_map &vm) {
@@ -910,7 +926,8 @@ int execute_promote(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  int r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -927,6 +944,7 @@ int execute_promote(const po::variables_map &vm) {
 void get_demote_arguments(po::options_description *positional,
 			   po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
 }
 
 int execute_demote(const po::variables_map &vm) {
@@ -935,7 +953,8 @@ int execute_demote(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, "", &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  int r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
