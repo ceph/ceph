@@ -184,10 +184,6 @@ public:
   int find_first_set_bits(int64_t required_blocks, int bit_offset,
           int *start_offset, int64_t *scanned);
 
-  int find_any_free_bits(int start_offset, int64_t num_blocks,
-        ExtentList *alloc_list, int64_t block_offset,
-        int64_t *scanned);
-
   void dump_state(int& count);
   ~BmapEntry();
 

@@ -341,37 +341,6 @@ BmapEntry::find_first_set_bits(int64_t required_blocks,
   return allocated;
 }
 
-/*
- * Find N number of free bits in bitmap. Need not be contiguous.
- */
-int BmapEntry::find_any_free_bits(int start_offset, int64_t num_blocks,
-        ExtentList *allocated_blocks, int64_t block_offset, int64_t *scanned)
-{
-  int allocated = 0;
-  int required = num_blocks;
-  int i = 0;
-
-  *scanned = 0;
-
-  if (atomic_fetch() == BmapEntry::full_bmask()) {
-    return 0;
-  }
-
-  /*
-   * Do a serial scan on bitmap.
-   */
-  for (i = start_offset; i < BmapEntry::size() &&
-        allocated < required; i++) {
-    if (check_n_set_bit(i)) {
-      allocated_blocks->add_extents(i + block_offset, 1);
-      allocated++;
-    }
-  }
-
-  *scanned = i - start_offset;
-  return allocated;
-}
-
 void BmapEntry::dump_state(int& count)
 {
   dout(0) << count << ":: 0x" << std::hex << m_bits << dendl;
