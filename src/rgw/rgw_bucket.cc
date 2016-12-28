@@ -106,10 +106,9 @@ int rgw_read_user_buckets(RGWRados * store,
 {
   int ret;
   buckets.clear();
-  string buckets_obj_id;
+  std::string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
   rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
-  list<cls_user_bucket_entry> entries;
 
   bool truncated = false;
   string m = marker;
@@ -121,15 +120,18 @@ int rgw_read_user_buckets(RGWRados * store,
   }
 
   do {
+    std::list<cls_user_bucket_entry> entries;
     ret = store->cls_user_list_buckets(obj, m, end_marker, max - total, entries, &m, &truncated);
-    if (ret == -ENOENT)
+    if (ret == -ENOENT) {
       ret = 0;
+    }
 
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
+    }
 
-    for (const auto& entry : entries) {
-      buckets.add(RGWBucketEnt(user_id, entry));
+    for (auto& entry : entries) {
+      buckets.add(RGWBucketEnt(user_id, std::move(entry)));
       total++;
     }
 
