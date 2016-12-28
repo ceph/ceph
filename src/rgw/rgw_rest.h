@@ -662,6 +662,7 @@ extern void dump_header(struct req_state* s,
 extern void dump_header(struct req_state* s,
                         const boost::string_ref& name,
                         const utime_t& val);
+
 template <class... Args>
 static inline void dump_header_prefixed(struct req_state* s,
                                         const boost::string_ref& name_prefix,
@@ -673,6 +674,24 @@ static inline void dump_header_prefixed(struct req_state* s,
                             name_prefix.data(),
                             static_cast<int>(name.length()),
                             name.data());
+  boost::string_ref full_name(full_name_buf, len);
+  return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
+}
+
+template <class... Args>
+static inline void dump_header_infixed(struct req_state* s,
+                                       const boost::string_ref& prefix,
+                                       const boost::string_ref& infix,
+                                       const boost::string_ref& sufix,
+                                       Args&&... args) {
+  char full_name_buf[prefix.size() + infix.size() + sufix.size() + 1];
+  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s%.*s",
+                            static_cast<int>(prefix.length()),
+                            prefix.data(),
+                            static_cast<int>(infix.length()),
+                            infix.data(),
+                            static_cast<int>(sufix.length()),
+                            sufix.data());
   boost::string_ref full_name(full_name_buf, len);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
