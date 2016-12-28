@@ -179,6 +179,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (op_ret)
     goto done;
 
+  assert(bl_len == total_len);
+
   if (range_str)
     dump_range(s, start, end, s->obj_size);
 

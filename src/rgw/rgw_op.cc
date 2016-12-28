@@ -1039,7 +1039,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 
     for (rgw_bucket_dir_entry& ent : objs) {
       uint64_t cur_total_len = obj_ofs;
-      uint64_t start_ofs = 0, end_ofs = ent.meta.size;
+      uint64_t start_ofs = 0, end_ofs = ent.meta.size - 1;
 
       if (!found_start && cur_total_len + ent.meta.size > (uint64_t)ofs) {
 	start_ofs = ofs - obj_ofs;
@@ -1053,7 +1053,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       if (!found_end && obj_ofs > (uint64_t)end) {
-	end_ofs = end - cur_total_len + 1;
+	end_ofs = end - cur_total_len;
 	found_end = true;
       }
 
@@ -1061,7 +1061,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 			(ceph_clock_now() - start_time));
 
       if (found_start && !handled_end) {
-        len_count += end_ofs - start_ofs;
+        len_count += end_ofs - start_ofs + 1;
 
         if (cb) {
           r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, cb_param);
@@ -1136,7 +1136,7 @@ static int iterate_slo_parts(CephContext *cct,
     ent.meta.etag = part.etag;
 
     uint64_t cur_total_len = obj_ofs;
-    uint64_t start_ofs = 0, end_ofs = ent.meta.size;
+    uint64_t start_ofs = 0, end_ofs = ent.meta.size - 1;
 
     if (!found_start && cur_total_len + ent.meta.size > (uint64_t)ofs) {
       start_ofs = ofs - obj_ofs;
@@ -1146,7 +1146,7 @@ static int iterate_slo_parts(CephContext *cct,
     obj_ofs += ent.meta.size;
 
     if (!found_end && obj_ofs > (uint64_t)end) {
-      end_ofs = end - cur_total_len + 1;
+      end_ofs = end - cur_total_len;
       found_end = true;
     }
 
