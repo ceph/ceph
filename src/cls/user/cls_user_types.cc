@@ -39,6 +39,7 @@ void cls_user_bucket_entry::dump(Formatter *f) const
   encode_json("creation_time", utime_t(creation_time), f);
   encode_json("count", count, f);
   encode_json("user_stats_sync", user_stats_sync, f);
+  encode_json("placement_rule", placement_rule, f);
 }
 
 void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i)
