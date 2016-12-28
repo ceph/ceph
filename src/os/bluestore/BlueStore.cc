@@ -3442,7 +3442,6 @@ int BlueStore::_open_db(bool create)
     }
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
-      unique_ptr<rocksdb::Directory> dir;
       rocksdb::Env *b = rocksdb::Env::Default();
       if (create) {
 	string cmd = "rm -rf " + path + "/db " +
