@@ -101,7 +101,7 @@ struct cls_user_bucket_entry {
   cls_user_bucket bucket;
   size_t size;
   size_t size_rounded;
-  real_time creation_time;
+  ceph::real_time creation_time;
   uint64_t count;
   bool user_stats_sync;
 
