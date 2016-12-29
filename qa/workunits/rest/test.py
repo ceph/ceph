@@ -130,9 +130,9 @@ if __name__ == '__main__':
     assert('epoch' in r.myjson['output'])
 
     assert('GLOBAL' in expect('df', 'GET', 200, 'plain').text)
-    assert('CATEGORY' in expect('df?detail=detail', 'GET', 200, 'plain').text)
+    assert('DIRTY' in expect('df?detail=detail', 'GET', 200, 'plain').text)
     # test param with no value (treated as param=param)
-    assert('CATEGORY' in expect('df?detail', 'GET', 200, 'plain').text)
+    assert('DIRTY' in expect('df?detail', 'GET', 200, 'plain').text)
 
     r = expect('df', 'GET', 200, 'json', JSONHDR)
     assert('total_used_bytes' in r.myjson['output']['stats'])

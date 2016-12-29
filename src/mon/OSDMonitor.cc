@@ -3167,7 +3167,7 @@ void OSDMonitor::dump_info(Formatter *f)
 namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
-    PG_NUM, PGP_NUM, CRUSH_RULESET, HASHPSPOOL,
+    PG_NUM, PGP_NUM, CRUSH_RULE, CRUSH_RULESET, HASHPSPOOL,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
@@ -3652,7 +3652,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"size", SIZE},
       {"min_size", MIN_SIZE},
       {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
-      {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM}, {"crush_ruleset", CRUSH_RULESET},
+      {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
+      {"crush_rule", CRUSH_RULE},
+      {"crush_ruleset", CRUSH_RULESET},
       {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
@@ -3769,6 +3771,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CRASH_REPLAY_INTERVAL:
 	    f->dump_int("crash_replay_interval",
 			p->get_crash_replay_interval());
+	    break;
+	  case CRUSH_RULE:
+	    if (osdmap.crush->rule_exists(p->get_crush_ruleset())) {
+	      f->dump_string("crush_rule", osdmap.crush->get_rule_name(
+			       p->get_crush_ruleset()));
+	    } else {
+	      f->dump_string("crush_rule", stringify(p->get_crush_ruleset()));
+	    }
 	    break;
 	  case CRUSH_RULESET:
 	    f->dump_int("crush_ruleset", p->get_crush_ruleset());
@@ -3925,6 +3935,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CRASH_REPLAY_INTERVAL:
 	    ss << "crash_replay_interval: " <<
 	      p->get_crash_replay_interval() << "\n";
+	    break;
+	  case CRUSH_RULE:
+	    if (osdmap.crush->rule_exists(p->get_crush_ruleset())) {
+	      ss << "crush_rule: " << osdmap.crush->get_rule_name(
+		p->get_crush_ruleset()) << "\n";
+	    } else {
+	      ss << "crush_rule: " << p->get_crush_ruleset() << "\n";
+	    }
 	    break;
 	  case CRUSH_RULESET:
 	    ss << "crush_ruleset: " << p->get_crush_ruleset() << "\n";
@@ -5317,6 +5335,20 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       }
     }
     p.set_pgp_num(n);
+  } else if (var == "crush_rule") {
+    int id = osdmap.crush->get_rule_id(val);
+    if (id == -ENOENT) {
+      ss << "crush rule " << val << " does not exist";
+      return -ENOENT;
+    }
+    if (id < 0) {
+      ss << cpp_strerror(id);
+      return -ENOENT;
+    }
+    if (!osdmap.crush->check_crush_rule(id, p.get_type(), p.get_size(), ss)) {
+      return -EINVAL;
+    }
+    p.crush_ruleset = id;
   } else if (var == "crush_ruleset") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;

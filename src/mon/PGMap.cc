@@ -1641,7 +1641,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 
   overall_cache_io_rate_summary(f, &ssr);
   if (!f && ssr.str().length())
-    *out << "  cache io " << ssr.str() << "\n";
+    *out << "   cache io " << ssr.str() << "\n";
 }
 
 void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
@@ -1883,7 +1883,6 @@ void PGMap::dump_pool_stats(const OSDMap &osd_map, stringstream *ss,
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     if (verbose) {
-      tbl.define_column("CATEGORY", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("QUOTA OBJECTS", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("QUOTA BYTES", TextTable::LEFT, TextTable::LEFT);
     }
@@ -1957,8 +1956,6 @@ void PGMap::dump_pool_stats(const OSDMap &osd_map, stringstream *ss,
       tbl << pool_name
           << pool_id;
       if (verbose) {
-	tbl << "-";
-
         if (pool->quota_max_objects == 0)
           tbl << "N/A";
         else
