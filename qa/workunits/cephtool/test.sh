@@ -1126,8 +1126,6 @@ function test_mon_osd()
   done
   ceph osd dump | grep 'osd.0 up'
 
-  ceph osd thrash 0
-
   ceph osd dump | grep 'osd.0 up'
   # ceph osd find expects the OsdName, so both ints and osd.n should work.
   ceph osd find 1

@@ -131,11 +131,6 @@ private:
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(utime_t now, int target_osd);
 
-  // map thrashing
-  int thrash_map;
-  int thrash_last_up_osd;
-  bool thrash();
-
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
   void _get_pending_crush(CrushWrapper& newcrush);

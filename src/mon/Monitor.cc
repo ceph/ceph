@@ -107,12 +107,6 @@ MonCommand mon_commands[] = {
   {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
 };
-#undef COMMAND
-MonCommand classic_mon_commands[] = {
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail},
-#include <mon/DumplingMonCommands.h>
-};
 
 
 long parse_pos_long(const char *s, ostream *pss)
@@ -259,8 +253,7 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
-  if (leader_supported_mon_commands != mon_commands &&
-      leader_supported_mon_commands != classic_mon_commands)
+  if (leader_supported_mon_commands != mon_commands)
     delete[] leader_supported_mon_commands;
 }
 
@@ -956,8 +949,6 @@ int Monitor::init()
   int cmdsize;
   get_locally_supported_monitor_commands(&cmds, &cmdsize);
   MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
-  get_classic_monitor_commands(&cmds, &cmdsize);
-  MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
 
   return 0;
 }
@@ -2016,7 +2007,7 @@ void Monitor::win_standalone_election()
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
-               my_cmds, cmdsize, NULL);
+               my_cmds, cmdsize);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -2044,8 +2035,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
-                           const MonCommand *cmdset, int cmdsize,
-                           const set<int> *classic_monitors)
+                           const MonCommand *cmdset, int cmdsize)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
@@ -2064,8 +2054,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 		<< " won leader election with quorum " << quorum << "\n";
 
   set_leader_supported_commands(cmdset, cmdsize);
-  if (classic_monitors)
-    classic_mons = *classic_monitors;
 
   paxos->leader_init();
   // NOTE: tell monmap monitor first.  This is important for the
@@ -2797,15 +2785,9 @@ void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
   *cmds = mon_commands;
   *count = ARRAY_SIZE(mon_commands);
 }
-void Monitor::get_classic_monitor_commands(const MonCommand **cmds, int *count)
-{
-  *cmds = classic_mon_commands;
-  *count = ARRAY_SIZE(classic_mon_commands);
-}
 void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
 {
-  if (leader_supported_mon_commands != mon_commands &&
-      leader_supported_mon_commands != classic_mon_commands)
+  if (leader_supported_mon_commands != mon_commands)
     delete[] leader_supported_mon_commands;
   leader_supported_mon_commands = cmds;
   leader_supported_mon_commands_size = size;
