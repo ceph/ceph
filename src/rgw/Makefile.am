@@ -1,3 +1,11 @@
+# inject rgw stuff in the decoder testcase
+DENCODER_SOURCES += \
+	rgw/rgw_dencoder.cc \
+	rgw/rgw_acl.cc \
+	rgw/rgw_common.cc \
+	rgw/rgw_env.cc \
+	rgw/rgw_json_enc.cc
+
 if WITH_RADOSGW
 librgw_la_SOURCES =  \
 	rgw/librgw.cc \
@@ -103,14 +111,6 @@ ceph_rgw_jsonparser_SOURCES = \
 	rgw/rgw_json_enc.cc
 ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
-
-# inject rgw stuff in the decoder testcase
-DENCODER_SOURCES += \
-	rgw/rgw_dencoder.cc \
-	rgw/rgw_acl.cc \
-	rgw/rgw_common.cc \
-	rgw/rgw_env.cc \
-	rgw/rgw_json_enc.cc
 
 
 endif # WITH_RADOSGW
