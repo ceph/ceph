@@ -62,6 +62,7 @@ fi
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
+POOL_EC=trs_pool_ec
 
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
 [ -x "$CEPH_TOOL" ] || die "couldn't find $CEPH_TOOL binary to test"
@@ -86,6 +87,9 @@ run_expect_nosignal "$RADOS_TOOL" --object_locator "asdf" ls
 run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
 
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
+run_expect_succ "$CEPH_TOOL" osd erasure-code-profile set myprofile k=2 m=1 ruleset-failure-domain=osd
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_EC" 100 100 erasure myprofile
+
 
 # expb happens to be the empty export for legacy reasons
 run_expect_succ "$RADOS_TOOL" -p "$POOL" export "$TDIR/expb"
@@ -277,7 +281,8 @@ expect_false()
 }
 
 cleanup() {
-    $RADOS_TOOL -p $POOL rm $OBJ || true
+    $RADOS_TOOL -p $POOL rm $OBJ > /dev/null 2>&1 || true
+    $RADOS_TOOL -p $POOL_EC rm $OBJ > /dev/null 2>&1 || true
 }
 
 test_omap() {
@@ -455,38 +460,23 @@ test_cleanup() {
 
 function test_append()
 {
-  # rados append test:
-  # replicated pool
-  $CEPH_TOOL osd pool create rados_append 100 100 replicated
+  cleanup
+
   # create object
   touch ./rados_append_null
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_null
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_0_out
-  orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_0_out
-  orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
-  read_size=`ls -l ./rados_append_0_out | awk -F ' '  '{print $5}'`
-  if [ $orig_size -ne $read_size ];
-  then
-    die "Create Failed!"
-  fi
+  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_null
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_0_out
+  cmp ./rados_append_null ./rados_append_0_out
 
   # append 4k, total size 4k
   dd if=/dev/zero of=./rados_append_4k bs=4k count=1
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
-  orig_size=`ls -l ./rados_append_4k  | awk -F ' '  '{print $5}'`
-  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
-  if [ $orig_size -ne $read_size ];
-  then
-    die "Append failed expecting $orig_size read $read_size"
-  fi
+  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_4k
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_4k_out
+  cmp ./rados_append_4k ./rados_append_4k_out
 
   # append 4k, total size 8k
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
-  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_4k
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_4k_out
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
   if [ 8192 -ne $read_size ];
   then
@@ -495,8 +485,8 @@ function test_append()
 
   # append 10M, total size 10493952
   dd if=/dev/zero of=./rados_append_10m bs=10M count=1
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_10m
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_10m_out
+  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_10m
+  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_10m_out
   read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
   if [ 10493952 -ne $read_size ];
   then
@@ -504,35 +494,21 @@ function test_append()
   fi
 
   # cleanup
-  $CEPH_TOOL osd pool delete rados_append rados_append --yes-i-really-really-mean-it
-
-  #erasure coded pool
-  $CEPH_TOOL osd erasure-code-profile set myprofile k=2 m=1 ruleset-failure-domain=osd
-  $CEPH_TOOL osd pool create rados_append 100 100 erasure myprofile
+  cleanup
 
   # create object
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_null
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_0_out
-  orig_size=`ls -l ./rados_append_null | awk -F ' '  '{print $5}'`
-  read_size=`ls -l ./rados_append_0_out | awk -F ' '  '{print $5}'`
-  if [ $orig_size -ne $read_size ];
-  then
-    die "Create Failed!"
-  fi
+  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_null
+  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_0_out
+  cmp rados_append_null rados_append_0_out
 
   # append 4k, total size 4k
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
-  orig_size=`ls -l ./rados_append_4k  | awk -F ' '  '{print $5}'`
-  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
-  if [ $orig_size -ne $read_size ];
-  then
-    die "Append failed expecting $orig_size read $read_size"
-  fi
+  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_4k
+  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_4k_out
+  cmp rados_append_4k rados_append_4k_out
 
   # append 4k, total size 8k
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_4k
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_4k_out
+  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_4k
+  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_4k_out
   read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
   if [ 8192 -ne $read_size ];
   then
@@ -540,16 +516,15 @@ function test_append()
   fi
 
   # append 10M, total size 10493952
-  $RADOS_TOOL -p rados_append append rados_append_obj ./rados_append_10m
-  $RADOS_TOOL -p rados_append get rados_append_obj ./rados_append_10m_out
+  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_10m
+  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_10m_out
   read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
   if [ 10493952 -ne $read_size ];
   then
     die "Append failed expecting 10493952 read $read_size"
   fi
 
-  # cleanup
-  $CEPH_TOOL osd pool delete rados_append rados_append --yes-i-really-really-mean-it
+  cleanup
   rm -rf ./rados_append_null ./rados_append_0_out
   rm -rf ./rados_append_4k ./rados_append_4k_out ./rados_append_10m ./rados_append_10m_out
 }
@@ -590,6 +565,11 @@ test_ls
 test_cleanup
 test_append
 test_put
+
+# clean up environment, delete pool
+$CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+$CEPH_TOOL osd pool delete $POOL_EC $POOL_EC --yes-i-really-really-mean-it
+$CEPH_TOOL osd pool delete $POOL_CP_TARGET $POOL_CP_TARGET --yes-i-really-really-mean-it
 
 echo "SUCCESS!"
 exit 0
