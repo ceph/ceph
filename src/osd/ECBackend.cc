@@ -1883,7 +1883,8 @@ bool ECBackend::try_reads_to_commit()
 
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
   ObjectStore::Transaction empty;
-
+  bool should_write_local = false;
+  ECSubWrite local_write_op;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_actingbackfill_shards().begin();
        i != get_parent()->get_actingbackfill_shards().end();
@@ -1915,12 +1916,8 @@ bool ECBackend::try_reads_to_commit()
       op->temp_cleared,
       !should_send);
     if (*i == get_parent()->whoami_shard()) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	sop,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+      should_write_local = true;
+      local_write_op.claim(sop);
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
@@ -1928,6 +1925,14 @@ bool ECBackend::try_reads_to_commit()
       get_parent()->send_message_osd_cluster(
 	i->osd, r, get_parent()->get_epoch());
     }
+  }
+  if (should_write_local) {
+      handle_sub_write(
+	get_parent()->whoami_shard(),
+	op->client_op,
+	local_write_op,
+	op->on_local_applied_sync);
+      op->on_local_applied_sync = 0;
   }
 
   for (auto i = op->on_write.begin();
