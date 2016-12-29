@@ -665,9 +665,10 @@ void DPDKQueuePair::handle_stats()
     return ;
   }
 
+#if RTE_VERSION < RTE_VERSION_NUM(16,7,0,0)
   _dev->perf_logger->set(l_dpdk_dev_rx_mcast, rte_stats.imcasts);
-
   _dev->perf_logger->set(l_dpdk_dev_rx_badcrc_errors, rte_stats.ibadcrc);
+#endif
   _dev->perf_logger->set(l_dpdk_dev_rx_dropped_errors, rte_stats.imissed);
   _dev->perf_logger->set(l_dpdk_dev_rx_nombuf_errors, rte_stats.rx_nombuf);
 
