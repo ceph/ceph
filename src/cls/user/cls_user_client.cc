@@ -72,16 +72,18 @@ public:
 };
 
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
-                          const string& in_marker,
-                          const string& end_marker,
+                          const std::string& tenant,
+                          const std::string& in_marker,
+                          const std::string& end_marker,
                           int max_entries,
-                          list<cls_user_bucket_entry>& entries,
-                          string *out_marker,
+                          std::list<cls_user_bucket_entry>& entries,
+                          std::string *out_marker,
                           bool *truncated,
                           int *pret)
 {
-  bufferlist inbl;
+  ceph::bufferlist inbl;
   cls_user_list_buckets_op call;
+  call.tenant = tenant;
   call.marker = in_marker;
   call.end_marker = end_marker;
   call.max_entries = max_entries;

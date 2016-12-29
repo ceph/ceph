@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <iostream>
+#include <string>
 
 #include <string.h>
 #include <stdlib.h>
@@ -38,20 +39,23 @@ static int remove_entry(cls_method_context_t hctx, const string& key)
   return 0;
 }
 
-static void get_key_by_bucket_name(const string& bucket_name, string *key)
+static string get_omap_key_for_bucket(const string& bucket_tenant,
+                                      const string& bucket_name)
 {
-  *key = bucket_name;
+  if (! bucket_tenant.empty()) {
+    return bucket_tenant + "/" + bucket_name;
+  } else {
+    return bucket_name;
+  }
 }
 
-static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_name,
+static int get_existing_bucket_entry(cls_method_context_t hctx,
+                                     const string& key,
                                      cls_user_bucket_entry& entry)
 {
-  if (bucket_name.empty()) {
+  if (key.empty()) {
     return -EINVAL;
   }
-
-  string key;
-  get_key_by_bucket_name(bucket_name, &key);
 
   bufferlist bl;
   int rc = cls_cxx_map_get_val(hctx, key, &bl);
@@ -137,9 +141,8 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
        iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
 
-    string key;
-
-    get_key_by_bucket_name(update_entry.bucket.name, &key);
+    string key = get_omap_key_for_bucket(update_entry.bucket.tenant,
+                                         update_entry.bucket.name);
 
     cls_user_bucket_entry entry;
     ret = get_existing_bucket_entry(hctx, key, entry);
@@ -241,9 +244,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return ret;
   }
 
-  string key;
-
-  get_key_by_bucket_name(op.bucket.name, &key);
+  string key = get_omap_key_for_bucket(op.bucket.tenant, op.bucket.name);
 
   cls_user_bucket_entry entry;
   ret = get_existing_bucket_entry(hctx, key, entry);
@@ -282,8 +283,8 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 
   map<string, bufferlist> keys;
 
-  const string& from_index = op.marker;
-  const string& to_index = op.end_marker;
+  const string& from_index = get_omap_key_for_bucket(op.tenant, op.marker);
+  const string& to_index = get_omap_key_for_bucket(op.tenant, op.end_marker);
   const bool to_index_valid = !to_index.empty();
 
 #define MAX_ENTRIES 1000
