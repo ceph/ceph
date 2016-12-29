@@ -521,8 +521,6 @@ public:
   set<hobject_t, hobject_t::BitwiseComparator> recovering_oids;
 #endif
 
-  utime_t replay_until;
-
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   unsigned    state;   // PG_STATE_*
@@ -592,8 +590,6 @@ public:
 
   friend std::ostream& operator<<(std::ostream& oss,
 				  const struct PriorSet &prior);
-
-  bool may_need_replay(const OSDMapRef osdmap) const;
 
 
 public:    
@@ -858,9 +854,8 @@ protected:
   map<hobject_t, list<Context*>, hobject_t::BitwiseComparator> callbacks_for_degraded_object;
 
   map<eversion_t,
-      list<pair<OpRequestRef, version_t> > > waiting_for_ack, waiting_for_ondisk;
+      list<pair<OpRequestRef, version_t> > > waiting_for_ondisk;
 
-  map<eversion_t,OpRequestRef>   replay_queue;
   void split_ops(PG *child, unsigned split_bits);
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>& m);
@@ -1036,7 +1031,6 @@ public:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool *history_les_bound);
   void build_might_have_unfound();
-  void replay_queued_ops();
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
@@ -2172,7 +2166,6 @@ public:
   bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
-  bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
@@ -2224,7 +2217,7 @@ public:
   PGLog::IndexedLog projected_log;
   bool check_in_progress_op(
     const osd_reqid_t &r,
-    eversion_t *replay_version,
+    eversion_t *version,
     version_t *user_version,
     int *return_code) const;
   eversion_t projected_last_update;
