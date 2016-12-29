@@ -34,7 +34,7 @@ class BitmapFreelistManager : public FreelistManager {
   bufferlist enumerate_bl;   ///< current key at enumerate_offset
   int enumerate_bl_pos;      ///< bit position in enumerate_bl
 
-  uint64_t get_offset(uint64_t key_off, int bit) {
+  uint64_t _get_offset(uint64_t key_off, int bit) {
     return key_off + bit * bytes_per_block;
   }
 

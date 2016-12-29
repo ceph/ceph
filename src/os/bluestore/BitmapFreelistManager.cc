@@ -243,7 +243,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
   while (true) {
     enumerate_bl_pos = get_next_clear_bit(enumerate_bl, enumerate_bl_pos);
     if (enumerate_bl_pos >= 0) {
-      *offset = get_offset(enumerate_offset, enumerate_bl_pos);
+      *offset = _get_offset(enumerate_offset, enumerate_bl_pos);
       dout(30) << __func__ << " found clear bit, key 0x" << std::hex
 	       << enumerate_offset << " bit 0x" << enumerate_bl_pos
 	       << " offset 0x" << *offset
@@ -257,7 +257,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     if (!enumerate_p->valid()) {
       enumerate_offset += bytes_per_key;
       enumerate_bl_pos = 0;
-      *offset = get_offset(enumerate_offset, enumerate_bl_pos);
+      *offset = _get_offset(enumerate_offset, enumerate_bl_pos);
       break;
     }
     string k = enumerate_p->key();
@@ -280,7 +280,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     while (true) {
       enumerate_bl_pos = get_next_set_bit(enumerate_bl, enumerate_bl_pos);
       if (enumerate_bl_pos >= 0) {
-	end = get_offset(enumerate_offset, enumerate_bl_pos);
+	end = _get_offset(enumerate_offset, enumerate_bl_pos);
 	dout(30) << __func__ << " found set bit, key 0x" << std::hex
 		 << enumerate_offset << " bit 0x" << enumerate_bl_pos
 		 << " offset 0x" << end << std::dec
