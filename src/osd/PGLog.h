@@ -258,10 +258,10 @@ public:
 
     bool get_request(
       const osd_reqid_t &r,
-      eversion_t *replay_version,
+      eversion_t *version,
       version_t *user_version,
       int *return_code) const {
-      assert(replay_version);
+      assert(version);
       assert(user_version);
       assert(return_code);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
@@ -270,7 +270,7 @@ public:
       }
       p = caller_ops.find(r);
       if (p != caller_ops.end()) {
-	*replay_version = p->second->version;
+	*version = p->second->version;
 	*user_version = p->second->user_version;
 	*return_code = p->second->return_code;
 	return true;
@@ -288,7 +288,7 @@ public:
 	     i != p->second->extra_reqids.end();
 	     ++i) {
 	  if (i->first == r) {
-	    *replay_version = p->second->version;
+	    *version = p->second->version;
 	    *user_version = i->second;
 	    *return_code = p->second->return_code;
 	    return true;

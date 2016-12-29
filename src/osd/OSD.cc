@@ -1716,7 +1716,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_command_thread_timeout,
     cct->_conf->osd_command_thread_suicide_timeout,
     &command_tp),
-  replay_queue_lock("OSD::replay_queue_lock"),
   remove_wq(
     cct,
     store,
@@ -2521,8 +2520,6 @@ void OSD::create_logger()
       "Client write operations");        // client writes
   osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes",
       "Client data written");    // client write in bytes
-  osd_plb.add_time_avg(l_osd_op_w_rlat, "op_w_rlat",
-      "Client write operation readable/applied latency");   // client write readable/applied latency
   osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency",
       "Latency of write operation (including queue time)");    // client write latency
   osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency",
@@ -2535,8 +2532,6 @@ void OSD::create_logger()
       "Client read-modify-write operations write in");   // client rmw in bytes
   osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes",
       "Client read-modify-write operations read out ");  // client rmw out bytes
-  osd_plb.add_time_avg(l_osd_op_rw_rlat,"op_rw_rlat",
-      "Client read-modify-write operation readable/applied latency");  // client rmw readable/applied latency
   osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency",
       "Latency of read-modify-write operation (including queue time)");   // client rmw latency
   osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency",
@@ -4387,10 +4382,6 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
-  }
-
-  if (is_active()) {
-    check_replay_queue();
   }
 
   do_waiters();
@@ -8452,44 +8443,6 @@ void OSD::_remove_pg(PG *pg)
 // =========================================================
 // RECOVERY
 
-/*
- * caller holds osd_lock
- */
-void OSD::check_replay_queue()
-{
-  assert(osd_lock.is_locked());
-
-  utime_t now = ceph_clock_now();
-  list< pair<spg_t,utime_t> > pgids;
-  replay_queue_lock.Lock();
-  while (!replay_queue.empty() &&
-	 replay_queue.front().second <= now) {
-    pgids.push_back(replay_queue.front());
-    replay_queue.pop_front();
-  }
-  replay_queue_lock.Unlock();
-
-  for (list< pair<spg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); ++p) {
-    spg_t pgid = p->first;
-    pg_map_lock.get_read();
-    if (pg_map.count(pgid)) {
-      PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
-      pg_map_lock.unlock();
-      dout(10) << "check_replay_queue " << *pg << dendl;
-      if ((pg->is_active() || pg->is_activating()) &&
-	  pg->is_replay() &&
-          pg->is_primary() &&
-          pg->replay_until == p->second) {
-	pg->replay_queued_ops();
-      }
-      pg->unlock();
-    } else {
-      pg_map_lock.unlock();
-      dout(10) << "check_replay_queue pgid " << pgid << " (not found)" << dendl;
-    }
-  }
-}
-
 void OSDService::_maybe_queue_recovery() {
   assert(recovery_lock.is_locked_by_me());
   uint64_t available_pushes;
@@ -8864,10 +8817,8 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
 bool OSD::op_is_discardable(MOSDOp *op)
 {
   // drop client request if they are not connected and can't get the
-  // reply anyway.  unless this is a replayed op, in which case we
-  // want to do what we can to apply it.
-  if (!op->get_connection()->is_connected() &&
-      op->get_version().version == 0) {
+  // reply anyway.
+  if (!op->get_connection()->is_connected()) {
     return true;
   }
   return false;
@@ -9337,7 +9288,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	 iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
       /* This a bit odd.  PING isn't actually a write.  It can't
        * result in an update to the object_info.  PINGs also aren'ty
-       * replayed, so there's no reason to write out a log entry
+       * resent, so there's no reason to write out a log entry
        *
        * However, we pipeline them behind writes, so let's force
        * the write_ordered flag.
