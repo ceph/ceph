@@ -362,6 +362,7 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
 
+  rados_buffer_free(reply_buf);
   rados_unwatch2(ioctx, handle);
 }
 
@@ -732,6 +733,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
   ASSERT_EQ(0, rados_aio_get_return_value(comp));
   rados_aio_release(comp);
+  rados_buffer_free(reply_buf);
 
 }
 
