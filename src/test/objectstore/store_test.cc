@@ -5596,7 +5596,6 @@ TEST_P(StoreTest, OnodeSizeTracking) {
   uint64_t total_bytes, total_bytes2;
   uint64_t total_onodes;
   get_mempool_stats(&total_bytes, &total_onodes);
-  ASSERT_EQ(total_bytes, 0u);
   ASSERT_EQ(total_onodes, 0u);
 
   {
