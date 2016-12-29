@@ -4890,18 +4890,17 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
       if (o == CRUSH_ITEM_NONE)
 	continue;
 
-      const osd_info_t *pinfo = 0;
-      if (osdmap->exists(o))
-	pinfo = &osdmap->get_info(o);
+      if (osdmap->exists(o)) {
+        const osd_info_t *pinfo = &osdmap->get_info(o);
 
       // does this osd appear to have survived through the end of the
       // interval?
-      if (pinfo) {
 	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
 	  dout(10) << "may_need_replay  osd." << o
 		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
 		   << " survived the interval" << dendl;
 	  any_survived_interval = true;
+	  break;
 	}
 	else if (pinfo->up_from <= interval.first &&
 		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
@@ -4911,6 +4910,7 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
 		   << " assumed to have survived the interval" << dendl;
 	  // (if it hasn't, we will rebuild PriorSet)
 	  any_survived_interval = true;
+	  break;
 	}
 	else if (pinfo->up_from > interval.last &&
 		 pinfo->last_clean_begin <= interval.first &&
@@ -4921,6 +4921,7 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
 		   << pinfo->last_clean_begin << "," << pinfo->last_clean_end
 		   << ") survived the interval" << dendl;
 	  any_survived_interval = true;
+	  break;
 	}
       }
     }
