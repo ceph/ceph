@@ -2,16 +2,22 @@
 
 # libtool and yasm do not get along.
 # filter out any crap that libtool feeds us that yasm does not understand.
+echo $0: got $*
 new=""
 touch=""
 while [ -n "$*" ]; do
     case "$1" in
 	-f )
 	    shift
-	    new="-f $1"
+	    new="$new -f $1"
 	    shift
 	    ;;
-	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -I* | -m* | -pipe )
+	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -m* | -pipe )
+	    shift
+	    ;;
+	-I )
+	    shift
+	    new="$new -i $1"
 	    shift
 	    ;;
 	-MT )
