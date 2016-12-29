@@ -121,7 +121,6 @@ uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
 {
   Mutex::Locker l(apply_lock);
   while (blocked) {
-    // note: this only happens during journal replay
     dout(10) << "op_apply_start blocked, waiting" << dendl;
     blocked_cond.Wait(apply_lock);
   }
@@ -142,7 +141,7 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   --open_ops;
   assert(open_ops >= 0);
 
-  // signal a blocked commit_start (only needed during journal replay)
+  // signal a blocked commit_start
   if (blocked) {
     blocked_cond.Signal();
   }
@@ -188,7 +187,6 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 {
   bool ret = false;
 
-  uint64_t _committing_seq = 0;
   {
     Mutex::Locker l(apply_lock);
     dout(10) << "commit_start max_applied_seq " << max_applied_seq
@@ -210,7 +208,7 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 	goto out;
       }
 
-      _committing_seq = committing_seq = max_applied_seq;
+      committing_seq = max_applied_seq;
 
       dout(10) << "commit_start committing " << committing_seq
 	       << ", still blocked" << dendl;
@@ -218,9 +216,9 @@ bool JournalingObjectStore::ApplyManager::commit_start()
   }
   ret = true;
 
- out:
   if (journal)
-    journal->commit_start(_committing_seq);  // tell the journal too
+    journal->commit_start(committing_seq);  // tell the journal too
+ out:
   return ret;
 }
 
