@@ -1338,7 +1338,7 @@ public:
     Context *onfinish, *ontimeout;
     int pool_op;
     uint64_t auid;
-    __u8 crush_rule;
+    int16_t crush_rule;
     snapid_t snapid;
     bufferlist *blp;
 
