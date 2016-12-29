@@ -316,6 +316,12 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``admin``
 
 
+``rgw content length compat``
+
+:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Type: Boolean
+:Default: ``false``
+
 Regions
 =======
 
