@@ -252,7 +252,7 @@ void RDMADispatcher::polling()
   RDMAWorker* worker;
   ldout(cct, 20) << __func__ << " going to poll rx cq:" << rx_cq << dendl;
   RDMAConnectedSocketImpl *conn = nullptr;
-  utime_t last_inactive = ceph_clock_now(cct);
+  utime_t last_inactive = ceph_clock_now();
   bool rearmed = false;
 
   while (true) {
@@ -275,7 +275,7 @@ void RDMADispatcher::polling()
       if (done)
         break;
 
-      if ((ceph_clock_now(cct) - last_inactive).to_nsec() / 1000 > cct->_conf->ms_async_rdma_polling_us) {
+      if ((ceph_clock_now() - last_inactive).to_nsec() / 1000 > cct->_conf->ms_async_rdma_polling_us) {
         if (!rearmed) {
           // Clean up cq events after rearm notify ensure no new incoming event
           // arrived between polling and rearm
@@ -299,7 +299,7 @@ void RDMADispatcher::polling()
         }
         if (r > 0 && rx_cc->get_cq_event())
           ldout(cct, 20) << __func__ << " got cq event." << dendl;
-        last_inactive = ceph_clock_now(cct);
+        last_inactive = ceph_clock_now();
         rearmed = false;
       }
       continue;
