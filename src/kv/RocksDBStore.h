@@ -285,6 +285,8 @@ public:
     const string &key,
     bufferlist *out
     );
+  
+  int get_statfs(struct store_statfs_t *buf);
 
   class RocksDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
