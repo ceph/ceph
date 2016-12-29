@@ -1929,6 +1929,7 @@ void PG::queue_op(OpRequestRef& op)
   }
   op->mark_queued_for_pg();
   osd->op_wq.queue(make_pair(PGRef(this), op));
+  op->set_enqueue_time(ceph_clock_now(NULL));
   {
     // after queue() to include any locking costs
 #ifdef WITH_LTTNG

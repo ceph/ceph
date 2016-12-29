@@ -3180,6 +3180,8 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
 			       successful_write);
+  //track lifetime of MOSDOp
+  ctx->reply->set_recv_stamp(m->get_recv_stamp());
 
   // Write operations aren't allowed to return a data payload because
   // we can't do so reliably. If the client has to resend the request
@@ -3289,7 +3291,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     });
   ctx->register_on_commit(
     [m, ctx, this](){
-      if (ctx->op)
+      if (ctx->op && !ctx->ignore_log_op_stats)
 	log_op_stats(
 	  ctx);
 
@@ -3353,14 +3355,16 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
 
   utime_t now = ceph_clock_now();
   utime_t latency = now;
-  latency -= ctx->op->get_req()->get_recv_stamp();
+  latency -= m->get_recv_stamp();
   utime_t process_latency = now;
-  process_latency -= ctx->op->get_dequeued_time();
+  process_latency -= op->get_dequeued_time();
+  utime_t enqueue_latency = op->get_enqueue_time() - m->get_recv_stamp();
+  utime_t queued_latency = op->get_dequeued_time() - op->get_enqueue_time();
 
   utime_t rlatency;
   if (ctx->readable_stamp != utime_t()) {
     rlatency = ctx->readable_stamp;
-    rlatency -= ctx->op->get_req()->get_recv_stamp();
+    rlatency -= m->get_recv_stamp();
   }
 
   uint64_t inb = ctx->bytes_written;
@@ -3372,6 +3376,8 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
   osd->logger->inc(l_osd_op_inb, inb);
   osd->logger->tinc(l_osd_op_lat, latency);
   osd->logger->tinc(l_osd_op_process_lat, process_latency);
+  osd->logger->tinc(l_osd_op_enqueue_lat, enqueue_latency);
+  osd->logger->tinc(l_osd_op_shard_queued_lat, queued_latency);
 
   if (op->may_read() && op->may_write()) {
     osd->logger->inc(l_osd_op_rw);
@@ -3379,6 +3385,8 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_rw_outb, outb);
     osd->logger->tinc(l_osd_op_rw_lat, latency);
     osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
+    osd->logger->tinc(l_osd_op_rw_enqueue_lat, enqueue_latency);
+    osd->logger->tinc(l_osd_op_rw_shard_queued_lat, queued_latency);
     if (rlatency != utime_t())
       osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
   } else if (op->may_read()) {
@@ -3386,11 +3394,16 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->tinc(l_osd_op_r_lat, latency);
     osd->logger->tinc(l_osd_op_r_process_lat, process_latency);
+    osd->logger->tinc(l_osd_op_r_enqueue_lat, enqueue_latency);
+    osd->logger->tinc(l_osd_op_r_shard_queued_lat, queued_latency);
+  osd->logger->tinc(l_osd_op_enqueue_lat, enqueue_latency);
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
     osd->logger->tinc(l_osd_op_w_lat, latency);
     osd->logger->tinc(l_osd_op_w_process_lat, process_latency);
+    osd->logger->tinc(l_osd_op_w_enqueue_lat, enqueue_latency);
+    osd->logger->tinc(l_osd_op_w_shard_queued_lat, queued_latency);
     if (rlatency != utime_t())
       osd->logger->tinc(l_osd_op_w_rlat, rlatency);
   } else
@@ -3399,6 +3412,8 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
   dout(15) << "log_op_stats " << *m
 	   << " inb " << inb
 	   << " outb " << outb
+	   << " enqueuelat " << enqueue_latency
+	   << " shard_queued_lat " << queued_latency
 	   << " rlat " << rlatency
 	   << " lat " << latency << dendl;
 }
