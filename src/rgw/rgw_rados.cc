@@ -8400,8 +8400,11 @@ int RGWRados::open_bucket_index(const RGWBucketInfo& bucket_info,
 {
   const rgw_bucket& bucket = bucket_info.bucket;
   int r = open_bucket_index_ctx(bucket_info, index_ctx);
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "open_bucket_index: open_bucket_index_ctx() returned "
+                   << r << dendl;
     return r;
+  }
 
   if (bucket.bucket_id.empty()) {
     ldout(cct, 0) << "ERROR: empty bucket id for bucket operation" << dendl;
@@ -8419,8 +8422,11 @@ int RGWRados::open_bucket_index_base(const RGWBucketInfo& bucket_info,
 				     string& bucket_oid_base) {
   const rgw_bucket& bucket = bucket_info.bucket;
   int r = open_bucket_index_ctx(bucket_info, index_ctx);
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "open_bucket_index_base: open_bucket_index_ctx() returned "
+                   << r << dendl;
     return r;
+  }
 
   if (bucket.bucket_id.empty()) {
     ldout(cct, 0) << "ERROR: empty bucket_id for bucket operation" << dendl;
@@ -8442,6 +8448,8 @@ int RGWRados::open_bucket_index(const RGWBucketInfo& bucket_info,
   string bucket_oid_base;
   int ret = open_bucket_index_base(bucket_info, index_ctx, bucket_oid_base);
   if (ret < 0) {
+    ldout(cct, 20) << "open_bucket_index: open_bucket_index_base() returned "
+                   << ret << dendl;
     return ret;
   }
 
@@ -11740,6 +11748,7 @@ int RGWRados::get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, const string& 
 			       oid, epbl, &info.objv_tracker, pmtime, pattrs,
 			       cache_info, refresh_version);
   if (ret < 0) {
+    ldout(cct, 20) << "rgw_get_system_obj() returned " << ret << dendl;
     return ret;
   }
 
@@ -13290,12 +13299,18 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ve
   map<int, string> oids;
   map<int, struct rgw_cls_list_ret> list_results;
   int r = open_bucket_index(bucket_info, index_ctx, oids, list_results, shard_id, bucket_instance_ids);
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "cls_bucket_head: open_bucket_index() returned "
+                   << r << dendl;
     return r;
+  }
 
   r = CLSRGWIssueGetDirHeader(index_ctx, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "
+                   << r << dendl;
     return r;
+  }
 
   map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
   for(; iter != list_results.end(); ++iter) {
