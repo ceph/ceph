@@ -195,7 +195,7 @@ struct pg_begin {
     if (struct_v > 2) {
       ::decode(pgid.shard, bl);
     } else {
-      pgid.shard = ghobject_t::NO_SHARD;
+      pgid.shard = shard_id_t::NO_SHARD;
     }
     DECODE_FINISH(bl);
   }
@@ -230,7 +230,7 @@ struct object_begin {
       ::decode(hoid.shard_id, bl);
     } else {
       hoid.generation = ghobject_t::NO_GEN;
-      hoid.shard_id = ghobject_t::NO_SHARD;
+      hoid.shard_id = shard_id_t::NO_SHARD;
     }
     if (struct_v > 2) {
       ::decode(oi, bl);

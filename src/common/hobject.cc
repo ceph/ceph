@@ -230,7 +230,7 @@ void ghobject_t::decode(bufferlist::iterator& bl)
     ::decode(shard_id, bl);
   } else {
     generation = ghobject_t::NO_GEN;
-    shard_id = ghobject_t::NO_SHARD;
+    shard_id = shard_id_t::NO_SHARD;
   }
   DECODE_FINISH(bl);
 }
@@ -245,7 +245,7 @@ void ghobject_t::decode(json_spirit::Value& v)
     if (p.name_ == "generation")
       generation = p.value_.get_uint64();
     else if (p.name_ == "shard_id")
-      shard_id = p.value_.get_int();
+      shard_id = shard_id_t (p.value_.get_int());
   }
 }
 
@@ -254,7 +254,7 @@ void ghobject_t::dump(Formatter *f) const
   hobj.dump(f);
   if (generation != NO_GEN)
     f->dump_int("generation", generation);
-  if (shard_id != ghobject_t::NO_SHARD)
+  if (shard_id != shard_id_t::NO_SHARD)
     f->dump_int("shard_id", shard_id);
 }
 
@@ -266,29 +266,29 @@ void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
   o.push_back(new ghobject_t(hobject_t(object_t("oname"), string(), 1, 234, -1, "")));
 
   o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
-	67, 0, "n1"), 1, 0));
+        67, 0, "n1"), 1, shard_id_t(0)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
-	67, 0, "n1"), 1, 1));
+        67, 0, "n1"), 1, shard_id_t(1)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
-	67, 0, "n1"), 1, 2));
+        67, 0, "n1"), 1, shard_id_t(2)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
-	CEPH_SNAPDIR, 910, 1, "n2"), 1, 0));
+        CEPH_SNAPDIR, 910, 1, "n2"), 1, shard_id_t(0)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
-	CEPH_SNAPDIR, 910, 1, "n2"), 2, 0));
+        CEPH_SNAPDIR, 910, 1, "n2"), 2, shard_id_t(0)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
-	CEPH_SNAPDIR, 910, 1, "n2"), 3, 0));
+        CEPH_SNAPDIR, 910, 1, "n2"), 3, shard_id_t(0)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
-	CEPH_SNAPDIR, 910, 1, "n2"), 3, 1));
+        CEPH_SNAPDIR, 910, 1, "n2"), 3, shard_id_t(1)));
   o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
-	CEPH_SNAPDIR, 910, 1, "n2"), 3, 2));
+        CEPH_SNAPDIR, 910, 1, "n2"), 3, shard_id_t(2)));
 }
 
 ostream& operator<<(ostream& out, const ghobject_t& o)
 {
   out << o.hobj;
   if (o.generation != ghobject_t::NO_GEN ||
-      o.shard_id != ghobject_t::NO_SHARD) {
-    assert(o.shard_id != ghobject_t::NO_SHARD);
+      o.shard_id != shard_id_t::NO_SHARD) {
+    assert(o.shard_id != shard_id_t::NO_SHARD);
     out << "/" << o.generation << "/" << (unsigned)(o.shard_id);
   }
   return out;

@@ -1358,8 +1358,8 @@ int ECBackend::get_min_avail_to_read_shards(
   for (set<int>::iterator i = need.begin();
        i != need.end();
        ++i) {
-    assert(shards.count(*i));
-    to_read->insert(shards[*i]);
+    assert(shards.count(shard_id_t(*i)));
+    to_read->insert(shards[shard_id_t(*i)]);
   }
   return 0;
 }

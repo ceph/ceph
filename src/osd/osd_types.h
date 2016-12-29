@@ -58,8 +58,6 @@
 
 typedef hobject_t collection_list_handle_t;
 
-typedef uint8_t shard_id_t;
-
 /// convert a single CPEH_OSD_FLAG_* to a string
 const char *ceph_osd_flag_name(unsigned flag);
 
@@ -69,11 +67,11 @@ string ceph_osd_flag_string(unsigned flags);
 struct pg_shard_t {
   int osd;
   shard_id_t shard;
-  pg_shard_t() : osd(-1), shard(ghobject_t::NO_SHARD) {}
-  explicit pg_shard_t(int osd) : osd(osd), shard(ghobject_t::NO_SHARD) {}
+  pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
+  explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
   pg_shard_t(int osd, shard_id_t shard) : osd(osd), shard(shard) {}
   static pg_shard_t undefined_shard() {
-    return pg_shard_t(-1, ghobject_t::NO_SHARD);
+    return pg_shard_t(-1, shard_id_t::NO_SHARD);
   }
   bool is_undefined() const {
     return osd == -1;
@@ -85,6 +83,24 @@ WRITE_CLASS_ENCODER(pg_shard_t)
 WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
 WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
 ostream &operator<<(ostream &lhs, const pg_shard_t &rhs);
+
+class IsPGRecoverablePredicate {
+public:
+  /**
+   * have encodes the shards available
+   */
+  virtual bool operator()(const set<pg_shard_t> &have) const = 0;
+  virtual ~IsPGRecoverablePredicate() {}
+};
+
+class IsPGReadablePredicate {
+public:
+  /**
+   * have encodes the shards available
+   */
+  virtual bool operator()(const set<pg_shard_t> &have) const = 0;
+  virtual ~IsPGReadablePredicate() {}
+};
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -395,9 +411,9 @@ CEPH_HASH_NAMESPACE_END
 struct spg_t {
   pg_t pgid;
   shard_id_t shard;
-  spg_t() : shard(ghobject_t::NO_SHARD) {}
+  spg_t() : shard(shard_id_t::NO_SHARD) {}
   spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
-  explicit spg_t(pg_t pgid) : pgid(pgid), shard(ghobject_t::NO_SHARD) {}
+  explicit spg_t(pg_t pgid) : pgid(pgid), shard(shard_id_t::NO_SHARD) {}
   unsigned get_split_bits(unsigned pg_num) const {
     return pgid.get_split_bits(pg_num);
   }
@@ -429,7 +445,7 @@ struct spg_t {
     return is_split;
   }
   bool is_no_shard() const {
-    return shard == ghobject_t::NO_SHARD;
+    return shard == shard_id_t::NO_SHARD;
   }
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -847,6 +863,9 @@ struct pg_pool_t {
   string get_flags_string() const {
     return get_flags_string(flags);
   }
+
+  /// converts the acting/up vector to a set of pg shards
+  void convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const;
 
   typedef enum {
     CACHEMODE_NONE = 0,                  ///< no caching
@@ -1709,8 +1728,8 @@ struct pg_notify_t {
   shard_id_t to;
   shard_id_t from;
   pg_notify_t() :
-    query_epoch(0), epoch_sent(0), to(ghobject_t::no_shard()),
-    from(ghobject_t::no_shard()) {}
+    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
+    from(shard_id_t::NO_SHARD) {}
   pg_notify_t(
     shard_id_t to,
     shard_id_t from,
@@ -1812,6 +1831,7 @@ struct pg_interval_t {
     ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     int64_t poolid,                             ///< [in] pool for pg
     pg_t pgid,                                  ///< [in] pgid for pg
+    IsPGRecoverablePredicate *could_have_gone_active, /// [in] predicate whether the pg can be active
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
@@ -1852,8 +1872,8 @@ struct pg_query_t {
   shard_id_t to;
   shard_id_t from;
 
-  pg_query_t() : type(-1), epoch_sent(0), to(ghobject_t::NO_SHARD),
-		 from(ghobject_t::NO_SHARD) {}
+  pg_query_t() : type(-1), epoch_sent(0), to(shard_id_t::NO_SHARD),
+		 from(shard_id_t::NO_SHARD) {}
   pg_query_t(
     int t,
     shard_id_t to,

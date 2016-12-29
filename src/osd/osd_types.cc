@@ -86,7 +86,7 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
 {
   if (rhs.is_undefined())
     return lhs << "?";
-  if (rhs.shard == ghobject_t::NO_SHARD)
+  if (rhs.shard == shard_id_t::NO_SHARD)
     return lhs << rhs.osd;
   return lhs << rhs.osd << '(' << (unsigned)(rhs.shard) << ')';
 }
@@ -354,7 +354,7 @@ bool pg_t::parse(const char *s)
 bool spg_t::parse(const char *s)
 {
   pgid.set_preferred(-1);
-  shard = ghobject_t::NO_SHARD;
+  shard = shard_id_t::NO_SHARD;
   uint64_t ppool;
   uint32_t pseed;
   int32_t pref;
@@ -379,7 +379,7 @@ bool spg_t::parse(const char *s)
   if (p) {
     r = sscanf(p, "s%d", &pshard);
     if (r == 1) {
-      shard = pshard;
+      shard = shard_id_t(pshard);
     } else {
       return false;
     }
@@ -811,6 +811,16 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
 }
 
+void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
+  for (size_t i = 0; i < from.size(); ++i) {
+    if (from[i] != CRUSH_ITEM_NONE) {
+      to->insert(
+        pg_shard_t(
+          from[i],
+          ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
+  }
+}
 
 int pg_pool_t::calc_bits_of(int t)
 {
@@ -2072,7 +2082,7 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 30)
     ::decode(pgid.shard, bl);
   else
-    pgid.shard = ghobject_t::no_shard();
+    pgid.shard = shard_id_t::NO_SHARD;
   DECODE_FINISH(bl);
 }
 
@@ -2111,7 +2121,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   list<pg_history_t*> h;
   pg_history_t::generate_test_instances(h);
   o.back()->history = *h.back();
-  o.back()->pgid = spg_t(pg_t(1, 2, -1), ghobject_t::no_shard());
+  o.back()->pgid = spg_t(pg_t(1, 2, -1), shard_id_t::NO_SHARD);
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
   o.back()->last_user_version = 2;
@@ -2151,8 +2161,8 @@ void pg_notify_t::decode(bufferlist::iterator &bl)
     ::decode(to, bl);
     ::decode(from, bl);
   } else {
-    to = ghobject_t::NO_SHARD;
-    from = ghobject_t::NO_SHARD;
+    to = shard_id_t::NO_SHARD;
+    from = shard_id_t::NO_SHARD;
   }
   DECODE_FINISH(bl);
 }
@@ -2172,8 +2182,8 @@ void pg_notify_t::dump(Formatter *f) const
 
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
-  o.push_back(new pg_notify_t(3, ghobject_t::NO_SHARD, 1 ,1 , pg_info_t()));
-  o.push_back(new pg_notify_t(0, 0, 3, 10, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10, pg_info_t()));
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
@@ -2181,8 +2191,8 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
   lhs << "(query_epoch:" << notify.query_epoch
       << ", epoch_sent:" << notify.epoch_sent
       << ", info:" << notify.info;
-  if (notify.from != ghobject_t::NO_SHARD ||
-      notify.to != ghobject_t::NO_SHARD)
+  if (notify.from != shard_id_t::NO_SHARD ||
+      notify.to != shard_id_t::NO_SHARD)
     lhs << " " << (unsigned)notify.from
 	<< "->" << (unsigned)notify.to;
   return lhs << ")";
@@ -2326,6 +2336,7 @@ bool pg_interval_t::check_new_interval(
   OSDMapRef lastmap,
   int64_t pool_id,
   pg_t pgid,
+  IsPGRecoverablePredicate *could_have_gone_active,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
@@ -2360,9 +2371,14 @@ bool pg_interval_t::check_new_interval(
       if (*p != CRUSH_ITEM_NONE)
 	++num_acting;
 
+    const pg_pool_t& old_pg_pool = lastmap->get_pools().find(pgid.pool())->second;
+    set<pg_shard_t> old_acting_shards;
+    old_pg_pool.convert_to_pg_shards(old_acting, &old_acting_shards);
+
     if (num_acting &&
 	i.primary != -1 &&
-	num_acting >= lastmap->get_pools().find(pgid.pool())->second.min_size) {
+	num_acting >= old_pg_pool.min_size &&
+        (*could_have_gone_active)(old_acting_shards)) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"
@@ -2458,8 +2474,8 @@ void pg_query_t::decode(bufferlist::iterator &bl) {
       ::decode(to, bl);
       ::decode(from, bl);
     } else {
-      to = ghobject_t::NO_SHARD;
-      from = ghobject_t::NO_SHARD;
+      to = shard_id_t::NO_SHARD;
+      from = shard_id_t::NO_SHARD;
     }
     DECODE_FINISH(bl);
   } catch (...) {
@@ -2486,12 +2502,12 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
   o.push_back(new pg_query_t());
   list<pg_history_t*> h;
   pg_history_t::generate_test_instances(h);
-  o.push_back(new pg_query_t(pg_query_t::INFO, 1, 2, *h.back(), 4));
-  o.push_back(new pg_query_t(pg_query_t::MISSING, 2, 3, *h.back(), 4));
-  o.push_back(new pg_query_t(pg_query_t::LOG, 0, 0,
+  o.push_back(new pg_query_t(pg_query_t::INFO, shard_id_t(1), shard_id_t(2), *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::MISSING, shard_id_t(2), shard_id_t(3), *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::LOG, shard_id_t(0), shard_id_t(0),
 			     eversion_t(4, 5), *h.back(), 4));
   o.push_back(new pg_query_t(pg_query_t::FULLLOG,
-			     ghobject_t::NO_SHARD, ghobject_t::NO_SHARD,
+			     shard_id_t::NO_SHARD, shard_id_t::NO_SHARD,
 			     *h.back(), 5));
 }
 

@@ -678,9 +678,9 @@ public:
     vector<int> acting;
     pg_to_acting_osds(pgid, &acting, &primary);
     if (i->second.ec_pool()) {
-      for (shard_id_t i = 0; i < acting.size(); ++i) {
+      for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == primary) {
-	  *out = spg_t(pgid, i);
+	  *out = spg_t(pgid, shard_id_t(i));
 	  return true;
 	}
       }

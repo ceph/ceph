@@ -587,7 +587,7 @@ public:
 	  oid.hobj.snap = soid.snap;
 	  oid.hobj.oid = soid.oid;
 	  oid.generation = ghobject_t::NO_GEN;
-	  oid.shard_id = ghobject_t::NO_SHARD;
+	  oid.shard_id = shard_id_t::NO_SHARD;
 	} else {
 	  ::decode(oid, p);
 	  if (use_pool_override && pool_override != -1 &&

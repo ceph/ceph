@@ -20,6 +20,7 @@
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
 #include "common/Thread.h"
+#include "osd/ReplicatedBackend.h"
 
 #include <sstream>
 
@@ -139,6 +140,7 @@ TEST(pg_interval_t, check_new_interval)
   int64_t pool_id = 200;
   int pg_num = 4;
   __u8 min_size = 2;
+  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(new ReplicatedBackend::RPCRecPred());
   {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
@@ -184,6 +186,7 @@ TEST(pg_interval_t, check_new_interval)
 						   lastmap,
 						   pool_id,
 						   pgid,
+                                                   recoverable.get(),
 						   &past_intervals));
     ASSERT_TRUE(past_intervals.empty());
   }
@@ -214,6 +217,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -247,6 +251,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     old_primary = new_primary;
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -281,6 +286,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -313,6 +319,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -352,6 +359,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -391,6 +399,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -425,6 +434,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -477,6 +487,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -512,6 +523,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -557,6 +569,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -606,6 +619,7 @@ TEST(pg_interval_t, check_new_interval)
 						  lastmap,
 						  pool_id,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -1294,9 +1308,19 @@ TEST(pg_pool_t_test, get_random_pg_position) {
   }
 }
 
+TEST(shard_id_t, iostream) {
+    set<shard_id_t> shards;
+    shards.insert(shard_id_t(0));
+    shards.insert(shard_id_t(1));
+    shards.insert(shard_id_t(2));
+    ostringstream out;
+    out << shards;
+    ASSERT_EQ(out.str(), "0,1,2");
+}
+
 /*
  * Local Variables:
- * compile-command: "cd .. ;
+ * compile-command: "cd ../.. ;
  *   make unittest_osd_types ;
  *   ./unittest_osd_types # --gtest_filter=pg_missing_t.constructor
  * "

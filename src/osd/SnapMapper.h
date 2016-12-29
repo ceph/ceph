@@ -151,7 +151,7 @@ private:
 
 public:
   static string make_shard_prefix(shard_id_t shard) {
-    if (shard == ghobject_t::NO_SHARD)
+    if (shard == shard_id_t::NO_SHARD)
       return string();
     char buf[20];
     int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
