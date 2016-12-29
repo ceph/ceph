@@ -1758,7 +1758,8 @@ int MDSMonitor::management_command(
     // Persist the new FSMap
     pending_fsmap.filesystems[new_fs->fscid] = new_fs;
     return 0;
-  } else if (prefix == "fs set_default") {
+  } else if (prefix == "fs set_default" ||
+	     prefix == "fs set-default") {
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     auto fs = pending_fsmap.get_filesystem(fs_name);
