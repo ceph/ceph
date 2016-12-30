@@ -2756,7 +2756,7 @@ class PrepareData(object):
                       self.args.data)
             self.partition = self.create_data_partition()
 
-    def set_journal_owner(self,journal = None):
+    def set_journal_owner(self,journal):
         if journal.find("/dev/disk/")!=-1:
             out, err, ret = command([
                 'ls',
