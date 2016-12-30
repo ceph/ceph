@@ -2765,7 +2765,7 @@ class PrepareData(object):
             ])
             journal = "/dev/" + out.split("/")[-1]
         partnum = re.findall("\d+", journal)
-        disk = journal[:journal.find(num[0])]
+        disk = journal[:journal.find(partnum[0])]
         try:
             command_check_call(
                 [
