@@ -80,6 +80,10 @@ public:
   }
 };
 
+inline static ostream& operator<<(ostream& out, const AllocExtent& e) {
+  return out << "0x" << std::hex << e.offset << "~" << e.length << std::dec;
+}
+
 class ExtentList {
   AllocExtentVector *m_extents;
   int64_t m_num_extents;
@@ -125,7 +129,7 @@ public:
 
 
 /// pextent: physical extent
-struct bluestore_pextent_t : public AllocExtent{
+struct bluestore_pextent_t : public AllocExtent {
   const static uint64_t INVALID_OFFSET = ~0ull;
 
   bluestore_pextent_t() : AllocExtent() {}
