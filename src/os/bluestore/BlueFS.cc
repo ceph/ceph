@@ -179,6 +179,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   assert(alloc[id]);
   int r = alloc[id]->reserve(want);
   assert(r == 0); // caller shouldn't ask for more than they can get
+<<<<<<< HEAD
   int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
 				    extents);
   if (got < (int64_t)want) {
@@ -195,6 +196,21 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
     block_all[id].erase(p.offset, p.length);
     block_total[id] -= p.length;
     log_t.op_alloc_rm(id, p.offset, p.length);
+=======
+  int count = 0;
+  uint64_t got = 0;
+  r = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
+                          extents, &count, &got);
+
+  assert(r >= 0);
+  if (got < want)
+    alloc[id]->unreserve(want - got);
+
+  for (int i = 0; i < count; i++) {
+    block_all[id].erase((*extents)[i].offset, (*extents)[i].length);
+    block_total[id] -= (*extents)[i].length;
+    log_t.op_alloc_rm(id, (*extents)[i].offset, (*extents)[i].length);
+>>>>>>> os/bluestore/BlueFS: fix reclaim_blocks
   }
 
   r = _flush_and_sync_log(l);
