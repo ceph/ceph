@@ -286,9 +286,9 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 		 << " offset 0x" << end << std::dec
 		 << dendl;
 	*length = end - *offset;
-       assert((*offset  + *length) <= size);
-       dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
-		<< std::dec << dendl;
+        assert((*offset  + *length) <= size);
+        dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
+		 << std::dec << dendl;
 	return true;
       }
       dout(30) << " no more set bits in 0x" << std::hex << enumerate_offset
