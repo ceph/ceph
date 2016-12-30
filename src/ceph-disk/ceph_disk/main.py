@@ -2756,22 +2756,22 @@ class PrepareData(object):
                       self.args.data)
             self.partition = self.create_data_partition()
 
-    def set_journal_owner(self,journal):
-        if journal.find("/dev/disk/")!=-1:
+    def set_journal_owner(self, journal):
+        if journal.find("/dev/disk/") != -1:
             out, err, ret = command([
                 'ls',
                 '-l',
                 journal,
             ])
             journal = "/dev/" + out.split("/")[-1]
-        num = re.findall("\d+",journal)
+        num = re.findall("\d+", journal)
         disk = journal[:journal.find(num[0])]
         try:
             command_check_call(
                 [
                     'sgdisk',
                     '--typecode=%s:%s' % (num[0],
-                                          self.partition.ptype_for_name('osd')),
+                                   self.partition.ptype_for_name('osd')),
                     '--',
                     disk,
                 ],
@@ -2835,8 +2835,9 @@ class PrepareData(object):
                                 '--sysname-match',
                                 os.path.basename(partition.rawdev)])
 
-        if self.args.journal != None and self.args.journal != self.args.data:
-            self.set_journal_owner(journal = self.args.journal)
+        if self.args.journal is not None and self.args.journal != self.args.data:
+            self.set_journal_owner(self.args.journal)
+
 
 class PrepareFilestoreData(PrepareData):
 
