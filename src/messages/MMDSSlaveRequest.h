@@ -80,7 +80,7 @@ class MMDSSlaveRequest : public Message {
 
     case OP_DROPLOCKS: return "drop_locks";
 
-    case OP_RENAMENOTIFY: return "reame_notify";
+    case OP_RENAMENOTIFY: return "rename_notify";
     case OP_RENAMENOTIFYACK: return "rename_notify_ack";
 
     case OP_ABORT: return "abort";
