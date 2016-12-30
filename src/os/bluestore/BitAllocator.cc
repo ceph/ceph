@@ -740,7 +740,7 @@ bmap_area_type_t BitMapArea::get_type()
  * BitMapArea Leaf and Internal
  */
 BitMapAreaIN::BitMapAreaIN(CephContext* cct)
-  : BitMapArea(cct)
+  : BitMapArea(cct), m_child_list(nullptr)
 {
   // nothing
 }
