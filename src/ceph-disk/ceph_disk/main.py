@@ -2837,7 +2837,7 @@ class PrepareData(object):
                                 '--sysname-match',
                                 os.path.basename(partition.rawdev)])
 
-        if ((self.args.journal is not None) and 
+        if ((self.args.journal is not None) and
                 (self.args.journal != self.args.data)):
             self.set_journal_owner(self.args.journal)
 
