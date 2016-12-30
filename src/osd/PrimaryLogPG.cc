@@ -73,7 +73,7 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
-PGLSFilter::PGLSFilter()
+PGLSFilter::PGLSFilter() : cct(nullptr)
 {
 }
 
