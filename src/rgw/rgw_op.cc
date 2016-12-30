@@ -4236,7 +4236,7 @@ void RGWPutLC::execute()
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!parser.parse(data, len, 1)) {
-    op_ret = -EACCES;
+    op_ret = -EINVAL;
     return;
   }
   config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));

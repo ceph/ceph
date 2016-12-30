@@ -81,13 +81,11 @@ int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfigura
   multimap<string, LCRule>::iterator iter;
   for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
     LCRule& src_rule = iter->second;
-    bool rule_ok = true;
-
-    if (rule_ok) {
-      dest.add_rule(&src_rule);
-    }
+    if (!dest.check_and_add_rule(&src_rule))
+      return -EINVAL;
   }
-
+  if (!dest.validate())
+    return -EINVAL;
   return 0;
 }
 
