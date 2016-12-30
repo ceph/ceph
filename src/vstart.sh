@@ -528,7 +528,9 @@ EOF
 		fi
 		if [ "$cephx" -eq 1 ] ; then
 			wconf <<EOF
-        auth supported = cephx
+        auth cluster required = cephx
+        auth service required = cephx
+        auth client required = cephx
 EOF
 		else
 			wconf <<EOF
