@@ -1988,9 +1988,8 @@ void KStore::_txc_finish_kv(TransContext *txc)
     finisher.queue(txc->oncommit);
     txc->oncommit = NULL;
   }
-  while (!txc->oncommits.empty()) {
-    finisher.queue(txc->oncommits.front());
-    txc->oncommits.pop_front();
+  if (!txc->oncommits.empty()) {
+    finisher.queue(txc->oncommits);
   }
 
   throttle_ops.put(txc->ops);
