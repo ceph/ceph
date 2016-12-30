@@ -2764,14 +2764,16 @@ class PrepareData(object):
                 journal,
             ])
             journal = "/dev/" + out.split("/")[-1]
-        num = re.findall("\d+", journal)
+        partnum = re.findall("\d+", journal)
         disk = journal[:journal.find(num[0])]
         try:
             command_check_call(
                 [
                     'sgdisk',
-                    '--typecode=%s:%s' % (num[0],
-                                   self.partition.ptype_for_name('osd')),
+                    '--typecode={num}:{uuid}'.format(
+                        num=partnum[0],
+                        uuid=self.partition.ptype_for_name('osd'),
+                    ),
                     '--',
                     disk,
                 ],
@@ -2835,7 +2837,8 @@ class PrepareData(object):
                                 '--sysname-match',
                                 os.path.basename(partition.rawdev)])
 
-        if self.args.journal is not None and self.args.journal != self.args.data:
+        if ((self.args.journal is not None) and 
+                (self.args.journal != self.args.data)):
             self.set_journal_owner(self.args.journal)
 
 
