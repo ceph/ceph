@@ -689,7 +689,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
           if (!probe_queue.empty()) {
             ProbeContext* ctxt = probe_queue.front();
             probe_queue.pop_front();
-            r = spdk_nvme_probe(ctxt, probe_cb, attach_cb);
+            r = spdk_nvme_probe(NULL, ctxt, probe_cb, attach_cb);
             if (r < 0) {
               assert(!ctxt->driver);
               derr << __func__ << " device probe nvme failed" << dendl;
