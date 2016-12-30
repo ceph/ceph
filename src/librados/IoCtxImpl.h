@@ -89,7 +89,7 @@ struct librados::IoCtxImpl {
 
   string get_cached_pool_name();
 
-  int get_object_hash_position(const std::string& oid, uint32_t *hash_postion);
+  int get_object_hash_position(const std::string& oid, uint32_t *hash_position);
   int get_object_pg_hash_position(const std::string& oid, uint32_t *pg_hash_position);
 
   ::ObjectOperation *prepare_assert_ops(::ObjectOperation *op);

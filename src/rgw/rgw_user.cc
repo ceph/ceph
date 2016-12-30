@@ -1322,7 +1322,7 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
   }
 
   if (op_state.get_subuser_perm() == RGW_PERM_INVALID) {
-    set_err_msg(err_msg, "invaild subuser access");
+    set_err_msg(err_msg, "invalid subuser access");
     return -EINVAL;
   }
 

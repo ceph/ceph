@@ -38,7 +38,7 @@ void DataScan::usage()
     << "  cephfs-data-scan pg_files <path> <pg id> [<pg id>...]\n"
     << "  cephfs-data-scan scan_links\n"
     << "\n"
-    << "    --force-corrupt: overrite apparently corrupt structures\n"
+    << "    --force-corrupt: overwrite apparently corrupt structures\n"
     << "    --force-init: write root inodes even if they exist\n"
     << "    --force-pool: use data pool even if it is not in FSMap\n"
     << "\n"

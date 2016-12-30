@@ -604,7 +604,7 @@ void AsyncConnection::process()
             // get a buffer
             map<ceph_tid_t,pair<bufferlist,int> >::iterator p = rx_buffers.find(current_header.tid);
             if (p != rx_buffers.end()) {
-              ldout(async_msgr->cct,10) << __func__ << " seleting rx buffer v " << p->second.second
+              ldout(async_msgr->cct,10) << __func__ << " selecting rx buffer v " << p->second.second
                                   << " at offset " << data_off
                                   << " len " << p->second.first.length() << dendl;
               data_buf = p->second.first;

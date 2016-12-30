@@ -4283,7 +4283,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
-    dout(10) << "i am a surivivor, and will ack immediately" << dendl;
+    dout(10) << "i am a survivor, and will ack immediately" << dendl;
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
 
     map<inodeno_t,map<client_t,Capability::Import> > imported_caps;
@@ -4743,7 +4743,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	} else {
 	  // the survivor missed MDentryLink message ?
 	  assert(strong->strong_inodes.count(dnl->get_inode()->vino()) == 0);
-	  dout(7) << " sender doesn't have primay dentry" << dendl;
+	  dout(7) << " sender doesn't have primary dentry" << dendl;
 	}
       } else {
 	if (q->second.is_primary()) {
