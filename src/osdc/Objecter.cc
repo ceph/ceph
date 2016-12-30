@@ -1013,16 +1013,25 @@ void Objecter::_check_op_pool_dne(Op *op, bool session_locked)
 {
   assert(rwlock.is_wlocked());
 
-  ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
-		 << " current " << osdmap->get_epoch()
-		 << " map_dne_bound " << op->map_dne_bound
-		 << dendl;
+  if (op->attempts) {
+    // we send a reply earlier, which means that previously the pool
+    // existed, and now it does not (i.e., it was deleted).
+    op->map_dne_bound = osdmap->get_epoch();
+    ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
+		   << " pool previously exists but now does not"
+		   << dendl;
+  } else {
+    ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
+		   << " current " << osdmap->get_epoch()
+		   << " map_dne_bound " << op->map_dne_bound
+		   << dendl;
+  }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
       // we had a new enough map
       ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
-		     << " concluding pool " << op->target.base_pgid.pool() << " dne"
-		     << dendl;
+		     << " concluding pool " << op->target.base_pgid.pool()
+		     << " dne" << dendl;
       if (op->onack) {
 	op->onack->complete(-ENOENT);
       }
@@ -1109,10 +1118,17 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
 
   *need_unregister = false;
 
-  ldout(cct, 10) << "_check_linger_pool_dne linger_id " << op->linger_id
-		 << " current " << osdmap->get_epoch()
-		 << " map_dne_bound " << op->map_dne_bound
-		 << dendl;
+  if (op->register_gen > 0) {
+    ldout(cct, 10) << "_check_linger_pool_dne linger_id " << op->linger_id
+		   << " pool previously existed but now does not"
+		   << dendl;
+    op->map_dne_bound = osdmap->get_epoch();
+  } else {
+    ldout(cct, 10) << "_check_linger_pool_dne linger_id " << op->linger_id
+		   << " current " << osdmap->get_epoch()
+		   << " map_dne_bound " << op->map_dne_bound
+		   << dendl;
+  }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
       if (op->on_reg_ack) {
