@@ -3256,6 +3256,7 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op,
   PG *out = NULL;
   if (wlistiter == session->waiting_for_pg.end()) {
     out = i->second;
+    out->lock();
   } else {
     wlistiter->second.push_back(op);
     register_session_waiting_on_pg(session, pgid);
@@ -8715,6 +8716,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     op->sent_epoch = m->get_map_epoch();
     enqueue_op(pg, op);
     share_map.should_send = false;
+    pg->unlock();
     return;
   }
 
@@ -8806,6 +8808,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     op->send_map_update = should_share_map;
     op->sent_epoch = m->map_epoch;
     enqueue_op(pg, op);
+    pg->unlock();
   } else if (should_share_map && m->get_connection()->is_connected()) {
     C_SendMap *send_map = new C_SendMap(this, m->get_source(),
 					m->get_connection(),
