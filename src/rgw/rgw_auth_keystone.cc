@@ -223,9 +223,9 @@ TokenEngine::authenticate(const std::string& token) const
   if (token_cache.find(token_id, t)) {
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
                    << dendl;
-      auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
-                                                get_creds_info(t, roles.admin));
-      return std::make_pair(std::move(apl), nullptr);
+    auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
+                                              get_creds_info(t, roles.admin));
+    return std::make_pair(std::move(apl), nullptr);
   }
 
   /* Retrieve token. */

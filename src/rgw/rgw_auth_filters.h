@@ -20,9 +20,9 @@ template <typename DecorateeT>
 class DecoratedApplier : public rgw::auth::IdentityApplier {
   typedef typename std::remove_pointer<DecorateeT>::type DerefedDecorateeT;
 
-  static_assert(std::is_base_of<rgw::auth::IdentityApplier,
-                                DerefedDecorateeT>::value,
-                "DecorateeT must be a subclass of rgw::io::RestfulClient");
+//  static_assert(std::is_base_of<rgw::auth::IdentityApplier,
+//                                DerefedDecorateeT>::value,
+//                "DecorateeT must be a subclass of rgw::io::RestfulClient");
 
   DecorateeT decoratee;
 
@@ -59,7 +59,7 @@ class DecoratedApplier : public rgw::auth::IdentityApplier {
   }
 
 public:
-  DecoratedRestfulClient(DecorateeT&& decoratee)
+  DecoratedApplier(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 

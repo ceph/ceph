@@ -12,12 +12,16 @@
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
+namespace rgw {
+namespace auth {
+namespace swift {
+
 /* TempURL: applier. */
-class RGWTempURLAuthApplier : public RGWLocalAuthApplier {
+class TempURLApplier : public rgw::auth::LocalApplier {
 public:
-  RGWTempURLAuthApplier(CephContext * const cct,
-                        const RGWUserInfo& user_info)
-    : RGWLocalAuthApplier(cct, user_info, RGWLocalAuthApplier::NO_SUBUSER) {
+  TempURLApplier(CephContext* const cct,
+                 const RGWUserInfo& user_info)
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER) {
   };
 
   virtual void modify_request_state(req_state * s) const override; /* in/out */
@@ -30,41 +34,38 @@ public:
 };
 
 /* TempURL: engine */
-class RGWTempURLAuthEngine : public RGWAuthEngine {
-protected:
-  /* const */ RGWRados * const store;
-  const req_state * const s;
-  const RGWTempURLAuthApplier::Factory * const apl_factory;
+class TempURLEngine : public rgw::auth::Engine {
+  using result_t = rgw::auth::Engine::result_t;
+
+  CephContext* const cct;
+  /* const */ RGWRados* const store;
+  const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(RGWUserInfo& owner_info) const;
+  void get_owner_info(const req_state* s,
+                      RGWUserInfo& owner_info) const;
+  bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
 
   class SignatureHelper;
 
 public:
-  RGWTempURLAuthEngine(const req_state * const s,
-                       /*const*/ RGWRados * const store,
-                       const RGWTempURLAuthApplier::Factory * const apl_factory)
-    : RGWAuthEngine(s->cct),
+  TempURLEngine(CephContext* const cct,
+                /*const*/ RGWRados* const store,
+                const TempURLApplier::Factory* const apl_factory)
+    : cct(cct),
       store(store),
-      s(s),
       apl_factory(apl_factory) {
   }
 
   /* Interface implementations. */
   const char* get_name() const noexcept override {
-    return "RGWTempURLAuthEngine";
+    return "rgw::auth::swift::TempURLEngine";
   }
 
-  bool is_applicable() const noexcept override;
-  RGWAuthApplier::aplptr_t authenticate() const override;
+  result_t authenticate(const req_state* const s) const override;
 };
 
-
-namespace rgw {
-namespace auth {
-namespace swift {
 
 /* AUTH_rgwtk */
 class SignedTokenEngine : public rgw::auth::Engine {
@@ -134,41 +135,34 @@ public:
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::RemoteApplier::Factory,
-                        public rgw::auth::LocalApplier::Factory {
+                        public rgw::auth::LocalApplier::Factory,
+                        public rgw::auth::swift::TempURLApplier::Factory {
+  RGWRados* const store;
+
   /* The engines. */
+  const rgw::auth::swift::TempURLEngine tempurl_engine;
+  const rgw::auth::swift::SignedTokenEngine signed_engine;
   const rgw::auth::keystone::TokenEngine keystone_engine;
+  const rgw::auth::swift::ExternalTokenEngine external_engine;
   const rgw::auth::AnonymousEngine anon_engine;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
   using keystone_cache_t = rgw::keystone::TokenCache;
-
-  DefaultStrategy(CephContext* const cct)
-    : keystone_engine(cct,
-                      static_cast<rgw::auth::TokenExtractor*>(this),
-                      static_cast<rgw::auth::RemoteApplier::Factory*>(this),
-                      keystone_config_t::get_instance(),
-                      keystone_cache_t::get_instance<keystone_config_t>()),
-      anon_engine(cct,
-                  static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
-    /* When the constructor's body is being executed, all member engines
-     * should be initialized. Thus, we can safely add them. */
-    using Control = rgw::auth::Strategy::Control;
-    add_engine(Control::SUFFICIENT, keystone_engine);
-    add_engine(Control::SUFFICIENT, anon_engine);
-  }
-
-  using aplptr_t = rgw::auth::Applier::aplptr_t;
+  using aplptr_t = rgw::auth::IdentityApplier::aplptr_t;
   using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
 
+  /* The method implements TokenExtractor for X-Auth-Token present in req_state. */
   std::string get_token(const req_state* const s) const override {
-    return "ala";
+    /* Returning a reference here would end in GCC complaining about a reference
+     * to temporary. */
+    return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
   }
 
   aplptr_t create_apl_remote(CephContext* const cct,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo info) const override {
     return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, nullptr, std::move(extra_acl_strategy), info));
+      new rgw::auth::RemoteApplier(cct, store, std::move(extra_acl_strategy), info));
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
@@ -177,14 +171,57 @@ class DefaultStrategy : public rgw::auth::Strategy,
     return aplptr_t(new rgw::auth::LocalApplier(cct, user_info, subuser));
   }
 
-public:
-  const char* get_name() const noexcept override {
-    return "rgw::auth::swift::DefaultStrategy";
+  aplptr_t create_apl_turl(CephContext* const cct,
+                           const RGWUserInfo& user_info) const override {
+    /* TempURL doesn't need any user account override. It's a Swift-specific
+     * mechanism that requires  account name internally, so there is no
+     * business with delegating the responsibility outside. */
+    return aplptr_t(new rgw::auth::swift::TempURLApplier(cct, user_info));
   }
 
-  static const DefaultStrategy& get_instance() {
-    static const DefaultStrategy instance(g_ceph_context);
-    return instance;
+public:
+  DefaultStrategy(CephContext* const cct,
+                  RGWRados* const store)
+    : store(store),
+      tempurl_engine(cct,
+                     store,
+                     static_cast<rgw::auth::swift::TempURLApplier::Factory*>(this)),
+      signed_engine(cct,
+                    store,
+                    static_cast<rgw::auth::TokenExtractor*>(this),
+                    static_cast<rgw::auth::LocalApplier::Factory*>(this)),
+      keystone_engine(cct,
+                      static_cast<rgw::auth::TokenExtractor*>(this),
+                      static_cast<rgw::auth::RemoteApplier::Factory*>(this),
+                      keystone_config_t::get_instance(),
+                      keystone_cache_t::get_instance<keystone_config_t>()),
+      external_engine(cct,
+                      store,
+                      static_cast<rgw::auth::TokenExtractor*>(this),
+                      static_cast<rgw::auth::LocalApplier::Factory*>(this)),
+      anon_engine(cct,
+                  static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
+    /* When the constructor's body is being executed, all member engines
+     * should be initialized. Thus, we can safely add them. */
+    using Control = rgw::auth::Strategy::Control;
+
+    add_engine(Control::SUFFICIENT, tempurl_engine);
+    add_engine(Control::SUFFICIENT, signed_engine);
+
+    /* The auth strategy is responsible for deciding whether a parcular
+     * engine is disabled or not. */
+    if (! cct->_conf->rgw_keystone_url.empty()) {
+      add_engine(Control::SUFFICIENT, keystone_engine);
+    }
+    if (! cct->_conf->rgw_swift_auth_url.empty()) {
+      add_engine(Control::SUFFICIENT, external_engine);
+    }
+
+    add_engine(Control::SUFFICIENT, anon_engine);
+  }
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::swift::DefaultStrategy";
   }
 };
 
