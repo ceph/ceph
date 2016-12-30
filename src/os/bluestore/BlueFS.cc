@@ -170,7 +170,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 }
 
 int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
-			   uint64_t *offset, uint32_t *length)
+			   AllocExtentVector *extents)
 {
   std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id
@@ -180,30 +180,27 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   int r = alloc[id]->reserve(want);
   assert(r == 0); // caller shouldn't ask for more than they can get
   int count = 0;
-  uint64_t alloc_len = 0;;
-  AllocExtentVector extents = AllocExtentVector(want / cct->_conf->bluefs_alloc_size);
-
+  uint64_t got = 0;
   r = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
-                          &extents, &count, &alloc_len);
+                          extents, &count, &got);
 
-  *length = alloc_len;
   assert(r >= 0);
-  if (*length < want) 
-    alloc[id]->unreserve(want - *length);
+  if (got < want)
+    alloc[id]->unreserve(want - got);
 
   for (int i = 0; i < count; i++) {
-    block_all[id].erase(extents[i].offset, extents[i].length);
-    block_total[id] -= extents[i].length;
-    log_t.op_alloc_rm(id, extents[i].offset, extents[i].length);
+    block_all[id].erase((*extents)[i].offset, (*extents)[i].length);
+    block_total[id] -= (*extents)[i].length;
+    log_t.op_alloc_rm(id, (*extents)[i].offset, (*extents)[i].length);
   }
 
   r = _flush_and_sync_log(l);
   assert(r == 0);
 
   if (logger)
-    logger->inc(l_bluefs_reclaim_bytes, *length);
+    logger->inc(l_bluefs_reclaim_bytes, got);
   dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
-	  << " got 0x" << *offset << "~" << *length << std::dec << dendl;
+	  << " got " << *extents << dendl;
   return 0;
 }
 

@@ -389,7 +389,7 @@ public:
 
   /// reclaim block space
   int reclaim_blocks(unsigned bdev, uint64_t want,
-		     uint64_t *offset, uint32_t *length);
+		     AllocExtentVector *extents);
 
   void flush(FileWriter *h) {
     std::lock_guard<std::mutex> l(lock);
