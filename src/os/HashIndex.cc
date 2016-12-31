@@ -300,12 +300,16 @@ int HashIndex::_lookup(const hobject_t &hoid,
   vector<string>::iterator next = path_comp.begin();
   int exists;
   while (1) {
+    utime_t before = ceph_clock_now(g_ceph_context);
     int r = path_exists(*path, &exists);
     if (r < 0)
       return r;
     if (!exists) {
       if (path->empty())
 	return -ENOENT;
+      utime_t after = ceph_clock_now(g_ceph_context);
+      after -= before;
+      dout(10) << "HashIndex::_lookup##path_test_negative, took " << after << " seconds." << dendl;
       path->pop_back();
       break;
     }
