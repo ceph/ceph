@@ -387,6 +387,7 @@ class ObjectCacher {
   loff_t stat_missing;
   loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
+  int64_t stat_total_commit;
 
   void verify_stats() const;
 
@@ -398,6 +399,7 @@ class ObjectCacher {
   loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
   loff_t get_stat_clean() { return stat_clean; }
   loff_t get_stat_zero() { return stat_zero; }
+  int64_t get_stat_total_commit() { return stat_total_commit; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
