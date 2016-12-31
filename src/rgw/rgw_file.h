@@ -636,7 +636,7 @@ namespace rgw {
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
 			       std::mutex> FHCache;
 
-    virtual ~RGWFileHandle() {}
+    virtual ~RGWFileHandle();
 
     class Factory : public cohort::lru::ObjectFactory
     {
@@ -954,6 +954,10 @@ namespace rgw {
 	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
+	  /* ref parent (non-initial ref cannot fail on valid object) */
+	  if (! parent->is_root()) {
+	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
+	  }
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
