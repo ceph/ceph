@@ -34,12 +34,14 @@ libcls_replica_log_client_la_SOURCES = \
 noinst_LTLIBRARIES += libcls_replica_log_client.la
 DENCODER_DEPS += libcls_replica_log_client.la
 
+if WITH_RADOSGW
 libcls_rgw_client_la_SOURCES = \
 	cls/rgw/cls_rgw_client.cc \
 	cls/rgw/cls_rgw_types.cc \
 	cls/rgw/cls_rgw_ops.cc
 noinst_LTLIBRARIES += libcls_rgw_client.la
 DENCODER_DEPS += libcls_rgw_client.la
+endif
 
 libcls_rbd_client_la_SOURCES = \
 	cls/rbd/cls_rbd_client.cc \
@@ -92,9 +94,6 @@ noinst_HEADERS += \
 	cls/replica_log/cls_replica_log_types.h \
 	cls/replica_log/cls_replica_log_ops.h \
 	cls/replica_log/cls_replica_log_client.h \
-	cls/rgw/cls_rgw_client.h \
-	cls/rgw/cls_rgw_ops.h \
-	cls/rgw/cls_rgw_types.h \
 	cls/user/cls_user_client.h \
 	cls/user/cls_user_ops.h \
 	cls/user/cls_user_types.h \
@@ -102,3 +101,10 @@ noinst_HEADERS += \
 	cls/cephfs/cls_cephfs_client.h \
 	cls/journal/cls_journal_client.h \
 	cls/journal/cls_journal_types.h
+
+if WITH_RADOSGW
+noinst_HEADERS += \
+	cls/rgw/cls_rgw_client.h \
+	cls/rgw/cls_rgw_ops.h \
+	cls/rgw/cls_rgw_types.h
+endif
