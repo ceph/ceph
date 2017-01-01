@@ -1,5 +1,6 @@
 if ENABLE_CLIENT
-
+if WITH_RADOS
+if WITH_RADOSGW
 # inject rgw stuff in the decoder testcase
 DENCODER_SOURCES += \
 	rgw/rgw_dencoder.cc \
@@ -17,9 +18,6 @@ DENCODER_DEPS += -lcurl -lexpat \
 	libcls_user_client.la \
 	libcls_timeindex_client.la \
 	libcls_statelog_client.la
-
-if WITH_RADOS
-if WITH_RADOSGW
 
 librgw_la_SOURCES = \
 	rgw/rgw_acl.cc \
