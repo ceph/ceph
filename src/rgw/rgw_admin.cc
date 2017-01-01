@@ -3103,10 +3103,6 @@ int main(int argc, char **argv)
 	  cerr << "no realm name or id provided" << std::endl;
 	  return EINVAL;
 	}
-        if (infile.empty()) {
-	  cerr << "no realm input file provided" << std::endl;
-	  return EINVAL;
-        }
 	RGWRealm realm(realm_id, realm_name);
 	bool new_realm = false;
 	int ret = realm.init(g_ceph_context, store);
