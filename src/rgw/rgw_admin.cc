@@ -3116,6 +3116,11 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  return 1;
 	}
+	if (!realm_name.empty() && realm.get_name() != realm_name) {
+	  cerr << "mismatch between --rgw-realm " << realm_name << " and json input file name " <<
+	    realm.get_name() << std::endl;
+	  return EINVAL;
+	}
 	/* new realm */
 	if (new_realm) {
 	  cout << "clearing period and epoch for new realm" << std::endl;
