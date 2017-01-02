@@ -11313,6 +11313,24 @@ int RGWRados::omap_get_vals(rgw_obj& obj, const std::string& marker,
   return 0;
 }
 
+int RGWRados::omap_get_vals_by_keys(rgw_obj& obj,
+									const std::set<std::string>& keys,
+									std::map<string, buffer::list>& m)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  r = ref.ioctx.omap_get_vals_by_keys(ref.oid, keys, &m);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int RGWRados::omap_get_all(rgw_obj& obj, std::map<string, bufferlist>& m)
 {
   rgw_rados_ref ref;
