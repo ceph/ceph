@@ -28,7 +28,6 @@
 #include <thread>
 #include <xmmintrin.h>
 
-#include <spdk/pci.h>
 #include <spdk/nvme.h>
 
 #include <rte_config.h>
@@ -52,7 +51,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
-rte_mempool *request_mempool = nullptr;
 std::vector<void*> data_buf_mempool;
 
 static constexpr uint16_t data_buffer_default_num = 2048;
@@ -146,9 +144,9 @@ struct Task {
 class SharedDriverData {
   unsigned id;
   std::string sn;
-  std::string name;
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
+  struct spdk_nvme_qpair *qpair;
   std::function<void ()> run_func;
 
   uint64_t block_size = 0;
@@ -188,11 +186,10 @@ class SharedDriverData {
   std::atomic_ulong completed_op_seq, queue_op_seq;
   PerfCounters *logger = nullptr;
 
-  SharedDriverData(unsigned i, const std::string &sn_tag, const std::string &n,
+  SharedDriverData(unsigned i, const std::string &sn_tag,
                    spdk_nvme_ctrlr *c, spdk_nvme_ns *ns)
       : id(i),
         sn(sn_tag),
-        name(n),
         ctrlr(c),
         ns(ns),
         run_func([this]() { _aio_thread(); }),
@@ -201,10 +198,13 @@ class SharedDriverData {
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
+    enum spdk_nvme_qprio qprio = SPDK_NVME_QPRIO_URGENT;
+
     sector_size = spdk_nvme_ns_get_sector_size(ns);
     block_size = std::max(CEPH_PAGE_SIZE, spdk_nvme_ns_get_sector_size(ns));
     size = spdk_nvme_ns_get_sector_size(ns) * spdk_nvme_ns_get_num_sectors(ns);
     zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
+    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, qprio);
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
@@ -223,6 +223,9 @@ class SharedDriverData {
   }
   ~SharedDriverData() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
+    if(!qpair) {
+      spdk_nvme_ctrlr_free_io_qpair(qpair); 
+    }
     delete logger;
   }
 
@@ -300,7 +303,7 @@ static void data_buf_reset_sgl(void *cb_arg, uint32_t sgl_offset)
   return ;
 }
 
-static int data_buf_next_sge(void *cb_arg, uint64_t *address, uint32_t *length)
+static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 {
   Task *t = static_cast<Task*>(cb_arg);
   if (t->io_request.cur_seg_idx >= t->io_request.nseg) {
@@ -313,16 +316,16 @@ static int data_buf_next_sge(void *cb_arg, uint64_t *address, uint32_t *length)
 
   if (t->io_request.cur_seg_left) {
     *length = t->io_request.cur_seg_left;
-    *address = rte_malloc_virt2phy(addr) + data_buffer_size - t->io_request.cur_seg_left;
+    *address = (void *)(rte_malloc_virt2phy(addr) + data_buffer_size - t->io_request.cur_seg_left);
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
       if (tail) {
-        *address = rte_malloc_virt2phy(addr) + tail - t->io_request.cur_seg_left;
+        *address = (void *)(rte_malloc_virt2phy(addr) + tail - t->io_request.cur_seg_left);
       }
     }
     t->io_request.cur_seg_left = 0;
   } else {
-    *address = rte_malloc_virt2phy(addr);
+    *address = (void *)rte_malloc_virt2phy(addr);
     *length = data_buffer_size;
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
@@ -370,9 +373,6 @@ static int alloc_buf_from_pool(Task *t, bool write)
 void SharedDriverData::_aio_thread()
 {
   dout(1) << __func__ << " start" << dendl;
-  if (spdk_nvme_register_io_thread() != 0) {
-    ceph_abort();
-  }
 
   if (data_buf_mempool.empty()) {
     for (uint16_t i = 0; i < data_buffer_default_num; i++) {
@@ -397,7 +397,7 @@ void SharedDriverData::_aio_thread()
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (inflight) {
-      if (!spdk_nvme_ctrlr_process_io_completions(ctrlr, max)) {
+      if (!spdk_nvme_qpair_process_completions(qpair, max)) {
         dout(30) << __func__ << " idle, have a pause" << dendl;
         _mm_pause();
       }
@@ -417,7 +417,7 @@ void SharedDriverData::_aio_thread()
           }
 
           r = spdk_nvme_ns_cmd_writev(
-              ns, lba_off, lba_count, io_complete, t, 0,
+              ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
@@ -440,7 +440,7 @@ void SharedDriverData::_aio_thread()
           }
 
           r = spdk_nvme_ns_cmd_readv(
-              ns, lba_off, lba_count, io_complete, t, 0,
+              ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
@@ -458,7 +458,7 @@ void SharedDriverData::_aio_thread()
         case IOCommand::FLUSH_COMMAND:
         {
           dout(20) << __func__ << " flush command issueed " << dendl;
-          r = spdk_nvme_ns_cmd_flush(ns, io_complete, t);
+          r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
             t->return_code = r;
@@ -509,7 +509,6 @@ void SharedDriverData::_aio_thread()
     }
   }
   assert(data_buf_mempool.size() == data_buffer_default_num);
-  spdk_nvme_unregister_io_thread();
   dout(1) << __func__ << " end" << dendl;
 }
 
@@ -544,7 +543,6 @@ class NVMEManager {
     assert(lock.is_locked());
     spdk_nvme_ns *ns;
     int num_ns = spdk_nvme_ctrlr_get_num_ns(c);
-    string name = spdk_pci_device_get_device_name(pci_dev) ? spdk_pci_device_get_device_name(pci_dev) : "Unknown";
     assert(num_ns >= 1);
     if (num_ns > 1) {
       dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
@@ -554,31 +552,47 @@ class NVMEManager {
       derr << __func__ << " failed to get namespace at 1" << dendl;
       ceph_abort();
     }
-    dout(1) << __func__ << " successfully attach nvme device at" << name
-            << " " << spdk_pci_device_get_bus(pci_dev) << ":" << spdk_pci_device_get_dev(pci_dev) << ":" << spdk_pci_device_get_func(pci_dev) << dendl;
+    dout(1) << __func__ << " successfully attach nvme device at" << spdk_pci_device_get_bus(pci_dev)
+            << ":" << spdk_pci_device_get_dev(pci_dev) << ":" << spdk_pci_device_get_func(pci_dev) << dendl;
 
     // only support one device per osd now!
     assert(shared_driver_datas.empty());
     // index 0 is occured by master thread
-    shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, sn_tag, name, c, ns));
+    shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, sn_tag, c, ns));
     *driver = shared_driver_datas.back();
   }
 };
 
 static NVMEManager manager;
 
-static bool probe_cb(void *cb_ctx, struct spdk_pci_device *pci_dev)
+static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, struct spdk_nvme_ctrlr_opts *opts)
 {
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
   char serial_number[128];
-  string name = spdk_pci_device_get_device_name(pci_dev) ? spdk_pci_device_get_device_name(pci_dev) : "Unknown";
-  dout(0) << __func__ << " found device at name: " << name
-          << " bus: " << spdk_pci_device_get_bus(pci_dev) << ":" << spdk_pci_device_get_dev(pci_dev) << ":"
+  struct spdk_pci_addr pci_addr;
+  struct spdk_pci_device *pci_dev = NULL;
+
+  if (trid->trtype != SPDK_NVME_TRANSPORT_PCIE) {
+    // currently, only probe local nvme device.
+    return false;
+  }
+
+  if (spdk_pci_addr_parse(&pci_addr, trid->traddr)) {
+    return false;
+  }
+
+  pci_dev = spdk_pci_get_device(&pci_addr);
+  if (!pci_dev) {
+    return false;
+  }
+
+  dout(0) << __func__ << " found device at bus: " << spdk_pci_device_get_bus(pci_dev)
+          << ":" << spdk_pci_device_get_dev(pci_dev) << ":"
           << spdk_pci_device_get_func(pci_dev) << " vendor:0x" << spdk_pci_device_get_vendor_id(pci_dev) << " device:0x" << spdk_pci_device_get_device_id(pci_dev)
           << dendl;
   int r = spdk_pci_device_get_serial_number(pci_dev, serial_number, 128);
   if (r < 0) {
-    dout(10) << __func__ << " failed to get serial number from " << name << dendl;
+    dout(10) << __func__ << " failed to get serial number from %p" << pci_dev << dendl;
     return false;
   }
 
@@ -587,41 +601,18 @@ static bool probe_cb(void *cb_ctx, struct spdk_pci_device *pci_dev)
     return false;
   }
 
-  if (spdk_pci_device_has_non_uio_driver(pci_dev)) {
-    /*NVMe kernel driver case*/
-    if (g_ceph_context->_conf->bdev_nvme_unbind_from_kernel) {
-      r =  spdk_pci_device_switch_to_uio_driver(pci_dev);
-      if (r < 0) {
-        derr << __func__ << " device " << name
-             << " " << spdk_pci_device_get_bus(pci_dev)
-             << ":" << spdk_pci_device_get_dev(pci_dev)
-             << ":" << spdk_pci_device_get_func(pci_dev)
-             << " switch to uio driver failed" << dendl;
-        return false;
-      }
-    } else {
-      derr << __func__ << " device has kernel nvme driver attached" << dendl;
-      return false;
-    }
-  } else {
-    r =  spdk_pci_device_bind_uio_driver(pci_dev);
-    if (r < 0) {
-      derr << __func__ << " device " << name
-           << " " << spdk_pci_device_get_bus(pci_dev)
-           << ":" << spdk_pci_device_get_dev(pci_dev) << ":"
-           << spdk_pci_device_get_func(pci_dev)
-           << " bind to uio driver failed, may lack of uio_pci_generic kernel module" << dendl;
-      return false;
-    }
-  }
-
   return true;
 }
 
-static void attach_cb(void *cb_ctx, struct spdk_pci_device *dev, struct spdk_nvme_ctrlr *ctrlr)
+static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
+                      struct spdk_nvme_ctrlr *ctrlr, const struct spdk_nvme_ctrlr_opts *opts)
 {
+  struct spdk_pci_addr pci_addr;
+  struct spdk_pci_device *pci_dev = NULL;
+
+  spdk_pci_addr_parse(&pci_addr, trid->traddr);
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
-  ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, dev, &ctx->driver);
+  ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, pci_dev, &ctx->driver);
 }
 
 int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
@@ -670,16 +661,6 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
           ceph_abort();
         }
 
-        request_mempool = rte_mempool_create("nvme_request", 512,
-                                             spdk_nvme_request_size(), 128, 0,
-                                             NULL, NULL, NULL, NULL,
-                                             SOCKET_ID_ANY, 0);
-        if (request_mempool == NULL) {
-          derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
-          ceph_abort();
-        }
-
-        pci_system_init();
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)
           spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
@@ -689,7 +670,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
           if (!probe_queue.empty()) {
             ProbeContext* ctxt = probe_queue.front();
             probe_queue.pop_front();
-            r = spdk_nvme_probe(ctxt, probe_cb, attach_cb);
+            r = spdk_nvme_probe(NULL, ctxt, probe_cb, attach_cb, NULL);
             if (r < 0) {
               assert(!ctxt->driver);
               derr << __func__ << " device probe nvme failed" << dendl;
