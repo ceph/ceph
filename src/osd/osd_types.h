@@ -1380,6 +1380,10 @@ public:
   /// application -> key/value metadata
   map<string, std::map<string, string>> application_metadata;
 
+  double mclock_res;
+  double mclock_wgt;
+  double mclock_lim;
+
 private:
   vector<uint32_t> grade_table;
 
@@ -1429,7 +1433,10 @@ public:
       stripe_width(0),
       expected_num_objects(0),
       fast_read(false),
-      opts()
+      opts(),
+      mclock_res(1000.0),
+      mclock_wgt(500.0),
+      mclock_lim(0.0)
   { }
 
   void dump(Formatter *f) const;
@@ -1540,6 +1547,10 @@ public:
     last_force_op_resend = t;
     last_force_op_resend_preluminous = t;
   }
+
+  double get_mclock_res() const { return mclock_res; }
+  double get_mclock_wgt() const { return mclock_wgt; }
+  double get_mclock_lim() const { return mclock_lim; }
 
   void calc_pg_masks();
 

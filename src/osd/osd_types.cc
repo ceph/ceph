@@ -1228,6 +1228,9 @@ void pg_pool_t::dump(Formatter *f) const
     f->close_section(); // application
   }
   f->close_section(); // application_metadata
+  f->dump_float("mclock_res", get_mclock_res());
+  f->dump_float("mclock_wgt", get_mclock_wgt());
+  f->dump_float("mclock_lim", get_mclock_lim());
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1527,7 +1530,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 26;
+  uint8_t v = 27;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
@@ -1604,12 +1607,17 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 26) {
     ::encode(application_metadata, bl);
   }
+  if (v >= 27) {
+    ::encode(mclock_res, bl);
+    ::encode(mclock_wgt, bl);
+    ::encode(mclock_lim, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(27, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_rule, bl);
@@ -1759,6 +1767,15 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 26) {
     ::decode(application_metadata, bl);
   }
+  if (struct_v >= 27) {
+    ::decode(mclock_res, bl);
+    ::decode(mclock_wgt, bl);
+    ::decode(mclock_lim, bl);
+  } else {
+    mclock_res = 1000.0;
+    mclock_wgt = 500.0;
+    mclock_lim = 0.0;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1823,6 +1840,9 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.expected_num_objects = 123456;
   a.fast_read = false;
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
+  a.mclock_res = 1000.0;
+  a.mclock_wgt = 500.0;
+  a.mclock_lim = 0.0;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1890,6 +1910,9 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       out << it->first;
     }
   }
+  out << " mclock_res " << p.get_mclock_res()
+      << " mclock_wgt " << p.get_mclock_wgt()
+      << " mclock_lim " << p.get_mclock_lim();
   return out;
 }
 

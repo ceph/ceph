@@ -1775,6 +1775,18 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("osd_pool_default_mclock_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1000.0)
+    .set_description(""),
+
+    Option("osd_pool_default_mclock_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(500.0)
+    .set_description(""),
+
+    Option("osd_pool_default_mclock_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description(""),
+
     Option("osd_hit_set_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description(""),

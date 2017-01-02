@@ -5954,6 +5954,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf->osd_pool_default_cache_min_evict_age;
+  pi->mclock_res = g_conf->osd_pool_default_mclock_res;
+  pi->mclock_wgt = g_conf->osd_pool_default_mclock_wgt;
+  pi->mclock_lim = g_conf->osd_pool_default_mclock_lim;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
