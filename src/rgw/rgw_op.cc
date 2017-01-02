@@ -4688,9 +4688,9 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = store->omap_get_vals(obj, header, p, num_parts + 1, parts_map);
+    ret = store->omap_get_vals(obj, p, num_parts + 1, parts_map);
   } else {
-    ret = store->omap_get_all(obj, header, parts_map);
+    ret = store->omap_get_all(obj, parts_map);
   }
   if (ret < 0)
     return ret;
