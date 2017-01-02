@@ -72,6 +72,7 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   ceph::unordered_map<RDMAWorker*, int> workers;;
   std::list<RDMAWorker*> pending_workers;
   RDMAStack* stack;
+
   class C_handle_cq_async : public EventCallback {
     RDMADispatcher *dispatcher;
    public:
@@ -83,87 +84,24 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   };
 
  public:
-  std::atomic<uint64_t> inflight = {0};
-  explicit RDMADispatcher(CephContext* c, Infiniband* i, RDMAStack* s)
-    : cct(c), ib(i), async_handler(new C_handle_cq_async(this)), lock("RDMADispatcher::lock"),
-      w_lock("RDMADispatcher::for worker pending list"), qp_lock("for qp lock"), stack(s) {
-    rx_cc = ib->create_comp_channel(c);
-    assert(rx_cc);
-    rx_cq = ib->create_comp_queue(c, rx_cc);
-    assert(rx_cq);
-    t = std::thread(&RDMADispatcher::polling, this);
-    cct->register_fork_watcher(this);
-  }
+  explicit RDMADispatcher(CephContext* c, Infiniband* i, RDMAStack* s);
   virtual ~RDMADispatcher();
   void handle_async_event();
   void polling();
-  int register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi) {
-    int fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
-    assert(fd >= 0);
-    Mutex::Locker l(lock);
-    assert(!qp_conns.count(qp->get_local_qp_number()));
-    qp_conns[qp->get_local_qp_number()] = std::make_pair(qp, csi);
-    return fd;
-  }
-  int register_worker(RDMAWorker* w) {
-    int fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
-    assert(fd >= 0);
-    Mutex::Locker l(w_lock);
-    workers[w] = fd;
-    return fd;
-  }
-  void pending_buffers(RDMAWorker* w) {
-    Mutex::Locker l(w_lock);
-    pending_workers.push_back(w);
-  }
-  RDMAStack* get_stack() {
-    return stack;
-  }
-  RDMAWorker* get_worker_from_list() {
-    Mutex::Locker l(w_lock);
-    if (pending_workers.empty())
-      return nullptr;
-    else {
-      RDMAWorker* w = pending_workers.front();
-      pending_workers.pop_front();
-      return w;
-    }
-  }
-  RDMAConnectedSocketImpl* get_conn_by_qp(uint32_t qp) {
-    Mutex::Locker l(lock);
-    auto it = qp_conns.find(qp);
-    if (it == qp_conns.end())
-      return nullptr;
-    if (it->second.first->is_dead())
-      return nullptr;
-    return it->second.second;
-  }
-  RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp) {
-    auto it = qp_conns.find(qp);
-    if (it == qp_conns.end())
-      return nullptr;
-    if (it->second.first->is_dead())
-      return nullptr;
-    return it->second.second;
-  }
-  void erase_qpn(uint32_t qpn) {
-    Mutex::Locker l(lock);
-    auto it = qp_conns.find(qpn);
-    if (it == qp_conns.end())
-      return ;
-    dead_queue_pairs.push_back(it->second.first);
-    qp_conns.erase(it);
-  }
+  int register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi);
+  int register_worker(RDMAWorker* w);
+  void pending_buffers(RDMAWorker* w);
+  RDMAStack* get_stack() { return stack; }
+  RDMAWorker* get_worker_from_list();
+  RDMAConnectedSocketImpl* get_conn_by_qp(uint32_t qp);
+  RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
+  void erase_qpn(uint32_t qpn);
   Infiniband::CompletionQueue* get_rx_cq() const { return rx_cq; }
   void notify_pending_workers();
-  virtual void handle_pre_fork() override {
-    done = true;
-    t.join();
-    done = false;
-  }
-  virtual void handle_post_fork() override {
-    t = std::thread(&RDMADispatcher::polling, this);
-  }
+  virtual void handle_pre_fork() override;
+  virtual void handle_post_fork() override;
+
+  std::atomic<uint64_t> inflight = {0};
 };
 
 
@@ -183,6 +121,7 @@ class RDMAWorker : public Worker {
   Mutex lock;
   std::vector<ibv_wc> wc;
   bool pended;
+
   class C_handle_cq_tx : public EventCallback {
     RDMAWorker *worker;
     public:
@@ -194,54 +133,21 @@ class RDMAWorker : public Worker {
 
  public:
   explicit RDMAWorker(CephContext *c, unsigned i);
-  virtual ~RDMAWorker() {
-    delete tx_handler;
-    if (notify_fd >= 0)
-      ::close(notify_fd);
-  }
-  void notify() {
-    uint64_t i = 1;
-    assert(write(notify_fd, &i, sizeof(i)) == sizeof(i));
-  }
-  void pass_wc(std::vector<ibv_wc> &&v) {
-    Mutex::Locker l(lock);
-    if (wc.empty())
-      wc = std::move(v);
-    else
-      wc.insert(wc.end(), v.begin(), v.end());
-    notify();
-  }
-  void get_wc(std::vector<ibv_wc> &w) {
-    Mutex::Locker l(lock);
-    if (wc.empty())
-      return ;
-    w.swap(wc);
-  }
+  virtual ~RDMAWorker();
+  void notify();
+  void pass_wc(std::vector<ibv_wc> &&v);
+  void get_wc(std::vector<ibv_wc> &w);
   virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   virtual void initialize() override;
-  RDMAStack *get_stack() {
-    return stack;
-  }
+  RDMAStack *get_stack() { return stack; }
   int reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes);
   int post_tx_buffer(std::vector<Chunk*> &chunks);
-  void add_pending_conn(RDMAConnectedSocketImpl* o) {
-    pending_sent_conns.push_back(o);
-    if (!pended) {
-      dispatcher->pending_buffers(this);
-      pended = true;
-    }
-  }
-  void remove_pending_conn(RDMAConnectedSocketImpl *o) {
-    pending_sent_conns.remove(o);
-  }
+  void add_pending_conn(RDMAConnectedSocketImpl* o);
+  void remove_pending_conn(RDMAConnectedSocketImpl *o) { pending_sent_conns.remove(o); }
   void handle_tx_event();
-  void set_ib(Infiniband* ib) {
-    infiniband = ib;
-  }
-  void set_stack(RDMAStack *s) {
-    stack = s;
-  }
+  void set_ib(Infiniband* ib) { infiniband = ib; }
+  void set_stack(RDMAStack *s) { stack = s; }
 };
 
 class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
@@ -273,109 +179,35 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   bool active;// qp is active ?
   bool detached;
 
-  void notify() {
-    uint64_t i = 1;
-    assert(write(notify_fd, &i, sizeof(i)) == sizeof(i));
-  }
+  void notify();
   ssize_t read_buffers(char* buf, size_t len);
   int post_work_request(std::vector<Chunk*>&);
 
  public:
   RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
-                          RDMAWorker *w)
-    : cct(cct), connected(0), error(0), infiniband(ib),
-      dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
-      is_server(false), con_handler(new C_handle_connection(this)),
-      active(false), detached(false) {
-    qp = infiniband->create_queue_pair(
-        cct, s->get_rx_cq(), s->get_rx_cq(), IBV_QPT_RC);
-    my_msg.qpn = qp->get_local_qp_number();
-    my_msg.psn = qp->get_initial_psn();
-    my_msg.lid = infiniband->get_lid();
-    my_msg.peer_qpn = 0;
-    my_msg.gid = infiniband->get_gid();
-    notify_fd = dispatcher->register_qp(qp, this);
-  }
+                          RDMAWorker *w);
+  virtual ~RDMAConnectedSocketImpl();
 
-  virtual ~RDMAConnectedSocketImpl() {
-    worker->remove_pending_conn(this);
-    dispatcher->erase_qpn(my_msg.qpn);
-    cleanup();
-    if (notify_fd >= 0)
-      ::close(notify_fd);
-    if (tcp_fd >= 0)
-      ::close(tcp_fd);
-    error = ECONNRESET;
-    Mutex::Locker l(lock);
-    for (unsigned i=0; i < wc.size(); ++i)
-      infiniband->recall_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
-    for (unsigned i=0; i < buffers.size(); ++i)
-      infiniband->recall_chunk(buffers[i]);
-  }
-
-  void pass_wc(std::vector<ibv_wc> &&v) {
-    Mutex::Locker l(lock);
-    if (wc.empty())
-      wc = std::move(v);
-    else
-      wc.insert(wc.end(), v.begin(), v.end());
-    notify();
-  }
-
-  void get_wc(std::vector<ibv_wc> &w) {
-    Mutex::Locker l(lock);
-    if (wc.empty())
-      return ;
-    w.swap(wc);
-  }
-
-  virtual int is_connected() override {
-    return connected;
-  }
+  void pass_wc(std::vector<ibv_wc> &&v);
+  void get_wc(std::vector<ibv_wc> &w);
+  virtual int is_connected() override { return connected; }
 
   virtual ssize_t read(char* buf, size_t len) override;
   virtual ssize_t zero_copy_read(bufferptr &data) override;
   virtual ssize_t send(bufferlist &bl, bool more) override;
-  virtual void shutdown() override {
-    if (!error)
-      fin();
-    error = ECONNRESET;
-    active = false;
-  }
-  virtual void close() override {
-    if (!error)
-      fin();
-    error = ECONNRESET;
-    active = false;
-  }
-  virtual int fd() const override {
-    return notify_fd;
-  }
-  void fault() {
-    /*if (qp) {
-      qp->to_dead();
-      qp = NULL;
-    }*/
-    error = ECONNRESET;
-    connected = 1;
-    notify();
-  }
-  const char* get_qp_state() {
-    return Infiniband::qp_state_string(qp->get_state());
-  }
+  virtual void shutdown() override;
+  virtual void close() override;
+  virtual int fd() const override { return notify_fd; }
+  void fault();
+  const char* get_qp_state() { return Infiniband::qp_state_string(qp->get_state()); }
   ssize_t submit(bool more);
   int activate();
   void fin();
   void handle_connection();
   void cleanup();
-  void set_accept_fd(int sd) {
-    tcp_fd = sd;
-    is_server = true;
-    worker->center.submit_to(worker->center.get_id(), [this]() {
-      worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
-    }, true);
-  }
+  void set_accept_fd(int sd);
   int try_connect(const entity_addr_t&, const SocketOptions &opt);
+
   class C_handle_connection : public EventCallback {
     RDMAConnectedSocketImpl *csi;
     bool active;
@@ -401,17 +233,12 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
   entity_addr_t sa;
 
  public:
-  RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a)
-    : cct(cct), net(cct), server_setup_socket(-1), infiniband(i), dispatcher(s), worker(w), sa(a) {}
+  RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a);
+
   int listen(entity_addr_t &sa, const SocketOptions &opt);
   virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
-  virtual void abort_accept() override {
-    if (server_setup_socket >= 0)
-      ::close(server_setup_socket);
-  }
-  virtual int fd() const override {
-    return server_setup_socket;
-  }
+  virtual void abort_accept() override;
+  virtual int fd() const override { return server_setup_socket; }
   int get_fd() { return server_setup_socket; }
 };
 
@@ -421,20 +248,12 @@ class RDMAStack : public NetworkStack {
 
  public:
   explicit RDMAStack(CephContext *cct, const string &t);
-  virtual ~RDMAStack() {
-    delete dispatcher;
-  }
+  virtual ~RDMAStack();
   virtual bool support_zero_copy_read() const override { return false; }
   virtual bool nonblock_connect_need_writable_event() const { return false; }
 
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override {
-    threads.resize(i+1);
-    threads[i] = std::move(std::thread(func));
-  }
-  virtual void join_worker(unsigned i) override {
-    assert(threads.size() > i && threads[i].joinable());
-    threads[i].join();
-  }
+  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
+  virtual void join_worker(unsigned i) override;
   RDMADispatcher *get_dispatcher() { return dispatcher; }
 };
 
