@@ -416,6 +416,7 @@ public:
   virtual void unreserve(int64_t num_blocks, int64_t allocated);
   virtual int64_t get_reserved_blocks();
   virtual int64_t get_used_blocks();
+  virtual int64_t get_used_blocks_adj();
   virtual int64_t size() {
     return m_total_blocks;
   }
@@ -530,7 +531,7 @@ public:
     return m_total_blocks - m_extra_blocks;
   }
   int64_t get_used_blocks() {
-    return BitMapAreaIN::get_used_blocks() - (m_extra_blocks + m_reserved_blocks);
+    return (BitMapAreaIN::get_used_blocks_adj() - m_extra_blocks);
   }
 
   BitAllocatorStats *get_stats() {
