@@ -880,7 +880,10 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
     ldout(cct, 1) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
     r = -EINVAL;
   } else { // valid message
-    sscanf(msg, "%x:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
+    int tmp;
+
+    sscanf(msg, "%x:%x:%x:%x:%s", &tmp, &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
+    im.lid = tmp;
     wire_gid_to_gid(gid, &(im.gid));
     ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
   }
