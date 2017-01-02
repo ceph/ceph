@@ -580,6 +580,7 @@ def cluster(ctx, config):
 
                 log.info('mount %s on %s -o %s' % (dev, remote,
                                                    ','.join(mount_options)))
+                mnt_point = '/var/lib/ceph/osd/ceph-{id}'.format(id=id_)
                 remote.run(
                     args=[
                         'sudo',
@@ -587,7 +588,7 @@ def cluster(ctx, config):
                         '-t', fs,
                         '-o', ','.join(mount_options),
                         dev,
-                        os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=id_)),
+                        mnt_point,
                     ]
                 )
                 remote.run(
