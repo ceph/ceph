@@ -3,7 +3,7 @@
 
 IMAGE=rbdrw-image
 LOCKID=rbdrw
-RELPATH=$(dirname $0)/../../../src/test/pybind
+RELPATH=$(dirname $0)/../../../src/test/librbd
 RBDRW=$RELPATH/rbdrw.py
 
 rbd create $IMAGE --size 10 --image-format 2 --image-shared || exit 1
