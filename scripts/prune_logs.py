@@ -25,6 +25,10 @@ optional arguments:
                         Remove the 'remote' subdir of jobs older than DAYS.
                         Negative values will skip this operation.
                         [default: 60]
+  -z DAYS, --compress DAYS
+                        Compress (using gzip) any teuthology.log files older
+                        than DAYS. Negative values will skip this operation.
+                        [default: 30]
 """.format(archive_base=teuthology.config.config.archive_base)
 
 

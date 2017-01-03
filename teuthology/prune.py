@@ -1,3 +1,4 @@
+import gzip
 import logging
 import os
 import shutil
@@ -24,11 +25,20 @@ def main(args):
     dry_run = args['--dry-run']
     pass_days = int(args['--pass'])
     remotes_days = int(args['--remotes'])
+    compress_days = int(args['--compress'])
 
-    prune_archive(archive_dir, pass_days, remotes_days, dry_run)
+    prune_archive(
+        archive_dir, pass_days, remotes_days, compress_days, dry_run
+    )
 
 
-def prune_archive(archive_dir, pass_days, remotes_days, dry_run=False):
+def prune_archive(
+        archive_dir,
+        pass_days,
+        remotes_days,
+        compress_days,
+        dry_run=False,
+):
     """
     Walk through the archive_dir, calling the cleanup functions to process
     directories that might be old enough
@@ -53,6 +63,7 @@ def prune_archive(archive_dir, pass_days, remotes_days, dry_run=False):
         log.debug("Processing %s ..." % run_dir)
         maybe_remove_passes(run_dir, pass_days, dry_run)
         maybe_remove_remotes(run_dir, remotes_days, dry_run)
+        maybe_compress_logs(run_dir, compress_days, dry_run)
 
 
 def listdir(path):
@@ -168,3 +179,47 @@ def _maybe_remove_subdir(job_dir, subdir, days, description, dry_run=False):
     ))
     if not dry_run:
         remove(subdir_path)
+
+
+def maybe_compress_logs(run_dir, days, dry_run=False):
+    if days < 0:
+        return
+    contents = listdir(run_dir)
+    if PRESERVE_FILE in contents:
+        return
+    for child in contents:
+        item = os.path.join(run_dir, child)
+        # Ensure the path isn't marked for preservation, that it is a
+        # directory, and that it is old enough
+        if (should_preserve(item) or not os.path.isdir(item) or not
+                is_old_enough(item, days)):
+            continue
+        log_name = 'teuthology.log'
+        log_path = os.path.join(item, log_name)
+        if not os.path.exists(log_path):
+            continue
+        log.info("{job} is {days} days old; compressing {name}".format(
+            job=item,
+            days=days,
+            name=log_name,
+        ))
+        if dry_run:
+            continue
+        zlog_path = log_path + '.gz'
+        try:
+            _compress(log_path, zlog_path)
+        except Exception:
+            log.exception("Failed to compress %s", log_path)
+            os.remove(zlog_path)
+        else:
+            os.remove(log_path)
+
+
+def _compress(in_path, out_path):
+    """
+    Compresses a file using gzip, preserving the original permissions, atime,
+    and mtime.  Does not remove the original.
+    """
+    with open(in_path, 'rb') as src, gzip.open(out_path, 'wb') as dest:
+        shutil.copyfileobj(src, dest)
+        shutil.copystat(in_path, out_path)
