@@ -138,7 +138,7 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   }
 
   // if stalled in request state machine -- abort
-  handle_peer_notification();
+  handle_peer_notification(0);
 }
 
 template <typename I>
@@ -230,15 +230,23 @@ void ExclusiveLock<I>::reacquire_lock(Context *on_reacquired) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::handle_peer_notification() {
-  Mutex::Locker locker(m_lock);
-  if (m_state != STATE_WAITING_FOR_PEER) {
-    return;
+void ExclusiveLock<I>::handle_peer_notification(int r) {
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_state != STATE_WAITING_FOR_PEER) {
+      return;
+    }
+
+    ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+    assert(get_active_action() == ACTION_REQUEST_LOCK);
+
+    if (r >= 0) {
+      execute_next_action();
+      return;
+    }
   }
 
-  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
-  assert(get_active_action() == ACTION_REQUEST_LOCK);
-  execute_next_action();
+  handle_acquire_lock(r);
 }
 
 template <typename I>
@@ -449,12 +457,13 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
   {
     m_lock.Lock();
     assert(m_state == STATE_ACQUIRING ||
-           m_state == STATE_POST_ACQUIRING);
+           m_state == STATE_POST_ACQUIRING ||
+           m_state == STATE_WAITING_FOR_PEER);
 
     Action action = get_active_action();
     assert(action == ACTION_TRY_LOCK || action == ACTION_REQUEST_LOCK);
     if (action == ACTION_REQUEST_LOCK && r < 0 && r != -EBLACKLISTED &&
-        r != -EPERM) {
+        r != -EPERM && r != -EROFS) {
       m_state = STATE_WAITING_FOR_PEER;
       m_lock.Unlock();
 

@@ -493,7 +493,10 @@ void ImageWatcher<I>::handle_request_lock(int r) {
                               << dendl;
 
     // treat this is a dead client -- so retest acquiring the lock
-    m_image_ctx.exclusive_lock->handle_peer_notification();
+    m_image_ctx.exclusive_lock->handle_peer_notification(0);
+  } else if (r == -EROFS) {
+    ldout(m_image_ctx.cct, 5) << this << " peer will not release lock" << dendl;
+    m_image_ctx.exclusive_lock->handle_peer_notification(r);
   } else if (r < 0) {
     lderr(m_image_ctx.cct) << this << " error requesting lock: "
                            << cpp_strerror(r) << dendl;
@@ -639,7 +642,7 @@ bool ImageWatcher<I>::handle_payload(const AcquiredLockPayload &payload,
   if (m_image_ctx.exclusive_lock != nullptr) {
     // potentially wake up the exclusive lock state machine now that
     // a lock owner has advertised itself
-    m_image_ctx.exclusive_lock->handle_peer_notification();
+    m_image_ctx.exclusive_lock->handle_peer_notification(0);
   }
   if (cancel_async_requests &&
       (m_image_ctx.exclusive_lock == nullptr ||
@@ -678,7 +681,7 @@ bool ImageWatcher<I>::handle_payload(const ReleasedLockPayload &payload,
   if (m_image_ctx.exclusive_lock != nullptr &&
       !m_image_ctx.exclusive_lock->is_lock_owner()) {
     m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
-    m_image_ctx.exclusive_lock->handle_peer_notification();
+    m_image_ctx.exclusive_lock->handle_peer_notification(0);
   }
   return true;
 }

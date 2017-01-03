@@ -4589,7 +4589,15 @@ TEST_F(TestLibRBD, ExclusiveLock)
 	}
 
 	std::cout << m_id << ": acquiring exclusive lock" << std::endl;
-	EXPECT_EQ(0, rbd_lock_acquire(m_image, RBD_LOCK_MODE_EXCLUSIVE));
+        int r;
+        do {
+          r = rbd_lock_acquire(m_image, RBD_LOCK_MODE_EXCLUSIVE);
+          if (r == -EROFS) {
+            usleep(1000);
+          }
+        } while (r == -EROFS);
+	EXPECT_EQ(0, r);
+
 	int lock_owner;
 	EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
 	EXPECT_TRUE(lock_owner);
