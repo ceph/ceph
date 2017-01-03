@@ -223,7 +223,7 @@ class SharedDriverData {
   }
   ~SharedDriverData() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
-    if(!qpair) {
+    if (!qpair) {
       spdk_nvme_ctrlr_free_io_qpair(qpair); 
     }
     delete logger;
@@ -571,18 +571,22 @@ static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, st
   char serial_number[128];
   struct spdk_pci_addr pci_addr;
   struct spdk_pci_device *pci_dev = NULL;
+  int result = 0;
 
   if (trid->trtype != SPDK_NVME_TRANSPORT_PCIE) {
-    // currently, only probe local nvme device.
+    dout(0) << __func__ << " only probe local nvme device" << dendl;
     return false;
   }
 
-  if (spdk_pci_addr_parse(&pci_addr, trid->traddr)) {
+  result = spdk_pci_addr_parse(&pci_addr, trid->traddr);
+  if (result) {
+    dout(0) << __func__ << " failed to get pci address from %s, " << trid->traddr << " return value is: %d" << result << dendl;
     return false;
   }
 
   pci_dev = spdk_pci_get_device(&pci_addr);
   if (!pci_dev) {
+    dout(0) << __func__ << " failed to get pci device" << dendl; 
     return false;
   }
 
@@ -590,8 +594,8 @@ static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, st
           << ":" << spdk_pci_device_get_dev(pci_dev) << ":"
           << spdk_pci_device_get_func(pci_dev) << " vendor:0x" << spdk_pci_device_get_vendor_id(pci_dev) << " device:0x" << spdk_pci_device_get_device_id(pci_dev)
           << dendl;
-  int r = spdk_pci_device_get_serial_number(pci_dev, serial_number, 128);
-  if (r < 0) {
+  result = spdk_pci_device_get_serial_number(pci_dev, serial_number, 128);
+  if (result < 0) {
     dout(10) << __func__ << " failed to get serial number from %p" << pci_dev << dendl;
     return false;
   }
