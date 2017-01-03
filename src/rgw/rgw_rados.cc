@@ -11407,6 +11407,19 @@ int RGWRados::omap_del(rgw_obj& obj, const std::string& key)
   return r;
 }
 
+int RGWRados::omap_rm_keys(rgw_obj& obj, const std::set<std::string>& keys)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  r = ref.ioctx.omap_rm_keys(ref.oid, keys);
+  return r;
+}
+
 int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
 {
   map<string, RGWBucketEnt>::iterator iter;
