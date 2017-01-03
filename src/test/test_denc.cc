@@ -518,9 +518,25 @@ TEST(denc, array)
     std::array<uint32_t, 3> s = { 1UL, 2UL, 3UL };
     test_denc(s);
   }
+}
+
+TEST(denc, tuple)
+{
   {
-    cout << "std::array<legacy_t, 3>" << std::endl;
-    std::array<legacy_t, 2> s = { legacy_t(1), legacy_t(2) };
-    test_encode_decode(s);
+    cout << "std::tuple<uint64_t, uint32_t>" << std::endl;
+    std::tuple<uint64_t, uint32_t> s(100ULL, 97UL);
+    counts.reset();
+    test_denc(s);
+  }
+  {
+    cout << "std::tuple<std::string, uint3_t>" << std::endl;
+    std::tuple<std::string, uint32_t> s("foo", 97);
+    test_denc(s);
+  }
+  {
+    cout << "std::tuple<std::string, std::set<uint32_t>>" << std::endl;
+    std::tuple<std::string, std::set<uint32_t>> s(
+      "bar", std::set<uint32_t>{uint32_t(1), uint32_t(2), uint32_t(3)});
+    test_denc(s);
   }
 }
