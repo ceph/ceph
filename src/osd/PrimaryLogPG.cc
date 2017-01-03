@@ -13120,7 +13120,18 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       continue;
     dout(10) << __func__ << " recording digests for " << p->first << dendl;
     ObjectContextRef obc = get_object_context(p->first, false);
-    assert(obc);
+    if (!obc) {
+      osd->clog->error() << info.pgid << " " << mode
+			 << " cannot get object context for "
+			 << p->first;
+      continue;
+    } else if (obc->obs.oi.soid != p->first) {
+      osd->clog->error() << info.pgid << " " << mode
+			 << " object " << p->first
+			 << " has a valid oi attr with a mismatched name, "
+			 << " obc->obs.oi.soid: " << obc->obs.oi.soid;
+      continue;
+    }
     OpContextUPtr ctx = simple_opc_create(obc);
     ctx->at_version = get_next_version();
     ctx->mtime = utime_t();      // do not update mtime
