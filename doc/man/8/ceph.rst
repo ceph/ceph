@@ -1183,12 +1183,16 @@ Usage::
 quorum
 ------
 
-Enter or exit quorum.
+Cause MON to enter or exit quorum.
 
 Usage::
 
 	ceph quorum enter|exit
 
+Note: this only works on the MON to which the ``ceph`` command is connected.
+If you want a specific MON to enter or exit quorum, use this syntax::
+
+	ceph tell mon.<id> quorum enter|exit
 
 quorum_status
 -------------
