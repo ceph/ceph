@@ -268,7 +268,12 @@ class Error(Exception):
 
     def __str__(self):
         doc = _bytes2str(self.__doc__.strip())
-        return ': '.join([doc] + [_bytes2str(a) for a in self.args])
+        try:
+            str_type = basestring
+        except NameError:
+            str_type = str
+        args = [a if isinstance(a, str_type) else str(a) for a in self.args]
+        return ': '.join([doc] + [_bytes2str(a) for a in args])
 
 
 class MountError(Error):
