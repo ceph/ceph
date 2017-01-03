@@ -105,12 +105,12 @@ if(WITH_SPDK)
     COMMENT "spdk building")
   # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
   # if INTERFACE is supported.
-  foreach(lib nvme memory util)
+  foreach(lib nvme log env_dpdk util)
     add_library(spdk_${lib} STATIC IMPORTED)
     add_dependencies(spdk_${lib} build_spdk)
     target_link_libraries(os LINK_PRIVATE spdk_${lib})
     set_target_properties(spdk_${lib} PROPERTIES
-      IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/lib/${lib}/libspdk_${lib}.a"
+      IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/build/lib/libspdk_${lib}.a"
       INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
     list(APPEND SPDK_LIBRARIES spdk_${lib})
   endforeach()
