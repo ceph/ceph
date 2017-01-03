@@ -4509,15 +4509,37 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
   ASSERT_TRUE(lock_owner);
 
+  rbd_lock_mode_t lock_mode;
+  char *lock_owners[1];
+  size_t max_lock_owners = 0;
+  ASSERT_EQ(-ERANGE, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
+                                         &max_lock_owners));
+  ASSERT_EQ(1U, max_lock_owners);
+
+  max_lock_owners = 2;
+  ASSERT_EQ(0, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
+                                   &max_lock_owners));
+  ASSERT_EQ(RBD_LOCK_MODE_EXCLUSIVE, lock_mode);
+  ASSERT_STRNE("", lock_owners[0]);
+  ASSERT_EQ(1U, max_lock_owners);
+
   rbd_image_t image2;
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
 
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_FALSE(lock_owner);
 
+  ASSERT_EQ(-EOPNOTSUPP, rbd_lock_break(image1, RBD_LOCK_MODE_SHARED, ""));
+  ASSERT_EQ(-EBUSY, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
+                                   "not the owner"));
+
   ASSERT_EQ(0, rbd_lock_release(image1));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
   ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-ENOENT, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
+                                    lock_owners[0]));
+  rbd_lock_get_owners_cleanup(lock_owners, max_lock_owners);
 
   ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
   ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));

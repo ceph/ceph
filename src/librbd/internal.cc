@@ -39,7 +39,10 @@
 #include "librbd/parent_types.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
+#include "librbd/exclusive_lock/BreakRequest.h"
+#include "librbd/exclusive_lock/GetLockerRequest.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/exclusive_lock/Types.h"
 #include "librbd/operation/TrimRequest.h"
 #include "include/util.h"
 
@@ -2098,11 +2101,14 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
   int lock_acquire(ImageCtx *ictx, rbd_lock_mode_t lock_mode)
   {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
+                   << "lock_mode=" << lock_mode << dendl;
+
     if (lock_mode != RBD_LOCK_MODE_EXCLUSIVE) {
       return -EOPNOTSUPP;
     }
 
-    CephContext *cct = ictx->cct;
     C_SaferCond lock_ctx;
     {
       RWLock::WLocker l(ictx->owner_lock);
@@ -2145,6 +2151,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   int lock_release(ImageCtx *ictx)
   {
     CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+
     C_SaferCond lock_ctx;
     {
       RWLock::WLocker l(ictx->owner_lock);
@@ -2162,6 +2170,79 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       lderr(cct) << "failed to release exclusive lock: " << cpp_strerror(r)
 		 << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int lock_get_owners(ImageCtx *ictx, rbd_lock_mode_t *lock_mode,
+                      std::list<std::string> *lock_owners)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+
+    exclusive_lock::Locker locker;
+    C_SaferCond get_owner_ctx;
+    auto get_owner_req = exclusive_lock::GetLockerRequest<>::create(
+      *ictx, &locker, &get_owner_ctx);
+    get_owner_req->send();
+
+    int r = get_owner_ctx.wait();
+    if (r == -ENOENT) {
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "failed to determine current lock owner: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    *lock_mode = RBD_LOCK_MODE_EXCLUSIVE;
+    lock_owners->clear();
+    lock_owners->emplace_back(locker.address);
+    return 0;
+  }
+
+  int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
+                 const std::string &lock_owner)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
+                   << "lock_mode=" << lock_mode << ", "
+                   << "lock_owner=" << lock_owner << dendl;
+
+    if (lock_mode != RBD_LOCK_MODE_EXCLUSIVE) {
+      return -EOPNOTSUPP;
+    }
+
+    exclusive_lock::Locker locker;
+    C_SaferCond get_owner_ctx;
+    auto get_owner_req = exclusive_lock::GetLockerRequest<>::create(
+      *ictx, &locker, &get_owner_ctx);
+    get_owner_req->send();
+
+    int r = get_owner_ctx.wait();
+    if (r == -ENOENT) {
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "failed to determine current lock owner: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (locker.address != lock_owner) {
+      return -EBUSY;
+    }
+
+    C_SaferCond break_ctx;
+    auto break_req = exclusive_lock::BreakRequest<>::create(
+      *ictx, locker, ictx->blacklist_on_break_lock, true, &break_ctx);
+    break_req->send();
+
+    r = break_ctx.wait();
+    if (r == -ENOENT) {
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "failed to break lock: " << cpp_strerror(r) << dendl;
       return r;
     }
     return 0;
