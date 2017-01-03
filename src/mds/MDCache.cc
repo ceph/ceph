@@ -8207,11 +8207,19 @@ class C_IO_MDC_OpenInoBacktraceFetched : public MDCacheIOContext {
 
 struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
   inodeno_t ino;
+  MMDSOpenIno *msg;
+  bool parent;
   public:
-  C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i) : MDCacheContext(c), ino(i) {}
+  C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i, MMDSOpenIno *m,  bool p) :
+    MDCacheContext(c), ino(i), msg(m), parent(p) {}
   void finish(int r) {
+    if (r < 0 && !parent)
+      r = -EAGAIN;
+    if (msg) {
+      mdcache->handle_open_ino(msg, r);
+      return;
+    }
     assert(mdcache->opening_inodes.count(ino));
-    assert(r >= 0);
     mdcache->_open_ino_traverse_dir(ino, mdcache->opening_inodes[ino], r);
   }
 };
@@ -8271,6 +8279,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
 		      new C_OnFinisher(fin, mds->finisher));
       return;
     }
+    err = 0; // backtrace.ancestors.empty() is checked below
   }
 
   if (err == 0) {
@@ -8281,11 +8290,15 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       if (info.ancestors[0] == backtrace.ancestors[0]) {
 	dout(10) << " got same parents " << info.ancestors[0] << " 2 times" << dendl;
 	err = -EINVAL;
+      } else {
+	info.last_err = 0;
       }
     }
   }
   if (err) {
-    dout(10) << " failed to open ino " << ino << dendl;
+    dout(0) << " failed to open ino " << ino << " err " << err << "/" << info.last_err << dendl;
+    if (info.last_err)
+      err = info.last_err;
     open_ino_finish(ino, info, err);
     return;
   }
@@ -8323,14 +8336,6 @@ void MDCache::_open_ino_parent_opened(inodeno_t ino, int ret)
   }
 }
 
-MDSInternalContextBase* MDCache::_open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m)
-{
-  if (m)
-    return new C_MDS_RetryMessage(mds, m);
-  else
-    return new C_MDC_OpenInoTraverseDir(this, ino);
-}
-
 void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int ret)
 {
   dout(10) << __func__ << ": ino " << ino << " ret " << ret << dendl;
@@ -8357,11 +8362,11 @@ void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int r
   do_open_ino(ino, info, ret);
 }
 
-void MDCache::_open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir)
+void MDCache::_open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir, bool parent)
 {
   if (dir->state_test(CDir::STATE_REJOINUNDEF))
     assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
-  dir->fetch(_open_ino_get_waiter(ino, m));
+  dir->fetch(new C_MDC_OpenInoTraverseDir(this, ino, m, parent));
 }
 
 int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
@@ -8375,7 +8380,7 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 
     if (!diri) {
       if (discover && MDS_INO_IS_MDSDIR(ancestors[i].dirino)) {
-	open_foreign_mdsdir(ancestors[i].dirino, _open_ino_get_waiter(ino, m));
+	open_foreign_mdsdir(ancestors[i].dirino, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0));
 	return 1;
       }
       continue;
@@ -8386,7 +8391,7 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
       while (dir->state_test(CDir::STATE_REJOINUNDEF) &&
 	     dir->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
 	dir = dir->get_inode()->get_parent_dir();
-      _open_ino_fetch_dir(ino, m, dir);
+      _open_ino_fetch_dir(ino, m, dir, i == 0);
       return 1;
     }
 
@@ -8404,12 +8409,12 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
       if (diri->is_auth()) {
 	if (diri->is_frozen()) {
 	  dout(10) << " " << *diri << " is frozen, waiting " << dendl;
-	  diri->add_waiter(CDir::WAIT_UNFREEZE, _open_ino_get_waiter(ino, m));
+	  diri->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0));
 	  return 1;
 	}
 	dir = diri->get_or_open_dirfrag(this, fg);
       } else if (discover) {
-	open_remote_dirfrag(diri, fg, _open_ino_get_waiter(ino, m));
+	open_remote_dirfrag(diri, fg, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0));
 	return 1;
       }
     }
@@ -8421,14 +8426,14 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 	if (dnl && dnl->is_primary() &&
 	    dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF)) {
 	  dout(10) << " fetching undef " << *dnl->get_inode() << dendl;
-	  _open_ino_fetch_dir(ino, m, dir);
+	  _open_ino_fetch_dir(ino, m, dir, i == 0);
 	  return 1;
 	}
 
 	if (!dnl && !dir->is_complete() &&
 	    (!dir->has_bloom() || dir->is_in_bloom(name))) {
 	  dout(10) << " fetching incomplete " << *dir << dendl;
-	  _open_ino_fetch_dir(ino, m, dir);
+	  _open_ino_fetch_dir(ino, m, dir, i == 0);
 	  return 1;
 	}
 
@@ -8438,13 +8443,13 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
       } else if (discover) {
 	if (!dnl) {
 	  filepath path(name, 0);
-	  discover_path(dir, CEPH_NOSNAP, path, _open_ino_get_waiter(ino, m),
+	  discover_path(dir, CEPH_NOSNAP, path, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0),
 			(i == 0 && want_xlocked));
 	  return 1;
 	}
 	if (dnl->is_null() && !dn->lock.can_read(-1)) {
 	  dout(10) << " null " << *dn << " is not readable, waiting" << dendl;
-	  dn->lock.add_waiter(SimpleLock::WAIT_RD, _open_ino_get_waiter(ino, m));
+	  dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0));
 	  return 1;
 	}
 	dout(10) << " no ino " << next_ino << " in " << *dir << dendl;
@@ -8471,7 +8476,7 @@ void MDCache::open_ino_finish(inodeno_t ino, open_ino_info_t& info, int ret)
 
 void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
 {
-  if (err < 0) {
+  if (err < 0 && err != -EAGAIN) {
     info.checked.clear();
     info.checked.insert(mds->get_nodeid());
     info.checking = MDS_RANK_NONE;
@@ -8481,6 +8486,8 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
       info.discover = false;
       info.ancestors.clear();
     }
+    if (err != -ENOENT && err != -ENOTDIR)
+      info.last_err = err;
   }
 
   if (info.check_peers) {
@@ -8542,9 +8549,9 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
   }
 }
 
-void MDCache::handle_open_ino(MMDSOpenIno *m)
+void MDCache::handle_open_ino(MMDSOpenIno *m, int err)
 {
-  dout(10) << "handle_open_ino " << *m << dendl;
+  dout(10) << "handle_open_ino " << *m << " err " << err << dendl;
 
   inodeno_t ino = m->ino;
   MMDSOpenInoReply *reply;
@@ -8566,6 +8573,8 @@ void MDCache::handle_open_ino(MMDSOpenIno *m)
     } else {
       reply->hint = in->authority().first;
     }
+  } else if (err < 0) {
+    reply = new MMDSOpenInoReply(m->get_tid(), ino, MDS_RANK_NONE, err);
   } else {
     mds_rank_t hint = MDS_RANK_NONE;
     int ret = open_ino_traverse_dir(ino, m, m->ancestors, false, false, &hint);
