@@ -206,6 +206,43 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
+TEST_F(TestMockExclusiveLockReleaseRequest, Blacklisted) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
+  expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, -EBLACKLISTED);
+  expect_flush_notifies(mock_image_ctx);
+
+  MockJournal *mock_journal = new MockJournal();
+  mock_image_ctx.journal = mock_journal;
+  expect_close_journal(mock_image_ctx, *mock_journal, -EBLACKLISTED);
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+  mock_image_ctx.object_map = mock_object_map;
+  expect_close_object_map(mock_image_ctx, *mock_object_map);
+
+  MockContext mock_releasing_ctx;
+  expect_complete_context(mock_releasing_ctx, 0);
+  expect_unlock(mock_image_ctx, -EBLACKLISTED);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
+
+  C_SaferCond ctx;
+  MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &mock_releasing_ctx,
+                                                       &ctx, false);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
 TEST_F(TestMockExclusiveLockReleaseRequest, BlockWritesError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 

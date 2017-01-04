@@ -127,7 +127,11 @@ Context *ReleaseRequest<I>::handle_block_writes(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  if (*ret_val < 0) {
+  if (*ret_val == -EBLACKLISTED) {
+    // allow clean shut down if blacklisted
+    lderr(cct) << "failed to block writes: " << cpp_strerror(*ret_val) << dendl;
+    *ret_val = 0;
+  } else if (*ret_val < 0) {
     m_image_ctx.aio_work_queue->unblock_writes();
     return m_on_finish;
   }
