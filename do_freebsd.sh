@@ -52,7 +52,6 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_MANPAGE=OFF \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \
-	-D WITH_RADOSGW=OFF \
 	2>&1 | tee cmake.log
 
 cd build
