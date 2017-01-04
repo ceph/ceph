@@ -165,7 +165,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
           << m->daemon_name << dendl;
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = 5;
+  configure->stats_period = g_conf->mgr_stats_period;
   m->get_connection()->send_message(configure);
 
   if (daemon_state.exists(key)) {
