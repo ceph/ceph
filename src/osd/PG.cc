@@ -7859,48 +7859,6 @@ PG::PriorSet::PriorSet(CephContext* cct,
 		       const PG *debug_pg)
   : cct(cct), ec_pool(ec_pool), pg_down(false), pcontdec(c)
 {
-  /*
-   * We have to be careful to gracefully deal with situations like
-   * so. Say we have a power outage or something that takes out both
-   * OSDs, but the monitor doesn't mark them down in the same epoch.
-   * The history may look like
-   *
-   *  1: A B
-   *  2:   B
-   *  3:       let's say B dies for good, too (say, from the power spike) 
-   *  4: A
-   *
-   * which makes it look like B may have applied updates to the PG
-   * that we need in order to proceed.  This sucks...
-   *
-   * To minimize the risk of this happening, we CANNOT go active if
-   * _any_ OSDs in the prior set are down until we send an MOSDAlive
-   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
-   * Then, we have something like
-   *
-   *  1: A B
-   *  2:   B   up_thru[B]=0
-   *  3:
-   *  4: A
-   *
-   * -> we can ignore B, bc it couldn't have gone active (alive_thru
-   *    still 0).
-   *
-   * or,
-   *
-   *  1: A B
-   *  2:   B   up_thru[B]=0
-   *  3:   B   up_thru[B]=2
-   *  4:
-   *  5: A    
-   *
-   * -> we must wait for B, bc it was alive through 2, and could have
-   *    written to the pg.
-   *
-   * If B is really dead, then an administrator will need to manually
-   * intervene by marking the OSD as "lost."
-   */
-
   // Include current acting and up nodes... not because they may
   // contain old data (this interval hasn't gone active, obviously),
   // but because we want their pg_info to inform choose_acting(), and
