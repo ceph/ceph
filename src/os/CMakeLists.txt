@@ -71,12 +71,10 @@ endif()
 if(WITH_SPDK)
   target_link_libraries(os
     ${SPDK_LIBRARIES}
-    ${DPDK_LIBRARIES}
-    ${PCIACCESS_LIBRARIES})
+    ${DPDK_LIBRARIES})
   target_include_directories(os
     PRIVATE
-    ${DPDK_INCLUDE_DIR}
-    ${PCIACCESS_INCLUDE_DIR})
+    ${DPDK_INCLUDE_DIR})
 endif(WITH_SPDK)
 
 if(WITH_LTTNG)
