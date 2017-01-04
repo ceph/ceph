@@ -1,4 +1,0 @@
-meta:
-- desc: "1-node cluster"
-roles:
-  - [mon.a, osd.0, client.0]
