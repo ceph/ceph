@@ -14,6 +14,7 @@
 # GNU Library Public License for more details.
 #
 from ceph_detect_init import alpine
+from ceph_detect_init import arch
 from ceph_detect_init import centos
 from ceph_detect_init import debian
 from ceph_detect_init import exc
@@ -55,6 +56,7 @@ def _get_distro(distro, use_rhceph=False):
     distro = _normalized_distro_name(distro)
     distributions = {
         'alpine': alpine,
+        'arch': arch,
         'debian': debian,
         'ubuntu': debian,
         'linuxmint': debian,
@@ -94,7 +96,7 @@ def platform_information():
     """detect platform information from remote host."""
     if platform.system() == 'Linux':
         linux_distro = platform.linux_distribution(
-            supported_dists=platform._supported_dists + ('alpine',))
+            supported_dists=platform._supported_dists + ('alpine', 'arch'))
         logging.debug('platform_information: linux_distribution = ' +
                       str(linux_distro))
         distro, release, codename = linux_distro
