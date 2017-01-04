@@ -3140,7 +3140,7 @@ bool pg_interval_t::check_new_interval(
 	num_acting >= old_pg_pool.min_size &&
         (*could_have_gone_active)(old_acting_shards)) {
       if (out)
-	*out << "generate_past_intervals " << i
+	*out << __func__ << " " << i
 	     << ": not rw,"
 	     << " up_thru " << lastmap->get_up_thru(i.primary)
 	     << " up_from " << lastmap->get_up_from(i.primary)
@@ -3150,7 +3150,7 @@ bool pg_interval_t::check_new_interval(
 	  lastmap->get_up_from(i.primary) <= i.first) {
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " includes interval"
@@ -3166,14 +3166,14 @@ bool pg_interval_t::check_new_interval(
 	// last_epoch_clean timing.
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : includes last_epoch_clean " << last_epoch_clean
 	       << " and presumed to have been rw"
 	       << std::endl;
       } else {
 	i.maybe_went_rw = false;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " does not include interval"
@@ -3182,7 +3182,7 @@ bool pg_interval_t::check_new_interval(
     } else {
       i.maybe_went_rw = false;
       if (out)
-	*out << "generate_past_intervals " << i << " : acting set is too small" << std::endl;
+	*out << __func__ << " " << i << " : acting set is too small" << std::endl;
     }
     return true;
   } else {
