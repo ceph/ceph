@@ -36,6 +36,7 @@
 
 #include "MDSRank.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
@@ -187,7 +188,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   mds_load_t load = balancer->get_load(now);
 
   if (logger) {
@@ -465,7 +466,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
 
   // hack: thrash exports
   static utime_t start;
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   if (start == utime_t())
     start = now;
   /*double el = now - start;

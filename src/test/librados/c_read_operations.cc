@@ -51,8 +51,8 @@ protected:
 
     const char *zeros[len];
     size_t zero_lens[len];
-    memset(zeros, 0, len);
-    memset(zero_lens, 0, len * sizeof(size_t));
+    memset(zeros, 0, sizeof(zeros));
+    memset(zero_lens, 0, sizeof(zero_lens));
     compare_omap_vals(keys, vals, lens, len, iter_vals);
     compare_omap_vals(keys, zeros, zero_lens, len, iter_keys);
     compare_omap_vals(keys, vals, lens, len, iter_vals_by_key);
@@ -159,6 +159,7 @@ TEST_F(CReadOpsTest, AssertExists) {
   ASSERT_EQ(0, rados_aio_read_op_operate(op, ioctx, completion, obj, 0));
   rados_aio_wait_for_complete(completion);
   ASSERT_EQ(-ENOENT, rados_aio_get_return_value(completion));
+  rados_aio_release(completion);
   rados_release_read_op(op);
 
   write_object();
@@ -428,6 +429,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
 			      sizeof(features) - 1, &bytes_read, &rval);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
   EXPECT_EQ(0u, bytes_read);
   EXPECT_EQ(-ERANGE, rval);
 

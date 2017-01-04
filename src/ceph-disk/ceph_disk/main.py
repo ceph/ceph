@@ -1813,6 +1813,44 @@ class Prepare(object):
         parser = subparsers.add_parser(
             'prepare',
             parents=parents,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=textwrap.fill(textwrap.dedent("""\
+            If the --bluestore argument is given, a bluestore objectstore
+            will be used instead of the legacy filestore objectstore.
+
+            When an entire device is prepared for bluestore, two
+            partitions are created. The first partition is for metadata,
+            the second partition is for blocks that contain data.
+
+            Unless explicitly specified with --block.db or
+            --block.wal, the bluestore DB and WAL data is stored on
+            the main block device. For instance:
+
+                ceph-disk prepare --bluestore /dev/sdc
+
+            Will create
+
+                /dev/sdc1 for osd metadata
+                /dev/sdc2 for block, db, and wal data (the rest of the disk)
+
+
+            If either --block.db or --block.wal are specified to be
+            the same whole device, they will be created as partition
+            three and four respectively. For instance:
+
+                ceph-disk prepare --bluestore \\
+                      --block.db /dev/sdc \\
+                      --block.wal /dev/sdc \\
+                      /dev/sdc
+
+            Will create
+
+                /dev/sdc1 for osd metadata
+                /dev/sdc2 for block (the rest of the disk)
+                /dev/sdc3 for db
+                /dev/sdc4 for wal
+
+            """)),
             help='Prepare a directory or disk for a Ceph OSD',
         )
         parser.set_defaults(
@@ -1888,7 +1926,13 @@ class PrepareBluestore(Prepare):
     def prepare_locked(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
-        self.data.prepare(self.blockdb, self.blockwal, self.block)
+        to_prepare_list = []
+        if getattr(self.data.args, 'block.db'):
+            to_prepare_list.append(self.blockdb)
+        if getattr(self.data.args, 'block.wal'):
+            to_prepare_list.append(self.blockwal)
+        to_prepare_list.append(self.block)
+        self.data.prepare(*to_prepare_list)
 
 
 class Space(object):
@@ -2230,7 +2274,7 @@ class PrepareBluestoreBlockDB(PrepareSpace):
         )
 
         if block_size is None:
-            return 64  # MB, default value
+            return 20480  # MB, default value
         else:
             return int(block_size) / 1048576  # MB
 
@@ -2240,6 +2284,9 @@ class PrepareBluestoreBlockDB(PrepareSpace):
         else:
             num = 0
         return num
+
+    def wants_space(self):
+        return False
 
     @staticmethod
     def parser():
@@ -2265,7 +2312,7 @@ class PrepareBluestoreBlockWAL(PrepareSpace):
         )
 
         if block_size is None:
-            return 128  # MB, default value
+            return 576  # MB, default value
         else:
             return int(block_size) / 1048576  # MB
 
@@ -2275,6 +2322,9 @@ class PrepareBluestoreBlockWAL(PrepareSpace):
         else:
             num = 0
         return num
+
+    def wants_space(self):
+        return False
 
     @staticmethod
     def parser():

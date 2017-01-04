@@ -1850,7 +1850,7 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
-    flusher_cond.WaitInterval(cct, lock, seconds(1));
+    flusher_cond.WaitInterval(lock, seconds(1));
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -2552,7 +2552,7 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
   }
 
   if (s != BufferHead::STATE_ERROR &&
-      bh->get_state() == BufferHead::STATE_ERROR) {
+      state == BufferHead::STATE_ERROR) {
     bh->error = 0;
   }
 

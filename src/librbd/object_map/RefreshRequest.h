@@ -19,6 +19,12 @@ namespace object_map {
 template <typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
+  static RefreshRequest *create(ImageCtxT &image_ctx,
+                                ceph::BitVector<2> *object_map,
+                                uint64_t snap_id, Context *on_finish) {
+    return new RefreshRequest(image_ctx, object_map, snap_id, on_finish);
+  }
+
   RefreshRequest(ImageCtxT &image_ctx, ceph::BitVector<2> *object_map,
                  uint64_t snap_id, Context *on_finish);
 

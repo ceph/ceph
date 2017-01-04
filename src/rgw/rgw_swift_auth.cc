@@ -18,6 +18,7 @@
 #include "rgw_http_client.h"
 #include "include/str_list.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define DEFAULT_SWIFT_PREFIX "/swift"
@@ -116,7 +117,7 @@ void RGWTempURLAuthEngine::get_owner_info(RGWUserInfo& owner_info) const
 bool RGWTempURLAuthEngine::is_expired(const std::string& expires) const
 {
   string err;
-  const utime_t now = ceph_clock_now(g_ceph_context);
+  const utime_t now = ceph_clock_now();
   const uint64_t expiration = (uint64_t)strict_strtoll(expires.c_str(),
                                                        10, &err);
   if (!err.empty()) {
@@ -373,7 +374,7 @@ static int encode_token(CephContext *cct, string& swift_user, string& key,
   if (ret < 0)
     return ret;
 
-  utime_t expiration = ceph_clock_now(cct);
+  utime_t expiration = ceph_clock_now();
   expiration += cct->_conf->rgw_swift_token_expiration;
 
   return build_token(swift_user, key, nonce, expiration, bl);
@@ -426,7 +427,7 @@ RGWAuthApplier::aplptr_t RGWSignedTokenAuthEngine::authenticate() const
     throw -EINVAL;
   }
 
-  const utime_t now = ceph_clock_now(cct);
+  const utime_t now = ceph_clock_now();
   if (expiration < now) {
     ldout(cct, 0) << "NOTICE: old timed out token was used now=" << now
 	          << " token.expiration=" << expiration

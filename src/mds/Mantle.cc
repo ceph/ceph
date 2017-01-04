@@ -19,6 +19,7 @@
 
 #include <fstream>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds_balancer
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_balancer

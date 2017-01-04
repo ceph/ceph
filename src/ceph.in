@@ -342,7 +342,9 @@ def format_help(cmddict, partial=None):
 
         if not cmd['help']:
             continue
-        if cmd['flags'] is not None and ((cmd['flags'] & (FLAG_OBSOLETE | FLAG_DEPRECATED)) != 0):
+        flags = cmd.get('flags')
+        if (flags is not None and
+            (flags & (FLAG_OBSOLETE | FLAG_DEPRECATED)) != 0):
             continue
         concise = concise_sig(cmd['sig'])
         if partial and not concise.startswith(partial):

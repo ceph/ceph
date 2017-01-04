@@ -96,7 +96,7 @@ public:
 
   hobject_t(const hobject_t &rhs) = default;
   hobject_t(hobject_t &&rhs) = default;
-  hobject_t(hobject_t_max &&singleon) : hobject_t() {
+  hobject_t(hobject_t_max &&singleton) : hobject_t() {
     max = true;
   }
   hobject_t &operator=(const hobject_t &rhs) = default;

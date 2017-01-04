@@ -103,7 +103,6 @@ class MMonSync;
 class MMonScrub;
 class MMonProbe;
 struct MMonSubscribe;
-class MAuthRotating;
 struct MRoute;
 struct MForward;
 struct MTimeCheck;
@@ -224,8 +223,6 @@ private:
    */
   mon_feature_t quorum_mon_features;
   bufferlist supported_commands_bl; // encoded MonCommands we support
-  bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
-  set<int> classic_mons; // set of "classic" monitors; only valid on leader
 
   set<string> outside_quorum;
 
@@ -288,7 +285,7 @@ private:
     SyncProvider() : cookie(0), last_committed(0), full(false) {}
 
     void reset_timeout(CephContext *cct, int grace) {
-      timeout = ceph_clock_now(cct);
+      timeout = ceph_clock_now();
       timeout += grace;
     }
   };
@@ -595,8 +592,7 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
-		    const MonCommand *cmdset, int cmdsize,
-		    const set<int> *classic_monitors);
+		    const MonCommand *cmdset, int cmdsize);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,
                      const mon_feature_t& mon_features);
@@ -605,12 +601,6 @@ public:
 
   const bufferlist& get_supported_commands_bl() {
     return supported_commands_bl;
-  }
-  const bufferlist& get_classic_commands_bl() {
-    return classic_commands_bl;
-  }
-  const set<int>& get_classic_mons() {
-    return classic_mons;
   }
 
   void update_logger();
@@ -959,7 +949,6 @@ public:
 					  Formatter *f,
 					  bufferlist *rdata);
   void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
-  void get_classic_monitor_commands(const MonCommand **cmds, int *count);
   /// the Monitor owns this pointer once you pass it in
   void set_leader_supported_commands(const MonCommand *cmds, int size);
   static bool is_keyring_required();

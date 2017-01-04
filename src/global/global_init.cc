@@ -36,6 +36,7 @@
 #include <sys/prctl.h>
 #endif
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 
 static void global_init_set_globals(CephContext *cct)

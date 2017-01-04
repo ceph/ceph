@@ -692,9 +692,10 @@ TEST_F(LibRadosList, EnumerateObjects) {
   {
     rados_object_list_item results[12];
     memset(results, 0, sizeof(rados_object_list_item) * 12);
-    int r = rados_object_list(ioctx,
-            c, rados_object_list_end(ioctx),
+    rados_object_list_cursor temp_end = rados_object_list_end(ioctx);
+    int r = rados_object_list(ioctx, c, temp_end,
             12, NULL, 0, results, &c);
+    rados_object_list_cursor_free(ioctx, temp_end);
     ASSERT_GE(r, 0);
     for (int i = 0; i < r; ++i) {
       std::string oid(results[i].oid, results[i].oid_length);

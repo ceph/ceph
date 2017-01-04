@@ -19,6 +19,7 @@
 #include "include/unordered_map.h"
 #include "common/ceph_context.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -41,6 +42,7 @@ PGLog::IndexedLog PGLog::IndexedLog::split_out_child(
 }
 
 void PGLog::IndexedLog::trim(
+  CephContext* cct,
   eversion_t s,
   set<eversion_t> *trimmed)
 {
@@ -120,7 +122,7 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(trim_to, &trimmed);
+    log.trim(cct, trim_to, &trimmed);
     info.log_tail = log.tail;
   }
 }

@@ -16,6 +16,7 @@
 
 #include "rgw_coroutine.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 struct rgw_http_req_data : public RefCountedObject {

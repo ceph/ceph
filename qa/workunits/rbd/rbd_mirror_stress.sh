@@ -11,13 +11,7 @@
 IMAGE_COUNT=50
 export LOCKDEP=0
 
-if [ -n "${CEPH_REF}" ]; then
-  wget -q https://raw.githubusercontent.com/SUSE/ceph/$CEPH_REF/qa/workunits/rbd/rbd_mirror_helpers.sh
-  #wget -O rbd_mirror_helpers.sh "https://git.ceph.com/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;f=qa/workunits/rbd/rbd_mirror_helpers.sh"
-  . ./rbd_mirror_helpers.sh
-else
-  . $(dirname $0)/rbd_mirror_helpers.sh
-fi
+. $(dirname $0)/rbd_mirror_helpers.sh
 
 create_snap()
 {

@@ -520,7 +520,7 @@ public:
    * if you recall that a temp object created for object head foo will
    * only ever be referenced by other transactions on foo and aren't
    * reused).  Next, factor this part into a class and maintain one per
-   * ordering token.  Next, fixup ReplicatedPG's repop queue to be
+   * ordering token.  Next, fixup PrimaryLogPG's repop queue to be
    * partitioned by ordering token.  Finally, refactor the op pipeline
    * so that the log entries passed into submit_tranaction aren't
    * versioned.  We can't assign versions to them until we actually
@@ -559,7 +559,6 @@ public:
   bool try_finish_rmw();
   void check_ops();
 
-  CephContext *cct;
   ErasureCodeInterfaceRef ec_impl;
 
 
@@ -619,7 +618,6 @@ public:
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
 				    const map<string,bufferptr> *attr = NULL);
 
-  friend struct ReadCB;
 public:
   ECBackend(
     PGBackend::Listener *pg,

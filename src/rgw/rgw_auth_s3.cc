@@ -7,6 +7,7 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 static const char *signed_subresources[] = {

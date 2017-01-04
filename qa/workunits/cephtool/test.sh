@@ -626,7 +626,6 @@ function test_mon_misc()
   grep GLOBAL $TMPFILE
   grep -v DIRTY $TMPFILE
   ceph df detail > $TMPFILE
-  grep CATEGORY $TMPFILE
   grep DIRTY $TMPFILE
   ceph df --format json > $TMPFILE
   grep 'total_bytes' $TMPFILE
@@ -801,11 +800,6 @@ function test_mon_mds()
   # We don't want any MDSs to be up, their activity can interfere with
   # the "current_epoch + 1" checking below if they're generating updates
   fail_all_mds $FS_NAME
-
-  # Check for default crash_replay_interval set automatically in 'fs new'
-  #This may vary based on ceph.conf (e.g., it's 5 in teuthology runs)
-  #ceph osd dump | grep fs_data > $TMPFILE
-  #check_response "crash_replay_interval 45 "
 
   ceph mds compat show
   expect_false ceph mds deactivate 2
@@ -1127,8 +1121,6 @@ function test_mon_osd()
   done
   ceph osd dump | grep 'osd.0 up'
 
-  ceph osd thrash 0
-
   ceph osd dump | grep 'osd.0 up'
   # ceph osd find expects the OsdName, so both ints and osd.n should work.
   ceph osd find 1
@@ -1442,7 +1434,7 @@ function test_mon_osd_pool_set()
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+  for s in pg_num pgp_num size min_size crush_rule crush_ruleset; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
@@ -1546,6 +1538,7 @@ function test_mon_osd_pool_set()
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
   ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+  ceph osd pool get rbd crush_rule | grep 'crush_rule: '
 }
 
 function test_mon_osd_tiered_pool_set()
@@ -1884,8 +1877,8 @@ function test_mon_cephdf_commands()
     sleep 1
   done
 
-  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
-  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
+  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $3}'`
+  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $10}'`
 
   ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
   rm ./cephdf_for_test

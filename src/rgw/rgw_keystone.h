@@ -123,7 +123,7 @@ public:
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const string& r) const;
   bool expired() {
-    uint64_t now = ceph_clock_now(NULL).sec();
+    uint64_t now = ceph_clock_now().sec();
     return (now >= (uint64_t)get_expires());
   }
   int parse(CephContext *cct,

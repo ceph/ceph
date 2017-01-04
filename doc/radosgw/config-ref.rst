@@ -47,6 +47,11 @@ Ceph configuration file, the default value will be set automatically.
 :Type: String
 :Default: N/A
 
+``rgw fcgi socket backlog``
+
+:Description: The socket backlog for fcgi.
+:Type: Integer
+:Default: ``1024``
 
 ``rgw host``
 
@@ -934,6 +939,17 @@ Logging Settings
 :Description: Flush pending usage log data every ``n`` seconds.
 :Type: Integer
 :Default: ``30``
+
+
+``rgw log http headers``
+
+:Description: Comma-delimited list of HTTP headers to include with ops
+	      log entries.  Header names are case insensitive, and use
+	      the full header name with words separated by underscores.
+
+:Type: String
+:Default: None
+:Example: "http_x_forwarded_for, http_x_special_k"
 
 
 ``rgw intent log object name``

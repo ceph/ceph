@@ -380,6 +380,7 @@ extern const char *ceph_mds_op_name(int op);
 #endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
+#define CEPH_SETATTR_KILL_SGUID	(1 << 10)
 
 /*
  * Ceph setxattr request flags.

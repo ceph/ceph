@@ -46,6 +46,7 @@
 #define SLOPPY_CRC_XATTR "user.cephos.scrc"
 
 
+#define dout_context cct()
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "genericfilestorebackend(" << get_basedir_path() << ") "
@@ -59,10 +60,10 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   ioctl_fiemap(false),
   seek_data_hole(false),
   use_splice(false),
-  m_filestore_fiemap(g_conf->filestore_fiemap),
-  m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
-  m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data),
-  m_filestore_splice(g_conf->filestore_splice) {}
+  m_filestore_fiemap(cct()->_conf->filestore_fiemap),
+  m_filestore_seek_data_hole(cct()->_conf->filestore_seek_data_hole),
+  m_filestore_fsync_flushes_journal_data(cct()->_conf->filestore_fsync_flushes_journal_data),
+  m_filestore_splice(cct()->_conf->filestore_splice) {}
 
 int GenericFileStoreBackend::detect_features()
 {

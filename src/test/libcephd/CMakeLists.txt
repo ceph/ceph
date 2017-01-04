@@ -4,6 +4,11 @@ set(cephdtest_srcs
 add_library(cephdtest STATIC ${cephdtest_srcs})
 set_target_properties(cephdtest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
+#Enable spdk
+if(HAVE_SPDK)
+link_directories("${CMAKE_SOURCE_DIR}/src/spdk/build/lib/")
+endif(HAVE_SPDK)
+
 # ceph_test_cephd_api_misc
 add_executable(ceph_test_cephd_api_misc
   misc.cc

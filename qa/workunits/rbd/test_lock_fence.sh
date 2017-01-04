@@ -3,11 +3,8 @@
 
 IMAGE=rbdrw-image
 LOCKID=rbdrw
-RBDRW=rbdrw.py
-CEPH_REF=${CEPH_REF:-master}
-
-wget -q https://raw.githubusercontent.com/SUSE/ceph/$CEPH_REF/src/test/librbd/$RBDRW
-#wget -O $RBDRW "https://git.ceph.com/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;f=src/test/librbd/rbdrw.py"
+RELPATH=$(dirname $0)/../../../src/test/librbd
+RBDRW=$RELPATH/rbdrw.py
 
 rbd create $IMAGE --size 10 --image-format 2 --image-shared || exit 1
 

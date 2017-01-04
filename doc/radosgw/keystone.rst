@@ -44,8 +44,8 @@ according to the ``rgw keystone accepted roles`` configurable.
 For a v3 version of the OpenStack Identity API you should replace
 ``rgw keystone admin tenant`` with::
 
-   rgw keystone admin domain = {keystone admin domain}
-   rgw keystone admin project = {keystone admin project}
+   rgw keystone admin domain = {keystone admin domain name}
+   rgw keystone admin project = {keystone admin project name}
 
 
 Prior to Kilo

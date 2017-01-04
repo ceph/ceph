@@ -42,6 +42,7 @@
 
 using namespace std;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define SECRET_KEY_LEN 40
@@ -6487,7 +6488,7 @@ next:
       cerr << "ERROR: marker was not specified" <<std::endl;
       return EINVAL;
     }
-    utime_t time = ceph_clock_now(NULL);
+    utime_t time = ceph_clock_now();
     if (!date.empty()) {
       ret = parse_date_str(date, time);
       if (ret < 0) {

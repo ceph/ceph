@@ -50,10 +50,10 @@ struct StopWatch {
   utime_t end_time;
 
   void start_time() {
-    begin_time = ceph_clock_now(g_ceph_context);
+    begin_time = ceph_clock_now();
   }
   void stop_time() {
-    end_time = ceph_clock_now(g_ceph_context);
+    end_time = ceph_clock_now();
   }
   double get_time() {
     return (end_time - begin_time) * 1000;

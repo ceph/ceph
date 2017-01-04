@@ -146,7 +146,7 @@ public:
 
       if (_cct->_conf->heartbeat_interval) {
         utime_t interval(_cct->_conf->heartbeat_interval, 0);
-        _cond.WaitInterval(_cct, _lock, interval);
+        _cond.WaitInterval(_lock, interval);
       } else
         _cond.Wait(_lock);
 
@@ -304,9 +304,14 @@ public:
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
       ceph_spin_unlock(&cct->_feature_lock);
-      if (!cct->_experimental_features.empty())
-	lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
-		   << cct->_experimental_features << dendl;
+      if (!cct->_experimental_features.empty()) {
+        if (cct->_experimental_features.count("*")) {
+          lderr(cct) << "WARNING: all dangerous and experimental features are enabled." << dendl;
+        } else {
+          lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
+	    << cct->_experimental_features << dendl;
+        }
+      }
     }
     if (changed.count("crush_location")) {
       cct->crush_location.update_from_conf();

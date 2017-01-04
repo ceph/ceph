@@ -29,6 +29,7 @@ using std::string;
 
 #include "common/debug.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_rocksdb
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
@@ -412,7 +413,7 @@ void RocksDBStore::get_statistics(Formatter *f)
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
   if (g_conf->rocksdb_perf) {
@@ -436,7 +437,7 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
          << " Rocksdb transaction: " << rocks_txc.seen << dendl;
   }
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
 
   if (g_conf->rocksdb_perf) {
     utime_t write_memtable_time;
@@ -465,7 +466,7 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 
 int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
   if (g_conf->rocksdb_perf) {
@@ -490,7 +491,7 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
          << " Rocksdb transaction: " << rocks_txc.seen << dendl;
   }
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
 
   if (g_conf->rocksdb_perf) {
     utime_t write_memtable_time;
@@ -590,7 +591,7 @@ int RocksDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end(); ++i) {
     std::string value;
@@ -599,7 +600,7 @@ int RocksDBStore::get(
     if (status.ok())
       (*out)[*i].append(value);
   }
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
   logger->tinc(l_rocksdb_get_latency, lat);
   return 0;
@@ -611,7 +612,7 @@ int RocksDBStore::get(
     bufferlist *out)
 {
   assert(out && (out->length() == 0));
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   int r = 0;
   string value, k;
   rocksdb::Status s;
@@ -622,7 +623,7 @@ int RocksDBStore::get(
   } else {
     r = -ENOENT;
   }
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
   logger->tinc(l_rocksdb_get_latency, lat);
   return r;
@@ -726,7 +727,7 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
   }
   compact_queue_cond.Signal();
   if (!compact_thread.is_started()) {
-    compact_thread.create("rstore_commpact");
+    compact_thread.create("rstore_compact");
   }
 }
 bool RocksDBStore::check_omap_dir(string &omap_dir)

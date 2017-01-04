@@ -264,7 +264,7 @@ elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
-  set(ALLOC_LIBS ${JEMALLOC_LIBRARY})
+  set(ALLOC_LIBS ${JEMALLOC_LIBRARIES})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "libc")
@@ -476,6 +476,7 @@ set(libcommon_files
   common/ceph_strings.cc
   common/ceph_frag.cc
   common/config.cc
+  common/config_validators.cc
   common/utf8.c
   common/mime.c
   common/strtol.cc
@@ -595,7 +596,7 @@ if (WITH_MGR)
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr mds osdc global
-      -lboost_python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+      ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -934,7 +935,7 @@ configure_file(
 add_subdirectory(brag)
 
 # Everything you need to spin up a cluster with vstart.sh
-add_custom_target(vstart DEPENDS
+add_custom_target(vstart-base DEPENDS
     ceph-osd
     ceph-mon
     ceph-mgr
@@ -942,11 +943,17 @@ add_custom_target(vstart DEPENDS
     ceph-conf
     monmaptool
     crushtool
+    rados
     cython_rados
+    )
+
+add_custom_target(vstart DEPENDS
+    vstart-base
     ceph-mds)
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
+
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

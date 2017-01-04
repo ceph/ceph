@@ -17,6 +17,7 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 void encode_json(const char *name, const obj_version& v, Formatter *f)

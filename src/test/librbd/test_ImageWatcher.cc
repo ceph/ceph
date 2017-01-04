@@ -135,8 +135,8 @@ public:
   bool wait_for_notifies(librbd::ImageCtx &ictx) {
     Mutex::Locker l(m_callback_lock);
     while (m_notifies.size() < m_notify_acks.size()) {
-      int r = m_callback_cond.WaitInterval(ictx.cct, m_callback_lock,
-					 utime_t(10, 0));
+      int r = m_callback_cond.WaitInterval(m_callback_lock,
+					   utime_t(10, 0));
       if (r != 0) {
 	break;
       }
@@ -238,7 +238,7 @@ struct ProgressContext : public librbd::ProgressContext {
   bool wait(librbd::ImageCtx *ictx, uint64_t offset_, uint64_t total_) {
     Mutex::Locker l(mutex);
     while (!received) {
-      int r = cond.WaitInterval(ictx->cct, mutex, utime_t(10, 0));
+      int r = cond.WaitInterval(mutex, utime_t(10, 0));
       if (r != 0) {
 	break;
       }

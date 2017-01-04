@@ -26,10 +26,6 @@ public:
   virtual int reserve(uint64_t need) = 0;
   virtual void unreserve(uint64_t unused) = 0;
 
-  virtual int allocate(
-    uint64_t need_size, uint64_t alloc_unit, int64_t hint,
-    uint64_t *offset, uint32_t *length) = 0;
-
   /*
    * Allocate required number of blocks in n number of extents.
    * Min and Max number of extents are limited by:
@@ -39,13 +35,13 @@ public:
    * Apart from that extents can vary between these lower and higher limits according
    * to free block search algorithm and availability of contiguous space.
    */
-  virtual int alloc_extents(uint64_t want_size, uint64_t alloc_unit,
-                            uint64_t max_alloc_size, int64_t hint,
-                            AllocExtentVector *extents, int *count) = 0;
+  virtual int allocate(uint64_t want_size, uint64_t alloc_unit,
+                       uint64_t max_alloc_size, int64_t hint,
+                       AllocExtentVector *extents, int *count, uint64_t *ret_len) = 0;
 
-  int alloc_extents(uint64_t want_size, uint64_t alloc_unit,
-                    int64_t hint, AllocExtentVector *extents, int *count) {
-    return alloc_extents(want_size, alloc_unit, want_size, hint, extents, count);
+  int allocate(uint64_t want_size, uint64_t alloc_unit,
+               int64_t hint, AllocExtentVector *extents, int *count, uint64_t *ret_len) {
+    return allocate(want_size, alloc_unit, want_size, hint, extents, count, ret_len);
   }
 
   virtual int release(
@@ -62,9 +58,6 @@ public:
     return res;
   }
 
-  virtual void commit_start() = 0;
-  virtual void commit_finish() = 0;
-
   virtual void dump() = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
@@ -73,7 +66,8 @@ public:
   virtual uint64_t get_free() = 0;
 
   virtual void shutdown() = 0;
-  static Allocator *create(string type, int64_t size, int64_t block_size);
+  static Allocator *create(CephContext* cct, string type, int64_t size,
+			   int64_t block_size);
 };
 
 #endif

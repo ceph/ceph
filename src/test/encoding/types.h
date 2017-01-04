@@ -41,7 +41,7 @@ TYPE_FEATUREFUL(entity_inst_t)
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
 TYPE(osd_xinfo_t)
-TYPE_FEATUREFUL_STRAYDATA(OSDMap)
+TYPE_FEATUREFUL_NOCOPY(OSDMap)
 TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"

@@ -120,7 +120,7 @@ namespace rgw {
     // XXX move RGWLibIO and timing setup into process_request
 
 #if 0 /* XXX */
-    utime_t tm = ceph_clock_now(NULL);
+    utime_t tm = ceph_clock_now();
 #endif
 
     RGWLibIO io_ctx;
@@ -139,7 +139,7 @@ namespace rgw {
     // XXX move RGWLibIO and timing setup into process_request
 
 #if 0 /* XXX */
-    utime_t tm = ceph_clock_now(NULL);
+    utime_t tm = ceph_clock_now();
 #endif
 
     RGWLibIO io_ctx;
@@ -297,7 +297,8 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+      rgw_log_op(store, nullptr /* !rest */, s,
+		 (op ? op->name() : "unknown"), olog);
     }
 
     int http_ret = s->err.http_ret;

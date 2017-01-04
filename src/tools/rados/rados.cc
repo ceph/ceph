@@ -85,7 +85,8 @@ void usage(ostream& out)
 "\n"
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
-"   put <obj-name> [infile]          write object\n"
+"   put <obj-name> [infile] [--offset offset]\n"
+"                                    write object write object start offset(default:0)\n"
 "   append <obj-name> [infile]       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
@@ -225,7 +226,8 @@ void usage(ostream& out)
 "   --run-length                     total time (in seconds)\n"
 "CACHE POOLS OPTIONS:\n"
 "   --with-clones                    include clones when doing flush or evict\n"
-    ;
+"OMAP OPTIONS:\n"
+"    --omap-key-file file            read the omap key from a file\n";
 }
 
 unsigned default_op_size = 1 << 22;
@@ -396,7 +398,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
 
 static int do_put(IoCtx& io_ctx, RadosStriper& striper,
 		  const char *objname, const char *infile, int op_size,
-		  bool use_striper)
+		  uint64_t obj_offset, bool use_striper)
 {
   string oid(objname);
   bool stdio = (strcmp(infile, "-") == 0);
@@ -409,7 +411,7 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
     return 1;
   }
   int count = op_size;
-  uint64_t offset = 0;
+  uint64_t offset = obj_offset;
   while (count != 0) {
     bufferlist indata;
     count = indata.read_fd(fd, op_size);
@@ -418,8 +420,9 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
       cerr << "error reading input file " << infile << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
+ 
     if (count == 0) {
-      if (!offset) { // in case we have to create an empty object
+     if (offset == obj_offset) { // in case we have to create an empty object & if obj_offset > 0 do a hole
 	if (use_striper) {
 	  ret = striper.write_full(oid, indata); // indata is empty
 	} else {
@@ -427,6 +430,17 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
 	}
 	if (ret < 0) {
 	  goto out;
+	}
+	if (offset) {
+	  if (use_striper) {
+	    ret = striper.trunc(oid, offset); // before truncate, object must be existed.
+	  } else {
+	    ret = io_ctx.trunc(oid, offset); // before truncate, object must be existed.
+	  }
+
+	  if (ret < 0) {
+	    goto out;
+	  }
 	}
       }
       continue;
@@ -611,7 +625,7 @@ public:
   }
 
   float time_passed() {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     now -= start_time;
     uint64_t ns = now.nsec();
     float total = (float) ns / 1000000000.0;
@@ -804,7 +818,7 @@ uint64_t LoadGen::gen_next_op()
 
 int LoadGen::run()
 {
-  start_time = ceph_clock_now(g_ceph_context);
+  start_time = ceph_clock_now();
   utime_t end_time = start_time;
   end_time += run_length;
   utime_t stamp_time = start_time;
@@ -813,14 +827,14 @@ int LoadGen::run()
   while (1) {
     lock.Lock();
     utime_t one_second(1, 0);
-    cond.WaitInterval(g_ceph_context, lock, one_second);
+    cond.WaitInterval(lock, one_second);
     lock.Unlock();
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
 
     if (now > end_time)
       break;
 
-    uint64_t expected = total_expected();  
+    uint64_t expected = total_expected();
     lock.Lock();
     uint64_t sent = total_sent;
     uint64_t completed = total_completed;
@@ -1618,6 +1632,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   unsigned op_size = default_op_size;
   unsigned object_size = 0;
   unsigned max_objects = 0;
+  uint64_t obj_offset = 0;
   bool block_size_specified = false;
   int bench_write_dest = 0;
   bool cleanup = true;
@@ -1649,6 +1664,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   Formatter *formatter = NULL;
   bool pretty_format = false;
   const char *output = NULL;
+  bool omap_key_valid = false;
+  std::string omap_key;
+  std::string omap_key_pretty;
 
   Rados rados;
   IoCtx io_ctx;
@@ -1714,6 +1732,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("max-objects");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &max_objects)) {
+      return -EINVAL;
+    }
+  }
+  i = opts.find("offset");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &obj_offset)) {
       return -EINVAL;
     }
   }
@@ -1839,6 +1863,24 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("with-clones");
   if (i != opts.end()) {
     with_clones = true;
+  }
+  i = opts.find("omap-key-file");
+  if (i != opts.end()) {
+    string err;
+    bufferlist indata;
+    ret = indata.read_file(i->second.c_str(), &err);
+    if (ret < 0) {
+      cerr << err << std::endl;
+      return 1;
+    }
+
+    omap_key_valid = true;
+    omap_key = std::string(indata.c_str(), indata.length());
+    omap_key_pretty = omap_key;
+    if (std::find_if_not(omap_key.begin(), omap_key.end(),
+                         (int (*)(int))isprint) != omap_key.end()) {
+        omap_key_pretty = "(binary key)";
+    }
   }
 
   // open rados
@@ -2236,7 +2278,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_put(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
+    ret = do_put(io_ctx, striper, nargs[1], nargs[2], op_size, obj_offset, use_striper);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2414,15 +2456,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = 0;
     }
   } else if (strcmp(nargs[0], "setomapval") == 0) {
-    if (!pool_name || nargs.size() < 3 || nargs.size() > 4)
+    uint32_t min_args = (omap_key_valid ? 2 : 3);
+    if (!pool_name || nargs.size() < min_args || nargs.size() > min_args + 1) {
       usage_exit();
+    }
 
     string oid(nargs[1]);
-    string key(nargs[2]);
+    if (!omap_key_valid) {
+      omap_key = nargs[2];
+      omap_key_pretty = omap_key;
+    }
 
     bufferlist bl;
-    if (nargs.size() == 4) {
-      string val(nargs[3]);
+    if (nargs.size() > min_args) {
+      string val(nargs[min_args]);
       bl.append(val);
     } else {
       do {
@@ -2434,41 +2481,47 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     map<string, bufferlist> values;
-    values[key] = bl;
+    values[omap_key] = bl;
 
     ret = io_ctx.omap_set(oid, values);
     if (ret < 0) {
       cerr << "error setting omap value " << pool_name << "/" << oid << "/"
-	   << key << ": " << cpp_strerror(ret) << std::endl;
+           << omap_key_pretty << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
       ret = 0;
     }
   } else if (strcmp(nargs[0], "getomapval") == 0) {
-    if (!pool_name || nargs.size() < 3)
+    uint32_t min_args = (omap_key_valid ? 2 : 3);
+    if (!pool_name || nargs.size() < min_args || nargs.size() > min_args + 1) {
       usage_exit();
+    }
 
     string oid(nargs[1]);
-    string key(nargs[2]);
+    if (!omap_key_valid) {
+      omap_key = nargs[2];
+      omap_key_pretty = omap_key;
+    }
+
     set<string> keys;
-    keys.insert(key);
+    keys.insert(omap_key);
 
     std::string outfile;
-    if (nargs.size() >= 4) {
-      outfile = nargs[3];
+    if (nargs.size() > min_args) {
+      outfile = nargs[min_args];
     }
 
     map<string, bufferlist> values;
     ret = io_ctx.omap_get_vals_by_keys(oid, keys, &values);
     if (ret < 0) {
       cerr << "error getting omap value " << pool_name << "/" << oid << "/"
-	   << key << ": " << cpp_strerror(ret) << std::endl;
+	   << omap_key_pretty << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
       ret = 0;
     }
 
-    if (values.size() && values.begin()->first == key) {
+    if (values.size() && values.begin()->first == omap_key) {
       if (!outfile.empty()) {
 	cerr << "Writing to " << outfile << std::endl;
 	dump_data(outfile, values.begin()->second);
@@ -2479,24 +2532,29 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       ret = 0;
     } else {
-      cout << "No such key: " << pool_name << "/" << oid << "/" << key
-	   << std::endl;
+      cout << "No such key: " << pool_name << "/" << oid << "/"
+           << omap_key_pretty << std::endl;
       ret = -1;
       goto out;
     }
   } else if (strcmp(nargs[0], "rmomapkey") == 0) {
-    if (!pool_name || nargs.size() < 3)
+    uint32_t num_args = (omap_key_valid ? 2 : 3);
+    if (!pool_name || nargs.size() != num_args) {
       usage_exit();
+    }
 
     string oid(nargs[1]);
-    string key(nargs[2]);
+    if (!omap_key_valid) {
+      omap_key = nargs[2];
+      omap_key_pretty = omap_key;
+    }
     set<string> keys;
-    keys.insert(key);
+    keys.insert(omap_key);
 
     ret = io_ctx.omap_rm_keys(oid, keys);
     if (ret < 0) {
       cerr << "error removing omap key " << pool_name << "/" << oid << "/"
-	   << key << ": " << cpp_strerror(ret) << std::endl;
+	   << omap_key_pretty << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
       ret = 0;
@@ -3616,6 +3674,8 @@ int main(int argc, const char **argv)
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
       opts["max-objects"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--offset", (char*)NULL)) {
+      opts["offset"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)NULL)) {
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
@@ -3672,6 +3732,8 @@ int main(int argc, const char **argv)
       opts["write-dest-xattr"] = "true";
     } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
       opts["with-clones"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
+      opts["omap-key-file"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();

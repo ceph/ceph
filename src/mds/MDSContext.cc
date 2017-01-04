@@ -18,8 +18,8 @@
 #include "MDSContext.h"
 
 #include "common/dout.h"
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
-
 
 void MDSInternalContextBase::complete(int r) {
   MDSRank *mds = get_mds();
