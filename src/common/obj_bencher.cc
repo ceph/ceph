@@ -420,6 +420,7 @@ int ObjBencher::write_bench(int secondsToRun,
   bufferlist b_write;
   lock_cond lc(&lock);
   utime_t runtime;
+  runtime.set_from_double(secondsToRun);
   utime_t timePassed;
 
   unsigned writes_per_object = 1;
@@ -443,8 +444,9 @@ int ObjBencher::write_bench(int secondsToRun,
   lock.Lock();
   data.finished = 0;
   data.start_time = ceph_clock_now();
+  stopTime = data.start_time + runtime;
   lock.Unlock();
-  for (int i = 0; i<concurrentios; ++i) {
+  for (int i = 0; i<concurrentios && ceph_clock_now() < stopTime; ++i) {
     start_times[i] = ceph_clock_now();
     r = create_completion(i, _aio_cb, (void *)&lc);
     if (r < 0)
@@ -466,8 +468,6 @@ int ObjBencher::write_bench(int secondsToRun,
 
   //don't need locking for reads because other thread doesn't write
 
-  runtime.set_from_double(secondsToRun);
-  stopTime = data.start_time + runtime;
   slot = 0;
   lock.Lock();
   while (!secondsToRun || ceph_clock_now() < stopTime) {
@@ -679,7 +679,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
-  for (int i = 0; i < concurrentios; ++i) {
+  for (int i = 0; i < concurrentios && ceph_clock_now() < finish_time; ++i) {
     index[i] = i;
     start_times[i] = ceph_clock_now();
     create_completion(i, _aio_cb, (void *)&lc);
@@ -908,7 +908,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
-  for (int i = 0; i < concurrentios; ++i) {
+  for (int i = 0; i < concurrentios && ceph_clock_now() < finish_time; ++i) {
     index[i] = i;
     start_times[i] = ceph_clock_now();
     create_completion(i, _aio_cb, (void *)&lc);
