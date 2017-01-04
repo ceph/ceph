@@ -6556,12 +6556,10 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     finishers[n]->queue(txc->onreadable);
     txc->onreadable = NULL;
   }
-  while (!txc->oncommits.empty()) {
-    auto f = txc->oncommits.front();
-    finishers[n]->queue(f);
-    txc->oncommits.pop_front();
-  }
 
+  if (!txc->oncommits.empty()) {
+    finishers[n]->queue(txc->oncommits);
+  }
   op_queue_release_throttle(txc);
 }
 
