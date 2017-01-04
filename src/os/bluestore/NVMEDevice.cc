@@ -150,7 +150,7 @@ class SharedDriverData {
   std::function<void ()> run_func;
 
   uint64_t block_size = 0;
-  uint64_t sector_size = 0;
+  uint32_t sector_size = 0;
   uint64_t size = 0;
   std::vector<NVMEDevice*> registered_devices;
   friend class AioCompletionThread;
@@ -198,13 +198,12 @@ class SharedDriverData {
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
-    enum spdk_nvme_qprio qprio = SPDK_NVME_QPRIO_URGENT;
 
     sector_size = spdk_nvme_ns_get_sector_size(ns);
-    block_size = std::max(CEPH_PAGE_SIZE, spdk_nvme_ns_get_sector_size(ns));
-    size = spdk_nvme_ns_get_sector_size(ns) * spdk_nvme_ns_get_num_sectors(ns);
+    block_size = std::max(CEPH_PAGE_SIZE, sector_size);
+    size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
     zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
-    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, qprio);
+    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, SPDK_NVME_QPRIO_URGENT);
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
