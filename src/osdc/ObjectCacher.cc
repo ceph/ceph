@@ -2552,7 +2552,7 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
   }
 
   if (s != BufferHead::STATE_ERROR &&
-      bh->get_state() == BufferHead::STATE_ERROR) {
+      state == BufferHead::STATE_ERROR) {
     bh->error = 0;
   }
 
