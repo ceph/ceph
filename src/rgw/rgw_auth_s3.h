@@ -4,18 +4,33 @@
 #ifndef CEPH_RGW_AUTH_S3_H
 #define CEPH_RGW_AUTH_S3_H
 
+#include <string>
+#include <tuple>
 
 #include "rgw_common.h"
 
-void rgw_create_s3_canonical_header(const char *method,
-				    const char *content_md5,
-				    const char *content_type, const char *date,
-				    map<string, string>& meta_map,
-				    const char *request_uri,
-				    map<string, string>& sub_resources,
-				    string& dest_str);
-bool rgw_create_s3_canonical_header(req_info& info, utime_t *header_time,
-				    string& dest, bool qsr);
+void rgw_create_s3_canonical_header(
+  const char *method,
+  const char *content_md5,
+  const char *content_type,
+  const char *date,
+  const std::map<std::string, std::string>& meta_map,
+  const char *request_uri,
+  const std::map<std::string, std::string>& sub_resources,
+  std::string& dest_str);
+bool rgw_create_s3_canonical_header(const req_info& info,
+                                    utime_t *header_time,       /* out */
+                                    std::string& dest,          /* out */
+                                    bool qsr);
+static inline std::tuple<bool, std::string, utime_t>
+rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
+  std::string dest;
+  utime_t header_time;
+
+  const bool ok = rgw_create_s3_canonical_header(info, &header_time, dest, qsr);
+  return std::make_tuple(ok, dest, header_time);
+}
+
 int rgw_get_s3_header_digest(const string& auth_hdr, const string& key,
 			     string& dest);
 int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& dest);

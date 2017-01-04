@@ -337,7 +337,9 @@ class RGWHTTPArgs
   map<string, string>& get_params() {
     return val_map;
   }
-  map<string, string>& get_sub_resources() { return sub_resources; }
+  const std::map<std::string, std::string>& get_sub_resources() const {
+    return sub_resources;
+  }
   unsigned get_num_params() const {
     return val_map.size();
   }
