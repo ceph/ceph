@@ -259,16 +259,44 @@ void get_enable_arguments(po::options_description *positional,
 }
 
 int execute_enable_disable(const std::string &pool_name,
-                           rbd_mirror_mode_t mirror_mode) {
+                           rbd_mirror_mode_t next_mirror_mode,
+                           const std::string &mode) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
+  rbd_mirror_mode_t current_mirror_mode;
+
   int r = utils::init(pool_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
 
   librbd::RBD rbd;
-  r = rbd.mirror_mode_set(io_ctx, mirror_mode);
+  r = rbd.mirror_mode_get(io_ctx, &current_mirror_mode);
+  if (r < 0) {
+    std::cerr << "rbd: failed to retrieve mirror mode: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (current_mirror_mode == next_mirror_mode) {
+    if (mode == "disabled") {
+      std::cout << "mirroring is already " << mode << std::endl;
+    } else {
+      std::cout << "mirroring is already configured for "
+                << mode << " mode" << std::endl;
+    }
+    return 0;
+  } else if (next_mirror_mode == RBD_MIRROR_MODE_IMAGE &&
+             current_mirror_mode == RBD_MIRROR_MODE_POOL) {
+    std::cout << "note: changing mirroring mode from pool to image"
+              << std::endl;
+  } else if (next_mirror_mode == RBD_MIRROR_MODE_POOL &&
+             current_mirror_mode == RBD_MIRROR_MODE_IMAGE) {
+    std::cout << "note: changing mirroring mode from image to pool"
+              << std::endl;
+  }
+
+  r = rbd.mirror_mode_set(io_ctx, next_mirror_mode);
   if (r < 0) {
     return r;
   }
@@ -279,7 +307,8 @@ int execute_disable(const po::variables_map &vm) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
-  return execute_enable_disable(pool_name, RBD_MIRROR_MODE_DISABLED);
+  return execute_enable_disable(pool_name, RBD_MIRROR_MODE_DISABLED,
+                                "disabled");
 }
 
 int execute_enable(const po::variables_map &vm) {
@@ -297,7 +326,7 @@ int execute_enable(const po::variables_map &vm) {
     return -EINVAL;
   }
 
-  return execute_enable_disable(pool_name, mirror_mode);
+  return execute_enable_disable(pool_name, mirror_mode, mode);
 }
 
 void get_info_arguments(po::options_description *positional,
