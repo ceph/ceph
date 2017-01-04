@@ -114,6 +114,28 @@ protected:
   librados::IoCtx cache_ioctx;
 };
 
+class Completions
+{
+public:
+  Completions() = default;
+  librados::AioCompletion* getCompletion() {
+    librados::AioCompletion* comp = librados::Rados::aio_create_completion();
+    m_completions.push_back(comp);
+    return comp;
+  }
+
+  ~Completions() {
+    for (auto& comp : m_completions) {
+      comp->release();
+    }
+  }
+
+private:
+  vector<librados::AioCompletion *> m_completions;
+};
+
+Completions completions;
+
 std::string LibRadosTwoPoolsPP::cache_pool_name;
 
 TEST_F(LibRadosTierPP, Dirty) {
@@ -2022,8 +2044,7 @@ void start_flush_read()
   //cout << " starting read" << std::endl;
   ObjectReadOperation op;
   op.stat(NULL, NULL, NULL);
-  librados::AioCompletion *completion =
-    librados::Rados::aio_create_completion();
+  librados::AioCompletion *completion = completions.getCompletion();
   completion->set_complete_callback(0, flush_read_race_cb);
   read_ioctx->aio_operate("foo", completion, &op, NULL);
 }
@@ -2038,7 +2059,6 @@ void flush_read_race_cb(completion_t cb, void *arg)
   } else {
     start_flush_read();
   }
-  // fixme: i'm leaking cb...
   test_lock.Unlock();
 }
 
