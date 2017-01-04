@@ -21,6 +21,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
 
+RDMAServerSocketImpl::RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a)
+  : cct(cct), net(cct), server_setup_socket(-1), infiniband(i), dispatcher(s), worker(w), sa(a)
+{
+}
+
 int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
 {
   int rc = 0;
@@ -105,4 +110,10 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     out->set_sockaddr((sockaddr*)&ss);
 
   return 0;
+}
+
+void RDMAServerSocketImpl::abort_accept()
+{
+  if (server_setup_socket >= 0)
+    ::close(server_setup_socket);
 }
