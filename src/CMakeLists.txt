@@ -827,8 +827,8 @@ add_subdirectory(bash_completion)
 if(WITH_LIBCEPHFS OR WITH_RBD)
   set(parse_secret_files
     common/secret.c)
+  add_library(parse_secret_objs OBJECT ${parse_secret_files})
 endif()
-add_library(parse_secret_objs OBJECT ${parse_secret_files})
 
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
