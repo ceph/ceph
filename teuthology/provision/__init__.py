@@ -5,6 +5,8 @@ from ..lockstatus import get_status
 from .downburst import Downburst
 from .openstack import ProvisionOpenStack
 
+import cloud
+
 
 log = logging.getLogger(__name__)
 
@@ -19,10 +21,21 @@ def create_if_vm(ctx, machine_name, _downburst=None):
         status_info = _downburst.status
     else:
         status_info = get_status(machine_name)
-    if not status_info.get('is_vm', False):
-        return False
+    shortname = decanonicalize_hostname(machine_name)
+    machine_type = status_info['machine_type']
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
+    if not status_info.get('is_vm', False):
+        return False
+
+    if machine_type in cloud.get_types():
+        return cloud.get_provisioner(
+            machine_type,
+            shortname,
+            os_type,
+            os_version,
+            conf=getattr(ctx, 'config', dict()),
+        ).create()
 
     has_config = hasattr(ctx, 'config') and ctx.config is not None
     if has_config and 'downburst' in ctx.config:
@@ -63,9 +76,13 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
         log.error(msg.format(node=machine_name, desc_arg=description,
                              desc_lock=status_info['description']))
         return False
-    if status_info.get('machine_type') == 'openstack':
-        return ProvisionOpenStack().destroy(
-            decanonicalize_hostname(machine_name))
+    machine_type = status_info.get('machine_type')
+    shortname = decanonicalize_hostname(machine_name)
+    if machine_type == 'openstack':
+        return ProvisionOpenStack().destroy(shortname)
+    elif machine_type in cloud.get_types():
+        return cloud.get_provisioner(
+            machine_type, shortname, None, None).destroy()
 
     dbrst = _downburst or Downburst(name=machine_name, os_type=None,
                                     os_version=None, status=status_info)

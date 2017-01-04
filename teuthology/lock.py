@@ -429,9 +429,9 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
             machine_type=machine_type,
             description=description,
         )
-        # Only query for os_type/os_version if non-vps, since in that case we
-        # just create them.
-        if machine_type != 'vps':
+        # Only query for os_type/os_version if non-vps and non-libcloud, since
+        # in that case we just create them.
+        if machine_type not in ['vps'] + provision.cloud.get_types():
             if os_type:
                 data['os_type'] = os_type
             if os_version:
@@ -449,7 +449,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                         machine['ssh_pub_key'] for machine in response.json()}
             log.debug('locked {machines}'.format(
                 machines=', '.join(machines.keys())))
-            if machine_type == 'vps':
+            if machine_type in ['vps'] + provision.cloud.get_types():
                 ok_machs = {}
                 for machine in machines:
                     if provision.create_if_vm(ctx, machine):
@@ -459,6 +459,8 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                                   machine)
                         unlock_one(ctx, machine, user)
                 return ok_machs
+                if machine_type in provision.cloud.get_types():
+                    machines = do_update_keys(machines.keys())
             return machines
         elif response.status_code == 503:
             log.error('Insufficient nodes available to lock %d %s nodes.',
