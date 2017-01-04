@@ -7,4 +7,5 @@ tasks:
       valgrind: [--tool=memcheck]
 - s3tests:
     client.0:
+      force-branch: hammer
       rgw_server: client.0
