@@ -1,7 +1,0 @@
-meta:
-- desc: "Use a stable upstream Ceph release"
-overrides:
-  ceph_ansible:
-    vars:
-      ceph_origin: upstream
-      ceph_stable: true
