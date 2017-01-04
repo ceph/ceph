@@ -26,7 +26,6 @@
 
 class PosixWorker : public Worker {
   NetHandler net;
-  std::thread t;
   virtual void initialize();
  public:
   PosixWorker(CephContext *c, unsigned i)
