@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fnmatch.h>
 
+#include "rgw_b64.h"
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
@@ -17,6 +18,8 @@
 #include "rgw_keystone.h"
 #include "rgw_auth_keystone.h"
 #include "rgw_keystone.h"
+#include "rgw_rest_s3.h"
+#include "rgw_auth_s3.h"
 
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
@@ -271,6 +274,210 @@ TokenEngine::authenticate(const std::string& token) const
                 << g_conf->rgw_keystone_accepted_roles << dendl;
 
   return std::make_pair(nullptr, nullptr);
+}
+
+
+/*
+ * Try to validate S3 auth against keystone s3token interface
+ */
+rgw::keystone::TokenEnvelope
+EC2Engine::get_from_keystone(const std::string& access_key_id,
+                             const std::string& string_to_sign,
+                             const std::string& signature) const
+{
+  /* prepare keystone url */
+  std::string keystone_url = config.get_endpoint_url();
+  if (keystone_url.empty()) {
+    throw -EINVAL;
+  }
+
+  const auto api_version = config.get_api_version();
+  if (config.get_api_version() == rgw::keystone::ApiVersion::VER_3) {
+    keystone_url.append("v3/s3tokens");
+  } else {
+    keystone_url.append("v2.0/s3tokens");
+  }
+
+  /* get authentication token for Keystone. */
+  std::string admin_token;
+  int ret = rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+                                                    admin_token);
+  if (ret < 0) {
+    ldout(cct, 2) << "s3 keystone: cannot get token for keystone access"
+                  << dendl;
+    throw ret;
+  }
+
+  using RGWValidateKeystoneToken
+    = rgw::keystone::Service::RGWValidateKeystoneToken;
+
+  /* The container for plain response obtained from Keystone. It will be
+   * parsed token_envelope_t::parse method. */
+  ceph::bufferlist token_body_bl;
+  RGWValidateKeystoneToken validate(cct, &token_body_bl);
+
+  /* set required headers for keystone request */
+  validate.append_header("X-Auth-Token", admin_token);
+  validate.append_header("Content-Type", "application/json");
+
+  /* check if we want to verify keystone's ssl certs */
+  validate.set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
+
+  /* create json credentials request body */
+  JSONFormatter credentials(false);
+  credentials.open_object_section("");
+  credentials.open_object_section("credentials");
+  credentials.dump_string("access", access_key_id);
+  credentials.dump_string("token", rgw::to_base64(string_to_sign));
+  credentials.dump_string("signature", signature);
+  credentials.close_section();
+  credentials.close_section();
+
+  std::stringstream os;
+  credentials.flush(os);
+  validate.set_post_data(os.str());
+  validate.set_send_length(os.str().length());
+
+  /* send request */
+  ret = validate.process("POST", keystone_url.c_str());
+  if (ret < 0) {
+    ldout(cct, 2) << "s3 keystone: token validation ERROR: "
+                  << token_body_bl.c_str() << dendl;
+    throw -EPERM;
+  }
+
+  /* if the supplied signature is wrong, we will get 401 from Keystone */
+  if (validate.get_http_status() ==
+          decltype(validate)::HTTP_STATUS_UNAUTHORIZED) {
+    throw -ERR_SIGNATURE_NO_MATCH;
+  }
+
+  /* now parse response */
+  rgw::keystone::TokenEnvelope token_envelope;
+  if (token_envelope.parse(cct, std::string(), token_body_bl, api_version) < 0) {
+    ldout(cct, 2) << "s3 keystone: token parsing failed" << dendl;
+    throw -EPERM;
+  }
+
+  return std::move(token_envelope);
+}
+
+
+bool EC2Engine::is_time_skew_ok(const utime_t& header_time,
+                                const bool qsr) const
+{
+  /* Check for time skew first. */
+  const time_t req_sec = header_time.sec();
+  time_t now;
+  time(&now);
+
+  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
+                   << "; now - RGW_AUTH_GRACE_MINS="
+                   << now - RGW_AUTH_GRACE_MINS * 60
+                   << "; now + RGW_AUTH_GRACE_MINS="
+                   << now + RGW_AUTH_GRACE_MINS * 60
+                   << dendl;
+
+    ldout(cct, 0)  << "NOTICE: request time skew too big now="
+                   << utime_t(now, 0)
+                   << " req_time=" << header_time
+                   << dendl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
+                                                    std::string signature,
+                                                    std::string expires,
+                                                    bool qsr,
+                                                    const req_info& info) const
+{
+  /* This will be initialized on the first call to this method. In C++11 it's
+   * also thread-safe. */
+  static const struct RolesCacher {
+    RolesCacher(CephContext* const cct) {
+      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+
+      /* Let's suppose that having an admin role implies also a regular one. */
+      plain.insert(std::end(plain), std::begin(admin), std::end(admin));
+    }
+
+    std::vector<std::string> plain;
+    std::vector<std::string> admin;
+  } accepted_roles(cct);
+
+  bool is_ok;
+  std::string string_to_sign;
+  utime_t header_time;
+  std::tie(is_ok, string_to_sign, header_time) = \
+    rgw_create_s3_canonical_header(info, qsr);
+  if (! is_ok) {
+    dout(10) << "failed to create auth header\n" << string_to_sign << dendl;
+    throw -EPERM;
+  }
+
+  const auto t = get_from_keystone(access_key_id, string_to_sign,
+                                   signature);
+  /* Verify expiration. */
+  if (t.expired()) {
+    ldout(cct, 0) << "got expired token: " << t.get_project_name()
+                  << ":" << t.get_user_name()
+                  << " expired: " << t.get_expires() << dendl;
+    return std::make_pair(nullptr, nullptr);
+  }
+
+  /* check if we have a valid role */
+  bool found = false;
+  for (const auto& role : accepted_roles.plain) {
+    if (t.has_role(role) == true) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
+                     " required roles: "
+                  << cct->_conf->rgw_keystone_accepted_roles << dendl;
+  }
+
+  /* everything seems fine, continue with this user */
+  ldout(cct, 5) << "s3 keystone: validated token: " << t.get_project_name()
+                << ":" << t.get_user_name()
+                << " expires: " << t.get_expires() << dendl;
+#if 0
+  return 0;
+}
+
+  /* Check for necessary roles. */
+  for (const auto& role : accepted_roles.plain) {
+    if (t.has_role(role) == true) {
+      ldout(cct, 0) << "validated token: " << t.get_project_name()
+                    << ":" << t.get_user_name()
+                    << " expires: " << t.get_expires() << dendl;
+
+      auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
+                                            get_creds_info(t, roles.admin));
+      return std::make_pair(std::move(apl), nullptr);
+    }
+  }
+
+  ldout(cct, 0) << "user does not hold a matching role; required roles: "
+                << g_conf->rgw_keystone_accepted_roles << dendl;
+
+  //return std::make_pair(nullptr, nullptr);
+#endif
+
+  if (! is_time_skew_ok(header_time, qsr)) {
+    throw -ERR_REQUEST_TIME_SKEWED;
+  }
+
+  throw -ERR_INVALID_ACCESS_KEY;
 }
 
 }; /* namespace keystone */

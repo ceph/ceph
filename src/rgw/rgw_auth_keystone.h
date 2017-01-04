@@ -6,6 +6,7 @@
 #define CEPH_RGW_AUTH_KEYSTONE_H
 
 #include "rgw_auth.h"
+#include "rgw_rest_s3.h"
 #include "rgw_common.h"
 #include "rgw_keystone.h"
 
@@ -61,6 +62,55 @@ public:
     return authenticate(extractor->get_token(s));
   }
 }; /* class TokenEngine */
+
+
+class EC2Engine : public rgw::auth::s3::Version2ndEngine {
+  using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
+  using auth_info_t = rgw::auth::RemoteApplier::AuthInfo;
+  using result_t = rgw::auth::Engine::result_t;
+  using token_envelope_t = rgw::keystone::TokenEnvelope;
+
+  const rgw::auth::RemoteApplier::Factory* const apl_factory;
+  rgw::keystone::Config& config;
+  rgw::keystone::TokenCache& token_cache;
+
+  /* Helper methods. */
+  acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
+  auth_info_t get_creds_info(const token_envelope_t& token,
+                             const std::vector<std::string>& admin_roles
+                            ) const noexcept;
+  bool is_time_skew_ok(const utime_t& header_time,
+                       const bool qsr) const;
+  token_envelope_t get_from_keystone(const std::string& access_key_id,
+                                     const std::string& string_to_sign,
+                                     const std::string& signature) const;
+  result_t authenticate(std::string access_key_id,
+                        std::string signature,
+                        std::string expires,
+                        bool qsr,
+                        const req_info& info) const override;
+public:
+  EC2Engine(CephContext* const cct,
+            const rgw::auth::s3::Version2ndEngine::Extractor* const extractor,
+            const rgw::auth::RemoteApplier::Factory* const apl_factory,
+            rgw::keystone::Config& config,
+            /* The token cache is used ONLY for the retrieving admin token.
+             * Due to the architecture of AWS Auth S3 credentials cannot be
+             * cached at all. */
+            rgw::keystone::TokenCache& token_cache)
+    : Version2ndEngine(cct, *extractor),
+      apl_factory(apl_factory),
+      config(config),
+      token_cache(token_cache) {
+  }
+
+  using Version2ndEngine::authenticate;
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::keystone::EC2Engine";
+  }
+
+}; /* class EC2Engine */
 
 }; /* namespace keystone */
 }; /* namespace auth */
