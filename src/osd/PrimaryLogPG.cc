@@ -9636,9 +9636,7 @@ void PrimaryLogPG::_committed_pushed_object(
 	    last_complete_ondisk),
 	  get_osdmap()->get_epoch());
       } else {
-	// we are the primary.  tell replicas to trim?
-	if (calc_min_last_complete_ondisk())
-	  trim_peers();
+	calc_min_last_complete_ondisk();
       }
     }
 
