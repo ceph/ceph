@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <map>
+#include <string>
+
 #include "common/armor.h"
 #include "common/utf8.h"
 #include "rgw_common.h"
@@ -10,7 +13,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-static const char *signed_subresources[] = {
+static const auto signed_subresources = {
   "acl",
   "cors",
   "delete",
@@ -35,75 +38,85 @@ static const char *signed_subresources[] = {
   "versionId",
   "versioning",
   "versions",
-  "website",
-  NULL
+  "website"
 };
 
 /*
  * ?get the canonical amazon-style header for something?
  */
 
-static void get_canon_amz_hdr(map<string, string>& meta_map, string& dest)
+static std::string
+get_canon_amz_hdr(const std::map<std::string, std::string>& meta_map)
 {
-  dest = "";
-  map<string, string>::iterator iter;
-  for (iter = meta_map.begin(); iter != meta_map.end(); ++iter) {
-    dest.append(iter->first);
+  std::string dest;
+
+  for (const auto& kv : meta_map) {
+    dest.append(kv.first);
     dest.append(":");
-    dest.append(iter->second);
+    dest.append(kv.second);
     dest.append("\n");
   }
+
+  return std::move(dest);
 }
 
 /*
  * ?get the canonical representation of the object's location
  */
-static void get_canon_resource(const char *request_uri, map<string, string>& sub_resources, string& dest)
+static std::string
+get_canon_resource(const char* const request_uri,
+                   const std::map<std::string, std::string>& sub_resources)
 {
-  string s;
+  std::string dest;
 
-  if (request_uri)
-    s.append(request_uri);
+  if (request_uri) {
+    dest.append(request_uri);
+  }
 
-  string append_str;
-
-  const char **p = signed_subresources;
-
-  for (; *p; ++p) {
-    map<string, string>::iterator iter = sub_resources.find(*p);
-    if (iter == sub_resources.end())
+  bool initial = true;
+  for (const auto& subresource : signed_subresources) {
+    const auto iter = sub_resources.find(subresource);
+    if (iter == std::end(sub_resources)) {
       continue;
+    }
     
-    if (append_str.empty())
-      append_str.append("?");
-    else
-      append_str.append("&");     
-    append_str.append(iter->first);
-    if (!iter->second.empty()) {
-      append_str.append("=");
-      append_str.append(iter->second);
+    if (initial) {
+      dest.append("?");
+      initial = false;
+    } else {
+      dest.append("&");
+    }
+
+    dest.append(iter->first);
+    if (! iter->second.empty()) {
+      dest.append("=");
+      dest.append(iter->second);
     }
   }
-  if (!append_str.empty()) {
-    s.append(append_str);
-  }
-  dest = s;
 
   dout(10) << "get_canon_resource(): dest=" << dest << dendl;
+  return std::move(dest);
 }
 
 /*
  * get the header authentication  information required to
  * compute a request's signature
  */
-void rgw_create_s3_canonical_header(const char *method, const char *content_md5, const char *content_type, const char *date,
-                            map<string, string>& meta_map, const char *request_uri, map<string, string>& sub_resources,
-                            string& dest_str)
+void rgw_create_s3_canonical_header(
+  const char* const method,
+  const char* const content_md5,
+  const char* const content_type,
+  const char* const date,
+  const std::map<std::string, std::string>& meta_map,
+  const char* const request_uri,
+  const std::map<std::string, std::string>& sub_resources,
+  std::string& dest_str)
 {
-  string dest;
+  std::string dest;
 
-  if (method)
+  if (method) {
     dest = method;
+  }
   dest.append("\n");
   
   if (content_md5) {
@@ -111,22 +124,18 @@ void rgw_create_s3_canonical_header(const char *method, const char *content_md5,
   }
   dest.append("\n");
 
-  if (content_type)
+  if (content_type) {
     dest.append(content_type);
+  }
   dest.append("\n");
 
-  if (date)
+  if (date) {
     dest.append(date);
+  }
   dest.append("\n");
 
-  string canon_amz_hdr;
-  get_canon_amz_hdr(meta_map, canon_amz_hdr);
-  dest.append(canon_amz_hdr);
-
-  string canon_resource;
-  get_canon_resource(request_uri, sub_resources, canon_resource);
-
-  dest.append(canon_resource);
+  dest.append(get_canon_amz_hdr(meta_map));
+  dest.append(get_canon_resource(request_uri, sub_resources));
 
   dest_str = dest;
 }
@@ -166,13 +175,17 @@ static inline bool is_base64_for_content_md5(unsigned char c) {
  * get the header authentication  information required to
  * compute a request's signature
  */
-bool rgw_create_s3_canonical_header(req_info& info, utime_t *header_time, string& dest, bool qsr)
+bool rgw_create_s3_canonical_header(const req_info& info,
+                                    utime_t* const header_time,
+                                    std::string& dest,
+                                    const bool qsr)
 {
-  const char *content_md5 = info.env->get("HTTP_CONTENT_MD5");
+  const char* const content_md5 = info.env->get("HTTP_CONTENT_MD5");
   if (content_md5) {
     for (const char *p = content_md5; *p; p++) {
       if (!is_base64_for_content_md5(*p)) {
-        dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
+        dout(0) << "NOTICE: bad content-md5 provided (not base64),"
+                << " aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
     }
@@ -180,7 +193,7 @@ bool rgw_create_s3_canonical_header(req_info& info, utime_t *header_time, string
 
   const char *content_type = info.env->get("CONTENT_TYPE");
 
-  string date;
+  std::string date;
   if (qsr) {
     date = info.args.get("Expires");
   } else {
@@ -210,19 +223,19 @@ bool rgw_create_s3_canonical_header(req_info& info, utime_t *header_time, string
     }
   }
 
-  map<string, string>& meta_map = info.x_meta_map;
-  map<string, string>& sub_resources = info.args.get_sub_resources();
+  const auto& meta_map = info.x_meta_map;
+  const auto& sub_resources = info.args.get_sub_resources();
 
-  string request_uri;
-  if (info.effective_uri.empty())
+  std::string request_uri;
+  if (info.effective_uri.empty()) {
     request_uri = info.request_uri;
-  else
+  } else {
     request_uri = info.effective_uri;
+  }
 
-  rgw_create_s3_canonical_header(info.method, content_md5, content_type, date.c_str(),
-                            meta_map, request_uri.c_str(), sub_resources,
-                            dest);
-
+  rgw_create_s3_canonical_header(info.method, content_md5, content_type,
+                                 date.c_str(), meta_map, request_uri.c_str(),
+                                 sub_resources, dest);
   return true;
 }
 
