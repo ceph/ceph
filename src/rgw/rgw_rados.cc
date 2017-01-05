@@ -6918,6 +6918,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
+  struct rgw_bucket_dir_entry_meta dir_meta;
+
   if (versioned_op) {
     index_op->set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
   }
@@ -6961,8 +6963,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->invalidate_state();
   state = NULL;
 
+  dir_meta.mtime = meta.set_mtime;
   if (versioned_op) {
-    r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, meta.olh_epoch, real_time(), false, meta.zones_trace);
+    r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, &dir_meta, meta.olh_epoch, real_time(), false, meta.zones_trace);
     if (r < 0) {
       return r;
     }
@@ -7260,6 +7263,7 @@ public:
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+      src_attrs.erase(RGW_ATTR_OLH_ID_TAG); // not interested in original object olh tag
     }
 
     if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
@@ -10835,6 +10839,9 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
 
   op.setxattr(attr_name.c_str(), bl);
 
+  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+  op.mtime2(&mtime_ts);
+
   int ret = obj_operate(bucket_info, olh_obj, &op);
   if (ret < 0) {
     return ret;
@@ -11096,9 +11103,6 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
   op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
   op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GT, last_ver);
 
-  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
-  op.mtime2(&mtime_ts);
-
   bool need_to_link = false;
   cls_rgw_obj_key key;
   bool delete_marker = false;
@@ -11166,6 +11170,9 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
       return ret;
     }
   }
+  
+  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+  op.mtime2(&mtime_ts);
 
   /* update olh object */
   r = ref.ioctx.operate(ref.oid, &op);
@@ -11254,6 +11261,10 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const r
     ret = get_obj_state(&obj_ctx, bucket_info, olh_obj, &state, false); /* don't follow olh */
     if (ret < 0) {
       return ret;
+    }
+
+    if (!target_obj.key.have_instance()) {
+      state->mtime = meta->mtime;
     }
 
     ret = olh_init_modification(bucket_info, *state, olh_obj, &op_tag);
