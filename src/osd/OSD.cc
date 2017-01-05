@@ -1937,6 +1937,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->close_section();
   } else if (command == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
+  } else if (command == "dump_scrubs") {
+    service.dumps_scrub(f);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2395,8 +2397,16 @@ void OSD::final_init()
 				     "get malloc extension heap property");
   assert(r == 0);
 
-  r = admin_socket->register_command("dump_objectstore_kv_stats", "dump_objectstore_kv_stats", asok_hook,
-					 "print statistics of kvdb which used by bluestore");
+  r = admin_socket->register_command("dump_objectstore_kv_stats",
+				     "dump_objectstore_kv_stats",
+				     asok_hook,
+				     "print statistics of kvdb which used by bluestore");
+  assert(r == 0);
+
+  r = admin_socket->register_command("dump_scrubs",
+				     "dump_scrubs",
+				     asok_hook,
+				     "print scheduled scrubs");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
