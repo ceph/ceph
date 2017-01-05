@@ -12,19 +12,18 @@ class RGWAsyncRadosRequest : public RefCountedObject {
 
   int retcode;
 
-  bool done;
-
   Mutex lock;
 
 protected:
   virtual int _send_request() = 0;
 public:
   RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn), retcode(0),
-                                                                               done(false), lock("RGWAsyncRadosRequest::lock") {
-    notifier->get();
+                                                                               lock("RGWAsyncRadosRequest::lock") {
   }
   virtual ~RGWAsyncRadosRequest() {
-    notifier->put();
+    if (notifier) {
+      notifier->put();
+    }
   }
 
   void send_request() {
@@ -32,8 +31,9 @@ public:
     retcode = _send_request();
     {
       Mutex::Locker l(lock);
-      if (!done) {
-        notifier->cb();
+      if (notifier) {
+        notifier->cb(); // drops its own ref
+        notifier = nullptr;
       }
     }
     put();
@@ -44,7 +44,11 @@ public:
   void finish() {
     {
       Mutex::Locker l(lock);
-      done = true;
+      if (notifier) {
+        // we won't call notifier->cb() to drop its ref, so drop it here
+        notifier->put();
+        notifier = nullptr;
+      }
     }
     put();
   }
