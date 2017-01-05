@@ -478,7 +478,12 @@ find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
-if (NOT WITH_SYSTEM_BOOST)
+if (WITH_SYSTEM_BOOST)
+  if(FREEBSD)
+    # if boost_python is used then also link with libpython*
+    LIST(APPEND Boost_LIBRARIES ${PYTHON_LIBRARIES})
+  endif()
+else()
   LIST(APPEND Boost_LIBRARIES "-lz")
 endif()
 
