@@ -114,6 +114,8 @@ private:
   bool is_transition_state() const;
   bool is_closed() const;
 
+  const Action *find_pending_refresh() const;
+
   void append_context(const Action &action, Context *context);
   void execute_next_action_unlock();
   void execute_action_unlock(const Action &action, Context *context);
