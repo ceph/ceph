@@ -2446,7 +2446,7 @@ void RGWCreateBucket::execute()
 
 int RGWDeleteBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
+  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
   }
 
