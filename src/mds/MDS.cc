@@ -242,9 +242,13 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->dump_string("error", "mds_not_active");
     } else if (command == "dump_ops_in_flight" ||
 	       command == "ops") {
-      op_tracker.dump_ops_in_flight(f);
+      if (!op_tracker.dump_ops_in_flight(f)) {
+        ss << "op_tracker tracking is not enabled";
+      }
     } else if (command == "dump_historic_ops") {
-      op_tracker.dump_historic_ops(f);
+      if (!op_tracker.dump_historic_ops(f)) {
+	ss << "op_tracker tracking is not enabled";
+      }
     } else if (command == "osdmap barrier") {
       int64_t target_epoch = 0;
       bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
