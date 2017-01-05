@@ -2912,7 +2912,10 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
     dout(10) << "read couldn't open " << cid << "/" << oid << ": " << cpp_strerror(r) << dendl;
   } else {
     uint64_t i;
+    struct fiemap_extent *extent = NULL;
+    struct fiemap_extent *last = NULL;
 
+more:
     r = backend->do_fiemap(**fd, offset, len, &fiemap);
     if (r < 0)
       goto done;
@@ -2922,7 +2925,7 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
       goto done;
     }
 
-    struct fiemap_extent *extent = &fiemap->fm_extents[0];
+    extent = &fiemap->fm_extents[0];
 
     /* start where we were asked to start */
     if (extent->fe_logical < offset) {
@@ -2954,7 +2957,15 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
       i++;
       extent++;
     }
+    const bool is_last = last->fe_flags & FIEMAP_EXTENT_LAST;
     free(fiemap);
+
+    if (!is_last) {
+      uint64_t xoffset = last->fe_logical + last->fe_length - offset;
+      offset = last->fe_logical + last->fe_length;
+      len -= xoffset;
+      goto more;
+    }
   }
 
 done:
