@@ -996,9 +996,12 @@ TEST(LibCephFS, BadFileDesc) {
 
   struct sockaddr_storage addr;
   ASSERT_EQ(ceph_get_file_stripe_address(cmount, -1, 0, &addr, 1), -EBADF);
-
-  ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
-  ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
+  
+  uint32_t stripe_unit;
+  ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1, &stripe_unit), -EBADF);
+  
+  int64_t file_pool_id;
+  ASSERT_EQ(ceph_get_file_pool(cmount, -1, &file_pool_id), -EBADF);
   ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
 
   ceph_shutdown(cmount);
@@ -1181,8 +1184,12 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_fsync(cmount, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_fstatx(cmount, 0, &stx, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_sync_fs(cmount));
-  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0));
-  EXPECT_EQ(-ENOTCONN, ceph_get_file_pool(cmount, 0));
+  
+  uint32_t stripe_unit;
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0, &stripe_unit));
+  
+  int64_t file_pool_id;
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_pool(cmount, 0, &file_pool_id));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_pool_name(cmount, 0, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_replication(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_address(cmount, 0, 0, NULL, 0));
@@ -1190,7 +1197,9 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_debug_get_fd_caps(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_debug_get_file_caps(cmount, "/path"));
   EXPECT_EQ(-ENOTCONN, ceph_get_stripe_unit_granularity(cmount));
-  EXPECT_EQ(-ENOTCONN, ceph_get_pool_id(cmount, "data"));
+  
+  int64_t pool_id;
+  EXPECT_EQ(-ENOTCONN, ceph_get_pool_id(cmount, "data", &pool_id));
   EXPECT_EQ(-ENOTCONN, ceph_get_pool_replication(cmount, 1));
 
   ceph_release(cmount);
@@ -1206,8 +1215,10 @@ TEST(LibCephFS, GetPoolId) {
   char name[80];
   memset(name, 0, sizeof(name));
   ASSERT_LE(0, ceph_get_path_pool_name(cmount, "/", name, sizeof(name)));
-  ASSERT_GE(ceph_get_pool_id(cmount, name), 0);
-  ASSERT_EQ(ceph_get_pool_id(cmount, "weflkjwelfjwlkejf"), -ENOENT);
+  
+  int64_t pool_id;
+  ASSERT_GE(ceph_get_pool_id(cmount, name, &pool_id), 0);
+  ASSERT_EQ(ceph_get_pool_id(cmount, "weflkjwelfjwlkejf", &pool_id), -ENOENT);
 
   ceph_shutdown(cmount);
 }

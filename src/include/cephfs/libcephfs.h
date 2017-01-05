@@ -1131,72 +1131,80 @@ int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char 
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the striping unit of.
- * @returns the striping unit of the file or a negative error code on failure.
+ * @param return the striping unit of the file.
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh, uint32_t *stripe_unit);
 
 /**
  * Get the file striping unit.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the striping unit of.
- * @returns the striping unit of the file or a negative error code on failure.
+ * @param return the striping unit of the path.
+ * @returns a negative error code on failure.
  */
-int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path, uint32_t *stripe_unit);
 
 /**
  * Get the file striping count from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the striping count of.
- * @returns the striping count of the file or a negative error code on failure.
+ * @param return the striping count of the file.
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh, uint32_t *stripe_count);
 
 /**
  * Get the file striping count.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the striping count of.
- * @returns the striping count of the file or a negative error code on failure.
+ * @param return the striping count of the path.
+ * @returns a negative error code on failure.
  */
-int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path, uint32_t *stripe_count);
 
 /**
  * Get the file object size from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the object size of.
- * @returns the object size of the file or a negative error code on failure.
+ * @param the object size of the file
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh, uint32_t *object_size);
 
 /**
  * Get the file object size.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the object size of.
- * @returns the object size of the file or a negative error code on failure.
+ * @param the object size of the path
+ * @return a negative error code on failure.
  */
-int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path, uint32_t *object_size);
 
 /**
  * Get the file pool information from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the pool information of.
- * @returns the ceph pool id that the file is in
+ * @param return the ceph pool id that the file is in
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh, int64_t *pool_id);
 
 /**
  * Get the file pool information.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the pool information of.
- * @returns the ceph pool id that the file is in
+ * @param return the ceph pool id that the path is in
+ * @returns a negative error code on failure.
  */
-int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *path, int64_t *pool_id);
 
 /**
  * Get the name of the pool a opened file is stored in,
@@ -1288,9 +1296,10 @@ int ceph_get_path_replication(struct ceph_mount_info *cmount, const char *path);
  *
  * @param cmount the ceph mount handle to use.
  * @param pool_name the name of the pool.
- * @returns the pool id, or a negative error code on failure.
+ * @param returns the pool id.
+ * @returns a negative error code on failure.
  */
-int ceph_get_pool_id(struct ceph_mount_info *cmount, const char *pool_name);
+int ceph_get_pool_id(struct ceph_mount_info *cmount, const char *pool_name, int64_t *pool_id);
 
 /**
  * Get the pool replication factor.
