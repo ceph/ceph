@@ -33,6 +33,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::StrEq;
+using ::testing::WithArg;
 
 static const std::string TEST_COOKIE("auto 123");
 
@@ -91,6 +92,21 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
+  void expect_invalidate_cache(MockImageCtx &mock_image_ctx, bool purge,
+                               int r) {
+    if (mock_image_ctx.object_cacher != nullptr) {
+      EXPECT_CALL(mock_image_ctx, invalidate_cache(purge, _))
+                    .WillOnce(WithArg<1>(CompleteContext(r, NULL)));
+    }
+  }
+
+  void expect_is_cache_empty(MockImageCtx &mock_image_ctx, bool empty) {
+    if (mock_image_ctx.object_cacher != nullptr) {
+      EXPECT_CALL(mock_image_ctx, is_cache_empty())
+        .WillOnce(Return(empty));
+    }
+  }
+
   void expect_flush_notifies(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
@@ -122,6 +138,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   expect_prepare_lock(mock_image_ctx);
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_block_writes(mock_image_ctx, 0);
+  expect_invalidate_cache(mock_image_ctx, false, 0);
   expect_flush_notifies(mock_image_ctx);
 
   MockJournal *mock_journal = new MockJournal();
@@ -159,6 +176,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
   InSequence seq;
   expect_prepare_lock(mock_image_ctx);
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_invalidate_cache(mock_image_ctx, false, 0);
   expect_flush_notifies(mock_image_ctx);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
@@ -191,6 +209,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
 
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_invalidate_cache(mock_image_ctx, false, 0);
   expect_flush_notifies(mock_image_ctx);
 
   expect_unlock(mock_image_ctx, 0);
@@ -219,6 +238,10 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Blacklisted) {
   expect_prepare_lock(mock_image_ctx);
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_block_writes(mock_image_ctx, -EBLACKLISTED);
+  expect_invalidate_cache(mock_image_ctx, false, -EBLACKLISTED);
+  expect_is_cache_empty(mock_image_ctx, false);
+  expect_invalidate_cache(mock_image_ctx, true, -EBLACKLISTED);
+  expect_is_cache_empty(mock_image_ctx, true);
   expect_flush_notifies(mock_image_ctx);
 
   MockJournal *mock_journal = new MockJournal();
@@ -278,6 +301,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_block_writes(mock_image_ctx, 0);
+  expect_invalidate_cache(mock_image_ctx, false, 0);
   expect_flush_notifies(mock_image_ctx);
 
   expect_unlock(mock_image_ctx, -EINVAL);
