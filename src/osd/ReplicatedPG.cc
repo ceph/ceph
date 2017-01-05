@@ -1365,6 +1365,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
+
+  if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
+    // not implemented.
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
+
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
@@ -7478,12 +7485,6 @@ void ReplicatedPG::issue_repop(RepGather *repop)
 {
   OpContext *ctx = repop->ctx;
   const hobject_t& soid = ctx->obs->oi.soid;
-  if (ctx->op &&
-    ((static_cast<MOSDOp *>(
-	ctx->op->get_req()))->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)) {
-    // replicate original op for parallel execution on replica
-    assert(0 == "broken implementation, do not use");
-  }
   dout(7) << "issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
           << dendl;
