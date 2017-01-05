@@ -370,8 +370,6 @@ bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack) /* re
   return collect(NULL, ret, skip_stack);
 }
 
-static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
-
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 {
   ((RGWAioCompletionNotifier *)arg)->cb();
