@@ -1187,8 +1187,8 @@ class RGWCloneMetaLogCoroutine : public RGWCoroutine {
   int max_entries = CLONE_MAX_ENTRIES;
 
   RGWRESTReadResource *http_op = nullptr;
+  boost::intrusive_ptr<RGWMetadataLogInfoCompletion> completion;
 
-  int req_ret = 0;
   RGWMetadataLogInfo shard_info;
   rgw_mdlog_shard_data data;
 
@@ -1205,6 +1205,9 @@ public:
   ~RGWCloneMetaLogCoroutine() {
     if (http_op) {
       http_op->put();
+    }
+    if (completion) {
+      completion->cancel();
     }
   }
 
@@ -2051,7 +2054,23 @@ int RGWCloneMetaLogCoroutine::state_init()
 
 int RGWCloneMetaLogCoroutine::state_read_shard_status()
 {
-  int ret = mdlog->get_info_async(shard_id, &shard_info, stack->get_completion_mgr(), (void *)stack, &req_ret);
+  const bool add_ref = false; // default constructs with refs=1
+
+  using CompletionRef = boost::intrusive_ptr<RGWMetadataLogInfoCompletion>;
+  completion = CompletionRef(new RGWMetadataLogInfoCompletion(
+    [this](int ret, const cls_log_header& header) {
+      if (ret < 0) {
+        ldout(cct, 1) << "ERROR: failed to read mdlog info with "
+            << cpp_strerror(ret) << dendl;
+      } else {
+        shard_info.marker = header.max_marker;
+        shard_info.last_update = header.max_time.to_real_time();
+      }
+      // wake up parent stack
+      stack->get_completion_mgr()->complete(nullptr, stack);
+    }), add_ref);
+
+  int ret = mdlog->get_info_async(shard_id, completion.get());
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
     return set_cr_error(ret);
@@ -2062,6 +2081,8 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
 
 int RGWCloneMetaLogCoroutine::state_read_shard_status_complete()
 {
+  completion.reset();
+
   ldout(cct, 20) << "shard_id=" << shard_id << " marker=" << shard_info.marker << " last_update=" << shard_info.last_update << dendl;
 
   marker = shard_info.marker;
