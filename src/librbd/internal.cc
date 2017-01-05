@@ -2410,10 +2410,13 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     }
 
     ictx->user_flushed();
+    C_SaferCond ctx;
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      r = ictx->flush();
+      ictx->flush(&ctx);
     }
+    r = ctx.wait();
+
     ictx->perfcounter->inc(l_librbd_flush);
     return r;
   }
