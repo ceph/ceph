@@ -36,6 +36,24 @@ public:
   }
 };
 
+class RGWOp_ZoneConfig_Get : public RGWRESTOp {
+  RGWZoneParams zone_params;
+public:
+  RGWOp_ZoneConfig_Get() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("admin", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user->caps);
+  }
+  void execute() {} /* store already has the info we need, just need to send response */
+  void send_response();
+  const string name() {
+    return "get_zone_config";
+  }
+};
+
 class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
