@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "acconfig.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -163,6 +164,7 @@ static int parse_unmap_options(char *options)
 
 static int do_kernel_showmapped(Formatter *f)
 {
+#if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   int r;
 
@@ -174,6 +176,10 @@ static int do_kernel_showmapped(Formatter *f)
 
   krbd_destroy(krbd);
   return r;
+#else
+  return -1;
+#endif
+
 }
 
 /*
@@ -218,6 +224,7 @@ static void print_error_description(const char *poolname, const char *imgname,
 static int do_kernel_map(const char *poolname, const char *imgname,
                          const char *snapname)
 {
+#if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   std::ostringstream oss;
   char *devnode;
@@ -254,11 +261,15 @@ static int do_kernel_map(const char *poolname, const char *imgname,
 out:
   krbd_destroy(krbd);
   return r;
+#else
+  return -1;
+#endif
 }
 
 static int do_kernel_unmap(const char *dev, const char *poolname,
                            const char *imgname, const char *snapname)
 {
+#if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   std::ostringstream oss;
   int r;
@@ -281,6 +292,10 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
 
   krbd_destroy(krbd);
   return r;
+#else
+  return -1;
+#endif
+
 }
 
 void get_show_arguments(po::options_description *positional,
