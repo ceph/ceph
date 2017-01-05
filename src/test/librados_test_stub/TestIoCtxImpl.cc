@@ -260,7 +260,10 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
       tmap[key] = value;
       break;
     case CEPH_OSD_TMAP_RM:
-      tmap.erase(key);
+      r = tmap.erase(key);
+      if (r == 0) {
+        return -ENOENT;
+      }
       break;
     default:
       return -EINVAL;

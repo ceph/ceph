@@ -23,12 +23,14 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
+  test_BlockGuard.cc
   test_ConsistencyGroups.cc
   test_main.cc
   test_mock_fixture.cc
   test_mock_AioImageRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
+  test_mock_ObjectMap.cc
   test_mock_ObjectWatcher.cc
   exclusive_lock/test_mock_AcquireRequest.cc
   exclusive_lock/test_mock_ReacquireRequest.cc
@@ -118,22 +120,19 @@ set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
 
 add_executable(ceph_test_librbd_fsx
   fsx.cc
-  $<TARGET_OBJECTS:krbd_objs>
   $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd_fsx
   librbd
   librados
   journal
+  krbd
   global
   m
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
   blkid
-  udev
-  keyutils
   )
 
 install(TARGETS

@@ -17,13 +17,11 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <gtest/gtest.h>
-#include "global/global_init.h"
-#include "compressor/Compressor.h"
-#include "common/ceph_argparse.h"
-#include "global/global_context.h"
+#include "gtest/gtest.h"
 #include "common/config.h"
+#include "compressor/Compressor.h"
 #include "compressor/CompressionPlugin.h"
+#include "global/global_context.h"
 
 class CompressorTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
@@ -452,21 +450,4 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
     exp.append(test, size);
     EXPECT_TRUE(exp.contents_equal(after));
   }
-}
-
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  if (env)
-    g_conf->set_val("plugin_dir", env, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

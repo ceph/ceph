@@ -21,24 +21,26 @@ Although RADOS only knows about pools and objects with their xattrs and
 omap[1], conceptually RGW organizes its data into three different kinds:
 metadata, bucket index, and data.
 
-* Metadata
+Metadata
+^^^^^^^^
 
 We have 3 'sections' of metadata: 'user', 'bucket', and 'bucket.instance'.
-You can use the following commands to introspect metadata entries:
+You can use the following commands to introspect metadata entries: ::
 
-$ radosgw-admin metadata list
+    $ radosgw-admin metadata list
+    $ radosgw-admin metadata list bucket
+    $ radosgw-admin metadata list bucket.instance
+    $ radosgw-admin metadata list user
 
-$ radosgw-admin metadata list bucket
-$ radosgw-admin metadata list bucket.instance
-$ radosgw-admin metadata list user
+    $ radosgw-admin metadata get bucket:<bucket>
+    $ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
+    $ radosgw-admin metadata get user:<user>   # get or set
+    
+Some variables have been used in above commands, they are:
 
-$ radosgw-admin metadata get bucket:<bucket>
-$ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
-$ radosgw-admin metadata get user:<user>   # get or set
-
-user: Holds user information
-bucket: Holds a mapping between bucket name and bucket instance id
-bucket.instance: Holds bucket instance information[2]
+- user: Holds user information
+- bucket: Holds a mapping between bucket name and bucket instance id
+- bucket.instance: Holds bucket instance information[2]
 
 Every metadata entry is kept on a single rados object.
 See below for implementation defails.
@@ -46,7 +48,8 @@ See below for implementation defails.
 Note that the metadata is not indexed. When listing a metadata section we do a
 rados pgls operation on the containing pool.
 
-* Bucket Index
+Bucket Index
+^^^^^^^^^^^^
 
 It's a different kind of metadata, and kept separately. The bucket index holds
 a key-value map in rados objects. By default it is a single rados object per
@@ -61,7 +64,8 @@ Note that we also hold other information in the bucket index, and it's kept in
 other key namespaces. We can hold the bucket index log there, and for versioned
 objects there is more information that we keep on other keys.
 
-* Data
+Data
+^^^^
 
 Objects data is kept in one or more rados objects for each rgw object.
 

@@ -461,19 +461,34 @@ def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
-def command_check_call(arguments):
+def command_check_call(arguments, exit=False):
     """
     Safely execute a ``subprocess.check_call`` call making sure that the
     executable exists and raising a helpful error message if it does not.
 
+    When ``exit`` is set to ``True`` this helper will do a clean (sans
+    traceback) system exit.
     .. note:: This should be the preferred way of calling
     ``subprocess.check_call`` since it provides the caller with the safety net
     of making sure that executables *will* be found and will error nicely
     otherwise.
     """
     arguments = _get_command_executable(arguments)
-    LOG.info('Running command: %s', ' '.join(arguments))
-    return subprocess.check_call(arguments)
+    command = ' '.join(arguments)
+    LOG.info('Running command: %s', command)
+    try:
+        return subprocess.check_call(arguments)
+    except subprocess.CalledProcessError as error:
+        if exit:
+            if error.output:
+                LOG.error(error.output)
+            raise SystemExit(
+                "'{cmd}' failed with status code {returncode}".format(
+                    cmd=command,
+                    returncode=error.returncode,
+                )
+            )
+        raise
 
 
 def platform_distro():
@@ -1560,7 +1575,8 @@ class Device(object):
                 '--mbrtogpt',
                 '--',
                 self.path,
-            ]
+            ],
+            exit=True
         )
         update_partition(self.path, 'created')
         return num
@@ -1797,6 +1813,44 @@ class Prepare(object):
         parser = subparsers.add_parser(
             'prepare',
             parents=parents,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=textwrap.fill(textwrap.dedent("""\
+            If the --bluestore argument is given, a bluestore objectstore
+            will be used instead of the legacy filestore objectstore.
+
+            When an entire device is prepared for bluestore, two
+            partitions are created. The first partition is for metadata,
+            the second partition is for blocks that contain data.
+
+            Unless explicitly specified with --block.db or
+            --block.wal, the bluestore DB and WAL data is stored on
+            the main block device. For instance:
+
+                ceph-disk prepare --bluestore /dev/sdc
+
+            Will create
+
+                /dev/sdc1 for osd metadata
+                /dev/sdc2 for block, db, and wal data (the rest of the disk)
+
+
+            If either --block.db or --block.wal are specified to be
+            the same whole device, they will be created as partition
+            three and four respectively. For instance:
+
+                ceph-disk prepare --bluestore \\
+                      --block.db /dev/sdc \\
+                      --block.wal /dev/sdc \\
+                      /dev/sdc
+
+            Will create
+
+                /dev/sdc1 for osd metadata
+                /dev/sdc2 for block (the rest of the disk)
+                /dev/sdc3 for db
+                /dev/sdc4 for wal
+
+            """)),
             help='Prepare a directory or disk for a Ceph OSD',
         )
         parser.set_defaults(
@@ -1872,7 +1926,13 @@ class PrepareBluestore(Prepare):
     def prepare_locked(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
-        self.data.prepare(self.blockdb, self.blockwal, self.block)
+        to_prepare_list = []
+        if getattr(self.data.args, 'block.db'):
+            to_prepare_list.append(self.blockdb)
+        if getattr(self.data.args, 'block.wal'):
+            to_prepare_list.append(self.blockwal)
+        to_prepare_list.append(self.block)
+        self.data.prepare(*to_prepare_list)
 
 
 class Space(object):
@@ -2214,7 +2274,7 @@ class PrepareBluestoreBlockDB(PrepareSpace):
         )
 
         if block_size is None:
-            return 64  # MB, default value
+            return 20480  # MB, default value
         else:
             return int(block_size) / 1048576  # MB
 
@@ -2224,6 +2284,9 @@ class PrepareBluestoreBlockDB(PrepareSpace):
         else:
             num = 0
         return num
+
+    def wants_space(self):
+        return False
 
     @staticmethod
     def parser():
@@ -2249,7 +2312,7 @@ class PrepareBluestoreBlockWAL(PrepareSpace):
         )
 
         if block_size is None:
-            return 128  # MB, default value
+            return 576  # MB, default value
         else:
             return int(block_size) / 1048576  # MB
 
@@ -2259,6 +2322,9 @@ class PrepareBluestoreBlockWAL(PrepareSpace):
         else:
             num = 0
         return num
+
+    def wants_space(self):
+        return False
 
     @staticmethod
     def parser():
@@ -2712,12 +2778,9 @@ class PrepareData(object):
                 '--',
                 partition.get_dev(),
             ])
-            try:
-                LOG.debug('Creating %s fs on %s',
-                          self.args.fs_type, partition.get_dev())
-                command_check_call(args)
-            except subprocess.CalledProcessError as e:
-                raise Error(e)
+            LOG.debug('Creating %s fs on %s',
+                      self.args.fs_type, partition.get_dev())
+            command_check_call(args, exit=True)
 
             path = mount(dev=partition.get_dev(),
                          fstype=self.args.fs_type,
@@ -2733,18 +2796,16 @@ class PrepareData(object):
                 partition.unmap()
 
         if not is_partition(self.args.data):
-            try:
-                command_check_call(
-                    [
-                        'sgdisk',
-                        '--typecode=%d:%s' % (partition.get_partition_number(),
-                                              partition.ptype_for_name('osd')),
-                        '--',
-                        self.args.data,
-                    ],
-                )
-            except subprocess.CalledProcessError as e:
-                raise Error(e)
+            command_check_call(
+                [
+                    'sgdisk',
+                    '--typecode=%d:%s' % (partition.get_partition_number(),
+                                          partition.ptype_for_name('osd')),
+                    '--',
+                    self.args.data,
+                ],
+                exit=True,
+            )
             update_partition(self.args.data, 'prepared')
             command_check_call(['udevadm', 'trigger',
                                 '--action=add',
@@ -3001,10 +3062,19 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
+            # ensure there is no duplicate ceph-osd@.service
+            command_check_call(
+                [
+                    'systemctl',
+                    'disable',
+                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+                ],
+            )
             command_check_call(
                 [
                     'systemctl',
                     'enable',
+                    '--runtime',
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
@@ -3076,6 +3146,7 @@ def stop_daemon(
                 [
                     'systemctl',
                     'disable',
+                    '--runtime',
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )

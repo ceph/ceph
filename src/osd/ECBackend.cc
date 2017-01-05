@@ -24,8 +24,9 @@
 #include "messages/MOSDECSubOpReadReply.h"
 #include "ECMsgTypes.h"
 
-#include "ReplicatedPG.h"
+#include "PrimaryLogPG.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
@@ -196,8 +197,7 @@ ECBackend::ECBackend(
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll, ch),
-    cct(cct),
+  : PGBackend(cct, pg, store, coll, ch),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   assert((ec_impl->get_data_chunk_count() *
@@ -910,7 +910,7 @@ void ECBackend::handle_sub_write(
     !op.backfill,
     localt);
 
-  ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
+  PrimaryLogPG *_rPG = dynamic_cast<PrimaryLogPG *>(get_parent());
   if (_rPG && !_rPG->is_undersized() &&
       (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
@@ -1337,7 +1337,6 @@ void ECBackend::on_change()
   }
   tid_to_op_map.clear();
 
-  tid_to_op_map.clear();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
@@ -1446,9 +1445,6 @@ int ECBackend::get_min_avail_to_read_shards(
   // Make sure we don't do redundant reads for recovery
   assert(!for_recovery || !do_redundant_reads);
 
-  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
-    get_parent()->get_missing_loc_shards().find(hoid);
-
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
 
@@ -1486,6 +1482,8 @@ int ECBackend::get_min_avail_to_read_shards(
       }
     }
 
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
+      get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
       for (set<pg_shard_t>::iterator i = miter->second.begin();
 	   i != miter->second.end();
@@ -1730,8 +1728,9 @@ bool ECBackend::try_state_to_reads()
 
   Op *op = &(waiting_state.front());
   if (op->requires_rmw() && pipeline_state.cache_invalid()) {
+    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
     dout(20) << __func__ << ": blocking " << *op
-	     << " because it requires an rmw and the cache is invalid"
+	     << " because it requires an rmw and the cache is invalid "
 	     << pipeline_state
 	     << dendl;
     return false;
@@ -1741,12 +1740,15 @@ bool ECBackend::try_state_to_reads()
     dout(20) << __func__ << ": invalidating cache after this op"
 	     << dendl;
     pipeline_state.invalidate();
+    op->using_cache = false;
+  } else {
+    op->using_cache = pipeline_state.caching_enabled();
   }
 
   waiting_state.pop_front();
   waiting_reads.push_back(*op);
 
-  if (op->requires_rmw() || pipeline_state.caching_enabled()) {
+  if (op->using_cache) {
     cache.open_write_pin(op->pin);
 
     extent_set empty;
@@ -1780,6 +1782,7 @@ bool ECBackend::try_state_to_reads()
   dout(10) << __func__ << ": " << *op << dendl;
 
   if (!op->remote_read.empty()) {
+    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
       [this, op](hobject_t::bitwisemap<pair<int, extent_map> > &&results) {
@@ -1810,7 +1813,7 @@ bool ECBackend::try_reads_to_commit()
     op->hoid,
     op->delta_stats);
 
-  if (pipeline_state.caching_enabled() || op->requires_rmw()) {
+  if (op->using_cache) {
     for (auto &&hpair: op->pending_read) {
       op->remote_read_result[hpair.first].insert(
 	cache.get_remaining_extents_for_rmw(
@@ -1869,7 +1872,7 @@ bool ECBackend::try_reads_to_commit()
   dout(20) << __func__ << ": written_set: " << written_set << dendl;
   assert(written_set == op->plan.will_write);
 
-  if (pipeline_state.caching_enabled() || op->requires_rmw()) {
+  if (op->using_cache) {
     for (auto &&hpair: written) {
       dout(20) << __func__ << ": " << hpair << dendl;
       cache.present_rmw_update(hpair.first, op->pin, hpair.second);
@@ -1880,7 +1883,8 @@ bool ECBackend::try_reads_to_commit()
 
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
   ObjectStore::Transaction empty;
-
+  bool should_write_local = false;
+  ECSubWrite local_write_op;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_actingbackfill_shards().begin();
        i != get_parent()->get_actingbackfill_shards().end();
@@ -1891,7 +1895,7 @@ bool ECBackend::try_reads_to_commit()
       trans.find(i->shard);
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
-    pg_stat_t stats =
+    const pg_stat_t &stats =
       should_send ?
       get_info().stats :
       parent->get_shard_info().find(*i)->second.stats;
@@ -1912,12 +1916,8 @@ bool ECBackend::try_reads_to_commit()
       op->temp_cleared,
       !should_send);
     if (*i == get_parent()->whoami_shard()) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	sop,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+      should_write_local = true;
+      local_write_op.claim(sop);
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
@@ -1925,6 +1925,14 @@ bool ECBackend::try_reads_to_commit()
       get_parent()->send_message_osd_cluster(
 	i->osd, r, get_parent()->get_epoch());
     }
+  }
+  if (should_write_local) {
+      handle_sub_write(
+	get_parent()->whoami_shard(),
+	op->client_op,
+	local_write_op,
+	op->on_local_applied_sync);
+      op->on_local_applied_sync = 0;
   }
 
   for (auto i = op->on_write.begin();
@@ -1969,7 +1977,7 @@ bool ECBackend::try_finish_rmw()
     }
   }
 
-  if (pipeline_state.caching_enabled() || op->requires_rmw()) {
+  if (op->using_cache) {
     cache.release_write_pin(op->pin);
   }
   tid_to_op_map.erase(op->tid);

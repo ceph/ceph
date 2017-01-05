@@ -37,6 +37,7 @@
 #include "include/assert.h"
 #include "include/compat.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
@@ -122,6 +123,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
   if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
+  if (dir.state_test(CDir::STATE_FRAGMENTING)) out << "|fragmenting";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -170,7 +172,7 @@ void CDir::print(ostream& out)
 
 ostream& CDir::print_db_line_prefix(ostream& out) 
 {
-  return out << ceph_clock_now(g_ceph_context) << " mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
+  return out << ceph_clock_now() << " mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
 }
 
 
@@ -188,10 +190,10 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   num_dirty(0), committing_version(0), committed_version(0),
   dir_auth_pins(0), request_pins(0),
   dir_rep(REP_NONE),
-  pop_me(ceph_clock_now(g_ceph_context)),
-  pop_nested(ceph_clock_now(g_ceph_context)),
-  pop_auth_subtree(ceph_clock_now(g_ceph_context)),
-  pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
+  pop_me(ceph_clock_now()),
+  pop_nested(ceph_clock_now()),
+  pop_auth_subtree(ceph_clock_now()),
+  pop_auth_subtree_nested(ceph_clock_now()),
   num_dentries_nested(0), num_dentries_auth_subtree(0),
   num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
@@ -635,6 +637,13 @@ void CDir::add_to_bloom(CDentry *dn)
     /* not create bloom filter for incomplete dir that was added by log replay */
     if (!is_complete())
       return;
+
+    /* don't maintain bloom filters in standby replay (saves cycles, and also
+     * avoids need to implement clearing it in EExport for #16924) */
+    if (cache->mds->is_standby_replay()) {
+      return;
+    }
+
     unsigned size = get_num_head_items() + get_num_snap_items();
     if (size < 100) size = 100;
     bloom.reset(new bloom_filter(size, 1.0 / size, 0));
@@ -912,8 +921,6 @@ void CDir::init_fragment_pins()
 void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
-
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_split);
 
   assert(replay || is_complete() || !is_auth());
 
@@ -1224,6 +1231,11 @@ void CDir::add_waiter(uint64_t tag, MDSInternalContextBase *c)
     }
   }
 
+  if (tag & WAIT_CREATED) {
+    assert(state_test(STATE_CREATING));
+    assert(state_test(STATE_FRAGMENTING));
+  }
+
   MDSCacheObject::add_waiter(tag, c);
 }
 
@@ -1335,6 +1347,13 @@ void CDir::_mark_dirty(LogSegment *ls)
 void CDir::mark_new(LogSegment *ls)
 {
   ls->new_dirfrags.push_back(&item_new);
+  state_clear(STATE_CREATING);
+
+  if (state_test(CDir::STATE_FRAGMENTING)) {
+    list<MDSInternalContextBase*> ls;
+    take_waiting(CDir::WAIT_CREATED, ls);
+    cache->mds->queue_waiters(ls);
+  }
 }
 
 void CDir::mark_clean()
@@ -1668,7 +1687,7 @@ CDentry *CDir::_load_dentry(
         }
 
         //in->hack_accessed = false;
-        //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
+        //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
@@ -2055,7 +2074,7 @@ void CDir::_omap_commit(int op_prio)
 	op.omap_rm_keys(to_remove);
 
       cache->mds->objecter->mutate(oid, oloc, op, snapc,
-				   ceph::real_clock::now(g_ceph_context),
+				   ceph::real_clock::now(),
 				   0, NULL, gather.new_sub());
 
       write_size = 0;
@@ -2089,7 +2108,7 @@ void CDir::_omap_commit(int op_prio)
     op.omap_rm_keys(to_remove);
 
   cache->mds->objecter->mutate(oid, oloc, op, snapc,
-			       ceph::real_clock::now(g_ceph_context),
+			       ceph::real_clock::now(),
 			       0, NULL, gather.new_sub());
 
   gather.activate();
@@ -2922,7 +2941,7 @@ void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
   assert(scrub_infop && !scrub_infop->directory_scrubbing);
 
   scrub_infop->recursive_start.version = get_projected_version();
-  scrub_infop->recursive_start.time = ceph_clock_now(g_ceph_context);
+  scrub_infop->recursive_start.time = ceph_clock_now();
 
   scrub_infop->directories_to_scrub.clear();
   scrub_infop->directories_scrubbing.clear();
@@ -3100,7 +3119,7 @@ bool CDir::scrub_local()
 
   scrub_info();
   if (rval) {
-    scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
+    scrub_infop->last_local.time = ceph_clock_now();
     scrub_infop->last_local.version = get_projected_version();
     scrub_infop->pending_scrub_error = false;
     scrub_infop->last_scrub_dirty = true;
@@ -3117,5 +3136,34 @@ std::string CDir::get_path() const
   std::string path;
   get_inode()->make_path_string(path, true);
   return path;
+}
+
+bool CDir::should_split_fast() const
+{
+  // Max size a fragment can be before trigger fast splitting
+  int fast_limit = g_conf->mds_bal_split_size * g_conf->mds_bal_fragment_fast_factor;
+
+  // Fast path: the sum of accounted size and null dentries does not
+  // exceed threshold: we definitely are not over it.
+  if (get_frag_size() + get_num_head_null() <= fast_limit) {
+    return false;
+  }
+
+  // Fast path: the accounted size of the frag exceeds threshold: we
+  // definitely are over it
+  if (get_frag_size() > fast_limit) {
+    return true;
+  }
+
+  int64_t effective_size = 0;
+
+  for (const auto &p : items) {
+    const CDentry *dn = p.second;
+    if (!dn->get_projected_linkage()->is_null()) {
+      effective_size++;
+    }
+  }
+
+  return effective_size > fast_limit;
 }
 

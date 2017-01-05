@@ -131,6 +131,9 @@ private:
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
     if (diff.empty()) {
+      if (m_diff_context.from_snap_id == 0 && !end_exists) {
+        compute_parent_overlap(diffs);
+      }
       return;
     } else if (m_diff_context.whole_object) {
       // provide the full object extents to the callback
@@ -261,7 +264,7 @@ int DiffIterate::execute() {
     RWLock::RLocker l(m_image_ctx.snap_lock);
     RWLock::RLocker l2(m_image_ctx.parent_lock);
     uint64_t overlap = end_size;
-    m_image_ctx.get_parent_overlap(from_snap_id, &overlap);
+    m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
     r = 0;
     if (m_image_ctx.parent && overlap > 0) {
       ldout(cct, 10) << " first getting parent diff" << dendl;
@@ -382,8 +385,8 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     }
 
     BitVector<2> object_map;
-    std::string oid(ObjectMap::object_map_name(m_image_ctx.id,
-                                               current_snap_id));
+    std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id,
+                                                 current_snap_id));
     r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid, &object_map);
     if (r < 0) {
       lderr(cct) << "diff_object_map: failed to load object map " << oid

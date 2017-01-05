@@ -42,6 +42,7 @@
 #include "compressor/Compressor.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -890,7 +891,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   bool is_truncated;
   vector<RGWObjEnt> objs;
 
-  utime_t start_time = ceph_clock_now(cct);
+  utime_t start_time = ceph_clock_now();
 
   RGWRados::Bucket target(store, *pbucket_info);
   RGWRados::Bucket::List list_op(&target);
@@ -927,7 +928,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       perfcounter->tinc(l_rgw_get_lat,
-                       (ceph_clock_now(cct) - start_time));
+			(ceph_clock_now() - start_time));
 
       if (found_start && !handled_end) {
         len_count += end_ofs - start_ofs;
@@ -941,7 +942,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       handled_end = found_end;
-      start_time = ceph_clock_now(cct);
+      start_time = ceph_clock_now();
     }
   } while (is_truncated);
 
@@ -987,7 +988,7 @@ static int iterate_slo_parts(CephContext *cct,
     return 0;
   }
 
-  utime_t start_time = ceph_clock_now(cct);
+  utime_t start_time = ceph_clock_now();
 
   map<uint64_t, rgw_slo_part>::iterator iter = slo_parts.upper_bound(ofs);
   if (iter != slo_parts.begin()) {
@@ -1020,7 +1021,7 @@ static int iterate_slo_parts(CephContext *cct,
     }
 
     perfcounter->tinc(l_rgw_get_lat,
-                      (ceph_clock_now(cct) - start_time));
+		      (ceph_clock_now() - start_time));
 
     if (found_start) {
       if (cb) {
@@ -1030,7 +1031,7 @@ static int iterate_slo_parts(CephContext *cct,
       }
     }
 
-    start_time = ceph_clock_now(cct);
+    start_time = ceph_clock_now();
   }
 
   return 0;
@@ -1263,7 +1264,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   /* garbage collection related handling */
-  utime_t start_time = ceph_clock_now(s->cct);
+  utime_t start_time = ceph_clock_now();
   if (start_time > gc_invalidate_time) {
     int r = store->defer_gc(s->obj_ctx, obj);
     if (r < 0) {
@@ -1318,7 +1319,7 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
       return false;
     }
 
-    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+    if (delete_at <= ceph_clock_now()) {
       return true;
     }
   }
@@ -1330,7 +1331,7 @@ void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
   bufferlist bl;
-  gc_invalidate_time = ceph_clock_now(s->cct);
+  gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
   bool need_decompress;
@@ -1467,7 +1468,7 @@ void RGWGetObj::execute()
     op_ret = filter->flush();
 
   perfcounter->tinc(l_rgw_get_lat,
-                   (ceph_clock_now(s->cct) - start_time));
+		    (ceph_clock_now() - start_time));
   if (op_ret < 0) {
     goto done_err;
   }
@@ -2775,6 +2776,11 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
   RGWPutObj_CB cb(this);
+  RGWGetDataCB* filter = &cb;
+  boost::optional<RGWGetObj_Decompress> decompress;
+  RGWCompressionInfo cs_info;
+  map<string, bufferlist> attrs;
+
   int ret = 0;
 
   uint64_t obj_size;
@@ -2790,27 +2796,46 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   RGWRados::Object op_target(store, copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
   read_op.params.obj_size = &obj_size;
+  read_op.params.attrs = &attrs;
+
   ret = read_op.prepare();
   if (ret < 0)
     return ret;
+
+  bool need_decompress;
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  if (op_ret < 0) {
+	  lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
+      return -EIO;
+  }
+
+  bool partial_content = true;
+  if (need_decompress)
+  {
+    obj_size = cs_info.orig_size;
+    decompress.emplace(s->cct, &cs_info, partial_content, filter);
+    filter = &*decompress;
+  }
+
   ret = read_op.range_to_ofs(obj_size, new_ofs, new_end);
   if (ret < 0)
     return ret;
 
-  ret = read_op.iterate(new_ofs, new_end, &cb);
-  if (ret < 0) {
-    return ret;
-  }
+  filter->fixup_range(new_ofs, new_end);
+  ret = read_op.iterate(new_ofs, new_end, filter);
+
+  if (ret >= 0)
+    ret = filter->flush();
 
   bl.claim_append(bl_aux);
 
   return ret;
 }
 
-// special handling for rgw_compression_type = "random" with multipart uploads
-static CompressorRef get_compressor_plugin(const req_state *s)
+// special handling for compression type = "random" with multipart uploads
+static CompressorRef get_compressor_plugin(const req_state *s,
+                                           const std::string& compression_type)
 {
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
   if (compression_type != "random") {
     return Compressor::create(s->cct, compression_type);
   }
@@ -2846,6 +2871,8 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      s->bucket_info.placement_rule);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -2932,11 +2959,11 @@ void RGWPutObj::execute()
 
   fst = copy_source_range_fst;
   lst = copy_source_range_lst;
-  if (s->cct->_conf->rgw_compression_type != "none") {
-    plugin = get_compressor_plugin(s);
+  if (compression_type != "none") {
+    plugin = get_compressor_plugin(s, compression_type);
     if (!plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-          << s->cct->_conf->rgw_compression_type << dendl;
+      ldout(s->cct, 1) << "Cannot load plugin for compression type "
+          << compression_type << dendl;
     } else {
       compressor.emplace(s->cct, plugin, filter);
       filter = &*compressor;
@@ -3162,7 +3189,7 @@ void RGWPutObj::execute()
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
-                   (ceph_clock_now(s->cct) - s->time));
+		    (ceph_clock_now() - s->time));
 }
 
 int RGWPostObj::verify_permission()
@@ -3239,12 +3266,13 @@ void RGWPostObj::execute()
   if (op_ret < 0)
     return;
 
-  const auto& compression_type = s->cct->_conf->rgw_compression_type;
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      s->bucket_info.placement_rule);
   CompressorRef plugin;
   if (compression_type != "none") {
     plugin = Compressor::create(s->cct, compression_type);
     if (!plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+      ldout(s->cct, 1) << "Cannot load plugin for compression type "
           << compression_type << dendl;
     } else {
       compressor.emplace(s->cct, plugin, filter);
@@ -5239,7 +5267,8 @@ void RGWDeleteMultiObj::execute()
   for (iter = multi_delete->objects.begin();
         iter != multi_delete->objects.end() && num_processed < max_to_delete;
         ++iter, num_processed++) {
-    rgw_obj obj(bucket, *iter);
+    rgw_obj obj(bucket, iter->name);
+    obj.set_instance(iter->instance);
 
     obj_ctx->set_atomic(obj);
 

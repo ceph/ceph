@@ -20,6 +20,8 @@
 #include "common/errno.h"
 #include "store_test_fixture.h"
 
+#define dout_context g_ceph_context
+
 namespace {
 
 const coll_t cid;
@@ -173,28 +175,21 @@ TEST_F(MemStoreClone, CloneRangeHoleEnd)
   ASSERT_EQ(expected, result);
 }
 
-// enable boost::intrusive_ptr<CephContext>
-void intrusive_ptr_add_ref(CephContext *cct) { cct->get(); }
-void intrusive_ptr_release(CephContext *cct) { cct->put(); }
-
 int main(int argc, char** argv)
 {
   // default to memstore
   vector<const char*> defaults{
     "--osd_objectstore", "memstore",
-    "--osd_data", "memstore.test_temp_dir",
+    "--osd_data", "msc.test_temp_dir",
     "--memstore_page_size", "4",
   };
 
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
-              CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-
-  // release g_ceph_context on exit
-  boost::intrusive_ptr<CephContext> cct{g_ceph_context, false};
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

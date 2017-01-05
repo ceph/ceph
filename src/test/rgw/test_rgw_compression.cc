@@ -3,9 +3,6 @@
 #include "gtest/gtest.h"
 
 #include "rgw/rgw_compression.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-
 
 struct MockGetDataCB : public RGWGetDataCB {
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
@@ -50,17 +47,4 @@ TEST(Decompress, FixupRangePartial)
   ASSERT_EQ(range_t(12, 18), fixup_range(&decompress, 16, 24));
   ASSERT_EQ(range_t(12, 24), fixup_range(&decompress, 16, 999));
   ASSERT_EQ(range_t(18, 24), fixup_range(&decompress, 998, 999));
-}
-
-// initialize a CephContext
-int main(int argc, char** argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

@@ -161,7 +161,7 @@ class StoreTool
     uint64_t total_size = 0;
     uint64_t total_txs = 0;
 
-    utime_t started_at = ceph_clock_now(g_ceph_context);
+    utime_t started_at = ceph_clock_now();
 
     do {
       int num_keys = 0;
@@ -186,14 +186,14 @@ class StoreTool
       if (num_keys > 0)
         other->submit_transaction_sync(tx);
 
-      utime_t cur_duration = ceph_clock_now(g_ceph_context) - started_at;
+      utime_t cur_duration = ceph_clock_now() - started_at;
       std::cout << "ts = " << cur_duration << "s, copied " << total_keys
                 << " keys so far (" << stringify(si_t(total_size)) << ")"
                 << std::endl;
 
     } while (it->valid());
 
-    utime_t time_taken = ceph_clock_now(g_ceph_context) - started_at;
+    utime_t time_taken = ceph_clock_now() - started_at;
 
     std::cout << "summary:" << std::endl;
     std::cout << "  copied " << total_keys << " keys" << std::endl;
@@ -230,7 +230,7 @@ int main(int argc, const char *argv[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(
+  auto cct = global_init(
       NULL, args,
       CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);

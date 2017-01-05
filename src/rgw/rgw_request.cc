@@ -4,6 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_request.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 /* XXX */
@@ -21,7 +22,7 @@ void RGWRequest::log_format(struct req_state *s, const char *fmt, ...)
 } /* RGWRequest::log_format */
 
 void RGWRequest::log_init() {
-  ts = ceph_clock_now(g_ceph_context);
+  ts = ceph_clock_now();
 }
 
 void RGWRequest::log(struct req_state *s, const char *msg) {
@@ -30,7 +31,7 @@ void RGWRequest::log(struct req_state *s, const char *msg) {
     req_str.append(" ");
     req_str.append(s->info.request_uri);
   }
-  utime_t t = ceph_clock_now(g_ceph_context) - ts;
+  utime_t t = ceph_clock_now() - ts;
   dout(2) << "req " << id << ":" << t << ":" << s->dialect << ":"
 	  << req_str << ":" << (op ? op->name() : "") << ":" << msg
 	  << dendl;

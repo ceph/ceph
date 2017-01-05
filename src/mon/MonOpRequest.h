@@ -74,6 +74,9 @@ struct MonOpRequest : public TrackedOp {
     OP_TYPE_COMMAND,          ///< is a command
   };
 
+  MonOpRequest(const MonOpRequest &other) = delete;
+  MonOpRequest & operator = (const MonOpRequest &other) = delete;
+
 private:
   Message *request;
   utime_t dequeued_time;

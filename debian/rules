@@ -5,7 +5,7 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
@@ -22,6 +22,7 @@ endif
 	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
 
 override_dh_auto_configure:
+	env | sort
 	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
 override_dh_auto_build:
@@ -96,6 +97,11 @@ override_dh_installinit:
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
 	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
 
+	install -d -m0755 debian/ceph-fuse/lib/systemd/system
+	install -m0644 systemd/ceph-fuse@.service debian/ceph-fuse/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-fuse/lib/systemd/system/ceph-fuse@.service
+	install -m0644 systemd/ceph-fuse.target debian/ceph-fuse/lib/systemd/system
+
 	install -d -m0755 debian/ceph-mgr/lib/systemd/system
 	install -m0644 systemd/ceph-mgr@.service debian/ceph-mgr/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
@@ -119,6 +125,7 @@ override_dh_systemd_start:
 
 override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
+	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
@@ -139,8 +146,8 @@ override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
 
 override_dh_python2:
-	for binding in rados cephfs rbd; do                                \
-	  dh_python2 -p python-$$binding; \
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python2 -p python-$$binding;       \
 	done
 	dh_python2 -p ceph-common
 	dh_python2 -p ceph-base
@@ -148,8 +155,8 @@ override_dh_python2:
 	dh_python2 -p ceph-mgr
 
 override_dh_python3:
-	for binding in rados cephfs rbd; do                                \
-	  dh_python3 -p python3-$$binding; \
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python3 -p python3-$$binding;      \
 	done
 	dh_python3 -p python3-ceph-argparse
 

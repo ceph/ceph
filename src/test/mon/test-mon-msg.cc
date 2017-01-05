@@ -42,6 +42,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonJoin.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix *_dout << "test-mon-msg "
@@ -262,9 +263,9 @@ public:
     if (timeout > 0) {
       utime_t cond_timeout;
       cond_timeout.set_from_double(timeout);
-      utime_t s = ceph_clock_now(g_ceph_context);
-      err = cond.WaitInterval(g_ceph_context, lock, cond_timeout);
-      utime_t e = ceph_clock_now(g_ceph_context);
+      utime_t s = ceph_clock_now();
+      err = cond.WaitInterval(lock, cond_timeout);
+      utime_t e = ceph_clock_now();
       dout(20) << __func__ << " took " << (e-s) << " seconds" << dendl;
     } else {
       err = cond.Wait(lock);
@@ -322,13 +323,12 @@ TEST_F(MonMsgTest, MMonJoin)
 
 int main(int argc, char *argv[])
 {
-  vector<const char*> def_args;
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(&def_args, args,
-	      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      0);
+  auto cct = global_init(nullptr, args,
+			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+			 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   ::testing::InitGoogleTest(&argc, argv);

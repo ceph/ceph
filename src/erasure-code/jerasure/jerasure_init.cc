@@ -22,6 +22,8 @@ extern "C" {
 #include "galois.h"
 }
 
+#define dout_context g_ceph_context
+
 extern "C" int jerasure_init(int count, int *words)
 {
   for(int i = 0; i < count; i++) {

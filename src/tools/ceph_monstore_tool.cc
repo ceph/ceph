@@ -272,7 +272,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
     OSDMap::Incremental inc(bl);
     if (inc.crush.length()) {
       inc.crush.clear();
-      crush->encode(inc.crush);
+      crush->encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
     }
     if (inc.fullmap.length()) {
       OSDMap fullmap;
@@ -494,7 +494,7 @@ int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
       }
       ::encode(ps->second, dirty_pgs);
     }
-    utime_t inc_stamp = ceph_clock_now(NULL);
+    utime_t inc_stamp = ceph_clock_now();
     ::encode(inc_stamp, trans_bl);
     ::encode_destructively(dirty_pgs, trans_bl);
     bufferlist dirty_osds;
@@ -635,7 +635,7 @@ static int update_pgmap_meta(MonitorDBStore& st)
   // the first pgmap_meta
   t->put(prefix, "version", 1);
   {
-    auto stamp = ceph_clock_now(g_ceph_context);
+    auto stamp = ceph_clock_now();
     bufferlist bl;
     ::encode(stamp, bl);
     t->put(prefix, "stamp", bl);
@@ -787,7 +787,7 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
+  auto cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_MON,
     CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
@@ -892,7 +892,7 @@ int main(int argc, char **argv) {
       if (r >= 0) {
         OSDMap osdmap;
         osdmap.decode(tmp);
-        osdmap.crush->encode(bl);
+        osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       }
     } else {
       r = st.get(map_type, v, bl);

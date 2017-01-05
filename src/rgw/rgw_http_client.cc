@@ -16,6 +16,7 @@
 
 #include "rgw_coroutine.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 struct rgw_http_req_data : public RefCountedObject {
@@ -226,6 +227,14 @@ static curl_slist *headers_to_slist(param_vec_t& headers)
   return h;
 }
 
+static bool is_upload_request(const char *method)
+{
+  if (method == nullptr) {
+    return false;
+  }
+  return strcmp(method, "POST") == 0 || strcmp(method, "PUT") == 0;
+}
+
 /*
  * process a single simple one off request, not going through RGWHTTPManager. Not using
  * req_data.
@@ -260,7 +269,9 @@ int RGWHTTPClient::process(const char *method, const char *url)
   }
   curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, simple_send_http_data);
   curl_easy_setopt(curl_handle, CURLOPT_READDATA, (void *)this);
-  curl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L); 
+  if (is_upload_request(method)) {
+    curl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L);
+  }
   if (has_send_len) {
     curl_easy_setopt(curl_handle, CURLOPT_INFILESIZE, (void *)send_len); 
   }
@@ -336,7 +347,9 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   }
   curl_easy_setopt(easy_handle, CURLOPT_READFUNCTION, send_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)req_data);
-  curl_easy_setopt(easy_handle, CURLOPT_UPLOAD, 1L); 
+  if (is_upload_request(method)) {
+    curl_easy_setopt(easy_handle, CURLOPT_UPLOAD, 1L);
+  }
   if (has_send_len) {
     curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, (void *)send_len); 
   }

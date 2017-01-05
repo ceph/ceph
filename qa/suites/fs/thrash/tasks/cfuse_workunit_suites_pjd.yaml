@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse set user groups: true
+        fuse default permissions: false
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/pjd.sh

@@ -14,9 +14,6 @@
 #include "mon/PGMap.h"
 #include "gtest/gtest.h"
 
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
 #include "include/stringify.h"
 
 TEST(pgmap, min_last_epoch_clean)
@@ -244,16 +241,4 @@ TEST(pgmap, dump_object_stat_sum_2)
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_t(avail)), tbl.get(0, col++));
   ASSERT_EQ(stringify(0), tbl.get(0, col++));
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  vector<const char*> def_args;
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

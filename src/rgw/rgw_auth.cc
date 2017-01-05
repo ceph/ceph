@@ -11,6 +11,7 @@
 
 #include "include/str_list.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 
@@ -220,7 +221,7 @@ uint32_t RGWLocalAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) c
 
 bool RGWLocalAuthApplier::is_admin_of(const rgw_user& uid) const
 {
-  return user_info.admin;
+  return user_info.admin || user_info.system;
 }
 
 bool RGWLocalAuthApplier::is_owner_of(const rgw_user& uid) const

@@ -131,7 +131,6 @@ class Elector {
    * victory.  Also note each peer's feature set.
    */
   map<int, elector_features_t> acked_me;
-  set<int> classic_mons;
   /**
    * @}
    */

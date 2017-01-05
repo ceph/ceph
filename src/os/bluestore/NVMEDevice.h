@@ -207,7 +207,7 @@ class NVMEDevice : public BlockDevice {
   aio_callback_t aio_callback;
   void *aio_callback_priv;
 
-  NVMEDevice(aio_callback_t cb, void *cbpriv);
+  NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   bool supported_bdev_label() override { return false; }
 

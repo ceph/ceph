@@ -422,6 +422,9 @@ void FSMap::decode(bufferlist::iterator& p)
       migrate_fs->mds_map.epoch = epoch;
       filesystems[migrate_fs->fscid] = migrate_fs;
 
+      // List of GIDs that had invalid states
+      std::set<mds_gid_t> drop_gids;
+
       // Construct mds_roles, standby_daemons, and remove
       // standbys from the MDSMap in the Filesystem.
       for (auto &p : migrate_fs->mds_map.mds_info) {
@@ -431,13 +434,26 @@ void FSMap::decode(bufferlist::iterator& p)
           p.second.rank = p.second.standby_for_rank;
         }
         if (p.second.rank == MDS_RANK_NONE) {
-          insert(p.second); // into standby_daemons
+          if (p.second.state != MDSMap::STATE_STANDBY) {
+            // Old MDSMaps can have down:dne here, which
+            // is invalid in an FSMap (#17837)
+            drop_gids.insert(p.first);
+          } else {
+            insert(p.second); // into standby_daemons
+          }
         } else {
           mds_roles[p.first] = migrate_fs->fscid;
         }
       }
       for (const auto &p : standby_daemons) {
+        // Erase from this Filesystem's MDSMap, because it has
+        // been copied into FSMap::Standby_daemons above
         migrate_fs->mds_map.mds_info.erase(p.first);
+      }
+      for (const auto &gid : drop_gids) {
+        // Throw away all info for this MDS because it was identified
+        // as having invalid state above.
+        migrate_fs->mds_map.mds_info.erase(gid);
       }
 
       legacy_client_fscid = migrate_fs->fscid;

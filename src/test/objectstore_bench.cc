@@ -15,6 +15,7 @@
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 
 static void usage()
@@ -155,7 +156,8 @@ int main(int argc, const char *argv[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY, 0);
 
   std::string val;
   vector<const char*>::iterator i = args.begin();

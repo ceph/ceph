@@ -11,7 +11,7 @@ find_path(DPDK_INCLUDE_DIR rte_config.h
 find_library(DPDK_rte_hash_LIBRARY rte_hash)
 find_library(DPDK_rte_kvargs_LIBRARY rte_kvargs)
 find_library(DPDK_rte_mbuf_LIBRARY rte_mbuf)
-find_library(DPDK_ethdev_LIBRARY ethdev)
+find_library(DPDK_rte_ethdev_LIBRARY rte_ethdev)
 find_library(DPDK_rte_mempool_LIBRARY rte_mempool)
 find_library(DPDK_rte_ring_LIBRARY rte_ring)
 find_library(DPDK_rte_eal_LIBRARY rte_eal)
@@ -27,7 +27,7 @@ set(check_LIBRARIES
   ${DPDK_rte_hash_LIBRARY}
   ${DPDK_rte_kvargs_LIBRARY}
   ${DPDK_rte_mbuf_LIBRARY}
-  ${DPDK_ethdev_LIBRARY}
+  ${DPDK_rte_ethdev_LIBRARY}
   ${DPDK_rte_mempool_LIBRARY}
   ${DPDK_rte_ring_LIBRARY}
   ${DPDK_rte_eal_LIBRARY}
@@ -43,7 +43,7 @@ mark_as_advanced(DPDK_INCLUDE_DIR
   DPDK_rte_hash_LIBRARY
   DPDK_rte_kvargs_LIBRARY
   DPDK_rte_mbuf_LIBRARY
-  DPDK_ethdev_LIBRARY
+  DPDK_rte_ethdev_LIBRARY
   DPDK_rte_mempool_LIBRARY
   DPDK_rte_ring_LIBRARY
   DPDK_rte_eal_LIBRARY
@@ -71,5 +71,5 @@ if (EXISTS ${WITH_DPDK_MLX5})
   list(APPEND check_LIBRARIES -libverbs)
 endif()
   set(DPDK_LIBRARIES
-    -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive)
+    -Wl,--whole-archive ${check_LIBRARIES} -lpthread -Wl,--no-whole-archive)
 endif(DPDK_FOUND)

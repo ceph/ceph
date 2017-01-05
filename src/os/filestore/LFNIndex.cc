@@ -35,6 +35,7 @@
 #include "LFNIndex.h"
 using ceph::crypto::SHA1;
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "LFNIndex(" << get_base_path() << ") "
@@ -782,8 +783,9 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
             *hardlink = 0;
           else
             return -errno;
-        }
-	*hardlink = st.st_nlink;
+        } else {
+	  *hardlink = st.st_nlink;
+	}
       }
       return 0;
     }

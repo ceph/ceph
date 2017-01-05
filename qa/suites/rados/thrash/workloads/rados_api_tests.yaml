@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+    crush_tunables: hammer
+    conf:
+      client:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh

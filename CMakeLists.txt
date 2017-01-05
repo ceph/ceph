@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 11.0.2)
+set(VERSION 11.1.0)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -97,7 +97,6 @@ CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
 CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
-CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
 CHECK_FUNCTION_EXISTS(splice CEPH_HAVE_SPLICE)
 CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
@@ -234,6 +233,13 @@ option(WITH_KVS "Key value store is here" ON)
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
 
+# embedded ceph daemon static library
+# NOTE: Ceph is mostly LGPL (see COPYING), which means that
+# static linking brings with it restrictions. Please be sure
+# to look at the LGPL license carefully before linking this library to
+# your code. See http://www.gnu.org/licenses/gpl-faq.html#LGPLStaticVsDynamic.
+option(WITH_EMBEDDED "build the embedded ceph daemon library" ON)
+
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(WITH_LEVELDB)
   if(LEVELDB_PREFIX)
@@ -278,10 +284,14 @@ else(ALLOCATOR)
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-if(NOT FREEBSD)
-  # XXX keyutils is available, but not yet recognised
+# jemalloc does not support mallinfo
+if(NOT JEMALLOC_FOUND)
+  CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
+endif()
+
+if(WITH_LIBCEPHFS OR WITH_RBD)
   find_package(keyutils REQUIRED)
-endif(NOT FREEBSD)
+endif()
 
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
@@ -342,6 +352,7 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
     set(Python_ADDITIONAL_VERSIONS 2.7)
+    find_package(PythonInterp 2.7 REQUIRED)
     find_package(PythonLibs 2.7 REQUIRED)
     # Boost dependency check deferred to Boost section
 endif(WITH_MGR)

@@ -156,7 +156,7 @@ int check_mon_data_empty()
   return code;
 }
 
-void usage()
+static void usage()
 {
   cerr << "usage: ceph-mon -i monid [flags]" << std::endl;
   cerr << "  --debug_mon n\n";
@@ -180,7 +180,12 @@ void usage()
   generic_server_usage();
 }
 
-int main(int argc, const char **argv) 
+#ifdef BUILDING_FOR_EMBEDDED
+void cephd_preload_embedded_plugins();
+extern "C" int cephd_mon(int argc, const char **argv)
+#else
+int main(int argc, const char **argv)
+#endif
 {
   int err;
 
@@ -236,8 +241,9 @@ int main(int argc, const char **argv)
     }
   }
 
-  global_init(&def_args, args,
-              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags, "mon_data");
+  auto cct = global_init(&def_args, args,
+			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
+			 flags, "mon_data");
   ceph_heap_profiler_init();
 
   uuid_d fsid;
@@ -491,8 +497,12 @@ int main(int argc, const char **argv)
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
+#ifndef BUILDING_FOR_EMBEDDED
     if (global_init_preload_erasure_code(g_ceph_context) < 0)
       prefork.exit(1);
+#else
+    cephd_preload_embedded_plugins();
+#endif
   }
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
@@ -759,7 +769,6 @@ int main(int argc, const char **argv)
   delete msgr;
   delete client_throttler;
   delete daemon_throttler;
-  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

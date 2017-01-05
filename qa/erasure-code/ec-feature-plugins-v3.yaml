@@ -1,0 +1,97 @@
+#
+# Test the expected behavior of the
+#
+#    CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3
+#
+# feature.
+#
+roles:
+- - mon.a
+  - mon.b
+  - osd.0
+  - osd.1
+- - osd.2
+  - mon.c
+tasks:
+#
+# Install hammer
+#
+- install:
+    branch: hammer
+- ceph:
+    fs: xfs
+#
+# We don't need mon.c for now: it will be used later to make sure an old
+# mon cannot join the quorum once the feature has been activated
+#
+- ceph.stop:
+    daemons: [mon.c]
+- exec:
+    mon.a: 
+      - |-
+        ceph osd erasure-code-profile set WRONG plugin=WRONG
+        ceph osd pool create poolWRONG 12 12 erasure WRONG 2>&1 | grep "failed to load plugin using profile WRONG"
+#
+# Partial upgrade, osd.2 is not upgraded
+#
+- install.upgrade:
+    osd.0: 
+#
+# a is the leader
+#
+- ceph.restart:
+    daemons: [mon.a]
+    wait-for-healthy: false
+- exec:
+    mon.a:
+      - |-
+        ceph osd erasure-code-profile set profile-shec k=2 m=1 c=1 plugin=shec 2>&1 | grep "unsupported by: the monitor cluster"
+- ceph.restart:
+    daemons: [mon.b, osd.1, osd.0]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+#
+# The shec plugin cannot be used because osd.2 is not upgraded yet
+# and would crash.
+#
+- exec:
+    mon.a: 
+      - |-
+        ceph osd erasure-code-profile set profile-shec k=2 m=1 c=1 plugin=shec 2>&1 | grep "unsupported by: osd.2"
+#
+# Taking osd.2 out, the rest of the cluster is upgraded
+#
+- ceph.stop:
+    daemons: [osd.2]
+- sleep:
+    duration: 60
+#
+# Creating an erasure code profile using the shec plugin now works
+#
+- exec:
+    mon.a: 
+      - "ceph osd erasure-code-profile set profile-shec k=2 m=1 c=1 plugin=shec"
+#
+# osd.2 won't be able to join the because is does not support the feature
+#
+- ceph.restart:
+    daemons: [osd.2]
+    wait-for-healthy: false
+- sleep:
+    duration: 60
+- exec:
+    osd.2: 
+      - |-
+        grep "protocol feature.*missing" /var/log/ceph/ceph-osd.2.log
+#
+# mon.c won't be able to join the because it does not support the feature
+#
+- ceph.restart:
+    daemons: [mon.c]
+    wait-for-healthy: false
+- sleep:
+    duration: 60
+- exec:
+    mon.c: 
+      - |-
+        grep "missing.*feature" /var/log/ceph/ceph-mon.c.log

@@ -19,6 +19,7 @@
 #include "include/unordered_map.h"
 #include "common/ceph_context.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -41,6 +42,7 @@ PGLog::IndexedLog PGLog::IndexedLog::split_out_child(
 }
 
 void PGLog::IndexedLog::trim(
+  CephContext* cct,
   eversion_t s,
   set<eversion_t> *trimmed)
 {
@@ -120,7 +122,7 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(trim_to, &trimmed);
+    log.trim(cct, trim_to, &trimmed);
     info.log_tail = log.tail;
   }
 }
@@ -176,16 +178,21 @@ void PGLog::proc_replica_log(
   }
 
   /* Because olog.head >= log.tail, we know that both pgs must at least have
-   * the event represented by log.tail.  Thus, lower_bound >= log.tail.  It's
+   * the event represented by log.tail.  Similarly, because log.head >= olog.tail,
+   * we know that the even represented by olog.tail must be common to both logs.
+   * Furthermore, the event represented by a log tail was necessarily trimmed,
+   * thus neither olog.tail nor log.tail can be divergent. It's
    * possible that olog/log contain no actual events between olog.head and
-   * log.tail, however, since they might have been split out.  Thus, if
-   * we cannot find an event e such that log.tail <= e.version <= log.head,
-   * the last_update must actually be log.tail.
+   * MAX(log.tail, olog.tail), however, since they might have been split out.
+   * Thus, if we cannot find an event e such that
+   * log.tail <= e.version <= log.head, the last_update must actually be
+   * MAX(log.tail, olog.tail).
    */
+  eversion_t limit = MAX(olog.tail, log.tail);
   eversion_t lu =
     (first_non_divergent == log.log.rend() ||
-     first_non_divergent->version < log.tail) ?
-    log.tail :
+     first_non_divergent->version < limit) ?
+    limit :
     first_non_divergent->version;
 
   IndexedLog folog(olog);
@@ -290,6 +297,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   //  this is just filling in history.  it does not affect our
   //  missing set, as that should already be consistent with our
   //  current log.
+  eversion_t orig_tail = log.tail;
   if (olog.tail < log.tail) {
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
     list<pg_log_entry_t>::iterator from = olog.log.begin();
@@ -336,19 +344,20 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     // find start point in olog
     list<pg_log_entry_t>::iterator to = olog.log.end();
     list<pg_log_entry_t>::iterator from = olog.log.end();
-    eversion_t lower_bound = olog.tail;
+    eversion_t lower_bound = MAX(olog.tail, orig_tail);
     while (1) {
       if (from == olog.log.begin())
 	break;
       --from;
       dout(20) << "  ? " << *from << dendl;
       if (from->version <= log.head) {
-	dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
-	lower_bound = from->version;
+	lower_bound = MAX(lower_bound, from->version);
 	++from;
 	break;
       }
     }
+    dout(20) << "merge_log cut point (usually last shared) is "
+	     << lower_bound << dendl;
     mark_dirty_from(lower_bound);
 
     auto divergent = log.rewind_from_head(lower_bound);

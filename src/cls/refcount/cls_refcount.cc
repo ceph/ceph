@@ -19,12 +19,6 @@
 CLS_VER(1,0)
 CLS_NAME(refcount)
 
-cls_handle_t h_class;
-cls_method_handle_t h_refcount_get;
-cls_method_handle_t h_refcount_put;
-cls_method_handle_t h_refcount_set;
-cls_method_handle_t h_refcount_read;
-
 
 #define REFCOUNT_ATTR "refcount"
 
@@ -227,9 +221,15 @@ static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, buffe
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(refcount)
 {
   CLS_LOG(1, "Loaded refcount class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_refcount_get;
+  cls_method_handle_t h_refcount_put;
+  cls_method_handle_t h_refcount_set;
+  cls_method_handle_t h_refcount_read;
 
   cls_register("refcount", &h_class);
 

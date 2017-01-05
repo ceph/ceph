@@ -25,11 +25,10 @@
 
 #include "acconfig.h"
 #include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
+
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -125,12 +124,12 @@ class C_poll : public EventCallback {
     woken = true;
   }
   bool poll(int milliseconds) {
-    auto start = ceph::coarse_real_clock::now(g_ceph_context);
+    auto start = ceph::coarse_real_clock::now();
     while (!woken) {
       center->process_events(sleepus);
       usleep(sleepus);
       auto r = std::chrono::duration_cast<std::chrono::milliseconds>(
-              ceph::coarse_real_clock::now(g_ceph_context) - start);
+              ceph::coarse_real_clock::now() - start);
       if (r >= std::chrono::milliseconds(milliseconds))
         break;
     }
@@ -1058,17 +1057,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
 
 /*
  * Local Variables:

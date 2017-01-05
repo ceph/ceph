@@ -1,0 +1,11 @@
+tasks:
+- install:
+- ceph:
+    fs: btrfs
+    log-whitelist:
+      - wrongly marked me down
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - rados/test_python.sh

@@ -400,7 +400,6 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
-  f->dump_unsigned("shared_blob_id", sbid);
   f->dump_unsigned("compressed_length_original", compressed_length_orig);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
@@ -411,7 +410,7 @@ void bluestore_blob_t::dump(Formatter *f) const
   for (unsigned i = 0; i < n; ++i)
     f->dump_unsigned("csum", get_csum_item(i));
   f->close_section();
-  f->dump_unsigned("unused", unused.to_ullong());
+  f->dump_unsigned("unused", unused);
 }
 
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
@@ -434,9 +433,6 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents;
-  if (o.sbid) {
-    out << " sbid 0x" << std::hex << o.sbid << std::dec;
-  }
   if (o.is_compressed()) {
     out << " clen 0x" << std::hex
 	<< o.compressed_length_orig
@@ -452,7 +448,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec;
   }
   if (o.has_unused())
-    out << " unused=0x" << std::hex << o.unused.to_ullong() << std::dec;
+    out << " unused=0x" << std::hex << o.unused << std::dec;
   out << ")";
   return out;
 }
@@ -550,13 +546,12 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
 {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("bytes", bytes);
-  f->dump_unsigned("extents", extents);
 }
 
 ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si)
 {
-  return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes, "
-	     << std::dec << si.extents << " extents)";
+  return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes"
+	     << std::dec << ")";
 }
 
 void bluestore_onode_t::dump(Formatter *f) const
@@ -572,7 +567,7 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->dump_unsigned("omap_head", omap_head);
+  f->dump_string("flags", get_flags_string());
   f->open_array_section("extent_map_shards");
   for (auto si : extent_map_shards) {
     f->dump_object("shard", si);
@@ -588,18 +583,6 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   o.push_back(new bluestore_onode_t());
   // FIXME
 }
-
-// FIXME: Using this to compute the ctx.csum_order can lead to poor small
-// random read performance when initial writes are large.
-size_t bluestore_onode_t::get_preferred_csum_order() const
-{
-  uint32_t t = expected_write_size;
-  if (!t) {
-    return 0;
-  }
-  return ctz(expected_write_size);
-}
-
 
 // bluestore_wal_op_t
 

@@ -183,8 +183,9 @@ int main(int argc, const char **argv)
   list<string> rm;
   list<feature_op_t> features;
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -306,7 +307,7 @@ int main(int argc, const char **argv)
 
   if (create) {
     monmap.epoch = 0;
-    monmap.created = ceph_clock_now(g_ceph_context);
+    monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
     if (g_conf->fsid.is_zero()) {

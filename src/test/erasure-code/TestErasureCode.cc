@@ -17,9 +17,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include "global/global_init.h"
 #include "erasure-code/ErasureCode.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
@@ -151,22 +149,6 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
     ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));
     ASSERT_TRUE(encoded[i].is_n_align_sized(chunk_size));
   }
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

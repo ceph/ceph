@@ -65,7 +65,7 @@ order to determine which clones might need to be removed upon snap
 removal, we maintain a mapping from snap to *hobject_t* using the
 *SnapMapper*.
 
-See ReplicatedPG::SnapTrimmer, SnapMapper
+See PrimaryLogPG::SnapTrimmer, SnapMapper
 
 This trimming is performed asynchronously by the snap_trim_wq while the
 pg is clean and not scrubbing.

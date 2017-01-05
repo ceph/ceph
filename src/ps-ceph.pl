@@ -23,6 +23,10 @@ sub is_ceph_proc {
         return 1 if $cmdline =~ /\bceph-mds\b/;
         return 1 if $cmdline =~ /\bceph-mon\b/;
         return 1 if $cmdline =~ /\bceph-osd\b/;
+        return 1 if $cmdline =~ /\bceph-mgr\b/;
+        return 1 if $cmdline =~ /\bceph-disk\b/;
+        return 1 if $cmdline =~ /\brbd-mirror\b/;
+        return 1 if $cmdline =~ /\bradosgw\b/;
         return 1 if $cmdline =~ /\bosdmaptool\b/;
         return 1 if $cmdline =~ /\brados\b/;
         return 1 if $cmdline =~ /test_/;

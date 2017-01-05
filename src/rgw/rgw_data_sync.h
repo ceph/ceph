@@ -185,9 +185,7 @@ struct rgw_datalog_shard_data {
 };
 
 class RGWAsyncRadosProcessor;
-class RGWDataSyncStatusManager;
 class RGWDataSyncControlCR;
-struct RGWDataSyncEnv;
 
 struct rgw_bucket_entry_owner {
   string id;
@@ -479,7 +477,6 @@ class RGWBucketSyncStatusManager {
 
   RGWCoroutinesManager cr_mgr;
 
-  RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager http_manager;
 
   string source_zone;
@@ -504,7 +501,6 @@ public:
   RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
                              const rgw_bucket& bucket) : store(_store),
                                                                                      cr_mgr(_store->ctx(), _store->get_cr_registry()),
-                                                                                     async_rados(NULL),
                                                                                      http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                      source_zone(_source_zone),
                                                                                      conn(NULL), error_logger(NULL),
@@ -530,22 +526,9 @@ public:
   int create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
-
-class RGWDataLogTrimCR : public RGWCoroutine {
-  RGWRados *store;
-  RGWHTTPManager *http;
-  const int num_shards;
-  const utime_t interval; //< polling interval
-  const std::string& zone; //< my zone id
-  std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
-  std::vector<rgw_data_sync_marker> min_shard_markers; //< min marker per shard
-  std::vector<std::string> last_trim; //< last trimmed marker per shard
-  int ret{0};
-
- public:
-  RGWDataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
-                   int num_shards, utime_t interval);
-  int operate() override;
-};
+// DataLogTrimCR factory function
+extern RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
+                                             RGWHTTPManager *http,
+                                             int num_shards, utime_t interval);
 
 #endif

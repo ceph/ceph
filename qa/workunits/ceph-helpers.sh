@@ -117,7 +117,8 @@ function test_setup() {
 function teardown() {
     local dir=$1
     kill_daemons $dir KILL
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ `uname` != FreeBSD ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
     rm -fr $dir
@@ -892,6 +893,8 @@ function test_get_not_primary() {
 # @param STDOUT the output of ceph-objectstore-tool
 # @return 0 on success, 1 on error
 #
+# The value of $ceph_osd_args will be passed to restarted osds
+#
 function objectstore_tool() {
     local dir=$1
     shift
@@ -904,7 +907,7 @@ function objectstore_tool() {
         --data-path $osd_data \
         --journal-path $osd_data/journal \
         "$@" || return 1
-    activate_osd $dir $id >&2 || return 1
+    activate_osd $dir $id $ceph_osd_args >&2 || return 1
     wait_for_clean >&2
 }
 
@@ -1082,6 +1085,8 @@ function test_is_clean() {
 # @return a list of sleep delays
 #
 function get_timeout_delays() {
+    local saved_state=$(set +o)
+    set +x
     local timeout=$1
     local first_step=${2:-1}
 
@@ -1096,6 +1101,7 @@ function get_timeout_delays() {
     if test "$(echo $total \< $timeout | bc -l)" = "1"; then
         echo -n $(echo $timeout - $total | bc -l)
     fi
+    eval "$saved_state"
 }
 
 function test_get_timeout_delays() {
@@ -1412,7 +1418,7 @@ function run_in_background() {
     shift;
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the awk one.
-    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print PROCINFO["pid"] ": " a[i]} }'; return ${PIPESTATUS[0]}) &
+    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print "'$$': " a[i]} }'; return ${PIPESTATUS[0]}) >&2 &
     eval "$pid_variable+=\" $!\""
 }
 

@@ -55,7 +55,7 @@ namespace ECTransaction {
 	  plan.invalidates_cache = true;
 	}
 
-	if (i.second.is_delete()) {
+	if (i.second.deletes_first()) {
 	  ldpp_dout(dpp, 20) << __func__ << ": delete, setting projected size"
 			     << " to 0" << dendl;
 	  projected_size = 0;
@@ -73,13 +73,13 @@ namespace ECTransaction {
 	    i.second.truncate->first < projected_size) {
 	  if (!(sinfo.logical_offset_is_stripe_aligned(
 		  i.second.truncate->first))) {
-	    plan.to_read[i.first].insert(
+	    plan.to_read[i.first].union_insert(
 	      sinfo.logical_to_prev_stripe_offset(i.second.truncate->first),
 	      sinfo.get_stripe_width());
 
 	    ldpp_dout(dpp, 20) << __func__ << ": unaligned truncate" << dendl;
 
-	    will_write.insert(
+	    will_write.union_insert(
 	      sinfo.logical_to_prev_stripe_offset(i.second.truncate->first),
 	      sinfo.get_stripe_width());
 	  }
@@ -87,6 +87,7 @@ namespace ECTransaction {
 	    i.second.truncate->first);
 	}
 
+	extent_set raw_write_set;
 	for (auto &&extent: i.second.buffer_updates) {
 	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
 	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
@@ -94,11 +95,16 @@ namespace ECTransaction {
 	      0 ==
 	      "CloneRange is not allowed, do_op should have returned ENOTSUPP");
 	  }
+	  raw_write_set.insert(extent.get_off(), extent.get_len());
+	}
 
+	for (auto extent = raw_write_set.begin();
+	     extent != raw_write_set.end();
+	     ++extent) {
 	  uint64_t head_start =
-	    sinfo.logical_to_prev_stripe_offset(extent.get_off());
+	    sinfo.logical_to_prev_stripe_offset(extent.get_start());
 	  uint64_t head_finish =
-	    sinfo.logical_to_next_stripe_offset(extent.get_off());
+	    sinfo.logical_to_next_stripe_offset(extent.get_start());
 	  if (head_start > projected_size) {
 	    head_start = projected_size;
 	  }
@@ -106,22 +112,22 @@ namespace ECTransaction {
 	      head_start < projected_size) {
 	    assert(head_finish <= projected_size);
 	    assert(head_finish - head_start == sinfo.get_stripe_width());
-	    plan.to_read[i.first].insert(
+	    plan.to_read[i.first].union_insert(
 	      head_start, sinfo.get_stripe_width());
 	  }
 
 	  uint64_t tail_start =
 	    sinfo.logical_to_prev_stripe_offset(
-	      extent.get_off() + extent.get_len());
+	      extent.get_start() + extent.get_len());
 	  uint64_t tail_finish =
 	    sinfo.logical_to_next_stripe_offset(
-	      extent.get_off() + extent.get_len());
+	      extent.get_start() + extent.get_len());
 	  if (tail_start != tail_finish &&
-	      tail_start != head_start &&
+	      (head_start == head_finish || tail_start != head_start) &&
 	      tail_start < projected_size) {
 	    assert(tail_finish <= projected_size);
 	    assert(tail_finish - tail_start == sinfo.get_stripe_width());
-	    plan.to_read[i.first].insert(
+	    plan.to_read[i.first].union_insert(
 	      tail_start, sinfo.get_stripe_width());
 	  }
 
@@ -130,7 +136,7 @@ namespace ECTransaction {
 	      sinfo.logical_offset_is_stripe_aligned(
 		tail_finish - head_start)
 	      );
-	    will_write.insert(
+	    will_write.union_insert(
 	      head_start, tail_finish - head_start);
 	    if (tail_finish > projected_size)
 	      projected_size = tail_finish;
@@ -146,7 +152,7 @@ namespace ECTransaction {
 	  ldpp_dout(dpp, 20) << __func__ << ": truncating out to "
 			     <<  truncating_to
 			     << dendl;
-	  will_write.insert(projected_size, truncating_to - projected_size);
+	  will_write.union_insert(projected_size, truncating_to - projected_size);
 	  projected_size = truncating_to;
 	}
 
@@ -157,7 +163,14 @@ namespace ECTransaction {
 	hinfo->set_projected_total_logical_size(
 	  sinfo,
 	  projected_size);
-	assert(plan.to_read[i.first].empty() || !i.second.has_source());
+
+	/* validate post conditions:
+	 * to_read should have an entry for i.first iff it isn't empty
+	 * and if we are reading from i.first, we can't be renaming or
+	 * cloning it */
+	assert(plan.to_read.count(i.first) == 0 ||
+	       (!plan.to_read.at(i.first).empty() &&
+		!i.second.has_source()));
       });
     plan.t = std::move(t);
     return plan;

@@ -51,7 +51,6 @@
 #include "Packet.h"
 
 class arp;
-class arp_for_protocol;
 template <typename L3>
 class arp_for;
 

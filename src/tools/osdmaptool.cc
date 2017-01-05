@@ -45,8 +45,9 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   const char *me = argv[0];
@@ -277,7 +278,7 @@ int main(int argc, const char **argv)
 
   if (!export_crush.empty()) {
     bufferlist cbl;
-    osdmap.crush->encode(cbl);
+    osdmap.crush->encode(cbl, CEPH_FEATURES_SUPPORTED_DEFAULT);
     r = cbl.write_file(export_crush.c_str());
     if (r < 0) {
       cerr << me << ": error writing crush map to " << import_crush << std::endl;
@@ -406,7 +407,7 @@ int main(int argc, const char **argv)
 	max_osd = i;
 
     }
-    uint64_t avg = total / in;
+    uint64_t avg = in ? (total / in) : 0;
     double dev = 0;
     for (int i=0; i<n; i++) {
       if (!osdmap.is_in(i))

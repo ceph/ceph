@@ -17,13 +17,6 @@
 CLS_VER(1,0)
 CLS_NAME(user)
 
-cls_handle_t h_class;
-cls_method_handle_t h_user_set_buckets_info;
-cls_method_handle_t h_user_complete_stats_sync;
-cls_method_handle_t h_user_remove_bucket;
-cls_method_handle_t h_user_list_buckets;
-cls_method_handle_t h_user_get_header;
-
 static int write_entry(cls_method_context_t hctx, const string& key, const cls_user_bucket_entry& entry)
 {
   bufferlist bl;
@@ -370,9 +363,16 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(user)
 {
   CLS_LOG(1, "Loaded user class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_user_set_buckets_info;
+  cls_method_handle_t h_user_complete_stats_sync;
+  cls_method_handle_t h_user_remove_bucket;
+  cls_method_handle_t h_user_list_buckets;
+  cls_method_handle_t h_user_get_header;
 
   cls_register("user", &h_class);
 

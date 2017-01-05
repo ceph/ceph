@@ -1651,7 +1651,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
 
         ldout(cct, 10) << "removing object map..." << dendl;
-        r = ObjectMap::remove(io_ctx, id);
+        r = ObjectMap<>::remove(io_ctx, id);
         if (r < 0 && r != -ENOENT) {
           lderr(cct) << "error removing image object map" << dendl;
           return r;
@@ -2179,7 +2179,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t left = mylen;
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    start_time = ceph_clock_now(ictx->cct);
+    start_time = ceph_clock_now();
     while (left > 0) {
       uint64_t period_off = off - (off % period);
       uint64_t read_len = min(period_off + period - off, left);
@@ -2206,7 +2206,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       off += ret;
     }
 
-    elapsed = ceph_clock_now(ictx->cct) - start_time;
+    elapsed = ceph_clock_now() - start_time;
     ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_rd);
     ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);

@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
+  auto cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = true;
     }*/
-  DBObjectMap omap(store);
+  DBObjectMap omap(cct.get(), store);
   stringstream out;
   int r = store->open(out);
   if (r < 0) {

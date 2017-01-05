@@ -20,6 +20,58 @@
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
 
+RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
+						 RDMAWorker *w)
+  : cct(cct), connected(0), error(0), infiniband(ib),
+    dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
+    is_server(false), con_handler(new C_handle_connection(this)),
+    active(false), detached(false)
+{
+  qp = infiniband->create_queue_pair(
+				     cct, s->get_rx_cq(), s->get_rx_cq(), IBV_QPT_RC);
+  my_msg.qpn = qp->get_local_qp_number();
+  my_msg.psn = qp->get_initial_psn();
+  my_msg.lid = infiniband->get_lid();
+  my_msg.peer_qpn = 0;
+  my_msg.gid = infiniband->get_gid();
+  notify_fd = dispatcher->register_qp(qp, this);
+}
+
+RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
+{
+  worker->remove_pending_conn(this);
+  dispatcher->erase_qpn(my_msg.qpn);
+  cleanup();
+  if (notify_fd >= 0)
+    ::close(notify_fd);
+  if (tcp_fd >= 0)
+    ::close(tcp_fd);
+  error = ECONNRESET;
+  Mutex::Locker l(lock);
+  for (unsigned i=0; i < wc.size(); ++i)
+    infiniband->recall_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
+  for (unsigned i=0; i < buffers.size(); ++i)
+    infiniband->recall_chunk(buffers[i]);
+}
+
+void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
+{
+  Mutex::Locker l(lock);
+  if (wc.empty())
+    wc = std::move(v);
+  else
+    wc.insert(wc.end(), v.begin(), v.end());
+  notify();
+}
+
+void RDMAConnectedSocketImpl::get_wc(std::vector<ibv_wc> &w)
+{
+  Mutex::Locker l(lock);
+  if (wc.empty())
+    return ;
+  w.swap(wc);
+}
+
 int RDMAConnectedSocketImpl::activate()
 {
   ibv_qp_attr qpa;
@@ -37,12 +89,15 @@ int RDMAConnectedSocketImpl::activate()
   qpa.ah_attr.is_global = 1;
   qpa.ah_attr.grh.hop_limit = 6;
   qpa.ah_attr.grh.dgid = peer_msg.gid;
-  qpa.ah_attr.grh.sgid_index = 0;
+
+  qpa.ah_attr.grh.sgid_index = infiniband->get_device()->get_gid_idx();
 
   qpa.ah_attr.dlid = peer_msg.lid;
-  qpa.ah_attr.sl = 0;
+  qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
   qpa.ah_attr.src_path_bits = 0;
   qpa.ah_attr.port_num = (uint8_t)(infiniband->get_ib_physical_port());
+
+  ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
 
   r = ibv_modify_qp(qp->get_qp(), &qpa, IBV_QP_STATE |
       IBV_QP_AV |
@@ -463,4 +518,46 @@ void RDMAConnectedSocketImpl::cleanup() {
     delete con_handler;
     con_handler = nullptr;
   }
+}
+
+void RDMAConnectedSocketImpl::notify()
+{
+  uint64_t i = 1;
+  assert(write(notify_fd, &i, sizeof(i)) == sizeof(i));
+}
+
+void RDMAConnectedSocketImpl::shutdown()
+{
+  if (!error)
+    fin();
+  error = ECONNRESET;
+  active = false;
+}
+
+void RDMAConnectedSocketImpl::close()
+{
+  if (!error)
+    fin();
+  error = ECONNRESET;
+  active = false;
+}
+
+void RDMAConnectedSocketImpl::fault()
+{
+  /*if (qp) {
+    qp->to_dead();
+    qp = NULL;
+    }*/
+  error = ECONNRESET;
+  connected = 1;
+  notify();
+}
+
+void RDMAConnectedSocketImpl::set_accept_fd(int sd)
+{
+  tcp_fd = sd;
+  is_server = true;
+  worker->center.submit_to(worker->center.get_id(), [this]() {
+			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+			   }, true);
 }

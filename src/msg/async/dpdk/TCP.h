@@ -543,13 +543,13 @@ class tcp {
     }
     void do_syn_sent() {
       _state = SYN_SENT;
-      _snd.syn_tx_time = clock_type::now(_tcp.cct);
+      _snd.syn_tx_time = clock_type::now();
       // Send <SYN> to remote
       output();
     }
     void do_syn_received() {
       _state = SYN_RECEIVED;
-      _snd.syn_tx_time = clock_type::now(_tcp.cct);
+      _snd.syn_tx_time = clock_type::now();
       // Send <SYN,ACK> to remote
       output();
     }
@@ -1198,7 +1198,7 @@ void tcp<InetTraits>::tcb::output_one(bool data_retransmit) {
   p.set_offload_info(oi);
 
   if (!data_retransmit && (len || syn_on || fin_on)) {
-    auto now = clock_type::now(_tcp.cct);
+    auto now = clock_type::now();
     if (len) {
       unsigned nr_transmits = 0;
       _snd.data.emplace_back(unacked_segment{std::move(clone),
@@ -1245,7 +1245,7 @@ int tcp<InetTraits>::tcb::send(Packet p) {
   auto len = p.len();
   if (!_snd.user_queue_space.get_or_fail(len)) {
     // note: caller must ensure enough queue space to send
-    assert(0);
+    ceph_abort();
   }
   // TODO: Handle p.len() > max user_queue_space case
   _snd.queued_len += len;
@@ -1380,7 +1380,7 @@ void tcp<InetTraits>::tcb::fast_retransmit() {
 template <typename InetTraits>
 void tcp<InetTraits>::tcb::update_rto(clock_type::time_point tx_time) {
   // Update RTO according to RFC6298
-  auto R = std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now(_tcp.cct) - tx_time);
+  auto R = std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - tx_time);
   if (_snd.first_rto_sample) {
     _snd.first_rto_sample = false;
     // RTTVAR <- R/2
@@ -1445,7 +1445,7 @@ tcp_sequence tcp<InetTraits>::tcb::get_isn() {
   hash[3] = _isn_secret.key[15];
   CryptoPP::Weak::MD5::Transform(hash, _isn_secret.key);
   auto seq = hash[0];
-  auto m = duration_cast<microseconds>(clock_type::now(_tcp.cct).time_since_epoch());
+  auto m = duration_cast<microseconds>(clock_type::now().time_since_epoch());
   seq += m.count() / 4;
   return make_seq(seq);
 }

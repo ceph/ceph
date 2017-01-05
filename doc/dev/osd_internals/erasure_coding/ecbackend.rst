@@ -193,7 +193,7 @@ Pipeline
 Reading src/osd/ExtentCache.h should have given a good idea of how
 operations might overlap.  There are several states involved in
 processing a write operation and an important invariant which
-isn't enforced by ReplicatedPG at a higher level which need to be
+isn't enforced by PrimaryLogPG at a higher level which need to be
 managed by ECBackend.  The important invariant is that we can't
 have uncacheable and rmw operations running at the same time
 on the same object.  For simplicity, we simply enforce that any

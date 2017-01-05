@@ -14,7 +14,6 @@
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
-#include "test/unit.h"
 #include "common/debug.h"
 #include "gmock/gmock.h"
 

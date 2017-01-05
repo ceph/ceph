@@ -34,10 +34,8 @@ struct MMonSubscribeAck;
 class MMonCommandAck;
 class MCommandReply;
 struct MAuthReply;
-class MAuthRotating;
 class MPing;
 class LogClient;
-class AuthSupported;
 class AuthMethodList;
 class Messenger;
 // class RotatingKeyRing;
@@ -64,7 +62,7 @@ struct MonClientPinger : public Dispatcher {
   { }
 
   int wait_for_reply(double timeout = 0.0) {
-    utime_t until = ceph_clock_now(cct);
+    utime_t until = ceph_clock_now();
     until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
     done = false;
 
@@ -152,7 +150,6 @@ private:
 
   Cond auth_cond;
 
-  void handle_auth_rotating_response(MAuthRotating *m);
   // monclient
   bool want_monmap;
 

@@ -20,11 +20,6 @@
 CLS_VER(1,0)
 CLS_NAME(timeindex)
 
-cls_handle_t h_class;
-cls_method_handle_t h_timeindex_add;
-cls_method_handle_t h_timeindex_list;
-cls_method_handle_t h_timeindex_trim;
-
 static const size_t MAX_LIST_ENTRIES = 1000;
 static const size_t MAX_TRIM_ENTRIES = 1000;
 
@@ -254,9 +249,14 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(timeindex)
 {
   CLS_LOG(1, "Loaded timeindex class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_timeindex_add;
+  cls_method_handle_t h_timeindex_list;
+  cls_method_handle_t h_timeindex_trim;
 
   cls_register("timeindex", &h_class);
 

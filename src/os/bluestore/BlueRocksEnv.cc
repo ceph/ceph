@@ -133,7 +133,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
     if (pattern == RANDOM)
       h->buf.max_prefetch = 4096;
     else if (pattern == SEQUENTIAL)
-      h->buf.max_prefetch = g_conf->bluefs_max_prefetch;
+      h->buf.max_prefetch = fs->cct->_conf->bluefs_max_prefetch;
   }
 
   // Remove any kind of caching of data from the offset to offset+length
@@ -397,7 +397,7 @@ rocksdb::Status BlueRocksEnv::NewDirectory(
   std::unique_ptr<rocksdb::Directory>* result)
 {
   if (!fs->dir_exists(name))
-    return rocksdb::Status::IOError(name, strerror(-ENOENT));
+    return rocksdb::Status::IOError(name, strerror(ENOENT));
   result->reset(new BlueRocksDirectory(fs));
   return rocksdb::Status::OK();
 }
@@ -419,7 +419,7 @@ rocksdb::Status BlueRocksEnv::GetChildren(
 {
   int r = fs->readdir(dir, result);
   if (r < 0)
-    return rocksdb::Status::IOError(dir, strerror(-ENOENT));//    return err_to_status(r);
+    return rocksdb::Status::IOError(dir, strerror(ENOENT));//    return err_to_status(r);
   return rocksdb::Status::OK();
 }
 

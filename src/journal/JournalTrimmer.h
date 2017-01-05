@@ -34,13 +34,13 @@ private:
   typedef std::function<Context*()> CreateContext;
 
   struct MetadataListener : public JournalMetadataListener {
-    JournalTrimmer *journal_trimmmer;
+    JournalTrimmer *journal_trimmer;
 
-    MetadataListener(JournalTrimmer *journal_trimmmer)
-      : journal_trimmmer(journal_trimmmer) {
+    MetadataListener(JournalTrimmer *journal_trimmer)
+      : journal_trimmer(journal_trimmer) {
     }
     void handle_update(JournalMetadata *) {
-      journal_trimmmer->handle_metadata_updated();
+      journal_trimmer->handle_metadata_updated();
     }
   };
 

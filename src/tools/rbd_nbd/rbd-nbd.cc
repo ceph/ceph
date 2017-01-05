@@ -51,6 +51,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/xlist.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
@@ -63,7 +64,8 @@ static void usage()
             << "Options:\n"
             << "  --device <device path>                    Specify nbd device path\n"
             << "  --read-only                               Map readonly\n"
-            << "  --nbds_max <limit>                        Override for module param\n"
+            << "  --nbds_max <limit>                        Override for module param nbds_max\n"
+            << "  --max_part <limit>                        Override for module param max_part\n"
             << "  --exclusive                               Forbid other clients write\n"
             << std::endl;
   generic_server_usage();
@@ -72,6 +74,7 @@ static void usage()
 static std::string devpath, poolname("rbd"), imgname, snapname;
 static bool readonly = false;
 static int nbds_max = 0;
+static int max_part = 255;
 static bool exclusive = false;
 
 #ifdef CEPH_BIG_ENDIAN
@@ -222,7 +225,7 @@ private:
 
       int r = safe_read_exact(fd, &ctx->request, sizeof(struct nbd_request));
       if (r < 0) {
-	derr << "failed to read nbd request header: " << cpp_strerror(errno)
+	derr << "failed to read nbd request header: " << cpp_strerror(r)
 	     << dendl;
 	return;
       }
@@ -254,7 +257,7 @@ private:
 	  r = safe_read_exact(fd, ptr.c_str(), ctx->request.len);
           if (r < 0) {
 	    derr << *ctx << ": failed to read nbd request data: "
-		 << cpp_strerror(errno) << dendl;
+		 << cpp_strerror(r) << dendl;
             return;
 	  }
           ctx->data.push_back(ptr);
@@ -446,14 +449,15 @@ static int open_device(const char* path, bool try_load_moudle = false)
 {
   int nbd = open(path, O_RDWR);
   if (nbd < 0 && try_load_moudle && access("/sys/module/nbd", F_OK) != 0) {
+    ostringstream param;
     int r;
     if (nbds_max) {
-      ostringstream param;
       param << "nbds_max=" << nbds_max;
-      r = module_load("nbd", param.str().c_str());
-    } else {
-      r = module_load("nbd", NULL);
     }
+    if (max_part) {
+        param << " max_part=" << max_part;
+    }
+    r = module_load("nbd", param.str().c_str());
     if (r < 0) {
       cerr << "rbd-nbd: failed to load nbd kernel module: " << cpp_strerror(-r) << std::endl;
       return r;
@@ -493,8 +497,9 @@ static int do_map()
     }
 
     if (forker.is_parent()) {
+      global_init_postfork_start(g_ceph_context);
       if (forker.parent_wait(err) != 0) {
-	return -ENXIO;
+        return -ENXIO;
       }
       return 0;
     }
@@ -754,8 +759,9 @@ static int rbd_nbd(int argc, const char *argv[])
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-              CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_DAEMON,
+			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
   g_ceph_context->_conf->set_val_or_die("pid_file", "");
 
   std::vector<const char*>::iterator i;
@@ -773,6 +779,15 @@ static int rbd_nbd(int argc, const char *argv[])
       }
       if (nbds_max < 0) {
         cerr << "rbd-nbd: Invalid argument for nbds_max!" << std::endl;
+        return EXIT_FAILURE;
+      }
+    } else if (ceph_argparse_witharg(args, i, &max_part, err, "--max_part", (char *)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      if ((max_part < 0) || (max_part > 255)) {
+        cerr << "rbd-nbd: Invalid argument for max_part(0~255)!" << std::endl;
         return EXIT_FAILURE;
       }
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {

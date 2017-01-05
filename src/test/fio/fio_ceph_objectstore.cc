@@ -23,10 +23,7 @@
 
 #include "include/assert.h" // fio.h clobbers our assert.h
 
-
-// enable boost::intrusive_ptr<CephContext>
-void intrusive_ptr_add_ref(CephContext* cct) { cct->get(); }
-void intrusive_ptr_release(CephContext* cct) { cct->put(); }
+#define dout_context g_ceph_context
 
 namespace {
 
@@ -107,11 +104,10 @@ Engine::Engine(const thread_data* td) : ref_count(0)
     args.emplace_back(td->o.directory);
   }
 
-  global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
   // claim the g_ceph_context reference and release it on destruction
-  cct = boost::intrusive_ptr<CephContext>(g_ceph_context, false);
+  cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
 
   // create the ObjectStore
   os.reset(ObjectStore::create(g_ceph_context,

@@ -261,11 +261,13 @@ int execute_list_images(const po::variables_map &vm) {
 
   if (r == -ENOENT)
     r = 0;
+
   if (r < 0)
     return r;
 
   if (f)
     f->open_array_section("consistency_groups");
+
   for (auto i : images) {
     std::string image_name = i.name;
     int64_t pool_id = i.pool;
@@ -274,8 +276,6 @@ int execute_list_images(const po::variables_map &vm) {
     if (cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE == state) {
       state_string = "incomplete";
     }
-    if (r < 0)
-      return r;
     if (f) {
       f->dump_string("image name", image_name);
       f->dump_int("pool id", pool_id);
@@ -283,6 +283,7 @@ int execute_list_images(const po::variables_map &vm) {
     } else
       std::cout << pool_id << "." << image_name << " " << state_string << std::endl;
   }
+
   if (f) {
     f->close_section();
     f->flush(std::cout);

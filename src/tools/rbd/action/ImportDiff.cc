@@ -12,6 +12,7 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
 namespace rbd {

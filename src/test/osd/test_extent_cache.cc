@@ -166,3 +166,115 @@ TEST(extentcache, write_write_overlap)
 
   c.release_write_pin(pin2);
 }
+
+TEST(extentcache, write_write_overlap2)
+{
+  hobject_t oid;
+
+  ExtentCache c;
+  ExtentCache::write_pin pin;
+  c.open_write_pin(pin);
+
+  // start write 1
+  auto to_read = extent_set();
+  auto to_write = iset_from_vector(
+    {{659456, 4096}});
+  auto must_read = c.reserve_extents_for_rmw(
+    oid, pin, to_write, to_read);
+  ASSERT_EQ(
+    must_read,
+    to_read);
+
+  c.print(std::cerr);
+
+  // start write 2
+  ExtentCache::write_pin pin2;
+  c.open_write_pin(pin2);
+  auto to_read2 = extent_set();
+  auto to_write2 = iset_from_vector(
+    {{663552, 4096}});
+  auto must_read2 = c.reserve_extents_for_rmw(
+    oid, pin2, to_write2, to_read2);
+  ASSERT_EQ(
+    must_read2,
+    to_read2);
+
+
+  // start write 3
+  ExtentCache::write_pin pin3;
+  c.open_write_pin(pin3);
+  auto to_read3 = iset_from_vector({{659456, 8192}});
+  auto to_write3 = iset_from_vector({{659456, 8192}});
+  auto must_read3 = c.reserve_extents_for_rmw(
+    oid, pin3, to_write3, to_read3);
+  ASSERT_EQ(
+    must_read3,
+    extent_set());
+
+  c.print(std::cerr);
+
+  // complete read for write 1 and start commit
+  auto got = imap_from_iset(must_read);
+  auto pending_read = to_read;
+  pending_read.subtract(must_read);
+  auto pending = c.get_remaining_extents_for_rmw(
+    oid,
+    pin,
+    pending_read);
+  ASSERT_TRUE(pending.empty());
+
+  auto write_map = imap_from_iset(to_write);
+  c.present_rmw_update(
+    oid,
+    pin,
+    write_map);
+
+  c.print(std::cerr);
+
+  // complete read for write 2 and start commit
+  auto pending_read2 = to_read2;
+  pending_read2.subtract(must_read2);
+  auto pending2 = c.get_remaining_extents_for_rmw(
+    oid,
+    pin2,
+    pending_read2);
+  ASSERT_EQ(
+    pending2,
+    imap_from_iset(pending_read2));
+
+  auto write_map2 = imap_from_iset(to_write2);
+  c.present_rmw_update(
+    oid,
+    pin2,
+    write_map2);
+
+  // complete read for write 2 and start commit
+  auto pending_read3 = to_read3;
+  pending_read3.subtract(must_read3);
+  auto pending3 = c.get_remaining_extents_for_rmw(
+    oid,
+    pin3,
+    pending_read3);
+  ASSERT_EQ(
+    pending3,
+    imap_from_iset(pending_read3));
+
+  auto write_map3 = imap_from_iset(to_write3);
+  c.present_rmw_update(
+    oid,
+    pin3,
+    write_map3);
+
+
+  c.print(std::cerr);
+
+  c.release_write_pin(pin);
+
+  c.print(std::cerr);
+
+  c.release_write_pin(pin2);
+
+  c.print(std::cerr);
+
+  c.release_write_pin(pin3);
+}

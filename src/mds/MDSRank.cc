@@ -36,6 +36,7 @@
 
 #include "MDSRank.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
@@ -187,7 +188,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   mds_load_t load = balancer->get_load(now);
 
   if (logger) {
@@ -465,7 +466,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
 
   // hack: thrash exports
   static utime_t start;
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   if (start == utime_t())
     start = now;
   /*double el = now - start;
@@ -520,11 +521,13 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
     frag_t fg = dir->get_frag();
-    if (mdsmap->allows_dirfrags() &&
-	(fg == frag_t() || (rand() % (1 << fg.bits()) == 0)))
-      mdcache->split_dir(dir, 1);
-    else
-      balancer->queue_merge(dir);
+    if (mdsmap->allows_dirfrags()) {
+      if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
+        mdcache->split_dir(dir, 1);
+      } else {
+        balancer->queue_merge(dir);
+      }
+    }
   }
 
   // hack: force hash root?
@@ -2332,6 +2335,7 @@ void MDSRank::create_logger()
     mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch", "Directory fetch");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
+    mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
 
     mds_plb.add_u64(l_mds_inode_max, "inode_max", "Max inodes, cache size");
     mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos");

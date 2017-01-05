@@ -92,6 +92,12 @@ enum {
   l_bluestore_write_small_wal,
   l_bluestore_write_small_pre_read,
   l_bluestore_write_small_new,
+
+  l_bluestore_cur_ops_in_queue,
+  l_bluestore_cur_bytes_in_queue,
+  l_bluestore_cur_ops_in_wal_queue,
+  l_bluestore_cur_bytes_in_wal_queue,
+
   l_bluestore_txc,
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
@@ -104,7 +110,6 @@ class BlueStore : public ObjectStore,
   // -----------------------------------------------------
   // types
 public:
-
   // config observer
   virtual const char** get_tracked_conf_keys() const override;
   virtual void handle_conf_change(const struct md_config_t *conf,
@@ -334,7 +339,6 @@ public:
 
     // these are defined/set if the blob is marked 'shared'
     uint64_t sbid = 0;          ///< shared blob id
-    string key;                 ///< key in kv store
     SharedBlobSet *parent_set = 0;  ///< containing SharedBlobSet
 
     BufferSpace bc;             ///< buffer cache
@@ -410,9 +414,12 @@ public:
     }
   };
 
+//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
+
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
+    CephContext* cct;
 
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
@@ -421,13 +428,14 @@ public:
 
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
-    mutable bool dirty = true;      ///< true if blob is newer than blob_bl
-    mutable bufferlist blob_bl;     ///< cached encoded blob
+#ifdef CACHE_BLOB_BL
+    mutable bufferlist blob_bl;     ///< cached encoded blob, blob is dirty if empty
+#endif
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_extent_ref_map_t ref_map;
 
   public:
-    Blob() {}
+    Blob(CephContext* cct) : cct(cct) {}
     ~Blob() {
     }
 
@@ -452,24 +460,20 @@ public:
     void dup(Blob& o) {
       o.shared_blob = shared_blob;
       o.blob = blob;
-      o.dirty = dirty;
+#ifdef CACHE_BLOB_BL
       o.blob_bl = blob_bl;
+#endif
     }
 
     const bluestore_blob_t& get_blob() const {
       return blob;
     }
     bluestore_blob_t& dirty_blob() {
-      if (!dirty) {
-	dirty = true;
-	blob_bl.clear();
-      }
+#ifdef CACHE_BLOB_BL
+      blob_bl.clear();
+#endif
       return blob;
     }
-    bool is_dirty() const {
-      return dirty;
-    }
-
     bool is_unreferenced(uint64_t offset, uint64_t length) const {
       return !ref_map.intersects(offset, length);
     }
@@ -496,14 +500,11 @@ public:
 	delete this;
     }
 
-//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
 
 #ifdef CACHE_BLOB_BL
     void _encode() const {
-      if (dirty) {
-	blob_bl.clear();
+      if (blob_bl.length() == 0 ) {
 	::encode(blob, blob_bl);
-	dirty = false;
       } else {
 	assert(blob_bl.length());
       }
@@ -528,26 +529,36 @@ public:
       const char *end = p.get_pos();
       blob_bl.clear();
       blob_bl.append(start, end - start);
-      dirty = false;
       if (include_ref_map) {
         ref_map.decode(p);
       }
     }
 #else
-    void bound_encode(size_t& p, bool include_ref_map) const {
-      denc(blob, p);
+    void bound_encode(size_t& p, uint64_t struct_v, uint64_t sbid, bool include_ref_map) const {
+      denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(sbid, p);
+      }
       if (include_ref_map) {
         ref_map.bound_encode(p);
       }
     }
-    void encode(bufferlist::contiguous_appender& p, bool include_ref_map) const {
-      denc(blob, p);
+    void encode(bufferlist::contiguous_appender& p, uint64_t struct_v, uint64_t sbid,
+		bool include_ref_map) const {
+      denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(sbid, p);
+      }
       if (include_ref_map) {
         ref_map.encode(p);
       }
     }
-    void decode(bufferptr::iterator& p, bool include_ref_map) {
-      denc(blob, p);
+    void decode(bufferptr::iterator& p, uint64_t struct_v, uint64_t* sbid,
+		bool include_ref_map) {
+      denc(blob, p, struct_v);
+      if (blob.is_shared()) {
+        denc(*sbid, p);
+      }
       if (include_ref_map) {
         ref_map.decode(p);
       }
@@ -628,14 +639,14 @@ public:
 
   /// a sharded extent map, mapping offsets to lextents to blobs
   struct ExtentMap {
+    CephContext* cct;
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
-      string key;            ///< kv key
-      uint32_t offset;       ///< starting logical offset
       bluestore_onode_t::shard_info *shard_info;
+      uint32_t offset = 0;   ///< starting logical offset
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
@@ -649,7 +660,7 @@ public:
       void operator()(Extent *e) { delete e; }
     };
 
-    ExtentMap(Onode *o);
+    ExtentMap(CephContext* cct, Onode *o);
     ~ExtentMap() {
       extent_map.clear_and_dispose(DeleteDisposer());
     }
@@ -675,11 +686,11 @@ public:
       return p->second;
     }
 
-    bool update(Onode *on, KeyValueDB::Transaction t, bool force);
-    void reshard(Onode *on, uint64_t min_alloc_size);
+    bool update(KeyValueDB::Transaction t, bool force);
+    void reshard(uint64_t min_alloc_size);
 
     /// initialize Shards from the onode
-    void init_shards(Onode *on, bool loaded, bool dirty);
+    void init_shards(bool loaded, bool dirty);
 
     /// return index of shard containing offset
     /// or -1 if not found
@@ -786,7 +797,6 @@ public:
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
 
-    OnodeSpace *space;    ///< containing OnodeSpace
     boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
@@ -794,18 +804,18 @@ public:
 
     ExtentMap extent_map;
 
+    std::atomic<int> flushing_count = {0};
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(OnodeSpace *s, Collection *c, const ghobject_t& o, const string& k)
+    Onode(Collection *c, const ghobject_t& o, const string& k)
       : nref(0),
 	c(c),
 	oid(o),
 	key(k),
-	space(s),
 	exists(false),
-	extent_map(this) {
+	extent_map(c->store->cct, this) {
     }
 
     void flush();
@@ -822,6 +832,7 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
+    CephContext* cct;
     PerfCounters *logger;
     std::recursive_mutex lock;          ///< protect lru and other structures
 
@@ -830,8 +841,9 @@ public:
 
     size_t last_trim_seq = 0;
 
-    static Cache *create(string type, PerfCounters *logger);
+    static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
+    Cache(CephContext* cct) : cct(cct) {}
     virtual ~Cache() {}
 
     virtual void _add_onode(OnodeRef& o, int level) = 0;
@@ -899,6 +911,7 @@ public:
     uint64_t buffer_size = 0;
 
   public:
+    LRUCache(CephContext* cct) : Cache(cct) {}
     uint64_t _get_num_onodes() override {
       return onode_lru.size();
     }
@@ -999,6 +1012,7 @@ public:
     uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
 
   public:
+    TwoQCache(CephContext* cct) : Cache(cct) {}
     uint64_t _get_num_onodes() override {
       return onode_lru.size();
     }
@@ -1074,6 +1088,7 @@ public:
 		const ghobject_t& new_oid,
 		const string& new_okey);
     void clear();
+    void clear_pre_split(SharedBlobSet& sbset, uint32_t ps, int bits);
     bool empty();
 
     /// return true if f true for any item
@@ -1111,12 +1126,12 @@ public:
     //  open = SharedBlob is instantiated
     //  shared = blob_t shared flag is set; SharedBlob is hashed.
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
-    void open_shared_blob(BlobRef b);
+    void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
-    void make_blob_shared(BlobRef b);
+    void make_blob_shared(uint64_t sbid, BlobRef b);
 
     BlobRef new_blob() {
-      BlobRef b = new Blob;
+      BlobRef b = new Blob(store->cct);
       b->shared_blob = new SharedBlob(cache);
       return b;
     }
@@ -1203,10 +1218,9 @@ public:
     }
 
     void log_state_latency(PerfCounters *logger, int state) {
-      utime_t lat, now = ceph_clock_now(g_ceph_context);
+      utime_t lat, now = ceph_clock_now();
       lat = now - last_stamp;
       logger->tinc(state, lat);
-      start = now;
       last_stamp = now;
     }
 
@@ -1216,6 +1230,7 @@ public:
     uint64_t ops, bytes;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
+    set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
     set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
@@ -1294,7 +1309,7 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
-    explicit TransContext(OpSequencer *o)
+    explicit TransContext(CephContext* cct, OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
 	ops(0),
@@ -1303,8 +1318,8 @@ public:
 	onreadable(NULL),
 	onreadable_sync(NULL),
 	wal_txn(NULL),
-	ioc(this),
-	start(ceph_clock_now(g_ceph_context)) {
+	ioc(cct, this),
+	start(ceph_clock_now()) {
         last_stamp = start;
     }
     ~TransContext() {
@@ -1316,6 +1331,15 @@ public:
     }
     void write_shared_blob(SharedBlobRef &sb) {
       shared_blobs.insert(sb);
+    }
+    /// note we logically modified object (when onode itself is unmodified)
+    void note_modified_object(OnodeRef &o) {
+      // onode itself isn't written, though
+      modified_objects.insert(o);
+    }
+    void removed(OnodeRef& o) {
+      onodes.erase(o);
+      modified_objects.erase(o);
     }
   };
 
@@ -1351,9 +1375,10 @@ public:
 
     std::atomic_int kv_committing_serially = {0};
 
-    OpSequencer()
+    OpSequencer(CephContext* cct)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL) {
+      : Sequencer_impl(cct),
+	parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -1486,7 +1511,6 @@ public:
   // --------------------------------------------------------
   // members
 private:
-  CephContext *cct;
   BlueFS *bluefs;
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
@@ -1513,6 +1537,7 @@ private:
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
+  interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
   std::mutex wal_lock;
   std::atomic<uint64_t> wal_seq = {0};
@@ -1542,15 +1567,15 @@ private:
 
   std::atomic<int> csum_type;
 
-  uint64_t block_size;     ///< block size of block device (power of 2)
-  uint64_t block_mask;     ///< mask to get just the block offset
-  size_t block_size_order; ///< bits to shift to get block size
+  uint64_t block_size = 0;     ///< block size of block device (power of 2)
+  uint64_t block_mask = 0;     ///< mask to get just the block offset
+  size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
-  uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
+  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
@@ -1627,7 +1652,8 @@ private:
 				   bool create);
 
   int _write_bdev_label(string path, bluestore_bdev_label_t label);
-  static int _read_bdev_label(string path, bluestore_bdev_label_t *label);
+  static int _read_bdev_label(CephContext* cct, string path,
+			      bluestore_bdev_label_t *label);
   int _check_or_set_bdev_label(string path, uint64_t size, string desc,
 			       bool create);
 
@@ -1677,7 +1703,10 @@ private:
       kv_cond.notify_all();
     }
     kv_sync_thread.join();
-    kv_stop = false;
+    {
+      std::lock_guard<std::mutex> l(kv_lock);
+      kv_stop = false;
+    }
   }
 
   bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
@@ -1703,7 +1732,8 @@ private:
     txc->shared_blobs_written.insert(b->shared_blob);
   }
 
-  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+  int _collection_list(
+    Collection *c, const ghobject_t& start, const ghobject_t& end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
@@ -1727,7 +1757,8 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
-  static int get_block_device_fsid(const string& path, uuid_d *fsid);
+  static int get_block_device_fsid(CephContext* cct, const string& path,
+				   uuid_d *fsid);
 
   bool test_mount_in_use() override;
 
@@ -1750,6 +1781,8 @@ public:
   int mkjournal() override {
     return 0;
   }
+
+  void get_db_statistics(Formatter *f);
 
 public:
   int statfs(struct store_statfs_t *buf) override;
@@ -1816,10 +1849,14 @@ public:
   int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
-  int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
+  int collection_list(const coll_t& cid,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
-  int collection_list(CollectionHandle &c, ghobject_t start, ghobject_t end,
+  int collection_list(CollectionHandle &c,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
@@ -1946,21 +1983,21 @@ public:
   }
 private:
   bool _debug_data_eio(const ghobject_t& o) {
-    if (!g_conf->bluestore_debug_inject_read_err) {
+    if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
     RWLock::RLocker l(debug_read_error_lock);
     return debug_data_error_objects.count(o);
   }
   bool _debug_mdata_eio(const ghobject_t& o) {
-    if (!g_conf->bluestore_debug_inject_read_err) {
+    if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
     RWLock::RLocker l(debug_read_error_lock);
     return debug_mdata_error_objects.count(o);
   }
   void _debug_obj_on_delete(const ghobject_t& o) {
-    if (g_conf->bluestore_debug_inject_read_err) {
+    if (cct->_conf->bluestore_debug_inject_read_err) {
       RWLock::WLocker l(debug_read_error_lock);
       debug_data_error_objects.erase(o);
       debug_mdata_error_objects.erase(o);
@@ -2144,14 +2181,19 @@ private:
 	      OnodeRef& oldo,
 	      OnodeRef& newo,
 	      const ghobject_t& new_oid);
-  int _create_collection(TransContext *txc, coll_t cid, unsigned bits,
-			 CollectionRef *c);
-  int _remove_collection(TransContext *txc, coll_t cid, CollectionRef *c);
+  int _create_collection(TransContext *txc, const coll_t &cid,
+			 unsigned bits, CollectionRef *c);
+  int _remove_collection(TransContext *txc, const coll_t &cid,
+                         CollectionRef *c);
   int _split_collection(TransContext *txc,
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
 
+  void op_queue_reserve_throttle(TransContext *txc);
+  void op_queue_release_throttle(TransContext *txc);
+  void op_queue_reserve_wal_throttle(TransContext *txc);
+  void op_queue_release_wal_throttle(TransContext *txc);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {

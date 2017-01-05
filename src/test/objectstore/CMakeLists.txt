@@ -102,6 +102,7 @@ target_link_libraries(unittest_chain_xattr os global)
 # unittest_rocksdb_option
 add_executable(unittest_rocksdb_option
   TestRocksdbOptionParse.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_rocksdb_option ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
@@ -110,12 +111,14 @@ if(HAVE_LIBAIO)
   # unittest_bit_alloc
   add_executable(unittest_bit_alloc
     BitAllocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
     )
   add_ceph_unittest(unittest_bit_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bit_alloc)
   target_link_libraries(unittest_bit_alloc os global)
 
   add_executable(unittest_alloc
     Allocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
     )
   add_ceph_unittest(unittest_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_alloc)
   target_link_libraries(unittest_alloc os global)

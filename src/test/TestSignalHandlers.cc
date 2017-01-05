@@ -28,6 +28,7 @@
 #include <sstream>
 #include <string>
 
+#define dout_context g_ceph_context
 using std::string;
 
 // avoid compiler warning about dereferencing NULL pointer
@@ -79,7 +80,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   test_fn_t fn = NULL;

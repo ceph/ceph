@@ -1,0 +1,16 @@
+roles:
+- [mon.0, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 6
+    size: 10 # GB
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    conf:
+      global:
+        osd max object name len: 460
+        osd max object namespace len: 64
+- ceph_objectstore_tool:
+    objects: 20

@@ -18,11 +18,8 @@
 #include <random>
 #include <gtest/gtest.h>
 
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
 #include "msg/async/dpdk/UserspaceEvent.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
 
 class UserspaceManagerTest : public ::testing::Test {
  public:
@@ -79,11 +76,11 @@ TEST_F(UserspaceManagerTest, StressTest) {
   std::uniform_int_distribution<> dist(0, 100);
 
   mappings.resize(1001);
-  mappings[0] = make_pair(-1, -1);
+  mappings[0] = std::make_pair(-1, -1);
   for (int i = 0; i < 1000; ++i) {
     int fd = manager->get_eventfd();
     ASSERT_TRUE(fd > 0);
-    mappings[fd] = make_pair(0, 0);
+    mappings[fd] = std::make_pair(0, 0);
   }
   int r = 0;
   int fd = manager->get_eventfd();
@@ -158,26 +155,14 @@ TEST_F(UserspaceManagerTest, StressTest) {
       ASSERT_TRUE(r > 0);
       if ((size_t)r >= mappings.size())
         mappings.resize(r+1);
-      mappings[r] = make_pair(0, 0);
+      mappings[r] = std::make_pair(0, 0);
     } else {
       manager->close(fd);
       std::cerr << " close fd " << fd << std::endl;
-      mappings[fd] = make_pair(-1, -1);
+      mappings[fd] = std::make_pair(-1, -1);
     }
     ASSERT_TRUE(manager->check());
   }
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

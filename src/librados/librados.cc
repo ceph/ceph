@@ -445,14 +445,6 @@ void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist
   o->setxattr(name, v);
 }
 
-void librados::ObjectWriteOperation::setxattr(const char *name,
-					      const buffer::list&& v)
-{
-  ::ObjectOperation *o = &impl->o;
-  o->setxattr(name, std::move(v));
-}
-
-
 void librados::ObjectWriteOperation::omap_set(
   const map<string, bufferlist> &map)
 {
@@ -1439,6 +1431,8 @@ static int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
   if (flags & librados::OPERATION_FULL_TRY)
     op_flags |= CEPH_OSD_FLAG_FULL_TRY;
+  if (flags & librados::OPERATION_FULL_FORCE)
+    op_flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   return op_flags;
 }
@@ -5947,7 +5941,7 @@ librados::ObjectCursor librados::IoCtx::object_list_begin()
 {
   hobject_t *h = new hobject_t(io_ctx_impl->objecter->enumerate_objects_begin());
   ObjectCursor oc;
-  oc.c_cursor = (rados_object_list_cursor)h;
+  oc.set((rados_object_list_cursor)h);
   return oc;
 }
 
@@ -5956,7 +5950,7 @@ librados::ObjectCursor librados::IoCtx::object_list_end()
 {
   hobject_t *h = new hobject_t(io_ctx_impl->objecter->enumerate_objects_end());
   librados::ObjectCursor oc;
-  oc.c_cursor = (rados_object_list_cursor)h;
+  oc.set((rados_object_list_cursor)h);
   return oc;
 }
 

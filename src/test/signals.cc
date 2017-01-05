@@ -3,7 +3,7 @@
 #include "global/signal_handler.h"
 #include "common/debug.h"
 
-#include "test/unit.h"
+#include "gtest/gtest.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -12,6 +12,7 @@
 
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 static volatile sig_atomic_t got_sigusr1 = 0;
 
 static void handle_sigusr1(int signo)
@@ -118,6 +119,7 @@ TEST(SignalHandler, LogInternal)
 {
   g_ceph_context->_log->inject_segv();
   ASSERT_DEATH(derr << "foo" << dendl, ".*");
+  g_ceph_context->_log->reset_segv();
 }
 
 

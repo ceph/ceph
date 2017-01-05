@@ -45,7 +45,8 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
@@ -65,7 +66,8 @@ int main(int argc, char **argv) {
   KeyValueDB *_db = KeyValueDB::create(g_ceph_context, "leveldb", db_path);
   assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
-  boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
+  boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
+						     store_dev));
 
   ObjectStore::Sequencer osr(__func__);
   coll_t coll(spg_t(pg_t(0,12),shard_id_t::NO_SHARD));

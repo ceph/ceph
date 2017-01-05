@@ -128,6 +128,7 @@ AioObjectRead<librbd::MockTestImageCtx>* AioObjectRead<librbd::MockTestImageCtx>
 } // namespace librbd
 
 #include "librbd/AioImageRequest.cc"
+
 template class librbd::AioImageRequest<librbd::MockTestImageCtx>;
 
 namespace librbd {

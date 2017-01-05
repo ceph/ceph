@@ -12,15 +12,12 @@
  *
  */
 
-#include <gtest/gtest.h>
-
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
+#include "gtest/gtest.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -105,6 +102,20 @@ TEST(AdminSocket, SendNoOp) {
   string version;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"0\"}", &version));
   ASSERT_EQ(CEPH_ADMIN_SOCK_VERSION, version);
+  ASSERT_EQ(true, asoct.shutdown());
+}
+
+TEST(AdminSocket, SendTooLongRequest) {
+  std::unique_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
+  string version;
+  string request(16384, 'a');
+  //if admin_socket cannot handle it, segfault will happened.
+  ASSERT_NE("", client.do_request(request, &version));
   ASSERT_EQ(true, asoct.shutdown());
 }
 
@@ -291,17 +302,6 @@ TEST(AdminSocket, bind_and_listen) {
     EXPECT_NE(std::string::npos, message.find("File exists"));
     ASSERT_TRUE(asoct.shutdown());
   }
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  vector<const char*> def_args;
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

@@ -50,9 +50,16 @@ function add_something() {
     local dir=$1
     local poolname=$2
     local obj=${3:-SOMETHING}
+    local scrub=${4:-noscrub}
 
-    ceph osd set noscrub || return 1
-    ceph osd set nodeep-scrub || return 1
+    if [ "$scrub" = "noscrub" ];
+    then
+        ceph osd set noscrub || return 1
+        ceph osd set nodeep-scrub || return 1
+    else
+        ceph osd unset noscrub || return 1
+        ceph osd unset nodeep-scrub || return 1
+    fi
 
     local payload=ABCDEF
     echo $payload > $dir/ORIGINAL
@@ -72,7 +79,7 @@ function TEST_corrupt_and_repair_replicated() {
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
 
-    add_something $dir $poolname
+    add_something $dir $poolname || return 1
     corrupt_and_repair_one $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
     # Reproduces http://tracker.ceph.com/issues/8914
     corrupt_and_repair_one $dir $poolname $(get_primary $poolname SOMETHING) || return 1
@@ -152,7 +159,7 @@ function corrupt_and_repair_erasure_coded() {
         || return 1
     wait_for_clean || return 1
 
-    add_something $dir $poolname
+    add_something $dir $poolname || return 1
 
     local primary=$(get_primary $poolname SOMETHING)
     local -a osds=($(get_osds $poolname SOMETHING | sed -e "s/$primary//"))
@@ -175,13 +182,13 @@ function TEST_auto_repair_erasure_coded() {
     # Launch a cluster with 5 seconds scrub interval
     setup $dir || return 1
     run_mon $dir a || return 1
-    for id in $(seq 0 2) ; do
-        run_osd $dir $id \
-            --osd-scrub-auto-repair=true \
+    local ceph_osd_args="--osd-scrub-auto-repair=true \
             --osd-deep-scrub-interval=5 \
             --osd-scrub-max-interval=5 \
             --osd-scrub-min-interval=5 \
-            --osd-scrub-interval-randomize-ratio=0
+            --osd-scrub-interval-randomize-ratio=0"
+    for id in $(seq 0 2) ; do
+        run_osd $dir $id $ceph_osd_args
     done
     wait_for_clean || return 1
 
@@ -197,12 +204,14 @@ function TEST_auto_repair_erasure_coded() {
     rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
 
     # Remove the object from one shard physically
+    # Restarted osd get $ceph_osd_args passed
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
     # Wait for auto repair
     local pgid=$(get_pg $poolname SOMETHING)
     wait_for_scrub $pgid "$(get_last_scrub_stamp $pgid)"
     wait_for_clean || return 1
     # Verify - the file should be back
+    # Restarted osd get $ceph_osd_args passed
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING list-attrs || return 1
     rados --pool $poolname get SOMETHING $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
@@ -272,7 +281,7 @@ function TEST_unfound_erasure_coded() {
       || return 1
     wait_for_clean || return 1
 
-    add_something $dir $poolname
+    add_something $dir $poolname || return 1
 
     local primary=$(get_primary $poolname SOMETHING)
     local -a osds=($(get_osds $poolname SOMETHING | sed -e "s/$primary//"))
@@ -393,7 +402,7 @@ function TEST_corrupt_scrub_replicated() {
 
     for i in $(seq 1 $total_objs) ; do
         objname=ROBJ${i}
-        add_something $dir $poolname $objname
+        add_something $dir $poolname $objname || return 1
 
         rados --pool $poolname setomapheader $objname hdr-$objname || return 1
         rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
@@ -1513,7 +1522,7 @@ function TEST_corrupt_scrub_erasure() {
 
     for i in $(seq 1 $total_objs) ; do
         objname=EOBJ${i}
-        add_something $dir $poolname $objname
+        add_something $dir $poolname $objname || return 1
 
         local osd=$(expr $i % 2)
 
@@ -2143,6 +2152,88 @@ EOF
     rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
+
+#
+# Test to make sure that a periodic scrub won't cause deep-scrub info to be lost
+#
+function TEST_periodic_scrub_replicated() {
+    local dir=$1
+    local poolname=psr_pool
+    local objname=POBJ
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0"
+    run_osd $dir 0 $ceph_osd_args || return 1
+    run_osd $dir 1 $ceph_osd_args || return 1
+    wait_for_clean || return 1
+
+    ceph osd pool create $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    local osd=0
+    add_something $dir $poolname $objname scrub || return 1
+    local primary=$(get_primary $poolname $objname)
+    local pg=$(get_pg $poolname $objname)
+
+    # Add deep-scrub only error
+    local payload=UVWXYZ
+    echo $payload > $dir/CORRUPT
+    # Uses $ceph_osd_args for osd restart
+    objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+
+    # No scrub information available, so expect failure
+    set -o pipefail
+    !  rados list-inconsistent-obj $pg | jq '.' || return 1
+    set +o pipefail
+
+    pg_deep_scrub $pg || return 1
+
+    # Make sure bad object found
+    rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
+
+    local last_scrub=$(get_last_scrub_stamp $pg)
+    # Fake a schedule scrub
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.${primary}.asok \
+             trigger_scrub $pg || return 1
+    # Wait for schedule regular scrub
+    wait_for_scrub $pg "$last_scrub"
+
+    # It needed to be upgraded
+    grep -q "Deep scrub errors, upgrading scrub to deep-scrub" $dir/osd.${primary}.log || return 1
+
+    # Bad object still known
+    rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
+
+    # Can't upgrade with this set
+    ceph osd set nodeep-scrub
+
+    # Fake a schedule scrub
+    local last_scrub=$(get_last_scrub_stamp $pg)
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.${primary}.asok \
+             trigger_scrub $pg || return 1
+    # Wait for schedule regular scrub
+    # to notice scrub and skip it
+    local found=false
+    for i in $(seq 14 -1 0)
+    do
+      sleep 1
+      ! grep -q "Regular scrub skipped due to deep-scrub errors and nodeep-scrub set" $dir/osd.${primary}.log || { found=true ; break; }
+      echo Time left: $i seconds
+    done
+    test $found = "true" || return 1
+
+    # Bad object still known
+    rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
+
+    # Request a regular scrub and it will be done
+    pg_scrub $pg
+    grep -q "Regular scrub request, losing deep-scrub details" $dir/osd.${primary}.log || return 1
+
+    # deep-scrub error is no longer present
+    rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
+}
+
 
 main osd-scrub-repair "$@"
 

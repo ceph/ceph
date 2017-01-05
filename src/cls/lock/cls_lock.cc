@@ -38,15 +38,6 @@ using namespace rados::cls::lock;
 CLS_VER(1,0)
 CLS_NAME(lock)
 
-cls_handle_t h_class;
-cls_method_handle_t h_lock_op;
-cls_method_handle_t h_unlock_op;
-cls_method_handle_t h_break_lock;
-cls_method_handle_t h_get_info;
-cls_method_handle_t h_list_locks;
-cls_method_handle_t h_assert_locked;
-cls_method_handle_t h_set_cookie;
-
 #define LOCK_PREFIX    "lock."
 
 typedef struct lock_info_s {
@@ -105,7 +96,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   /* now trim expired locks */
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
 
   map<locker_id_t, locker_info_t>::iterator iter = lock->lockers.begin();
 
@@ -226,7 +217,7 @@ static int lock_obj(cls_method_context_t hctx,
   linfo.tag = tag;
   utime_t expiration;
   if (!duration.is_zero()) {
-    expiration = ceph_clock_now(g_ceph_context);
+    expiration = ceph_clock_now();
     expiration += duration;
 
   }
@@ -601,9 +592,18 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(lock)
 {
   CLS_LOG(20, "Loaded lock class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_lock_op;
+  cls_method_handle_t h_unlock_op;
+  cls_method_handle_t h_break_lock;
+  cls_method_handle_t h_get_info;
+  cls_method_handle_t h_list_locks;
+  cls_method_handle_t h_assert_locked;
+  cls_method_handle_t h_set_cookie;
 
   cls_register("lock", &h_class);
   cls_register_cxx_method(h_class, "lock",

@@ -99,6 +99,7 @@ public:
   static const unsigned STATE_FREEZINGDIR =   (1<< 5);
   static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
   static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
+  static const unsigned STATE_CREATING =      (1<< 8);
   static const unsigned STATE_IMPORTBOUND =   (1<<10);
   static const unsigned STATE_EXPORTBOUND =   (1<<11);
   static const unsigned STATE_EXPORTING =     (1<<12);
@@ -149,6 +150,7 @@ public:
   static const uint64_t WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const uint64_t WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
   static const uint64_t WAIT_FROZEN       = (1<<2);  // auth pins removed
+  static const uint64_t WAIT_CREATED	  = (1<<3);  // new dirfrag is logged
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
@@ -444,7 +446,9 @@ protected:
     return num_dirty;
   }
 
-  int64_t get_frag_size() { return get_projected_fnode()->fragstat.size(); }
+  int64_t get_frag_size() const {
+    return get_projected_fnode()->fragstat.size();
+  }
 
   // -- dentries and inodes --
  public:
@@ -488,10 +492,11 @@ public:
   void split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
   void merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
 
-  bool should_split() {
+  bool should_split() const {
     return (int)get_frag_size() > g_conf->mds_bal_split_size;
   }
-  bool should_merge() {
+  bool should_split_fast() const;
+  bool should_merge() const {
     return (int)get_frag_size() < g_conf->mds_bal_merge_size;
   }
 

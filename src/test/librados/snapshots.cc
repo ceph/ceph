@@ -157,15 +157,13 @@ TEST_F(LibRadosSnapshotsPP, SnapCreateRemovePP) {
   ASSERT_EQ(0, ioctx.remove("foo"));
   ASSERT_EQ(0, ioctx.snap_create("snapbar"));
 
-  librados::ObjectWriteOperation *op = new librados::ObjectWriteOperation();
+  std::unique_ptr<librados::ObjectWriteOperation> op(new librados::ObjectWriteOperation());
   op->create(false);
   op->remove();
-  ASSERT_EQ(0, ioctx.operate("foo", op));
+  ASSERT_EQ(0, ioctx.operate("foo", op.get()));
 
   EXPECT_EQ(0, ioctx.snap_remove("snapfoo"));
   EXPECT_EQ(0, ioctx.snap_remove("snapbar"));
-
-  delete op;
 }
 
 TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
@@ -512,10 +510,10 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, Bug11677) {
   ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
 
-  librados::ObjectWriteOperation *op = new librados::ObjectWriteOperation();
+  std::unique_ptr<librados::ObjectWriteOperation> op(new librados::ObjectWriteOperation());
   op->assert_exists();
   op->remove();
-  ASSERT_EQ(0, ioctx.operate("foo", op));
+  ASSERT_EQ(0, ioctx.operate("foo", op.get()));
 
   ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps.back()));
   my_snaps.pop_back();
@@ -877,10 +875,10 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, Bug11677) {
   ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
 
-  librados::ObjectWriteOperation *op = new librados::ObjectWriteOperation();
+  std::unique_ptr<librados::ObjectWriteOperation> op(new librados::ObjectWriteOperation());
   op->assert_exists();
   op->remove();
-  ASSERT_EQ(0, ioctx.operate("foo", op));
+  ASSERT_EQ(0, ioctx.operate("foo", op.get()));
 
   ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps.back()));
   my_snaps.pop_back();

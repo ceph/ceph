@@ -271,7 +271,7 @@ void *Pipe::DelayedDelivery::entry()
     Message *m = delay_queue.front().second;
     string delay_msg_type = pipe->msgr->cct->_conf->ms_inject_delay_msg_type;
     if (!flush_count &&
-        (release > ceph_clock_now(pipe->msgr->cct) &&
+        (release > ceph_clock_now() &&
          (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
       lgeneric_subdout(pipe->msgr->cct, ms, 10) << *pipe << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
       delay_cond.WaitUntil(delay_lock, release);
@@ -893,7 +893,8 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: "
+                         << cpp_strerror(r) << dendl;
     }
   }
   if (msgr->cct->_conf->ms_tcp_rcvbuf) {
@@ -901,7 +902,8 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size
+                         << ": " << cpp_strerror(r) << dendl;
     }
   }
 
@@ -911,7 +913,8 @@ void Pipe::set_socket_options()
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
     r = -errno;
-    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
+    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: "
+                       << cpp_strerror(r) << dendl;
   }
 #endif
 
@@ -922,8 +925,9 @@ void Pipe::set_socket_options()
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
     if (r < 0) {
+      r = -errno;
       ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                         << ": " << cpp_strerror(errno) << dendl;
+                         << ": " << cpp_strerror(r) << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 
@@ -934,8 +938,9 @@ void Pipe::set_socket_options()
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
 #endif
     if (r < 0) {
+      r = -errno;
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
-                         << ": " << cpp_strerror(errno) << dendl;
+                         << ": " << cpp_strerror(r) << dendl;
     }
 #endif
   }
@@ -1037,12 +1042,17 @@ int Pipe::connect()
     ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << cpp_strerror(rc) << dendl;
     goto fail;
   }
-  {
+  try {
     bufferlist::iterator p = addrbl.begin();
     ::decode(paddr, p);
     ::decode(peer_addr_for_me, p);
-    port = peer_addr_for_me.get_port();
   }
+  catch (buffer::error& e) {
+    ldout(msgr->cct,2) << "connect couldn't decode peer addrs: " << e.what()
+		       << dendl;
+    goto fail;
+  }
+  port = peer_addr_for_me.get_port();
 
   ldout(msgr->cct,20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
   if (peer_addr != paddr) {
@@ -1500,7 +1510,7 @@ void Pipe::fault(bool onread)
     backoff.set_from_double(conf->ms_initial_backoff);
   } else {
     ldout(msgr->cct,10) << "fault waiting " << backoff << dendl;
-    cond.WaitInterval(msgr->cct, pipe_lock, backoff);
+    cond.WaitInterval(pipe_lock, backoff);
     backoff += backoff;
     if (backoff > conf->ms_max_backoff)
       backoff.set_from_double(conf->ms_max_backoff);
@@ -1556,6 +1566,7 @@ void Pipe::stop()
 
 void Pipe::stop_and_wait()
 {
+  assert(pipe_lock.is_locked_by_me());
   if (state != STATE_CLOSED)
     stop();
 
@@ -1569,7 +1580,9 @@ void Pipe::stop_and_wait()
   }
   
   if (delay_thread) {
+    pipe_lock.Unlock();
     delay_thread->stop_fast_dispatching();
+    pipe_lock.Lock();
   }
   while (reader_running &&
 	 reader_dispatching)
@@ -1617,7 +1630,7 @@ void Pipe::reader()
     if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
       ldout(msgr->cct,2) << "reader got KEEPALIVE" << dendl;
       pipe_lock.Lock();
-      connection_state->set_last_keepalive(ceph_clock_now(NULL));
+      connection_state->set_last_keepalive(ceph_clock_now());
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
@@ -1634,7 +1647,7 @@ void Pipe::reader()
 	keepalive_ack_stamp = utime_t(t);
 	ldout(msgr->cct,2) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
 			   << dendl;
-	connection_state->set_last_keepalive(ceph_clock_now(NULL));
+	connection_state->set_last_keepalive(ceph_clock_now());
 	cond.Signal();
       }
       continue;
@@ -1822,7 +1835,7 @@ void Pipe::writer()
 	if (connection_state->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	  pipe_lock.Unlock();
 	  rc = write_keepalive2(CEPH_MSGR_TAG_KEEPALIVE2,
-				ceph_clock_now(msgr->cct));
+				ceph_clock_now());
 	} else {
 	  pipe_lock.Unlock();
 	  rc = write_keepalive();
@@ -2025,7 +2038,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   unsigned data_len, data_off;
   int aborted;
   Message *message;
-  utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  utime_t recv_stamp = ceph_clock_now();
 
   if (policy.throttler_messages) {
     ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
@@ -2053,7 +2066,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     in_q->dispatch_throttler.get(message_size);
   }
 
-  utime_t throttle_stamp = ceph_clock_now(msgr->cct);
+  utime_t throttle_stamp = ceph_clock_now();
 
   // read front
   front_len = header.front_len;
@@ -2189,7 +2202,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   message->set_recv_stamp(recv_stamp);
   message->set_throttle_stamp(throttle_stamp);
-  message->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
+  message->set_recv_complete_stamp(ceph_clock_now());
 
   *pm = message;
   return 0;
@@ -2283,13 +2296,6 @@ int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
 {
   suppress_sigpipe();
   while (len > 0) {
-    if (0) { // sanity
-      unsigned l = 0;
-      for (unsigned i=0; i<msg->msg_iovlen; i++)
-	l += msg->msg_iov[i].iov_len;
-      assert(l == len);
-    }
-
     int r;
 #if defined(MSG_NOSIGNAL)
     r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
@@ -2570,8 +2576,11 @@ int Pipe::tcp_read_wait()
   if (has_pending_data())
     return 0;
 
-  if (poll(&pfd, 1, msgr->timeout) <= 0)
+  int r = poll(&pfd, 1, msgr->timeout);
+  if (r < 0)
     return -errno;
+  if (r == 0)
+    return -EAGAIN;
 
   evmask = POLLERR | POLLHUP | POLLNVAL;
 #if defined(__linux__)

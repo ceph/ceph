@@ -65,21 +65,23 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   struct stat st;
   int r = 0;
   DIR *dir;
-  char devname[PATH_MAX], fn[PATH_MAX];
+  char devname[PATH_MAX] = {0}, fn[PATH_MAX] = {0};
   char *p;
   char realname[PATH_MAX] = {0};
 
   if (strncmp(dev, "/dev/", 5) != 0) {
-    if ((readlink(dev, realname, sizeof(realname)) == -1) || (strncmp(realname, "/dev/", 5) != 0))
+    if (realpath(dev, realname) == NULL || (strncmp(realname, "/dev/", 5) != 0)) {
       return -EINVAL;
+    }
   }
 
   if (strlen(realname))
-    strncpy(devname, realname + 5, PATH_MAX -1);
+    strncpy(devname, realname + 5, PATH_MAX - 5);
   else
-    strncpy(devname, dev + 5, PATH_MAX-1);
+    strncpy(devname, dev + 5, strlen(dev) - 5);
 
-  devname[PATH_MAX-1] = '\0';
+  devname[PATH_MAX - 1] = '\0';
+
   for (p = devname; *p; ++p)
     if (*p == '/')
       *p = '!';
@@ -197,7 +199,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   if (blkid_get_cache(&cache, NULL) >= 0)
     dev = blkid_find_dev_with_tag(cache, label, (const char*)uuid_str);
   else
-    rc = -EINVAL;
+    return -EINVAL;
 
   if (dev) {
     temp_partition_ptr = blkid_dev_devname(dev);

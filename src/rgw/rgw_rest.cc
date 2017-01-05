@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <limits.h>
 
+#include <boost/algorithm/string.hpp>
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 #include "common/utf8.h"
@@ -1790,6 +1791,15 @@ RGWRESTMgr* RGWRESTMgr::get_resource_mgr(struct req_state* const s,
   return this;
 }
 
+void RGWREST::register_x_headers(const string& s_headers)
+{
+  std::vector<std::string> hdrs = get_str_vec(s_headers);
+  for (auto& hdr : hdrs) {
+    boost::algorithm::to_upper(hdr); // XXX
+    (void) x_headers.insert(hdr);
+  }
+}
+
 RGWRESTMgr::~RGWRESTMgr()
 {
   map<string, RGWRESTMgr *>::iterator iter;
@@ -1848,6 +1858,10 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   bool s3website_enabled = api_priority_s3website >= 0;
 
   if (info.host.size()) {
+    ssize_t pos = info.host.find(':');
+    if (pos >= 0) {
+      info.host = info.host.substr(0, pos);
+    }
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
