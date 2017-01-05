@@ -5,6 +5,22 @@
 
 namespace librbd {
 
+typedef enum {
+  GROUP_IMAGE_STATE_ATTACHED,
+  GROUP_IMAGE_STATE_INCOMPLETE
+} group_image_state_t;
+
+typedef struct {
+  std::string name;
+  int64_t pool;
+  group_image_state_t state;
+} group_image_status_t;
+
+typedef struct {
+  std::string name;
+  int64_t pool;
+} group_spec_t;
+
 // Consistency groups functions
 int group_create(librados::IoCtx& io_ctx, const char *imgname);
 int group_remove(librados::IoCtx& io_ctx, const char *group_name);
