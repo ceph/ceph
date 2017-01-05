@@ -5100,7 +5100,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   op_ret = del_op.delete_obj();
   if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_SUCH_BUCKET;
+    op_ret = -ERR_NO_SUCH_UPLOAD;
   }
 }
 
