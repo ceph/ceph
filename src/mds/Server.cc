@@ -1505,10 +1505,12 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
         req->get_op() == CEPH_MDS_OP_SETXATTR ||
         req->get_op() == CEPH_MDS_OP_SETFILELOCK ||
         req->get_op() == CEPH_MDS_OP_CREATE ||
-        req->get_op() == CEPH_MDS_OP_LINK ||
-        req->get_op() == CEPH_MDS_OP_RENAME ||
         req->get_op() == CEPH_MDS_OP_SYMLINK ||
-        req->get_op() == CEPH_MDS_OP_MKSNAP) {
+        req->get_op() == CEPH_MDS_OP_MKSNAP ||
+	((req->get_op() == CEPH_MDS_OP_LINK ||
+	  req->get_op() == CEPH_MDS_OP_RENAME) &&
+	 (!mdr->has_more() || mdr->more()->witnessed.empty())) // haven't started slave request
+	) {
 
       dout(20) << __func__ << ": full, responding ENOSPC to op " << ceph_mds_op_name(req->get_op()) << dendl;
       respond_to_request(mdr, -ENOSPC);
@@ -4950,14 +4952,16 @@ void Server::handle_client_link(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, targeti, MAY_WRITE))
-    return;
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, targeti, MAY_WRITE))
+      return;
 
-  if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
-    return;
+    if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
+      return;
 
-  if (!check_fragment_space(mdr, dir))
-    return;
+    if (!check_fragment_space(mdr, dir))
+      return;
+  }
 
   // go!
   assert(g_conf->mds_kill_link_at != 1);
@@ -5560,13 +5564,15 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
-    return;
-
   if (in->is_dir() &&
       _dir_is_nonempty(mdr, in)) {
     respond_to_request(mdr, -ENOTEMPTY);
     return;
+  }
+
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, diri, MAY_WRITE))
+      return;
   }
 
   // yay!
@@ -6401,17 +6407,19 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 				  &remote_wrlocks, auth_pin_freeze))
     return;
 
-  if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
-    return;
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
+      return;
 
-  if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
-    return;
+    if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
+      return;
 
-  if (!check_fragment_space(mdr, destdn->get_dir()))
-    return;
+    if (!check_fragment_space(mdr, destdn->get_dir()))
+      return;
 
-  if (!check_access(mdr, srci, MAY_WRITE))
-    return;
+    if (!check_access(mdr, srci, MAY_WRITE))
+      return;
+  }
 
   // with read lock, really verify oldin is empty
   if (oldin &&
