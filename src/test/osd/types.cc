@@ -120,6 +120,7 @@ TEST(hobject, prefixes5)
   ASSERT_EQ(prefixes_out, prefixes_correct);
 }
 
+#if 0
 TEST(pg_interval_t, check_new_interval)
 {
   //
@@ -170,10 +171,10 @@ TEST(pg_interval_t, check_new_interval)
   // being split
   //
   {
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_FALSE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_FALSE(PastIntervals::check_new_interval(old_primary,
 						   new_primary,
 						   old_acting,
 						   new_acting,
@@ -199,10 +200,10 @@ TEST(pg_interval_t, check_new_interval)
     int _new_primary = osd_id + 1;
     new_acting.push_back(_new_primary);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -233,10 +234,10 @@ TEST(pg_interval_t, check_new_interval)
     int _new_primary = osd_id + 1;
     new_up.push_back(_new_primary);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -265,10 +266,10 @@ TEST(pg_interval_t, check_new_interval)
     vector<int> new_up;
     int _new_up_primary = osd_id + 1;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -304,10 +305,10 @@ TEST(pg_interval_t, check_new_interval)
     inc.new_pools[pool_id].set_pg_num(new_pg_num);
     osdmap->apply_incremental(inc);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -343,10 +344,10 @@ TEST(pg_interval_t, check_new_interval)
     inc.new_pools[pool_id].set_pg_num(pg_num);
     osdmap->apply_incremental(inc);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -375,12 +376,12 @@ TEST(pg_interval_t, check_new_interval)
   {
     vector<int> old_acting;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ostringstream out;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -429,10 +430,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -464,10 +465,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -509,10 +510,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -558,10 +559,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -582,6 +583,7 @@ TEST(pg_interval_t, check_new_interval)
     ASSERT_NE(string::npos, out.str().find("does not include interval"));
   }
 }
+#endif
 
 TEST(pg_t, get_ancestor)
 {

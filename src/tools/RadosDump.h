@@ -284,7 +284,7 @@ struct metadata_section {
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
-  map<epoch_t,pg_interval_t> past_intervals;
+  PastIntervals past_intervals;
   OSDMap osdmap;
   bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
   map<eversion_t, hobject_t> divergent_priors;
@@ -295,7 +295,7 @@ struct metadata_section {
     epoch_t map_epoch,
     const pg_info_t &info,
     const pg_log_t &log,
-    const map<epoch_t,pg_interval_t> &past_intervals,
+    const PastIntervals &past_intervals,
     const pg_missing_t &missing)
     : struct_ver(struct_ver),
       map_epoch(map_epoch),

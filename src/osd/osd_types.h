@@ -2471,28 +2471,40 @@ WRITE_CLASS_ENCODER(pg_notify_t)
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
 
 
-/**
- * pg_interval_t - information about a past interval
- */
 class OSDMap;
-struct pg_interval_t {
-  vector<int32_t> up, acting;
-  epoch_t first, last;
-  bool maybe_went_rw;
-  int32_t primary;
-  int32_t up_primary;
+/**
+ * PastIntervals -- information needed to determine the PriorSet and
+ * the might_have_unfound set
+ */
+class PastIntervals {
+public:
+  struct pg_interval_t {
+    vector<int32_t> up, acting;
+    epoch_t first, last;
+    bool maybe_went_rw;
+    int32_t primary;
+    int32_t up_primary;
 
-  pg_interval_t()
-    : first(0), last(0),
-      maybe_went_rw(false),
-      primary(-1),
-      up_primary(-1)
-  {}
+    pg_interval_t()
+      : first(0), last(0),
+	maybe_went_rw(false),
+	primary(-1),
+	up_primary(-1)
+      {}
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<pg_interval_t*>& o);
+  };
+private:
+  map<epoch_t, pg_interval_t> past_intervals;
+
+public:
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<pg_interval_t*>& o);
+  static void generate_test_instances(list<PastIntervals *> & o);
 
   /**
    * Determines whether there is an interval change
@@ -2549,20 +2561,133 @@ struct pg_interval_t {
     const vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
-    ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    ceph::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
+    ceph::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     IsPGRecoverablePredicate *could_have_gone_active, /// [in] predicate whether the pg can be active
-    map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
+    PastIntervals *past_intervals,              ///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
+  friend ostream& operator<<(ostream& out, const PastIntervals &i);
+
+  template <typename F>
+  void trim(epoch_t bound, F &&f) {
+    PastIntervals::iterator pif = past_intervals.begin();
+    PastIntervals::iterator end = past_intervals.end();
+    while (pif != end) {
+      if (pif->second.last >= bound)
+	return;
+      f(pif->second);
+      past_intervals.erase(pif++);
+    }
+  }
+  void clear() { past_intervals.clear(); }
+
+  /**
+   * Should return a value which gives an indication of the amount
+   * of state contained
+   */
+  size_t size() const { return past_intervals.size(); }
+
+  bool empty() const { return past_intervals.empty(); }
+
+  void swap(PastIntervals &other) {
+    ::swap(other.past_intervals, past_intervals);
+  }
+
+  /**
+   * Return all osds which have been in the acting set back to the
+   * latest epoch to which we have trimmed
+   */
+  set<pg_shard_t> get_might_have_unfound(
+    pg_shard_t pg_whoami,
+    bool ec_pool) const;
+
+  bool has_crashed_interval_since(
+    epoch_t since,
+    const vector<int> &acting,
+    const vector<int> &up,
+    const OSDMap& osdmap,
+    const DoutPrefixProvider *dpp) const;
+
+  /* Return the set of epochs
+   * [(start_interval_start, start_interval_end), end) represented by the
+   * past_interval set.  Annoyingly, pg_info_t records last_epoch_started,
+   * but doesn't pin it to the start of the interval, so we have to return
+   * the first interval so a user can verify that last_epoch_started falls
+   * within it */
+  pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const {
+    auto iter = past_intervals.begin();
+    if (iter != past_intervals.end()) {
+      auto riter = past_intervals.rbegin();
+      return make_pair(
+	make_pair(iter->second.first, iter->second.last + 1),
+	riter->second.last + 1);
+    } else {
+      assert(0 == "get_bounds only valid if !empty()");
+      return make_pair(make_pair(0, 0), 0);
+    }
+  }
+
+  struct PriorSet {
+    bool ec_pool = false;
+    set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
+    set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
+    map<int, epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
+
+    bool pg_down = false;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
+    unique_ptr<IsPGRecoverablePredicate> pcontdec;
+
+    PriorSet() = default;
+    PriorSet(PriorSet &&) = default;
+    PriorSet &operator=(PriorSet &&) = default;
+
+    PriorSet &operator=(const PriorSet &) = delete;
+    PriorSet(const PriorSet &) = delete;
+
+    bool affected_by_map(
+      const OSDMap &osdmap,
+      const DoutPrefixProvider *dpp) const;
+
+  private:
+    PriorSet(
+      bool ec_pool,
+      IsPGRecoverablePredicate *c,
+      const OSDMap &osdmap,
+      const PastIntervals &past_intervals,
+      const vector<int> &up,
+      const vector<int> &acting,
+      const pg_info_t &info,
+      const DoutPrefixProvider *dpp);
+
+    friend class PastIntervals;
+  };
+
+  template <typename... Args>
+  PriorSet get_prior_set(Args&&... args) const {
+    return PriorSet(std::forward<Args>(args)...);
+  }
+
+private:
+  using iterator = map<epoch_t, pg_interval_t>::iterator;
+  using const_iterator = map<epoch_t, pg_interval_t>::const_iterator;
+  using reverse_iterator = map<epoch_t, pg_interval_t>::reverse_iterator;
+  using const_reverse_iterator =
+    map<epoch_t, pg_interval_t>::const_reverse_iterator;
+  iterator begin() { return past_intervals.begin(); }
+  iterator end() { return past_intervals.end(); }
+  const_iterator begin() const { return past_intervals.begin(); }
+  const_iterator end() const { return past_intervals.end(); }
+  reverse_iterator rbegin() { return past_intervals.rbegin(); }
+  reverse_iterator rend() { return past_intervals.rend(); }
+  const_reverse_iterator rbegin() const { return past_intervals.rbegin(); }
+  const_reverse_iterator rend() const { return past_intervals.rend(); }
 };
-WRITE_CLASS_ENCODER(pg_interval_t)
+WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
+WRITE_CLASS_ENCODER(PastIntervals)
 
-ostream& operator<<(ostream& out, const pg_interval_t& i);
-
-typedef map<epoch_t, pg_interval_t> pg_interval_map_t;
-
+ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i);
+ostream& operator<<(ostream& out, const PastIntervals &i);
 
 /** 
  * pg_query_t - used to ask a peer for information about a pg.

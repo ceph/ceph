@@ -36,7 +36,7 @@ public:
   pg_info_t info;
   pg_log_t log;
   pg_missing_t missing;
-  pg_interval_map_t past_intervals;
+  PastIntervals past_intervals;
 
   epoch_t get_epoch() const { return epoch; }
   spg_t get_pgid() const { return spg_t(info.pgid.pgid, to); }
