@@ -94,10 +94,11 @@ int RGWGC::remove(int index, const std::list<string>& tags)
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
 {
   result.clear();
+  string next_marker;
 
   for (; *index < max_objs && result.size() < max; (*index)++, marker.clear()) {
     std::list<cls_rgw_gc_obj_info> entries;
-    int ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated);
+    int ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
     if (ret == -ENOENT)
       continue;
     if (ret < 0)
@@ -107,6 +108,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       result.push_back(*iter);
     }
+
+    marker = next_marker;
 
     if (*index == max_objs - 1) {
       /* we cut short here, truncated will hold the correct value */
@@ -154,12 +157,13 @@ int RGWGC::process(int index, int max_secs)
     return ret;
 
   string marker;
+  string next_marker;
   bool truncated;
   IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
-    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, true, entries, &truncated);
+    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, true, entries, &truncated, next_marker);
     if (ret == -ENOENT) {
       ret = 0;
       goto done;
