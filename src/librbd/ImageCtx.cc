@@ -123,7 +123,9 @@ struct C_InvalidateCache : public Context {
     } else {
       lderr(cct) << "could not release all objects from cache: "
                  << unclean << " bytes remain" << dendl;
-      r = -EBUSY;
+      if (r == 0) {
+        r = -EBUSY;
+      }
     }
 
     if (reentrant_safe) {
@@ -763,7 +765,7 @@ struct C_InvalidateCache : public Context {
     return result;
   }
 
-  void ImageCtx::invalidate_cache(Context *on_finish) {
+  void ImageCtx::invalidate_cache(bool purge_on_error, Context *on_finish) {
     if (object_cacher == NULL) {
       op_work_queue->queue(on_finish, 0);
       return;
@@ -773,7 +775,7 @@ struct C_InvalidateCache : public Context {
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    flush_cache(new C_InvalidateCache(this, false, false, on_finish));
+    flush_cache(new C_InvalidateCache(this, purge_on_error, false, on_finish));
   }
 
   void ImageCtx::clear_nonexistence_cache() {
@@ -781,6 +783,11 @@ struct C_InvalidateCache : public Context {
     if (!object_cacher)
       return;
     object_cacher->clear_nonexistence(object_set);
+  }
+
+  bool ImageCtx::is_cache_empty() {
+    Mutex::Locker locker(cache_lock);
+    return object_cacher->set_is_empty(object_set);
   }
 
   void ImageCtx::register_watch(Context *on_finish) {

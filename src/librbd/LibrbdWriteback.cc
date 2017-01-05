@@ -122,7 +122,12 @@ namespace librbd {
 
     virtual void complete(int r) {
       if (request_sent || r < 0) {
-        commit_io_event_extent(r);
+        if (request_sent && r == 0) {
+          // only commit IO events that are safely recorded to the backing image
+          // since the cache will retry all IOs that fail
+          commit_io_event_extent(0);
+        }
+
         req_comp->complete(r);
         delete this;
       } else {
