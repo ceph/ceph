@@ -696,7 +696,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
 	!_internal_field(key)) {
       (*oss) << key << " = '" << buf << "' ";
       if (range.first == range.second) {
-	(*oss) << "(unchangeable) ";
+	(*oss) << "(not observed, change may require restart) ";
       }
     }
     for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
