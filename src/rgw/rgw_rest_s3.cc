@@ -1860,26 +1860,26 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  }
 	  s->perm_mask = RGW_PERM_FULL_CONTROL;
 	}
-  } else if (ldap.is_applicable()) {
-    try {
-      auto applier = ldap.authenticate();
-      if (! applier) {
-        return -EACCES;
-      }
+      } else if (ldap.is_applicable()) {
+        try {
+          auto applier = ldap.authenticate();
+          if (! applier) {
+            return -EACCES;
+          }
 
-      try {
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
-        applier->modify_request_state(s);
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        return -EACCES;
-      }
-    } catch (int err) {
-      return -EACCES;
-    }
+          try {
+            applier->load_acct_info(*s->user);
+            s->perm_mask = applier->get_perm_mask();
+            applier->modify_request_state(s);
+            s->auth_identity = std::move(applier);
+          } catch (int err) {
+            return -EACCES;
+          }
+        } catch (int err) {
+          return -EACCES;
+        }
       } else {
-	return -EACCES;
+        return -EACCES;
       }
     } else {
       map<string, RGWAccessKey> access_keys  = user_info.access_keys;
