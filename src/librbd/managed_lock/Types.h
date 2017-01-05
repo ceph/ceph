@@ -17,6 +17,12 @@ struct Locker {
   uint64_t handle;
 };
 
+enum Mode {
+  EXCLUSIVE,
+  SHARED
+};
+
+
 } // namespace managed_lock
 } // namespace librbd
 
