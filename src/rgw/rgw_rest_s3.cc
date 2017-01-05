@@ -4390,6 +4390,39 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
 rgw::LDAPHelper* RGWLDAPAuthEngine::ldh = nullptr;
 std::mutex RGWLDAPAuthEngine::mtx;
 
+namespace rgw {
+namespace auth {
+namespace s3 {
+
+std::tuple<Version2ndEngine::Extractor::access_key_id_t,
+           Version2ndEngine::Extractor::signature_t,
+           Version2ndEngine::Extractor::expires_t,
+           Version2ndEngine::Extractor::qsr_t>
+rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
+{
+  if (! s->http_auth || s->http_auth[0] == '\0') {
+    return std::make_tuple(s->info.args.get("AWSAccessKeyId"),
+                           s->info.args.get("Signature"),
+                           s->info.args.get("Expires"),
+                           true);
+  } else {
+    const std::string auth_str(s->http_auth + strlen("AWS "));
+    const size_t pos = auth_str.rfind(':');
+    if (pos != std::string::npos) {
+      return std::make_tuple(auth_str.substr(0, pos),
+                             auth_str.substr(pos + 1),
+                             std::string(), false);
+    }
+  }
+
+  return std::make_tuple("", "", "", false);
+}
+
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
+
+
 void RGWLDAPAuthEngine::init(CephContext* const cct)
 {
   if (! ldh) {

@@ -763,4 +763,104 @@ public:
           store, acct_override));
     }
 };
+
+
+namespace rgw {
+namespace auth {
+namespace s3 {
+
+class Version2ndEngine : public rgw::auth::Engine {
+public:
+  class Extractor {
+  public:
+    virtual ~Extractor() {};
+
+    using access_key_id_t = std::string;
+    using signature_t = std::string;
+    using expires_t = std::string;
+    using qsr_t = bool;
+
+    virtual std::tuple<access_key_id_t,
+                       signature_t,
+                       expires_t,
+                       qsr_t> get_auth_data(const req_state* s) const = 0;
+  };
+
+protected:
+  CephContext* cct;
+  const Extractor& extractor;
+
+  Version2ndEngine(CephContext* const cct, const Extractor& extractor)
+    : cct(cct),
+      extractor(extractor) {
+  }
+
+  using result_t = rgw::auth::Engine::result_t;
+
+  virtual result_t authenticate(std::string access_key_id,
+                                std::string signature,
+                                std::string expires,
+                                bool qsr,
+                                const req_info& info) const = 0;
+
+public:
+  result_t authenticate(const req_state* const s) const final {
+    std::string access_key_id;
+    std::string signature;
+    std::string expires;
+    bool qsr;
+
+    std::tie(access_key_id, signature, expires, qsr) = \
+      extractor.get_auth_data(s);
+
+    if (access_key_id.empty() || signature.empty()) {
+      return std::make_pair(nullptr, nullptr);
+    } else {
+      return authenticate(std::move(access_key_id), std::move(signature),
+                          std::move(expires), qsr, s->info);
+    }
+  }
+};
+
+class RGWS3V2Extractor : public Version2ndEngine::Extractor {
+public:
+  std::tuple<access_key_id_t,
+             signature_t,
+             expires_t,
+             qsr_t> get_auth_data(const req_state* s) const override;
+};
+
+
+class S3AuthFactory : public rgw::auth::RemoteApplier::Factory,
+                      public rgw::auth::LocalApplier::Factory {
+  typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
+  RGWRados* const store;
+
+public:
+  S3AuthFactory(RGWRados* const store)
+    : store(store) {
+  }
+
+  aplptr_t create_apl_remote(CephContext* const cct,
+                             rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
+                             const rgw::auth::RemoteApplier::AuthInfo info
+                            ) const override {
+    return aplptr_t(
+      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
+  }
+
+  aplptr_t create_apl_local(CephContext* const cct,
+                            const RGWUserInfo& user_info,
+                            const std::string& subuser) const override {
+      return aplptr_t(
+        new rgw::auth::LocalApplier(cct, user_info, subuser));
+  }
+};
+
+
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
+
+
 #endif /* CEPH_RGW_REST_S3_H */
