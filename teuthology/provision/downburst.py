@@ -7,7 +7,7 @@ import yaml
 from ..config import config
 from ..contextutil import safe_while
 from ..misc import decanonicalize_hostname
-from ..lockstatus import get_status
+from ..lock import get_status
 
 
 log = logging.getLogger(__name__)

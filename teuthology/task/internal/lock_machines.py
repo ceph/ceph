@@ -4,7 +4,6 @@ import time
 import yaml
 
 from teuthology import lock
-from teuthology import lockstatus
 from teuthology import misc
 from teuthology import provision
 from teuthology import report
@@ -92,7 +91,7 @@ def lock_machines(ctx, config):
         if len(all_locked) == total_requested:
             vmlist = []
             for lmach in all_locked:
-                if misc.is_vm(lmach):
+                if lock.is_vm(lmach):
                     vmlist.append(lmach)
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
@@ -117,7 +116,7 @@ def lock_machines(ctx, config):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in all_locked.iterkeys():
-                    stats = lockstatus.get_status(dkey)
+                    stats = lock.get_status(dkey)
                     newscandict[dkey] = stats['ssh_pub_key']
                 ctx.config['targets'] = newscandict
             else:

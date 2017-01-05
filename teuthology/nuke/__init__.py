@@ -10,9 +10,9 @@ import teuthology
 
 from ..config import config, FakeNamespace
 from ..lock import (
-    list_locks, locked_since_seconds, unlock_one, find_stale_locks
+    list_locks, locked_since_seconds, unlock_one, find_stale_locks, get_status,
+    is_vm
 )
-from ..lockstatus import get_status
 from ..misc import (
     canonicalize_hostname, config_file, decanonicalize_hostname, merge_configs,
     get_user, sh
@@ -298,7 +298,8 @@ def nuke_helper(ctx, should_unlock):
         if 'vpm' in shortname:
             return
         status_info = get_status(host)
-        if status_info['is_vm'] and status_info['machine_type'] == 'openstack':
+        if is_vm(status=status_info) and \
+                status_info['machine_type'] == 'openstack':
             return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))

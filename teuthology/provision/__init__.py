@@ -1,6 +1,6 @@
 import logging
 from ..misc import decanonicalize_hostname, get_distro, get_distro_version
-from ..lockstatus import get_status
+from ..lock import get_status, is_vm
 
 from .downburst import Downburst
 from .openstack import ProvisionOpenStack
@@ -25,7 +25,7 @@ def create_if_vm(ctx, machine_name, _downburst=None):
     machine_type = status_info['machine_type']
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
-    if not status_info.get('is_vm', False):
+    if not is_vm(status=status_info):
         return False
 
     if machine_type in cloud.get_types():
@@ -61,7 +61,7 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
         status_info = _downburst.status
     else:
         status_info = get_status(machine_name)
-    if not status_info or not status_info.get('is_vm', False):
+    if not status_info or not is_vm(status=status_info):
         return True
     if user is not None and user != status_info['locked_by']:
         msg = "Tried to destroy {node} as {as_user} but it is locked " + \

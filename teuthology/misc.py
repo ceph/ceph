@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 
 import datetime
 stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
-is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')

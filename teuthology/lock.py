@@ -16,13 +16,29 @@ from . import provision
 from .config import config
 from .config import set_config_attr
 from .contextutil import safe_while
-from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
 
 
-def is_vm(name):
-    return get_status(name)['is_vm']
+def get_status(name):
+    name = misc.canonicalize_hostname(name, user=None)
+    uri = os.path.join(config.lock_server, 'nodes', name, '')
+    response = requests.get(uri)
+    success = response.ok
+    if success:
+        return response.json()
+    log.warning(
+        "Failed to query lock server for status of {name}".format(name=name))
+    return None
+
+
+def is_vm(name=None, status=None):
+    if status is None:
+        if name is None:
+            raise ValueError("Must provide either name or status, or both")
+        name = misc.canonicalize_hostname(name)
+        status = get_status(name)
+    return status.get('is_vm', False)
 
 
 def get_distro_from_downburst():
@@ -241,7 +257,7 @@ def main(ctx):
         statuses = get_statuses(machines)
         owner = ctx.owner or misc.get_user()
         for machine in statuses:
-            if machine['is_vm'] and machine['locked'] and \
+            if is_vm(status=machine) and machine['locked'] and \
                (machines or machine['locked_by'] == owner):
                 vmachines.append(machine['name'])
         if vmachines:
@@ -269,7 +285,7 @@ def main(ctx):
 
             # When listing, only show the vm_host's name, not every detail
             for s in statuses:
-                if not s.get('is_vm', False):
+                if not is_vm(status=s):
                     continue
                 # with an OpenStack API, there is no host for a VM
                 if s['vm_host'] is None:
@@ -322,7 +338,7 @@ def main(ctx):
         if ctx.owner is None and user is None:
             user = misc.get_user()
         # If none of them are vpm, do them all in one shot
-        if not filter(is_vm, machines):
+        if not filter(lambda x: is_vm(status=x), machines):
             res = unlock_many(machines, user)
             return 0 if res else 1
         for machine in machines:

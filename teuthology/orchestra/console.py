@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 
-from teuthology import lockstatus as ls
+from teuthology import lock
 from teuthology.config import config
 
 from ..exceptions import ConsoleError
@@ -316,9 +316,9 @@ class VirtualConsole():
             raise RuntimeError("libvirt not found")
 
         self.shortname = remote.getShortName(name)
-        status_info = ls.get_status(self.shortname)
+        status_info = lock.get_status(self.shortname)
         try:
-            if status_info.get('is_vm', False):
+            if lock.is_vm(status=status_info):
                 phys_host = status_info['vm_host']['name'].split('.')[0]
         except TypeError:
             return
