@@ -78,7 +78,7 @@ public:
   }
 };
 
-TEST_F(TestMockManagedLockGetLockerRequest, Success) {
+TEST_F(TestMockManagedLockGetLockerRequest, SuccessExclusive) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -95,7 +95,34 @@ TEST_F(TestMockManagedLockGetLockerRequest, Success) {
   C_SaferCond ctx;
   Locker locker;
   MockGetLockerRequest *req = MockGetLockerRequest::create(
-    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, &locker, &ctx);
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, true, &locker, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  ASSERT_EQ(entity_name_t::CLIENT(1), locker.entity);
+  ASSERT_EQ("1.2.3.4:0/0", locker.address);
+  ASSERT_EQ("auto 123", locker.cookie);
+  ASSERT_EQ(123U, locker.handle);
+}
+
+TEST_F(TestMockManagedLockGetLockerRequest, SuccessShared) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
+                       "auto 123", ManagedLock<>::WATCHER_LOCK_TAG,
+                       LOCK_SHARED);
+
+  C_SaferCond ctx;
+  Locker locker;
+  MockGetLockerRequest *req = MockGetLockerRequest::create(
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, false, &locker, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -121,7 +148,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoError) {
   C_SaferCond ctx;
   Locker locker;
   MockGetLockerRequest *req = MockGetLockerRequest::create(
-    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, &locker, &ctx);
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, true, &locker, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -142,7 +169,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoEmpty) {
   C_SaferCond ctx;
   Locker locker;
   MockGetLockerRequest *req = MockGetLockerRequest::create(
-    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, &locker, &ctx);
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, true, &locker, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -163,12 +190,12 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoExternalTag) {
   C_SaferCond ctx;
   Locker locker;
   MockGetLockerRequest *req = MockGetLockerRequest::create(
-    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, &locker, &ctx);
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, true, &locker, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoShared) {
+TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoIncompatibleShared) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -185,7 +212,29 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoShared) {
   C_SaferCond ctx;
   Locker locker;
   MockGetLockerRequest *req = MockGetLockerRequest::create(
-    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, &locker, &ctx);
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, true, &locker, &ctx);
+  req->send();
+  ASSERT_EQ(-EBUSY, ctx.wait());
+}
+
+TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoIncompatibleExclusive) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
+                       "auto 123", ManagedLock<>::WATCHER_LOCK_TAG,
+                       LOCK_EXCLUSIVE);
+
+  C_SaferCond ctx;
+  Locker locker;
+  MockGetLockerRequest *req = MockGetLockerRequest::create(
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, false, &locker, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }
@@ -207,7 +256,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoExternalCookie) {
   C_SaferCond ctx;
   Locker locker;
   MockGetLockerRequest *req = MockGetLockerRequest::create(
-    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, &locker, &ctx);
+    mock_image_ctx.md_ctx, mock_image_ctx.header_oid, true, &locker, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
 }

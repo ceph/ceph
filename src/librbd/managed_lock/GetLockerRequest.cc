@@ -24,10 +24,11 @@ using util::create_rados_ack_callback;
 
 template <typename I>
 GetLockerRequest<I>::GetLockerRequest(librados::IoCtx& ioctx,
-				      const std::string& oid, Locker *locker,
-				      Context *on_finish)
+				      const std::string& oid, bool exclusive,
+                                      Locker *locker, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
-    m_oid(oid), m_locker(locker), m_on_finish(on_finish) {
+    m_oid(oid), m_exclusive(exclusive), m_locker(locker),
+    m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -61,8 +62,8 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
   std::string lock_tag;
   if (r == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    r = rados::cls::lock::get_lock_info_finish(&it, &lockers,
-                                                      &lock_type, &lock_tag);
+    r = rados::cls::lock::get_lock_info_finish(&it, &lockers, &lock_type,
+                                               &lock_tag);
   }
 
   if (r < 0) {
@@ -83,8 +84,12 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
     return;
   }
 
-  if (lock_type == LOCK_SHARED) {
-    ldout(m_cct, 5) << "shared lock type detected" << dendl;
+  if (m_exclusive && lock_type == LOCK_SHARED) {
+    ldout(m_cct, 5) << "incompatible shared lock type detected" << dendl;
+    finish(-EBUSY);
+    return;
+  } else if (!m_exclusive && lock_type == LOCK_EXCLUSIVE) {
+    ldout(m_cct, 5) << "incompatible exclusive lock type detected" << dendl;
     finish(-EBUSY);
     return;
   }
