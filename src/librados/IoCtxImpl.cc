@@ -184,6 +184,52 @@ struct C_aio_notify_Ack : public Context {
   }
 };
 
+struct C_aio_selfmanaged_snap_op_Complete : public Context {
+  librados::RadosClient *client;
+  librados::AioCompletionImpl *c;
+
+  C_aio_selfmanaged_snap_op_Complete(librados::RadosClient *client,
+                                     librados::AioCompletionImpl *c)
+    : client(client), c(c) {
+    c->get();
+  }
+
+  virtual void finish(int r) {
+    c->lock.Lock();
+    c->rval = r;
+    c->ack = true;
+    c->safe = true;
+    c->cond.Signal();
+
+    if (c->callback_complete) {
+      client->finisher.queue(new librados::C_AioComplete(c));
+    }
+    if (c->callback_safe) {
+      client->finisher.queue(new librados::C_AioSafe(c));
+    }
+    c->put_unlock();
+  }
+};
+
+struct C_aio_selfmanaged_snap_create_Complete : public C_aio_selfmanaged_snap_op_Complete {
+  snapid_t snapid;
+  uint64_t *dest_snapid;
+
+  C_aio_selfmanaged_snap_create_Complete(librados::RadosClient *client,
+                                         librados::AioCompletionImpl *c,
+                                         uint64_t *dest_snapid)
+    : C_aio_selfmanaged_snap_op_Complete(client, c),
+      dest_snapid(dest_snapid) {
+  }
+
+  virtual void finish(int r) {
+    if (r >= 0) {
+      *dest_snapid = snapid;
+    }
+    C_aio_selfmanaged_snap_op_Complete::finish(r);
+  }
+};
+
 } // anonymous namespace
 } // namespace librados
 
@@ -371,6 +417,18 @@ int librados::IoCtxImpl::selfmanaged_snap_create(uint64_t *psnapid)
   return reply;
 }
 
+void librados::IoCtxImpl::aio_selfmanaged_snap_create(uint64_t *snapid,
+                                                      AioCompletionImpl *c)
+{
+  C_aio_selfmanaged_snap_create_Complete *onfinish =
+    new C_aio_selfmanaged_snap_create_Complete(client, c, snapid);
+  int r = objecter->allocate_selfmanaged_snap(poolid, &onfinish->snapid,
+                                              onfinish);
+  if (r < 0) {
+    onfinish->complete(r);
+  }
+}
+
 int librados::IoCtxImpl::snap_remove(const char *snapName)
 {
   int reply;
@@ -443,6 +501,13 @@ int librados::IoCtxImpl::selfmanaged_snap_remove(uint64_t snapid)
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
   return (int)reply;
+}
+
+void librados::IoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
+                                                      AioCompletionImpl *c)
+{
+  Context *onfinish = new C_aio_selfmanaged_snap_op_Complete(client, c);
+  objecter->delete_selfmanaged_snap(poolid, snapid, onfinish);
 }
 
 int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
