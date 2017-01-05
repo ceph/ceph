@@ -401,7 +401,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   int r = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
   if (r < 0)
     cerr << __func__ << " warning: peek_map_epoch reported error" << std::endl;
-  map<epoch_t,pg_interval_t> past_intervals;
+  PastIntervals past_intervals;
   __u8 struct_v;
   r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
   if (r < 0) {
@@ -442,7 +442,7 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
 }
 
 int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    map<epoch_t,pg_interval_t> &past_intervals)
+    PastIntervals &past_intervals)
 {
   //Empty for this
   coll_t coll(info.pgid);
@@ -464,7 +464,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 typedef map<eversion_t, hobject_t> divergent_priors_t;
 
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-	     pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
+	     pg_log_t &log, PastIntervals &past_intervals,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
 {
@@ -747,7 +747,7 @@ int add_osdmap(ObjectStore *store, metadata_section &ms)
 int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
     pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
     const OSDSuperblock& superblock,
-    map<epoch_t,pg_interval_t> &past_intervals)
+    PastIntervals &past_intervals)
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
@@ -3412,7 +3412,7 @@ int main(int argc, char **argv)
       cerr << "map_epoch " << map_epoch << std::endl;
 
     pg_info_t info(pgid);
-    map<epoch_t,pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
     __u8 struct_ver;
     ret = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
 		      struct_ver);

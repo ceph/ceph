@@ -194,7 +194,7 @@ struct PGPool {
  *
  */
 
-class PG : protected DoutPrefixProvider {
+class PG : public DoutPrefixProvider {
 protected:
   OSDService *osd;
   CephContext *cct;
@@ -491,7 +491,7 @@ public:
     }
   } missing_loc;
   
-  map<epoch_t,pg_interval_t> past_intervals;
+  PastIntervals past_intervals;
 
   interval_set<snapid_t> snap_trimq;
 
@@ -551,45 +551,19 @@ public:
   set<int> blocked_by; ///< osds we are blocked by (for pg stats)
 
   // [primary only] content recovery state
- protected:
-  struct PriorSet {
-    CephContext* cct;
-    const bool ec_pool;
-    set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
-    set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
-    map<int, epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
-
-    bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
-    boost::scoped_ptr<IsPGRecoverablePredicate> pcontdec;
-    PriorSet(CephContext* cct,
-	     bool ec_pool,
-	     IsPGRecoverablePredicate *c,
-	     const OSDMap &osdmap,
-	     const map<epoch_t, pg_interval_t> &past_intervals,
-	     const vector<int> &up,
-	     const vector<int> &acting,
-	     const pg_info_t &info,
-	     const PG *debug_pg = nullptr);
-
-    bool affected_by_map(const OSDMapRef osdmap, const PG *debug_pg=0) const;
-  };
-
-  friend std::ostream& operator<<(std::ostream& oss,
-				  const struct PriorSet &prior);
-
 
 public:    
   struct BufferedRecoveryMessages {
     map<int, map<spg_t, pg_query_t> > query_map;
-    map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > info_map;
-    map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > notify_list;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
   };
 
   struct RecoveryCtx {
     utime_t start_time;
     map<int, map<spg_t, pg_query_t> > *query_map;
-    map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *info_map;
-    map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *notify_list;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > *info_map;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > *notify_list;
     set<PGRef> created_pgs;
     C_Contexts *on_applied;
     C_Contexts *on_safe;
@@ -597,9 +571,9 @@ public:
     ThreadPool::TPHandle* handle;
     RecoveryCtx(map<int, map<spg_t, pg_query_t> > *query_map,
 		map<int,
-		    vector<pair<pg_notify_t, pg_interval_map_t> > > *info_map,
+		    vector<pair<pg_notify_t, PastIntervals> > > *info_map,
 		map<int,
-		    vector<pair<pg_notify_t, pg_interval_map_t> > > *notify_list,
+		    vector<pair<pg_notify_t, PastIntervals> > > *notify_list,
 		C_Contexts *on_applied,
 		C_Contexts *on_safe,
 		ObjectStore::Transaction *transaction)
@@ -633,20 +607,20 @@ public:
 	  omap[j->first] = j->second;
 	}
       }
-      for (map<int, vector<pair<pg_notify_t, pg_interval_map_t> > >::iterator i
+      for (map<int, vector<pair<pg_notify_t, PastIntervals> > >::iterator i
 	     = m.info_map.begin();
 	   i != m.info_map.end();
 	   ++i) {
-	vector<pair<pg_notify_t, pg_interval_map_t> > &ovec =
+	vector<pair<pg_notify_t, PastIntervals> > &ovec =
 	  (*info_map)[i->first];
 	ovec.reserve(ovec.size() + i->second.size());
 	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
       }
-      for (map<int, vector<pair<pg_notify_t, pg_interval_map_t> > >::iterator i
+      for (map<int, vector<pair<pg_notify_t, PastIntervals> > >::iterator i
 	     = m.notify_list.begin();
 	   i != m.notify_list.end();
 	   ++i) {
-	vector<pair<pg_notify_t, pg_interval_map_t> > &ovec =
+	vector<pair<pg_notify_t, PastIntervals> > &ovec =
 	  (*notify_list)[i->first];
 	ovec.reserve(ovec.size() + i->second.size());
 	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
@@ -933,10 +907,24 @@ public:
 
   void mark_clean();  ///< mark an active pg clean
 
-  bool _calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map);
-  void generate_past_intervals();
+  static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
+    const pg_info_t &info,
+    epoch_t oldest_map) {
+    epoch_t start = MAX(
+      info.history.last_epoch_started,
+      MAX(oldest_map, info.history.epoch_created));
+    epoch_t end = MAX(
+      info.history.same_interval_since,
+      info.history.epoch_created);
+    if (start == end) {
+      return make_pair(0, 0);
+    } else {
+      return make_pair(start, end);
+    }
+  }
+  void check_past_interval_bounds() const;
   void trim_past_intervals();
-  void build_prior(std::unique_ptr<PriorSet> &prior_set);
+	PastIntervals::PriorSet build_prior();
 
   void remove_down_peer_info(const OSDMapRef osdmap);
 
@@ -1064,7 +1052,7 @@ public:
     list<Context*>& tfin,
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int,
-      vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map,
+      vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
     RecoveryCtx *ctx);
   void _activate_committed(epoch_t epoch, epoch_t activation_epoch);
   void all_activated_and_committed();
@@ -1573,7 +1561,7 @@ public:
 	return state->rctx->query_map;
       }
 
-      map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *get_info_map() {
+      map<int, vector<pair<pg_notify_t, PastIntervals> > > *get_info_map() {
 	assert(state->rctx);
 	assert(state->rctx->info_map);
 	return state->rctx->info_map;
@@ -1594,7 +1582,7 @@ public:
       RecoveryCtx *get_recovery_ctx() { return &*(state->rctx); }
 
       void send_notify(pg_shard_t to,
-		       const pg_notify_t &info, const pg_interval_map_t &pi) {
+		       const pg_notify_t &info, const PastIntervals &pi) {
 	assert(state->rctx);
 	assert(state->rctx->notify_list);
 	(*state->rctx->notify_list)[to.osd].push_back(make_pair(info, pi));
@@ -1744,7 +1732,7 @@ public:
     struct Active;
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
-      std::unique_ptr< PriorSet > prior_set;
+      PastIntervals::PriorSet prior_set;
       bool history_les_bound;  //< need osd_find_best_info_ignore_history_les
 
       explicit Peering(my_context ctx);
@@ -2242,7 +2230,7 @@ public:
     const vector<int>& acting,
     int acting_primary,
     const pg_history_t& history,
-    const pg_interval_map_t& pim,
+    const PastIntervals& pim,
     bool backfill,
     ObjectStore::Transaction *t);
 
@@ -2266,7 +2254,7 @@ public:
     epoch_t epoch,
     pg_info_t &info,
     pg_info_t &last_written_info,
-    map<epoch_t,pg_interval_t> &past_intervals,
+    PastIntervals &past_intervals,
     bool dirty_big_info,
     bool dirty_epoch,
     bool try_fast_info,
@@ -2303,7 +2291,7 @@ public:
   std::string get_corrupt_pg_log_name() const;
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
-    bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
+    bufferlist &bl, pg_info_t &info, PastIntervals &past_intervals,
     __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);

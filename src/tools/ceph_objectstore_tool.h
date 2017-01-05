@@ -30,7 +30,7 @@ class ObjectStoreTool : public RadosDump
     int do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
           pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
           const OSDSuperblock& superblock,
-          map<epoch_t,pg_interval_t> &past_intervals);
+          PastIntervals &past_intervals);
     int get_object(ObjectStore *store, coll_t coll,
 		   bufferlist &bl, OSDMap &curmap, bool *skipped_objects,
 		   ObjectStore::Sequencer &osr);

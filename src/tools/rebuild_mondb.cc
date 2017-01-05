@@ -364,7 +364,7 @@ int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
       continue;
     bufferlist bl;
     pg_info_t info(pgid);
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
     __u8 struct_v;
     r = PG::read_info(&fs, pgid, coll, bl, info, past_intervals, struct_v);
     if (r < 0) {
