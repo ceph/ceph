@@ -38,17 +38,12 @@
 #undef ENODATA
 #define ENODATA ENOATTR
 #endif
-
 #ifndef MSG_MORE
 #define	MSG_MORE 0
 #endif
 
 #ifndef O_DSYNC
 #define O_DSYNC O_SYNC
-#endif
-
-#ifndef HOST_NAME_MAX
-#define HOST_NAME_MAX 64
 #endif
 
 // Fix clock accuracy
@@ -72,11 +67,22 @@
 
 #endif /* !__FreeBSD__ */
 
-#if defined(__APPLE__)
-/* PATH_MAX */
+#if defined(__APPLE__) || defined(__FreeBSD__)
+/* get PATH_MAX */
 #include <limits.h>
+
+#ifndef EREMOTEIO
 #define EREMOTEIO 121
+#endif
+
+#ifndef HOST_NAME_MAX
+#ifdef MAXHOSTNAMELEN 
+#define HOST_NAME_MAX MAXHOSTNAMELEN 
+#else
 #define HOST_NAME_MAX 255
+#endif
+#endif
+
 #endif /* __APPLE__ */
 
 /* O_LARGEFILE is not defined/required on OSX/FreeBSD */
