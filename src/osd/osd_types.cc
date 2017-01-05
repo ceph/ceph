@@ -2857,6 +2857,7 @@ void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>&
   o.back()->maybe_went_rw = true;
 }
 
+WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
 void PastIntervals::encode(bufferlist &bl) const
 {
   ::encode(past_intervals, bl);

@@ -2683,7 +2683,6 @@ private:
   const_reverse_iterator rbegin() const { return past_intervals.rbegin(); }
   const_reverse_iterator rend() const { return past_intervals.rend(); }
 };
-WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
 WRITE_CLASS_ENCODER(PastIntervals)
 
 ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i);
