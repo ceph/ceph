@@ -5,6 +5,7 @@
 #define CEPH_RGW_METADATA_H
 
 #include <string>
+#include <boost/optional.hpp>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -12,6 +13,7 @@
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
 #include "common/RWLock.h"
+#include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 
 
@@ -140,6 +142,35 @@ struct RGWMetadataLogInfo {
 
 class RGWCompletionManager;
 
+class RGWMetadataLogInfoCompletion : public RefCountedObject {
+ public:
+  using info_callback_t = std::function<void(int, const cls_log_header&)>;
+ private:
+  cls_log_header header;
+  librados::IoCtx io_ctx;
+  librados::AioCompletion *completion;
+  std::mutex mutex; //< protects callback between cancel/complete
+  boost::optional<info_callback_t> callback; //< cleared on cancel
+ public:
+  RGWMetadataLogInfoCompletion(info_callback_t callback);
+  virtual ~RGWMetadataLogInfoCompletion();
+
+  librados::IoCtx& get_io_ctx() { return io_ctx; }
+  cls_log_header& get_header() { return header; }
+  librados::AioCompletion* get_completion() { return completion; }
+
+  void finish(librados::completion_t cb) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (callback) {
+      (*callback)(completion->get_return_value(), header);
+    }
+  }
+  void cancel() {
+    std::lock_guard<std::mutex> lock(mutex);
+    callback = boost::none;
+  }
+};
+
 class RGWMetadataLog {
   CephContext *cct;
   RGWRados *store;
@@ -193,7 +224,7 @@ public:
 
   int trim(int shard_id, const real_time& from_time, const real_time& end_time, const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
-  int get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCompletionManager *completion_manager, void *user_info, int *pret);
+  int get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion);
   int lock_exclusive(int shard_id, timespan duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
 
