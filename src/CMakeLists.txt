@@ -664,9 +664,13 @@ if(WITH_RBD)
   set(DENCODER_EXTRALIBS
     ${DENCODER_EXTRALIBS}
     cls_rbd_client
-    krbd
     rbd_types
     rbd_replay_types)
+  if(WITH_KRBD)
+    set(DENCODER_EXTRALIBS
+      ${DENCODER_EXTRALIBS}
+      krbd)
+  endif()
 endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
@@ -850,7 +854,7 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-if(WITH_LIBCEPHFS OR WITH_RBD)
+if(WITH_LIBCEPHFS OR WITH_KRBD)
   set(parse_secret_files
     common/secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_files})
@@ -906,10 +910,12 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-if(${WITH_RBD})
-  add_library(krbd STATIC krbd.cc
-    $<TARGET_OBJECTS:parse_secret_objs>)
-  target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
+if(WITH_RBD)
+  if(WITH_KRBD)
+    add_library(krbd STATIC krbd.cc
+      $<TARGET_OBJECTS:parse_secret_objs>)
+    target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
+  endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
     add_subdirectory(rbd_fuse)
@@ -921,7 +927,7 @@ if(${WITH_RBD})
     ${CMAKE_SOURCE_DIR}/src/rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
-endif(${WITH_RBD})
+endif(WITH_RBD)
 
 # RadosGW
 if(WITH_KVS)
