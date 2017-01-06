@@ -1,6 +1,7 @@
 from mock import patch, Mock
 
-from .. import lock
+import teuthology.lock.util
+from .. import provision
 
 
 class TestVpsOsVersionParamCheck(object):
@@ -20,13 +21,13 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = 'ubuntu'
         self.fake_ctx.os_version = 'precise'
         with patch.multiple(
-            lock.provision.downburst,
+            provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
-            check_value = lock.vps_version_or_type_valid(
-                        self.fake_ctx.machine_type,
-                        self.fake_ctx.os_type,
-                        self.fake_ctx.os_version)
+            check_value = teuthology.lock.util.vps_version_or_type_valid(
+                self.fake_ctx.machine_type,
+                self.fake_ctx.os_type,
+                self.fake_ctx.os_version)
 
         assert check_value
 
@@ -34,51 +35,50 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = 'ubuntu'
         self.fake_ctx.os_version = '12.04'
         with patch.multiple(
-            lock.provision.downburst,
+            provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
-            check_value = lock.vps_version_or_type_valid(
-                        self.fake_ctx.machine_type,
-                        self.fake_ctx.os_type,
-                        self.fake_ctx.os_version)
+            check_value = teuthology.lock.util.vps_version_or_type_valid(
+                self.fake_ctx.machine_type,
+                self.fake_ctx.os_type,
+                self.fake_ctx.os_version)
         assert check_value
 
     def test_mixup(self):
         self.fake_ctx.os_type = '6.5'
         self.fake_ctx.os_version = 'rhel'
         with patch.multiple(
-            lock.provision.downburst,
+            provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
-            check_value = lock.vps_version_or_type_valid(
-                        self.fake_ctx.machine_type,
-                        self.fake_ctx.os_type,
-                        self.fake_ctx.os_version)
+            check_value = teuthology.lock.util.vps_version_or_type_valid(
+                self.fake_ctx.machine_type,
+                self.fake_ctx.os_type,
+                self.fake_ctx.os_version)
         assert not check_value
 
     def test_bad_type(self):
         self.fake_ctx.os_type = 'aardvark'
         self.fake_ctx.os_version = '6.5'
         with patch.multiple(
-            lock.provision.downburst,
+            provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
-            check_value = lock.vps_version_or_type_valid(
-                        self.fake_ctx.machine_type,
-                        self.fake_ctx.os_type,
-                        self.fake_ctx.os_version)
+            check_value = teuthology.lock.util.vps_version_or_type_valid(
+                self.fake_ctx.machine_type,
+                self.fake_ctx.os_type,
+                self.fake_ctx.os_version)
         assert not check_value
 
     def test_bad_version(self):
         self.fake_ctx.os_type = 'rhel'
         self.fake_ctx.os_version = 'vampire_bat'
         with patch.multiple(
-            lock.provision.downburst,
+            provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
-            check_value = lock.vps_version_or_type_valid(
-                        self.fake_ctx.machine_type,
-                        self.fake_ctx.os_type,
-                        self.fake_ctx.os_version)
+            check_value = teuthology.lock.util.vps_version_or_type_valid(
+                self.fake_ctx.machine_type,
+                self.fake_ctx.os_type,
+                self.fake_ctx.os_version)
         assert not check_value
-

@@ -4,15 +4,23 @@ import json
 import logging
 import os
 import subprocess
+
 import yaml
 
 import teuthology
-
-from ..config import config, FakeNamespace
-from ..lock import (
-    list_locks, locked_since_seconds, unlock_one, find_stale_locks, get_status,
-    is_vm
+from teuthology.lock.ops import unlock_one
+from teuthology.lock.query import is_vm, list_locks, \
+    find_stale_locks
+from teuthology.lock.util import locked_since_seconds
+from .actions import (
+    check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
+    reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
+    remove_ceph_packages, synch_clocks, unlock_firmware_repo,
+    remove_configuration_files, undo_multipath, reset_syslog_dir,
+    remove_ceph_data, remove_testing_tree, remove_yum_timedhosts,
+    kill_valgrind,
 )
+from ..config import config, FakeNamespace
 from ..misc import (
     canonicalize_hostname, config_file, decanonicalize_hostname, merge_configs,
     get_user, sh
@@ -21,15 +29,6 @@ from ..openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
 from ..orchestra.remote import Remote
 from ..parallel import parallel
 from ..task.internal import check_lock, add_remotes, connect
-
-from .actions import (
-    check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
-    reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
-    remove_ceph_packages, synch_clocks,
-    unlock_firmware_repo, remove_configuration_files, undo_multipath,
-    reset_syslog_dir, remove_ceph_data, remove_testing_tree,
-    remove_yum_timedhosts, kill_valgrind,
-)
 
 log = logging.getLogger(__name__)
 

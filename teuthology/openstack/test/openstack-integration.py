@@ -30,6 +30,9 @@ import tempfile
 import shutil
 
 import teuthology.lock
+import teuthology.lock.cli
+import teuthology.lock.query
+import teuthology.lock.util
 import teuthology.nuke
 import teuthology.misc
 import teuthology.schedule
@@ -144,7 +147,7 @@ class TestSuite(Integration):
         self.wait_worker()
         log = self.get_teuthology_log()
         assert "teuthology.run:FAIL" in log
-        locks = teuthology.lock.list_locks(locked=True)
+        locks = teuthology.lock.query.list_locks(locked=True)
         assert len(locks) == 0
 
 class TestSchedule(Integration):
@@ -221,7 +224,7 @@ class TestLock(Integration):
 
     def test_main(self):
         args = scripts.lock.parse_args(self.options + ['--lock'])
-        assert teuthology.lock.main(args) == 0
+        assert teuthology.lock.cli.main(args) == 0
 
     def test_lock_unlock(self):
         for image in teuthology.openstack.OpenStack.image2url.keys():
@@ -230,16 +233,16 @@ class TestLock(Integration):
                                            ['--lock-many', '1',
                                             '--os-type', os_type,
                                             '--os-version', os_version])
-            assert teuthology.lock.main(args) == 0
-            locks = teuthology.lock.list_locks(locked=True)
+            assert teuthology.lock.cli.main(args) == 0
+            locks = teuthology.lock.query.list_locks(locked=True)
             assert len(locks) == 1
             args = scripts.lock.parse_args(self.options +
                                            ['--unlock', locks[0]['name']])
-            assert teuthology.lock.main(args) == 0
+            assert teuthology.lock.cli.main(args) == 0
 
     def test_list(self, capsys):
         args = scripts.lock.parse_args(self.options + ['--list', '--all'])
-        teuthology.lock.main(args)
+        teuthology.lock.cli.main(args)
         out, err = capsys.readouterr()
         assert 'machine_type' in out
         assert 'openstack' in out
@@ -258,8 +261,8 @@ class TestNuke(Integration):
                                        ['--lock-many', '1',
                                         '--os-type', os_type,
                                         '--os-version', os_version])
-        assert teuthology.lock.main(args) == 0
-        locks = teuthology.lock.list_locks(locked=True)
+        assert teuthology.lock.cli.main(args) == 0
+        locks = teuthology.lock.query.list_locks(locked=True)
         logging.info('list_locks = ' + str(locks))
         assert len(locks) == 1
         ctx = argparse.Namespace(name=None,
@@ -269,5 +272,5 @@ class TestNuke(Integration):
                                  owner=locks[0]['locked_by'],
                                  teuthology_config={})
         teuthology.nuke.nuke(ctx, should_unlock=True)
-        locks = teuthology.lock.list_locks(locked=True)
+        locks = teuthology.lock.query.list_locks(locked=True)
         assert len(locks) == 0

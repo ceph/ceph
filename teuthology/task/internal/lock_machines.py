@@ -3,7 +3,10 @@ import logging
 import time
 import yaml
 
-from teuthology import lock
+import teuthology.lock.keys
+import teuthology.lock.ops
+import teuthology.lock.query
+import teuthology.lock.util
 from teuthology import misc
 from teuthology import provision
 from teuthology import report
@@ -44,8 +47,8 @@ def lock_machines(ctx, config):
     requested = total_requested
     while True:
         # get a candidate list of machines
-        machines = lock.list_locks(machine_type=machine_type, up=True,
-                                   locked=False, count=requested + reserved)
+        machines = teuthology.lock.query.list_locks(machine_type=machine_type, up=True,
+                                                    locked=False, count=requested + reserved)
         if machines is None:
             if ctx.block:
                 log.error('Error listing machines, trying again')
@@ -71,9 +74,9 @@ def lock_machines(ctx, config):
                            (reserved, requested, len(machines)))
 
         try:
-            newly_locked = lock.lock_many(ctx, requested, machine_type,
-                                          ctx.owner, ctx.archive, os_type,
-                                          os_version, arch)
+            newly_locked = teuthology.lock.ops.lock_many(ctx, requested, machine_type,
+                                                         ctx.owner, ctx.archive, os_type,
+                                                         os_version, arch)
         except Exception:
             # Lock failures should map to the 'dead' status instead of 'fail'
             set_status(ctx.summary, 'dead')
@@ -91,7 +94,7 @@ def lock_machines(ctx, config):
         if len(all_locked) == total_requested:
             vmlist = []
             for lmach in all_locked:
-                if lock.is_vm(lmach):
+                if teuthology.lock.query.is_vm(lmach):
                     vmlist.append(lmach)
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
@@ -112,11 +115,11 @@ def lock_machines(ctx, config):
                                 full_name = misc.canonicalize_hostname(guest)
                                 provision.destroy_if_vm(ctx, full_name)
                                 provision.create_if_vm(ctx, full_name)
-                if lock.do_update_keys(keys_dict):
+                if teuthology.lock.keys.do_update_keys(keys_dict):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in all_locked.iterkeys():
-                    stats = lock.get_status(dkey)
+                    stats = teuthology.lock.query.get_status(dkey)
                     newscandict[dkey] = stats['ssh_pub_key']
                 ctx.config['targets'] = newscandict
             else:
@@ -154,4 +157,4 @@ def lock_machines(ctx, config):
         if get_status(ctx.summary) == 'pass' or unlock_on_failure:
             log.info('Unlocking machines...')
             for machine in ctx.config['targets'].iterkeys():
-                lock.unlock_one(ctx, machine, ctx.owner, ctx.archive)
+                teuthology.lock.ops.unlock_one(ctx, machine, ctx.owner, ctx.archive)

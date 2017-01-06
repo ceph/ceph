@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import subprocess
@@ -7,8 +8,7 @@ import yaml
 from ..config import config
 from ..contextutil import safe_while
 from ..misc import decanonicalize_hostname
-from ..lock import get_status
-
+from teuthology.lock import query
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class Downburst(object):
         self.name = name
         self.os_type = os_type
         self.os_version = os_version
-        self.status = status or get_status(self.name)
+        self.status = status or query.get_status(self.name)
         self.config_path = None
         self.user_path = None
         self.user = user
@@ -221,3 +221,40 @@ class Downburst(object):
 
     def __del__(self):
         self.remove_config()
+
+
+def get_distro_from_downburst():
+    """
+    Return a table of valid distros.
+
+    If downburst is in path use it.  If either downburst is unavailable,
+    or if downburst is unable to produce a json list, then use a default
+    table.
+    """
+    default_table = {u'rhel_minimal': [u'6.4', u'6.5'],
+                     u'fedora': [u'17', u'18', u'19', u'20', u'22'],
+                     u'centos': [u'6.3', u'6.4', u'6.5', u'7.0',
+				 u'7.2'],
+                     u'centos_minimal': [u'6.4', u'6.5'],
+                     u'ubuntu': [u'8.04(hardy)', u'9.10(karmic)',
+                                 u'10.04(lucid)', u'10.10(maverick)',
+                                 u'11.04(natty)', u'11.10(oneiric)',
+                                 u'12.04(precise)', u'12.10(quantal)',
+                                 u'13.04(raring)', u'13.10(saucy)',
+                                 u'14.04(trusty)', u'utopic(utopic)',
+                                 u'16.04(xenial)'],
+                     u'sles': [u'11-sp2'],
+                     u'debian': [u'6.0', u'7.0', u'8.0']}
+    executable_cmd = downburst_executable()
+    if not executable_cmd:
+        log.warn("Downburst not found!")
+        log.info('Using default values for supported os_type/os_version')
+        return default_table
+    try:
+        output = subprocess.check_output([executable_cmd, 'list-json'])
+        downburst_data = json.loads(output)
+        return downburst_data
+    except (subprocess.CalledProcessError, OSError):
+        log.exception("Error calling downburst!")
+        log.info('Using default values for supported os_type/os_version')
+        return default_table

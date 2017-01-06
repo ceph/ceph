@@ -9,7 +9,8 @@ import sys
 
 from email.mime.text import MIMEText
 
-from .. import lock
+import teuthology.lock.query
+import teuthology.lock.util
 from .. import repo_utils
 
 from ..config import config
@@ -276,7 +277,7 @@ def get_arch(machine_type):
 
     :returns: A string or None
     """
-    result = lock.list_locks(machine_type=machine_type, count=1)
+    result = teuthology.lock.query.list_locks(machine_type=machine_type, count=1)
     if not result:
         log.warn("No machines found with machine_type %s!", machine_type)
     else:

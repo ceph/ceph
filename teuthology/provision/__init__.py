@@ -1,11 +1,11 @@
 import logging
-from ..misc import decanonicalize_hostname, get_distro, get_distro_version
-from ..lock import get_status, is_vm
 
-from .downburst import Downburst
-from .openstack import ProvisionOpenStack
+import teuthology.lock.query
+from ..misc import decanonicalize_hostname, get_distro, get_distro_version
 
 import cloud
+import downburst
+import openstack
 
 
 log = logging.getLogger(__name__)
@@ -20,12 +20,12 @@ def create_if_vm(ctx, machine_name, _downburst=None):
     if _downburst:
         status_info = _downburst.status
     else:
-        status_info = get_status(machine_name)
+        status_info = teuthology.lock.query.get_status(machine_name)
     shortname = decanonicalize_hostname(machine_name)
     machine_type = status_info['machine_type']
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
-    if not is_vm(status=status_info):
+    if not teuthology.lock.query.is_vm(status=status_info):
         return False
 
     if machine_type in cloud.get_types():
@@ -43,8 +43,9 @@ def create_if_vm(ctx, machine_name, _downburst=None):
             'Usage of a custom downburst config has been deprecated.'
         )
 
-    dbrst = _downburst or Downburst(name=machine_name, os_type=os_type,
-                                    os_version=os_version, status=status_info)
+    dbrst = _downburst or \
+        downburst.Downburst(name=machine_name, os_type=os_type,
+                            os_version=os_version, status=status_info)
     return dbrst.create()
 
 
@@ -60,8 +61,8 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
     if _downburst:
         status_info = _downburst.status
     else:
-        status_info = get_status(machine_name)
-    if not status_info or not is_vm(status=status_info):
+        status_info = teuthology.lock.query.get_status(machine_name)
+    if not status_info or not teuthology.lock.query.is_vm(status=status_info):
         return True
     if user is not None and user != status_info['locked_by']:
         msg = "Tried to destroy {node} as {as_user} but it is locked " + \
@@ -79,11 +80,12 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
     machine_type = status_info.get('machine_type')
     shortname = decanonicalize_hostname(machine_name)
     if machine_type == 'openstack':
-        return ProvisionOpenStack().destroy(shortname)
+        return openstack.ProvisionOpenStack().destroy(shortname)
     elif machine_type in cloud.get_types():
         return cloud.get_provisioner(
             machine_type, shortname, None, None).destroy()
 
-    dbrst = _downburst or Downburst(name=machine_name, os_type=None,
-                                    os_version=None, status=status_info)
+    dbrst = _downburst or \
+        downburst.Downburst(name=machine_name, os_type=None,
+                            os_version=None, status=status_info)
     return dbrst.destroy()

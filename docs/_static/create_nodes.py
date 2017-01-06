@@ -8,7 +8,8 @@
 import logging
 import sys
 from teuthology.orchestra.remote import Remote
-from teuthology.lock import update_inventory
+from teuthology.lock.ops import update_inventory
+
 paddles_url = 'http://paddles.example.com/nodes/'
 
 machine_type = 'typica'
