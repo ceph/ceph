@@ -163,6 +163,46 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   return 0;
 }
 
+void filter_out_mirror_watchers(ImageCtx *ictx,
+                                std::list<obj_watch_t> *watchers) {
+  if (watchers->empty()) {
+    return;
+  }
+
+  if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
+    return;
+  }
+
+  cls::rbd::MirrorImage mirror_image;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      lderr(ictx->cct) << "failed to retrieve mirroring state: "
+                       << cpp_strerror(r) << dendl;
+    }
+    return;
+  }
+
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    return;
+  }
+
+  std::list<obj_watch_t> mirror_watchers;
+  r = ictx->md_ctx.list_watchers(RBD_MIRRORING, &mirror_watchers);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      lderr(ictx->cct) << "error listing mirroring watchers: "
+                       << cpp_strerror(r) << dendl;
+    }
+    return;
+  }
+  for (auto &watcher : mirror_watchers) {
+    watchers->remove_if([watcher] (obj_watch_t &w) {
+        return (strncmp(w.addr, watcher.addr, sizeof(w.addr)) == 0);
+      });
+  }
+}
+
 } // anonymous namespace
 
   int detect_format(IoCtx &io_ctx, const string &name,
@@ -1557,6 +1597,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         ictx->state->close();
         return r;
       }
+
+      // If an image is being bootstrapped by rbd-mirror, it implies
+      // that the rbd-mirror daemon currently has the image open.
+      // Permit removal if this is the case.
+      filter_out_mirror_watchers(ictx, &watchers);
+
       if (watchers.size() > 1) {
         lderr(cct) << "image has watchers - not removing" << dendl;
 	ictx->owner_lock.put_read();
