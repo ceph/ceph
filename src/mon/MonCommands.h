@@ -142,7 +142,7 @@ COMMAND("pg dump_stuck " \
 COMMAND("pg ls-by-pool " \
         "name=poolstr,type=CephString " \
 	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
-	"list pg with pool = [poolname | poolid]", "pg", "r", "cli,rest")
+	"list pg with pool = [poolname]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-primary " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
