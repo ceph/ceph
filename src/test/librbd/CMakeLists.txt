@@ -132,7 +132,6 @@ target_link_libraries(ceph_test_librbd_fsx
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
-  blkid
   )
 
 install(TARGETS
