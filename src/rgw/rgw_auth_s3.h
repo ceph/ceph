@@ -8,6 +8,66 @@
 #include <tuple>
 
 #include "rgw_common.h"
+#include "rgw_rest_s3.h"
+
+#include "rgw_auth.h"
+#include "rgw_auth_keystone.h"
+
+
+namespace rgw {
+namespace auth {
+namespace s3 {
+
+class ExternalAuthStrategy : public rgw::auth::Strategy,
+                             public rgw::auth::RemoteApplier::Factory {
+  typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
+  RGWRados* const store;
+
+  using keystone_config_t = rgw::keystone::CephCtxConfig;
+  using keystone_cache_t = rgw::keystone::TokenCache;
+  using EC2Engine = rgw::auth::keystone::EC2Engine;
+
+  EC2Engine keystone_engine;
+  LDAPEngine ldap_engine;
+
+  aplptr_t create_apl_remote(CephContext* const cct,
+                             rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
+                             const rgw::auth::RemoteApplier::AuthInfo info
+                            ) const override {
+    return aplptr_t(
+      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
+  }
+
+public:
+  ExternalAuthStrategy(CephContext* const cct,
+                       RGWRados* const store,
+                       Version2ndEngine::Extractor* const extractor)
+    : store(store),
+      keystone_engine(cct, extractor,
+                      static_cast<rgw::auth::RemoteApplier::Factory*>(this),
+                      keystone_config_t::get_instance(),
+                      keystone_cache_t::get_instance<keystone_config_t>()),
+      ldap_engine(cct, store, *extractor,
+                  static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
+
+    if (cct->_conf->rgw_s3_auth_use_keystone &&
+        ! cct->_conf->rgw_keystone_url.empty()) {
+      add_engine(Control::SUFFICIENT, keystone_engine);
+    }
+
+    if (cct->_conf->rgw_s3_auth_use_ldap &&
+        ! cct->_conf->rgw_ldap_uri.empty()) {
+      add_engine(Control::SUFFICIENT, ldap_engine);
+    }
+  }
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::s3::AWSv2ExternalAuthStrategy";
+  }
+};
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
 
 void rgw_create_s3_canonical_header(
   const char *method,
