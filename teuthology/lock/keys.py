@@ -12,7 +12,7 @@ def do_update_keys(machines, all_=False):
     if all_:
         machines = reference.keys()
     keys_dict = misc.ssh_keyscan(machines)
-    return push_new_keys(keys_dict, reference)
+    return push_new_keys(keys_dict, reference), keys_dict
 
 
 def push_new_keys(keys_dict, reference):

@@ -215,6 +215,7 @@ def main(ctx):
 
     return ret
 
+
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0, 0, 'unknown'])
     if ctx.machine_type:
@@ -251,9 +252,8 @@ def updatekeys(args):
         level=loglevel,
     )
     all_ = args['--all']
-    if all_:
-        machines = []
-    elif args['<machine>']:
+    machines = []
+    if args['<machine>']:
         machines = [misc.canonicalize_hostname(m, user=None)
                     for m in args['<machine>']]
     elif args['--targets']:
@@ -263,4 +263,4 @@ def updatekeys(args):
             for doc in docs:
                 machines = [n for n in doc.get('targets', dict()).iterkeys()]
 
-    return keys.do_update_keys(machines, all_)
+    return keys.do_update_keys(machines, all_)[0]

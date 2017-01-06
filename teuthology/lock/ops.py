@@ -104,6 +104,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                         log.error('Unable to create virtual machine: %s',
                                   machine)
                         unlock_one(ctx, machine, user)
+                    ok_machs = keys.do_update_keys(ok_machs.keys())[1]
                 return ok_machs
             return machines
         elif response.status_code == 503:
