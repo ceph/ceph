@@ -20,7 +20,7 @@
 #include "osd/osd_types.h"
 
 class MOSDPGInfo : public Message {
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 1;
 
   epoch_t epoch;
@@ -74,8 +74,14 @@ public:
     // v2 needs the PastIntervals for each record
     for (vector<pair<pg_notify_t,PastIntervals> >::iterator p = pg_list.begin();
 	 p != pg_list.end();
-	 p++)
-      ::encode(p->second, payload);
+	 p++) {
+      if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+	::encode(p->second, payload);
+      } else {
+	header.version = 4;
+	p->second.encode_classic(payload);
+      }
+    }
 
     // v3 needs epoch_sent, query_epoch
     for (vector<pair<pg_notify_t,PastIntervals> >::iterator p = pg_list.begin();
@@ -107,7 +113,11 @@ public:
     if (header.version >= 2) {
       // get the PastIntervals portion
       for (unsigned i=0; i<n; i++) {
-	::decode(pg_list[i].second, p);
+	if (header.version >= 5) {
+	  ::decode(pg_list[i].second, p);
+	} else {
+	  pg_list[i].second.decode_classic(p);
+	}
       }
     }
 
