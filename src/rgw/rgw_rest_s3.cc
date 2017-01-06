@@ -26,6 +26,7 @@
 #include "rgw_client_io.h"
 
 #include "rgw_keystone.h"
+#include "rgw_auth_keystone.h"
 
 #include <typeinfo> // for 'typeid'
 
@@ -1828,38 +1829,40 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  store->ctx()->_conf->rgw_keystone_url.empty())
       {
 	// keystone
-	int external_auth_result = -EINVAL;
 	dout(20) << "s3 keystone: trying keystone auth" << dendl;
 
-	RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-	external_auth_result =
-	  keystone_validator.validate_s3token(s3_access_key,
-					      string(encoded_policy.c_str(),
-						    encoded_policy.length()),
-					      received_signature_str);
+        /* FIXME: stop overriding the aplfact and extr from parent scope.
+         * This will be possible when other S3 engines are ported. */
+        rgw::auth::s3::S3AuthFactory aplfact(store);
+        rgw::auth::s3::RGWS3V2Extractor extr;
 
-	if (external_auth_result < 0) {
-	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
-	  err_msg = "Bad access key / signature";
-	  return -EACCES;
-	}
+        using keystone_config_t = rgw::keystone::CephCtxConfig;
+        using keystone_cache_t = rgw::keystone::TokenCache;
+        using EC2Engine = rgw::auth::keystone::EC2Engine;
 
-	string project_id = keystone_validator.response.get_project_id();
-	rgw_user uid(project_id);
-
-	user_info.user_id = project_id;
-	user_info.display_name = keystone_validator.response.get_project_name();
-
-	/* try to store user if it not already exists */
-	if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
-	  if (ret < 0) {
-	    ldout(store->ctx(), 10)
-	      << "NOTICE: failed to store new user's info: ret="
-	      << ret << dendl;
-	  }
-	  s->perm_mask = RGW_PERM_FULL_CONTROL;
-	}
+        EC2Engine keystone_s3(s->cct, &extr, &aplfact,
+                              keystone_config_t::get_instance(),
+                              keystone_cache_t::get_instance<keystone_config_t>());
+        try {
+          auto result = keystone_s3.authenticate(s);
+          auto& applier = result.first;
+          if (! applier) {
+            return -EACCES;
+          } else {
+            try {
+              applier->load_acct_info(user_info);
+              s->perm_mask = applier->get_perm_mask();
+              applier->modify_request_state(s);
+              s->auth.identity = std::move(applier);
+            } catch (int err) {
+              ldout(s->cct, 5) << "applier threw err=" << err << dendl;
+              return err;
+            }
+          }
+        } catch (int err) {
+          ldout(s->cct, 5) << "keystone auth engine threw err=" << err << dendl;
+          return err;
+        }
       } else if (ldap.is_applicable()) {
         try {
           auto applier = ldap.authenticate();
@@ -3995,52 +3998,38 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
   if (store->ctx()->_conf->rgw_s3_auth_use_keystone
       && !store->ctx()->_conf->rgw_keystone_url.empty()) {
     dout(20) << "s3 keystone: trying keystone auth" << dendl;
+    /* FIXME: the factory and extractor will be shared across all external
+     * engines after making the transition to S3ExternalAuthStrategy. */
+    rgw::auth::s3::S3AuthFactory aplfact(store);
+    rgw::auth::s3::RGWS3V2Extractor extr;
 
-    RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-    string token;
+    using keystone_config_t = rgw::keystone::CephCtxConfig;
+    using keystone_cache_t = rgw::keystone::TokenCache;
+    using EC2Engine = rgw::auth::keystone::EC2Engine;
 
-    if (!rgw_create_s3_canonical_header(s->info,
-                                        &s->header_time, token, qsr)) {
-      dout(10) << "failed to create auth header\n" << token << dendl;
-      external_auth_result = -EPERM;
-    } else {
-      external_auth_result = keystone_validator.validate_s3token(auth_id, token,
-							    auth_sign);
-      if (external_auth_result == 0) {
-	// Check for time skew first
-	time_t req_sec = s->header_time.sec();
-
-	if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-	     req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-	  ldout(s->cct, 10) << "req_sec=" << req_sec << " now=" << now
-                            << "; now - RGW_AUTH_GRACE_MINS="
-                            << now - RGW_AUTH_GRACE_MINS * 60
-                            << "; now + RGW_AUTH_GRACE_MINS="
-                            << now + RGW_AUTH_GRACE_MINS * 60
-                            << dendl;
-
-	  ldout(s->cct, 0)  << "NOTICE: request time skew too big now="
-                            << utime_t(now, 0)
-                            << " req_time=" << s->header_time
-                            << dendl;
-	  return -ERR_REQUEST_TIME_SKEWED;
-	}
-
-        string project_id = keystone_validator.response.get_project_id();
-        s->user->user_id = project_id;
-        s->user->display_name = keystone_validator.response.get_project_name(); // wow.
-
-        rgw_user uid(project_id);
-        /* try to store user if it not already exists */
-        if (rgw_get_user_info_by_uid(store, uid, *(s->user)) < 0) {
-          int ret = rgw_store_user_info(store, *(s->user), NULL, NULL, real_time(), true);
-          if (ret < 0)
-            dout(10) << "NOTICE: failed to store new user's info: ret="
-		     << ret << dendl;
+    EC2Engine keystone_s3(s->cct, &extr, &aplfact,
+                          keystone_config_t::get_instance(),
+                          keystone_cache_t::get_instance<keystone_config_t>());
+    try {
+      auto result = keystone_s3.authenticate(s);
+      auto& applier = result.first;
+      if (! applier) {
+        external_auth_result = -EACCES;
+      } else {
+        try {
+          applier->load_acct_info(*s->user);
+          s->perm_mask = applier->get_perm_mask();
+          applier->modify_request_state(s);
+          s->auth.identity = std::move(applier);
+          external_auth_result = 0;
+        } catch (int err) {
+          ldout(s->cct, 5) << "applier threw err=" << err << dendl;
+          external_auth_result = err;
         }
-
-        s->perm_mask = RGW_PERM_FULL_CONTROL;
       }
+    } catch (int err) {
+      ldout(s->cct, 5) << "keystone auth engine threw err=" << err << dendl;
+      external_auth_result = err;
     }
   }
 
