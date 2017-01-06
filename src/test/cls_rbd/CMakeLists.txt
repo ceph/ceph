@@ -14,9 +14,7 @@ target_link_libraries(ceph_test_cls_rbd
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
-  radostest
-  blkid
-  udev)
+  radostest)
 install(TARGETS
   ceph_test_cls_rbd
   DESTINATION ${CMAKE_INSTALL_BINDIR})

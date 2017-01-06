@@ -36,7 +36,6 @@ if(${WITH_BABELTRACE})
     global
     babeltrace
     babeltrace-ctf
-    udev
     ${Boost_DATE_TIME_LIBRARY}
     )
   install(TARGETS rbd-replay-prep DESTINATION bin)
