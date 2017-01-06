@@ -1890,7 +1890,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       dout(10) << "finish_scatter_update " << fg << " journaling accounted scatterstat update v" << inode_version << dendl;
 
       MDLog *mdlog = mdcache->mds->mdlog;
-      MutationRef mut(new MutationImpl);
+      auto mut(std::make_shared<MutationImpl>());
       mut->ls = mdlog->get_current_segment();
 
       inode_t *pi = get_projected_inode();

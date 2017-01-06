@@ -186,7 +186,7 @@ class MonitorDBStore
     }
 
     void append_from_encoded(bufferlist& bl) {
-      TransactionRef other(new Transaction);
+      auto other(std::make_shared<Transaction>());
       bufferlist::iterator it = bl.begin();
       other->decode(it);
       append(other);
@@ -376,7 +376,7 @@ class MonitorDBStore
 			 string &key,
 			 bufferlist &value,
 			 uint64_t max) {
-      TransactionRef tmp(new Transaction);
+      auto tmp(std::make_shared<Transaction>());
       bufferlist tmp_bl;
       tmp->put(prefix, key, value);
       tmp->encode(tmp_bl);

@@ -66,7 +66,7 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   mon->monmap->decode(monmap_bl);
 
   if (mon->store->exists("mkfs", "monmap")) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->erase("mkfs", "monmap");
     mon->store->apply_transaction(t);
   }
@@ -161,7 +161,7 @@ void MonmapMonitor::on_active()
        single-threaded process and, truth be told, no one else relies on this
        thing besides us.
      */
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(Monitor::MONITOR_NAME, "joined", 1);
     mon->store->apply_transaction(t);
     mon->has_ever_joined = true;

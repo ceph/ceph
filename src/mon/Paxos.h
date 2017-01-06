@@ -1141,7 +1141,7 @@ public:
    */
   static void decode_append_transaction(MonitorDBStore::TransactionRef t,
 					bufferlist& bl) {
-    MonitorDBStore::TransactionRef vt(new MonitorDBStore::Transaction);
+    auto vt(std::make_shared<MonitorDBStore::Transaction>());
     bufferlist::iterator it = bl.begin();
     vt->decode(it);
     t->append(vt);
@@ -1359,7 +1359,7 @@ inline ostream& operator<<(ostream& out, Paxos::C_Proposal& p)
   out << " " << proposed
       << " queued " << (ceph_clock_now() - p.proposal_time)
       << " tx dump:\n";
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   bufferlist::iterator p_it = p.bl.begin();
   t->decode(p_it);
   JSONFormatter f(true);

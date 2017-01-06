@@ -730,7 +730,7 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
 		   << channel << "'" << dendl;
 
   if (graylogs.count(channel) == 0) {
-    ceph::logging::Graylog::Ref graylog = ceph::logging::Graylog::Ref(new ceph::logging::Graylog("mon"));
+    auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
 
     graylog->set_fsid(g_conf->fsid);
     graylog->set_hostname(g_conf->host);

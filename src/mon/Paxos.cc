@@ -299,7 +299,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
     dout(10) << "accepting pn " << accepted_pn << " from " 
 	     << accepted_pn_from << dendl;
   
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(get_name(), "accepted_pn", accepted_pn);
 
     dout(30) << __func__ << " transaction dump:\n";
@@ -413,7 +413,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
  */
 bool Paxos::store_state(MMonPaxos *m)
 {
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   map<version_t,bufferlist>::iterator start = m->values.begin();
   bool changed = false;
 
@@ -670,7 +670,7 @@ void Paxos::begin(bufferlist& v)
   new_value = v;
 
   if (last_committed == 0) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     // initial base case; set first_committed too
     t->put(get_name(), "first_committed", 1);
     decode_append_transaction(t, new_value);
@@ -683,7 +683,7 @@ void Paxos::begin(bufferlist& v)
 
   // store the proposed value in the store. IF it is accepted, we will then
   // have to decode it into a transaction and apply it.
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(get_name(), last_committed+1, new_value);
 
   // note which pn this pending value is for.
@@ -694,7 +694,7 @@ void Paxos::begin(bufferlist& v)
   JSONFormatter f(true);
   t->dump(&f);
   f.flush(*_dout);
-  MonitorDBStore::TransactionRef debug_tx(new MonitorDBStore::Transaction);
+  auto debug_tx(std::make_shared<MonitorDBStore::Transaction>());
   bufferlist::iterator new_value_it = new_value.begin();
   debug_tx->decode(new_value_it);
   debug_tx->dump(&f);
@@ -772,7 +772,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
   dout(10) << "accepting value for " << v << " pn " << accepted_pn << dendl;
   // store the accepted value onto our store. We will have to decode it and
   // apply its transaction once we receive permission to commit.
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(get_name(), v, begin->values[v]);
 
   // note which pn this pending value is for.
@@ -873,7 +873,7 @@ void Paxos::commit_start()
 
   assert(g_conf->paxos_kill_at != 7);
 
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
 
   // commit locally
   t->put(get_name(), "last_committed", last_committed + 1);
@@ -1280,7 +1280,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn += (version_t)mon->rank;
 
   // write
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(get_name(), "last_pn", last_pn);
 
   dout(30) << __func__ << " transaction dump:\n";

@@ -326,7 +326,7 @@ int FileStore::lfn_open(const coll_t& cid,
       TEMP_FAILURE_RETRY(::close(fd));
     }
   } else {
-    *outfd = FDRef(new FDCache::FD(fd));
+    *outfd = std::make_shared<FDCache::FD>(fd);
   }
 
   if (need_lock) {
