@@ -390,6 +390,44 @@ bool EC2Engine::is_time_skew_ok(const utime_t& header_time,
   }
 }
 
+EC2Engine::acl_strategy_t
+EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
+{
+  /* This is based on the assumption that the default acl strategy in
+   * get_perms_from_aclspec, will take care. Extra acl spec is not required. */
+  return nullptr;
+}
+
+EC2Engine::auth_info_t
+EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
+                          const std::vector<std::string>& admin_roles
+                         ) const noexcept
+{
+  using acct_privilege_t = \
+    rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
+
+  /* Check whether the user has an admin status. */
+  acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
+  for (const auto& admin_role : admin_roles) {
+    if (token.has_role(admin_role)) {
+      level = acct_privilege_t::IS_ADMIN_ACCT;
+      break;
+    }
+  }
+
+  return auth_info_t {
+    /* Suggested account name for the authenticated user. */
+    rgw_user(token.get_project_id()),
+    /* User's display name (aka real name). */
+    token.get_project_name(),
+    /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
+     * the access rights through the perm_mask. At least at this layer. */
+    RGW_PERM_FULL_CONTROL,
+    level,
+    TYPE_KEYSTONE,
+  };
+}
+
 rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
                                                     std::string signature,
                                                     std::string expires,
@@ -431,6 +469,10 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
     return std::make_pair(nullptr, nullptr);
   }
 
+  if (! is_time_skew_ok(header_time, qsr)) {
+    throw -ERR_REQUEST_TIME_SKEWED;
+  }
+
   /* check if we have a valid role */
   bool found = false;
   for (const auto& role : accepted_roles.plain) {
@@ -440,44 +482,21 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
     }
   }
 
-  if (!found) {
+  if (! found) {
     ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
                      " required roles: "
                   << cct->_conf->rgw_keystone_accepted_roles << dendl;
+    return std::make_pair(nullptr, nullptr);
+  } else {
+    /* everything seems fine, continue with this user */
+    ldout(cct, 5) << "s3 keystone: validated token: " << t.get_project_name()
+                  << ":" << t.get_user_name()
+                  << " expires: " << t.get_expires() << dendl;
+
+    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
+                                              get_creds_info(t, accepted_roles.admin));
+    return std::make_pair(std::move(apl), nullptr);
   }
-
-  /* everything seems fine, continue with this user */
-  ldout(cct, 5) << "s3 keystone: validated token: " << t.get_project_name()
-                << ":" << t.get_user_name()
-                << " expires: " << t.get_expires() << dendl;
-#if 0
-  return 0;
-}
-
-  /* Check for necessary roles. */
-  for (const auto& role : accepted_roles.plain) {
-    if (t.has_role(role) == true) {
-      ldout(cct, 0) << "validated token: " << t.get_project_name()
-                    << ":" << t.get_user_name()
-                    << " expires: " << t.get_expires() << dendl;
-
-      auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
-                                            get_creds_info(t, roles.admin));
-      return std::make_pair(std::move(apl), nullptr);
-    }
-  }
-
-  ldout(cct, 0) << "user does not hold a matching role; required roles: "
-                << g_conf->rgw_keystone_accepted_roles << dendl;
-
-  //return std::make_pair(nullptr, nullptr);
-#endif
-
-  if (! is_time_skew_ok(header_time, qsr)) {
-    throw -ERR_REQUEST_TIME_SKEWED;
-  }
-
-  throw -ERR_INVALID_ACCESS_KEY;
 }
 
 }; /* namespace keystone */
