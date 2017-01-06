@@ -19,7 +19,6 @@
 
 #include <queue>
 #include <map>
-#include <pciaccess.h>
 #include <limits>
 
 // since _Static_assert introduced in c11
