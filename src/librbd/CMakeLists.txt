@@ -107,7 +107,6 @@ target_link_libraries(librbd LINK_PRIVATE
   cls_journal_client 
   common
   pthread
-  udev
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(ENABLE_SHARED)
