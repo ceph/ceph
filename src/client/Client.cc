@@ -7831,7 +7831,7 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
 		 mode_t mode, int stripe_unit, int stripe_count,
 		 int object_size, const char *data_pool)
 {
-  ldout(cct, 3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;
+  ldout(cct, 3) << "open enter(" << relpath << ", " << flags << "," << mode << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "open" << std::endl;
   tout(cct) << relpath << std::endl;
@@ -7919,7 +7919,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 			const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_hash enter(" << ino << ", #" << dirino << "/" << name << ") = " << dendl;
+  ldout(cct, 3) << "lookup_hash enter(" << ino << ", #" << dirino << "/" << name << ")" << dendl;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPHASH);
   filepath path(ino);
@@ -7949,7 +7949,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_ino enter(" << ino << ") = " << dendl;
+  ldout(cct, 3) << "lookup_ino enter(" << ino << ")" << dendl;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
   filepath path(ino);
@@ -7977,7 +7977,7 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_parent enter(" << ino->ino << ") = " << dendl;
+  ldout(cct, 3) << "lookup_parent enter(" << ino->ino << ")" << dendl;
 
   if (!ino->dn_set.empty()) {
     // if we exposed the parent here, we'd need to check permissions,
@@ -7985,11 +7985,16 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
     ldout(cct, 3) << "lookup_parent dentry already present" << dendl;
     return 0;
   }
+  
+  if (ino->is_root()) {
+    *parent = NULL;
+    ldout(cct, 3) << "ino is root, no parent" << dendl;
+    return -EINVAL;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
   filepath path(ino->ino);
   req->set_filepath(path);
-  req->set_inode(ino);
 
   InodeRef target;
   int r = make_request(req, perms, &target, NULL, rand() % mdsmap->get_num_in_mds());
@@ -8017,7 +8022,7 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
   assert(parent->is_dir());
 
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_name enter(" << ino->ino << ") = " << dendl;
+  ldout(cct, 3) << "lookup_name enter(" << ino->ino << ")" << dendl;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
   req->set_filepath2(filepath(parent->ino));
