@@ -174,7 +174,7 @@ void NetworkStack::stop()
 class C_drain : public EventCallback {
   Mutex drain_lock;
   Cond drain_cond;
-  std::atomic<unsigned> drain_count;
+  unsigned drain_count;
 
  public:
   explicit C_drain(size_t c)
@@ -183,11 +183,11 @@ class C_drain : public EventCallback {
   void do_request(int id) {
     Mutex::Locker l(drain_lock);
     drain_count--;
-    drain_cond.Signal();
+    if (drain_count == 0) drain_cond.Signal();
   }
   void wait() {
     Mutex::Locker l(drain_lock);
-    while (drain_count.load())
+    while (drain_count)
       drain_cond.Wait(drain_lock);
   }
 };
