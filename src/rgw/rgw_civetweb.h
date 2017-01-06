@@ -52,7 +52,7 @@ public:
     return env;
   }
 
-  RGWCivetWeb(mg_connection *_conn, int _port);
+  RGWCivetWeb(mg_connection *_conn);
 };
 
 #endif
