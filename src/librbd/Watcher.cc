@@ -199,10 +199,9 @@ void Watcher::handle_rewatch(int r) {
 
     std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
 
-    handle_rewatch_complete(r);
     m_work_queue->queue(
-        create_context_callback<Watcher,
-                                &Watcher::handle_rewatch_complete>(this));
+      create_context_callback<Watcher,
+                              &Watcher::handle_rewatch_complete>(this), r);
   }
 
   // wake up pending unregister request
