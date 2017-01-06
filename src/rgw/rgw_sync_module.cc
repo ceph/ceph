@@ -54,12 +54,12 @@ int RGWCallStatRemoteObjCR::operate() {
 
 void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
 {
-  RGWSyncModuleRef default_module(new RGWDefaultSyncModule());
+  RGWSyncModuleRef default_module(std::make_shared<RGWDefaultSyncModule>());
   modules_manager->register_module("rgw", default_module, true);
 
-  RGWSyncModuleRef log_module(new RGWLogSyncModule());
+  RGWSyncModuleRef log_module(std::make_shared<RGWLogSyncModule>());
   modules_manager->register_module("log", log_module);
 
-  RGWSyncModuleRef es_module(new RGWElasticSyncModule());
+  RGWSyncModuleRef es_module(std::make_shared<RGWElasticSyncModule>());
   modules_manager->register_module("elasticsearch", es_module);
 }

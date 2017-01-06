@@ -51,7 +51,7 @@ void Elector::bump_epoch(epoch_t e)
   dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
   assert(epoch <= e);
   epoch = e;
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", epoch);
   mon->store->apply_transaction(t);
 
@@ -79,7 +79,7 @@ void Elector::start()
     bump_epoch(epoch+1);  // odd == election cycle
   } else {
     // do a trivial db write just to ensure it is writeable.
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
     int r = mon->store->apply_transaction(t);
     assert(r >= 0);
@@ -491,7 +491,7 @@ void Elector::dispatch(MonOpRequestRef op)
 		<< ", taking it"
 		<< dendl;
 	mon->monmap->decode(em->monmap_bl);
-        MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+        auto t(std::make_shared<MonitorDBStore::Transaction>());
         t->put("monmap", mon->monmap->epoch, em->monmap_bl);
         t->put("monmap", "last_committed", mon->monmap->epoch);
         mon->store->apply_transaction(t);
