@@ -1821,66 +1821,28 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
     if (op_ret < 0) {
-      rgw::auth::s3::S3AuthFactory aplfact(store);
-        // try external authenticators
-      if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-	  store->ctx()->_conf->rgw_keystone_url.empty())
-      {
-	// keystone
-	dout(20) << "s3 keystone: trying keystone auth" << dendl;
-
-        rgw::auth::s3::RGWS3V2Extractor extr;
-
-        using keystone_config_t = rgw::keystone::CephCtxConfig;
-        using keystone_cache_t = rgw::keystone::TokenCache;
-        using EC2Engine = rgw::auth::keystone::EC2Engine;
-
-        EC2Engine keystone_s3(s->cct, &extr, &aplfact,
-                              keystone_config_t::get_instance(),
-                              keystone_cache_t::get_instance<keystone_config_t>());
-        try {
-          auto result = keystone_s3.authenticate(s);
-          auto& applier = result.first;
-          if (! applier) {
-            return -EACCES;
-          } else {
-            try {
-              applier->load_acct_info(user_info);
-              s->perm_mask = applier->get_perm_mask();
-              applier->modify_request_state(s);
-              s->auth.identity = std::move(applier);
-            } catch (int err) {
-              ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-              return err;
-            }
-          }
-        } catch (int err) {
-          ldout(s->cct, 5) << "keystone auth engine threw err=" << err << dendl;
-          return err;
+      // try external authenticators
+      rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
+      /* FIXME: this is a makeshift solution. The browser upload authenication will be
+       * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
+       * method. Thus creating a strategy per request won't be necessary. */
+      rgw::auth::s3::ExternalAuthStrategy strategy(s->cct, store, &extr);
+      try {
+        auto result = strategy.authenticate(s);
+        auto& applier = result.first;
+        if (! applier) {
+          return -EACCES;
         }
-      } else if (s->cct->_conf->rgw_s3_auth_use_ldap &&
-               ! s->cct->_conf->rgw_ldap_uri.empty()) {
-        rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
-        rgw::auth::s3::LDAPEngine ldap(s->cct, store, extr, &aplfact);
-        try {
-          auto result = ldap.authenticate(s);
-          auto& applier = result.first;
-          if (! applier) {
-            return -EACCES;
-          }
 
-          try {
-            applier->load_acct_info(*s->user);
-            s->perm_mask = applier->get_perm_mask();
-            applier->modify_request_state(s);
-            s->auth.identity = std::move(applier);
-          } catch (int err) {
-            return -EACCES;
-          }
+        try {
+          applier->load_acct_info(user_info);
+          s->perm_mask = applier->get_perm_mask();
+          applier->modify_request_state(s);
+          s->auth.identity = std::move(applier);
         } catch (int err) {
           return -EACCES;
         }
-      } else {
+      } catch (int err) {
         return -EACCES;
       }
     } else {
@@ -3995,70 +3957,36 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
   rgw::auth::s3::S3AuthFactory aplfact(store);
   rgw::auth::s3::RGWS3V2Extractor extr;
 
-  /* try keystone auth first */
+  /* TODO(rzarzynski): the final strategy will be a part of Handler - exactly
+   * like in the case of Swift API. */
+  static rgw::auth::s3::ExternalAuthStrategy strategy(g_ceph_context,
+                                                      store, &extr);
+  /* try external auth first */
   int external_auth_result = -ERR_INVALID_ACCESS_KEY;
-  if (store->ctx()->_conf->rgw_s3_auth_use_keystone
-      && !store->ctx()->_conf->rgw_keystone_url.empty()) {
-    dout(20) << "s3 keystone: trying keystone auth" << dendl;
-
-    using keystone_config_t = rgw::keystone::CephCtxConfig;
-    using keystone_cache_t = rgw::keystone::TokenCache;
-    using EC2Engine = rgw::auth::keystone::EC2Engine;
-
-    EC2Engine keystone_s3(s->cct, &extr, &aplfact,
-                          keystone_config_t::get_instance(),
-                          keystone_cache_t::get_instance<keystone_config_t>());
-    try {
-      auto result = keystone_s3.authenticate(s);
-      auto& applier = result.first;
-      if (! applier) {
-        external_auth_result = -EACCES;
-      } else {
-        try {
-          applier->load_acct_info(*s->user);
-          s->perm_mask = applier->get_perm_mask();
-          applier->modify_request_state(s);
-          s->auth.identity = std::move(applier);
-          external_auth_result = 0;
-        } catch (int err) {
-          ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-          external_auth_result = err;
-        }
-      }
-    } catch (int err) {
-      ldout(s->cct, 5) << "keystone auth engine threw err=" << err << dendl;
-      external_auth_result = err;
+  try {
+    auto result = strategy.authenticate(s);
+    auto& applier = result.first;
+    if (! applier) {
+      return -EACCES;
     }
-  }
-
-  if (s->cct->_conf->rgw_s3_auth_use_ldap &&
-      ! s->cct->_conf->rgw_ldap_uri.empty()) {
-    rgw::auth::s3::LDAPEngine ldap(s->cct, store, extr, &aplfact);
 
     try {
-      auto result = ldap.authenticate(s);
-      auto& applier = result.first;
-      if (! applier) {
-        external_auth_result = -EACCES;
-      } else {
-        try {
-          applier->load_acct_info(*s->user);
-          s->perm_mask = applier->get_perm_mask();
-          applier->modify_request_state(s);
-          s->auth.identity = std::move(applier);
-          external_auth_result = 0;
-        } catch (int err) {
-          ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-          external_auth_result = err;
-        }
-      }
+      applier->load_acct_info(*s->user);
+      s->perm_mask = applier->get_perm_mask();
+      applier->modify_request_state(s);
+      s->auth.identity = std::move(applier);
     } catch (int err) {
-      ldout(s->cct, 5) << "ldap auth engine threw err=" << err << dendl;
+      ldout(s->cct, 5) << "applier threw err=" << err << dendl;
       external_auth_result = err;
     }
+  } catch (int err) {
+    ldout(s->cct, 5) << "external auth strategy threw err=" << err << dendl;
+    external_auth_result = err;
   }
 
-  /* now try rados backend, but only if keystone did not succeed */
+  /* now try rados backend, but only if externals did not succeed */
+  /* TODO(rzarzynski): aggregate the externals with the local engine in
+   * as a final AuthStrategy for S3V2. */
   if (external_auth_result < 0) {
       rgw::auth::s3::LocalVersion2ndEngine localauth(s->cct, store, extr, &aplfact);
 
