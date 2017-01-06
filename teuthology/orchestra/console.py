@@ -322,7 +322,7 @@ class VirtualConsole():
             if teuthology.lock.query.is_vm(status=status_info):
                 phys_host = status_info['vm_host']['name'].split('.')[0]
         except TypeError:
-            return
+            raise RuntimeError("Cannot create a virtual console for %s", name)
         self.connection = libvirt.open(phys_host)
         for i in self.connection.listDomainsID():
             d = self.connection.lookupByID(i)

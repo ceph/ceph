@@ -294,11 +294,7 @@ def nuke_helper(ctx, should_unlock):
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
     if should_unlock:
-        if 'vpm' in shortname:
-            return
-        status_info = get_status(host)
-        if is_vm(status=status_info) and \
-                status_info['machine_type'] == 'openstack':
+        if is_vm(shortname):
             return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))

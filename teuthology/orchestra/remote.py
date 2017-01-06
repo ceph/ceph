@@ -471,6 +471,9 @@ def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
     Return either VirtualConsole or PhysicalConsole depending on name.
     """
     if teuthology.lock.query.is_vm(name):
-        return console.VirtualConsole(name)
+        try:
+            return console.VirtualConsole(name)
+        except Exception:
+            return None
     return console.PhysicalConsole(
         name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)
