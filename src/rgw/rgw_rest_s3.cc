@@ -1821,9 +1821,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
     if (op_ret < 0) {
-      S3AuthFactory aplfact(store, s->account_name);
-      RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
-      RGWLDAPAuthEngine ldap(s->cct, store, extr, &aplfact);
+      rgw::auth::s3::S3AuthFactory aplfact(store);
         // try external authenticators
       if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
 	  store->ctx()->_conf->rgw_keystone_url.empty())
@@ -1831,9 +1829,6 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	// keystone
 	dout(20) << "s3 keystone: trying keystone auth" << dendl;
 
-        /* FIXME: stop overriding the aplfact and extr from parent scope.
-         * This will be possible when other S3 engines are ported. */
-        rgw::auth::s3::S3AuthFactory aplfact(store);
         rgw::auth::s3::RGWS3V2Extractor extr;
 
         using keystone_config_t = rgw::keystone::CephCtxConfig;
@@ -1863,9 +1858,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
           ldout(s->cct, 5) << "keystone auth engine threw err=" << err << dendl;
           return err;
         }
-      } else if (ldap.is_applicable()) {
+      } else if (s->cct->_conf->rgw_s3_auth_use_ldap &&
+               ! s->cct->_conf->rgw_ldap_uri.empty()) {
+        rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
+        rgw::auth::s3::LDAPEngine ldap(s->cct, store, extr, &aplfact);
         try {
-          auto applier = ldap.authenticate();
+          auto result = ldap.authenticate(s);
+          auto& applier = result.first;
           if (! applier) {
             return -EACCES;
           }
@@ -1874,7 +1873,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
             applier->load_acct_info(*s->user);
             s->perm_mask = applier->get_perm_mask();
             applier->modify_request_state(s);
-            s->auth_identity = std::move(applier);
+            s->auth.identity = std::move(applier);
           } catch (int err) {
             return -EACCES;
           }
@@ -3993,15 +3992,14 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     auth_sign = auth_str.substr(pos + 1);
   }
 
+  rgw::auth::s3::S3AuthFactory aplfact(store);
+  rgw::auth::s3::RGWS3V2Extractor extr;
+
   /* try keystone auth first */
   int external_auth_result = -ERR_INVALID_ACCESS_KEY;
   if (store->ctx()->_conf->rgw_s3_auth_use_keystone
       && !store->ctx()->_conf->rgw_keystone_url.empty()) {
     dout(20) << "s3 keystone: trying keystone auth" << dendl;
-    /* FIXME: the factory and extractor will be shared across all external
-     * engines after making the transition to S3ExternalAuthStrategy. */
-    rgw::auth::s3::S3AuthFactory aplfact(store);
-    rgw::auth::s3::RGWS3V2Extractor extr;
 
     using keystone_config_t = rgw::keystone::CephCtxConfig;
     using keystone_cache_t = rgw::keystone::TokenCache;
@@ -4033,13 +4031,13 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     }
   }
 
-  S3AuthFactory aplfact(store, s->account_name);
-  RGWS3V2Extractor extr(s);
-  RGWLDAPAuthEngine ldap(s->cct, store, extr, &aplfact);
+  if (s->cct->_conf->rgw_s3_auth_use_ldap &&
+      ! s->cct->_conf->rgw_ldap_uri.empty()) {
+    rgw::auth::s3::LDAPEngine ldap(s->cct, store, extr, &aplfact);
 
-  if (ldap.is_applicable()) {
     try {
-      auto applier = ldap.authenticate();
+      auto result = ldap.authenticate(s);
+      auto& applier = result.first;
       if (! applier) {
         external_auth_result = -EACCES;
       } else {
@@ -4047,7 +4045,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
           applier->load_acct_info(*s->user);
           s->perm_mask = applier->get_perm_mask();
           applier->modify_request_state(s);
-          s->auth_identity = std::move(applier);
+          s->auth.identity = std::move(applier);
           external_auth_result = 0;
         } catch (int err) {
           ldout(s->cct, 5) << "applier threw err=" << err << dendl;
@@ -4062,13 +4060,14 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
   /* now try rados backend, but only if keystone did not succeed */
   if (external_auth_result < 0) {
-      RGWS3V2LocalAuthEngine localauth(s, store, extr, &aplfact);
+      rgw::auth::s3::LocalVersion2ndEngine localauth(s->cct, store, extr, &aplfact);
 
-      if (! localauth.is_applicable()) {
+      if (! s->cct->_conf->rgw_s3_auth_use_rados) {
         return external_auth_result;
       }
       try {
-        auto applier = localauth.authenticate();
+        auto result = localauth.authenticate(s);
+        auto& applier = result.first;
         if (! applier) {
           return external_auth_result;
         }
@@ -4076,7 +4075,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
           applier->load_acct_info(*s->user);
           s->perm_mask = applier->get_perm_mask();
           applier->modify_request_state(s);
-          s->auth_identity = std::move(applier);
+          s->auth.identity = std::move(applier);
         } catch (int err) {
           ldout(s->cct, 5) << "applier threw err=" << err << dendl;
           return err;
@@ -4376,8 +4375,6 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
   return op;
 }
 
-rgw::LDAPHelper* RGWLDAPAuthEngine::ldh = nullptr;
-std::mutex RGWLDAPAuthEngine::mtx;
 
 namespace rgw {
 namespace auth {
@@ -4411,8 +4408,10 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
 } /* namespace auth */
 } /* namespace rgw */
 
+rgw::LDAPHelper* rgw::auth::s3::LDAPEngine::ldh = nullptr;
+std::mutex rgw::auth::s3::LDAPEngine::mtx;
 
-void RGWLDAPAuthEngine::init(CephContext* const cct)
+void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
 {
   if (! ldh) {
     std::lock_guard<std::mutex> lck(mtx);
@@ -4433,19 +4432,23 @@ void RGWLDAPAuthEngine::init(CephContext* const cct)
   }
 }
 
-RGWRemoteAuthApplier::acl_strategy_t RGWLDAPAuthEngine::get_acl_strategy() const
+rgw::auth::RemoteApplier::acl_strategy_t
+rgw::auth::s3::LDAPEngine::get_acl_strategy() const
 {
   //This is based on the assumption that the default acl strategy in
   // get_perms_from_aclspec, will take care. Extra acl spec is not required.
   return nullptr;
 }
 
-RGWRemoteAuthApplier::AuthInfo
-RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
+rgw::auth::RemoteApplier::AuthInfo
+rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
 {
-  using acct_privilege_t = RGWRemoteAuthApplier::AuthInfo::acct_privilege_t;
+  /* The short form of "using" can't be used here -- we're aliasing a class'
+   * member. */
+  using acct_privilege_t = \
+    rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
 
-  return RGWRemoteAuthApplier::AuthInfo {
+  return rgw::auth::RemoteApplier::AuthInfo {
     rgw_user(token.id),
     token.id,
     RGW_PERM_FULL_CONTROL,
@@ -4454,25 +4457,25 @@ RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
   };
 }
 
-bool RGWLDAPAuthEngine::is_applicable() const noexcept
+rgw::auth::Engine::result_t
+rgw::auth::s3::LDAPEngine::authenticate(const std::string access_key_id,
+                                        const std::string signature,
+                                        const std::string expires,
+                                        const bool qsr,
+                                        const req_info& /* unused */) const
 {
-  if (! RGWS3V2AuthEngine::is_applicable()) {
-    return false;
+  /* boost filters and/or string_ref may throw on invalid input */
+  rgw::RGWToken base64_token;
+  try {
+    base64_token = rgw::from_base64(access_key_id);
+  } catch (...) {
+    base64_token = std::string("");
   }
 
-  if (! cct->_conf->rgw_s3_auth_use_ldap ||
-      cct->_conf->rgw_ldap_uri.empty()) {
-    return false;
+  if (! base64_token.valid()) {
+    return std::make_pair(nullptr, nullptr);
   }
 
-  return true;
-}
-
-RGWAuthApplier::aplptr_t RGWLDAPAuthEngine::authenticate() const
-{
-  if(! base64_token.valid()) {
-    return nullptr;
-  }
   //TODO: Uncomment, when we have a migration plan in place.
   //Check if a user of type other than 'ldap' is already present, if yes, then
   //return error.
@@ -4486,49 +4489,25 @@ RGWAuthApplier::aplptr_t RGWLDAPAuthEngine::authenticate() const
   }*/
 
   if (ldh->auth(base64_token.id, base64_token.key) != 0) {
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
-  return apl_factory->create_apl_remote(cct, get_acl_strategy(), get_creds_info(base64_token));
+  auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(),
+                                            get_creds_info(base64_token));
+  return std::make_pair(std::move(apl), nullptr);
 }
 
-void RGWS3V2Extractor::get_auth_keys(std::string& access_key_id,
-                                      std::string& signature,
-                                      std::string& expires,
-                                      bool& qsr) const
-{
-  qsr = false;
-  if (! s->http_auth || !(*s->http_auth)) {
-    access_key_id = s->info.args.get("AWSAccessKeyId");
-    signature = s->info.args.get("Signature");
-    expires = s->info.args.get("Expires");
-    qsr = true;
-  } else {
-    string auth_str(s->http_auth + 4);
-    int pos = auth_str.rfind(':');
-    if (pos >= 0) {
-      access_key_id = auth_str.substr(0, pos);
-      signature = auth_str.substr(pos + 1);
-    }
-  }
-}
 
-bool RGWS3V2LocalAuthEngine::is_applicable() const noexcept
-{
-  if (! RGWS3V2AuthEngine::is_applicable()) {
-    return false;
-  }
-  if (! s->cct->_conf->rgw_s3_auth_use_rados) {
-    return false;
-  }
-
-  return true;
-}
-
-RGWAuthApplier::aplptr_t RGWS3V2LocalAuthEngine::authenticate() const
+/* LocalVersion2ndEngine */
+rgw::auth::Engine::result_t
+rgw::auth::s3::LocalVersion2ndEngine::authenticate(std::string access_key_id,
+                                                   std::string signature,
+                                                   std::string expires,
+                                                   bool qsr,
+                                                   const req_info& info) const
 {
   if (access_key_id.empty() || signature.empty()) {
-    ldout(s->cct, 5) << "access_key_id or signature is empty" << dendl;
+    ldout(cct, 5) << "access_key_id or signature is empty" << dendl;
     throw -EINVAL;
   }
 
@@ -4541,11 +4520,11 @@ RGWAuthApplier::aplptr_t RGWS3V2LocalAuthEngine::authenticate() const
     }
   }
   /* get the user info */
-  string access_key = access_key_id;
-  if (rgw_get_user_info_by_access_key(store, access_key, *(s->user)) < 0) {
-      ldout(s->cct, 5) << "error reading user info, uid=" << access_key_id
+  RGWUserInfo user_info;
+  if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
+      ldout(cct, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
-      return nullptr;
+      return std::make_pair(nullptr, nullptr);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
@@ -4557,29 +4536,30 @@ RGWAuthApplier::aplptr_t RGWS3V2LocalAuthEngine::authenticate() const
 
   /* now verify  signature */
   string auth_hdr;
-  if (! rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr,
+  utime_t header_time;
+  if (! rgw_create_s3_canonical_header(info, &header_time, auth_hdr,
         qsr)) {
-    ldout(s->cct, 10) << "failed to create auth header\n" << auth_hdr << dendl;
+    ldout(cct, 10) << "failed to create auth header\n" << auth_hdr << dendl;
     throw -EPERM;
   }
-  ldout(s->cct, 10) << "auth_hdr:\n" << auth_hdr << dendl;
+  ldout(cct, 10) << "auth_hdr:\n" << auth_hdr << dendl;
 
-  time_t req_sec = s->header_time.sec();
+  time_t req_sec = header_time.sec();
   if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    ldout(s->cct, 10) << "req_sec=" << req_sec << " now=" << now
+    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
              << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60
              << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60
              << dendl;
-    ldout(s->cct, 0)  << "NOTICE: request time skew too big now=" << utime_t(now, 0)
-             << " req_time=" << s->header_time
+    ldout(cct, 0)  << "NOTICE: request time skew too big now=" << utime_t(now, 0)
+             << " req_time=" << header_time
              << dendl;
     throw -ERR_REQUEST_TIME_SKEWED;
   }
 
-  map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(access_key_id);
-  if (iter == s->user->access_keys.end()) {
-    ldout(s->cct, 0) << "ERROR: access key not encoded in user info" << dendl;
+  map<string, RGWAccessKey>::iterator iter = user_info.access_keys.find(access_key_id);
+  if (iter == user_info.access_keys.end()) {
+    ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
     throw -EPERM;
   }
   RGWAccessKey& k = iter->second;
@@ -4590,13 +4570,14 @@ RGWAuthApplier::aplptr_t RGWS3V2LocalAuthEngine::authenticate() const
     throw -EPERM;
   }
 
-  ldout(s->cct, 15) << "calculated digest=" << digest << dendl;
-  ldout(s->cct, 15) << "auth_sign=" << signature << dendl;
-  ldout(s->cct, 15) << "compare=" << signature.compare(digest) << dendl;
+  ldout(cct, 15) << "calculated digest=" << digest << dendl;
+  ldout(cct, 15) << "auth_sign=" << signature << dendl;
+  ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;
 
   if (signature != digest) {
     throw -ERR_SIGNATURE_NO_MATCH;
   }
 
-  return apl_factory->create_apl_local(cct, *(s->user), k.subuser);
+  auto apl = apl_factory->create_apl_local(cct, user_info, k.subuser);
+  return std::make_pair(std::move(apl), nullptr);
 }

@@ -1695,7 +1695,6 @@ struct req_state {
   bool enable_usage_log;
   uint8_t defer_to_bucket_acls;
   uint32_t perm_mask;
-  utime_t header_time;
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
   string account_name;
