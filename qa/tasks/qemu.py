@@ -11,6 +11,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from tasks import rbd
 from teuthology.orchestra import run
+from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
@@ -87,8 +88,26 @@ def generate_iso(ctx, config):
     """Execute system commands to generate iso"""
     log.info('generating iso...')
     testdir = teuthology.get_testdir(ctx)
+
+    # use ctx.config instead of config, because config has been
+    # through teuthology.replace_all_with_clients()
+    refspec = ctx.config.get('branch')
+    if refspec is None:
+        refspec = ctx.config.get('tag')
+    if refspec is None:
+        refspec = ctx.config.get('sha1')
+    if refspec is None:
+        refspec = 'HEAD'
+
+    # hack: the git_url is always ceph-ci or ceph
+    git_url = teuth_config.get_ceph_git_url()
+    repo_name = 'ceph.git'
+    if git_url.count('ceph-ci'):
+        repo_name = 'ceph-ci.git'
+
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
+        test_url = client_config['test'].format(repo=repo_name, branch=refspec)
         (remote,) = ctx.cluster.only(client).remotes.keys()
         src_dir = os.path.dirname(__file__)
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
@@ -132,10 +151,12 @@ def generate_iso(ctx, config):
             teuthology.write_file(remote, metadata_path, f)
 
         test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
+
+        log.info('fetching test %s for %s', test_url, client)
         remote.run(
             args=[
                 'wget', '-nv', '-O', test_file,
-                client_config['test'],
+                test_url,
                 run.Raw('&&'),
                 'chmod', '755', test_file,
                 ],
