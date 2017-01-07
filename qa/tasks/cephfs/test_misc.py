@@ -2,6 +2,8 @@
 from unittest import SkipTest
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.orchestra.run import CommandFailedError
+import errno
 
 class TestMisc(CephFSTestCase):
     CLIENTS_REQUIRED = 2
@@ -31,3 +33,59 @@ class TestMisc(CephFSTestCase):
         self.mount_b.run_shell(["cat", "testfile"])
 
         self.mount_a.kill_background(p)
+
+    def test_fs_new(self):
+        data_pool_name = self.fs.get_data_pool_name()
+
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
+                                            '--yes-i-really-mean-it')
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                            self.fs.metadata_pool_name,
+                                            self.fs.metadata_pool_name,
+                                            '--yes-i-really-really-mean-it')
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                            self.fs.metadata_pool_name,
+                                            self.fs.get_pgs_per_fs_pool().__str__())
+
+        dummyfile = '/etc/fstab'
+
+        self.fs.put_metadata_object_raw("key", dummyfile)
+
+        timeout = 10
+
+        get_pool_df = self.fs.get_pool_df
+        self.wait_until_true(
+                lambda: get_pool_df(self.fs.metadata_pool_name)['objects'] > 0,
+                timeout=timeout)
+
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
+                                                self.fs.metadata_pool_name,
+                                                data_pool_name)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            raise AssertionError("Expected EINVAL")
+
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
+                                            self.fs.metadata_pool_name,
+                                            data_pool_name, "--force")
+
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
+                                            '--yes-i-really-mean-it')
+
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                            self.fs.metadata_pool_name,
+                                            self.fs.metadata_pool_name,
+                                            '--yes-i-really-really-mean-it')
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                            self.fs.metadata_pool_name,
+                                            self.fs.get_pgs_per_fs_pool().__str__())
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
+                                            self.fs.metadata_pool_name,
+                                            data_pool_name)
