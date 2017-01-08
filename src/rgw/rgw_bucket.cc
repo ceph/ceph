@@ -158,6 +158,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
 
   ep.linked = true;
   ep.owner = user_id;
+  ep.bucket = bucket;
   ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0, &attrs);
   if (ret < 0)
     goto done_err;
@@ -746,7 +747,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     rgw_obj obj_bucket_instance(bucket_instance, no_oid);
     r = store->set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
 
-    r = rgw_link_bucket(store, user_info.user_id, bucket, 0);
+    r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket, 0);
     if (r < 0)
       return r;
   }
