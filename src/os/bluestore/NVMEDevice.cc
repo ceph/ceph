@@ -315,16 +315,16 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 
   if (t->io_request.cur_seg_left) {
     *length = t->io_request.cur_seg_left;
-    *address = (void *)(rte_malloc_virt2phy(addr) + data_buffer_size - t->io_request.cur_seg_left);
+    *address = (void *)((uint64_t)addr + data_buffer_size - t->io_request.cur_seg_left);
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
       if (tail) {
-        *address = (void *)(rte_malloc_virt2phy(addr) + tail - t->io_request.cur_seg_left);
+        *address = (void *)((uint64_t)addr + tail - t->io_request.cur_seg_left);
       }
     }
     t->io_request.cur_seg_left = 0;
   } else {
-    *address = (void *)rte_malloc_virt2phy(addr);
+    *address = addr;
     *length = data_buffer_size;
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
@@ -375,8 +375,7 @@ void SharedDriverData::_aio_thread()
 
   if (data_buf_mempool.empty()) {
     for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-      void *b = rte_malloc_socket(
-          "nvme_data_buffer", data_buffer_size, CEPH_PAGE_SIZE, rte_socket_id());
+      void *b = spdk_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
       if (!b) {
         derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
         assert(b);
