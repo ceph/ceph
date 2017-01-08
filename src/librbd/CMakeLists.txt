@@ -31,6 +31,8 @@ set(librbd_internal_srcs
   cache/PassthroughImageCache.cc
   exclusive_lock/AcquireRequest.cc
   exclusive_lock/AutomaticPolicy.cc
+  exclusive_lock/BreakRequest.cc
+  exclusive_lock/GetLockerRequest.cc
   exclusive_lock/ReacquireRequest.cc
   exclusive_lock/ReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
