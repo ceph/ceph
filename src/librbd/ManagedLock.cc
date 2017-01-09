@@ -105,7 +105,9 @@ void ManagedLock<I>::acquire_lock(Context *on_acquired) {
     }
   }
 
-  on_acquired->complete(r);
+  if (on_acquired != nullptr) {
+    on_acquired->complete(r);
+  }
 }
 
 template <typename I>
@@ -122,7 +124,9 @@ void ManagedLock<I>::try_acquire_lock(Context *on_acquired) {
     }
   }
 
-  on_acquired->complete(r);
+  if (on_acquired != nullptr) {
+    on_acquired->complete(r);
+  }
 }
 
 template <typename I>
@@ -139,7 +143,9 @@ void ManagedLock<I>::release_lock(Context *on_released) {
     }
   }
 
-  on_released->complete(r);
+  if (on_released != nullptr) {
+    on_released->complete(r);
+  }
 }
 
 template <typename I>
