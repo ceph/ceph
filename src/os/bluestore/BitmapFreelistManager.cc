@@ -53,7 +53,8 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
   : FreelistManager(cct),
     meta_prefix(meta_prefix),
     bitmap_prefix(bitmap_prefix),
-    kvdb(db)
+    kvdb(db),
+    enumerate_bl_pos(0)
 {
 }
 

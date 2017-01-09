@@ -843,7 +843,7 @@ public:
 
     static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
-    Cache(CephContext* cct) : cct(cct) {}
+    Cache(CephContext* cct) : cct(cct), logger(nullptr) {}
     virtual ~Cache() {}
 
     virtual void _add_onode(OnodeRef& o, int level) = 0;

@@ -638,7 +638,7 @@ public:
     utime_t sched_time;
     /// the hard upper bound of scrub time
     utime_t deadline;
-    ScrubJob() {}
+    ScrubJob() : cct(nullptr) {}
     explicit ScrubJob(CephContext* cct, const spg_t& pg,
 		      const utime_t& timestamp,
 		      double pool_scrub_min_interval = 0,
