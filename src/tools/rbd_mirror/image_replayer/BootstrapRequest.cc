@@ -5,6 +5,7 @@
 #include "BootstrapRequest.h"
 #include "CloseImageRequest.h"
 #include "CreateImageRequest.h"
+#include "IsPrimaryRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
@@ -257,11 +258,6 @@ void BootstrapRequest<I>::open_remote_image() {
 
 template <typename I>
 void BootstrapRequest<I>::handle_open_remote_image(int r) {
-  // deduce the class type for the journal to support unit tests
-  using Journal = typename std::decay<
-    typename std::remove_pointer<decltype(std::declval<I>().journal)>
-    ::type>::type;
-
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
@@ -271,18 +267,36 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
     return;
   }
 
-  // TODO: make async
-  bool tag_owner;
-  r = Journal::is_tag_owner(m_remote_image_ctx, &tag_owner);
+  is_primary();
+}
+
+template <typename I>
+void BootstrapRequest<I>::is_primary() {
+  dout(20) << dendl;
+
+  update_progress("OPEN_REMOTE_IMAGE");
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_is_primary>(
+      this);
+  IsPrimaryRequest<I> *request = IsPrimaryRequest<I>::create(m_remote_image_ctx,
+                                                             &m_primary, ctx);
+  request->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_is_primary(int r) {
+  dout(20) << ": r=" << r << dendl;
+
   if (r < 0) {
-    derr << ": failed to query remote image primary status: " << cpp_strerror(r)
+    derr << ": error querying remote image primary status: " << cpp_strerror(r)
          << dendl;
     m_ret_val = r;
     close_remote_image();
     return;
   }
 
-  if (!tag_owner) {
+  if (!m_primary) {
     dout(5) << ": remote image is not primary -- skipping image replay"
             << dendl;
     m_ret_val = -EREMOTEIO;
