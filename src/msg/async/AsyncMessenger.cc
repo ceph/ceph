@@ -51,7 +51,7 @@ class Processor::C_processor_accept : public EventCallback {
   }
 };
 
-Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n)
+Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c)
   : msgr(r), net(c), worker(w),
     listen_handler(new C_processor_accept(this)) {}
 
@@ -256,7 +256,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   if (stack->support_local_listen_table())
     processor_num = stack->get_num_worker();
   for (unsigned i = 0; i < processor_num; ++i)
-    processors.push_back(new Processor(this, stack->get_worker(i), cct, _nonce));
+    processors.push_back(new Processor(this, stack->get_worker(i), cct));
 }
 
 /**
