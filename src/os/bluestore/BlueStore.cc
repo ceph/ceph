@@ -3717,18 +3717,17 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
 	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
 
     while (reclaim > 0) {
-      uint64_t offset = 0;
-      uint32_t length = 0;
-
       // NOTE: this will block and do IO.
+      AllocExtentVector extents;
       int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
-				   &offset, &length);
+				     &extents);
       assert(r >= 0);
 
-      bluefs_extents.erase(offset, length);
-      bluefs_extents_reclaiming.insert(offset, length);
-
-      reclaim -= length;
+      for (auto e : extents) {
+	bluefs_extents.erase(e.offset, e.length);
+	bluefs_extents_reclaiming.insert(e.offset, e.length);
+	reclaim -= e.length;
+      }
     }
 
     ret = 1;
