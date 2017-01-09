@@ -5,6 +5,12 @@ include(GNUInstallDirs)
 # for erasure and compressor plugins
 set(CMAKE_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
 set(CMAKE_INSTALL_FULL_PKGLIBDIR ${CMAKE_INSTALL_FULL_LIBDIR}/${PROJECT_NAME})
+# so libceph-common can be found
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(NOT CMAKE_INSTALL_RPATH)
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_PKGLIBDIR}")
+endif()
+
 # to be compatible with configure_files shared with autoconfig
 set(bindir ${CMAKE_INSTALL_FULL_BINDIR})
 set(sbindir ${CMAKE_INSTALL_FULL_SBINDIR})
@@ -424,8 +430,6 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
-  $<TARGET_OBJECTS:common_buffer_obj>
-  $<TARGET_OBJECTS:common_texttable_obj>
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -503,7 +507,6 @@ set(libcommon_files
   common/dns_resolve.cc
   ${arch_files}
   ${auth_files}
-  $<TARGET_OBJECTS:compressor_objs>
   ${mds_files})
 if(LINUX)
   list(APPEND libcommon_files msg/async/EventEpoll.cc)
@@ -534,17 +537,36 @@ else()
     perfglue/disabled_stubs.cc)
 endif()
 
-if(ENABLE_SHARED)
-  list(APPEND libcommon_files
-    $<TARGET_OBJECTS:global_common_objs>)
-endif(ENABLE_SHARED)
-
-add_library(common STATIC ${libcommon_files}
-  $<TARGET_OBJECTS:mon_common_objs>
-  $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common json_spirit erasure_code rt ${LIB_RESOLV}
-  ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
+add_library(common-objs OBJECT ${libcommon_files})
+add_library(ceph-common SHARED
+  $<TARGET_OBJECTS:common_buffer_obj>
+  $<TARGET_OBJECTS:common_texttable_obj>
+  $<TARGET_OBJECTS:compressor_objs>
+  $<TARGET_OBJECTS:common-objs>
+  $<TARGET_OBJECTS:common_mountcephfs_objs>
+  $<TARGET_OBJECTS:global_common_objs>)
+target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
+  ${Boost_THREAD_LIBRARY}
+  ${Boost_SYSTEM_LIBRARY}
+  ${Boost_REGEX_LIBRARY}
+  ${Boost_RANDOM_LIBRARY}
+  ${Boost_PROGRAM_OPTIONS_LIBRARY}
+  ${Boost_DATE_TIME_LIBRARY}
+  ${Boost_IOSTREAMS_LIBRARY}
+  ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+if(NOT WITH_SYSTEM_BOOST)
+  target_link_libraries(ceph-common ${ZLIB_LIBRARIES})
+endif()
+install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
+if(WITH_EMBEDDED)
+  add_library(cephd_common STATIC
+    $<TARGET_OBJECTS:common_buffer_obj>
+    $<TARGET_OBJECTS:common_texttable_obj>
+    $<TARGET_OBJECTS:compressor_objs>
+    $<TARGET_OBJECTS:common-objs>
+    $<TARGET_OBJECTS:common_mountcephfs_objs>)
+endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -554,7 +576,7 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
 include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
-  target_link_libraries(common common_crc_aarch64)
+  target_link_libraries(ceph-common common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
@@ -681,7 +703,7 @@ set(ceph_mon_srcs
 add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
-      target_link_libraries(ceph-mon mon common os global ${EXTRALIBS}
+      target_link_libraries(ceph-mon mon ceph-common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
@@ -841,7 +863,7 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
-    foreach(name common client osdc)
+    foreach(name ceph-common client osdc)
       set(CEPHFS_LINK_FLAGS "${CEPHFS_LINK_FLAGS} -Wl,--exclude-libs,lib${name}.a")
     endforeach()
     set_target_properties(cephfs PROPERTIES
