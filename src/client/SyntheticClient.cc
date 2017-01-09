@@ -1005,8 +1005,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   UserPerm perms = client->pick_my_perms();
   t.start();
 
-  char buf[1024];
-  char buf2[1024];
+  string buf;
+  string buf2;
 
   utime_t start = ceph_clock_now();
 
