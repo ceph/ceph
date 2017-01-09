@@ -796,6 +796,63 @@ TEST_F(HeapFixture1, iterator_find_rfind) {
 }
 
 
+TEST_F(HeapFixture1, const_iterator_find_rfind) {
+  const auto& c_heap = heap;
+
+  {
+    auto it1 = c_heap.find(data7);
+    EXPECT_NE(c_heap.cend(), it1) <<
+      "find by indirection for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "find by indirection for included element should result in right value";
+
+    auto fake_data = std::make_shared<Elem>(-7);
+    auto it2 = c_heap.find(fake_data);
+    EXPECT_EQ(c_heap.cend(), it2) <<
+      "find by indirection for not included element should fail";
+  }
+
+  {
+    auto it1 = c_heap.find(Elem(-7));
+    EXPECT_NE(c_heap.cend(), it1) <<
+      "find by value for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "find by value for included element should result in right value";
+
+    auto it2 = c_heap.find(Elem(7));
+    EXPECT_EQ(c_heap.cend(), it2) <<
+      "find by value for not included element should fail";
+  }
+
+  {
+    auto it1 = c_heap.rfind(data7);
+    EXPECT_NE(c_heap.cend(), it1) <<
+      "reverse find by indirecton for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "reverse find by indirection for included element should result "
+      "in right value";
+
+    auto fake_data = std::make_shared<Elem>(-7);
+    auto it2 = c_heap.rfind(fake_data);
+    EXPECT_EQ(c_heap.cend(), it2) <<
+      "reverse find by indirection for not included element should fail";
+  }
+
+  {
+    auto it1 = c_heap.rfind(Elem(-7));
+    EXPECT_NE(c_heap.cend(), it1) <<
+      "reverse find by value for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "reverse find by value for included element should result "
+      "in right value";
+
+    auto it2 = c_heap.rfind(Elem(7));
+    EXPECT_EQ(c_heap.cend(), it2) <<
+      "reverse find by value for not included element should fail";
+  }
+}
+
+
 TEST_F(HeapFixture1, iterator_remove) {
   auto it1 = heap.find(data7);
   EXPECT_NE(heap.end(), it1) << "find for included element should succeed";

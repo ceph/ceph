@@ -294,6 +294,49 @@ namespace crimson {
       return end();
     }
 
+    ConstIterator find(const I& ind_item) const {
+      for (HeapIndex i = 0; i < count; ++i) {
+	if (data[i] == ind_item) {
+	  return ConstIterator(*this, i);
+	}
+      }
+      return cend();
+    }
+
+    // when passing in value we do a comparison via operator==
+    ConstIterator find(const T& item) const {
+      for (HeapIndex i = 0; i < count; ++i) {
+	if (*data[i] == item) {
+	  return ConstIterator(*this, i);
+	}
+      }
+      return cend();
+    }
+
+    // reverse find -- start looking from bottom of heap
+    ConstIterator rfind(const I& ind_item) const {
+      // HeapIndex is unsigned, so we can't allow to go negative; so
+      // we'll keep it one more than actual index
+      for (HeapIndex i = count; i > 0; --i) {
+	if (data[i-1] == ind_item) {
+	  return ConstIterator(*this, i-1);
+	}
+      }
+      return cend();
+    }
+
+    // reverse find -- start looking from bottom of heap
+    ConstIterator rfind(const T& item) const {
+      // HeapIndex is unsigned, so we can't allow to go negative; so
+      // we'll keep it one more than actual index
+      for (HeapIndex i = count; i > 0; --i) {
+	if (*data[i-1] == item) {
+	  return ConstIterator(*this, i-1);
+	}
+      }
+      return cend();
+    }
+
     void promote(T& item) {
       sift_up(item.*heap_info);
     }
