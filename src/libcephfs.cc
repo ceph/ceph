@@ -320,7 +320,6 @@ extern "C" int ceph_create_from_rados(struct ceph_mount_info **cmount,
 {
   auto rados = (librados::RadosClient *) cluster;
   auto cct = rados->cct;
-  cct->get();
   return ceph_create_with_context(cmount, cct);
 }
 
