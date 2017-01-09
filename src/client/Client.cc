@@ -7143,7 +7143,9 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& p
       return r;
   }
   r = _opendir(in.get(), dirpp, perms);
-  tout(cct) << (unsigned long)*dirpp << std::endl;
+  /* if ENOTDIR, dirpp will be an uninitialized point and it's very dangerous to access its value */
+  if (r != -ENOTDIR)
+      tout(cct) << (unsigned long)*dirpp << std::endl;
   return r;
 }
 
