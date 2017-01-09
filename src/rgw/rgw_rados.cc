@@ -8638,6 +8638,19 @@ int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **stat
   return ret;
 }
 
+int RGWRados::Object::get_manifest(RGWObjManifest **pmanifest)
+{
+  RGWObjState *astate;
+  int r = get_state(&astate, true);
+  if (r < 0) {
+    return r;
+  }
+
+  *pmanifest = &astate->manifest;
+
+  return 0;
+}
+
 int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
 {
   RGWObjState *state;
