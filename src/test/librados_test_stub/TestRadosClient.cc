@@ -30,8 +30,7 @@ namespace librados {
 
 static void finish_aio_completion(AioCompletionImpl *c, int r) {
   c->lock.Lock();
-  c->ack = true;
-  c->safe = true;
+  c->complete = true;
   c->rval = r;
   c->lock.Unlock();
 

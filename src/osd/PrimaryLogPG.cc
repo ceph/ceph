@@ -2887,7 +2887,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
   ceph_tid_t tid = osd->objecter->mutate(
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(pwop->mtime),
-    flags, NULL, new C_OnFinisher(fin, &osd->objecter_finisher),
+    flags, new C_OnFinisher(fin, &osd->objecter_finisher),
     &pwop->user_version, pwop->reqid);
   fin->tid = tid;
   pwop->objecter_tid = tid;
@@ -8095,7 +8095,6 @@ int PrimaryLogPG::start_flush(
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
-      NULL,
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
   }
 
@@ -8111,7 +8110,6 @@ int PrimaryLogPG::start_flush(
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
-      NULL,
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
   }
 
@@ -8145,8 +8143,8 @@ int PrimaryLogPG::start_flush(
     soid.oid, base_oloc, o, snapc,
     ceph::real_clock::from_ceph_timespec(oi.mtime),
     CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
-    NULL, new C_OnFinisher(fin,
-			   &osd->objecter_finisher));
+    new C_OnFinisher(fin,
+		     &osd->objecter_finisher));
   /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;

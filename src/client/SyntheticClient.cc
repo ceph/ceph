@@ -1045,9 +1045,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   Mutex lock("synclient foo");
   Cond cond;
   bool ack;
-  bool safe;
-  C_GatherBuilder safeg(client->cct, new C_SafeCond(&lock, &cond, &safe));
-  Context *safegref = safeg.new_sub();  // take a ref
 
   while (!t.end()) {
 
@@ -1454,7 +1451,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       uint64_t size;
       ceph::real_time mtime;
-      client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
+      client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0,
+			     new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1467,7 +1465,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       lock.Lock();
       bufferlist bl;
-      client->objecter->read(oid, oloc, off, len, CEPH_NOSNAP, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
+      client->objecter->read(oid, oloc, off, len, CEPH_NOSNAP, &bl, 0,
+			     new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1485,9 +1484,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       SnapContext snapc;
       client->objecter->write(oid, oloc, off, len, snapc, bl,
 			      ceph::real_clock::now(), 0,
-			      new C_SafeCond(&lock, &cond, &ack),
-			      safeg.new_sub());
-      safeg.activate();
+			      new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1502,9 +1499,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       SnapContext snapc;
       client->objecter->zero(oid, oloc, off, len, snapc,
 			     ceph::real_clock::now(), 0,
-			     new C_SafeCond(&lock, &cond, &ack),
-			     safeg.new_sub());
-      safeg.activate();
+			     new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1517,15 +1512,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   }
 
   dout(10) << "trace finished on line " << t.get_line() << dendl;
-
-  // wait for safe after an object trace
-  safegref->complete(0);
-  lock.Lock();
-  while (!safe) {
-    dout(10) << "waiting for safe" << dendl;
-    cond.Wait(lock);
-  }
-  lock.Unlock();
 
   // close open files
   for (ceph::unordered_map<int64_t, int64_t>::iterator fi = open_files.begin();
@@ -2274,7 +2260,6 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   Mutex lock("create_objects lock");
   Cond cond;
   
-  int unack = 0;
   int unsafe = 0;
   
   list<utime_t> starts;
@@ -2295,13 +2280,12 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     client->client_lock.Lock();
     client->objecter->write(oid, oloc, 0, osize, snapc, bl,
 			    ceph::real_clock::now(), 0,
-			    new C_Ref(lock, cond, &unack),
 			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();
 
     lock.Lock();
-    while (unack > inflight) {
-      dout(20) << "waiting for " << unack << " unack" << dendl;
+    while (unsafe > inflight) {
+      dout(20) << "waiting for " << unsafe << " unsafe" << dendl;
       cond.Wait(lock);
     }
     lock.Unlock();
@@ -2312,10 +2296,6 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   }
 
   lock.Lock();
-  while (unack > 0) {
-    dout(20) << "waiting for " << unack << " unack" << dendl;
-    cond.Wait(lock);
-  }
   while (unsafe > 0) {
     dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
     cond.Wait(lock);
@@ -2399,7 +2379,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       m.ops.push_back(op);
       client->objecter->mutate(oid, oloc, m, snapc,
 			       ceph::real_clock::now(), 0,
-			       NULL, new C_Ref(lock, cond, &unack));
+			       new C_Ref(lock, cond, &unack));
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;

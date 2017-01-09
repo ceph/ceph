@@ -83,7 +83,6 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   mds->objecter->write_full(oid, oloc,
 			    snapc,
 			    bl, ceph::real_clock::now(), 0,
-			    NULL,
 			    new C_OnFinisher(new C_IO_MT_Save(this, version),
 					     mds->finisher));
 }

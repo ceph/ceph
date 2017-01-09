@@ -125,7 +125,7 @@ libradosstriper::RadosStriperImpl::CompletionData::CompletionData
   m_striper(striper), m_soid(soid), m_lockCookie(lockCookie), m_ack(0) {
   m_striper->get();
   if (userCompletion) {
-    m_ack = new librados::IoCtxImpl::C_aio_Ack(userCompletion);
+    m_ack = new librados::IoCtxImpl::C_aio_Complete(userCompletion);
     userCompletion->io = striper->m_ioCtxImpl;
   }
 }
@@ -188,7 +188,7 @@ libradosstriper::RadosStriperImpl::WriteCompletionData::WriteCompletionData
   CompletionData(striper, soid, lockCookie, userCompletion, n), m_safe(0),
   m_unlockCompletion(0) {
   if (userCompletion) {
-    m_safe = new librados::IoCtxImpl::C_aio_Safe(userCompletion);
+    m_safe = new librados::IoCtxImpl::C_aio_Complete(userCompletion);
   }
 }
 
