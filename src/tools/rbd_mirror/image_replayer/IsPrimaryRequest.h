@@ -4,6 +4,8 @@
 #ifndef RBD_MIRROR_IMAGE_REPLAYER_IS_PRIMARY_REQUEST_H
 #define RBD_MIRROR_IMAGE_REPLAYER_IS_PRIMARY_REQUEST_H
 
+#include "include/buffer.h"
+
 class Context;
 class ContextWQ;
 namespace librbd { class ImageCtx; }
@@ -31,8 +33,11 @@ private:
    * <start>
    *    |
    *    v
-   * IS_TAG_OWNER * * * * * * *
-   *    |                     * (error)
+   * GET_MIRROR_STATE * * * * *
+   *    |                     *
+   *    v                     *
+   * IS_TAG_OWNER * * * * * * * (error)
+   *    |                     *
    *    v                     *
    * <finish> < * * * * * * * *
    *
@@ -41,6 +46,11 @@ private:
   ImageCtxT *m_image_ctx;
   bool *m_primary;
   Context *m_on_finish;
+
+  bufferlist m_out_bl;
+
+  void send_get_mirror_state();
+  void handle_get_mirror_state(int r);
 
   void send_is_tag_owner();
   void handle_is_tag_owner(int r);

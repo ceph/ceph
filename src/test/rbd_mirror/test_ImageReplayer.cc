@@ -97,6 +97,7 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.ioctx_create(m_remote_pool_name.c_str(),
 					       m_remote_ioctx));
+    EXPECT_EQ(0, librbd::mirror_mode_set(m_remote_ioctx, RBD_MIRROR_MODE_POOL));
 
     m_image_name = get_temp_image_name();
     uint64_t features = g_ceph_context->_conf->rbd_default_features;
@@ -390,7 +391,7 @@ TEST_F(TestImageReplayer, BootstrapErrorLocalImageExists)
 
 TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
 {
-  // disable remote journal journaling
+  // disable remote image journaling
   librbd::ImageCtx *ictx;
   open_remote_image(&ictx);
   uint64_t features;
@@ -402,6 +403,58 @@ TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
   C_SaferCond cond;
   m_replayer->start(&cond);
   ASSERT_EQ(-ENOENT, cond.wait());
+}
+
+TEST_F(TestImageReplayer, BootstrapErrorMirrorDisabled)
+{
+  // disable remote image mirroring
+  ASSERT_EQ(0, librbd::mirror_mode_set(m_remote_ioctx, RBD_MIRROR_MODE_IMAGE));
+  librbd::ImageCtx *ictx;
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, librbd::mirror_image_disable(ictx, true));
+  close_image(ictx);
+
+  create_replayer<>();
+  C_SaferCond cond;
+  m_replayer->start(&cond);
+  ASSERT_EQ(-ENOENT, cond.wait());
+}
+
+TEST_F(TestImageReplayer, BootstrapMirrorDisabling)
+{
+  // set remote image mirroring state to DISABLING
+  ASSERT_EQ(0, librbd::mirror_mode_set(m_remote_ioctx, RBD_MIRROR_MODE_IMAGE));
+  librbd::ImageCtx *ictx;
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, librbd::mirror_image_enable(ictx));
+  cls::rbd::MirrorImage mirror_image;
+  ASSERT_EQ(0, librbd::cls_client::mirror_image_get(&m_remote_ioctx, ictx->id,
+                                                    &mirror_image));
+  mirror_image.state = cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_DISABLING;
+  ASSERT_EQ(0, librbd::cls_client::mirror_image_set(&m_remote_ioctx, ictx->id,
+                                                    mirror_image));
+  close_image(ictx);
+
+  create_replayer<>();
+  C_SaferCond cond;
+  m_replayer->start(&cond);
+  ASSERT_EQ(0, cond.wait());
+  ASSERT_TRUE(m_replayer->is_stopped());
+}
+
+TEST_F(TestImageReplayer, BootstrapDemoted)
+{
+  // demote remote image
+  librbd::ImageCtx *ictx;
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, librbd::mirror_image_demote(ictx));
+  close_image(ictx);
+
+  create_replayer<>();
+  C_SaferCond cond;
+  m_replayer->start(&cond);
+  ASSERT_EQ(0, cond.wait());
+  ASSERT_TRUE(m_replayer->is_stopped());
 }
 
 TEST_F(TestImageReplayer, StartInterrupted)
