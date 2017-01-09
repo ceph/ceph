@@ -158,7 +158,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_lock_image>(
       this);
 
-  (*m_local_image_ctx)->exclusive_lock->request_lock(ctx);
+  (*m_local_image_ctx)->exclusive_lock->acquire_lock(ctx);
 }
 
 template <typename I>

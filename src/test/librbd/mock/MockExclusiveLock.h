@@ -23,7 +23,7 @@ struct MockExclusiveLock {
   MOCK_METHOD1(block_requests, void(int));
   MOCK_METHOD0(unblock_requests, void());
 
-  MOCK_METHOD1(request_lock, void(Context *));
+  MOCK_METHOD1(acquire_lock, void(Context *));
   MOCK_METHOD1(release_lock, void(Context *));
 };
 

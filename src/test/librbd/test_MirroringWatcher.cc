@@ -73,28 +73,24 @@ public:
 };
 
 TEST_F(TestMirroringWatcher, ModeUpdated) {
-  EXPECT_CALL(*m_image_watcher, handle_mode_updated(cls::rbd::MIRROR_MODE_DISABLED, _))
-    .WillRepeatedly(WithArg<1>(Invoke([](Context *on_finish) {
-        on_finish->complete(0);
-      })));
+  EXPECT_CALL(*m_image_watcher, handle_mode_updated(cls::rbd::MIRROR_MODE_DISABLED, _));
 
-  ASSERT_EQ(0, MockMirroringWatcher::notify_mode_updated(m_ioctx, cls::rbd::MIRROR_MODE_DISABLED));
-
+  C_SaferCond ctx;
+  MockMirroringWatcher::notify_mode_updated(m_ioctx, cls::rbd::MIRROR_MODE_DISABLED, &ctx);
+  ASSERT_EQ(0, ctx.wait());
 }
 
 TEST_F(TestMirroringWatcher, ImageStatusUpdated) {
   EXPECT_CALL(*m_image_watcher,
               handle_image_updated(cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
                                    StrEq("image id"), StrEq("global image id"),
-                                   _))
-    .WillRepeatedly(WithArg<3>(Invoke([](Context *on_finish) {
-        on_finish->complete(0);
-      })));
+                                   _));
 
-  ASSERT_EQ(0, MockMirroringWatcher::notify_image_updated(m_ioctx,
-                                                          cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                                          "image id",
-                                                          "global image id"));
+  C_SaferCond ctx;
+  MockMirroringWatcher::notify_image_updated(m_ioctx,
+                                             cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
+                                             "image id", "global image id", &ctx);
+  ASSERT_EQ(0, ctx.wait());
 }
 
 } // namespace librbd
