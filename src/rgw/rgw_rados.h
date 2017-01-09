@@ -2223,6 +2223,7 @@ public:
     rgw_obj& get_obj() { return obj; }
     RGWObjectCtx& get_ctx() { return ctx; }
     RGWBucketInfo& get_bucket_info() { return bucket_info; }
+    int get_manifest(RGWObjManifest **pmanifest);
 
     int get_bucket_shard(BucketShard **pbs) {
       if (!bs_initialized) {

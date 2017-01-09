@@ -1615,4 +1615,32 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWGetObjLayout : public RGWOp {
+protected:
+  RGWRados::Object *target{nullptr};
+  RGWObjManifest *manifest{nullptr};
+  rgw_obj head_obj;
+
+public:
+  RGWGetObjLayout() {
+    delete target;
+  }
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("admin", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user->caps);
+  }
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_obj_layout"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_OBJ_LAYOUT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+
+
 #endif /* CEPH_RGW_OP_H */
