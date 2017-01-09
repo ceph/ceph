@@ -120,7 +120,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
       dout(10) << __func__ << " remove dirfrag " << oid << dendl;
       mds->objecter->remove(oid, oloc, nullsnapc,
 			    ceph::real_clock::now(),
-			    0, NULL, gather.new_sub());
+			    0, gather.new_sub());
     }
     assert(gather.has_subs());
     gather.activate();
@@ -164,7 +164,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
 			  ceph::real_clock::now(), 0,
-			  NULL, gather.new_sub());
+			  gather.new_sub());
   }
   // remove old backtrace objects
   for (compact_set<int64_t>::iterator p = pi->old_pools.begin();
@@ -175,7 +175,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
 	     << " old pool " << *p << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
 			  ceph::real_clock::now(), 0,
-			  NULL, gather.new_sub());
+			  gather.new_sub());
   }
   assert(gather.has_subs());
   gather.activate();
@@ -916,7 +916,7 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
     filer.zero(in->ino(), &in->inode.layout, *snapc,
 	       0, in->inode.layout.object_size,
 	       ceph::real_clock::now(),
-	       0, true, NULL, gather.new_sub());
+	       0, true, gather.new_sub());
   }
 
   assert(gather.has_subs());

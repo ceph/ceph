@@ -2075,7 +2075,7 @@ void CDir::_omap_commit(int op_prio)
 
       cache->mds->objecter->mutate(oid, oloc, op, snapc,
 				   ceph::real_clock::now(),
-				   0, NULL, gather.new_sub());
+				   0, gather.new_sub());
 
       write_size = 0;
       to_set.clear();
@@ -2109,7 +2109,7 @@ void CDir::_omap_commit(int op_prio)
 
   cache->mds->objecter->mutate(oid, oloc, op, snapc,
 			       ceph::real_clock::now(),
-			       0, NULL, gather.new_sub());
+			       0, gather.new_sub());
 
   gather.activate();
 }
