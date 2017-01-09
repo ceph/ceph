@@ -22,6 +22,10 @@ struct Elem {
 
   Elem(int _data) : data(_data) { }
 
+  bool operator==(const Elem& other) {
+    return data == other.data;
+  }
+
   friend std::ostream& operator<<(std::ostream& out, const Elem& d) {
     out << d.data;
     return out;
@@ -55,7 +59,7 @@ struct ElemCompareAlt {
 };
 
 
-class HeapFixture1: public ::testing::Test { 
+class HeapFixture1: public ::testing::Test {
 
 public:
 
@@ -84,7 +88,7 @@ public:
     heap.push(data7);
   }
 
-  void TearDown() { 
+  void TearDown() {
     // nothing to do
   }
 }; // class HeapFixture1
@@ -412,7 +416,7 @@ TEST(IndIntruHeap, multi_K) {
 
     bound = current;
   }
-  
+
   EXPECT_TRUE(heap2.empty()) << "should be empty after all elements popped";
   EXPECT_TRUE(heap3.empty()) << "should be empty after all elements popped";
   EXPECT_TRUE(heap4.empty()) << "should be empty after all elements popped";
@@ -660,7 +664,7 @@ TEST_F(HeapFixture1, iterator_basics) {
   }
 
   auto i1 = heap.begin();
-  
+
   EXPECT_EQ(-12, i1->data) <<
     "first member with * operator must be smallest";
 
@@ -705,7 +709,7 @@ TEST_F(HeapFixture1, const_iterator_basics) {
   }
 
   auto i1 = heap.cbegin();
-  
+
   EXPECT_EQ(-12, i1->data) <<
     "first member with * operator must be smallest";
 
@@ -740,26 +744,54 @@ TEST_F(HeapFixture1, const_iterator_basics) {
 TEST_F(HeapFixture1, iterator_find_rfind) {
   {
     auto it1 = heap.find(data7);
-    EXPECT_NE(heap.end(), it1) << "find for included element should succeed";
+    EXPECT_NE(heap.end(), it1) <<
+      "find by indirection for included element should succeed";
     EXPECT_EQ(-7, it1->data) <<
-      "find for included element should result in right value";
+      "find by indirection for included element should result in right value";
 
     auto fake_data = std::make_shared<Elem>(-7);
     auto it2 = heap.find(fake_data);
-    EXPECT_EQ(heap.end(), it2) << "find for not included element should fail";
+    EXPECT_EQ(heap.end(), it2) <<
+      "find by indirection for not included element should fail";
+  }
+
+  {
+    auto it1 = heap.find(Elem(-7));
+    EXPECT_NE(heap.end(), it1) <<
+      "find by value for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "find by value for included element should result in right value";
+
+    auto it2 = heap.find(Elem(7));
+    EXPECT_EQ(heap.end(), it2) <<
+      "find by value for not included element should fail";
   }
 
   {
     auto it1 = heap.rfind(data7);
     EXPECT_NE(heap.end(), it1) <<
-      "reverse find for included element should succeed";
+      "reverse find by indirecton for included element should succeed";
     EXPECT_EQ(-7, it1->data) <<
-      "reverse find for included element should result in right value";
+      "reverse find by indirection for included element should result "
+      "in right value";
 
     auto fake_data = std::make_shared<Elem>(-7);
     auto it2 = heap.rfind(fake_data);
     EXPECT_EQ(heap.end(), it2) <<
-      "reverse find for not included element should fail";
+      "reverse find by indirection for not included element should fail";
+  }
+
+  {
+    auto it1 = heap.rfind(Elem(-7));
+    EXPECT_NE(heap.end(), it1) <<
+      "reverse find by value for included element should succeed";
+    EXPECT_EQ(-7, it1->data) <<
+      "reverse find by value for included element should result "
+      "in right value";
+
+    auto it2 = heap.rfind(Elem(7));
+    EXPECT_EQ(heap.end(), it2) <<
+      "reverse find by value for not included element should fail";
   }
 }
 

@@ -251,19 +251,19 @@ namespace crimson {
       i = end();
     }
 
-    Iterator find(const I& item) {
+    Iterator find(const I& ind_item) {
       for (HeapIndex i = 0; i < count; ++i) {
-	if (data[i] == item) {
+	if (data[i] == ind_item) {
 	  return Iterator(*this, i);
 	}
       }
       return end();
     }
 
-    // NB: should we be using operator== instead of address check?
+    // when passing in value we do a comparison via operator==
     Iterator find(const T& item) {
       for (HeapIndex i = 0; i < count; ++i) {
-	if (data[i].get() == &item) {
+	if (*data[i] == item) {
 	  return Iterator(*this, i);
 	}
       }
@@ -271,11 +271,11 @@ namespace crimson {
     }
 
     // reverse find -- start looking from bottom of heap
-    Iterator rfind(const I& item) {
+    Iterator rfind(const I& ind_item) {
       // HeapIndex is unsigned, so we can't allow to go negative; so
       // we'll keep it one more than actual index
       for (HeapIndex i = count; i > 0; --i) {
-	if (data[i-1] == item) {
+	if (data[i-1] == ind_item) {
 	  return Iterator(*this, i-1);
 	}
       }
@@ -287,7 +287,7 @@ namespace crimson {
       // HeapIndex is unsigned, so we can't allow to go negative; so
       // we'll keep it one more than actual index
       for (HeapIndex i = count; i > 0; --i) {
-	if (data[i-1].get() == &item) {
+	if (*data[i-1] == item) {
 	  return Iterator(*this, i-1);
 	}
       }
