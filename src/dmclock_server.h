@@ -564,6 +564,7 @@ namespace crimson {
 			  bool show_ready = true,
 			  bool show_prop = true) const {
 	auto filter = [](const ClientRec& e)->bool { return true; };
+	DataGuard g(data_mtx);
 	if (show_res) {
 	  resv_heap.display_sorted(out << "RESER:", filter) << std::endl;
 	}
@@ -601,7 +602,7 @@ namespace crimson {
       //
       // ready_opt determines how the ready flag influences the sort
       //
-      // use_prop_delta determines whether the proportial delta is
+      // use_prop_delta determines whether the proportional delta is
       // added in for comparison
       template<double RequestTag::*tag_field,
 	       ReadyOption ready_opt,
@@ -832,6 +833,17 @@ namespace crimson {
 #endif
 
 	client.add_request(tag, client.client, std::move(request));
+	if (1 == client.requests.size()) {
+	  // NB: can the following 4 calls to adjust be changed
+	  // promote? Can adding a request ever demote a client in the
+	  // heaps?
+	  resv_heap.adjust(client);
+	  limit_heap.adjust(client);
+	  ready_heap.adjust(client);
+#if USE_PROP_HEAP
+	  prop_heap.adjust(client);
+#endif
+	}
 
 	client.cur_rho = req_params.rho;
 	client.cur_delta = req_params.delta;
