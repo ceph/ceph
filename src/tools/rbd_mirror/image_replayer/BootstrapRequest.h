@@ -100,6 +100,9 @@ private:
    *    v                                               *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * *
    *    |                                               *
+   *    v                                               *
+   * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *
+   *    |                                               *
    *    | (remote image primary)                        *
    *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
    *    |         |   .   ^                             *
@@ -165,6 +168,7 @@ private:
   cls::journal::Client m_client;
   uint64_t m_remote_tag_class = 0;
   ImageCtxT *m_remote_image_ctx = nullptr;
+  bool m_primary = false;
   bool m_created_local_image = false;
   int m_ret_val = 0;
 
@@ -184,6 +188,9 @@ private:
 
   void open_remote_image();
   void handle_open_remote_image(int r);
+
+  void is_primary();
+  void handle_is_primary(int r);
 
   void update_client_state();
   void handle_update_client_state(int r);

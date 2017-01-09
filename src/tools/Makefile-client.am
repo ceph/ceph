@@ -103,6 +103,7 @@ librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/image_replayer/CloseImageRequest.cc \
 	tools/rbd_mirror/image_replayer/CreateImageRequest.cc \
 	tools/rbd_mirror/image_replayer/EventPreprocessor.cc \
+	tools/rbd_mirror/image_replayer/IsPrimaryRequest.cc \
 	tools/rbd_mirror/image_replayer/OpenImageRequest.cc \
 	tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc \
 	tools/rbd_mirror/image_replayer/ReplayStatusFormatter.cc \
