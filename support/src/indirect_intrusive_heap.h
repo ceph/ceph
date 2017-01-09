@@ -106,7 +106,7 @@ namespace crimson {
       }
 
       bool operator==(const Iterator& other) const {
-	return index == other.index;
+	return &heap == &other.heap && index == other.index;
       }
 
       bool operator!=(const Iterator& other) const {
