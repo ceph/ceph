@@ -1770,7 +1770,7 @@ class RGWGetObjLayout : public RGWOp {
 protected:
   RGWRados::Object *target{nullptr};
   RGWObjManifest *manifest{nullptr};
-  rgw_obj head_obj;
+  rgw_raw_obj head_obj;
 
 public:
   RGWGetObjLayout() {

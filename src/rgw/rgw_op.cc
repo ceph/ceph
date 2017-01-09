@@ -5526,9 +5526,8 @@ void RGWGetObjLayout::pre_exec()
 
 void RGWGetObjLayout::execute()
 {
-  rgw_obj obj(s->bucket, s->object.name);
-  obj.set_instance(s->object.instance);
-  target = new RGWRados::Object(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  rgw_obj obj(s->bucket, s->object);
+  target = new RGWRados::Object(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), rgw_obj(s->bucket, s->object));
   RGWRados::Object::Read stat_op(target);
 
   op_ret = stat_op.prepare();
@@ -5536,7 +5535,7 @@ void RGWGetObjLayout::execute()
     return;
   }
 
-  head_obj = stat_op.state.obj;
+  head_obj = stat_op.state.head_obj;
 
   op_ret = target->get_manifest(&manifest);
 }
