@@ -3858,7 +3858,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     signal_cond_list(in->waitfor_caps);
 }
 
-Cap* Client::remove_cap(Cap *cap, bool queue_release)
+void Client::remove_cap(Cap *cap, bool queue_release)
 {
   Inode *in = cap->inode;
   MetaSession *session = cap->session;
@@ -3885,13 +3885,9 @@ Cap* Client::remove_cap(Cap *cap, bool queue_release)
   assert(in->caps.count(mds));
   in->caps.erase(mds);
 
-  if (cap == session->s_cap_iterator) {
-    cap->inode = NULL;
-  } else {
-    cap->cap_item.remove_myself();
-    delete cap;
-    cap = nullptr;
-  }
+  cap->cap_item.remove_myself();
+  delete cap;
+  cap = nullptr;
 
   if (!in->is_any_caps()) {
     ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
@@ -3899,7 +3895,6 @@ Cap* Client::remove_cap(Cap *cap, bool queue_release)
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
   }
-  return cap;
 }
 
 void Client::remove_all_caps(Inode *in)
@@ -3987,8 +3982,11 @@ void Client::trim_caps(MetaSession *s, int max)
   xlist<Cap*>::iterator p = s->caps.begin();
   while ((caps_size - trimmed) > max && !p.end()) {
     Cap *cap = *p;
-    s->s_cap_iterator = cap;
     Inode *in = cap->inode;
+
+    // Increment p early because it will be invalidated if cap
+    // is deleted inside remove_cap
+    ++p;
 
     if (in->caps.size() > 1 && cap != in->auth_cap) {
       int mine = cap->issued | cap->implemented;
@@ -3996,7 +3994,7 @@ void Client::trim_caps(MetaSession *s, int max)
       // disposable non-auth cap
       if (!(get_caps_used(in) & ~oissued & mine)) {
 	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-	cap = remove_cap(cap, true);
+	remove_cap(cap, true);
 	trimmed++;
       }
     } else {
@@ -4025,14 +4023,7 @@ void Client::trim_caps(MetaSession *s, int max)
 	trimmed++;
       }
     }
-
-    ++p;
-    if (cap && !cap->inode) {
-      cap->cap_item.remove_myself();
-      delete cap;
-    }
   }
-  s->s_cap_iterator = NULL;
 
   if (s->caps.size() > max)
     _invalidate_kernel_dcache();
