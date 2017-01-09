@@ -169,11 +169,16 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
        << cpp_strerror(r) << dendl;
     send_close_image(false, r);
     return;
-  } else if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
-             !(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
-    derr << ": image is not locked" << dendl;
-    send_close_image(false, -EBUSY);
-    return;
+  }
+
+  {
+    RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
+    if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
+	!(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
+      derr << ": image is not locked" << dendl;
+      send_close_image(false, -EBUSY);
+      return;
+    }
   }
 
   finish(0);
