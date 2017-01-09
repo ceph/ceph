@@ -87,15 +87,15 @@ class KernelMount(CephFSMount):
 
         self.mounted = True
 
-    def umount(self):
+    def umount(self, force=False):
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
-        self.client_remote.run(
-            args=[
-                'sudo',
-                'umount',
-                self.mountpoint,
-            ],
-        )
+
+        cmd=['sudo', 'umount', self.mountpoint]
+        if force:
+            cmd.append('-f')
+
+        self.client_remote.run(args=cmd)
+
         self.client_remote.run(
             args=[
                 'rmdir',
@@ -116,7 +116,7 @@ class KernelMount(CephFSMount):
             return
 
         try:
-            self.umount()
+            self.umount(force)
         except CommandFailedError:
             if not force:
                 raise
