@@ -2,36 +2,48 @@
 ceph:
   deb:
   - ceph
+  - ceph-base
   - ceph-mds
+  - ceph-mds-dbg
   - ceph-mgr
-  - ceph-common
+  - ceph-mgr-dbg
+  - ceph-mon
+  - ceph-mon-dbg
+  - ceph-osd
+  - ceph-osd-dbg
   - ceph-fuse
-  - ceph-test
-  - radosgw
-  - python-ceph
+  - ceph-fuse-dbg
+  - rbd-fuse
+  - rbd-fuse-dbg
+  - rbd-mirror
+  - rbd-mirror-dbg
+  - rbd-nbd
+  - rbd-nbd-dbg
+  - ceph-common
+  - ceph-common-dbg
+  - librados2
+  - librados2-dbg
+  - librados-dev
+  - libradosstriper1
+  - libradosstriper1-dbg
+  - librbd1
+  - librbd1-dbg
+  - librbd-dev
   - libcephfs2
+  - libcephfs2-dbg
   - libcephfs-dev
+  - librgw2
+  - librgw2-dbg
+  - radosgw
+  - radosgw-dbg
+  - ceph-test
+  - ceph-test-dbg
+  - python-ceph
+  - python-rados
+  - python-rbd
+  - python-cephfs
   - libcephfs-java
   - libcephfs-jni
-  - librados2
-  - librbd1
-  - rbd-fuse
-  - ceph-common-dbg
-  - ceph-fuse-dbg
-  - ceph-mds-dbg
-  - ceph-mgr-dbg
-  - ceph-mon-dbg
-  - ceph-osd-dbg
-  - ceph-test-dbg
-  - libcephfs2-dbg
-  - librados2-dbg
-  - libradosstriper1-dbg
-  - librbd1-dbg
-  - librgw2-dbg
-  - radosgw-dbg
-  - rbd-fuse-dbg
-  - rbd-mirror-dbg
-  - rbd-nbd-dbg
   rpm:
   - ceph-radosgw
   - ceph-test
