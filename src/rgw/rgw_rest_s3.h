@@ -398,6 +398,14 @@ public:
   void end_response();
 };
 
+class RGWGetObjLayout_ObjStore_S3 : public RGWGetObjLayout {
+public:
+  RGWGetObjLayout_ObjStore_S3() {}
+  ~RGWGetObjLayout_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGW_Auth_S3_Keystone_ValidateToken : public RGWHTTPClient {
 private:
   bufferlist rx_buffer;
