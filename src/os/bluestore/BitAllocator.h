@@ -194,6 +194,7 @@ public:
 };
 
 typedef enum bmap_area_type {
+  UNDEFINED = 0,
   ZONE = 1,
   LEAF = 2,
   NON_LEAF = 3
@@ -263,7 +264,7 @@ public:
   int64_t get_level();
   bmap_area_type_t get_type();
   virtual void dump_state(int& count) = 0;
-  BitMapArea(CephContext* cct) : cct(cct) {}
+  BitMapArea(CephContext* cct) : cct(cct), m_type(UNDEFINED) {}
   virtual ~BitMapArea() { }
 };
 
