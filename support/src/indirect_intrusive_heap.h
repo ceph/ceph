@@ -43,6 +43,9 @@ namespace crimson {
 	   uint K = 2>
   class IndIntruHeap {
 
+    // shorthand
+    using HeapIndex = IndIntruHeapData;
+
     static_assert(
       std::is_same<T,typename std::pointer_traits<I>::element_type>::value,
       "class I must resolve to class T by indirection (pointer dereference)");
@@ -58,9 +61,9 @@ namespace crimson {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
       IndIntruHeap<I, T, heap_info, C, K>& heap;
-      size_t                            index;
+      HeapIndex                            index;
 
-      Iterator(IndIntruHeap<I, T, heap_info, C, K>& _heap, size_t _index) :
+      Iterator(IndIntruHeap<I, T, heap_info, C, K>& _heap, HeapIndex _index) :
 	heap(_heap),
 	index(_index)
       {
@@ -130,9 +133,10 @@ namespace crimson {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
       const IndIntruHeap<I, T, heap_info, C, K>& heap;
-      size_t                                  index;
+      HeapIndex                                     index;
 
-      ConstIterator(const IndIntruHeap<I, T, heap_info, C, K>& _heap, size_t _index) :
+      ConstIterator(const IndIntruHeap<I, T, heap_info, C, K>& _heap,
+		    HeapIndex _index) :
 	heap(_heap),
 	index(_index)
       {
@@ -192,10 +196,9 @@ namespace crimson {
 
     
   protected:
-    using index_t = IndIntruHeapData;
 
     std::vector<I> data;
-    index_t        count;
+    HeapIndex      count;
     C              comparator;
 
   public:
@@ -209,14 +212,14 @@ namespace crimson {
     IndIntruHeap(const IndIntruHeap<I,T,heap_info,C,K>& other) :
       count(other.count)
     {
-      for (uint i = 0; i < other.count; ++i) {
+      for (HeapIndex i = 0; i < other.count; ++i) {
 	data.push_back(other.data[i]);
       }
     }
 
     bool empty() const { return 0 == count; }
 
-    size_t size() const { return count; }
+    size_t size() const { return (size_t) count; }
 
     T& top() { return *data[0]; }
 
@@ -227,7 +230,7 @@ namespace crimson {
     const I& top_ind() const { return data[0]; }
 
     void push(I&& item) {
-      index_t i = count++;
+      HeapIndex i = count++;
       intru_data_of(item) = i;
       data.emplace_back(std::move(item));
       sift_up(i);
@@ -248,7 +251,7 @@ namespace crimson {
     }
 
     Iterator find(const I& item) {
-      for (index_t i = 0; i < count; ++i) {
+      for (HeapIndex i = 0; i < count; ++i) {
 	if (data[i] == item) {
 	  return Iterator(*this, i);
 	}
@@ -258,7 +261,7 @@ namespace crimson {
 
     // NB: should we be using operator== instead of address check?
     Iterator find(const T& item) {
-      for (index_t i = 0; i < count; ++i) {
+      for (HeapIndex i = 0; i < count; ++i) {
 	if (data[i].get() == &item) {
 	  return Iterator(*this, i);
 	}
@@ -268,9 +271,9 @@ namespace crimson {
 
     // reverse find -- start looking from bottom of heap
     Iterator rfind(const I& item) {
-      // index_t is unsigned, so we can't allow to go negative; so
+      // HeapIndex is unsigned, so we can't allow to go negative; so
       // we'll keep it one more than actual index
-      for (index_t i = count; i > 0; --i) {
+      for (HeapIndex i = count; i > 0; --i) {
 	if (data[i-1] == item) {
 	  return Iterator(*this, i-1);
 	}
@@ -280,9 +283,9 @@ namespace crimson {
 
     // reverse find -- start looking from bottom of heap
     Iterator rfind(const T& item) {
-      // index_t is unsigned, so we can't allow to go negative; so
+      // HeapIndex is unsigned, so we can't allow to go negative; so
       // we'll keep it one more than actual index
-      for (index_t i = count; i > 0; --i) {
+      for (HeapIndex i = count; i > 0; --i) {
 	if (data[i-1].get() == &item) {
 	  return Iterator(*this, i-1);
 	}
@@ -359,11 +362,11 @@ namespace crimson {
 
   protected:
 
-    static index_t& intru_data_of(I& item) {
+    static IndIntruHeapData& intru_data_of(I& item) {
       return (*item).*heap_info;
     }
 
-    void remove(index_t i) {
+    void remove(HeapIndex i) {
       std::swap(data[i], data[--count]);
       intru_data_of(data[i]) = i;
       data.pop_back();
@@ -374,20 +377,20 @@ namespace crimson {
     static bool all_filter(const T& data) { return true; }
 
     // when i is negative?
-    static inline index_t parent(index_t i) {
+    static inline HeapIndex parent(HeapIndex i) {
       assert(0 != i);
       return (i - 1) / K;
     }
 
     // index of left child when K==2, index of left-most child when K>2
-    static inline index_t lhs(index_t i) { return K*i + 1; }
+    static inline HeapIndex lhs(HeapIndex i) { return K*i + 1; }
 
     // index of right child when K==2, index of right-most child when K>2
-    static inline index_t rhs(index_t i) { return K*i + K; }
+    static inline HeapIndex rhs(HeapIndex i) { return K*i + K; }
 
-    void sift_up(index_t i) {
+    void sift_up(HeapIndex i) {
       while (i > 0) {
-	index_t pi = parent(i);
+	HeapIndex pi = parent(i);
 	if (!comparator(*data[i], *data[pi])) {
 	  break;
 	}
@@ -403,17 +406,17 @@ namespace crimson {
     // uses a loop; EnableBool insures template uses a template
     // parameter
     template<bool EnableBool=true>
-    typename std::enable_if<(K>2)&&EnableBool,void>::type sift_down(index_t i) {
+    typename std::enable_if<(K>2)&&EnableBool,void>::type sift_down(HeapIndex i) {
       if (i >= count) return;
       while (true) {
-	index_t li = lhs(i);
+	HeapIndex li = lhs(i);
 
 	if (li < count) {
-	  index_t ri = std::min(rhs(i), count - 1);
+	  HeapIndex ri = std::min(rhs(i), count - 1);
 
 	  // find the index of min. child
-	  index_t min_i = li;
-	  for (index_t k = li + 1; k <= ri; ++k) {
+	  HeapIndex min_i = li;
+	  for (HeapIndex k = li + 1; k <= ri; ++k) {
 	    if (comparator(*data[k], *data[min_i])) {
 	      min_i = k;
 	    }
@@ -438,11 +441,11 @@ namespace crimson {
     // use this sift_down definition when K==2; EnableBool insures
     // template uses a template parameter
     template<bool EnableBool=true>
-    typename std::enable_if<K==2&&EnableBool,void>::type sift_down(index_t i) {
+    typename std::enable_if<K==2&&EnableBool,void>::type sift_down(HeapIndex i) {
       if (i >= count) return;
       while (true) {
-        const index_t li = lhs(i);
-	const index_t ri = 1 + li;
+        const HeapIndex li = lhs(i);
+	const HeapIndex ri = 1 + li;
  
         if (li < count) {
 	  if (comparator(*data[li], *data[i])) {
@@ -473,12 +476,12 @@ namespace crimson {
       } // while
     } // sift_down
 
-    void sift(index_t i) {
+    void sift(HeapIndex i) {
       if (i == 0) {
 	// if we're at top, can only go down
 	sift_down(i);
       } else {
-	index_t pi = parent(i);
+	HeapIndex pi = parent(i);
 	if (comparator(*data[i], *data[pi])) {
 	  // if we can go up, we will
 	  sift_up(i);
