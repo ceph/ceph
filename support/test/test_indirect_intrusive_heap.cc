@@ -560,6 +560,49 @@ TEST(IndIntruHeap, adjust) {
 }
 
 
+TEST(IndIntruHeap, remove_careful) {
+  // here we test whether a common mistake in implementing remove is
+  // done; if after we remove an item and move the last element of the
+  // heap to the position of the removed element, we need to sift it
+  // rather than sift_down it.
+
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			2> heap;
+
+  heap.push(std::make_shared<Elem>(0));
+  heap.push(std::make_shared<Elem>(10));
+  heap.push(std::make_shared<Elem>(100));
+  heap.push(std::make_shared<Elem>(20));
+  heap.push(std::make_shared<Elem>(30));
+  heap.push(std::make_shared<Elem>(200));
+  heap.push(std::make_shared<Elem>(300));
+  heap.push(std::make_shared<Elem>(40));
+
+  auto k = heap.find(Elem(200));
+  EXPECT_NE(heap.end(), k) <<
+    "we should have found an element with the value 200, which we'll remove";
+  heap.remove(k);
+
+  auto i = heap.cbegin();
+  EXPECT_EQ(0, i->data);
+  ++i;
+  EXPECT_EQ(10, i->data);
+  ++i;
+  EXPECT_EQ(40, i->data) <<
+    "this needs to be 40 or there's a mistake in implementation";
+  ++i;
+  EXPECT_EQ(20, i->data);
+  ++i;
+  EXPECT_EQ(30, i->data);
+  ++i;
+  EXPECT_EQ(100, i->data) <<
+    "this needs to be 100 or there's a mistake in implementation";
+}
+
+
 TEST_F(HeapFixture1, shared_data) {
 
   crimson::IndIntruHeap<std::shared_ptr<Elem>,Elem,&Elem::heap_data_alt,ElemCompareAlt> heap2;
