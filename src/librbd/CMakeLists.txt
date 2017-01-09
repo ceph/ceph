@@ -107,7 +107,7 @@ target_link_libraries(librbd LINK_PRIVATE
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
-  common
+  ceph-common
   pthread
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
