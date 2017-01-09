@@ -9743,9 +9743,10 @@ void PrimaryLogPG::sub_op_remove(OpRequestRef op)
 eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
 {
   eversion_t v;
-
-  assert(pg_log.get_missing().is_missing(oid));
-  v = pg_log.get_missing().get_items().find(oid)->second.have;
+  pg_missing_item pmi;
+  bool is_missing = pg_log.get_missing().is_missing(oid, &pmi);
+  assert(is_missing);
+  v = pmi.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
   assert(!actingbackfill.empty());
