@@ -305,9 +305,7 @@ void MDCache::remove_inode(CInode *o)
   if (o->is_dirty_parent())
     o->clear_dirty_parent();
 
-  o->filelock.remove_dirty();
-  o->nestlock.remove_dirty();
-  o->dirfragtreelock.remove_dirty();
+  o->clear_scatter_dirty();
 
   o->item_open_file.remove_myself();
 
@@ -3405,7 +3403,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       MDRequestRef mdr = request_get(*p);
       mdr->aborted = true;
       if (mdr->slave_request) {
-	if (mdr->more()->slave_commit) // journaling slave prepare ?
+	if (mdr->slave_did_prepare()) // journaling slave prepare ?
 	  add_rollback(*p, from);
       } else {
 	request_finish(mdr);
@@ -9028,10 +9026,6 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 
 void MDCache::dispatch_request(MDRequestRef& mdr)
 {
-  if (mdr->killed) {
-    dout(10) << "request " << *mdr << " was killed" << dendl;
-    return;
-  }
   if (mdr->client_request) {
     mds->server->dispatch_client_request(mdr);
   } else if (mdr->slave_request) {
@@ -9076,10 +9070,13 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_FINISH);
 
-    // information about rename imported caps
-    if (mdr->more()->srcdn_auth_mds == *p &&
-	mdr->more()->inode_import.length() > 0)
+    if (mdr->killed && !mdr->committing) {
+      r->mark_abort();
+    } else if (mdr->more()->srcdn_auth_mds == *p &&
+	       mdr->more()->inode_import.length() > 0) {
+      // information about rename imported caps
       r->inode_export.claim(mdr->more()->inode_import);
+    }
 
     mds->send_message_mds(r, *p);
   }
@@ -9168,13 +9165,27 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 
 void MDCache::request_kill(MDRequestRef& mdr)
 {
+  // rollback slave requests is tricky. just let the request proceed.
+  if (mdr->done_locking && mdr->has_more() &&
+      (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_slave.empty())) {
+    dout(10) << "request_kill " << *mdr << " -- already started slave requests, no-op" << dendl;
+
+    assert(mdr->used_prealloc_ino == 0);
+    assert(mdr->prealloc_inos.empty());
+
+    mdr->session = NULL;
+    mdr->item_session_request.remove_myself();
+    return;
+  }
+
   mdr->killed = true;
   mdr->mark_event("killing request");
-  if (!mdr->committing) {
+
+  if (mdr->committing) {
+    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
+  } else {
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
-  } else {
-    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
   }
 }
 

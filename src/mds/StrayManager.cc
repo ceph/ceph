@@ -771,20 +771,20 @@ void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
     }
   }
   assert(remote_dn->last == CEPH_NOSNAP);
-    // NOTE: we repeat this check in _rename(), since our submission path is racey.
-    if (!remote_dn->is_projected()) {
-      if (remote_dn->is_auth() && remote_dn->dir->can_auth_pin()) {
-        reintegrate_stray(stray_dn, remote_dn);
-      } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
-        migrate_stray(stray_dn, remote_dn->authority().first);
-      } else {
-        dout(20) << __func__ << ": not reintegrating" << dendl;
-      }
+  // NOTE: we repeat this check in _rename(), since our submission path is racey.
+  if (!remote_dn->is_projected()) {
+    if (remote_dn->is_auth() && remote_dn->dir->can_auth_pin()) {
+      reintegrate_stray(stray_dn, remote_dn);
+    } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
+      migrate_stray(stray_dn, remote_dn->authority().first);
     } else {
-      // don't do anything if the remote parent is projected, or we may
-      // break user-visible semantics!
-      dout(20) << __func__ << ": not reintegrating (projected)" << dendl;
+      dout(20) << __func__ << ": not reintegrating" << dendl;
     }
+  } else {
+    // don't do anything if the remote parent is projected, or we may
+    // break user-visible semantics!
+    dout(20) << __func__ << ": not reintegrating (projected)" << dendl;
+  }
 }
 
 void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
@@ -809,7 +809,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
  
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
-  CInode *in = dn->get_linkage()->get_inode();
+  CInode *in = dn->get_projected_linkage()->get_inode();
   assert(in);
   CInode *diri = dn->dir->get_inode();
   assert(diri->is_stray());

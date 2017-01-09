@@ -1638,6 +1638,8 @@ void Migrator::export_reverse(CDir *dir)
 {
   dout(7) << "export_reverse " << *dir << dendl;
 
+  set<CInode*> to_eval;
+
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
@@ -1654,6 +1656,10 @@ void Migrator::export_reverse(CDir *dir)
 	continue;
       CInode *in = p->second->get_linkage()->get_inode();
       in->abort_export();
+      if (in->state_test(CInode::STATE_EVALSTALECAPS)) {
+	in->state_clear(CInode::STATE_EVALSTALECAPS);
+	to_eval.insert(in);
+      }
       if (in->is_dir())
 	in->get_nested_dirfrags(rq);
     }
@@ -1680,6 +1686,22 @@ void Migrator::export_reverse(CDir *dir)
   
   // unfreeze
   dir->unfreeze_tree();
+
+  // revoke/resume stale caps
+  for (auto in : to_eval) {
+    bool need_issue = false;
+    for (auto& p : in->get_client_caps()) {
+      Capability *cap = p.second;
+      if (cap->is_stale()) {
+	mds->locker->revoke_stale_caps(cap);
+      } else {
+	need_issue = true;
+      }
+    }
+    if (need_issue &&
+	(!in->is_auth() || !mds->locker->eval(in, CEPH_CAP_LOCKS)))
+      mds->locker->issue_caps(in);
+  }
 
   cache->show_cache();
 }
@@ -1810,11 +1832,6 @@ void Migrator::export_finish(CDir *dir)
   C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather> *fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather>(g_ceph_context);
   finish_export_dir(dir, ceph_clock_now(), it->second.peer,
 		    it->second.peer_imported, fin->contexts, &num_dentries);
-  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
-
-  // unfreeze
-  dout(7) << "export_finish unfreezing" << dendl;
-  dir->unfreeze_tree();
   
   // unpin bounds
   set<CDir*> bounds;
@@ -1834,8 +1851,17 @@ void Migrator::export_finish(CDir *dir)
 
   // no more auth subtree? clear scatter dirty
   if (!dir->get_inode()->is_auth() &&
-      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
+      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dir->get_inode()->clear_scatter_dirty();
+    // wake up scatter_nudge waiters
+    dir->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, fin->contexts);
+  }
+
+  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
+
+  // unfreeze
+  dout(7) << "export_finish unfreezing" << dendl;
+  dir->unfreeze_tree();
 
   // discard delayed expires
   cache->discard_delayed_expire(dir);
@@ -2368,9 +2394,13 @@ void Migrator::import_reverse(CDir *dir)
 
   cache->adjust_subtree_auth(dir, stat.peer);
 
+  C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather> *fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather>(g_ceph_context);
   if (!dir->get_inode()->is_auth() &&
-      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
+      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dir->get_inode()->clear_scatter_dirty();
+    // wake up scatter_nudge waiters
+    dir->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, fin->contexts);
+  }
 
   int num_dentries = 0;
   // adjust auth bits.
@@ -2406,8 +2436,10 @@ void Migrator::import_reverse(CDir *dir)
 	if (in->is_dirty()) 
 	  in->mark_clean();
 	in->clear_dirty_rstat();
-	if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
+	if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
 	  in->clear_scatter_dirty();
+	  in->take_waiting(CInode::WAIT_ANY_MASK, fin->contexts);
+	}
 
 	in->clear_dirty_parent();
 
@@ -2430,6 +2462,8 @@ void Migrator::import_reverse(CDir *dir)
       ++num_dentries;
     }
   }
+
+  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
   if (stat.state == IMPORT_ACKING) {
     // remove imported caps
@@ -2517,8 +2551,6 @@ void Migrator::import_reverse_unfreeze(CDir *dir)
   assert(dir);
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   dir->unfreeze_tree();
-  list<MDSInternalContextBase*> ls;
-  mds->queue_waiters(ls);
   cache->discard_delayed_expire(dir);
   import_reverse_final(dir);
 }
@@ -2656,14 +2688,6 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
     it->second.state = IMPORT_FINISHING;
     return;
   }
-
-  // clear updated scatterlocks
-  /*
-  for (list<ScatterLock*>::iterator p = import_updated_scatterlocks[dir].begin();
-       p != import_updated_scatterlocks[dir].end();
-       ++p) 
-    (*p)->clear_updated();
-  */
 
   // remove pins
   set<CDir*> bounds;
