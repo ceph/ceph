@@ -9610,7 +9610,9 @@ struct get_obj_data : public RefCountedObject {
       total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
       client_cb(NULL),
       throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
-  virtual ~get_obj_data() { } 
+
+  virtual ~get_obj_data() {}
+
   void set_cancelled(int r) {
     cancelled.set(1);
     err_code.set(r);
@@ -9638,6 +9640,7 @@ struct get_obj_data : public RefCountedObject {
 
     c->wait_for_safe_and_cb();
     int r = c->get_return_value();
+    c->put();
 
     lock.Lock();
     completion_map.erase(cur_ofs);
@@ -9673,6 +9676,7 @@ struct get_obj_data : public RefCountedObject {
     struct get_obj_aio_data *paio_data =  &aio_data.back(); /* last element */
 
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void *)paio_data, NULL, _get_obj_aio_completion_cb);
+    c->get(); /* take "extra" ref so completion_map can't outlive c */
     completion_map[ofs] = c;
 
     *pc = c;

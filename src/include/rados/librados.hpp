@@ -212,7 +212,12 @@ namespace librados
     int get_return_value();
     int get_version() __attribute__ ((deprecated));
     uint64_t get_version64();
+    void get();
+    void put();
     void release();
+	void operator delete(void* ptr) {
+		static_cast<AioCompletion*>(ptr)->put();
+	}
     AioCompletionImpl *pc;
   };
 

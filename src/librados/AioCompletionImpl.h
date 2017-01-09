@@ -27,6 +27,7 @@
 class IoCtxImpl;
 
 struct librados::AioCompletionImpl {
+  AioCompletion c;
   Mutex lock;
   Cond cond;
   int ref, rval;
@@ -48,7 +49,8 @@ struct librados::AioCompletionImpl {
   ceph_tid_t aio_write_seq;
   xlist<AioCompletionImpl*>::item aio_write_list_item;
 
-  AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),
+  AioCompletionImpl() : c(this),
+ 			lock("AioCompletionImpl lock", false, false),
 			ref(1), rval(0), released(false), ack(false), safe(false),
 			objver(0),
                         tid(0),
@@ -166,8 +168,9 @@ struct librados::AioCompletionImpl {
     assert(ref > 0);
     int n = --ref;
     lock.Unlock();
-    if (!n)
+    if (!n) {
       delete this;
+    }
   }
 };
 
