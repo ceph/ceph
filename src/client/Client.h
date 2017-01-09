@@ -621,7 +621,7 @@ protected:
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags, const UserPerm& perms);
-  Cap* remove_cap(Cap *cap, bool queue_release);
+  void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
