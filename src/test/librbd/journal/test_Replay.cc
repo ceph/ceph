@@ -30,7 +30,7 @@ public:
     C_SaferCond lock_ctx;
     {
       RWLock::WLocker owner_locker(ictx->owner_lock);
-      ictx->exclusive_lock->request_lock(&lock_ctx);
+      ictx->exclusive_lock->acquire_lock(&lock_ctx);
     }
     int r = lock_ctx.wait();
     if (r < 0) {
