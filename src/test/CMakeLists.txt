@@ -878,6 +878,7 @@ target_link_libraries(unittest_subprocess global)
 # unittest_pageset
 add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pageset)
+target_link_libraries(unittest_pageset global)
 
 #make check ends here
 
