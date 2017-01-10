@@ -182,7 +182,6 @@ class SharedDriverData {
   std::set<uint64_t> flush_waiter_seqs;
 
  public:
-  bool zero_command_support;
   std::atomic_ulong completed_op_seq, queue_op_seq;
   PerfCounters *logger = nullptr;
 
@@ -202,7 +201,6 @@ class SharedDriverData {
     sector_size = spdk_nvme_ns_get_sector_size(ns);
     block_size = std::max(CEPH_PAGE_SIZE, sector_size);
     size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
-    zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
     qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, SPDK_NVME_QPRIO_URGENT);
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
@@ -811,10 +809,6 @@ int NVMEDevice::open(string p)
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
-  if (!driver->zero_command_support) {
-    zeros = buffer::create_page_aligned(1048576);
-    zeros.zero();
-  }
 
   //nvme is non-rotational device.
   rotational = false;
