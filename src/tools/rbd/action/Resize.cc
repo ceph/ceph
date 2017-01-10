@@ -88,6 +88,6 @@ Shell::Action action(
   {"resize"}, {}, "Resize (expand or shrink) image.", "", &get_arguments,
   &execute);
 
-} // namespace list
+} // namespace resize
 } // namespace action
 } // namespace rbd
