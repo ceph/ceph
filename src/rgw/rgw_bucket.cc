@@ -1016,8 +1016,8 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   int max = 1000;
 
   map<string, bool> common_prefixes;
-  string ns = "";
 
+  string ns = "multipart";
   bool is_truncated;
   map<string, bool> meta_objs;
   map<rgw_obj_key, string> all_objs;
@@ -1034,6 +1034,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;
+  list_op.params.ns = ns;
 
   do {
     vector<RGWObjEnt> result;
@@ -2131,7 +2132,7 @@ public:
       return ret;
 
     /*
-     * We're unlinking the bucket but we don't want to update the entrypoint here — we're removing
+     * We're unlinking the bucket but we don't want to update the entrypoint here - we're removing
      * it immediately and don't want to invalidate our cached objv_version or the bucket obj removal
      * will incorrectly fail.
      */
