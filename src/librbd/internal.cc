@@ -3029,6 +3029,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
           if (r < 0) {
             lderr(cct) << "error enabling mirroring for image "
                        << img_pair.first << ": " << cpp_strerror(r) << dendl;
+            img_ctx->state->close();
             return r;
           }
 
