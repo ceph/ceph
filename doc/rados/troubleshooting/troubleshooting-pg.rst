@@ -346,12 +346,115 @@ PGs Inconsistent
 ================
 
 If you receive an ``active + clean + inconsistent`` state, this may happen
-due to an error during scrubbing. If the inconsistency is due to disk errors,
-check your disks.
+due to an error during scrubbing. As always, we can identify the inconsistent
+placement group(s) with::
+
+    $ ceph health detail
+    HEALTH_ERR 1 pgs inconsistent; 2 scrub errors
+    pg 0.6 is active+clean+inconsistent, acting [0,1,2]
+    2 scrub errors
+
+Or if you prefer inspecting the output in a programmatic way::
+
+    $ rados list-inconsistent-pg rbd
+    ["0.6"]
+
+There is only one consistent state, but in the worst case, we could have
+different inconsistencies in multiple perspectives found in more than one
+objects. If an object named ``foo`` in PG ``0.6`` is truncated, we will have::
+
+    $ rados list-inconsistent-obj 0.6 --format=json-pretty
+
+.. code-block:: javascript
+
+    {
+        "epoch": 14,
+        "inconsistents": [
+            {
+                "object": {
+                    "name": "foo",
+                    "nspace": "",
+                    "locator": "",
+                    "snap": "head",
+                    "version": 1
+                },
+                "errors": [
+                    "data_digest_mismatch",
+                    "size_mismatch"
+                ],
+                "union_shard_errors": [
+                    "data_digest_mismatch_oi",
+                    "size_mismatch_oi"
+                ],
+                "selected_object_info": "0:602f83fe:::foo:head(16'1 client.4110.0:1 dirty|data_digest|omap_digest s 968 uv 1 dd e978e67f od ffffffff alloc_hint [0 0 0])",
+                "shards": [
+                    {
+                        "osd": 0,
+                        "errors": [],
+                        "size": 968,
+                        "omap_digest": "0xffffffff",
+                        "data_digest": "0xe978e67f"
+                    },
+                    {
+                        "osd": 1,
+                        "errors": [],
+                        "size": 968,
+                        "omap_digest": "0xffffffff",
+                        "data_digest": "0xe978e67f"
+                    },
+                    {
+                        "osd": 2,
+                        "errors": [
+                            "data_digest_mismatch_oi",
+                            "size_mismatch_oi"
+                        ],
+                        "size": 0,
+                        "omap_digest": "0xffffffff",
+                        "data_digest": "0xffffffff"
+                    }
+                ]
+            }
+        ]
+    }
+
+In this case, we can learn from the output:
+
+* The only inconsistent object is named ``foo``, and it is its head that has
+  inconsistencies.
+* The inconsistencies fall into two categories:
+
+  * ``errors``: these errors indicate inconsistencies between shards without a
+    determination of which shard(s) are bad. Check for the ``errors`` in the
+    `shards` array, if available, to pinpoint the problem.
+
+    * ``data_digest_mismatch``: the digest of the replica read from OSD.2 is
+      different from the ones of OSD.0 and OSD.1
+    * ``size_mismatch``: the size of the replica read from OSD.2 is 0, while
+      the size reported by OSD.0 and OSD.1 is 968.
+  * ``union_shard_errors``: the union of all shard specific ``errors`` in
+    ``shards`` array. The ``errors`` are set for the given shard that has the
+    problem. They include errors like ``read_error``. The ``errors`` ending in
+    ``oi`` indicate a comparison with ``selected_object_info``. Look at the
+    ``shards`` array to determine which shard has which error(s).
+
+    * ``data_digest_mismatch_oi``: the digest stored in the object-info is not
+      ``0xffffffff``, which is calculated from the shard read from OSD.2
+    * ``size_mismatch_oi``: the size stored in the object-info is different
+      from the one read from OSD.2. The latter is 0.
 
 You can repair the inconsistent placement group by executing:: 
 
 	ceph pg repair {placement-group-ID}
+
+Which overwrites the `bad` copies with the `authoritative` ones. In most cases,
+Ceph is able to choose authoritative copies from all available replicas using
+some predefined criteria. But this does not always work. For example, the stored
+data digest could be missing, and the calculated digest will be ignored when
+choosing the authoritative copies. So, please use the above command with caution.
+
+If ``read_error`` is listed in the ``errors`` attribute of a shard, the
+inconsistency is likely due to disk errors. You might want to check your disk
+used by that OSD.
 
 If you receive ``active + clean + inconsistent`` states periodically due to 
 clock skew, you may consider configuring your `NTP`_ daemons on your 
