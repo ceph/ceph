@@ -2666,7 +2666,8 @@ int main(int argc, char **argv)
     } else {
     json_spirit::Value v;
     try {
-      if (!json_spirit::read(object, v)) {
+      if (!json_spirit::read(object, v) ||
+          (v.type() != json_spirit::array_type && v.type() != json_spirit::obj_type)) {
         // Special: Need head/snapdir so set even if user didn't specify
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;
