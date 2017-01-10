@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 /*
- * Copyright (C) 2016 Red Hat Inc.
+ * Copyright (C) 2017 Red Hat Inc.
  */
 
 
@@ -148,7 +148,7 @@ namespace crimson {
 	    1 + delta_counter - it->second.delta_prev_req - it->second.my_delta;
 	  Counter rho =
 	    1 + rho_counter - it->second.rho_prev_req - it->second.my_rho;
-	  
+
 	  it->second.req_update(delta_counter, rho_counter);
 
 	  return ReqParams(uint32_t(delta), uint32_t(rho));

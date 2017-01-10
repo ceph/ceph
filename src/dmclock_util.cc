@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 /*
- * Copyright (C) 2016 Red Hat Inc.
+ * Copyright (C) 2017 Red Hat Inc.
  */
 
 

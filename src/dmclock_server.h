@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 /*
- * Copyright (C) 2016 Red Hat Inc.
+ * Copyright (C) 2017 Red Hat Inc.
  */
 
 
@@ -405,7 +405,7 @@ namespace crimson {
 	  out << "{ ClientRec::" <<
 	    " client:" << e.client <<
 	    " prev_tag:" << e.prev_tag <<
-	    " req_count:" << e.requests.size() << 
+	    " req_count:" << e.requests.size() <<
 	    " top_req:";
 	  if (e.has_request()) {
 	    out << e.next_request();
