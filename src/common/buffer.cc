@@ -40,6 +40,7 @@
 #include <poll.h>
 
 #include <ostream>
+#include <sys/ioctl.h>
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
@@ -491,6 +492,7 @@ private:
     return TEMP_FAILURE_RETRY(::close(fd));
   }
 
+  static const size_t min_useful_splice_buffer = 1 << 16;
 public:
   MEMPOOL_CLASS_HELPERS();
   explicit raw_splice_kcrypt(unsigned len) : raw(len),
@@ -517,6 +519,15 @@ public:
       lclose(elem.fd);
     }
   }
+
+  buffer::raw* create_zero_copy(size_t capacity) {
+    if (capacity >= raw_splice_kcrypt::min_useful_splice_buffer) {
+      return new raw_splice_kcrypt(capacity);
+    } else {
+      return create_page_aligned(capacity);
+    }
+  }
+
 /*
  * TODO - make crc32c calculation using kcrypto crc32c-intel algorithm, if possible
  */
@@ -565,6 +576,7 @@ public:
       return -1;
     ssize_t r;
     r = splice(fd, nullptr, devnull, nullptr, len, SPLICE_F_MOVE);
+    assert(r == (ssize_t)len);
     ::close(devnull);
     return r;
   }
@@ -654,11 +666,19 @@ public:
       ssize_t moved_cnt;
       moved_cnt = splice(fds[read_end], nullptr,
                   fd, dst_offset == -1 ? nullptr : &off_out,
-                  tomove_size, SPLICE_F_NONBLOCK | SPLICE_F_MORE | SPLICE_F_MOVE);
-      if (moved_cnt < 0) {
+                  tomove_size, SPLICE_F_NONBLOCK | SPLICE_F_MOVE);
+      if (moved_cnt == -1) {
         lclose(fds[read_end]);
-        get_data();
-        return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+        if (total_moved >0) {
+          break;
+        } else {
+          if (errno == EAGAIN) {
+            return -EAGAIN;
+          } else {
+            get_data();
+            return buffer::raw::copy_to_fd(fd, ofs_from, req_size, dst_offset);
+          }
+        }
       }
       if (dst_offset != -1)
         dst_offset += moved_cnt;
@@ -707,48 +727,130 @@ public:
           return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
         }
       }
-      size_t to_move = count;
+      int to_move = count;
       ssize_t r;
-      if (src_offset == -1 )
-        r = splice(fd, nullptr, pipe_curr_write_fd, nullptr, to_move, SPLICE_F_NONBLOCK);
-      else
-      {
-        loff_t offset = src_offset;
-        r = splice(fd, &offset, pipe_curr_write_fd, nullptr, to_move, SPLICE_F_NONBLOCK);
-      }
-      if (r > 0) {
-        pipe_read_elements.back().size += r;
-        total_moved += r;
-        dst_pos += r;
-        actual_content_size += r;
-        if (src_offset != -1)
-          src_offset += r;
-        count -= r;
-      } else if (r == 0) {
-        //something got closed...
-        break;
+      int data_avail;
+      if (src_offset == -1) {
+        if (ioctl(fd, FIONREAD, &data_avail) < 0)
+          return -EBADF;
       } else {
-        //on linux, if you try to splice to pipe, you can get EAGAIN
-        //if you started from offset that was unaligned, last page cannot be filled
-        if (is_pipe_full(pipe_curr_write_fd)) {
-          //it is just pipe blocked
-          lclose(pipe_curr_write_fd);
-          pipe_curr_write_fd = -1;
+        struct stat f_status;
+        if (fstat(fd, &f_status) < 0)
+          return -EBADF;
+        data_avail = f_status.st_size - src_offset;
+      }
+
+      if (data_avail == 0) {
+        //no data, check if we work in nonblocking mode
+        if (fcntl(fd, F_GETFL, 0) & O_NONBLOCK) {
+          return -EAGAIN;
         } else {
-          int e = -errno;
-          if (e == -EAGAIN) {
-            if (total_moved == 0)
-              return e;
-            else
-              break;
+          //wait for data
+          struct pollfd fds;
+          fds.fd = fd;
+          fds.events = POLLIN;
+          fds.revents = 0;
+          poll(&fds, 1, -1);
+          //when no fds.revents are set, means we are blocked
+          if (src_offset == -1) {
+            if (ioctl(fd, FIONREAD, &data_avail) < 0)
+              return -EBADF;
           } else {
+            struct stat f_status;
+            if (fstat(fd, &f_status) < 0)
+              return -EBADF;
+            data_avail = f_status.st_size - src_offset;
+          }
+        }
+      }
+
+      if (((unsigned)data_avail >= (CEPH_PAGE_SIZE * 2)) && (to_move >= 4096)) {
+        if (to_move > data_avail)
+          to_move = data_avail;
+        to_move = to_move & ~(CEPH_PAGE_SIZE - 1);
+
+        if (src_offset == -1)
+          r = splice(fd, nullptr, pipe_curr_write_fd, nullptr, to_move, SPLICE_F_NONBLOCK);
+        else
+        {
+          loff_t offset = src_offset;
+          r = splice(fd, &offset, pipe_curr_write_fd, nullptr, to_move, SPLICE_F_NONBLOCK);
+        }
+        if (r > 0) {
+          pipe_read_elements.back().size += r;
+          total_moved += r;
+          dst_pos += r;
+          actual_content_size += r;
+          if (src_offset != -1)
+            src_offset += r;
+          count -= r;
+        } else if (r == 0) {
+          //something got closed...
+          break;
+        } else {
+          //on linux, if you try to splice to pipe, you can get EAGAIN
+          //if you started from offset that was unaligned, last page cannot be filled
+          if (is_pipe_full(pipe_curr_write_fd)) {
+            //it is just pipe blocked
             lclose(pipe_curr_write_fd);
             pipe_curr_write_fd = -1;
-            get_data();
-	    if (total_moved!=0)
-	      return total_moved;
-            return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
+          } else {
+            int e = -errno;
+            if (e == -EAGAIN) {
+              if (total_moved == 0)
+                return e;
+              else
+                break;
+            } else {
+              lclose(pipe_curr_write_fd);
+              pipe_curr_write_fd = -1;
+              get_data();
+              if (total_moved!=0)
+                return total_moved;
+              return buffer::raw::insert_from_fd(dst_pos, count, fd, src_offset);
+            }
           }
+        }
+      } else {
+        if (total_moved>0)
+          return total_moved;
+
+        //nothing moved; have to resort to read/write
+        char buffer[CEPH_PAGE_SIZE*2];
+        ssize_t r, w;
+        if (data_avail < to_move)
+          to_move = data_avail;
+        //to_move is always <= 2*CEPH_PAGE_SIZE
+        if (src_offset == -1) {
+          r = read(fd, &buffer, to_move);
+        } else {
+          r = pread(fd, &buffer, to_move, src_offset);
+        }
+        if (r > 0) {
+          total_moved += r;
+          dst_pos += r;
+          actual_content_size += r;
+          if (src_offset != -1)
+            src_offset += r;
+          count -= r;
+          w = write(pipe_curr_write_fd, &buffer, r);
+          if (w == r) {
+            pipe_read_elements.back().size += r;
+          } else {
+            if (w == -1) {
+              w = 0;
+            }
+            lclose(pipe_curr_write_fd);
+            append_pipe();
+            ssize_t wf = write(pipe_curr_write_fd, &buffer + w, r - w);
+            pipe_read_elements.back().size += wf;
+            //we expect that in NEW pipe there will be enough space for CEPH_PAGE_SIZE*2
+            assert(wf == r - w);
+          }
+        } else if (r==0) {
+          return 0;
+        } else {
+          return -errno;
         }
       }
     }
@@ -1022,7 +1124,6 @@ private:
    * \param capacity size of buffer
    */
   buffer::raw* buffer::create_zero_copy(size_t capacity) {
-    //return create_page_aligned(capacity);
 #ifdef CEPH_HAVE_SPLICE
     return new raw_splice_kcrypt(capacity);
 #else
@@ -1053,7 +1154,12 @@ private:
       r = buf->insert_from_fd(dst_ofs, count - dst_ofs, fd, offset);
       if (r>0) {
         dst_ofs += r;
+        if (offset !=-1) {
+          offset += r;
+        }
+        continue;
       }
+
       if (r==-EAGAIN) continue;
       if (r<=0)
         throw error_code(-EINVAL);

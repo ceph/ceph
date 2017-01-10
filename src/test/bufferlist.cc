@@ -42,6 +42,7 @@
 #include "semaphore.h"
 #include "netinet/tcp.h"
 #include "sys/ioctl.h"
+#include "poll.h"
 #include "thread"
 #include "atomic"
 
@@ -228,7 +229,6 @@ TEST(BufferRaw, ostream) {
   EXPECT_GT(stream.str().size(), stream.str().find("len 1 nref 1)"));
 }
 
-
 #ifdef CEPH_HAVE_SPLICE
 class TestRawPipe : public ::testing::Test {
 protected:
@@ -287,10 +287,17 @@ ssize_t safe_copy_to_fd(const bufferptr& ptr, int fd, off_t ofs_from, ssize_t re
   ssize_t count = 0;
   while (req_size > 0) {
     r = ptr.copy_to_fd(fd, ofs_from + count, req_size, dst_offset);
-    if (r == -EAGAIN) continue;
+    if (r == -EAGAIN) {
+      //wait for data
+      struct pollfd fds;
+      fds.fd = fd;
+      fds.events = POLLOUT;
+      fds.revents = 0;
+      poll(&fds, 1, -1);
+      continue;
+    }
     if (r > 0) {
       count += r;
-      //ofs_from += r;
       req_size -= r;
       if (dst_offset != -1)
 	dst_offset += r;
@@ -304,7 +311,7 @@ ssize_t safe_copy_to_fd(const bufferptr& ptr, int fd, off_t ofs_from, ssize_t re
   return count;
 }
 
-//        buffer::raw* zero_copy = buffer::create_zero_copy(size/10);
+
 ssize_t safe_insert_from_fd(buffer::raw* buffer_raw, size_t position, size_t req_size, int fd, off_t src_offset = -1) {
   ssize_t r;
   ssize_t count = 0;
@@ -326,9 +333,6 @@ ssize_t safe_insert_from_fd(buffer::raw* buffer_raw, size_t position, size_t req
   }
   return count;  
 }
-
-//  ssize_t buffer::insert_from_fd(buffer::raw* _raw, size_t position, size_t count, int fd, off_t src_offset) {
-
 
 
 TEST_F(TestRawPipe, create_zero_copy) {
@@ -666,7 +670,6 @@ TEST_F(TestRawPipe, no_files_left_on_extraction) {
 }
 
 
-
 class TestRawPipePerformance : public ::testing::Test {
 protected:
   virtual void SetUp() {
@@ -764,7 +767,8 @@ TEST_F(TestRawPipePerformance, drain_input) {
   EXPECT_TRUE(tcp_pipe(source_fd, sink_fd));
   int enable = 1;
   setsockopt(sink_fd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(int));
-  for (size_t size = 10; size < 2000000 ; size = size * 25/16 + 1 )
+  setsockopt(source_fd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(int));
+  for (size_t size = 10; size < 2000000 ; size = size * 25/16 + 1)
   {
     utime_t start = ceph_clock_now();
     utime_t end;
@@ -783,7 +787,6 @@ TEST_F(TestRawPipePerformance, drain_input) {
     bufferptr(buffer::create_zero_copy(size, source_fd));
     std::cout << "chunksize=" << size <<
         " perf=" << total_moved/(end-start)/1024/1024 << " MB/s" << std::endl;
-
   }
 };
 
@@ -821,44 +824,6 @@ TEST_F(TestRawPipePerformance, splice_Nagle_conflict) {
     std::cout << "chunksize=" << size <<
         " perf=" << total_moved/(end-start)/1024/1024 << " MB/s" << std::endl;
   }
-};
-
-/*
- * Tests performance if there is always a lot of input
- */
-TEST_F(TestRawPipePerformance, input_full) {
-  int sink_fd;
-  int source_fd;
-  EXPECT_TRUE(tcp_pipe(source_fd, sink_fd));
-  int enable = 1;
-  setsockopt(sink_fd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(int));
-  setsockopt(source_fd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(int));
-  char buffer[1024*1024];
-
-  EXPECT_EQ(fcntl(sink_fd, F_SETFL, fcntl(sink_fd, F_GETFL,0) | O_NONBLOCK), 0);
-  int a = write(sink_fd, buffer, 1024*1024);
-  usleep(100000);
-  int b = write(sink_fd, buffer, 1024*1024);
-  EXPECT_GE(a + b ,2000000);
-
-  for (size_t size = 10; size < 2000000 ; size = size * 25/16 + 1 )
-  {
-    utime_t start = ceph_clock_now();
-    utime_t end;
-    int64_t total_moved = 0;
-    do {
-      bufferptr ptr(buffer::create_zero_copy(size, source_fd));
-      EXPECT_EQ(size, ptr.length());
-      EXPECT_EQ((int)size, safe_copy_to_fd(ptr, sink_fd, 0, size));
-      total_moved += size;
-      end = ceph_clock_now();
-    } while (end-start < 0.5);
-    std::cout << "chunksize=" << size <<
-        " perf=" << total_moved/(end-start)/1024/1024 << " MB/s" << std::endl;
-
-  }
-  close(sink_fd);
-  close(source_fd);
 };
 
 /*
@@ -915,17 +880,10 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
   int source_fd[numcpu];
   int sink_fd[numcpu];
   for (int i=0; i<numcpu; i++) {
-    char buffer[1024*1024];
     EXPECT_TRUE(tcp_pipe(source_fd[i], sink_fd[i]));
     int enable = 1;
     setsockopt(sink_fd[i], IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(int));
-    setsockopt(source_fd[i], IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(int));
-
     EXPECT_EQ(fcntl(sink_fd[i], F_SETFL, fcntl(sink_fd[i], F_GETFL,0) | O_NONBLOCK), 0);
-    int a = write(sink_fd[i], buffer, 1024*1024);
-    usleep(100000);
-    int b = write(sink_fd[i], buffer, 1024*1024);
-    EXPECT_GE(a+b, 2000000);
   }
   for (int kind = 0; kind < 2; kind++)
   {
@@ -934,6 +892,7 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
       std::atomic<std::uint64_t> total_bytes(0);
       std::atomic<std::uint64_t> total_time(0);
       for (int i=0; i<numcpu; i++) {
+        EXPECT_EQ((int)size, safe_copy_to_fd(bufferptr(buffer::create(size)), sink_fd[i], 0, size));
         if (kind == 0)
           workers[i] = thread(test_splice, source_fd[i], sink_fd[i], size, &total_time, &total_bytes);
         else
@@ -942,6 +901,7 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
       usleep(500000);
       for (int i=0; i<numcpu; i++) {
         workers[i].join();
+        bufferptr(buffer::create_zero_copy(size, source_fd[i]));
       }
       std::cout << (kind == 0?"splice chunksize=":"read chunksize=") << size <<
           " perf=" << total_bytes.load()/((double)total_time.load()/1000000)/1024/1024*numcpu << " MB/s" << std::endl;
