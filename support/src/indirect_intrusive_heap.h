@@ -391,10 +391,13 @@ namespace crimson {
       std::vector<I> copy(data);
       std::sort(copy.begin(), copy.end(), compare);
 
+      bool first = true;
       for (auto c = copy.begin(); c != copy.end(); ++c) {
 	if (filter(**c)) {
-	  if (c != copy.begin()) {
+	  if (!first) {
 	    out << ", ";
+	  } else {
+	    first = false;
 	  }
 	  out << **c;
 	}
