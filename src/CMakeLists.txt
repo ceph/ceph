@@ -57,6 +57,9 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
       CMAKE_C_FLAGS_${build_type_upper})
     string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " " "${flags}" "${${flags}}")
   endforeach()
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O0 -g" )
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG} -O0 -g" )
 endif()
 
 include(CheckCCompilerFlag)
@@ -501,6 +504,9 @@ set(libcommon_files
   common/Graylog.cc
   common/fs_types.cc
   common/dns_resolve.cc
+  common/armor.c
+  common/safe_io.c
+  common/addr_parsing.c
   ${arch_files}
   ${auth_files}
   $<TARGET_OBJECTS:compressor_objs>
@@ -518,13 +524,15 @@ set(mon_common_files
   auth/cephx/CephxSessionHandler.cc
   erasure-code/ErasureCodePlugin.cc)
 add_library(mon_common_objs OBJECT ${mon_common_files})
-set(common_mountcephfs_files
-  common/armor.c
-  common/safe_io.c
-  common/module.c
-  common/addr_parsing.c)
-add_library(common_mountcephfs_objs OBJECT
-  ${common_mountcephfs_files})
+
+if(LINUX)
+  list(APPEND libcommon_files
+    common/module.c )
+  set(common_mountcephfs_files
+  common/module.c)
+  add_library(common_mountcephfs_objs OBJECT
+    ${common_mountcephfs_files})
+endif(LINUX)
 
 if(WITH_PROFILER)
   list(APPEND libcommon_files
@@ -540,8 +548,13 @@ if(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 
 add_library(common STATIC ${libcommon_files}
-  $<TARGET_OBJECTS:mon_common_objs>
-  $<TARGET_OBJECTS:common_mountcephfs_objs>)
+  $<TARGET_OBJECTS:mon_common_objs>)
+
+if(LINUX)
+  add_library(common STATIC ${libcommon_files}
+    $<TARGET_OBJECTS:common_mountcephfs_objs>)
+endif(LINUX)
+
 target_link_libraries(common json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
