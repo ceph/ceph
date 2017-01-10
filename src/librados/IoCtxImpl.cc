@@ -194,15 +194,11 @@ struct C_aio_selfmanaged_snap_op_Complete : public Context {
   virtual void finish(int r) {
     c->lock.Lock();
     c->rval = r;
-    c->ack = true;
-    c->safe = true;
+    c->complete = true;
     c->cond.Signal();
 
-    if (c->callback_complete) {
+    if (c->callback_complete || c->callback_safe) {
       client->finisher.queue(new librados::C_AioComplete(c));
-    }
-    if (c->callback_safe) {
-      client->finisher.queue(new librados::C_AioSafe(c));
     }
     c->put_unlock();
   }
