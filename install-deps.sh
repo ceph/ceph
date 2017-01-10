@@ -21,7 +21,7 @@ export LC_ALL=C # the following is vulnerable to i18n
 
 source /etc/os-release
 case $ID in
-debian|ubuntu|devuan)
+    debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
@@ -48,7 +48,7 @@ debian|ubuntu|devuan)
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-centos|fedora|rhel)
+    centos|fedora|rhel)
         echo "Using yum to install dependencies"
         $SUDO yum install -y redhat-lsb-core
         case $(lsb_release -si) in
@@ -81,7 +81,7 @@ centos|fedora|rhel)
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
-*)
+    *)
         echo "$ID is unknown, dependencies will have to be installed manually."
         ;;
 esac
