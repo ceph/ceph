@@ -403,9 +403,7 @@ def build_ceph_cluster(ctx, config):
 
             if mds_nodes:
                 log.info('Configuring CephFS...')
-                ceph_fs = Filesystem(ctx)
-                if not ceph_fs.legacy_configured():
-                    ceph_fs.create()
+                ceph_fs = Filesystem(ctx, create=True)
         elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
