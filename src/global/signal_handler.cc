@@ -113,7 +113,9 @@ static void handle_fatal_signal(int signum)
 
   // avoid recursion back into logging code if that is where
   // we got the SEGV.
-  if (!g_ceph_context->_log->is_inside_log_lock()) {
+  if (g_ceph_context &&
+      g_ceph_context->_log &&
+      !g_ceph_context->_log->is_inside_log_lock()) {
     // TODO: don't use an ostringstream here. It could call malloc(), which we
     // don't want inside a signal handler.
     // Also fix the backtrace code not to allocate memory.
