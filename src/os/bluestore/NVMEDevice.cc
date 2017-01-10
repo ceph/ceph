@@ -444,6 +444,7 @@ void SharedDriverData::_aio_thread()
             derr << __func__ << " failed to read" << dendl;
             --t->ctx->num_reading;
             t->return_code = r;
+            t->release_segs();
             std::unique_lock<std::mutex> l(t->ctx->lock);
             t->ctx->cond.notify_all();
           } else {
@@ -460,6 +461,7 @@ void SharedDriverData::_aio_thread()
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
             t->return_code = r;
+            t->release_segs();
             std::unique_lock<std::mutex> l(t->ctx->lock);
             t->ctx->cond.notify_all();
           } else {
