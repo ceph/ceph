@@ -54,8 +54,6 @@ int KernelDevice::_lock()
   memset(&l, 0, sizeof(l));
   l.l_type = F_WRLCK;
   l.l_whence = SEEK_SET;
-  l.l_start = 0;
-  l.l_len = 0;
   int r = ::fcntl(fd_direct, F_SETLK, &l);
   if (r < 0)
     return -errno;
