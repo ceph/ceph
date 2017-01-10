@@ -29,7 +29,6 @@ class KernelDevice : public BlockDevice {
   string path;
   FS *fs;
   bool aio, dio;
-  bufferptr zeros;
 
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
