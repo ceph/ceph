@@ -30,8 +30,10 @@ using util::create_context_callback;
 using util::create_rados_ack_callback;
 
 template <typename I>
-OpenRequest<I>::OpenRequest(I *image_ctx, Context *on_finish)
-  : m_image_ctx(image_ctx), m_on_finish(on_finish), m_error_result(0),
+OpenRequest<I>::OpenRequest(I *image_ctx, bool skip_open_parent,
+                            Context *on_finish)
+  : m_image_ctx(image_ctx), m_skip_open_parent_image(skip_open_parent),
+    m_on_finish(on_finish), m_error_result(0),
     m_last_metadata_key(ImageCtx::METADATA_CONF_PREFIX) {
 }
 
@@ -373,7 +375,7 @@ void OpenRequest<I>::send_refresh() {
 
   using klass = OpenRequest<I>;
   RefreshRequest<I> *ctx = RefreshRequest<I>::create(
-    *m_image_ctx, false,
+    *m_image_ctx, false, m_skip_open_parent_image,
     create_context_callback<klass, &klass::handle_refresh>(this));
   ctx->send();
 }

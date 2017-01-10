@@ -192,7 +192,7 @@ public:
   {
     librbd::ImageCtx *ictx = new librbd::ImageCtx(image_name.c_str(),
 						  "", "", ioctx, readonly);
-    EXPECT_EQ(0, ictx->state->open());
+    EXPECT_EQ(0, ictx->state->open(false));
     *ictxp = ictx;
   }
 

@@ -28,8 +28,9 @@ using util::create_context_callback;
 
 template <typename I>
 RefreshRequest<I>::RefreshRequest(I &image_ctx, bool acquiring_lock,
-                                  Context *on_finish)
+                                  bool skip_open_parent, Context *on_finish)
   : m_image_ctx(image_ctx), m_acquiring_lock(acquiring_lock),
+    m_skip_open_parent_image(skip_open_parent),
     m_on_finish(create_async_context_callback(m_image_ctx, on_finish)),
     m_error_result(0), m_flush_aio(false), m_exclusive_lock(nullptr),
     m_object_map(nullptr), m_journal(nullptr), m_refresh_parent(nullptr) {
@@ -397,8 +398,8 @@ void RefreshRequest<I>::send_v2_refresh_parent() {
 
     parent_info parent_md;
     int r = get_parent_info(m_image_ctx.snap_id, &parent_md);
-    if (r < 0 ||
-        RefreshParentRequest<I>::is_refresh_required(m_image_ctx, parent_md)) {
+    if (!m_skip_open_parent_image && (r < 0 ||
+        RefreshParentRequest<I>::is_refresh_required(m_image_ctx, parent_md))) {
       CephContext *cct = m_image_ctx.cct;
       ldout(cct, 10) << this << " " << __func__ << dendl;
 

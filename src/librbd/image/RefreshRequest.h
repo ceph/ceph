@@ -27,11 +27,13 @@ template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
   static RefreshRequest *create(ImageCtxT &image_ctx, bool acquiring_lock,
-                                Context *on_finish) {
-    return new RefreshRequest(image_ctx, acquiring_lock, on_finish);
+                                bool skip_open_parent, Context *on_finish) {
+    return new RefreshRequest(image_ctx, acquiring_lock, skip_open_parent,
+                              on_finish);
   }
 
-  RefreshRequest(ImageCtxT &image_ctx, bool acquiring_lock, Context *on_finish);
+  RefreshRequest(ImageCtxT &image_ctx, bool acquiring_lock,
+                 bool skip_open_parent, Context *on_finish);
   ~RefreshRequest();
 
   void send();
@@ -98,6 +100,7 @@ private:
 
   ImageCtxT &m_image_ctx;
   bool m_acquiring_lock;
+  bool m_skip_open_parent_image;
   Context *m_on_finish;
 
   int m_error_result;

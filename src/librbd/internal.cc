@@ -1422,7 +1422,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
-    int r = p_imctx->state->open();
+    int r = p_imctx->state->open(false);
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(-r) << dendl;
@@ -1558,7 +1558,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     }
 
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
-    r = c_imctx->state->open();
+    r = c_imctx->state->open(false);
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
       delete c_imctx;
@@ -1631,7 +1631,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 		   << dstname << dendl;
 
     ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
-    int r = ictx->state->open();
+    int r = ictx->state->open(false);
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
@@ -1971,7 +1971,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       if (enable_mirroring) {
         ImageCtx *img_ctx = new ImageCtx("", ictx->id, nullptr,
             ictx->md_ctx, false);
-        r = img_ctx->state->open();
+        r = img_ctx->state->open(false);
         if (r < 0) {
           lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
           delete img_ctx;
@@ -2268,7 +2268,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     bool unknown_format = true;
     ImageCtx *ictx = new ImageCtx(
       (id.empty() ? name : std::string()), id, nullptr, io_ctx, false);
-    int r = ictx->state->open();
+    int r = ictx->state->open(true);
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
       delete ictx;
@@ -2538,7 +2538,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
 					  dest_md_ctx, false);
-    r = dest->state->open();
+    r = dest->state->open(false);
     if (r < 0) {
       delete dest;
       lderr(cct) << "failed to read newly created header" << dendl;
@@ -3603,7 +3603,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
           ImageCtx *img_ctx = new ImageCtx("", img_pair.second, nullptr,
                                            io_ctx, false);
-          r = img_ctx->state->open();
+          r = img_ctx->state->open(false);
           if (r < 0) {
             lderr(cct) << "error opening image "<< img_pair.first << ": "
                        << cpp_strerror(r) << dendl;
@@ -3650,7 +3650,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           }
         } else {
           ImageCtx *img_ctx = new ImageCtx("", img_id, nullptr, io_ctx, false);
-          r = img_ctx->state->open();
+          r = img_ctx->state->open(false);
           if (r < 0) {
             lderr(cct) << "error opening image id "<< img_id << ": "
                        << cpp_strerror(r) << dendl;

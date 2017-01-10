@@ -79,7 +79,7 @@ int TestFixture::open_image(librados::IoCtx &io_ctx,
   *image_ctx = new librbd::ImageCtx(image_name.c_str(), "", NULL, io_ctx,
                                     false);
   m_image_ctxs.insert(*image_ctx);
-  return (*image_ctx)->state->open();
+  return (*image_ctx)->state->open(false);
 }
 
 int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
