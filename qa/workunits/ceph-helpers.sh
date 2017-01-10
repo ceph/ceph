@@ -1133,15 +1133,14 @@ function wait_for_clean() {
     local cur_active_clean
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
     local -i loop=0
-    local num_pgs=$(get_num_pgs)
-    test $num_pgs != 0 || return 1
+    test $(get_num_pgs) != 0 || return 1
 
     while true ; do
         # Comparing get_num_active_clean & get_num_pgs is used to determine
         # if the cluster is clean. That's almost an inline of is_clean() to
         # get more performance by avoiding multiple calls of get_num_active_clean.
         cur_active_clean=$(get_num_active_clean)
-        test $cur_active_clean = $num_pgs && break
+        test $cur_active_clean = $(get_num_pgs) && break
         if test $cur_active_clean != $num_active_clean ; then
             loop=0
             num_active_clean=$cur_active_clean
