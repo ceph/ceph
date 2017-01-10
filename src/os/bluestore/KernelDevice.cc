@@ -68,7 +68,7 @@ int KernelDevice::open(string p)
 
   fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
   if (fd_direct < 0) {
-    int r = -errno;
+    r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     return r;
   }
