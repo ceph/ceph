@@ -1190,6 +1190,7 @@ public:
     bool used_replica;
     bool paused;
 
+    epoch_t last_force_resend = 0;
     int osd;      ///< the final target osd, or -1
 
     op_target_t(object_t oid, object_locator_t oloc, int flags)
@@ -1261,8 +1262,6 @@ public:
 
     int *data_offset;
 
-    epoch_t last_force_resend;
-
     osd_reqid_t reqid; // explicitly setting reqid
 
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
@@ -1286,8 +1285,7 @@ public:
       budgeted(false),
       should_resend(true),
       ctx_budgeted(false),
-      data_offset(offset),
-      last_force_resend(0) {
+      data_offset(offset) {
       ops.swap(op);
 
       /* initialize out_* to match op vector */
@@ -1640,8 +1638,6 @@ public:
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
 
-    epoch_t last_force_resend;
-
     void _queued_async() {
       // watch_lock ust be locked unique
       watch_pending_async.push_back(ceph::mono_clock::now());
@@ -1667,8 +1663,7 @@ public:
 		 session(NULL),
 		 register_tid(0),
 		 ping_tid(0),
-		 map_dne_bound(0),
-		 last_force_resend(0) {}
+		 map_dne_bound(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -1834,7 +1829,7 @@ public:
   bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, epoch_t *last_force_resend = 0,
+  int _calc_target(op_target_t *t,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   shunique_lock& lc);
