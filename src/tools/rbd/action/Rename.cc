@@ -79,6 +79,6 @@ Shell::Action action(
   {"rename"}, {"mv"}, "Rename image within pool.", "", &get_arguments,
   &execute);
 
-} // namespace list
+} // namespace rename
 } // namespace action
 } // namespace rbd
