@@ -1,4 +1,4 @@
-#!/usr/bin/nosetests --nocapture
+#!/usr/bin/env nosetests 
 # -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
