@@ -46,8 +46,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
     aio_thread(this),
     injecting_crash(0)
 {
-  zeros = buffer::create_page_aligned(1048576);
-  zeros.zero();
 }
 
 int KernelDevice::_lock()
