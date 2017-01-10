@@ -91,6 +91,12 @@ namespace dpdk {
         args.push_back(string2vector("--no-huge"));
       }
 
+      std::string rte_file_prefix;
+      rte_file_prefix = "rte_";
+      rte_file_prefix += c->_conf->name.to_str();
+      args.push_back(string2vector("--file-prefix"));
+      args.push_back(string2vector(rte_file_prefix));
+
       std::vector<char*> cargs;
 
       for (auto&& a: args) {
