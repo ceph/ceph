@@ -20,6 +20,7 @@
 #include "librbd/journal/OpenRequest.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/journal/PromoteRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>
@@ -181,6 +182,21 @@ public:
 };
 
 OpenRequest<MockJournalImageCtx> *OpenRequest<MockJournalImageCtx>::s_instance = nullptr;
+
+
+template <>
+class PromoteRequest<MockJournalImageCtx> {
+public:
+  static PromoteRequest s_instance;
+  static PromoteRequest *create(MockJournalImageCtx *image_ctx, bool force,
+                                Context *on_finish) {
+    return &s_instance;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+PromoteRequest<MockJournalImageCtx> PromoteRequest<MockJournalImageCtx>::s_instance;
 
 } // namespace journal
 } // namespace librbd
