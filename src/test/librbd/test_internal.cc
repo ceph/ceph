@@ -82,7 +82,7 @@ TEST_F(TestInternal, OpenByID) {
    close_image(ictx);
 
    ictx = new librbd::ImageCtx("", id, nullptr, m_ioctx, true);
-   ASSERT_EQ(0, ictx->state->open());
+   ASSERT_EQ(0, ictx->state->open(false));
    ASSERT_EQ(ictx->name, m_image_name);
    close_image(ictx);
 }
