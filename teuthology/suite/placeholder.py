@@ -79,9 +79,6 @@ dict_templ = {
                     'log file': '/var/log/ceph/ceph-$name.$pid.log'
                 },
                 'mon': {
-                    'debug mon': 1,
-                    'debug ms': 20,
-                    'debug paxos': 20,
                     'osd default pool size': 2
                 }
             }
