@@ -201,7 +201,7 @@ function test_mon_injectargs()
                  ceph tell osd.0 injectargs -- '--osd_op_history_duration'
 
   ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
-  check_response "mon_lease = '6' (unchangeable)"
+  check_response "mon_lease = '6' (not observed, change may require restart)"
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
   expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1
