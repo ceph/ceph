@@ -775,14 +775,6 @@ public:
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
-
-    bool do_write_check_depth(
-      uint64_t onode_size,
-      uint64_t start_offset,
-      uint64_t end_offset,
-      uint8_t  *blob_depth,
-      uint64_t *gc_start_offset,
-      uint64_t *gc_end_offset);
   };
 
   struct OnodeSpace;
