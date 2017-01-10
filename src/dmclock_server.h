@@ -405,6 +405,7 @@ namespace crimson {
 	  out << "{ ClientRec::" <<
 	    " client:" << e.client <<
 	    " prev_tag:" << e.prev_tag <<
+	    " req_count:" << e.requests.size() << 
 	    " top_req:";
 	  if (e.has_request()) {
 	    out << e.next_request();
@@ -537,22 +538,22 @@ namespace crimson {
 				      const PriorityQueueBase& q) {
 	std::lock_guard<decltype(q.data_mtx)> guard(q.data_mtx);
 
-	out << "{ PriorityQueue:: " << std::endl;
+	out << "{ PriorityQueue::";
 	for (const auto& c : q.client_map) {
 	  out << "  { client:" << c.first << ", record:" << *c.second <<
 	    " }";
 	}
 	if (!q.resv_heap.empty()) {
 	  const auto& resv = q.resv_heap.top();
-	  out << std::endl << "  { reservation_top:" << resv << " }" << std::endl;
+	  out << " { reservation_top:" << resv << " }";
 	  const auto& ready = q.ready_heap.top();
-	  out << "  { ready_top:" << ready << " }" << std::endl;
+	  out << " { ready_top:" << ready << " }";
 	  const auto& limit = q.limit_heap.top();
-	  out << "  { limit_top:" << limit << " }" << std::endl;
+	  out << " { limit_top:" << limit << " }";
 	} else {
 	  out << " HEAPS-EMPTY";
 	}
-	out << " }" << std::endl;
+	out << " }";
 
 	return out;
       }
@@ -566,17 +567,17 @@ namespace crimson {
 	auto filter = [](const ClientRec& e)->bool { return true; };
 	DataGuard g(data_mtx);
 	if (show_res) {
-	  resv_heap.display_sorted(out << "RESER:", filter) << std::endl;
+	  resv_heap.display_sorted(out << "RESER:", filter);
 	}
 	if (show_lim) {
-	  limit_heap.display_sorted(out << "LIMIT:", filter) << std::endl;
+	  limit_heap.display_sorted(out << "LIMIT:", filter);
 	}
 	if (show_ready) {
-	  ready_heap.display_sorted(out << "READY:", filter) << std::endl;
+	  ready_heap.display_sorted(out << "READY:", filter);
 	}
 #if USE_PROP_HEAP
 	if (show_prop) {
-	  prop_heap.display_sorted(out << "PROPO:", filter) << std::endl;
+	  prop_heap.display_sorted(out << "PROPO:", filter);
 	}
 #endif
       } // display_queues
