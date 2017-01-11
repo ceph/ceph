@@ -57,6 +57,7 @@ private:
   std::list<struct plain_stack_entry> stack;
   size_t min_stack_level;
   bool use_kv;
+  bool wrote_something;
 };
 
 
