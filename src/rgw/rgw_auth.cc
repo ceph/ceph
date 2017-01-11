@@ -82,7 +82,7 @@ transform_old_authinfo(const req_state* const s)
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
-  const RGWIdentityApplier::aclspec_t& aclspec)
+  const rgw::auth::Identity::aclspec_t& aclspec)
 {
   dout(5) << "Searching permissions for uid=" << uid <<  dendl;
 
