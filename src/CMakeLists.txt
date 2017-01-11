@@ -566,6 +566,9 @@ target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
 if(NOT WITH_SYSTEM_BOOST)
   target_link_libraries(ceph-common ${ZLIB_LIBRARIES})
 endif()
+# appease dpkg-shlibdeps
+set_target_properties(ceph-common PROPERTIES
+  SOVERSION 0)
 install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 if(WITH_EMBEDDED)
   add_library(cephd_common STATIC
