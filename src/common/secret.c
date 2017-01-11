@@ -18,7 +18,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#if defined(__linux__)
 #include <keyutils.h>
+#endif
 #include <sys/types.h>
 
 #include "common/armor.h"
@@ -50,6 +52,7 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
   return 0;
 }
 
+#if defined(__linux__)
 int set_kernel_secret(const char *secret, const char *key_name)
 {
   /* try to submit key to kernel via the keys api */
@@ -85,6 +88,17 @@ int is_kernel_secret(const char *key_name)
   serial = request_key("ceph", key_name, NULL, KEY_SPEC_USER_KEYRING);
   return serial != -1;
 }
+#else
+int set_kernel_secret(const char *secret, const char *key_name)
+{
+  return -ENOSYS;
+}
+
+int is_kernel_secret(const char *key_name)
+{
+  return -ENOSYS;
+}
+#endif
 
 int get_secret_option(const char *secret, const char *key_name,
 		      char *secret_option, size_t max_len)
