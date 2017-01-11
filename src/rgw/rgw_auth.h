@@ -66,9 +66,13 @@ public:
   virtual void to_str(std::ostream& out) const = 0;
 };
 
+inline std::ostream& operator<<(std::ostream& out,
+                                const rgw::auth::Identity& id) {
+  id.to_str(out);
+  return out;
+}
 
 std::unique_ptr<Identity> transform_old_authinfo(const req_state* const s);
-
 
 /* Interface for classes applying changes to request state/RADOS store
  * imposed by a particular rgw::auth::Engine.
