@@ -325,7 +325,7 @@ class RGWHTTPArgs
   void get_bool(const char *name, bool *val, bool def_val);
 
   /** Get the value for specific system argument parameter */
-  string sys_get(const string& name, bool *exists = nullptr);
+  std::string sys_get(const string& name, bool *exists = nullptr) const;
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) const {

@@ -753,7 +753,7 @@ rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
     rgw_get_anon_user(user_info);
 
     // FIXME: over 80 columns
-    auto apl = apl_factory->create_apl_local(cct, user_info,
+    auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                              rgw::auth::LocalApplier::NO_SUBUSER);
     return std::make_pair(std::move(apl), nullptr);
   }

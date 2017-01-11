@@ -31,6 +31,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
   LDAPEngine ldap_engine;
 
   aplptr_t create_apl_remote(CephContext* const cct,
+                             const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo info
                             ) const override {
