@@ -137,7 +137,7 @@ public:
     }
   };
 
-  using aclspec_t = RGWIdentityApplier::aclspec_t;
+  using aclspec_t = rgw::auth::Identity::aclspec_t;
   typedef std::function<uint32_t(const aclspec_t&)> acl_strategy_t;
 
 protected:
@@ -605,7 +605,7 @@ public:
     }
   };
 
-  using aclspec_t = RGWIdentityApplier::aclspec_t;
+  using aclspec_t = rgw::auth::Identity::aclspec_t;
   typedef std::function<uint32_t(const aclspec_t&)> acl_strategy_t;
 
 protected:
@@ -660,7 +660,7 @@ public:
  * the authentication process, they must have it loaded. Leveraging this is
  * a way to avoid unnecessary calls to underlying RADOS store. */
 class LocalApplier : public IdentityApplier {
-  using aclspec_t = RGWIdentityApplier::aclspec_t;
+  using aclspec_t = rgw::auth::Identity::aclspec_t;
 
 protected:
   const RGWUserInfo user_info;
@@ -725,5 +725,10 @@ protected:
 
 } /* namespace auth */
 } /* namespace rgw */
+
+
+uint32_t rgw_perms_from_aclspec_default_strategy(
+  const rgw_user& uid,
+  const rgw::auth::Identity::aclspec_t& aclspec);
 
 #endif /* CEPH_RGW_AUTH_H */
