@@ -340,10 +340,10 @@ struct quota_info_t
   static void generate_test_instances(list<quota_info_t *>& ls);
 
   bool is_valid() const {
-    return max_bytes >=0 && max_files >=0;
+    return max_bytes >= 0 && max_files >= 0;
   }
   bool is_enable() const {
-    return max_bytes || max_files;
+    return max_bytes > 0 || max_files > 0 ;
   }
 };
 WRITE_CLASS_ENCODER(quota_info_t)
