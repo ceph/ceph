@@ -79,7 +79,7 @@ public:
     C_SaferCond ctx;
     {
       RWLock::RLocker owner_locker((*image_ctx)->owner_lock);
-      (*image_ctx)->exclusive_lock->try_lock(&ctx);
+      (*image_ctx)->exclusive_lock->try_acquire_lock(&ctx);
     }
     ASSERT_EQ(0, ctx.wait());
     ASSERT_TRUE((*image_ctx)->exclusive_lock->is_lock_owner());

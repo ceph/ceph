@@ -33,6 +33,9 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
+#include "librbd/managed_lock/BreakRequest.h"
+#include "librbd/managed_lock/GetLockerRequest.h"
+#include "librbd/managed_lock/Types.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/MirroringWatcher.h"
@@ -41,10 +44,7 @@
 #include "librbd/parent_types.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
-#include "librbd/exclusive_lock/BreakRequest.h"
-#include "librbd/exclusive_lock/GetLockerRequest.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
-#include "librbd/exclusive_lock/Types.h"
 #include "librbd/operation/TrimRequest.h"
 
 #include "journal/Journaler.h"
@@ -1484,7 +1484,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 	return 0;
       }
 
-      ictx->exclusive_lock->request_lock(&lock_ctx);
+      ictx->exclusive_lock->acquire_lock(&lock_ctx);
     }
 
     int r = lock_ctx.wait();
@@ -1538,9 +1538,9 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
-    exclusive_lock::Locker locker;
+    managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    auto get_owner_req = exclusive_lock::GetLockerRequest<>::create(
+    auto get_owner_req = managed_lock::GetLockerRequest<>::create(
       *ictx, &locker, &get_owner_ctx);
     get_owner_req->send();
 
@@ -1571,9 +1571,9 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       return -EOPNOTSUPP;
     }
 
-    exclusive_lock::Locker locker;
+    managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    auto get_owner_req = exclusive_lock::GetLockerRequest<>::create(
+    auto get_owner_req = managed_lock::GetLockerRequest<>::create(
       *ictx, &locker, &get_owner_ctx);
     get_owner_req->send();
 
@@ -1591,7 +1591,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     }
 
     C_SaferCond break_ctx;
-    auto break_req = exclusive_lock::BreakRequest<>::create(
+    auto break_req = managed_lock::BreakRequest<>::create(
       *ictx, locker, ictx->blacklist_on_break_lock, true, &break_ctx);
     break_req->send();
 
@@ -2710,7 +2710,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     };
 
     C_SaferCond lock_ctx;
-    ictx->exclusive_lock->request_lock(&lock_ctx);
+    ictx->exclusive_lock->acquire_lock(&lock_ctx);
 
     // don't block holding lock since refresh might be required
     ictx->owner_lock.put_read();
