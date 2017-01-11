@@ -203,7 +203,6 @@ PromoteRequest<MockJournalImageCtx> PromoteRequest<MockJournalImageCtx>::s_insta
 
 // template definitions
 #include "librbd/Journal.cc"
-template class librbd::Journal<librbd::MockJournalImageCtx>;
 
 using ::testing::_;
 using ::testing::DoAll;
