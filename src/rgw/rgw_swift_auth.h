@@ -28,7 +28,8 @@ public:
 
   struct Factory {
     virtual ~Factory() {}
-    virtual aplptr_t create_apl_turl(CephContext * const cct,
+    virtual aplptr_t create_apl_turl(CephContext* cct,
+                                     const req_state* s,
                                      const RGWUserInfo& user_info) const = 0;
   };
 };
@@ -77,7 +78,8 @@ class SignedTokenEngine : public rgw::auth::Engine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   bool is_applicable(const std::string& token) const noexcept;
-  result_t authenticate(const std::string& token) const;
+  result_t authenticate(const std::string& token,
+                        const req_state* s) const;
 
 public:
   SignedTokenEngine(CephContext* const cct,
@@ -95,7 +97,7 @@ public:
   }
 
   result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s));
+    return authenticate(extractor->get_token(s), s);
   }
 };
 
@@ -110,7 +112,8 @@ class ExternalTokenEngine : public rgw::auth::Engine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   bool is_applicable(const std::string& token) const noexcept;
-  result_t authenticate(const std::string& token) const;
+  result_t authenticate(const std::string& token,
+                        const req_state* s) const;
 
 public:
   ExternalTokenEngine(CephContext* const cct,
@@ -128,7 +131,7 @@ public:
   }
 
   result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s));
+    return authenticate(extractor->get_token(s), s);
   }
 };
 
@@ -159,6 +162,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
   }
 
   aplptr_t create_apl_remote(CephContext* const cct,
+                             const req_state* const s,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo info) const override {
     return aplptr_t(
@@ -166,12 +170,14 @@ class DefaultStrategy : public rgw::auth::Strategy,
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
+                            const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser) const override {
     return aplptr_t(new rgw::auth::LocalApplier(cct, user_info, subuser));
   }
 
   aplptr_t create_apl_turl(CephContext* const cct,
+                           const req_state* const s,
                            const RGWUserInfo& user_info) const override {
     /* TempURL doesn't need any user account override. It's a Swift-specific
      * mechanism that requires  account name internally, so there is no

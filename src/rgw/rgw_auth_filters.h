@@ -6,6 +6,7 @@
 
 #include <type_traits>
 
+#include <boost/logic/tribool.hpp>
 #include <boost/optional.hpp>
 
 #include "rgw_common.h"
@@ -173,6 +174,85 @@ ThirdPartyAccountApplier<T> add_3rdparty(RGWRados* const store,
                                          T&& t) {
   return ThirdPartyAccountApplier<T>(store, acct_user_override,
                                      std::forward<T>(t));
+}
+
+
+template <typename T>
+class SysReqApplier : public DecoratedApplier<T> {
+  CephContext* const cct;
+  /*const*/ RGWRados* const store;
+  const RGWHTTPArgs& args;
+  mutable boost::tribool is_system;
+
+public:
+  template <typename U>
+  SysReqApplier(CephContext* const cct,
+                /*const*/ RGWRados* const store,
+                const req_state* const s,
+                U&& decoratee)
+    : DecoratedApplier<T>(std::forward<T>(decoratee)),
+      cct(cct),
+      store(store),
+      args(s->info.args),
+      is_system(boost::logic::indeterminate) {
+  }
+
+  void to_str(std::ostream& out) const override;
+  void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
+  void modify_request_state(req_state* s) const override;       /* in/out */
+};
+
+template <typename T>
+void SysReqApplier<T>::to_str(std::ostream& out) const
+{
+  out << "rgw::auth::SysReqApplier" << " -> ";
+  DecoratedApplier<T>::to_str(out);
+}
+
+template <typename T>
+void SysReqApplier<T>::load_acct_info(RGWUserInfo& user_info) const
+{
+  DecoratedApplier<T>::load_acct_info(user_info);
+  is_system = user_info.system;
+
+  if (is_system) {
+    //dout(20) << "system request" << dendl;
+
+    rgw_user effective_uid(args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
+    if (! effective_uid.empty()) {
+      /* We aren't writing directly to user_info for consistency and security
+       * reasons. rgw_get_user_info_by_uid doesn't trigger the operator=() but
+       * calls ::decode instead. */
+      RGWUserInfo euser_info;
+      if (rgw_get_user_info_by_uid(store, effective_uid, euser_info) < 0) {
+        //ldout(s->cct, 0) << "User lookup failed!" << dendl;
+        throw -EACCES;
+      }
+      user_info = euser_info;
+    }
+  }
+}
+
+template <typename T>
+void SysReqApplier<T>::modify_request_state(req_state* const s) const
+{
+  if (boost::logic::indeterminate(is_system)) {
+    RGWUserInfo unused_info;
+    load_acct_info(unused_info);
+  }
+
+  if (is_system) {
+    s->info.args.set_system();
+    s->system_request = true;
+  }
+}
+
+template <typename T> static inline
+SysReqApplier<T> add_sysreq(CephContext* const cct,
+                            /* const */ RGWRados* const store,
+                            const req_state* const s,
+                            T&& t) {
+  return SysReqApplier<T>(cct, store, s, std::forward<T>(t));
 }
 
 } /* namespace auth */

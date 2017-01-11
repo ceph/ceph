@@ -269,7 +269,7 @@ TempURLEngine::authenticate(const req_state* const s) const
                           << dendl;
 
         if (sig_helper.is_equal_to(temp_url_sig)) {
-          auto apl = apl_factory->create_apl_turl(cct, owner_info);
+          auto apl = apl_factory->create_apl_turl(cct, s, owner_info);
           return std::make_pair(std::move(apl), nullptr);
         } else {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
@@ -296,7 +296,8 @@ bool ExternalTokenEngine::is_applicable(const std::string& token) const noexcept
 }
 
 ExternalTokenEngine::result_t
-ExternalTokenEngine::authenticate(const std::string& token) const
+ExternalTokenEngine::authenticate(const std::string& token,
+                                  const req_state* const s) const
 {
   if (! is_applicable(token)) {
     return std::make_pair(nullptr, nullptr);
@@ -349,7 +350,7 @@ ExternalTokenEngine::authenticate(const std::string& token) const
     throw ret;
   }
 
-  auto apl = apl_factory->create_apl_local(cct, tmp_uinfo,
+  auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
                                            extract_swift_subuser(swift_user));
   return std::make_pair(std::move(apl), nullptr);
 }
@@ -411,7 +412,8 @@ bool SignedTokenEngine::is_applicable(const std::string& token) const noexcept
 }
 
 SignedTokenEngine::result_t
-SignedTokenEngine::authenticate(const std::string& token) const
+SignedTokenEngine::authenticate(const std::string& token,
+                                const req_state* const s) const
 {
   if (! is_applicable(token)) {
     return std::make_pair(nullptr, nullptr);
@@ -499,7 +501,7 @@ SignedTokenEngine::authenticate(const std::string& token) const
     return std::make_pair(nullptr, nullptr);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, user_info,
+  auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                            extract_swift_subuser(swift_user));
   return std::make_pair(std::move(apl), nullptr);
 }

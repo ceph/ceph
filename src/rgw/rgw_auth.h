@@ -647,7 +647,8 @@ public:
     /* Providing r-value reference here is required intensionally. Callee is
      * thus disallowed to handle std::function in a way that could inhibit
      * the move behaviour (like forgetting about std::moving a l-value). */
-    virtual aplptr_t create_apl_remote(CephContext * const cct,
+    virtual aplptr_t create_apl_remote(CephContext* cct,
+                                       const req_state* s,
                                        acl_strategy_t&& extra_acl_strategy,
                                        const AuthInfo info) const = 0;
   };
@@ -690,7 +691,8 @@ public:
 
   struct Factory {
     virtual ~Factory() {}
-    virtual aplptr_t create_apl_local(CephContext* const cct,
+    virtual aplptr_t create_apl_local(CephContext* cct,
+                                      const req_state* s,
                                       const RGWUserInfo& user_info,
                                       const std::string& subuser) const = 0;
     };
