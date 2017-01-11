@@ -15,14 +15,17 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-std::unique_ptr<RGWIdentityApplier>
-rgw_auth_transform_old_authinfo(req_state * const s)
+namespace rgw {
+namespace auth {
+
+std::unique_ptr<rgw::auth::Identity>
+transform_old_authinfo(const req_state* const s)
 {
   /* This class is not intended for public use. Should be removed altogether
    * with this function after moving all our APIs to the new authentication
    * infrastructure. */
-  class RGWDummyIdentityApplier : public RGWIdentityApplier {
-    CephContext * const cct;
+  class DummyIdentityApplier : public rgw::auth::Identity {
+    CephContext* const cct;
 
     /* For this particular case it's OK to use rgw_user structure to convey
      * the identity info as this was the policy for doing that before the
@@ -31,10 +34,10 @@ rgw_auth_transform_old_authinfo(req_state * const s)
     const int perm_mask;
     const bool is_admin;
   public:
-    RGWDummyIdentityApplier(CephContext * const cct,
-                            const rgw_user& auth_id,
-                            const int perm_mask,
-                            const bool is_admin)
+    DummyIdentityApplier(CephContext* const cct,
+                         const rgw_user& auth_id,
+                         const int perm_mask,
+                         const bool is_admin)
       : cct(cct),
         id(auth_id),
         perm_mask(perm_mask),
@@ -64,14 +67,17 @@ rgw_auth_transform_old_authinfo(req_state * const s)
     }
   };
 
-  return std::unique_ptr<RGWIdentityApplier>(
-        new RGWDummyIdentityApplier(s->cct,
-                                    s->user->user_id,
-                                    s->perm_mask,
+  return std::unique_ptr<rgw::auth::Identity>(
+        new DummyIdentityApplier(s->cct,
+                                 s->user->user_id,
+                                 s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                    s->system_request));
+                                 s->system_request));
 }
+
+} /* namespace auth */
+} /* namespace rgw */
 
 
 uint32_t rgw_perms_from_aclspec_default_strategy(

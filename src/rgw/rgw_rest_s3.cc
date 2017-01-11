@@ -1924,7 +1924,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     /* FIXME: remove this after switching S3 to the new authentication
      * infrastructure. */
-    s->auth_identity = rgw_auth_transform_old_authinfo(s);
+    s->auth.identity = rgw::auth::transform_old_authinfo(s);
   } else {
     ldout(s->cct, 0) << "No attached policy found!" << dendl;
   }

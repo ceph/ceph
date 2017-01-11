@@ -62,9 +62,6 @@ inline std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
-std::unique_ptr<RGWIdentityApplier>
-rgw_auth_transform_old_authinfo(req_state * const s);
-
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
   const RGWIdentityApplier::aclspec_t& aclspec);
@@ -401,6 +398,9 @@ public:
 
   virtual void to_str(std::ostream& out) const = 0;
 };
+
+
+std::unique_ptr<Identity> transform_old_authinfo(const req_state* const s);
 
 
 /* Interface for classes applying changes to request state/RADOS store
