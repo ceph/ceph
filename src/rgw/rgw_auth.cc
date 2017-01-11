@@ -522,6 +522,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
 rgw::auth::Engine::result_t
 rgw::auth::Strategy::authenticate(const req_state* const s) const
 {
+  int previous_error = 0;
   for (const stack_item_t& kv : auth_stack) {
     const rgw::auth::Engine& engine = kv.first;
     const auto& policy = kv.second;
@@ -529,8 +530,8 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
     rgw::auth::Engine::result_t res;
     try {
       res = engine.authenticate(s);
-    } catch (int err) {
-      /* NOP */
+    } catch (const int err) {
+      previous_error = err;
     }
 
     const auto& applier = res.first;
@@ -544,6 +545,8 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
         case Control::SUFFICIENT:
           /* Just try next. */
           continue;
+        case Control::FALLBACK:
+          throw previous_error;
         default:
           /* Huh, memory corruption? */
           abort();

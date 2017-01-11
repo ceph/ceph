@@ -540,6 +540,9 @@ public:
      * doesn't abort it - there will be fall-back to following engine
      * it the one that failed wasn't the last. */
     SUFFICIENT,
+
+    /* */
+    FALLBACK,
   };
 
   Engine::result_t authenticate(const req_state* s) const override final;
