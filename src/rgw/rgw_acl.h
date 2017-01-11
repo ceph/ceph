@@ -249,7 +249,11 @@ struct ACLReferer {
 };
 WRITE_CLASS_ENCODER(ACLReferer)
 
-class RGWIdentityApplier;
+namespace rgw {
+namespace auth {
+  class Identity;
+}
+}
 
 class RGWAccessControlList
 {
@@ -272,7 +276,7 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  uint32_t get_perm(const RGWIdentityApplier& auth_identity,
+  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
   uint32_t get_referer_perm(const std::string http_referer, uint32_t perm_mask);
@@ -379,11 +383,11 @@ public:
     acl.set_ctx(ctx);
   }
 
-  uint32_t get_perm(const RGWIdentityApplier& auth_identity,
+  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask,
                     const char * http_referer);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  bool verify_permission(const RGWIdentityApplier& auth_identity,
+  bool verify_permission(const rgw::auth::Identity& auth_identity,
                          uint32_t user_perm_mask,
                          uint32_t perm,
                          const char * http_referer = nullptr);
