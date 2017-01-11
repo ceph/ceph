@@ -456,7 +456,7 @@ struct bluestore_blob_t {
 
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
-    assert(struct_v == 1);
+    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     denc_varint_lowz(compressed_length_orig, p);
@@ -469,7 +469,7 @@ struct bluestore_blob_t {
   }
 
   void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
-    assert(struct_v == 1);
+    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
@@ -489,7 +489,7 @@ struct bluestore_blob_t {
   }
 
   void decode(bufferptr::iterator& p, uint64_t struct_v) {
-    assert(struct_v == 1);
+    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
