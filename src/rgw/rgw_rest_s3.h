@@ -22,7 +22,6 @@
 #include "include/assert.h"
 
 #include "rgw_auth.h"
-#include "rgw_auth_decoimpl.h"
 #include "rgw_auth_filters.h"
 
 #define RGW_AUTH_GRACE_MINS 15

@@ -19,7 +19,6 @@
 #include "rgw_client_io.h"
 
 #include "rgw_auth.h"
-#include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
 #include "rgw_request.h"
