@@ -3,6 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/WatchNotifyTypes.h"
+#include "librbd/watcher/Types.h"
 #include "include/assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -20,35 +21,6 @@ public:
   }
 };
 
-class EncodePayloadVisitor : public boost::static_visitor<void> {
-public:
-  explicit EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
-
-  template <typename Payload>
-  inline void operator()(const Payload &payload) const {
-    ::encode(static_cast<uint32_t>(Payload::NOTIFY_OP), m_bl);
-    payload.encode(m_bl);
-  }
-
-private:
-  bufferlist &m_bl;
-};
-
-class DecodePayloadVisitor : public boost::static_visitor<void> {
-public:
-  DecodePayloadVisitor(__u8 version, bufferlist::iterator &iter)
-    : m_version(version), m_iter(iter) {}
-
-  template <typename Payload>
-  inline void operator()(Payload &payload) const {
-    payload.decode(m_version, m_iter);
-  }
-
-private:
-  __u8 m_version;
-  bufferlist::iterator &m_iter;
-};
-
 class DumpPayloadVisitor : public boost::static_visitor<void> {
 public:
   explicit DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
@@ -64,7 +36,7 @@ private:
   ceph::Formatter *m_formatter;
 };
 
-}
+} // anonymous namespace
 
 void ClientId::encode(bufferlist &bl) const {
   ::encode(gid, bl);
@@ -318,7 +290,7 @@ bool NotifyMessage::check_for_refresh() const {
 
 void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_START(5, 1, bl);
-  boost::apply_visitor(EncodePayloadVisitor(bl), payload);
+  boost::apply_visitor(watcher::EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
 
@@ -383,7 +355,7 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
     break;
   }
 
-  apply_visitor(DecodePayloadVisitor(struct_v, iter), payload);
+  apply_visitor(watcher::DecodePayloadVisitor(struct_v, iter), payload);
   DECODE_FINISH(iter);
 }
 
