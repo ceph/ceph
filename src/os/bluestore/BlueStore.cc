@@ -7856,34 +7856,36 @@ int BlueStore::_do_alloc_write(
 
   uint64_t hint = 0;
   CompressorRef c;
+  double crr = 0;
   if (wctx->compress) {
     c = select_option(
-    "compression_algorithm",
-    compressor,
-    [&]() {
-      string val;
-      if (coll->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
-        CompressorRef cp = compressor;
-        if (!cp || cp->get_type_name() != val) {
-          cp = Compressor::create(cct, val);
+      "compression_algorithm",
+      compressor,
+      [&]() {
+        string val;
+        if (coll->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
+          CompressorRef cp = compressor;
+          if (!cp || cp->get_type_name() != val) {
+            cp = Compressor::create(cct, val);
+          }
+          return boost::optional<CompressorRef>(cp);
         }
-        return boost::optional<CompressorRef>(cp);
+        return boost::optional<CompressorRef>();
       }
-      return boost::optional<CompressorRef>();
-    });
-  }
+    );
 
-  auto crr = select_option(
-    "compression_required_ratio",
-    cct->_conf->bluestore_compression_required_ratio,
-    [&]() {
-      double val;
-      if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
-        return boost::optional<double>(val);
+    crr = select_option(
+      "compression_required_ratio",
+      cct->_conf->bluestore_compression_required_ratio,
+      [&]() {
+        double val;
+        if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
+          return boost::optional<double>(val);
+        }
+        return boost::optional<double>();
       }
-      return boost::optional<double>();
-    }
-  );
+    );
+  }
 
   // checksum
   int csum = csum_type.load();
@@ -8196,12 +8198,12 @@ int BlueStore::_do_write(
       return boost::optional<Compressor::CompressionMode>();
     }
   );
-  wctx.compress =
-    (cm == Compressor::COMP_FORCE) ||
-    (cm == Compressor::COMP_AGGRESSIVE &&
-     (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
-    (cm == Compressor::COMP_PASSIVE &&
-     (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
+  wctx.compress = (cm != Compressor::COMP_NONE) &&
+    ((cm == Compressor::COMP_FORCE) ||
+     (cm == Compressor::COMP_AGGRESSIVE &&
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
+     (cm == Compressor::COMP_PASSIVE &&
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)));
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
