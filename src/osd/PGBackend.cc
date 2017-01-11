@@ -461,6 +461,16 @@ void PGBackend::be_scan_list(
 	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	o.attrs);
 
+      bufferlist fbl;
+      store->fiemap(
+	ch,
+	ghobject_t(
+	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	0,
+	st.st_size,
+	fbl);
+      ::decode(o.object_fiemap, fbl);
+
       // calculate the CRC32 on deep scrubs
       if (deep) {
 	be_deep_scrub(*p, seed, o, handle);
@@ -609,6 +619,36 @@ static int dcount(const object_info_t &oi)
   return count;
 }
 
+static uint64_t flength(const map<uint64_t, uint64_t> &fiemap)
+{
+  uint64_t length = 0;
+  for (map<uint64_t, uint64_t>::const_iterator p = fiemap.begin();
+       p != fiemap.end();
+       ++p)
+    length += p->second;
+  return length;
+}
+
+static bool fiemap_diff_too_large(const map<uint64_t, uint64_t> &first, const map<uint64_t, uint64_t> &second)
+{
+  return (flength(first) < (1 - g_conf->osd_deep_scrub_allocation_fix_threshold) * flength(second))
+	 || (flength(second) < (1 - g_conf->osd_deep_scrub_allocation_fix_threshold) * flength(first));
+}
+
+static bool should_update_auth_fiemap(const map<uint64_t, uint64_t> &cur, const map<uint64_t, uint64_t> &auth)
+{
+  bool update;
+
+  // prefer smaller fiemap if filestore_fiemap is true
+  // prefer larger fiemap if filestore_fiemap is false
+  if (g_conf->filestore_fiemap) {
+    update = (flength(cur) < (1 - g_conf->osd_deep_scrub_allocation_fix_threshold) * flength(auth));
+  } else {
+    update = (flength(auth) < (1 - g_conf->osd_deep_scrub_allocation_fix_threshold) * flength(cur));
+  }
+  return update;
+}
+
 map<pg_shard_t, ScrubMap *>::const_iterator
   PGBackend::be_select_auth_object(
   const hobject_t &obj,
@@ -619,6 +659,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 {
   eversion_t auth_version;
   bufferlist auth_bl;
+  map<uint64_t, uint64_t> auth_fiemap;
 
   map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
   for (map<pg_shard_t, ScrubMap *>::const_iterator j = maps.begin();
@@ -679,6 +720,11 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	object_error.set_object_info_inconsistency();
 	error_string += " object_info_inconsistency";
       }
+      if (!object_error.has_object_fiemap_inconsistency() && fiemap_diff_too_large(i->second.object_fiemap, auth_fiemap)
+	  && g_conf->osd_deep_scrub_allocation_fix) {
+	object_error.set_object_fiemap_inconsistency();
+	error_string += " object_fiemap_inconsistency";
+      }
     }
 
     // Don't use this particular shard because it won't be able to repair data
@@ -687,12 +733,15 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
 
     if (auth_version == eversion_t() || oi.version > auth_version ||
-        (oi.version == auth_version && dcount(oi) > dcount(*auth_oi))) {
+        (oi.version == auth_version && dcount(oi) > dcount(*auth_oi)) ||
+        (should_update_auth_fiemap(i->second.object_fiemap, auth_fiemap) &&
+	 g_conf->osd_deep_scrub_allocation_fix)) {
       auth = j;
       *auth_oi = oi;
       auth_version = oi.version;
       auth_bl.clear();
       auth_bl.append(bl);
+      auth_fiemap = i->second.object_fiemap;
     }
 
 out:
