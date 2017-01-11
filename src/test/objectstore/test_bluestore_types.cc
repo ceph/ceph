@@ -996,7 +996,7 @@ TEST(Blob, legacy_decode)
     BlueStore::Blob Bres, Bres2;
     Bres.shared_blob = new BlueStore::SharedBlob(&coll);
     Bres2.shared_blob = new BlueStore::SharedBlob(&coll);
-   
+
     uint64_t sbid, sbid2;
     Bres.decode(
       &coll,
