@@ -10,6 +10,7 @@
 #include <string>
 
 class Context;
+class ContextWQ;
 
 namespace librados { class IoCtx; }
 
@@ -23,7 +24,15 @@ template <typename ImageCtxT = ImageCtx>
 class EnableRequest {
 public:
   static EnableRequest *create(ImageCtxT *image_ctx, Context *on_finish) {
-    return new EnableRequest(image_ctx, on_finish);
+    return create(image_ctx->md_ctx, image_ctx->id, "",
+                  image_ctx->op_work_queue, on_finish);
+  }
+  static EnableRequest *create(librados::IoCtx &io_ctx,
+                               const std::string &image_id,
+                               const std::string &non_primary_global_image_id,
+                               ContextWQ *op_work_queue, Context *on_finish) {
+    return new EnableRequest(io_ctx, image_id, non_primary_global_image_id,
+                             op_work_queue, on_finish);
   }
 
   void send();
@@ -35,6 +44,9 @@ private:
    * <start>
    *    |
    *    v
+   * GET_MIRROR_MODE  * * * * * * *
+   *    |                         *
+   *    v                         *
    * GET_TAG_OWNER  * * * * * * * *
    *    |                         *
    *    v                         *
@@ -52,13 +64,17 @@ private:
    * @endverbatim
    */
 
-  EnableRequest(ImageCtxT *image_ctx, Context *on_finish);
+  EnableRequest(librados::IoCtx &io_ctx, const std::string &image_id,
+                const std::string &non_primary_global_image_id,
+                ContextWQ *op_work_queue, Context *on_finish);
 
-  librados::IoCtx *m_io_ctx = nullptr;
+  librados::IoCtx &m_io_ctx;
   std::string m_image_id;
-  ImageCtxT *m_image_ctx = nullptr;
+  std::string m_non_primary_global_image_id;
+  ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
+  CephContext *m_cct = nullptr;
   bool m_is_primary = false;
   bufferlist m_out_bl;
   cls::rbd::MirrorImage m_mirror_image;
