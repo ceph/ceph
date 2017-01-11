@@ -273,10 +273,6 @@ public:
       return i;
     }
 
-    bool empty() const {
-      return buffer_map.empty();
-    }
-
     // must be called under protection of the Cache lock
     void _clear();
 
