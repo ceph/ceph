@@ -47,7 +47,7 @@ add_executable(unittest_str_map
   test_str_map.cc
   )
 add_ceph_unittest(unittest_str_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_str_map)
-target_link_libraries(unittest_str_map common global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_str_map ceph-common global ${BLKID_LIBRARIES})
 
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry

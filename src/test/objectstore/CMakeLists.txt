@@ -20,7 +20,7 @@ set_target_properties(ceph_test_objectstore PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_objectstore
   os
-  common
+  ceph-common
   ${UNITTEST_LIBS}
   global
   ${EXTRALIBS}
@@ -38,7 +38,7 @@ set_target_properties(ceph_test_keyvaluedb PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_keyvaluedb
   os
-  common
+  ceph-common
   ${UNITTEST_LIBS}
   global
   ${EXTRALIBS}
@@ -142,7 +142,7 @@ endif(HAVE_LIBAIO)
 add_executable(unittest_transaction
   test_transaction.cc)
 add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_transaction)
-target_link_libraries(unittest_transaction os common ${XIO_LIBRARY})
+target_link_libraries(unittest_transaction os ceph-common ${XIO_LIBRARY})
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone

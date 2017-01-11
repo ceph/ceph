@@ -518,15 +518,6 @@ find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
-if (WITH_SYSTEM_BOOST)
-  if(FREEBSD)
-    # if boost_python is used then also link with libpython*
-    LIST(APPEND Boost_LIBRARIES ${PYTHON_LIBRARIES})
-  endif()
-else()
-  LIST(APPEND Boost_LIBRARIES "-lz")
-endif()
-
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 
 find_package(Threads REQUIRED)

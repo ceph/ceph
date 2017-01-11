@@ -45,7 +45,7 @@ target_link_libraries(rbd librbd librados
   krbd
   rbd_types
   journal
-  common global
+  ceph-common global
   ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 install(TARGETS rbd DESTINATION bin)
