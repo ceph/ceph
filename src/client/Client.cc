@@ -5628,7 +5628,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   }
 
   filepath fp(CEPH_INO_ROOT);
-  if (!mount_root.empty()) {
+  if (cct->_conf->client_mountpoint != std::string("/") && !mount_root.empty()) {
     metadata["root"] = mount_root.c_str();
     fp = filepath(mount_root.c_str());
   }
