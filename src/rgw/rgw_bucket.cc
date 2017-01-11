@@ -1625,7 +1625,7 @@ int RGWDataChangesLog::list_entries(const real_time& start_time, const real_time
 
 int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
 {
-  if (shard_id > num_shards)
+  if (shard_id >= num_shards)
     return -EINVAL;
 
   string oid = oids[shard_id];
