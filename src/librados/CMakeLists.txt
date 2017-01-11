@@ -8,7 +8,7 @@ add_library(rados_a STATIC
   $<TARGET_OBJECTS:librados_api_obj>
   $<TARGET_OBJECTS:librados_objs>
   $<TARGET_OBJECTS:common_buffer_obj>)
-target_link_libraries(rados_a osdc common cls_lock_client
+target_link_libraries(rados_a osdc ceph-common cls_lock_client
     ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 if(WITH_LTTNG)
   add_dependencies(librados_api_obj librados-tp)
@@ -19,7 +19,7 @@ if(ENABLE_SHARED)
     $<TARGET_OBJECTS:librados_objs>
     $<TARGET_OBJECTS:common_buffer_obj>)
   # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
-  target_link_libraries(librados LINK_PRIVATE osdc common cls_lock_client
+  target_link_libraries(librados LINK_PRIVATE osdc ceph-common cls_lock_client
     ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados
