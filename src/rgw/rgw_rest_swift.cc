@@ -706,7 +706,7 @@ int RGWPutObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1010,7 +1010,7 @@ int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1230,7 +1230,7 @@ int RGWGetObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1668,15 +1668,15 @@ bool RGWSwiftWebsiteHandler::can_be_website_req() const
   }
 
   /* We also need to handle early failures from the auth system. In such cases
-   * req_state::auth_identity may be empty. Let's treat that the same way as
+   * req_state::auth.identity may be empty. Let's treat that the same way as
    * the anonymous access. */
-  if (! s->auth_identity) {
+  if (! s->auth.identity) {
     return true;
   }
 
   /* Swift serves websites only for anonymous requests unless client explicitly
    * requested this behaviour by supplying X-Web-Mode HTTP header set to true. */
-  if (s->auth_identity->is_anonymous() || is_web_mode()) {
+  if (s->auth.identity->is_anonymous() || is_web_mode()) {
     return true;
   }
 

@@ -47,7 +47,7 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   _add_grant(grant);
 }
 
-uint32_t RGWAccessControlList::get_perm(const RGWIdentityApplier& auth_identity,
+uint32_t RGWAccessControlList::get_perm(const rgw::auth::Identity& auth_identity,
                                         const uint32_t perm_mask)
 {
   ldout(cct, 5) << "Searching permissions for identity=" << auth_identity
@@ -94,7 +94,7 @@ uint32_t RGWAccessControlList::get_referer_perm(const std::string http_referer,
   }
 }
 
-uint32_t RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identity,
+uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identity,
                                           const uint32_t perm_mask,
                                           const char * const http_referer)
 {
@@ -130,7 +130,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identit
   return perm;
 }
 
-bool RGWAccessControlPolicy::verify_permission(const RGWIdentityApplier& auth_identity,
+bool RGWAccessControlPolicy::verify_permission(const rgw::auth::Identity& auth_identity,
                                                const uint32_t user_perm_mask,
                                                const uint32_t perm,
                                                const char * const http_referer)
