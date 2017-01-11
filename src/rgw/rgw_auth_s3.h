@@ -11,6 +11,7 @@
 #include "rgw_rest_s3.h"
 
 #include "rgw_auth.h"
+#include "rgw_auth_filters.h"
 #include "rgw_auth_keystone.h"
 
 
@@ -35,8 +36,10 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo info
                             ) const override {
-    return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
+    /* TODO(rzarzynski): replace with static_ptr. */
+    return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
@@ -66,6 +69,45 @@ public:
     return "rgw::auth::s3::AWSv2ExternalAuthStrategy";
   }
 };
+
+
+class AWSv2AuthStrategy : public rgw::auth::Strategy,
+                          public rgw::auth::LocalApplier::Factory {
+  typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
+  RGWRados* const store;
+
+  rgw::auth::s3::RGWS3V2Extractor extractor;
+  ExternalAuthStrategy external_engines;
+  LocalVersion2ndEngine local_engine;
+
+  aplptr_t create_apl_local(CephContext* const cct,
+                            const req_state* const s,
+                            const RGWUserInfo& user_info,
+                            const std::string& subuser) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::LocalApplier(cct, user_info, subuser));
+    /* TODO(rzarzynski): replace with static_ptr. */
+    return aplptr_t(new decltype(apl)(std::move(apl)));
+  }
+
+public:
+  AWSv2AuthStrategy(CephContext* const cct,
+                    RGWRados* const store)
+    : store(store),
+      external_engines(cct, store, &extractor),
+      local_engine(cct, store, extractor,
+                   static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
+    add_engine(Control::SUFFICIENT, external_engines);
+    if (cct->_conf->rgw_s3_auth_use_rados) {
+      add_engine(Control::SUFFICIENT, local_engine);
+    }
+  }
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::s3::AWSv2AuthStrategy";
+  }
+};
+
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
