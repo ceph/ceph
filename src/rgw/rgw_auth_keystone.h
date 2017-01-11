@@ -39,7 +39,8 @@ class TokenEngine : public rgw::auth::Engine {
   auth_info_t get_creds_info(const token_envelope_t& token,
                              const std::vector<std::string>& admin_roles
                             ) const noexcept;
-  result_t authenticate(const std::string& token) const;
+  result_t authenticate(const std::string& token,
+                        const req_state* s) const;
 
 public:
   TokenEngine(CephContext* const cct,
@@ -59,7 +60,7 @@ public:
   }
 
   result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s));
+    return authenticate(extractor->get_token(s), s);
   }
 }; /* class TokenEngine */
 
@@ -88,7 +89,8 @@ class EC2Engine : public rgw::auth::s3::Version2ndEngine {
                         std::string signature,
                         std::string expires,
                         bool qsr,
-                        const req_info& info) const override;
+                        const req_info& info,
+                        const req_state* s) const override;
 public:
   EC2Engine(CephContext* const cct,
             const rgw::auth::s3::Version2ndEngine::Extractor* const extractor,

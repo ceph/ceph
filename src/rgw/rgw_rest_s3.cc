@@ -4318,7 +4318,8 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string access_key_id,
                                         const std::string signature,
                                         const std::string expires,
                                         const bool qsr,
-                                        const req_info& /* unused */) const
+                                        const req_info& /* unused */,
+                                        const req_state* const s) const
 {
   /* boost filters and/or string_ref may throw on invalid input */
   rgw::RGWToken base64_token;
@@ -4348,7 +4349,7 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string access_key_id,
     return std::make_pair(nullptr, nullptr);
   }
 
-  auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(),
+  auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(base64_token));
   return std::make_pair(std::move(apl), nullptr);
 }
@@ -4360,7 +4361,8 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(std::string access_key_id,
                                                    std::string signature,
                                                    std::string expires,
                                                    bool qsr,
-                                                   const req_info& info) const
+                                                   const req_info& info,
+                                                   const req_state* const s) const
 {
   if (access_key_id.empty() || signature.empty()) {
     ldout(cct, 5) << "access_key_id or signature is empty" << dendl;
@@ -4434,6 +4436,6 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(std::string access_key_id,
     throw -ERR_SIGNATURE_NO_MATCH;
   }
 
-  auto apl = apl_factory->create_apl_local(cct, user_info, k.subuser);
+  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
   return std::make_pair(std::move(apl), nullptr);
 }

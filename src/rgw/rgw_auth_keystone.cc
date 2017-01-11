@@ -198,7 +198,8 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
 }
 
 TokenEngine::result_t
-TokenEngine::authenticate(const std::string& token) const
+TokenEngine::authenticate(const std::string& token,
+                          const req_state* const s) const
 {
   TokenEngine::token_envelope_t t;
 
@@ -226,7 +227,7 @@ TokenEngine::authenticate(const std::string& token) const
   if (token_cache.find(token_id, t)) {
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
                    << dendl;
-    auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
+    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
                                               get_creds_info(t, roles.admin));
     return std::make_pair(std::move(apl), nullptr);
   }
@@ -259,7 +260,7 @@ TokenEngine::authenticate(const std::string& token) const
                     << ":" << t.get_user_name()
                     << " expires: " << t.get_expires() << dendl;
       token_cache.add(token_id, t);
-      auto apl = apl_factory->create_apl_remote(cct, get_acl_strategy(t),
+      auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));
       return std::make_pair(std::move(apl), nullptr);
     }
@@ -427,7 +428,9 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
                                                     std::string signature,
                                                     std::string expires,
                                                     bool qsr,
-                                                    const req_info& info) const
+                                                    const req_info& info,
+                                                    /* Passthorugh only! */
+                                                    const req_state* s) const
 {
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
