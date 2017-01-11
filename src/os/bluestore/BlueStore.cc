@@ -7514,12 +7514,10 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
 		      << dendl;
     }
     std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->bc.cache->lock);
-    if (!e.blob->shared_blob->bc.empty()) {
-      for (auto& i : e.blob->shared_blob->bc.buffer_map) {
-	dout(log_level) << __func__ << "       0x" << std::hex << i.first
-			<< "~" << i.second->length << std::dec
-			<< " " << *i.second << dendl;
-      }
+    for (auto& i : e.blob->shared_blob->bc.buffer_map) {
+      dout(log_level) << __func__ << "       0x" << std::hex << i.first
+                      << "~" << i.second->length << std::dec
+                      << " " << *i.second << dendl;
     }
   }
 }
