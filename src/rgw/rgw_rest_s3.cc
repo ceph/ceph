@@ -1817,71 +1817,33 @@ int RGWPostObj_ObjStore_S3::get_policy()
       err_msg = "Missing signature";
       return -EINVAL;
     }
-    RGWUserInfo user_info;
 
-    op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
-    if (op_ret < 0) {
-      // try external authenticators
-      rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
-      /* FIXME: this is a makeshift solution. The browser upload authenication will be
-       * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
-       * method. Thus creating a strategy per request won't be necessary. */
-      rgw::auth::s3::ExternalAuthStrategy strategy(s->cct, store, &extr);
+    rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
+    /* FIXME: this is a makeshift solution. The browser upload authenication will be
+     * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
+     * method. Thus creating a strategy per request won't be necessary. */
+    const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store);
+    try {
+      auto result = strategy.authenticate(s);
+      auto& applier = result.first;
+      if (! applier) {
+        return -EACCES;
+      }
+
       try {
-        auto result = strategy.authenticate(s);
-        auto& applier = result.first;
-        if (! applier) {
-          return -EACCES;
-        }
+        applier->load_acct_info(*s->user);
+        s->perm_mask = applier->get_perm_mask();
+        applier->modify_request_state(s);
+        s->auth.identity = std::move(applier);
 
-        try {
-          applier->load_acct_info(user_info);
-          s->perm_mask = applier->get_perm_mask();
-          applier->modify_request_state(s);
-          s->auth.identity = std::move(applier);
-        } catch (int err) {
-          return -EACCES;
-        }
+        s->owner.set_id(s->user->user_id);
+        s->owner.set_name(s->user->display_name);
+        /* OK, fall through. */
       } catch (int err) {
         return -EACCES;
       }
-    } else {
-      map<string, RGWAccessKey> access_keys  = user_info.access_keys;
-
-      map<string, RGWAccessKey>::const_iterator iter =
-	access_keys.find(s3_access_key);
-      // We know the key must exist, since the user was returned by
-      // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
-      if (iter == access_keys.end()) {
-	ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
-	err_msg = "No secret key for matching access key";
-	return -EACCES;
-      }
-      string s3_secret_key = (iter->second).key;
-
-      char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-
-      calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(),
-		     encoded_policy.c_str(), encoded_policy.length(),
-		     expected_signature_char);
-      bufferlist expected_signature_hmac_raw;
-      bufferlist expected_signature_hmac_encoded;
-      expected_signature_hmac_raw.append(expected_signature_char,
-					 CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-      expected_signature_hmac_raw.encode_base64(
-	expected_signature_hmac_encoded);
-      expected_signature_hmac_encoded.append((char)0); /* null terminate */
-
-      if (received_signature_str.compare(
-	    expected_signature_hmac_encoded.c_str()) != 0) {
-	ldout(s->cct, 0) << "Signature verification failed!" << dendl;
-	ldout(s->cct, 0) << "received: " << received_signature_str.c_str()
-			 << dendl;
-	ldout(s->cct, 0) << "expected: "
-			 << expected_signature_hmac_encoded.c_str() << dendl;
-	err_msg = "Bad access key / signature";
-	return -EACCES;
-      }
+    } catch (int err) {
+      return -EACCES;
     }
 
     ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
@@ -1920,14 +1882,6 @@ int RGWPostObj_ObjStore_S3::get_policy()
       return r;
     }
 
-    // deep copy
-    *(s->user) = user_info;
-    s->owner.set_id(user_info.user_id);
-    s->owner.set_name(user_info.display_name);
-
-    /* FIXME: remove this after switching S3 to the new authentication
-     * infrastructure. */
-    s->auth.identity = rgw::auth::transform_old_authinfo(s);
   } else {
     ldout(s->cct, 0) << "No attached policy found!" << dendl;
   }
@@ -3954,88 +3908,37 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     auth_sign = auth_str.substr(pos + 1);
   }
 
-  rgw::auth::s3::S3AuthFactory aplfact(store);
-  rgw::auth::s3::RGWS3V2Extractor extr;
-
-  /* TODO(rzarzynski): the final strategy will be a part of Handler - exactly
-   * like in the case of Swift API. */
-  static rgw::auth::s3::ExternalAuthStrategy strategy(g_ceph_context,
-                                                      store, &extr);
-  /* try external auth first */
-  int external_auth_result = -ERR_INVALID_ACCESS_KEY;
+  /* TODO(rzarzynski): this will be moved to the S3 handlers -- in exactly
+   * way like we currently have in the case of Swift API. */
+  static const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store);
   try {
     auto result = strategy.authenticate(s);
     auto& applier = result.first;
     if (! applier) {
-      return -EACCES;
+      return -EPERM;
     }
-
     try {
       applier->load_acct_info(*s->user);
       s->perm_mask = applier->get_perm_mask();
       applier->modify_request_state(s);
       s->auth.identity = std::move(applier);
-    } catch (int err) {
+
+      /* Populate the owner info. */
+      s->owner.set_id(s->user->user_id);
+      s->owner.set_name(s->user->display_name);
+
+      /* Success - not throwed. */
+      return 0;
+    } catch (const int err) {
       ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-      external_auth_result = err;
+      return err;
     }
-  } catch (int err) {
-    ldout(s->cct, 5) << "external auth strategy threw err=" << err << dendl;
-    external_auth_result = err;
+  } catch (const int err) {
+    ldout(s->cct, 5) << "local auth engine threw err=" << err << dendl;
+    return err;
   }
 
-  /* now try rados backend, but only if externals did not succeed */
-  /* TODO(rzarzynski): aggregate the externals with the local engine in
-   * as a final AuthStrategy for S3V2. */
-  if (external_auth_result < 0) {
-      rgw::auth::s3::LocalVersion2ndEngine localauth(s->cct, store, extr, &aplfact);
-
-      if (! s->cct->_conf->rgw_s3_auth_use_rados) {
-        return external_auth_result;
-      }
-      try {
-        auto result = localauth.authenticate(s);
-        auto& applier = result.first;
-        if (! applier) {
-          return external_auth_result;
-        }
-        try {
-          applier->load_acct_info(*s->user);
-          s->perm_mask = applier->get_perm_mask();
-          applier->modify_request_state(s);
-          s->auth.identity = std::move(applier);
-        } catch (int err) {
-          ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-          return err;
-        }
-      } catch (int err) {
-          ldout(s->cct, 5) << "local auth engine threw err=" << err << dendl;
-          return err;
-      }
-    if (s->user->system) {
-      s->system_request = true;
-      dout(20) << "system request" << dendl;
-      s->info.args.set_system();
-      string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
-      RGWUserInfo effective_user;
-      if (!effective_uid.empty()) {
-        rgw_user euid(effective_uid);
-        int ret = rgw_get_user_info_by_uid(store, euid, effective_user);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed!" << dendl;
-          return -EACCES;
-        }
-        *(s->user) = effective_user;
-      }
-    }
-
-  } /* if external_auth_result < 0 */
-
-  // populate the owner info
-  s->owner.set_id(s->user->user_id);
-  s->owner.set_name(s->user->display_name);
-
-  return  0;
+  return -ERR_SIGNATURE_NO_MATCH;
 }
 
 int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
