@@ -165,15 +165,25 @@ class DefaultStrategy : public rgw::auth::Strategy,
                              const req_state* const s,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo info) const override {
-    return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, store, std::move(extra_acl_strategy), info));
+    auto apl = \
+      rgw::auth::add_3rdparty(store, s->account_name,
+        rgw::auth::add_sysreq(cct, store, s,
+          rgw::auth::RemoteApplier(cct, store, std::move(extra_acl_strategy),
+                                   info)));
+    /* TODO(rzarzynski): replace with static_ptr. */
+    return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser) const override {
-    return aplptr_t(new rgw::auth::LocalApplier(cct, user_info, subuser));
+    auto apl = \
+      rgw::auth::add_3rdparty(store, s->account_name,
+        rgw::auth::add_sysreq(cct, store, s,
+          rgw::auth::LocalApplier(cct, user_info, subuser)));
+    /* TODO(rzarzynski): replace with static_ptr. */
+    return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
   aplptr_t create_apl_turl(CephContext* const cct,
