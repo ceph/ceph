@@ -1725,14 +1725,15 @@ struct req_state {
 
   RGWUserInfo *user;
 
-  /* Object having the knowledge about an authenticated identity and allowing
-   * to apply it during the authorization phase (verify_permission() methods
-   * of a given RGWOp). Thus, it bounds authentication and authorization steps
-   * through a well-defined interface. For more details, see rgw_auth.h. */
-  std::unique_ptr<RGWIdentityApplier> auth_identity;
   struct {
-    /* TODO(rzarzynski): switch out to the static_ptr. */
+    /* TODO(rzarzynski): switch out to the static_ptr for both members. */
+
+    /* Object having the knowledge about an authenticated identity and allowing
+     * to apply it during the authorization phase (verify_permission() methods
+     * of a given RGWOp). Thus, it bounds authentication and authorization steps
+     * through a well-defined interface. For more details, see rgw_auth.h. */
     std::unique_ptr<rgw::auth::Identity> identity;
+
     std::unique_ptr<rgw::auth::Completer> completer;
   } auth;
 
