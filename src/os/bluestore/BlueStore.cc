@@ -1683,6 +1683,36 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 	   << "    and " << *r << dendl;
 }
 
+#ifndef CACHE_BLOB_BL
+void BlueStore::Blob::decode(
+  Collection *coll,
+  bufferptr::iterator& p,
+  uint64_t struct_v,
+  uint64_t* sbid,
+  bool include_ref_map)
+{
+  denc(blob, p, struct_v);
+  if (blob.is_shared()) {
+    denc(*sbid, p);
+  }
+  if (include_ref_map) {
+    if (struct_v > 1) {
+      used_in_blob.decode(p);
+    } else {
+      used_in_blob.clear();
+      bluestore_extent_ref_map_t legacy_ref_map;
+      legacy_ref_map.decode(p);
+      for (auto r : legacy_ref_map.ref_map) {
+        get_ref(
+          coll,
+          r.first,
+          r.second.refs * r.second.length);
+      }
+    }
+  }
+}
+#endif
+
 // Extent
 
 ostream& operator<<(ostream& out, const BlueStore::Extent& e)
@@ -1956,7 +1986,9 @@ bool BlueStore::ExtentMap::encode_some(
   auto start = extent_map.lower_bound(dummy);
   uint32_t end = offset + length;
 
-  __u8 struct_v = 1;
+  __u8 struct_v = 2; // Version 2 differs from v1 in blob's ref_map
+                     // serialization only. Hence there is no specific
+                     // handling at ExtentMap level.
 
   unsigned n = 0;
   size_t bound = 0;
@@ -2057,7 +2089,11 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   auto p = bl.front().begin_deep();
   __u8 struct_v;
   denc(struct_v, p);
-  assert(struct_v == 1);
+  // Version 2 differs from v1 in blob's ref_map
+  // serialization only. Hence there is no specific
+  // handling at ExtentMap level below.
+  assert(struct_v == 1 || struct_v == 2);
+
   uint32_t num;
   denc_varint(num, p);
   vector<BlobRef> blobs(num);
@@ -2095,7 +2131,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
       } else {
 	Blob *b = new Blob();
         uint64_t sbid = 0;
-	b->decode(p, struct_v, &sbid, false);
+        b->decode(onode->c, p, struct_v, &sbid, false);
 	blobs[n] = b;
 	onode->c->open_shared_blob(sbid, b);
 	le->assign_blob(b);
@@ -2116,7 +2152,11 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 
 void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
 {
-  __u8 struct_v = 1;
+  // Version 2 differs from v1 in blob's ref_map
+  // serialization only. Hence there is no specific
+  // handling at ExtentMap level.
+  __u8 struct_v = 2;
+
   denc(struct_v, p);
   denc_varint((uint32_t)0, p);
   size_t key_size = 0;
@@ -2130,7 +2170,11 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
 void BlueStore::ExtentMap::encode_spanning_blobs(
   bufferlist::contiguous_appender& p)
 {
-  __u8 struct_v = 1;
+  // Version 2 differs from v1 in blob's ref_map
+  // serialization only. Hence there is no specific
+  // handling at ExtentMap level.
+  __u8 struct_v = 2;
+
   denc(struct_v, p);
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
@@ -2144,7 +2188,11 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
 {
   __u8 struct_v;
   denc(struct_v, p);
-  assert(struct_v == 1);
+  // Version 2 differs from v1 in blob's ref_map
+  // serialization only. Hence there is no specific
+  // handling at ExtentMap level.
+  assert(struct_v == 1 || struct_v == 2);
+
   unsigned n;
   denc_varint(n, p);
   while (n--) {
@@ -2152,7 +2200,7 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
     denc_varint(b->id, p);
     spanning_blob_map[b->id] = b;
     uint64_t sbid = 0;
-    b->decode(p, struct_v, &sbid, true);
+    b->decode(onode->c, p, struct_v, &sbid, true);
     onode->c->open_shared_blob(sbid, b);
   }
 }

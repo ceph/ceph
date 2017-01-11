@@ -525,6 +525,7 @@ public:
       }
     }
     void decode(
+      Collection */*coll*/,
       bufferptr::iterator& p,
       bool include_ref_map) {
       const char *start = p.get_pos();
@@ -564,18 +565,11 @@ public:
       }
     }
     void decode(
+      Collection *coll,
       bufferptr::iterator& p,
       uint64_t struct_v,
       uint64_t* sbid,
-      bool include_ref_map) {
-      denc(blob, p, struct_v);
-      if (blob.is_shared()) {
-        denc(*sbid, p);
-      }
-      if (include_ref_map) {
-	used_in_blob.decode(p);
-      }
-    }
+      bool include_ref_map);
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;

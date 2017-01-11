@@ -938,6 +938,82 @@ TEST(Blob, split)
   }
 }
 
+TEST(Blob, legacy_decode)
+{
+  BlueStore store(g_ceph_context, "", 4096);
+  BlueStore::Cache *cache = BlueStore::Cache::create(
+    g_ceph_context, "lru", NULL);
+  BlueStore::Collection coll(&store, cache, coll_t());
+  bufferlist bl, bl2;
+  {
+    BlueStore::Blob B;
+    B.shared_blob = new BlueStore::SharedBlob(&coll);
+    B.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x1, 0x2000));
+    B.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
+    B.get_ref(&coll, 0, 0xff0);
+    B.get_ref(&coll, 0x1fff, 1);
+
+    bluestore_extent_ref_map_t fake_ref_map;
+    fake_ref_map.get(0, 0xff0);
+    fake_ref_map.get(0x1fff, 1);
+
+    size_t bound = 0, bound2 = 0;
+
+    B.bound_encode(
+      bound,
+      1, /*struct_v*/
+      0, /*sbid*/
+      false);
+    fake_ref_map.bound_encode(bound);
+
+    B.bound_encode(
+      bound2,
+      2, /*struct_v*/
+      0, /*sbid*/
+      true);
+
+    {
+      auto app = bl.get_contiguous_appender(bound);
+      auto app2 = bl2.get_contiguous_appender(bound2);
+      B.encode(
+        app,
+        1, /*struct_v*/
+        0, /*sbid*/
+        false);
+      fake_ref_map.encode(app);
+
+      B.encode(
+        app2,
+        2, /*struct_v*/
+        0, /*sbid*/
+        true);
+    }
+
+    auto p = bl.front().begin_deep();
+    auto p2 = bl2.front().begin_deep();
+    BlueStore::Blob Bres, Bres2;
+    Bres.shared_blob = new BlueStore::SharedBlob(&coll);
+    Bres2.shared_blob = new BlueStore::SharedBlob(&coll);
+   
+    uint64_t sbid, sbid2;
+    Bres.decode(
+      &coll,
+      p,
+      1, /*struct_v*/
+      &sbid,
+      true);
+    Bres2.decode(
+      &coll,
+      p2,
+      2, /*struct_v*/
+      &sbid2,
+      true);
+
+    ASSERT_EQ(0xff0u + 1u, Bres.get_blob_use_tracker().get_referenced_bytes());
+    ASSERT_EQ(0xff0u + 1u, Bres2.get_blob_use_tracker().get_referenced_bytes());
+    ASSERT_TRUE(Bres.get_blob_use_tracker().equal(Bres2.get_blob_use_tracker()));
+  }
+}
 TEST(ExtentMap, find_lextent)
 {
   BlueStore store(g_ceph_context, "", 4096);
