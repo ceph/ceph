@@ -32,6 +32,7 @@ TEST(bluestore, sizeof) {
   P(bluestore_blob_t::extents);
   P(bluestore_extent_ref_map_t);
   P(bluestore_extent_ref_map_t::record_t);
+  P(bluestore_blob_use_tracker_t);
   P(std::atomic_int);
   P(BlueStore::SharedBlobRef);
   P(boost::intrusive::set_base_hook<>);
