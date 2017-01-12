@@ -562,12 +562,18 @@ int main(int argc, const char **argv)
   r = ms_hb_back_server->bind(hb_back_addr);
   if (r < 0)
     exit(1);
+  r = ms_hb_back_client->client_bind(hb_back_addr);
+  if (r < 0)
+    exit(1);
 
   // hb front should bind to same ip as public_addr
   entity_addr_t hb_front_addr = g_conf->public_addr;
   if (hb_front_addr.is_ip())
     hb_front_addr.set_port(0);
   r = ms_hb_front_server->bind(hb_front_addr);
+  if (r < 0)
+    exit(1);
+  r = ms_hb_front_client->client_bind(hb_back_addr);
   if (r < 0)
     exit(1);
 

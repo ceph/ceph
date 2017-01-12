@@ -115,6 +115,7 @@ public:
 
   int bind(const entity_addr_t& bind_addr);
   int rebind(const set<int>& avoid_ports);
+  int client_bind(const entity_addr_t& bind_addr);
 
   /** @} Configuration functions */
 
