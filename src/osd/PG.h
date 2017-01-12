@@ -436,6 +436,12 @@ public:
       ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       );
 
+    /// Returns version needed
+    eversion_t get_version_needed(const hobject_t &hoid) const {
+      assert(needs_recovery_map.count(hoid));
+      return needs_recovery_map.at(hoid).need;
+    }
+
     /// Uses osdmap to update structures for now down sources
     void check_recovery_sources(const OSDMapRef& osdmap);
 
