@@ -305,25 +305,53 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         scratch_tmp = os.path.join(mnt, 'client.{id}'.format(id=id_), 'tmp')
     else:
         scratch_tmp = os.path.join(mnt, subdir)
-    srcdir = '{tdir}/workunit.{role}'.format(tdir=testdir, role=role)
     clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
+    srcdir = '{cdir}/qa/workunits'.format(cdir=clonedir)
 
     git_url = teuth_config.get_ceph_git_url()
-    remote.run(
-        logger=log.getChild(role),
-        args=[
-            'git',
-            'clone',
+    try:
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'rm',
+                '-rf',
+                clonedir,
+                run.Raw('&&'),
+                'git',
+                'clone',
+                git_url,
+                clonedir,
+                run.Raw('&&'),
+                'cd', '--', clonedir,
+                run.Raw('&&'),
+                'git', 'checkout', refspec,
+            ],
+        )
+    except CommandFailedError:
+        alt_git_url = git_url.replace('ceph-ci', 'ceph')
+        log.info(
+            "failed to check out '%s' from %s; will also try in %s",
+            refspec,
             git_url,
-            clonedir,
-            run.Raw(';'),
-            'cd', '--', clonedir,
-            run.Raw('&&'),
-            'git', 'checkout', refspec,
-            run.Raw('&&'),
-            'mv', 'qa/workunits', srcdir,
-        ],
-    )
+            alt_git_url,
+        )
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'rm',
+                '-rf',
+                clonedir,
+                run.Raw('&&'),
+                'git',
+                'clone',
+                alt_git_url,
+                clonedir,
+                run.Raw('&&'),
+                'cd', '--', clonedir,
+                run.Raw('&&'),
+                'git', 'checkout', refspec,
+            ],
+        )
 
     remote.run(
         logger=log.getChild(role),
@@ -361,7 +389,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ARGS="--cluster {0}"'.format(cluster)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
-                    run.Raw('PATH=$PATH:/usr/sbin')
+                    run.Raw('PATH=$PATH:/usr/sbin'),
+                    run.Raw('CEPH_BASE={dir}'.format(dir=clonedir)),
                 ]
                 if env is not None:
                     for var, val in env.iteritems():
@@ -394,6 +423,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(
             logger=log.getChild(role),
             args=[
-                'rm', '-rf', '--', workunits_file, srcdir, clonedir,
+                'rm', '-rf', '--', workunits_file, clonedir,
             ],
         )
