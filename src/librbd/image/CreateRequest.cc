@@ -415,7 +415,7 @@ Context *CreateRequest<I>::handle_negotiate_features(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   uint64_t all_features;
-  if (*result == 0) {
+  if (*result >= 0) {
     bufferlist::iterator it = m_outbl.begin();
     *result = cls_client::get_all_features_finish(&it, &all_features);
   }

@@ -472,7 +472,7 @@ uint64_t AioImageWrite<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid;
+  uint64_t tid = 0;
   uint64_t buffer_offset = 0;
   assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
@@ -561,7 +561,7 @@ uint64_t AioImageDiscard<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid;
+  uint64_t tid = 0;
   assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
     journal::EventEntry event_entry(journal::AioDiscardEvent(extent.first,

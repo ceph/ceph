@@ -2712,19 +2712,19 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 int snapshot_get_limit(cls_method_context_t hctx, bufferlist *in,
 		       bufferlist *out)
 {
-  int rc;
   uint64_t snap_limit;
-
-  rc = read_key(hctx, "snap_limit", &snap_limit);
-  if (rc == -ENOENT) {
-    rc = 0;
-    ::encode(UINT64_MAX, *out);
-  } else {
-    ::encode(snap_limit, *out);
+  int r = read_key(hctx, "snap_limit", &snap_limit);
+  if (r == -ENOENT) {
+    snap_limit = UINT64_MAX;
+  } else if (r < 0) {
+    CLS_ERR("error retrieving snapshot limit: %s", cpp_strerror(r).c_str());
+    return r;
   }
 
   CLS_LOG(20, "read snapshot limit %lu", snap_limit);
-  return rc;
+  ::encode(snap_limit, *out);
+
+  return 0;
 }
 
 int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
@@ -3777,7 +3777,10 @@ int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
 
   std::string mirror_uuid;
   r = mirror::uuid_get(hctx, &mirror_uuid);
-  if (mirror_peer.uuid == mirror_uuid) {
+  if (r < 0) {
+    CLS_ERR("error retrieving mirroring uuid: %s", cpp_strerror(r).c_str());
+    return r;
+  } else if (mirror_peer.uuid == mirror_uuid) {
     CLS_ERR("peer uuid '%s' matches pool mirroring uuid",
             mirror_uuid.c_str());
     return -EINVAL;
