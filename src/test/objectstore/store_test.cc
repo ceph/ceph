@@ -5664,6 +5664,7 @@ TEST_P(StoreTest, OnodeSizeTracking) {
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "none");
   g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
+  g_ceph_context->_conf->set_val("bluestore_cache_size", "400000000");
   g_ceph_context->_conf->apply_changes(NULL);
   int r = store->umount();
   ASSERT_EQ(r, 0);
@@ -5720,7 +5721,25 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     f.flush(cout);
     cout << std::endl;
   }
+  {
+    bufferlist bl;
+    for (size_t i = 0; i < obj_size; i += 0x1000) {
+      store->read(cid, hoid, i, 0x1000, bl);
+    }
+  }
+  get_mempool_stats(&total_bytes, &total_onodes);
+  ASSERT_NE(total_bytes, 0u);
+  ASSERT_EQ(total_onodes, 1u);
 
+  {
+    cout <<" mempool dump:\n";
+    JSONFormatter f(true);
+    f.open_object_section("transaction");
+    mempool::dump(&f);
+    f.close_section();
+    f.flush(cout);
+    cout << std::endl;
+  }
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
@@ -5729,6 +5748,7 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  g_ceph_context->_conf->set_val("bluestore_cache_size", "4000000");
   g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "crc32c");
