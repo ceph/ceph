@@ -88,6 +88,7 @@ look something like ``28f7427e-5558-4ffd-ae1a-51ec3042759a.client25386880``)
 will contain a variety of files that output interesting output when you ``cat``
 them. These files are described below; the most interesting when debugging
 slow requests are probably the ``mdsc`` and ``osdc`` files.
+
 * bdi: BDI info about the Ceph system (blocks dirtied, written, etc)
 * caps: counts of file "caps" structures in-memory and used
 * client_options: dumps the options provided to the CephFS mount
