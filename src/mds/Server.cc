@@ -423,12 +423,15 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
 
-  mds->sessionmap.mark_dirty(session);
-
   if (piv) {
+    assert(session->is_closing() || session->is_killing() ||
+	   session->is_opening()); // re-open closing session
+    session->info.prealloc_inos.subtract(inos);
     mds->inotable->apply_release_ids(inos);
     assert(mds->inotable->get_version() == piv);
   }
+
+  mds->sessionmap.mark_dirty(session);
 
   // apply
   if (session->get_state_seq() != state_seq) {
@@ -708,9 +711,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   // release alloc and pending-alloc inos for this session
   // and wipe out session state, in case the session close aborts for some reason
   interval_set<inodeno_t> both;
-  both.swap(session->info.prealloc_inos);
+  both.insert(session->info.prealloc_inos);
   both.insert(session->pending_prealloc_inos);
-  session->pending_prealloc_inos.clear();
   if (both.size()) {
     mds->inotable->project_release_ids(both);
     piv = mds->inotable->get_projected_version();
@@ -1503,10 +1505,12 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
         req->get_op() == CEPH_MDS_OP_SETXATTR ||
         req->get_op() == CEPH_MDS_OP_SETFILELOCK ||
         req->get_op() == CEPH_MDS_OP_CREATE ||
-        req->get_op() == CEPH_MDS_OP_LINK ||
-        req->get_op() == CEPH_MDS_OP_RENAME ||
         req->get_op() == CEPH_MDS_OP_SYMLINK ||
-        req->get_op() == CEPH_MDS_OP_MKSNAP) {
+        req->get_op() == CEPH_MDS_OP_MKSNAP ||
+	((req->get_op() == CEPH_MDS_OP_LINK ||
+	  req->get_op() == CEPH_MDS_OP_RENAME) &&
+	 (!mdr->has_more() || mdr->more()->witnessed.empty())) // haven't started slave request
+	) {
 
       dout(20) << __func__ << ": full, responding ENOSPC to op " << ceph_mds_op_name(req->get_op()) << dendl;
       respond_to_request(mdr, -ENOSPC);
@@ -2303,8 +2307,15 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 {
   CInode *in = new CInode(mdcache);
   
+  // Server::prepare_force_open_sessions() can re-open session in closing
+  // state. In that corner case, session's prealloc_inos are being freed.
+  // To simplify the code, we disallow using/refilling session's prealloc_ino
+  // while session is opening.
+  bool allow_prealloc_inos = !mdr->session->is_opening();
+
   // assign ino
-  if (mdr->session->info.prealloc_inos.size()) {
+  if (allow_prealloc_inos &&
+      mdr->session->info.prealloc_inos.size()) {
     mdr->used_prealloc_ino = 
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.mark_projected(mdr->session);
@@ -2327,9 +2338,10 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     //ceph_abort(); // just for now.
   }
     
-  int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
-  if (got > g_conf->mds_client_prealloc_inos / 2) {
-    mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
+  if (allow_prealloc_inos &&
+      mdr->session->get_num_projected_prealloc_inos() < g_conf->mds_client_prealloc_inos / 2) {
+    int need = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+    mds->inotable->project_alloc_ids(mdr->prealloc_inos, need);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
     mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.mark_projected(mdr->session);
@@ -2421,10 +2433,8 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   }
   if (mdr->prealloc_inos.size()) {
     assert(session);
-    if (!mdr->killed) {
-      session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
-      session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    }
+    session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+    session->info.prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.mark_dirty(session);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
@@ -2435,7 +2445,17 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   }
 }
 
-
+class C_MDS_TryFindInode : public ServerContext {
+  MDRequestRef mdr;
+public:
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
+  virtual void finish(int r) {
+    if (r == -ESTALE) // :( find_ino_peers failed
+      server->respond_to_request(mdr, r);
+    else
+      server->dispatch_client_request(mdr);
+  }
+};
 
 CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath)
 {
@@ -2455,6 +2475,11 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return 0;
+    }
     respond_to_request(mdr, r);
     return 0;
   }
@@ -2467,18 +2492,6 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   dout(10) << "traverse_to_auth_dir " << *dir << dendl;
   return dir;
 }
-
-class C_MDS_TryFindInode : public ServerContext {
-  MDRequestRef mdr;
-public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
-  virtual void finish(int r) {
-    if (r == -ESTALE) // :( find_ino_peers failed
-      server->respond_to_request(mdr, r);
-    else
-      server->dispatch_client_request(mdr);
-  }
-};
 
 /* If this returns null, the request has been handled
  * as appropriate: forwarded on, or the client's been replied to */
@@ -2650,13 +2663,14 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
   }
 
   mdr->dn[n].push_back(dn);
-  mdr->in[n] = dn->get_projected_linkage()->get_inode();
+  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
+  mdr->in[n] = dnl->get_inode();
 
   // -- lock --
   // NOTE: rename takes the same set of locks for srcdn
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
-  if (alwaysxlock || dn->get_linkage(client, mdr)->is_null())
+  if (alwaysxlock || dnl->is_null())
     xlocks.insert(&dn->lock);                 // new dn, xlock
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
@@ -4938,14 +4952,16 @@ void Server::handle_client_link(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, targeti, MAY_WRITE))
-    return;
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, targeti, MAY_WRITE))
+      return;
 
-  if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
-    return;
+    if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
+      return;
 
-  if (!check_fragment_space(mdr, dir))
-    return;
+    if (!check_fragment_space(mdr, dir))
+      return;
+  }
 
   // go!
   assert(g_conf->mds_kill_link_at != 1);
@@ -5461,6 +5477,11 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (r < 0) {
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      mdcache->find_ino_peers(req->get_filepath().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return;
+    }
     respond_to_request(mdr, r);
     return;
   }
@@ -5543,13 +5564,15 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
-    return;
-
   if (in->is_dir() &&
       _dir_is_nonempty(mdr, in)) {
     respond_to_request(mdr, -ENOTEMPTY);
     return;
+  }
+
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, diri, MAY_WRITE))
+      return;
   }
 
   // yay!
@@ -5574,7 +5597,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       } else if (mdr->more()->waiting_on_slave.count(*p)) {
 	dout(10) << " already waiting on witness mds." << *p << dendl;      
       } else {
-	if (!_rmdir_prepare_witness(mdr, *p, dn, straydn))
+	if (!_rmdir_prepare_witness(mdr, *p, trace, straydn))
 	  return;
       }
     }
@@ -5738,7 +5761,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   }
 }
 
-bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)
+bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn)
 {
   if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
     dout(10) << "_rmdir_prepare_witness mds." << who << " is not active" << dendl;
@@ -5750,12 +5773,12 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *
   dout(10) << "_rmdir_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_RMDIRPREP);
-  dn->make_path(req->srcdnpath);
-  straydn->make_path(req->destdnpath);
-  req->op_stamp = mdr->get_op_stamp();
-  
+  req->srcdnpath = filepath(trace.front()->get_dir()->ino());
+  for (auto dn : trace)
+    req->srcdnpath.push_dentry(dn->name);
   mdcache->replicate_stray(straydn, who, req->stray);
-  
+
+  req->op_stamp = mdr->get_op_stamp();
   mds->send_message_mds(req, who);
   
   assert(mdr->more()->waiting_on_slave.count(who) == 0);
@@ -6220,46 +6243,26 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (destpath.get_ino() != srcpath.get_ino() &&
       !(req->get_source().is_mds() &&
 	MDS_INO_IS_MDSDIR(srcpath.get_ino()))) {  // <-- mds 'rename' out of stray dir is ok!
-    // do traces share a dentry?
-    CDentry *common = 0;
-    for (unsigned i=0; i < srctrace.size(); i++) {
-      for (unsigned j=0; j < desttrace.size(); j++) {
-	if (srctrace[i] == desttrace[j]) {
-	  common = srctrace[i];
-	  break;
-	}
-      }
-      if (common)
-	break;
+    CInode *srcbase = srctrace[0]->get_dir()->get_inode();
+    CInode *destbase = desttrace[0]->get_dir()->get_inode();
+    // ok, extend srctrace toward root until it is an ancestor of desttrace.
+    while (srcbase != destbase &&
+	   !srcbase->is_projected_ancestor_of(destbase)) {
+      CDentry *pdn = srcbase->get_projected_parent_dn();
+      srctrace.insert(srctrace.begin(), pdn);
+      dout(10) << "rename prepending srctrace with " << *pdn << dendl;
+      srcbase = pdn->get_dir()->get_inode();
     }
 
-    if (common) {
-      dout(10) << "rename src and dest traces share common dentry " << *common << dendl;
-    } else {
-      CInode *srcbase = srctrace[0]->get_dir()->get_inode();
-      CInode *destbase = destdir->get_inode();
-      if (!desttrace.empty())
-	destbase = desttrace[0]->get_dir()->get_inode();
-
-      // ok, extend srctrace toward root until it is an ancestor of desttrace.
-      while (srcbase != destbase &&
-	     !srcbase->is_projected_ancestor_of(destbase)) {
-	srctrace.insert(srctrace.begin(),
-			srcbase->get_projected_parent_dn());
-	dout(10) << "rename prepending srctrace with " << *srctrace[0] << dendl;
-	srcbase = srcbase->get_projected_parent_dn()->get_dir()->get_inode();
-      }
-
-      // then, extend destpath until it shares the same parent inode as srcpath.
-      while (destbase != srcbase) {
-	desttrace.insert(desttrace.begin(),
-			 destbase->get_projected_parent_dn());
-	rdlocks.insert(&desttrace[0]->lock);
-	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
-	destbase = destbase->get_projected_parent_dn()->get_dir()->get_inode();
-      }
-      dout(10) << "rename src and dest traces now share common ancestor " << *destbase << dendl;
+    // then, extend destpath until it shares the same parent inode as srcpath.
+    while (destbase != srcbase) {
+      CDentry *pdn = destbase->get_projected_parent_dn();
+      desttrace.insert(desttrace.begin(), pdn);
+      rdlocks.insert(&pdn->lock);
+      dout(10) << "rename prepending desttrace with " << *pdn << dendl;
+      destbase = pdn->get_dir()->get_inode();
     }
+    dout(10) << "rename src and dest traces now share common ancestor " << *destbase << dendl;
   }
 
   // src == dest?
@@ -6284,7 +6287,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   // is this a stray migration, reintegration or merge? (sanity checks!)
   if (mdr->reqid.name.is_mds() &&
       !(MDS_INO_IS_MDSDIR(srcpath.get_ino()) &&
-	MDS_INO_IS_STRAY(destpath.get_ino())) &&
+	MDS_INO_IS_MDSDIR(destpath.get_ino())) &&
       !(destdnl->is_remote() &&
 	destdnl->get_remote_ino() == srci->ino())) {
     respond_to_request(mdr, -EINVAL);  // actually, this won't reply, but whatev.
@@ -6325,11 +6328,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     witnesses.insert(srcdn->authority().first);
   if (srcdnl->is_remote() && !srci->is_auth())
     witnesses.insert(srci->authority().first);
-  if (!destdnl->is_null()) {
-    destdn->list_replicas(witnesses);
-    if (destdnl->is_remote() && !oldin->is_auth())
-      witnesses.insert(oldin->authority().first);
-  }
+  destdn->list_replicas(witnesses);
+  if (destdnl->is_remote() && !oldin->is_auth())
+    witnesses.insert(oldin->authority().first);
   dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
 
@@ -6406,17 +6407,19 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 				  &remote_wrlocks, auth_pin_freeze))
     return;
 
-  if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
-    return;
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
+      return;
 
-  if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
-    return;
+    if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
+      return;
 
-  if (!check_fragment_space(mdr, destdn->get_dir()))
-    return;
+    if (!check_fragment_space(mdr, destdn->get_dir()))
+      return;
 
-  if (!check_access(mdr, srci, MAY_WRITE))
-    return;
+    if (!check_access(mdr, srci, MAY_WRITE))
+      return;
+  }
 
   // with read lock, really verify oldin is empty
   if (oldin &&
@@ -6479,7 +6482,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
       dout(10) << " preparing ambiguous auth for srci" << dendl;
       mdr->set_ambiguous_auth(srci);
-      _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
+      _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
       return;
     }
   }
@@ -6493,7 +6496,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     } else if (mdr->more()->waiting_on_slave.count(*p)) {
       dout(10) << " already waiting on witness mds." << *p << dendl;      
     } else {
-      if (!_rename_prepare_witness(mdr, *p, witnesses, srcdn, destdn, straydn))
+      if (!_rename_prepare_witness(mdr, *p, witnesses, srctrace, desttrace, straydn))
 	return;
     }
   }
@@ -6503,7 +6506,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (last != MDS_RANK_NONE && mdr->more()->witnessed.count(last) == 0) {
     dout(10) << " preparing last witness (srcdn auth)" << dendl;
     assert(mdr->more()->waiting_on_slave.count(last) == 0);
-    _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
+    _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
     return;
   }
 
@@ -6592,7 +6595,7 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
 // helpers
 
 bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
-				     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+				     vector<CDentry*>& srctrace, vector<CDentry*>& dsttrace, CDentry *straydn)
 {
   if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
     dout(10) << "_rename_prepare_witness mds." << who << " is not active" << dendl;
@@ -6604,16 +6607,20 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
   dout(10) << "_rename_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_RENAMEPREP);
-  srcdn->make_path(req->srcdnpath);
-  destdn->make_path(req->destdnpath);
-  req->op_stamp = mdr->get_op_stamp();
-  
+
+  req->srcdnpath = filepath(srctrace.front()->get_dir()->ino());
+  for (auto dn : srctrace)
+    req->srcdnpath.push_dentry(dn->name);
+  req->destdnpath = filepath(dsttrace.front()->get_dir()->ino());
+  for (auto dn : dsttrace)
+    req->destdnpath.push_dentry(dn->name);
   if (straydn)
     mdcache->replicate_stray(straydn, who, req->stray);
   
   // srcdn auth will verify our current witness list is sufficient
   req->witnesses = witnesse;
 
+  req->op_stamp = mdr->get_op_stamp();
   mds->send_message_mds(req, who);
   
   assert(mdr->more()->waiting_on_slave.count(who) == 0);
@@ -7182,6 +7189,11 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, NULL, NULL, destpath, &trace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
+  if (r == -ESTALE) {
+    mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
+			    mdr->slave_to_mds);
+    return;
+  }
   assert(r == 0);  // we shouldn't get an error here!
       
   CDentry *destdn = trace[trace.size()-1];
