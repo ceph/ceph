@@ -198,6 +198,8 @@ void bluestore_extent_ref_map_t::put(
   uint64_t offset, uint32_t length,
   PExtentVector *release)
 {
+  //NB: existing entries in 'release' container must be preserved!
+
   auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {

@@ -30,6 +30,7 @@ TEST(bluestore, sizeof) {
   P(bluestore_onode_t);
   P(bluestore_blob_t);
   P(bluestore_blob_t::extents);
+  P(bluestore_shared_blob_t);
   P(bluestore_extent_ref_map_t);
   P(bluestore_extent_ref_map_t::record_t);
   P(bluestore_blob_use_tracker_t);
