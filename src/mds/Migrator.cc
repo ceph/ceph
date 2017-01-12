@@ -322,7 +322,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     }
     dir->unfreeze_tree();
     cache->adjust_subtree_auth(dir, mds->get_nodeid());
-    cache->try_subtree_merge(dir);  // NOTE: this may journal subtree_map as side effect
+    cache->try_subtree_merge(dir);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
@@ -493,7 +493,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	  
 	  // adjust auth back to the exporter
 	  cache->adjust_subtree_auth(dir, q->second.peer);
-	  cache->try_subtree_merge(dir);   // NOTE: may journal subtree_map as side-effect
+	  cache->try_subtree_merge(dir);
 
 	  // bystanders?
 	  if (q->second.bystanders.empty()) {
@@ -1676,7 +1676,7 @@ void Migrator::export_reverse(CDir *dir)
 
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
-  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as side-effect
+  cache->try_subtree_merge(dir);
 
   // notify bystanders
   export_notify_abort(dir, bounds);
@@ -1847,7 +1847,7 @@ void Migrator::export_finish(CDir *dir)
   // adjust auth, with possible subtree merge.
   //  (we do this _after_ removing EXPORTBOUND pins, to allow merges)
   cache->adjust_subtree_auth(dir, it->second.peer);
-  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as sideeffect
+  cache->try_subtree_merge(dir);
 
   // no more auth subtree? clear scatter dirty
   if (!dir->get_inode()->is_auth() &&
@@ -2493,7 +2493,7 @@ void Migrator::import_reverse(CDir *dir)
   // log our failure
   mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
 
-  cache->try_subtree_merge(dir);  // NOTE: this may journal subtree map as side effect
+  cache->try_subtree_merge(dir);
 
   cache->trim(-1, num_dentries); // try trimming dentries
 
@@ -2710,7 +2710,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 
   mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
 
-  cache->try_subtree_merge(dir);   // NOTE: this may journal subtree_map as sideffect
+  cache->try_subtree_merge(dir);
 
   // process delayed expires
   cache->process_delayed_expire(dir);
