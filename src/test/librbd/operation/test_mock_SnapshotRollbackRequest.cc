@@ -166,7 +166,7 @@ public:
   void expect_invalidate_cache(MockOperationImageCtx &mock_image_ctx, int r) {
     if (mock_image_ctx.object_cacher != nullptr) {
       EXPECT_CALL(mock_image_ctx, invalidate_cache(true, _))
-                    .WillOnce(WithArg<1>(CompleteContext(r, NULL)));
+                    .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
     }
   }
 
