@@ -158,7 +158,7 @@ void PGPool::update(OSDMapRef map)
   auid = pi->auid;
   name = map->get_pool_name(id);
   bool updated = false;
-  if ((map->get_epoch() == cached_epoch + 1) &&
+  if ((map->get_epoch() != cached_epoch + 1) ||
       (pi->get_snap_epoch() == map->get_epoch())) {
     updated = true;
     pi->build_removed_snaps(newly_removed_snaps);
@@ -176,6 +176,16 @@ void PGPool::update(OSDMapRef map)
     }
     snapc = pi->get_snap_context();
   } else {
+    /* 1) map->get_epoch() == cached_epoch + 1 &&
+     * 2) pi->get_snap_epoch() != map->get_epoch()
+     *
+     * From the if branch, 1 && 2 must be true.  From 2, we know that
+     * this map didn't change the set of removed snaps.  From 1, we
+     * know that our cached_removed_snaps matches the previous map.
+     * Thus, from 1 && 2, cached_removed snaps matches the current
+     * set of removed snaps and all we have to do is clear
+     * newly_removed_snaps.
+     */
     newly_removed_snaps.clear();
   }
   cached_epoch = map->get_epoch();
@@ -5586,6 +5596,19 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
+  if (cct->_conf->osd_debug_verify_cached_snaps) {
+    interval_set<snapid_t> actual_removed_snaps;
+    const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
+    assert(pi);
+    pi->build_removed_snaps(actual_removed_snaps);
+    if (!(actual_removed_snaps == pool.cached_removed_snaps)) {
+      derr << __func__ << ": mismatch between the actual removed snaps "
+	   << actual_removed_snaps << " and pool.cached_removed_snaps "
+	   << " pool.cached_removed_snaps " << pool.cached_removed_snaps
+	   << dendl;
+    }
+    assert(actual_removed_snaps == pool.cached_removed_snaps);
+  }
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
