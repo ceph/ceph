@@ -370,19 +370,13 @@ void RocksDBStore::close()
     cct->get_perfcounters_collection()->remove(logger);
 }
 
-void RocksDBStore::split(const std::string &s, char delim, std::vector<std::string> &elems) {
+void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss;
     ss.str(s);
     std::string item;
     while (std::getline(ss, item, delim)) {
         elems.push_back(item);
     }
-}
-
-std::vector<std::string> RocksDBStore::split(const std::string &s, char delim) {
-    std::vector<std::string> elems;
-    split(s, delim, elems);
-    return elems;
 }
 
 void RocksDBStore::get_statistics(Formatter *f)
@@ -400,7 +394,7 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->open_object_section("rocksdb_statistics");
       f->dump_string("rocksdb_compaction_statistics", "");
       vector<string> stats;
-      split(stat_str, '\n', stats);
+      split_stats(stat_str, '\n', stats);
       for (auto st :stats) {
         f->dump_string("", st);
       }
@@ -412,7 +406,7 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->open_object_section("rocksdb_extended_statistics");
       string stat_str = dbstats->ToString();
       vector<string> stats;
-      split(stat_str, '\n', stats);
+      split_stats(stat_str, '\n', stats);
       f->dump_string("rocksdb_extended_statistics", "");
       for (auto st :stats) {
         f->dump_string(".", st);
