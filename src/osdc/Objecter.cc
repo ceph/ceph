@@ -855,7 +855,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target, &info->last_force_resend);
+  _calc_target(&info->target);
 
   // Create LingerOp<->OSDSession relation
   int r = _get_session(info->target.osd, &s, sul);
@@ -1063,7 +1063,7 @@ void Objecter::_scan_requests(OSDSession *s,
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
-    int r = _calc_target(&op->target, &op->last_force_resend);
+    int r = _calc_target(&op->target);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!force_resend &&
@@ -1291,7 +1291,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (!op->session) {
-      _calc_target(&op->target, &op->last_force_resend);
+      _calc_target(&op->target);
       OSDSession *s = NULL;
       int const r = _get_session(op->target.osd, &s, sul);
       assert(r == 0);
@@ -2280,7 +2280,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool check_for_latest_map = _calc_target(&op->target, &op->last_force_resend)
+  bool check_for_latest_map = _calc_target(&op->target)
     == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
@@ -2297,7 +2297,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
       // map changed; recalculate mapping
       ldout(cct, 10) << __func__ << " relock raced with osdmap, recalc target"
 		     << dendl;
-      check_for_latest_map = _calc_target(&op->target, &op->last_force_resend)
+      check_for_latest_map = _calc_target(&op->target)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
@@ -2643,8 +2643,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
-			   bool any_change)
+int Objecter::_calc_target(op_target_t *t, bool any_change)
 {
   // rwlock is locked
 
@@ -2660,11 +2659,12 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
   bool force_resend = false;
   bool need_check_tiering = false;
   if (osdmap->get_epoch() == pi->last_force_op_resend) {
-    if (last_force_resend && *last_force_resend < pi->last_force_op_resend) {
-      *last_force_resend = pi->last_force_op_resend;
+    if (t->last_force_resend < pi->last_force_op_resend) {
+      t->last_force_resend = pi->last_force_op_resend;
       force_resend = true;
-    } else if (last_force_resend == 0)
+    } else if (t->last_force_resend == 0) {
       force_resend = true;
+    }
   }
   if (t->target_oid.name.empty() || force_resend) {
     t->target_oid = t->base_oid;
@@ -2927,7 +2927,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
 {
   // rwlock is locked unique
 
-  int r = _calc_target(&linger_op->target, &linger_op->last_force_resend,
+  int r = _calc_target(&linger_op->target,
 		       true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
@@ -4687,26 +4687,22 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
       c->map_check_error_str = "osd down";
       return RECALC_OP_TARGET_OSD_DOWN;
     }
-    c->osd = c->target_osd;
+    c->target.osd = c->target_osd;
   } else {
-    if (!osdmap->have_pg_pool(c->target_pg.pool())) {
+    int ret = _calc_target(&(c->target), true);
+    if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";
-      return RECALC_OP_TARGET_POOL_DNE;
-    }
-    vector<int> acting;
-    int acting_primary;
-    osdmap->pg_to_acting_osds(c->target_pg, &acting, &acting_primary);
-    if (acting_primary == -1) {
+      return ret;
+    } else if (ret == RECALC_OP_TARGET_OSD_DOWN) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
-      return RECALC_OP_TARGET_OSD_DOWN;
+      return ret;
     }
-    c->osd = acting_primary;
   }
 
   OSDSession *s;
-  int r = _get_session(c->osd, &s, sul);
+  int r = _get_session(c->target.osd, &s, sul);
   assert(r != -EAGAIN); /* shouldn't happen as we're holding the write lock */
 
   if (c->session != s) {
@@ -4728,7 +4724,7 @@ void Objecter::_assign_command_session(CommandOp *c,
   assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
   OSDSession *s;
-  int r = _get_session(c->osd, &s, sul);
+  int r = _get_session(c->target.osd, &s, sul);
   assert(r != -EAGAIN); /* shouldn't happen as we're holding the write lock */
 
   if (c->session != s) {
