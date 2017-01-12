@@ -339,9 +339,9 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   int sd;
 
   if (opts.nonblock) {
-    sd = net.nonblock_connect(addr);
+    sd = net.nonblock_connect(addr, opts.connect_bind_addr);
   } else {
-    sd = net.connect(addr);
+    sd = net.connect(addr, opts.connect_bind_addr);
   }
 
   if (sd < 0) {

@@ -573,7 +573,7 @@ int main(int argc, const char **argv)
   r = ms_hb_front_server->bind(hb_front_addr);
   if (r < 0)
     exit(1);
-  r = ms_hb_front_client->client_bind(hb_back_addr);
+  r = ms_hb_front_client->client_bind(hb_front_addr);
   if (r < 0)
     exit(1);
 

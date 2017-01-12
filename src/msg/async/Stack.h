@@ -42,6 +42,7 @@ struct SocketOptions {
   bool nodelay = true;
   int rcbuf_size = 0;
   int priority = -1;
+  entity_addr_t connect_bind_addr;
 };
 
 /// \cond internal
