@@ -3952,6 +3952,11 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(1U, pairs.size());
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
+  // test config setting
+  ASSERT_EQ(0, image1.metadata_set("conf_rbd_cache", "false"));
+  ASSERT_EQ(-EINVAL, image1.metadata_set("conf_rbd_cache", "INVALID_VALUE"));
+  ASSERT_EQ(0, image1.metadata_remove("conf_rbd_cache"));
+
   // test metadata with snapshot adding
   ASSERT_EQ(0, image1.snap_create("snap1"));
   ASSERT_EQ(0, image1.snap_protect("snap1"));
