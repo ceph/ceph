@@ -35,6 +35,10 @@ function run() {
     local install_cmd
     if test -f /etc/redhat-release ; then
         source /etc/os-release
+        if ! type bc > /dev/null 2>&1 ; then
+            echo "Please install bc and re-run." 
+            exit 1
+        fi
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
             install_cmd="dnf -y install"
         else
@@ -44,6 +48,12 @@ function run() {
 
     type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
     type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
+
+    if ! type sudo > /dev/null 2>&1 ; then
+        echo "Please install sudo and re-run. This script assumes it is running"
+        echo "as a normal user with the ability to run commands as root via sudo." 
+        exit 1
+    fi
     if [ -n "$install_cmd" ]; then
         $DRY_RUN sudo $install_cmd ccache jq
     else
@@ -60,6 +70,10 @@ function run() {
 }
 
 function main() {
+    if [[ $EUID -eq 0 ]] ; then
+        echo "For best results, run this script as a normal user configured"
+        echo "with the ability to run commands as root via sudo."
+    fi
     echo -n "Checking hostname sanity... "
     if hostname --fqdn >/dev/null 2>&1 ; then
         echo "OK"
