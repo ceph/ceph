@@ -1689,19 +1689,21 @@ static void get_md_sync_status(list<string>& status)
     return;
   }
 
-  map<int, RGWMetadataLogInfo> master_shards_info;
-  string master_period;
 
-  ret = sync.read_master_log_shards_info(&master_period, &master_shards_info);
+  map<int, RGWMetadataLogInfo> master_shards_info;
+  string master_start_period;
+
+  ret = sync.read_master_log_shards_info(&master_start_period, &master_shards_info);
   if (ret < 0) {
     status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
     return;
   }
 
   map<int, string> shards_behind;
-
-  if (sync_status.sync_info.period != master_period) {
-    status.push_back(string("master is on a different period: master_period=" + master_period + " local_period=" + sync_status.sync_info.period));
+  if (store->get_current_period_id() !=  sync_status.sync_info.period) {
+    status.push_back(string("master is on a different period: master_period=" +
+                            store->get_current_period_id() + " local_period=" +
+                            sync_status.sync_info.period));
   } else {
     for (auto local_iter : sync_status.sync_markers) {
       int shard_id = local_iter.first;
