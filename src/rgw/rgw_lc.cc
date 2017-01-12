@@ -83,14 +83,8 @@ bool RGWLifecycleConfiguration::validate()
   while (next_iter != prefix_map.end()) {
     string c_pre = cur_iter->first;
     string n_pre = next_iter->first;
-    if (c_pre.length() > n_pre.length()) {
-      if (c_pre.compare(0, n_pre.length(), n_pre) == 0) {
-        return false;
-      }
-    } else {
-      if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
-        return false;
-      }
+    if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
+      return false;
     }
     ++next_iter;
     ++cur_iter;
