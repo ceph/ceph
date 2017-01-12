@@ -419,6 +419,10 @@ CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
 
+CEPH_RBD_API int rbd_flatten_with_progress(rbd_image_t image,
+                                           librbd_progress_fn_t cb,
+                                           void *cbdata);
+
 /**
  * List all images that are cloned from the image at the
  * snapshot that is set via rbd_snap_set().
