@@ -538,6 +538,11 @@ int RGWGetObj::verify_permission()
   }
 
   if (!verify_object_permission(s, RGW_PERM_READ)) {
+    /* swift container owner doesn't have SWIFT_PERM_READ perm by default,
+     * so here we should consider it separately*/
+    if (s->prot_flags & RGW_REST_SWIFT && s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+      return 0;
+    }
     return -EACCES;
   }
 
