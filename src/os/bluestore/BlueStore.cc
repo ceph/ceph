@@ -1370,14 +1370,14 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   if (sb.sbid) {
     out << " sbid 0x" << std::hex << sb.sbid << std::dec;
   }
-  if (sb.loaded) {
-    out << " loaded " << sb.shared_blob;
+  if (sb.persistent) {
+    out << " loaded " << *sb.persistent;
   }
   return out << ")";
 }
 
 BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
-  : sbid(i), coll(_coll)
+  : sbid(i), coll(_coll), persistent(nullptr)
 {
   assert(sbid > 0);
   if (get_cache()) {
@@ -1392,6 +1392,7 @@ BlueStore::SharedBlob::~SharedBlob()
     bc._clear(get_cache());
     get_cache()->rm_blob();
   }
+  delete persistent; //nullptr is OK to delete too
 }
 
 void BlueStore::SharedBlob::put()
@@ -1412,6 +1413,19 @@ void BlueStore::SharedBlob::put()
       delete this;
     }
   }
+}
+
+void BlueStore::SharedBlob::get_ref(uint64_t offset, uint32_t length)
+{
+  assert(persistent);
+  persistent->ref_map.get(offset, length);
+}
+
+void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
+  PExtentVector *r)
+{
+  assert(persistent);
+  persistent->ref_map.put(offset, length, r);
 }
 
 // Blob
@@ -2569,27 +2583,31 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
 
 void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 {
-  assert(!sb->loaded);
-  bufferlist v;
-  string key;
-  get_shared_blob_key(sb->sbid, &key);
-  int r = store->db->get(PREFIX_SHARED_BLOB, key, &v);
-  if (r < 0) {
-      lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sb->sbid
-			<< std::dec << " not found at key "
-			<< pretty_binary_string(key) << dendl;
-    assert(0 == "uh oh, missing shared_blob");
-  }
+  if (!sb->is_loaded()) {
 
-  bufferlist::iterator p = v.begin();
-  ::decode(sb->shared_blob, p);
-  ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sb->sbid
-			<< std::dec << " loaded shared_blob " << *sb << dendl;
-  sb->loaded = true;
+    bufferlist v;
+    string key;
+    get_shared_blob_key(sb->sbid, &key);
+    int r = store->db->get(PREFIX_SHARED_BLOB, key, &v);
+    if (r < 0) {
+	lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sb->sbid
+			  << std::dec << " not found at key "
+			  << pretty_binary_string(key) << dendl;
+      assert(0 == "uh oh, missing shared_blob");
+    }
+
+    sb->persistent = new bluestore_shared_blob_t();
+    bufferlist::iterator p = v.begin();
+    ::decode(*(sb->persistent), p);
+    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sb->sbid
+			  << std::dec << " loaded shared_blob " << *sb << dendl;
+  }
 }
 
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
+  assert(b->shared_blob->is_loaded());
+
   ldout(store->cct, 10) << __func__ << " " << *b << dendl;
   bluestore_blob_t& blob = b->dirty_blob();
 
@@ -2598,12 +2616,14 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   blob.clear_flag(bluestore_blob_t::FLAG_MUTABLE);
 
   // update shared blob
-  b->shared_blob->loaded = true;  // we are new and therefore up to date
   b->shared_blob->sbid = sbid;
+  b->shared_blob->persistent = new bluestore_shared_blob_t();
   shared_blob_set.add(this, b->shared_blob.get());
   for (auto p : blob.extents) {
     if (p.is_valid()) {
-      b->shared_blob->shared_blob.ref_map.get(p.offset, p.length);
+      b->shared_blob->get_ref(
+	p.offset,
+	p.length);
     }
   }
   ldout(store->cct, 20) << __func__ << " now " << *b << dendl;
@@ -6756,13 +6776,13 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   for (auto sb : txc->shared_blobs) {
     string key;
     get_shared_blob_key(sb->sbid, &key);
-    if (sb->shared_blob.empty()) {
+    if (sb->persistent->empty()) {
       dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
 	       << " is empty" << dendl;
       t->rmkey(PREFIX_SHARED_BLOB, key);
     } else {
       bufferlist bl;
-      ::encode(sb->shared_blob, bl);
+      ::encode(*(sb->persistent), bl);
       dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
 	       << " is " << bl.length() << dendl;
       t->set(PREFIX_SHARED_BLOB, key, bl);
@@ -8296,13 +8316,9 @@ void BlueStore::_wctx_finish(
       dout(20) << __func__ << "  blob release " << r << dendl;
       if (blob.is_shared()) {
 	PExtentVector final;
-	if (!b->shared_blob->loaded) {
-	  c->load_shared_blob(b->shared_blob);
-	}
+        c->load_shared_blob(b->shared_blob);
 	for (auto e : r) {
-	  PExtentVector cur;
-	  b->shared_blob->shared_blob.ref_map.put(e.offset, e.length, &cur);
-	  final.insert(final.end(), cur.begin(), cur.end());
+	  b->shared_blob->put_ref(e.offset, e.length, &final);
 	}
 	dout(20) << __func__ << "  shared_blob release " << final
 		 << " from " << *b->shared_blob << dendl;
@@ -9076,7 +9092,7 @@ int BlueStore::_do_clone_range(
       if (!blob.is_shared()) {
 	c->make_blob_shared(_assign_blobid(txc), e.blob);
 	dirtied_oldo = true;  // fixme: overkill
-      } else if (!e.blob->shared_blob->loaded) {
+      } else {
 	c->load_shared_blob(e.blob->shared_blob);
       }
       cb = new Blob();
@@ -9086,7 +9102,7 @@ int BlueStore::_do_clone_range(
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.extents) {
 	if (p.is_valid()) {
-	  e.blob->shared_blob->shared_blob.ref_map.get(p.offset, p.length);
+	  e.blob->shared_blob->get_ref(p.offset, p.length);
 	}
       }
       txc->write_shared_blob(e.blob->shared_blob);

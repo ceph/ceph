@@ -324,16 +324,13 @@ public:
 
     std::atomic_int nref = {0}; ///< reference count
 
-    // these are defined/set if the shared_blob is 'loaded'
-    bool loaded = false;        ///< whether shared_blob is loaded
-    bluestore_shared_blob_t shared_blob; ///< the actual shared state
-
     // these are defined/set if the blob is marked 'shared'
     uint64_t sbid = 0;          ///< shared blob id
     Collection *coll = nullptr;
+    bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(Collection *_coll) : coll(_coll) {
+    SharedBlob(Collection *_coll) : coll(_coll), persistent(nullptr) {
       if (get_cache()) {
 	get_cache()->add_blob();
       }
@@ -351,6 +348,13 @@ public:
     }
     void put();
 
+    /// get logical references
+    void get_ref(uint64_t offset, uint32_t length);
+
+    /// put logical references, and get back any released extents
+    void put_ref(uint64_t offset, uint32_t length,
+      PExtentVector *r);
+
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.sbid == r.sbid;
     }
@@ -364,6 +368,10 @@ public:
     inline SharedBlobSet* get_parent() {
       return coll ? &(coll->shared_blob_set) : nullptr;
     }
+    inline bool is_loaded() const {
+      return persistent != nullptr;
+    }
+
   };
   typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
 
