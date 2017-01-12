@@ -512,8 +512,16 @@ int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& b
   }
 
   rgw_obj obj(bucket, key);
-
-  return store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+  int r = store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+  if (r == -ENOENT) {
+    if (obj.key.instance == "null") {
+      obj.key.instance.clear();
+    }
+    return store->delete_obj_index(obj);
+  }
+  else {
+    return r;
+  }
 }
 
 int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
