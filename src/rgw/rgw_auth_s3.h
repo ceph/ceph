@@ -94,8 +94,24 @@ public:
   AWSv2AuthStrategy(CephContext* const cct,
                     RGWRados* const store)
     : store(store),
+      extractor(cct),
       external_engines(cct, store, &extractor),
       local_engine(cct, store, extractor,
+                   static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
+    add_engine(Control::SUFFICIENT, external_engines);
+    if (cct->_conf->rgw_s3_auth_use_rados) {
+      add_engine(Control::SUFFICIENT, local_engine);
+    }
+  }
+
+  /* FIXME(rzarzynski): hack for S3's browsers upload. */
+  AWSv2AuthStrategy(CephContext* const cct,
+                    RGWRados* const store,
+                    Version2ndEngine::Extractor* const external_extractor)
+    : store(store),
+      extractor(cct),
+      external_engines(cct, store, external_extractor),
+      local_engine(cct, store, *external_extractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
     add_engine(Control::SUFFICIENT, external_engines);
     if (cct->_conf->rgw_s3_auth_use_rados) {

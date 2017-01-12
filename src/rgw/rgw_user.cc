@@ -330,10 +330,15 @@ extern int rgw_get_user_info_by_swift(RGWRados * const store,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker, real_time *pmtime)
+extern int rgw_get_user_info_by_access_key(RGWRados* store,
+                                           const std::string& access_key,
+                                           RGWUserInfo& info,
+                                           RGWObjVersionTracker* objv_tracker,
+                                           real_time *pmtime)
 {
-  return rgw_get_user_info_from_index(store, access_key, store->get_zone_params().user_keys_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, access_key,
+                                      store->get_zone_params().user_keys_pool,
+                                      info, objv_tracker, pmtime);
 }
 
 int rgw_get_user_attrs_by_uid(RGWRados *store,

@@ -80,16 +80,12 @@ class EC2Engine : public rgw::auth::s3::Version2ndEngine {
   auth_info_t get_creds_info(const token_envelope_t& token,
                              const std::vector<std::string>& admin_roles
                             ) const noexcept;
-  bool is_time_skew_ok(const utime_t& header_time,
-                       const bool qsr) const;
   token_envelope_t get_from_keystone(const std::string& access_key_id,
                                      const std::string& string_to_sign,
                                      const std::string& signature) const;
-  result_t authenticate(std::string access_key_id,
-                        std::string signature,
-                        std::string expires,
-                        bool qsr,
-                        const req_info& info,
+  result_t authenticate(const std::string& access_key_id,
+                        const std::string& signature,
+                        const std::string& string_to_sign,
                         const req_state* s) const override;
 public:
   EC2Engine(CephContext* const cct,
