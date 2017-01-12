@@ -9716,8 +9716,12 @@ void PrimaryLogPG::failed_push(const list<pg_shard_t> &from, const hobject_t &so
     requeue_ops(blocked_ops);
   }
   recovering.erase(soid);
-  for (auto&& i : from)
+  for (auto&& i : from) {
     missing_loc.remove_location(soid, i);
+    auto miter = peer_missing.find(i);
+    assert(miter != peer_missing.end());
+    miter->second.add(soid, missing_loc.get_version_needed(soid), eversion_t());
+  }
   dout(0) << __func__ << " " << soid << " from shard " << from
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
