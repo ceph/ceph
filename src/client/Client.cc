@@ -6091,31 +6091,35 @@ int Client::link(const char *relexisting, const char *relpath)
   tout(cct) << relpath << std::endl;
 
   filepath existing(relexisting);
-  filepath path(relpath);
-  string name = path.last_dentry();
-  path.pop_dentry();
 
   InodeRef in, dir;
   int r = path_walk(existing, &in);
   if (r < 0)
-    goto out;
+    return r;
+  if (std::string(relpath) == "/") {
+    r = -EEXIST;
+    return r;
+  }
+  filepath path(relpath);
+  string name = path.last_dentry();
+  path.pop_dentry();
+
   r = path_walk(path, &dir);
   if (r < 0)
-    goto out;
+    return r;
   if (cct->_conf->client_permissions) {
     if (S_ISDIR(in->mode)) {
       r = -EPERM;
-      goto out;
+      return r;
     }
     r = may_hardlink(in.get());
     if (r < 0)
-      goto out;
+      return r;
     r = may_create(dir.get());
     if (r < 0)
-      goto out;
+      return r;
   }
   r = _link(in.get(), dir.get(), name.c_str());
- out:
   return r;
 }
 
@@ -6124,6 +6128,9 @@ int Client::unlink(const char *relpath)
   Mutex::Locker lock(client_lock);
   tout(cct) << "unlink" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EISDIR;
 
   filepath path(relpath);
   string name = path.last_dentry();
@@ -6146,6 +6153,9 @@ int Client::rename(const char *relfrom, const char *relto)
   tout(cct) << "rename" << std::endl;
   tout(cct) << relfrom << std::endl;
   tout(cct) << relto << std::endl;
+
+  if (std::string(relfrom) == "/" || std::string(relto) == "/")
+    return -EBUSY;
 
   filepath from(relfrom);
   filepath to(relto);
@@ -6184,6 +6194,9 @@ int Client::mkdir(const char *relpath, mode_t mode)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << "mkdir: " << relpath << dendl;
+
+  if (std::string(relpath) == "/")
+    return -EEXIST;
 
   filepath path(relpath);
   string name = path.last_dentry();
@@ -6257,6 +6270,10 @@ int Client::rmdir(const char *relpath)
   Mutex::Locker lock(client_lock);
   tout(cct) << "rmdir" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EBUSY;
+
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
@@ -6279,6 +6296,10 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EEXIST;
+
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
@@ -6302,6 +6323,9 @@ int Client::symlink(const char *target, const char *relpath)
   tout(cct) << "symlink" << std::endl;
   tout(cct) << target << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EEXIST;
 
   filepath path(relpath);
   string name = path.last_dentry();
