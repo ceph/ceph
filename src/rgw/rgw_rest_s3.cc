@@ -1798,6 +1798,12 @@ int RGWPostObj_ObjStore_S3::get_params()
   return 0;
 }
 
+static std::string to_string(ceph::bufferlist& bl)
+{
+  return std::string(bl.c_str(),
+                     static_cast<std::string::size_type>(bl.length()));
+}
+
 int RGWPostObj_ObjStore_S3::get_policy()
 {
   bufferlist encoded_policy;
@@ -1818,11 +1824,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
       return -EINVAL;
     }
 
-    rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
+    rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key,
+                                                received_signature_str,
+                                                to_string(encoded_policy));
     /* FIXME: this is a makeshift solution. The browser upload authenication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
      * method. Thus creating a strategy per request won't be necessary. */
-    const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store);
+    const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store, &extr);
     try {
       auto result = strategy.authenticate(s);
       auto& applier = result.first;
@@ -1847,7 +1855,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
     }
 
     ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
-    bufferlist decoded_policy;
+
+    ceph::bufferlist decoded_policy;
     try {
       decoded_policy.decode_base64(encoded_policy);
     } catch (buffer::error& err) {
@@ -1857,8 +1866,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
     }
 
     decoded_policy.append('\0'); // NULL terminate
-
     ldout(s->cct, 0) << "POST policy: " << decoded_policy.c_str() << dendl;
+
 
     int r = post_policy.from_json(decoded_policy, err_msg);
     if (r < 0) {
@@ -3884,30 +3893,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
  */
 int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 {
-  bool qsr = false;
-  string auth_id;
-  string auth_sign;
-
-  time_t now;
-  time(&now);
-
-  if (!s->http_auth || !(*s->http_auth)) {
-    auth_id = s->info.args.get("AWSAccessKeyId");
-    auth_sign = s->info.args.get("Signature");
-    string date = s->info.args.get("Expires");
-    time_t exp = atoll(date.c_str());
-    if (now >= exp)
-      return -EPERM;
-    qsr = true;
-  } else {
-    string auth_str(s->http_auth + 4);
-    int pos = auth_str.rfind(':');
-    if (pos < 0)
-      return -EINVAL;
-    auth_id = auth_str.substr(0, pos);
-    auth_sign = auth_str.substr(pos + 1);
-  }
-
   /* TODO(rzarzynski): this will be moved to the S3 handlers -- in exactly
    * way like we currently have in the case of Swift API. */
   static const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store);
@@ -4211,28 +4196,88 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
+bool rgw::auth::s3::RGWS3V2Extractor::is_time_skew_ok(const utime_t& header_time,
+                                                      const bool qsr) const
+{
+  /* Check for time skew first. */
+  const time_t req_sec = header_time.sec();
+  time_t now;
+  time(&now);
+
+  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
+                   << "; now - RGW_AUTH_GRACE_MINS="
+                   << now - RGW_AUTH_GRACE_MINS * 60
+                   << "; now + RGW_AUTH_GRACE_MINS="
+                   << now + RGW_AUTH_GRACE_MINS * 60
+                   << dendl;
+
+    ldout(cct, 0)  << "NOTICE: request time skew too big now="
+                   << utime_t(now, 0)
+                   << " req_time=" << header_time
+                   << dendl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
 std::tuple<Version2ndEngine::Extractor::access_key_id_t,
            Version2ndEngine::Extractor::signature_t,
-           Version2ndEngine::Extractor::expires_t,
-           Version2ndEngine::Extractor::qsr_t>
+           Version2ndEngine::Extractor::string_to_sign_t>
 rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
 {
+  std::string access_key_id;
+  std::string signature;
+  bool qsr = false;
+
   if (! s->http_auth || s->http_auth[0] == '\0') {
-    return std::make_tuple(s->info.args.get("AWSAccessKeyId"),
-                           s->info.args.get("Signature"),
-                           s->info.args.get("Expires"),
-                           true);
+    /* Credentials are provided in query string. We also need to verify
+     * the "Expires" parameter now. */
+    access_key_id = s->info.args.get("AWSAccessKeyId");
+    signature = s->info.args.get("Signature");
+    qsr = true;
+
+    std::string expires = s->info.args.get("Expires");
+    if (! expires.empty()) {
+      const time_t exp = atoll(expires.c_str());
+      time_t now;
+      time(&now);
+
+      if (now >= exp) {
+        throw -EPERM;
+      }
+    }
   } else {
+    /* The "Authorization" HTTP header is being used. */
     const std::string auth_str(s->http_auth + strlen("AWS "));
     const size_t pos = auth_str.rfind(':');
     if (pos != std::string::npos) {
-      return std::make_tuple(auth_str.substr(0, pos),
-                             auth_str.substr(pos + 1),
-                             std::string(), false);
+      access_key_id = auth_str.substr(0, pos);
+      signature = auth_str.substr(pos + 1);
     }
   }
 
-  return std::make_tuple("", "", "", false);
+  /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
+  std::string string_to_sign;
+  utime_t header_time;
+  if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
+        qsr)) {
+    ldout(cct, 10) << "failed to create the canonized auth header\n"
+                   << string_to_sign << dendl;
+    throw -EPERM;
+  }
+
+  ldout(cct, 10) << "string_to_sign:\n" << string_to_sign << dendl;
+
+  if (! is_time_skew_ok(header_time, qsr)) {
+    throw -ERR_REQUEST_TIME_SKEWED;
+  }
+
+  return std::make_tuple(std::move(access_key_id),
+                         std::move(signature),
+                         std::move(string_to_sign));
 }
 
 } /* namespace s3 */
@@ -4289,11 +4334,9 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::s3::LDAPEngine::authenticate(const std::string access_key_id,
-                                        const std::string signature,
-                                        const std::string expires,
-                                        const bool qsr,
-                                        const req_info& /* unused */,
+rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
+                                        const std::string& signature,
+                                        const std::string& string_to_sign,
                                         const req_state* const s) const
 {
   /* boost filters and/or string_ref may throw on invalid input */
@@ -4332,11 +4375,9 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string access_key_id,
 
 /* LocalVersion2ndEngine */
 rgw::auth::Engine::result_t
-rgw::auth::s3::LocalVersion2ndEngine::authenticate(std::string access_key_id,
-                                                   std::string signature,
-                                                   std::string expires,
-                                                   bool qsr,
-                                                   const req_info& info,
+rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key_id,
+                                                   const std::string& signature,
+                                                   const std::string& string_to_sign,
                                                    const req_state* const s) const
 {
   if (access_key_id.empty() || signature.empty()) {
@@ -4344,14 +4385,6 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(std::string access_key_id,
     throw -EINVAL;
   }
 
-  time_t now;
-  time(&now);
-  if (! expires.empty()) {
-    time_t exp = atoll(expires.c_str());
-    if (now >= exp) {
-      throw -EPERM;
-    }
-  }
   /* get the user info */
   RGWUserInfo user_info;
   if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
@@ -4367,44 +4400,23 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(std::string access_key_id,
     }
   }*/
 
-  /* now verify  signature */
-  string auth_hdr;
-  utime_t header_time;
-  if (! rgw_create_s3_canonical_header(info, &header_time, auth_hdr,
-        qsr)) {
-    ldout(cct, 10) << "failed to create auth header\n" << auth_hdr << dendl;
-    throw -EPERM;
-  }
-  ldout(cct, 10) << "auth_hdr:\n" << auth_hdr << dendl;
 
-  time_t req_sec = header_time.sec();
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-      req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
-             << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60
-             << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60
-             << dendl;
-    ldout(cct, 0)  << "NOTICE: request time skew too big now=" << utime_t(now, 0)
-             << " req_time=" << header_time
-             << dendl;
-    throw -ERR_REQUEST_TIME_SKEWED;
-  }
-
-  map<string, RGWAccessKey>::iterator iter = user_info.access_keys.find(access_key_id);
-  if (iter == user_info.access_keys.end()) {
+  const auto iter = user_info.access_keys.find(access_key_id);
+  if (iter == std::end(user_info.access_keys)) {
     ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
     throw -EPERM;
   }
-  RGWAccessKey& k = iter->second;
+  const RGWAccessKey& k = iter->second;
 
-  string digest;
-  int ret = rgw_get_s3_header_digest(auth_hdr, k.key, digest);
+  std::string digest;
+  int ret = rgw_get_s3_header_digest(string_to_sign, k.key, digest);
   if (ret < 0) {
     throw -EPERM;
   }
 
+  ldout(cct, 15) << "string_to_sign=" << string_to_sign << dendl;
   ldout(cct, 15) << "calculated digest=" << digest << dendl;
-  ldout(cct, 15) << "auth_sign=" << signature << dendl;
+  ldout(cct, 15) << "auth signature=" << signature << dendl;
   ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;
 
   if (signature != digest) {

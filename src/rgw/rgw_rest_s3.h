@@ -624,13 +624,12 @@ public:
 
     using access_key_id_t = std::string;
     using signature_t = std::string;
-    using expires_t = std::string;
-    using qsr_t = bool;
+    using string_to_sign_t = std::string;
 
     virtual std::tuple<access_key_id_t,
                        signature_t,
-                       expires_t,
-                       qsr_t> get_auth_data(const req_state* s) const = 0;
+                       string_to_sign_t>
+    get_auth_data(const req_state* s) const = 0;
   };
 
 protected:
@@ -644,38 +643,44 @@ protected:
 
   using result_t = rgw::auth::Engine::result_t;
 
-  virtual result_t authenticate(std::string access_key_id,
-                                std::string signature,
-                                std::string expires,
-                                bool qsr,
-                                const req_info& info,
+  virtual result_t authenticate(const std::string& access_key_id,
+                                const std::string& signature,
+                                const std::string& string_to_sign,
                                 const req_state* s) const = 0;
 
 public:
   result_t authenticate(const req_state* const s) const final {
     std::string access_key_id;
     std::string signature;
-    std::string expires;
-    bool qsr;
+    std::string string_to_sign;
 
-    std::tie(access_key_id, signature, expires, qsr) = \
+    /* Small reminder: an extractor is allowed to throw! */
+    std::tie(access_key_id, signature, string_to_sign) = \
       extractor.get_auth_data(s);
 
     if (access_key_id.empty() || signature.empty()) {
       return std::make_pair(nullptr, nullptr);
     } else {
-      return authenticate(std::move(access_key_id), std::move(signature),
-                          std::move(expires), qsr, s->info, s);
+      return authenticate(access_key_id, signature, string_to_sign, s);
     }
   }
 };
 
 class RGWS3V2Extractor : public Version2ndEngine::Extractor {
+  CephContext* const cct;
+
+  bool is_time_skew_ok(const utime_t& header_time,
+                       const bool qsr) const;
+
 public:
+  RGWS3V2Extractor(CephContext* const cct)
+    : cct(cct) {
+  }
+
   std::tuple<access_key_id_t,
              signature_t,
-             expires_t,
-             qsr_t> get_auth_data(const req_state* s) const override;
+             string_to_sign_t>
+  get_auth_data(const req_state* s) const override;
 };
 
 
@@ -683,18 +688,22 @@ class RGWGetPolicyV2Extractor : public Version2ndEngine::Extractor {
 private:
   std::string access_key_id;
   std::string signature;
+  std::string string_to_sign;
 
 public:
-  RGWGetPolicyV2Extractor(std::string access_key_id, std::string signature)
+  RGWGetPolicyV2Extractor(std::string access_key_id,
+                          std::string signature,
+                          std::string string_to_sign)
     : access_key_id(std::move(access_key_id)),
-      signature(std::move(signature)) {}
+      signature(std::move(signature)),
+      string_to_sign(std::move(string_to_sign)) {
+  }
 
   std::tuple<access_key_id_t,
              signature_t,
-             expires_t,
-             qsr_t> get_auth_data(const req_state* s) const override {
-                     // FIXME
-    return std::make_tuple(this->access_key_id, this->signature, "", false);
+             string_to_sign_t>
+  get_auth_data(const req_state* s) const override {
+    return std::make_tuple(access_key_id, signature, string_to_sign);
   }
 };
 
@@ -716,11 +725,9 @@ protected:
   acl_strategy_t get_acl_strategy() const;
   auth_info_t get_creds_info(const rgw::RGWToken& token) const noexcept;
 
-  result_t authenticate(std::string access_key_id,
-                        std::string signature,
-                        std::string expires,
-                        bool qsr,
-                        const req_info& info,
+  result_t authenticate(const std::string& access_key_id,
+                        const std::string& signature,
+                        const std::string& string_to_sign,
                         const req_state* s) const override;
 public:
   LDAPEngine(CephContext* const cct,
@@ -745,11 +752,9 @@ class LocalVersion2ndEngine : public Version2ndEngine {
   RGWRados* const store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
-  result_t authenticate(std::string access_key_id,
-                        std::string signature,
-                        std::string expires,
-                        bool qsr,
-                        const req_info& info,
+  result_t authenticate(const std::string& access_key_id,
+                        const std::string& signature,
+                        const std::string& string_to_sign,
                         const req_state* s) const override;
 public:
   LocalVersion2ndEngine(CephContext* const cct,
