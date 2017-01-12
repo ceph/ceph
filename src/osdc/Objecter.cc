@@ -4750,26 +4750,22 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
       c->map_check_error_str = "osd down";
       return RECALC_OP_TARGET_OSD_DOWN;
     }
-    c->osd = c->target_osd;
+    c->target.osd = c->target_osd;
   } else {
-    if (!osdmap->have_pg_pool(c->target_pg.pool())) {
+    int ret = _calc_target(&(c->target), true);
+    if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";
-      return RECALC_OP_TARGET_POOL_DNE;
-    }
-    vector<int> acting;
-    int acting_primary;
-    osdmap->pg_to_acting_osds(c->target_pg, &acting, &acting_primary);
-    if (acting_primary == -1) {
+      return ret;
+    } else if (ret == RECALC_OP_TARGET_OSD_DOWN) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
-      return RECALC_OP_TARGET_OSD_DOWN;
+      return ret;
     }
-    c->osd = acting_primary;
   }
 
   OSDSession *s;
-  int r = _get_session(c->osd, &s, sul);
+  int r = _get_session(c->target.osd, &s, sul);
   assert(r != -EAGAIN); /* shouldn't happen as we're holding the write lock */
 
   if (c->session != s) {
@@ -4791,7 +4787,7 @@ void Objecter::_assign_command_session(CommandOp *c,
   assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
   OSDSession *s;
-  int r = _get_session(c->osd, &s, sul);
+  int r = _get_session(c->target.osd, &s, sul);
   assert(r != -EAGAIN); /* shouldn't happen as we're holding the write lock */
 
   if (c->session != s) {

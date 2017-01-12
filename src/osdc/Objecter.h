@@ -1166,49 +1166,49 @@ public:
   struct OSDSession;
 
   struct op_target_t {
-    int flags;
+    int flags = 0;
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
     object_locator_t target_oloc;
 
-    bool precalc_pgid; ///< true if we are directed at base_pgid, not base_oid
-    pg_t base_pgid; ///< explciti pg target, if any
+    ///< true if we are directed at base_pgid, not base_oid
+    bool precalc_pgid = false;
+
+    ///< explcit pg target, if any
+    pg_t base_pgid;
 
     pg_t pgid; ///< last pg we mapped to
-    unsigned pg_num; ///< last pg_num we mapped to
-    unsigned pg_num_mask; ///< last pg_num_mask we mapped to
+    unsigned pg_num = 0; ///< last pg_num we mapped to
+    unsigned pg_num_mask = 0; ///< last pg_num_mask we mapped to
     vector<int> up; ///< set of up osds for last pg we mapped to
     vector<int> acting; ///< set of acting osds for last pg we mapped to
-    int up_primary; ///< primary for last pg we mapped to based on the up set
-    int acting_primary;  ///< primary for last pg we mapped to based on the
-			 ///  acting set
-    int size; ///< the size of the pool when were were last mapped
-    int min_size; ///< the min size of the pool when were were last mapped
-    bool sort_bitwise; ///< whether the hobject_t sort order is bitwise
+    int up_primary = -1; ///< last up_primary we mapped to
+    int acting_primary = -1;  ///< last acting_primary we mapped to
+    int size = -1; ///< the size of the pool when were were last mapped
+    int min_size = -1; ///< the min size of the pool when were were last mapped
+    bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
 
-    bool used_replica;
-    bool paused;
+    bool used_replica = false;
+    bool paused = false;
+
+    int osd = -1;      ///< the final target osd, or -1
 
     epoch_t last_force_resend = 0;
-    int osd;      ///< the final target osd, or -1
 
     op_target_t(object_t oid, object_locator_t oloc, int flags)
       : flags(flags),
 	base_oid(oid),
-	base_oloc(oloc),
-	precalc_pgid(false),
-	pg_num(0),
-	pg_num_mask(0),
-	up_primary(-1),
-	acting_primary(-1),
-	size(-1),
-	min_size(-1),
-	sort_bitwise(false),
-	used_replica(false),
-	paused(false),
-	osd(-1)
-    {}
+	base_oloc(oloc)
+      {}
+
+    op_target_t(pg_t pgid)
+      : base_oloc(pgid.pool(), pgid.ps()),
+	precalc_pgid(true),
+	base_pgid(pgid)
+      {}
+
+    op_target_t() = default;
 
     void dump(Formatter *f) const;
   };
@@ -1547,29 +1547,56 @@ public:
 
   // -- osd commands --
   struct CommandOp : public RefCountedObject {
-    OSDSession *session;
-    ceph_tid_t tid;
+    OSDSession *session = nullptr;
+    ceph_tid_t tid = 0;
     vector<string> cmd;
     bufferlist inbl;
-    bufferlist *poutbl;
-    string *prs;
-    int target_osd;
-    pg_t target_pg;
-    int osd; /* calculated osd for sending request */
-    epoch_t map_dne_bound;
-    int map_check_error; // error to return if map check fails
-    const char *map_check_error_str;
-    Context *onfinish;
-    uint64_t ontimeout;
+    bufferlist *poutbl = nullptr;
+    string *prs = nullptr;
+
+    // target_osd == -1 means target_pg is valid
+    const int target_osd = -1;
+    const pg_t target_pg;
+
+    op_target_t target;
+
+    epoch_t map_dne_bound = 0;
+    int map_check_error = 0; // error to return if map check fails
+    const char *map_check_error_str = nullptr;
+
+    Context *onfinish = nullptr;
+    uint64_t ontimeout = 0;
     ceph::mono_time last_submit;
 
-    CommandOp()
-      : session(NULL),
-	tid(0), poutbl(NULL), prs(NULL), target_osd(-1), osd(-1),
-	map_dne_bound(0),
-	map_check_error(0),
-	map_check_error_str(NULL),
-	onfinish(NULL), ontimeout(0) {}
+    CommandOp(
+      int target_osd,
+      const vector<string> &cmd,
+      bufferlist inbl,
+      bufferlist *poutbl,
+      string *prs,
+      Context *onfinish)
+      : cmd(cmd),
+	inbl(inbl),
+	poutbl(poutbl),
+	prs(prs),
+	target_osd(target_osd),
+	onfinish(onfinish) {}
+
+    CommandOp(
+      pg_t pgid,
+      const vector<string> &cmd,
+      bufferlist inbl,
+      bufferlist *poutbl,
+      string *prs,
+      Context *onfinish)
+      : cmd(cmd),
+	inbl(inbl),
+	poutbl(poutbl),
+	prs(prs),
+	target_pg(pgid),
+	target(pgid),
+	onfinish(onfinish) {}
+
   };
 
   int submit_command(CommandOp *c, ceph_tid_t *ptid);
@@ -2123,25 +2150,25 @@ public:
 		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
-    CommandOp *c = new CommandOp;
-    c->cmd = cmd;
-    c->inbl = inbl;
-    c->poutbl = poutbl;
-    c->prs = prs;
-    c->onfinish = onfinish;
-    c->target_osd = osd;
+    CommandOp *c = new CommandOp(
+      osd,
+      cmd,
+      inbl,
+      poutbl,
+      prs,
+      onfinish);
     return submit_command(c, ptid);
   }
   int pg_command(pg_t pgid, vector<string>& cmd,
 		 const bufferlist& inbl, ceph_tid_t *ptid,
 		 bufferlist *poutbl, string *prs, Context *onfinish) {
-    CommandOp *c = new CommandOp;
-    c->cmd = cmd;
-    c->inbl = inbl;
-    c->poutbl = poutbl;
-    c->prs = prs;
-    c->onfinish = onfinish;
-    c->target_pg = pgid;
+    CommandOp *c = new CommandOp(
+      pgid,
+      cmd,
+      inbl,
+      poutbl,
+      prs,
+      onfinish);
     return submit_command(c, ptid);
   }
 
