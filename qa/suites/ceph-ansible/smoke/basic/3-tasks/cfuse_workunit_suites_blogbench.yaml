@@ -1,8 +1,9 @@
 meta:
 - desc: "Run the cephfs blogbench tests"
+
 tasks:
 - ceph-fuse:
 - workunit:
     clients:
-      all:
+      client.0:
         - suites/blogbench.sh
