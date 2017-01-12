@@ -363,34 +363,6 @@ EC2Engine::get_from_keystone(const std::string& access_key_id,
   return std::move(token_envelope);
 }
 
-
-bool EC2Engine::is_time_skew_ok(const utime_t& header_time,
-                                const bool qsr) const
-{
-  /* Check for time skew first. */
-  const time_t req_sec = header_time.sec();
-  time_t now;
-  time(&now);
-
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
-                   << "; now - RGW_AUTH_GRACE_MINS="
-                   << now - RGW_AUTH_GRACE_MINS * 60
-                   << "; now + RGW_AUTH_GRACE_MINS="
-                   << now + RGW_AUTH_GRACE_MINS * 60
-                   << dendl;
-
-    ldout(cct, 0)  << "NOTICE: request time skew too big now="
-                   << utime_t(now, 0)
-                   << " req_time=" << header_time
-                   << dendl;
-    return false;
-  } else {
-    return true;
-  }
-}
-
 EC2Engine::acl_strategy_t
 EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
 {
@@ -429,11 +401,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
   };
 }
 
-rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
-                                                    std::string signature,
-                                                    std::string expires,
-                                                    bool qsr,
-                                                    const req_info& info,
+rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_key_id,
+                                                    const std::string& signature,
+                                                    const std::string& string_to_sign,
                                                     /* Passthorugh only! */
                                                     const req_state* s) const
 {
@@ -452,16 +422,6 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
     std::vector<std::string> admin;
   } accepted_roles(cct);
 
-  bool is_ok;
-  std::string string_to_sign;
-  utime_t header_time;
-  std::tie(is_ok, string_to_sign, header_time) = \
-    rgw_create_s3_canonical_header(info, qsr);
-  if (! is_ok) {
-    dout(10) << "failed to create auth header\n" << string_to_sign << dendl;
-    throw -EPERM;
-  }
-
   const auto t = get_from_keystone(access_key_id, string_to_sign,
                                    signature);
   /* Verify expiration. */
@@ -470,10 +430,6 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(std::string access_key_id,
                   << ":" << t.get_user_name()
                   << " expired: " << t.get_expires() << dendl;
     return std::make_pair(nullptr, nullptr);
-  }
-
-  if (! is_time_skew_ok(header_time, qsr)) {
-    throw -ERR_REQUEST_TIME_SKEWED;
   }
 
   /* check if we have a valid role */
