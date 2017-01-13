@@ -83,6 +83,10 @@ void AioDiscardEvent::dump(Formatter *f) const {
   f->dump_unsigned("length", length);
 }
 
+uint32_t AioWriteEvent::get_fixed_size() {
+  return EventEntry::get_fixed_size() + 16 /* offset, length */;
+}
+
 void AioWriteEvent::encode(bufferlist& bl) const {
   ::encode(offset, bl);
   ::encode(length, bl);
@@ -314,9 +318,10 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
+  encode_metadata(bl);
 }
 
 void EventEntry::decode(bufferlist::iterator& it) {
@@ -385,62 +390,80 @@ void EventEntry::decode(bufferlist::iterator& it) {
 
   boost::apply_visitor(DecodeVisitor(struct_v, it), event);
   DECODE_FINISH(it);
+  if (struct_v >= 4) {
+    decode_metadata(it);
+  }
 }
 
 void EventEntry::dump(Formatter *f) const {
   boost::apply_visitor(DumpVisitor(f, "event_type"), event);
+  f->dump_stream("timestamp") << timestamp;
+}
+
+void EventEntry::encode_metadata(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(timestamp, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EventEntry::decode_metadata(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(timestamp, it);
+  DECODE_FINISH(it);
 }
 
 void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(AioDiscardEvent()));
-  o.push_back(new EventEntry(AioDiscardEvent(123, 345)));
+  o.push_back(new EventEntry(AioDiscardEvent(123, 345), utime_t(1, 1)));
 
   bufferlist bl;
   bl.append(std::string(32, '1'));
   o.push_back(new EventEntry(AioWriteEvent()));
-  o.push_back(new EventEntry(AioWriteEvent(123, 456, bl)));
+  o.push_back(new EventEntry(AioWriteEvent(123, 456, bl), utime_t(1, 1)));
 
   o.push_back(new EventEntry(AioFlushEvent()));
 
-  o.push_back(new EventEntry(OpFinishEvent(123, -1)));
+  o.push_back(new EventEntry(OpFinishEvent(123, -1), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapCreateEvent()));
+  o.push_back(new EventEntry(SnapCreateEvent(), utime_t(1, 1)));
   o.push_back(new EventEntry(SnapCreateEvent(234, "snap",
-					       cls::rbd::UserSnapshotNamespace())));
+                                             cls::rbd::UserSnapshotNamespace()),
+                             utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapRemoveEvent()));
-  o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
+  o.push_back(new EventEntry(SnapRemoveEvent(345, "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapRenameEvent()));
-  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap")));
+  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap"),
+                             utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapProtectEvent()));
-  o.push_back(new EventEntry(SnapProtectEvent(567, "snap")));
+  o.push_back(new EventEntry(SnapProtectEvent(567, "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapUnprotectEvent()));
-  o.push_back(new EventEntry(SnapUnprotectEvent(678, "snap")));
+  o.push_back(new EventEntry(SnapUnprotectEvent(678, "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(SnapRollbackEvent()));
-  o.push_back(new EventEntry(SnapRollbackEvent(789, "snap")));
+  o.push_back(new EventEntry(SnapRollbackEvent(789, "snap"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(RenameEvent()));
-  o.push_back(new EventEntry(RenameEvent(890, "image name")));
+  o.push_back(new EventEntry(RenameEvent(890, "image name"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(ResizeEvent()));
-  o.push_back(new EventEntry(ResizeEvent(901, 1234)));
+  o.push_back(new EventEntry(ResizeEvent(901, 1234), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(FlattenEvent(123)));
+  o.push_back(new EventEntry(FlattenEvent(123), utime_t(1, 1)));
 
   o.push_back(new EventEntry(DemoteEvent()));
 
   o.push_back(new EventEntry(UpdateFeaturesEvent()));
-  o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true)));
+  o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true), utime_t(1, 1)));
 
   o.push_back(new EventEntry(MetadataSetEvent()));
-  o.push_back(new EventEntry(MetadataSetEvent(123, "key", "value")));
+  o.push_back(new EventEntry(MetadataSetEvent(123, "key", "value"), utime_t(1, 1)));
 
   o.push_back(new EventEntry(MetadataRemoveEvent()));
-  o.push_back(new EventEntry(MetadataRemoveEvent(123, "key")));
+  o.push_back(new EventEntry(MetadataRemoveEvent(123, "key"), utime_t(1, 1)));
 }
 
 // Journal Client
