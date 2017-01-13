@@ -26,8 +26,9 @@ function(add_tracing_library name tracings version)
     get_filename_component(tp ${tp_file} NAME_WE)
     list(APPEND hdrs
       ${header_dir}/${tp}.h)
+    list(APPEND tpfiles ${tp}.c)
   endforeach()
-  add_library(${name} SHARED ${hdrs} ${tp}.c)
+  add_library(${name} SHARED ${hdrs} ${tpfiles})
   target_link_libraries(${name} ${LTTNGUST_LIBRARIES} ${CMAKE_DL_LIBS})
   string(REGEX MATCH "^[0-9]+" soversion ${version})
   set_target_properties(${name} PROPERTIES
