@@ -364,10 +364,6 @@ public:
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
     }
-    friend std::size_t hash_value(const SharedBlob &e) {
-      rjhash<uint32_t> h;
-      return h(e.get_sbid());
-    }
     inline Cache* get_cache() {
       return coll ? coll->cache : nullptr;
     }
