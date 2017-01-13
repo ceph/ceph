@@ -47,11 +47,6 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
   if (tcp_fd >= 0)
     ::close(tcp_fd);
   error = ECONNRESET;
-  Mutex::Locker l(lock);
-  for (unsigned i=0; i < wc.size(); ++i)
-    infiniband->recall_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
-  for (unsigned i=0; i < buffers.size(); ++i)
-    infiniband->recall_chunk(buffers[i]);
 }
 
 void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
@@ -260,10 +255,12 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     if (response->byte_len == 0) {
       if (connected) {
         error = ECONNRESET;
-        assert(infiniband->post_chunk(chunk) == 0);
+        cleanup();
         ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
       }
-      break;
+      r = infiniband->post_chunk(chunk);
+      assert(r == 0);
+      continue;
     }
     //assert(response->byte_len);
     if (read == (ssize_t)len) {
@@ -518,6 +515,18 @@ void RDMAConnectedSocketImpl::cleanup() {
     delete con_handler;
     con_handler = nullptr;
   }
+  int r = 0;
+  Mutex::Locker l(lock);
+  for (unsigned i = 0; i < wc.size(); ++i) {
+    r = infiniband->recall_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
+    assert(r);
+  }
+  wc.clear();
+  for (auto chunk : buffers) {
+    r = infiniband->post_chunk(chunk);
+    assert(r == 0);
+  }
+  buffers.clear();
 }
 
 void RDMAConnectedSocketImpl::notify()
@@ -530,6 +539,7 @@ void RDMAConnectedSocketImpl::shutdown()
 {
   if (!error)
     fin();
+  cleanup();
   error = ECONNRESET;
   active = false;
 }
@@ -538,6 +548,7 @@ void RDMAConnectedSocketImpl::close()
 {
   if (!error)
     fin();
+  cleanup();
   error = ECONNRESET;
   active = false;
 }
@@ -548,6 +559,7 @@ void RDMAConnectedSocketImpl::fault()
     qp->to_dead();
     qp = NULL;
     }*/
+  cleanup();
   error = ECONNRESET;
   connected = 1;
   notify();
