@@ -277,6 +277,12 @@
 /* Support ARMv8 CRC instructions */
 #cmakedefine HAVE_ARMV8_CRC
 
+/* Support ARMv8 CRYPTO instructions */
+#cmakedefine HAVE_ARMV8_CRYPTO
+
+/* Support ARMv8 CRC and CRYPTO intrinsics */
+#cmakedefine HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
+
 /* Define if you have struct stat.st_mtimespec.tv_nsec */
 #cmakedefine HAVE_STAT_ST_MTIMESPEC_TV_NSEC
 
