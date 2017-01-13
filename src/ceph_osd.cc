@@ -625,6 +625,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
+  register_async_signal_handler_oneshot(SIGABRT, handle_osd_signal);
 
   osd->final_init();
 
@@ -641,6 +642,7 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_osd_signal);
   unregister_async_signal_handler(SIGTERM, handle_osd_signal);
+  unregister_async_signal_handler(SIGABRT, handle_osd_signal);
   shutdown_async_signal_handler();
 
   // done
