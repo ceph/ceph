@@ -1385,7 +1385,7 @@ void Server::handle_client_request(MClientRequest *req)
 	}
 	req->get_connection()->send_message(reply);
 
-	if (req->is_replay())
+	if (mds->is_clientreplay())
 	  mds->queue_one_replay();
 
 	req->put();
