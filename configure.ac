@@ -531,6 +531,29 @@ AS_IF([test "$RADOSGW" = "1"],
                             AC_DEFINE([HAVE_CURL_MULTI_WAIT], [1], [Define if have curl_multi_wait()]))
               ])
 
+AS_IF([test "$RADOSGW" = "1"],  [
+    AX_CHECK_OPENSSL([],
+        [AC_MSG_FAILURE([radosgw selected but OpenSSL not found])])
+AC_MSG_NOTICE([radosgw: openssl INCLUDES $OPENSSL_INCLUDES LIBS $OPENSSL_LIBS])
+AC_MSG_CHECKING(for radosgw/civetweb: sonames for openssl libraries)
+  saved_LIBS="${LIBS}"
+  LIBS="$OPENSSL_LIBS"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[]])],
+      [AC_MSG_RESULT([linked])
+eval `$OBJDUMP -p ./conftest$ac_exeext | sed -n 's/^  NEEDED  *libssl/LIBSSL_SONAME=libssl/p;
+s/^  NEEDED  *libcrypto/LIBCRYPTO_SONAME=libcrypto/p'`],
+      AC_MSG_RESULT([problem looking up sonames]))
+  LIBS="${saved_LIBS}"
+AC_MSG_NOTICE([radosgw: openssl sonames $LIBSSL_SONAME $LIBCRYPTO_SONAME])])
+SONAME_DEFINES=""
+AS_IF([test "x$LIBSSL_SONAME" != x], [
+SONAME_DEFINES="$SONAME_DEFINES -DSSL_LIB=\\"'"'"$LIBSSL_SONAME\\"'"'""
+])
+AS_IF([test "x$LIBCRYPTO_SONAME" != x], [
+SONAME_DEFINES="$SONAME_DEFINES -DCRYPTO_LIB=\\"'"'"$LIBCRYPTO_SONAME\\"'"'""
+])
+AC_SUBST(SONAME_DEFINES)
+
 # fuse?
 AC_ARG_WITH([fuse],
             [AS_HELP_STRING([--without-fuse], [disable FUSE userspace client])],
