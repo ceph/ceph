@@ -152,6 +152,12 @@ add_executable(unittest_tableformatter
 add_ceph_unittest(unittest_tableformatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_tableformatter)
 target_link_libraries(unittest_tableformatter global)
 
+add_executable(unittest_xmlformatter
+    test_xmlformatter.cc
+    )
+add_ceph_unittest(unittest_xmlformatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_xmlformatter)
+target_link_libraries(unittest_xmlformatter ceph-common)
+
 # unittest_bit_vector
 add_executable(unittest_bit_vector
   test_bit_vector.cc
