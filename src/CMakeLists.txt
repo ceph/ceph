@@ -544,16 +544,15 @@ else()
 endif()
 
 add_library(common-objs OBJECT ${libcommon_files})
-add_library(ceph-common SHARED
+set(ceph_common_objs
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:global_common_objs>)
-set_target_properties(ceph-common PROPERTIES
-  INSTALL_RPATH "")
-target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
+set(ceph_common_deps
+  json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_THREAD_LIBRARY}
   ${Boost_SYSTEM_LIBRARY}
   ${Boost_REGEX_LIBRARY}
@@ -564,19 +563,7 @@ target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
   ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 if(NOT WITH_SYSTEM_BOOST)
-  target_link_libraries(ceph-common ${ZLIB_LIBRARIES})
-endif()
-# appease dpkg-shlibdeps
-set_target_properties(ceph-common PROPERTIES
-  SOVERSION 0)
-install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
-if(WITH_EMBEDDED)
-  add_library(cephd_common STATIC
-    $<TARGET_OBJECTS:common_buffer_obj>
-    $<TARGET_OBJECTS:common_texttable_obj>
-    $<TARGET_OBJECTS:compressor_objs>
-    $<TARGET_OBJECTS:common-objs>
-    $<TARGET_OBJECTS:common_mountcephfs_objs>)
+  list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
@@ -587,8 +574,19 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
 include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
-  target_link_libraries(ceph-common common_crc_aarch64)
+  list(APPEND ceph_common_deps common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
+
+add_library(common STATIC ${ceph_common_objs})
+target_link_libraries(common ${ceph_common_deps})
+
+add_library(ceph-common SHARED ${ceph_common_objs})
+target_link_libraries(ceph-common ${ceph_common_deps})
+# appease dpkg-shlibdeps
+set_target_properties(ceph-common PROPERTIES
+  SOVERSION 0
+  INSTALL_RPATH "")
+install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
