@@ -428,6 +428,7 @@ protected:
 
   map_t::iterator begin() { return items.begin(); }
   map_t::iterator end() { return items.end(); }
+  map_t::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
 
   unsigned get_num_head_items() const { return num_head_items; }
   unsigned get_num_head_null() const { return num_head_null; }
