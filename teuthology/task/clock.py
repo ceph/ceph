@@ -38,9 +38,11 @@ def task(ctx, config):
             if l.startswith('server')
         ]
         os.remove(ntpconf)
+        # CentOS calls it ntpd, Xenial/Trusty are ntp.  Thanks guys.
         args = [
-            'sudo',
-            'service', 'ntp', 'stop',
+            'sudo', 'service', 'ntp', 'stop',
+            run.Raw('||'),
+            'sudo', 'service', 'ntpd', 'stop',
             run.Raw(';'),
             'sudo',
             'ntpdate',
@@ -48,8 +50,9 @@ def task(ctx, config):
         args.extend(servers)
         args.extend([
             run.Raw(';'),
-            'sudo',
-            'service', 'ntp', 'start',
+            'sudo', 'service', 'ntp', 'start',
+            run.Raw('||'),
+            'sudo', 'service', 'ntpd', 'start',
             run.Raw(';'),
             'PATH=/usr/bin:/usr/sbin',
             'ntpdc', '-p',
