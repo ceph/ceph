@@ -5,6 +5,8 @@
 #include "test/librbd/test_support.h"
 #include "librbd/ManagedLock.h"
 #include "librbd/managed_lock/AcquireRequest.h"
+#include "librbd/managed_lock/BreakRequest.h"
+#include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/ReacquireRequest.h"
 #include "librbd/managed_lock/ReleaseRequest.h"
 #include "gmock/gmock.h"
@@ -78,6 +80,34 @@ struct ReacquireRequest<MockManagedLockImageCtx> : public BaseRequest<ReacquireR
 template <>
 struct ReleaseRequest<MockManagedLockImageCtx> : public BaseRequest<ReleaseRequest<MockManagedLockImageCtx> > {
   MOCK_METHOD0(send, void());
+};
+
+template <>
+struct GetLockerRequest<MockManagedLockImageCtx> {
+  static GetLockerRequest* create(librados::IoCtx& ioctx,
+                                  const std::string& oid,
+                                  Locker *locker, Context *on_finish) {
+    assert(0 == "unexpected call");
+  }
+
+  void send() {
+    assert(0 == "unexpected call");
+  }
+};
+
+template <>
+struct BreakRequest<MockManagedLockImageCtx> {
+  static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+                              const std::string& oid, const Locker &locker,
+                              bool blacklist_locker,
+                              uint32_t blacklist_expire_seconds,
+                              bool force_break_lock, Context *on_finish) {
+    assert(0 == "unexpected call");
+  }
+
+  void send() {
+    assert(0 == "unexpected call");
+  }
 };
 
 } // namespace managed_lock

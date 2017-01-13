@@ -20,6 +20,8 @@ namespace librbd {
 
 struct ImageCtx;
 
+namespace managed_lock { struct Locker; }
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class ManagedLock {
 private:
@@ -50,6 +52,9 @@ public:
   void try_acquire_lock(Context *on_acquired);
   void release_lock(Context *on_released);
   void reacquire_lock(Context *on_reacquired = nullptr);
+  void get_locker(managed_lock::Locker *locker, Context *on_finish);
+  void break_lock(const managed_lock::Locker &locker, bool force_break_lock,
+                  Context *on_finish);
 
   bool is_shutdown() const {
     Mutex::Locker l(m_lock);
@@ -168,6 +173,7 @@ private:
 
   static std::string encode_lock_cookie(uint64_t watch_handle);
 
+  bool is_lock_owner(Mutex &lock) const;
   bool is_transition_state() const;
 
   void append_context(Action action, Context *ctx);
