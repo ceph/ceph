@@ -9,7 +9,6 @@ overrides:
             osd default pool size: 2                                                                                                                                                                        
             mon pg warn min per osd: 2                                                                                                                                                                      
         ceph_dev: true                                                                                                                                                                                      
-        ceph_dev_branch: jewel                                                                                                                                                                              
         ceph_dev_key: https://download.ceph.com/keys/autobuild.asc                                                                                                                                          
         ceph_origin: upstream                                                                                                                                                                               
         ceph_test: true                                                                                                                                                                                     
