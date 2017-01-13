@@ -212,7 +212,7 @@ public:
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
-  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info);
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status();
   int init_sync_status();
@@ -268,7 +268,7 @@ public:
   int read_log_info(rgw_mdlog_info *log_info) {
     return master_log.read_log_info(log_info);
   }
-  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info) {
     return master_log.read_master_log_shards_info(master_period, shards_info);
   }
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
