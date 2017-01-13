@@ -323,20 +323,26 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref = {0}; ///< reference count
+    bool loaded = false;
 
-    // these are defined/set if the blob is marked 'shared'
-    uint64_t sbid = 0;          ///< shared blob id
     Collection *coll = nullptr;
-    bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
+    union {
+      uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
+      bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
+    };
     BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(Collection *_coll) : coll(_coll), persistent(nullptr) {
+    SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
       if (get_cache()) {
 	get_cache()->add_blob();
       }
     }
     SharedBlob(uint64_t i, Collection *_coll);
     ~SharedBlob();
+
+    uint64_t get_sbid() const {
+      return loaded ? persistent->sbid : sbid_unloaded;
+    }
 
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
     friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
@@ -356,11 +362,11 @@ public:
       PExtentVector *r);
 
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
-      return l.sbid == r.sbid;
+      return l.get_sbid() == r.get_sbid();
     }
     friend std::size_t hash_value(const SharedBlob &e) {
       rjhash<uint32_t> h;
-      return h(e.sbid);
+      return h(e.get_sbid());
     }
     inline Cache* get_cache() {
       return coll ? coll->cache : nullptr;
@@ -369,7 +375,7 @@ public:
       return coll ? &(coll->shared_blob_set) : nullptr;
     }
     inline bool is_loaded() const {
-      return persistent != nullptr;
+      return loaded;
     }
 
   };
@@ -394,7 +400,7 @@ public:
 
     void add(Collection* coll, SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
-      sb_map[sb->sbid] = sb;
+      sb_map[sb->get_sbid()] = sb;
       sb->coll = coll;
     }
 
@@ -402,7 +408,7 @@ public:
       std::lock_guard<std::mutex> l(lock);
       if (sb->nref == 0) {
 	assert(sb->get_parent() == this);
-	sb_map.erase(sb->sbid);
+	sb_map.erase(sb->get_sbid());
 	return true;
       }
       return false;

@@ -732,18 +732,20 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
+  f->dump_int("sbid", sbid);
   f->dump_object("ref_map", ref_map);
 }
 
 void bluestore_shared_blob_t::generate_test_instances(
   list<bluestore_shared_blob_t*>& ls)
 {
-  ls.push_back(new bluestore_shared_blob_t);
+  ls.push_back(new bluestore_shared_blob_t(1));
 }
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)
 {
-  out << "shared_blob(" << sb.ref_map << ")";
+  out << " sbid 0x" << std::hex << sb.sbid << std::dec;
+  out << " ref_map(" << sb.ref_map << ")";
   return out;
 }
 
