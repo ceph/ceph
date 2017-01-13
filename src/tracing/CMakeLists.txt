@@ -34,7 +34,8 @@ function(add_tracing_library name tracings version)
   set_target_properties(${name} PROPERTIES
     OUTPUT_NAME ${name}
     VERSION ${version}
-    SOVERSION ${soversion})
+    SOVERSION ${soversion}
+    INSTALL_RPATH "")
 endfunction()
 
 set(osd_traces oprequest.tp osd.tp pg.tp)
