@@ -130,7 +130,7 @@ struct denc_counter_t {
 WRITE_CLASS_DENC(denc_counter_t)
 
 struct denc_counter_bounded_t {
-  void bound_encode(size_t& p) const {
+  static void bound_encode(size_t& p) {
     ++counts.num_bound_encode;
     ++p;  // denc.h does not like 0-length objects
   }
@@ -334,10 +334,17 @@ struct foo_t {
   int32_t a = 0;
   uint64_t b = 123;
 
-  DENC(foo_t, v, p) {
+  DENC_BOUNDED(foo_t, v, p) {
     DENC_START(1, 1, p);
     ::denc(v.a, p);
     ::denc(v.b, p);
+    DENC_FINISH(p);
+  }
+
+  DENC_BOUND_ENCODE(foo_t, p) {
+    DENC_START(1, 1, p);
+    ::denc(bounded_t<decltype(foo_t::a)>{}, p);
+    ::denc(bounded_t<decltype(foo_t::b)>{}, p);
     DENC_FINISH(p);
   }
 
@@ -351,10 +358,16 @@ struct foo2_t {
   int32_t c = 0;
   uint64_t d = 123;
 
-  DENC(foo2_t, v, p) {
+  DENC_BOUNDED(foo2_t, v, p) {
     DENC_START(1, 1, p);
     ::denc(v.c, p);
     ::denc(v.d, p);
+    DENC_FINISH(p);
+  }
+  DENC_BOUND_ENCODE(foo2_t, p) {
+    DENC_START(1, 1, p);
+    ::denc(bounded_t<decltype(foo2_t::c)>{}, p);
+    ::denc(bounded_t<decltype(foo2_t::d)>{}, p);
     DENC_FINISH(p);
   }
 
@@ -369,9 +382,15 @@ struct bar_t {
   int32_t a = 0;
   uint64_t b = 123;
 
-  DENC_FEATURED(bar_t, v, p, f) {
+  DENC_FEATURED_BOUNDED(bar_t, v, p, f) {
     ::denc(v.a, p, f);
     ::denc(v.b, p, f);
+  }
+  DENC_FEATURED_BOUND_ENCODE(bar_t, p, f) {
+    DENC_START(1, 1, p);
+    ::denc(bounded_t<decltype(bar_t::a)>{}, p, f);
+    ::denc(bounded_t<decltype(bar_t::b)>{}, p, f);
+    DENC_FINISH(p);
   }
 
   friend bool operator==(const bar_t& l, const bar_t& r) {
