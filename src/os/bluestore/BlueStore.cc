@@ -1367,19 +1367,19 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
 {
   out << "SharedBlob(" << &sb;
-  if (sb.sbid) {
-    out << " sbid 0x" << std::hex << sb.sbid << std::dec;
-  }
-  if (sb.persistent) {
+  
+  if (sb.loaded) {
     out << " loaded " << *sb.persistent;
+  } else {
+    out << " sbid 0x" << std::hex << sb.sbid_unloaded << std::dec;
   }
   return out << ")";
 }
 
 BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
-  : sbid(i), coll(_coll), persistent(nullptr)
+  : coll(_coll), sbid_unloaded(i)
 {
-  assert(sbid > 0);
+  assert(sbid_unloaded > 0);
   if (get_cache()) {
     get_cache()->add_blob();
   }
@@ -1392,7 +1392,9 @@ BlueStore::SharedBlob::~SharedBlob()
     bc._clear(get_cache());
     get_cache()->rm_blob();
   }
-  delete persistent; //nullptr is OK to delete too
+  if (loaded && persistent) {
+    delete persistent; 
+  }
 }
 
 void BlueStore::SharedBlob::put()
@@ -2026,7 +2028,7 @@ bool BlueStore::ExtentMap::encode_some(
     p->blob->bound_encode(
       bound,
       struct_v,
-      p->blob->shared_blob->sbid,
+      p->blob->shared_blob->get_sbid(),
       false);
   }
 
@@ -2079,7 +2081,7 @@ bool BlueStore::ExtentMap::encode_some(
       }
       pos = p->logical_end();
       if (include_blob) {
-	p->blob->encode(app, struct_v, p->blob->shared_blob->sbid, false);
+	p->blob->encode(app, struct_v, p->blob->shared_blob->get_sbid(), false);
       }
     }
   }
@@ -2177,7 +2179,7 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
   denc_varint((uint32_t)0, key_size);
   p += spanning_blob_map.size() * key_size;
   for (const auto& i : spanning_blob_map) {
-    i.second->bound_encode(p, struct_v, i.second->shared_blob->sbid, true);
+    i.second->bound_encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
   }
 }
 
@@ -2193,7 +2195,7 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
     denc_varint(i.second->id, p);
-    i.second->encode(p, struct_v, i.second->shared_blob->sbid, true);
+    i.second->encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
   }
 }
 
@@ -2587,26 +2589,28 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 
     bufferlist v;
     string key;
-    get_shared_blob_key(sb->sbid, &key);
+    auto sbid = sb->get_sbid();
+    get_shared_blob_key(sbid, &key);
     int r = store->db->get(PREFIX_SHARED_BLOB, key, &v);
     if (r < 0) {
-	lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sb->sbid
+	lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " not found at key "
 			  << pretty_binary_string(key) << dendl;
       assert(0 == "uh oh, missing shared_blob");
     }
 
-    sb->persistent = new bluestore_shared_blob_t();
+    sb->loaded = true;
+    sb->persistent = new bluestore_shared_blob_t(sbid);
     bufferlist::iterator p = v.begin();
     ::decode(*(sb->persistent), p);
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sb->sbid
+    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " loaded shared_blob " << *sb << dendl;
   }
 }
 
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
-  assert(b->shared_blob->is_loaded());
+  assert(!b->shared_blob->is_loaded());
 
   ldout(store->cct, 10) << __func__ << " " << *b << dendl;
   bluestore_blob_t& blob = b->dirty_blob();
@@ -2616,8 +2620,8 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   blob.clear_flag(bluestore_blob_t::FLAG_MUTABLE);
 
   // update shared blob
-  b->shared_blob->sbid = sbid;
-  b->shared_blob->persistent = new bluestore_shared_blob_t();
+  b->shared_blob->loaded = true;
+  b->shared_blob->persistent = new bluestore_shared_blob_t(sbid);
   shared_blob_set.add(this, b->shared_blob.get());
   for (auto p : blob.extents) {
     if (p.is_valid()) {
@@ -4768,18 +4772,18 @@ int BlueStore::fsck(bool deep)
 	    i.first->get_referenced_bytes();
 	}
 	if (blob.is_shared()) {
-	  if (i.first->shared_blob->sbid > blobid_max) {
+	  if (i.first->shared_blob->get_sbid() > blobid_max) {
 	    derr << __func__ << " " << oid << " blob " << blob
-		 << " sbid " << i.first->shared_blob->sbid << " > blobid_max "
+		 << " sbid " << i.first->shared_blob->get_sbid() << " > blobid_max "
 		 << blobid_max << dendl;
 	    ++errors;
-	  } else if (i.first->shared_blob->sbid == 0) {
+	  } else if (i.first->shared_blob->get_sbid() == 0) {
             derr << __func__ << " " << oid << " blob " << blob
                  << " marked as shared but has uninitialized sbid"
                  << dendl;
             ++errors;
           }
-	  sb_info_t& sbi = sb_info[i.first->shared_blob->sbid];
+	  sb_info_t& sbi = sb_info[i.first->shared_blob->get_sbid()];
 	  sbi.sb = i.first->shared_blob;
 	  sbi.oids.push_back(oid);
 	  sbi.compressed = blob.is_compressed();
@@ -4836,7 +4840,7 @@ int BlueStore::fsck(bool deep)
       } else {
 	++num_shared_blobs;
 	sb_info_t& sbi = p->second;
-	bluestore_shared_blob_t shared_blob;
+	bluestore_shared_blob_t shared_blob(sbid);
 	bufferlist bl = it->value();
 	bufferlist::iterator blp = bl.begin();
 	::decode(shared_blob, blp);
@@ -6775,15 +6779,16 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize shared_blobs
   for (auto sb : txc->shared_blobs) {
     string key;
-    get_shared_blob_key(sb->sbid, &key);
+    auto sbid = sb->get_sbid();
+    get_shared_blob_key(sbid, &key);
     if (sb->persistent->empty()) {
-      dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
+      dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
 	       << " is empty" << dendl;
       t->rmkey(PREFIX_SHARED_BLOB, key);
     } else {
       bufferlist bl;
       ::encode(*(sb->persistent), bl);
-      dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
+      dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
 	       << " is " << bl.length() << dendl;
       t->set(PREFIX_SHARED_BLOB, key, bl);
     }

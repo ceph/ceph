@@ -804,13 +804,17 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
 /// shared blob state
 struct bluestore_shared_blob_t {
+  uint64_t sbid;                       ///> shared blob id
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
+
+  bluestore_shared_blob_t(uint64_t _sbid) : sbid(_sbid) {}
 
   DENC(bluestore_shared_blob_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.ref_map, p);
     DENC_FINISH(p);
   }
+
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_shared_blob_t*>& ls);
