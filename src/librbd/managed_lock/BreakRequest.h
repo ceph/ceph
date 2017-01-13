@@ -7,29 +7,34 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "msg/msg_types.h"
-#include "librbd/ImageCtx.h"
 #include <list>
 #include <string>
 #include <boost/optional.hpp>
+#include "librbd/managed_lock/Types.h"
 
 class Context;
+class ContextWQ;
+class obj_watch_t;
+
+namespace librados { class IoCtx; }
 
 namespace librbd {
 
+class ImageCtx;
 template <typename> class Journal;
 
 namespace managed_lock {
 
-struct Locker;
-
 template <typename ImageCtxT = ImageCtx>
 class BreakRequest {
 public:
-  static BreakRequest* create(ImageCtxT &image_ctx, const Locker &locker,
-                              bool blacklist_locker, bool force_break_lock,
-                              Context *on_finish) {
-    return new BreakRequest(image_ctx, locker, blacklist_locker,
-                            force_break_lock, on_finish);
+  static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+                              const std::string& oid, const Locker &locker,
+                              bool blacklist_locker,
+                              uint32_t blacklist_expire_seconds,
+                              bool force_break_lock, Context *on_finish) {
+    return new BreakRequest(ioctx, work_queue, oid, locker, blacklist_locker,
+                            blacklist_expire_seconds, force_break_lock, on_finish);
   }
 
   void send();
@@ -55,9 +60,13 @@ private:
    * @endvertbatim
    */
 
-  ImageCtxT &m_image_ctx;
-  const Locker &m_locker;
+  librados::IoCtx &m_ioctx;
+  CephContext *m_cct;
+  ContextWQ *m_work_queue;
+  std::string m_oid;
+  Locker m_locker;
   bool m_blacklist_locker;
+  uint32_t m_blacklist_expire_seconds;
   bool m_force_break_lock;
   Context *m_on_finish;
 
@@ -66,13 +75,10 @@ private:
   std::list<obj_watch_t> m_watchers;
   int m_watchers_ret_val;
 
-  BreakRequest(ImageCtxT &image_ctx, const Locker &locker,
-               bool blacklist_locker, bool force_break_lock,
-               Context *on_finish)
-    : m_image_ctx(image_ctx), m_locker(locker),
-      m_blacklist_locker(blacklist_locker),
-      m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
-  }
+  BreakRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
+               const std::string& oid, const Locker &locker,
+               bool blacklist_locker, uint32_t blacklist_expire_seconds,
+               bool force_break_lock, Context *on_finish);
 
   void send_get_watchers();
   void handle_get_watchers(int r);

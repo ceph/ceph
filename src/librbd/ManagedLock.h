@@ -30,12 +30,17 @@ public:
   static const std::string WATCHER_LOCK_TAG;
 
   static ManagedLock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
-                             const std::string& oid, Watcher *watcher) {
-    return new ManagedLock(ioctx, work_queue, oid, watcher);
+                             const std::string& oid, Watcher *watcher,
+                             bool blacklist_on_break_lock,
+                             uint32_t blacklist_expire_seconds) {
+    return new ManagedLock(ioctx, work_queue, oid, watcher,
+                           blacklist_on_break_lock, blacklist_expire_seconds);
   }
 
   ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
-              const std::string& oid, Watcher *watcher);
+              const std::string& oid, Watcher *watcher,
+              bool blacklist_on_break_lock,
+              uint32_t blacklist_expire_seconds);
   virtual ~ManagedLock();
 
   bool is_lock_owner() const;
@@ -151,6 +156,8 @@ private:
   ContextWQ *m_work_queue;
   std::string m_oid;
   Watcher *m_watcher;
+  bool m_blacklist_on_break_lock;
+  uint32_t m_blacklist_expire_seconds;
 
   std::string m_cookie;
   std::string m_new_cookie;

@@ -23,14 +23,21 @@ namespace managed_lock {
 using util::create_rados_ack_callback;
 
 template <typename I>
+GetLockerRequest<I>::GetLockerRequest(librados::IoCtx& ioctx,
+				      const std::string& oid, Locker *locker,
+				      Context *on_finish)
+  : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
+    m_oid(oid), m_locker(locker), m_on_finish(on_finish) {
+}
+
+template <typename I>
 void GetLockerRequest<I>::send() {
   send_get_lockers();
 }
 
 template <typename I>
 void GetLockerRequest<I>::send_get_lockers() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   librados::ObjectReadOperation op;
   rados::cls::lock::get_lock_info_start(&op, RBD_LOCK_NAME);
@@ -39,16 +46,14 @@ void GetLockerRequest<I>::send_get_lockers() {
   librados::AioCompletion *rados_completion =
     create_rados_ack_callback<klass, &klass::handle_get_lockers>(this);
   m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op, &m_out_bl);
+  int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, &m_out_bl);
   assert(r == 0);
   rados_completion->release();
 }
 
 template <typename I>
 void GetLockerRequest<I>::handle_get_lockers(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
@@ -61,25 +66,25 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
   }
 
   if (r < 0) {
-    lderr(cct) << "failed to retrieve lockers: " << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to retrieve lockers: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
 
   if (lockers.empty()) {
-    ldout(cct, 20) << "no lockers detected" << dendl;
+    ldout(m_cct, 20) << "no lockers detected" << dendl;
     finish(-ENOENT);
     return;
   }
 
   if (lock_tag != ManagedLock<>::WATCHER_LOCK_TAG) {
-    ldout(cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
+    ldout(m_cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
     finish(-EBUSY);
     return;
   }
 
   if (lock_type == LOCK_SHARED) {
-    ldout(cct, 5) << "shared lock type detected" << dendl;
+    ldout(m_cct, 5) << "shared lock type detected" << dendl;
     finish(-EBUSY);
     return;
   }
@@ -88,8 +93,8 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
            rados::cls::lock::locker_info_t>::iterator iter = lockers.begin();
   if (!ManagedLock<>::decode_lock_cookie(iter->first.cookie,
                                          &m_locker->handle)) {
-    ldout(cct, 5) << "locked by external mechanism: "
-                  << "cookie=" << iter->first.cookie << dendl;
+    ldout(m_cct, 5) << "locked by external mechanism: "
+		    << "cookie=" << iter->first.cookie << dendl;
     finish(-EBUSY);
     return;
   }
@@ -98,20 +103,19 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
   m_locker->cookie = iter->first.cookie;
   m_locker->address = stringify(iter->second.addr);
   if (m_locker->cookie.empty() || m_locker->address.empty()) {
-    ldout(cct, 20) << "no valid lockers detected" << dendl;
+    ldout(m_cct, 20) << "no valid lockers detected" << dendl;
     finish(-ENOENT);
     return;
   }
 
-  ldout(cct, 10) << "retrieved exclusive locker: "
+  ldout(m_cct, 10) << "retrieved exclusive locker: "
                  << m_locker->entity << "@" << m_locker->address << dendl;
   finish(0);
 }
 
 template <typename I>
 void GetLockerRequest<I>::finish(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;
@@ -121,4 +125,3 @@ void GetLockerRequest<I>::finish(int r) {
 } // namespace librbd
 
 template class librbd::managed_lock::GetLockerRequest<librbd::ImageCtx>;
-

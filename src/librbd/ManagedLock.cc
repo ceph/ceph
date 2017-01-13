@@ -43,13 +43,17 @@ const std::string ManagedLock<I>::WATCHER_LOCK_TAG("internal");
 
 template <typename I>
 ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
-                            const string& oid, Watcher *watcher)
+                            const string& oid, Watcher *watcher,
+                            bool blacklist_on_break_lock,
+                            uint32_t blacklist_expire_seconds)
   : m_lock(util::unique_lock_name("librbd::ManagedLock<I>::m_lock", this)),
     m_state(STATE_UNLOCKED),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_work_queue(work_queue),
     m_oid(oid),
-    m_watcher(watcher) {
+    m_watcher(watcher),
+    m_blacklist_on_break_lock(blacklist_on_break_lock),
+    m_blacklist_expire_seconds(blacklist_expire_seconds) {
 }
 
 template <typename I>
@@ -376,9 +380,10 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
   }
 
   using managed_lock::AcquireRequest;
-  AcquireRequest<I>* req = AcquireRequest<I>::create(m_ioctx, m_watcher,
-      m_work_queue, m_oid, m_cookie,
-      util::create_context_callback<
+  AcquireRequest<I>* req = AcquireRequest<I>::create(
+    m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie,
+    m_blacklist_on_break_lock, m_blacklist_expire_seconds,
+    util::create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<AcquireRequest<I>>(req), 0);
 }
