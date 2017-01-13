@@ -433,7 +433,7 @@ protected:
 
   // Optional extra metadata about me to send to the MDS
   std::map<std::string, std::string> metadata;
-  void populate_metadata();
+  void populate_metadata(const std::string &mount_root);
 
 
   /* async block write barrier support */
