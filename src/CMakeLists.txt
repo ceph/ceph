@@ -626,7 +626,7 @@ if (WITH_MGR)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr mds osdc global
+  target_link_libraries(ceph-mgr mds osdc global-static common
       ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
@@ -716,7 +716,8 @@ set(ceph_mon_srcs
 add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
-      target_link_libraries(ceph-mon mon ceph-common os global ${EXTRALIBS}
+target_link_libraries(ceph-mon mon common os global-static common
+  ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
@@ -782,7 +783,8 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
+target_link_libraries(ceph-osd osd os global-static common
+  ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
@@ -793,7 +795,7 @@ set(ceph_mds_srcs
   ceph_mds.cc)
 add_executable(ceph-mds ${ceph_mds_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
+target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
   ${Boost_THREAD_LIBRARY})
 install(TARGETS ceph-mds DESTINATION bin)
 
@@ -897,7 +899,7 @@ if(WITH_LIBCEPHFS)
     ceph_syn.cc
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
-  target_link_libraries(ceph-syn client global)
+  target_link_libraries(ceph-syn client global-static)
 
   set(mount_ceph_srcs
     mount/mount.ceph.c)
@@ -916,7 +918,8 @@ if(WITH_LIBCEPHFS)
       ceph_fuse.cc
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES} client global)
+    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
+      client global-static)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
