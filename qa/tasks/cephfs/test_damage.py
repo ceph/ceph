@@ -448,28 +448,26 @@ class TestDamage(CephFSTestCase):
         # damaged guy if I want.
         self.mount_a.touch("subdir/file_to_be_damaged")
 
-    def test_corrupt_backtrace(self):
+    def test_open_ino_errors(self):
         """
-        That an un-decodeable backtrace leads to an appropriate
-        error trying to follow the backtrace to the file.
+        That errors encountered during opening inos are properly propagated
         """
 
-        self.mount_a.run_shell(["mkdir", "alpha"])
-        self.mount_a.run_shell(["mkdir", "bravo"])
-        self.mount_a.run_shell(["touch", "alpha/target"])
-        self.mount_a.run_shell(["ln", "alpha/target", "bravo/hardlink"])
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.run_shell(["touch", "dir1/file1"])
+        self.mount_a.run_shell(["mkdir", "dir2"])
+        self.mount_a.run_shell(["touch", "dir2/file2"])
+        self.mount_a.run_shell(["mkdir", "testdir"])
+        self.mount_a.run_shell(["ln", "dir1/file1", "testdir/hardlink1"])
+        self.mount_a.run_shell(["ln", "dir2/file2", "testdir/hardlink2"])
 
-        alpha_ino = self.mount_a.path_to_ino("alpha/target")
+        file1_ino = self.mount_a.path_to_ino("dir1/file1")
+        file2_ino = self.mount_a.path_to_ino("dir2/file2")
+        dir2_ino = self.mount_a.path_to_ino("dir2")
 
         # Ensure everything is written to backing store
         self.mount_a.umount_wait()
         self.fs.mds_asok(["flush", "journal"])
-
-        # Validate that the backtrace is present and decodable
-        self.fs.read_backtrace(alpha_ino)
-        # Go corrupt the backtrace of alpha/target (used for resolving
-        # bravo/hardlink).
-        self.fs._write_data_xattr(alpha_ino, "parent", "rhubarb")
 
         # Drop everything from the MDS cache
         self.mds_cluster.mds_stop()
@@ -477,9 +475,18 @@ class TestDamage(CephFSTestCase):
         self.mds_cluster.mds_fail_restart()
         self.fs.wait_for_daemons()
 
-        # Check that touching the hardlink gives EIO
         self.mount_a.mount()
-        ran = self.mount_a.run_shell(["ls", "-l", "bravo/hardlink"], wait=False)
+
+        # Case 1: un-decodeable backtrace
+
+        # Validate that the backtrace is present and decodable
+        self.fs.read_backtrace(file1_ino)
+        # Go corrupt the backtrace of alpha/target (used for resolving
+        # bravo/hardlink).
+        self.fs._write_data_xattr(file1_ino, "parent", "rhubarb")
+
+        # Check that touching the hardlink gives EIO
+        ran = self.mount_a.run_shell(["stat", "testdir/hardlink1"], wait=False)
         try:
             ran.wait()
         except CommandFailedError:
@@ -492,4 +499,41 @@ class TestDamage(CephFSTestCase):
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 1)
         self.assertEqual(damage[0]['damage_type'], "backtrace")
-        self.assertEqual(damage[0]['ino'], alpha_ino)
+        self.assertEqual(damage[0]['ino'], file1_ino)
+
+        self.fs.mon_manager.raw_cluster_cmd(
+            'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+            "damage", "rm", str(damage[0]['id']))
+
+
+        # Case 2: missing dirfrag for the target inode
+
+        self.fs.rados(["rm", "{0:x}.00000000".format(dir2_ino)])
+
+        # Check that touching the hardlink gives EIO
+        ran = self.mount_a.run_shell(["stat", "testdir/hardlink2"], wait=False)
+        try:
+            ran.wait()
+        except CommandFailedError:
+            self.assertTrue("Input/output error" in ran.stderr.getvalue())
+
+        # Check that an entry is created in the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 2)
+        if damage[0]['damage_type'] == "backtrace" :
+            self.assertEqual(damage[0]['ino'], file2_ino)
+            self.assertEqual(damage[1]['damage_type'], "dir_frag")
+            self.assertEqual(damage[1]['ino'], dir2_ino)
+        else:
+            self.assertEqual(damage[0]['damage_type'], "dir_frag")
+            self.assertEqual(damage[0]['ino'], dir2_ino)
+            self.assertEqual(damage[1]['damage_type'], "backtrace")
+            self.assertEqual(damage[1]['ino'], file2_ino)
+
+        for entry in damage:
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "rm", str(entry['id']))
