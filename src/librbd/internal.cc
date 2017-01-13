@@ -1571,7 +1571,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
     auto get_owner_req = managed_lock::GetLockerRequest<>::create(
-      *ictx, &locker, &get_owner_ctx);
+      ictx->md_ctx, ictx->header_oid, &locker, &get_owner_ctx);
     get_owner_req->send();
 
     int r = get_owner_ctx.wait();
@@ -1604,7 +1604,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
     auto get_owner_req = managed_lock::GetLockerRequest<>::create(
-      *ictx, &locker, &get_owner_ctx);
+      ictx->md_ctx, ictx->header_oid, &locker, &get_owner_ctx);
     get_owner_req->send();
 
     int r = get_owner_ctx.wait();
@@ -1622,7 +1622,9 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 
     C_SaferCond break_ctx;
     auto break_req = managed_lock::BreakRequest<>::create(
-      *ictx, locker, ictx->blacklist_on_break_lock, true, &break_ctx);
+      ictx->md_ctx, ictx->op_work_queue, ictx->header_oid, locker,
+      ictx->blacklist_on_break_lock, ictx->blacklist_expire_seconds, true,
+      &break_ctx);
     break_req->send();
 
     r = break_ctx.wait();

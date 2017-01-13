@@ -8,8 +8,8 @@
 #include "include/stringify.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/managed_lock/Types.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -25,27 +25,39 @@ using util::create_rados_safe_callback;
 
 namespace {
 
-template <typename I>
 struct C_BlacklistClient : public Context {
-  I &image_ctx;
+  librados::IoCtx &ioctx;
   std::string locker_address;
+  uint32_t expire_seconds;
   Context *on_finish;
 
-  C_BlacklistClient(I &image_ctx, const std::string &locker_address,
-                    Context *on_finish)
-    : image_ctx(image_ctx), locker_address(locker_address),
-      on_finish(on_finish) {
+  C_BlacklistClient(librados::IoCtx &ioctx, const std::string &locker_address,
+                    uint32_t expire_seconds, Context *on_finish)
+    : ioctx(ioctx), locker_address(locker_address),
+      expire_seconds(expire_seconds), on_finish(on_finish) {
   }
 
   virtual void finish(int r) override {
-    librados::Rados rados(image_ctx.md_ctx);
-    r = rados.blacklist_add(locker_address,
-                            image_ctx.blacklist_expire_seconds);
+    librados::Rados rados(ioctx);
+    r = rados.blacklist_add(locker_address, expire_seconds);
     on_finish->complete(r);
   }
 };
 
 } // anonymous namespace
+
+template <typename I>
+BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
+                              const std::string& oid, const Locker &locker,
+                              bool blacklist_locker,
+                              uint32_t blacklist_expire_seconds,
+                              bool force_break_lock, Context *on_finish)
+  : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
+    m_work_queue(work_queue), m_oid(oid), m_locker(locker),
+    m_blacklist_locker(blacklist_locker),
+    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
+}
 
 template <typename I>
 void BreakRequest<I>::send() {
@@ -54,8 +66,7 @@ void BreakRequest<I>::send() {
 
 template <typename I>
 void BreakRequest<I>::send_get_watchers() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   librados::ObjectReadOperation op;
   op.list_watchers(&m_watchers, &m_watchers_ret_val);
@@ -64,23 +75,21 @@ void BreakRequest<I>::send_get_watchers() {
   librados::AioCompletion *rados_completion =
     create_rados_ack_callback<klass, &klass::handle_get_watchers>(this);
   m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op, &m_out_bl);
+  int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, &m_out_bl);
   assert(r == 0);
   rados_completion->release();
 }
 
 template <typename I>
 void BreakRequest<I>::handle_get_watchers(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r == 0) {
     r = m_watchers_ret_val;
   }
   if (r < 0) {
-    lderr(cct) << "failed to retrieve watchers: " << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to retrieve watchers: " << cpp_strerror(r)
+                 << dendl;
     finish(r);
     return;
   }
@@ -89,7 +98,7 @@ void BreakRequest<I>::handle_get_watchers(int r) {
     if ((strncmp(m_locker.address.c_str(),
                  watcher.addr, sizeof(watcher.addr)) == 0) &&
         (m_locker.handle == watcher.cookie)) {
-      ldout(cct, 10) << "lock owner is still alive" << dendl;
+      ldout(m_cct, 10) << "lock owner is still alive" << dendl;
 
       if (m_force_break_lock) {
         break;
@@ -110,26 +119,24 @@ void BreakRequest<I>::send_blacklist() {
     return;
   }
 
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   // TODO: need async version of RadosClient::blacklist_add
   using klass = BreakRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_blacklist>(
     this);
-  m_image_ctx.op_work_queue->queue(new C_BlacklistClient<I>(m_image_ctx,
-                                                            m_locker.address,
-                                                            ctx), 0);
+  m_work_queue->queue(new C_BlacklistClient(m_ioctx, m_locker.address,
+                                            m_blacklist_expire_seconds, ctx),
+                      0);
 }
 
 template <typename I>
 void BreakRequest<I>::handle_blacklist(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to blacklist lock owner: " << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to blacklist lock owner: " << cpp_strerror(r)
+                 << dendl;
     finish(r);
     return;
   }
@@ -138,8 +145,7 @@ void BreakRequest<I>::handle_blacklist(int r) {
 
 template <typename I>
 void BreakRequest<I>::send_break_lock() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::break_lock(&op, RBD_LOCK_NAME, m_locker.cookie,
@@ -148,19 +154,17 @@ void BreakRequest<I>::send_break_lock() {
   using klass = BreakRequest<I>;
   librados::AioCompletion *rados_completion =
     create_rados_safe_callback<klass, &klass::handle_break_lock>(this);
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op);
+  int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
 }
 
 template <typename I>
 void BreakRequest<I>::handle_break_lock(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to break lock: " << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to break lock: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -170,8 +174,7 @@ void BreakRequest<I>::handle_break_lock(int r) {
 
 template <typename I>
 void BreakRequest<I>::finish(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;
