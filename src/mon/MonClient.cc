@@ -366,10 +366,19 @@ int MonClient::init()
       method = cct->_conf->auth_cluster_required;
     else
       method = cct->_conf->auth_client_required;
+  
+  // Don't leak if called more than once
+  if (auth_supported) {
+    delete auth_supported;
+  }
   auth_supported = new AuthMethodList(cct, method);
   ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << " method " << method << dendl;
 
   int r = 0;
+  // Don't leak if called more than once
+  if (keyring) {
+    delete keyring;
+  }
   keyring = new KeyRing; // initializing keyring anyway
 
   if (auth_supported->is_supported_auth(CEPH_AUTH_CEPHX)) {
@@ -389,6 +398,10 @@ int MonClient::init()
     return r;
   }
 
+  // Don't leak if called more than once
+  if (rotating_secrets) {
+    delete rotating_secrets;
+  }
   rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
 
   initialized = true;
