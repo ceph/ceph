@@ -666,6 +666,9 @@ int RGWAsyncRemoveObj::_send_request()
   }
   if (versioned) {
     del_op.params.versioning_status = BUCKET_VERSIONED;
+    if ((bucket_info.flags & BUCKET_VERSIONS_SUSPENDED) != 0 ) {
+      del_op.params.versioning_status |= BUCKET_VERSIONS_SUSPENDED;
+    }
   }
   del_op.params.olh_epoch = versioned_epoch;
   del_op.params.marker_version_id = marker_version_id;

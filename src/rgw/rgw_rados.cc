@@ -8740,7 +8740,7 @@ int RGWRados::Object::Delete::delete_obj()
         if (params.marker_version_id != "null") {
           marker.key.set_instance(params.marker_version_id);
         }
-      } else if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
+      } else if (instance != "null" && (params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
         store->gen_rand_obj_instance_name(&marker);
       }
 
@@ -8766,7 +8766,7 @@ int RGWRados::Object::Delete::delete_obj()
       rgw_bucket_dir_entry dirent;
 
       int r = store->bi_get_instance(target->get_bucket_info(), obj, &dirent);
-      if (r < 0) {
+      if (r < 0 || (obj.key.instance.empty() && !dirent.is_delete_marker() && !dirent.exists)) {
         return r;
       }
       result.delete_marker = dirent.is_delete_marker();

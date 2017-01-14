@@ -2223,7 +2223,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       idx = op.key.name;
       break;
     case InstanceIdx:
-      encode_obj_index_key(op.key, &idx);
+      encode_obj_versioned_data_key(op.key, &idx);
       break;
     case OLHIdx:
       encode_olh_data_key(op.key, &idx);
@@ -2241,6 +2241,15 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   entry.idx = idx;
 
   int r = cls_cxx_map_get_val(hctx, idx, &entry.data);
+  if (r == -ENOENT && op.type == InstanceIdx && op.key.instance.empty()) {
+      encode_obj_versioned_data_key(op.key, &idx, true);
+      r = cls_cxx_map_get_val(hctx, idx, &entry.data);
+      if (r == -ENOENT) {
+          idx = op.key.name;
+          r = cls_cxx_map_get_val(hctx, idx, &entry.data);
+      }
+  }
+
   if (r < 0) {
       CLS_LOG(10, "%s(): cls_cxx_map_get_val() returned %d", __func__, r);
       return r;
