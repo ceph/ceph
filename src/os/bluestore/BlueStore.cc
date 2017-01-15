@@ -5774,7 +5774,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 bool BlueStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  return o->onode.has_omap() && it->valid() && it->raw_key().second <= tail;
+  return o->onode.has_omap() && it && it->valid() && it->raw_key().second <= tail;
 }
 
 int BlueStore::OmapIteratorImpl::next(bool validate)
