@@ -642,13 +642,26 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   auto p = onode_lru.end();
   assert(p != onode_lru.begin());
   --p;
+  int skipped = 0;
+  int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
     if (refs > 1) {
       dout(20) << __func__ << "  " << o->oid << " has " << refs
-	       << " refs; stopping with " << num << " left to trim" << dendl;
-      break;
+	       << " refs, skipping" << dendl;
+      if (++skipped >= max_skipped) {
+        dout(20) << __func__ << " maximum skip pinned reached; stopping with "
+                 << num << " left to trim" << dendl;
+        break;
+      }
+
+      if (p == onode_lru.begin()) {
+        break;
+      } else {
+        p--;
+        continue;
+      }
     }
     dout(30) << __func__ << "  rm " << o->oid << dendl;
     if (p != onode_lru.begin()) {
@@ -895,13 +908,26 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   auto p = onode_lru.end();
   assert(p != onode_lru.begin());
   --p;
+  int skipped = 0;
+  int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
     if (refs > 1) {
       dout(20) << __func__ << "  " << o->oid << " has " << refs
-	       << " refs; stopping with " << num << " left to trim" << dendl;
-      break;
+	       << " refs; skipping" << dendl;
+      if (++skipped >= max_skipped) {
+        dout(20) << __func__ << " maximum skip pinned reached; stopping with "
+                 << num << " left to trim" << dendl;
+        break;
+      }
+
+      if (p == onode_lru.begin()) {
+        break;
+      } else {
+        p--;
+        continue;
+      }
     }
     dout(30) << __func__ << "  trim " << o->oid << dendl;
     if (p != onode_lru.begin()) {
