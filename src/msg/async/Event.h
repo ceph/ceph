@@ -152,6 +152,7 @@ class EventCenter {
 
  private:
   CephContext *cct;
+  std::string type;
   int nevent;
   // Used only to external event
   pthread_t owner;
