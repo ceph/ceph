@@ -651,6 +651,13 @@ void Server::find_idle_sessions()
     return;
   }
 
+  if (mds->sessionmap.get_sessions().size() == 1 &&
+      mds->mdsmap->get_num_in_mds() == 1) {
+    dout(20) << "not evicting a slow client, because there is only one"
+             << dendl;
+    return;
+  }
+
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
     if (!session)
