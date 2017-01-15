@@ -771,7 +771,9 @@ public:
     Collection *c;
 
     ghobject_t oid;
-    string key;     ///< key under PREFIX_OBJ where we are stored
+
+    /// key under PREFIX_OBJ where we are stored
+    mempool::bluestore_meta_other::string key;
 
     boost::intrusive::list_member_hook<> lru_item;
 
@@ -785,7 +787,8 @@ public:
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(Collection *c, const ghobject_t& o, const string& k)
+    Onode(Collection *c, const ghobject_t& o,
+	  const mempool::bluestore_meta_other::string& k)
       : nref(0),
 	c(c),
 	oid(o),
@@ -1062,7 +1065,7 @@ public:
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
-		const string& new_okey);
+		const mempool::bluestore_meta_other::string& new_okey);
     void clear();
     void clear_pre_split(SharedBlobSet& sbset, uint32_t ps, int bits);
     bool empty();
