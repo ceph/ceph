@@ -17,6 +17,7 @@
 
 #include "ClusterWatcher.h"
 #include "ImageReplayer.h"
+#include "LeaderWatcher.h"
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
@@ -26,7 +27,6 @@ namespace mirror {
 
 struct Threads;
 class ReplayerAdminSocketHook;
-class MirrorStatusWatchCtx;
 
 /**
  * Controls mirroring for a single remote cluster.
@@ -42,6 +42,7 @@ public:
   Replayer& operator=(const Replayer&) = delete;
 
   bool is_blacklisted() const;
+  bool is_leader() const;
 
   int init();
   void run();
@@ -51,6 +52,7 @@ public:
   void stop(bool manual);
   void restart();
   void flush();
+  void release_leader();
 
 private:
   typedef PoolWatcher::ImageId ImageId;
@@ -64,11 +66,11 @@ private:
                             const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
-  int mirror_image_status_init();
-  void mirror_image_status_shut_down();
-
   int init_rados(const std::string &cluster_name, const std::string &client_name,
                  const std::string &description, RadosRef *rados_ref);
+
+  void handle_post_acquire_leader(Context *on_finish);
+  void handle_pre_release_leader(Context *on_finish);
 
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
@@ -92,7 +94,6 @@ private:
 
   std::unique_ptr<PoolWatcher> m_pool_watcher;
   std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
-  std::unique_ptr<MirrorStatusWatchCtx> m_status_watcher;
 
   std::string m_asok_hook_name;
   ReplayerAdminSocketHook *m_asok_hook;
@@ -126,6 +127,26 @@ private:
       return 0;
     }
   } m_replayer_thread;
+
+  class LeaderListener : public LeaderWatcher<>::Listener {
+  public:
+    LeaderListener(Replayer *replayer) : m_replayer(replayer) {
+    }
+
+  protected:
+    virtual void post_acquire_handler(Context *on_finish) {
+      m_replayer->handle_post_acquire_leader(on_finish);
+    }
+
+    virtual void pre_release_handler(Context *on_finish) {
+      m_replayer->handle_pre_release_leader(on_finish);
+    }
+
+  private:
+    Replayer *m_replayer;
+  } m_leader_listener;
+
+  std::unique_ptr<LeaderWatcher<> > m_leader_watcher;
 };
 
 } // namespace mirror
