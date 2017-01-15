@@ -99,11 +99,12 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-int EventCenter::init(int n, unsigned i, std::string &t)
+int EventCenter::init(int n, unsigned i, const std::string &t)
 {
   // can't init multi times
   assert(nevent == 0);
 
+  type = t;
   idx = i;
 
   if (t == "dpdk") {
@@ -189,7 +190,7 @@ void EventCenter::set_owner()
   ldout(cct, 2) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
   if (!global_centers) {
     cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
-        global_centers, "AsyncMessenger::EventCenter::global_center");
+        global_centers, "AsyncMessenger::EventCenter::global_center::"+type);
     assert(global_centers);
     global_centers->centers[idx] = this;
     if (driver->need_wakeup()) {

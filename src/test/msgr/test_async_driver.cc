@@ -256,7 +256,7 @@ class FakeEvent : public EventCallback {
 TEST(EventCenterTest, FileEventExpansion) {
   vector<int> sds;
   EventCenter center(g_ceph_context);
-  center.init(100, 0);
+  center.init(100, 0, "posix");
   center.set_owner();
   EventCallbackRef e(new FakeEvent());
   for (int i = 0; i < 300; i++) {
@@ -277,7 +277,7 @@ class Worker : public Thread {
  public:
   EventCenter center;
   explicit Worker(CephContext *c, int idx): cct(c), done(false), center(c) {
-    center.init(100, idx);
+    center.init(100, idx, "posix");
   }
   void stop() {
     done = true; 
