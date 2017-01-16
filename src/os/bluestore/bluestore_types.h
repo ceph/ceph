@@ -217,7 +217,7 @@ struct bluestore_extent_ref_map_t {
   bool intersects(uint64_t offset, uint32_t len) const;
 
   void bound_encode(size_t& p) const {
-    denc((uint32_t)0, p);
+    denc_varint((uint32_t)0, p);
     size_t elem_size = 0;
     denc_varint_lowz((uint32_t)0, p);
     ((const record_t*)nullptr)->bound_encode(elem_size);
