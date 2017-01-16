@@ -5581,14 +5581,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
     set<mds_rank_t> witnesses;
-
-    list<CDir*> dfls;
-    in->get_subtree_dirfrags(dfls);
-    for (auto p : dfls) {
-      if (mds->get_nodeid() != p->get_dir_auth().first)
-	witnesses.insert(p->get_dir_auth().first);
-    }
-
+    in->list_replicas(witnesses);
     dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
     for (set<mds_rank_t>::iterator p = witnesses.begin();
