@@ -303,8 +303,8 @@ public:
   void handle_export_dir(MExportDir *m);
 
 public:
-  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, mds_rank_t oldauth, 
-			   LogSegment *ls, uint64_t log_offset,
+  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+			   mds_rank_t oldauth, LogSegment *ls,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::iterator &blp,
