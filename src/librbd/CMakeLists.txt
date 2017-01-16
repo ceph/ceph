@@ -116,6 +116,10 @@ target_link_libraries(librbd LINK_PRIVATE
   pthread
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
+if(HAVE_UDEV)
+  target_link_libraries(librbd LINK_PRIVATE
+    udev)
+endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
