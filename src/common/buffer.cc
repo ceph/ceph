@@ -1795,7 +1795,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
         if (gap > len) gap = len;
     //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
         append_buffer.append(data, gap);
-        append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
+        append(append_buffer, append_buffer.length() - gap, gap);	// add segment to the list
         len -= gap;
         data += gap;
       }
