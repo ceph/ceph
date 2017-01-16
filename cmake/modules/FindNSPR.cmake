@@ -34,6 +34,7 @@ else (NSPR_LIBRARIES AND NSPR_INCLUDE_DIRS)
       /sw/include
     PATH_SUFFIXES
       nspr4
+      nspr
   )
 
   find_library(PLDS4_LIBRARY
