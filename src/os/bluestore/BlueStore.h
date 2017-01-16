@@ -471,7 +471,7 @@ public:
     void get_ref(uint64_t offset, uint64_t length);
     /// put logical references, and get back any released extents
     bool put_ref(Collection *coll, uint64_t offset, uint64_t length,
-		 vector<bluestore_pextent_t> *r);
+		 PExtentVector *r);
     /// pass references for specific range to other blob
     void pass_ref(Blob* other, uint64_t src_offset, uint64_t length, uint64_t dest_offset);
 
@@ -1640,8 +1640,8 @@ private:
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents);
-  void _commit_bluefs_freespace(const vector<bluestore_pextent_t>& extents);
+  int _balance_bluefs_freespace(PExtentVector *extents);
+  void _commit_bluefs_freespace(const PExtentVector& extents);
 
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);
@@ -1696,7 +1696,7 @@ private:
 
   int _fsck_check_extents(
     const ghobject_t& oid,
-    const vector<bluestore_pextent_t>& extents,
+    const PExtentVector& extents,
     bool compressed,
     boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);

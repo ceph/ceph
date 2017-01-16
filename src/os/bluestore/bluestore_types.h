@@ -152,25 +152,27 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
+typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector;
+
 template<>
-struct denc_traits<vector<bluestore_pextent_t>> {
+struct denc_traits<PExtentVector> {
   enum { supported = true };
   enum { bounded = false };
   enum { featured = false };
-  static void bound_encode(const vector<bluestore_pextent_t>& v, size_t& p) {
+  static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     size_t per = 0;
     denc(*(bluestore_pextent_t*)nullptr, per);
     p += per * v.size();
   }
-  static void encode(const vector<bluestore_pextent_t>& v,
+  static void encode(const PExtentVector& v,
 		     bufferlist::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
     }
   }
-  static void decode(vector<bluestore_pextent_t>& v, bufferptr::iterator& p) {
+  static void decode(PExtentVector& v, bufferptr::iterator& p) {
     unsigned num;
     denc_varint(num, p);
     v.clear();
@@ -208,7 +210,7 @@ struct bluestore_extent_ref_map_t {
   }
 
   void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
+  void put(uint64_t offset, uint32_t len, PExtentVector *release);
 
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;
@@ -283,7 +285,8 @@ struct bluestore_blob_t {
   };
   static string get_flags_string(unsigned flags);
 
-  vector<bluestore_pextent_t> extents;///< raw data position on device
+
+  PExtentVector extents;              ///< raw data position on device
   uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
@@ -742,7 +745,7 @@ struct bluestore_wal_op_t {
   } type_t;
   __u8 op = 0;
 
-  vector<bluestore_pextent_t> extents;
+  PExtentVector extents;
   bufferlist data;
 
   DENC(bluestore_wal_op_t, v, p) {
