@@ -8734,6 +8734,13 @@ int RGWRados::Object::Delete::delete_obj()
 
   if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
     if (instance.empty() || explicit_marker_version) {
+      if (!instance.empty() && explicit_marker_version) {
+        rgw_bucket_dir_entry dirent;
+        int r = store->bi_get_instance(target->get_bucket_info(), obj, &dirent);
+        if (r == 0) {
+          return 0;  //return when the delete marker is existed
+        }
+      }
       rgw_obj marker = obj;
 
       if (!params.marker_version_id.empty()) {
