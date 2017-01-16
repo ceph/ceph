@@ -3,7 +3,8 @@ include(MergeStaticLibraries)
 add_library(cephd_base STATIC
   libcephd.cc
   ../ceph_mon.cc
-  ../ceph_osd.cc)
+  ../ceph_osd.cc
+  ../ceph_mds.cc)
 
 set_target_properties(cephd_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
 
@@ -15,12 +16,14 @@ set(merge_libs
   cephd_cls_kvs
   cephd_rados
   cephd_rbd
+  cephd_rgw
   cephd_common
   common_utf8
   erasure_code
   global
   json_spirit
   kv
+  mds
   mon
   os
   osd
