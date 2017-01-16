@@ -1,3 +1,11 @@
 11.1.1
 ------
 
+ * When assigning a network to the public network and not to
+   the cluster network the network specification of the public
+   network will be used for the cluster network as well.
+   In the older version this would lead to cluster services
+   being bound to 0.0.0.0:<port>, thus actually making the
+   cluster service even more publicly available than the
+   public services. When only specifying a cluster network it
+   will still result in the public services binding to 0.0.0.0.
