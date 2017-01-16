@@ -89,11 +89,12 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
   EntityName name;
   uint64_t global_id = 0;
 
-  is_valid = handler->verify_authorizer(cct, monc->rotating_secrets,
-						  authorizer_data,
-                                                  authorizer_reply, name,
-                                                  global_id, caps_info,
-                                                  session_key);
+  is_valid = handler->verify_authorizer(
+    cct, monc->rotating_secrets.get(),
+    authorizer_data,
+    authorizer_reply, name,
+    global_id, caps_info,
+    session_key);
 
   // TODO: invent some caps suitable for ceph-mgr
 
