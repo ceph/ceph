@@ -266,7 +266,8 @@ void librados::ObjectReadOperation::omap_get_vals(
   int *prval)
 {
   ::ObjectOperation *o = &impl->o;
-  o->omap_get_vals(start_after, filter_prefix, max_return, out_vals, prval);
+  o->omap_get_vals(start_after, filter_prefix, max_return, out_vals, nullptr,
+		   prval);
 }
 
 void librados::ObjectReadOperation::omap_get_vals(
@@ -276,7 +277,7 @@ void librados::ObjectReadOperation::omap_get_vals(
   int *prval)
 {
   ::ObjectOperation *o = &impl->o;
-  o->omap_get_vals(start_after, "", max_return, out_vals, prval);
+  o->omap_get_vals(start_after, "", max_return, out_vals, nullptr, prval);
 }
 
 void librados::ObjectReadOperation::omap_get_keys(
@@ -286,7 +287,7 @@ void librados::ObjectReadOperation::omap_get_keys(
   int *prval)
 {
   ::ObjectOperation *o = &impl->o;
-  o->omap_get_keys(start_after, max_return, out_keys, prval);
+  o->omap_get_keys(start_after, max_return, out_keys, nullptr, prval);
 }
 
 void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
@@ -5714,11 +5715,13 @@ extern "C" void rados_read_op_omap_get_vals(rados_read_op_t read_op,
   RadosOmapIter *omap_iter = new RadosOmapIter;
   const char *start = start_after ? start_after : "";
   const char *filter = filter_prefix ? filter_prefix : "";
-  ((::ObjectOperation *)read_op)->omap_get_vals(start,
-						filter,
-						max_return,
-						&omap_iter->values,
-						prval);
+  ((::ObjectOperation *)read_op)->omap_get_vals(
+    start,
+    filter,
+    max_return,
+    &omap_iter->values,
+    nullptr,
+    prval);
   ((::ObjectOperation *)read_op)->add_handler(new C_OmapIter(omap_iter));
   *iter = omap_iter;
   tracepoint(librados, rados_read_op_omap_get_vals_exit, *iter);
@@ -5747,8 +5750,9 @@ extern "C" void rados_read_op_omap_get_keys(rados_read_op_t read_op,
   tracepoint(librados, rados_read_op_omap_get_keys_enter, read_op, start_after, max_return, prval);
   RadosOmapIter *omap_iter = new RadosOmapIter;
   C_OmapKeysIter *ctx = new C_OmapKeysIter(omap_iter);
-  ((::ObjectOperation *)read_op)->omap_get_keys(start_after ? start_after : "",
-						max_return, &ctx->keys, prval);
+  ((::ObjectOperation *)read_op)->omap_get_keys(
+    start_after ? start_after : "",
+    max_return, &ctx->keys, nullptr, prval);
   ((::ObjectOperation *)read_op)->add_handler(ctx);
   *iter = omap_iter;
   tracepoint(librados, rados_read_op_omap_get_keys_exit, *iter);
