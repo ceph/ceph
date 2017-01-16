@@ -474,6 +474,7 @@ int execute_set_limit(const po::variables_map &vm) {
   if (vm.count(at::LIMIT)) {
     limit = vm[at::LIMIT].as<uint64_t>();
   } else {
+    std::cerr << "rbd: must specify --limit <num>" << std::endl;
     return -ERANGE;
   }
 
