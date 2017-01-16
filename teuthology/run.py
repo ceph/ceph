@@ -25,7 +25,8 @@ def set_up_logging(verbose, archive):
         teuthology.log.setLevel(logging.DEBUG)
 
     if archive is not None:
-        os.mkdir(archive)
+        if not os.path.isdir(archive):
+            os.mkdir(archive)
 
         teuthology.setup_log_file(os.path.join(archive, 'teuthology.log'))
 
