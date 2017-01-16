@@ -1,3 +1,12 @@
-11.1.1
+12.0.0
 ------
 
+ * The omap_get_keys and omap_get_vals librados functions have been deprecated
+   in favor of omap_get_vals2 and omap_get_keys2.  The new methods include an
+   output argument indicating whether there are additional keys left to fetch.
+   Previously this had to be inferred from the requested key count vs the
+   number of keys returned, but this breaks with new OSD-side limits on the
+   number of keys or bytes that can be returned by a single omap request.  These
+   limits were introduced by kraken but were effectively disabled (by setting a
+   very large limit of 1 GB) because users of the newly deprecated interface
+   cannot tell whether they should fetch more keys or not.

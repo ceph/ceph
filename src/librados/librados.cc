@@ -270,6 +270,19 @@ void librados::ObjectReadOperation::omap_get_vals(
 		   prval);
 }
 
+void librados::ObjectReadOperation::omap_get_vals2(
+  const std::string &start_after,
+  const std::string &filter_prefix,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  bool *pmore,
+  int *prval)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->omap_get_vals(start_after, filter_prefix, max_return, out_vals, pmore,
+		   prval);
+}
+
 void librados::ObjectReadOperation::omap_get_vals(
   const std::string &start_after,
   uint64_t max_return,
@@ -280,6 +293,17 @@ void librados::ObjectReadOperation::omap_get_vals(
   o->omap_get_vals(start_after, "", max_return, out_vals, nullptr, prval);
 }
 
+void librados::ObjectReadOperation::omap_get_vals2(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  bool *pmore,
+  int *prval)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->omap_get_vals(start_after, "", max_return, out_vals, pmore, prval);
+}
+
 void librados::ObjectReadOperation::omap_get_keys(
   const std::string &start_after,
   uint64_t max_return,
@@ -288,6 +312,17 @@ void librados::ObjectReadOperation::omap_get_keys(
 {
   ::ObjectOperation *o = &impl->o;
   o->omap_get_keys(start_after, max_return, out_keys, nullptr, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_keys2(
+  const std::string &start_after,
+  uint64_t max_return,
+  std::set<std::string> *out_keys,
+  bool *pmore,
+  int *prval)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->omap_get_keys(start_after, max_return, out_keys, pmore, prval);
 }
 
 void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
@@ -336,19 +371,61 @@ void librados::ObjectReadOperation::is_dirty(bool *is_dirty, int *prval)
 }
 
 int librados::IoCtx::omap_get_vals(const std::string& oid,
-                                   const std::string& start_after,
+                                   const std::string& orig_start_after,
                                    const std::string& filter_prefix,
                                    uint64_t max_return,
                                    std::map<std::string, bufferlist> *out_vals)
 {
+  bool first = true;
+  string start_after = orig_start_after;
+  bool more = true;
+  while (max_return > 0 && more) {
+    std::map<std::string,bufferlist> out;
+    ObjectReadOperation op;
+    op.omap_get_vals2(start_after, filter_prefix, max_return, &out, &more,
+		      nullptr);
+    bufferlist bl;
+    int ret = operate(oid, &op, &bl);
+    if (ret < 0) {
+      return ret;
+    }
+    if (more) {
+      if (out.empty()) {
+	return -EINVAL;  // wth
+      }
+      start_after = out.rbegin()->first;
+    }
+    if (out.size() <= max_return) {
+      max_return -= out.size();
+    } else {
+      max_return = 0;
+    }
+    if (first) {
+      out_vals->swap(out);
+      first = false;
+    } else {
+      out_vals->insert(out.begin(), out.end());
+      out.clear();
+    }
+  }
+  return 0;
+}
+
+int librados::IoCtx::omap_get_vals2(
+  const std::string& oid,
+  const std::string& start_after,
+  const std::string& filter_prefix,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  bool *pmore)
+{
   ObjectReadOperation op;
   int r;
-  op.omap_get_vals(start_after, filter_prefix, max_return, out_vals, &r);
+  op.omap_get_vals2(start_after, filter_prefix, max_return, out_vals, pmore, &r);
   bufferlist bl;
   int ret = operate(oid, &op, &bl);
   if (ret < 0)
     return ret;
-
   return r;
 }
 
@@ -1326,30 +1403,79 @@ int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    uint64_t max_return,
                                    std::map<std::string, bufferlist> *out_vals)
 {
+  return omap_get_vals(oid, start_after, string(), max_return, out_vals);
+}
+
+int librados::IoCtx::omap_get_vals2(
+  const std::string& oid,
+  const std::string& start_after,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  bool *pmore)
+{
   ObjectReadOperation op;
   int r;
-  op.omap_get_vals(start_after, max_return, out_vals, &r);
+  op.omap_get_vals2(start_after, max_return, out_vals, pmore, &r);
   bufferlist bl;
   int ret = operate(oid, &op, &bl);
   if (ret < 0)
     return ret;
-
   return r;
 }
 
 int librados::IoCtx::omap_get_keys(const std::string& oid,
-                                   const std::string& start_after,
+                                   const std::string& orig_start_after,
                                    uint64_t max_return,
                                    std::set<std::string> *out_keys)
 {
+  bool first = true;
+  string start_after = orig_start_after;
+  bool more = true;
+  while (max_return > 0 && more) {
+    std::set<std::string> out;
+    ObjectReadOperation op;
+    op.omap_get_keys2(start_after, max_return, &out, &more, nullptr);
+    bufferlist bl;
+    int ret = operate(oid, &op, &bl);
+    if (ret < 0) {
+      return ret;
+    }
+    if (more) {
+      if (out.empty()) {
+	return -EINVAL;  // wth
+      }
+      start_after = *out.rbegin();
+    }
+    if (out.size() <= max_return) {
+      max_return -= out.size();
+    } else {
+      max_return = 0;
+    }
+    if (first) {
+      out_keys->swap(out);
+      first = false;
+    } else {
+      out_keys->insert(out.begin(), out.end());
+      out.clear();
+    }
+  }
+  return 0;
+}
+
+int librados::IoCtx::omap_get_keys2(
+  const std::string& oid,
+  const std::string& start_after,
+  uint64_t max_return,
+  std::set<std::string> *out_keys,
+  bool *pmore)
+{
   ObjectReadOperation op;
   int r;
-  op.omap_get_keys(start_after, max_return, out_keys, &r);
+  op.omap_get_keys2(start_after, max_return, out_keys, pmore, &r);
   bufferlist bl;
   int ret = operate(oid, &op, &bl);
   if (ret < 0)
     return ret;
-
   return r;
 }
 
@@ -5727,6 +5853,30 @@ extern "C" void rados_read_op_omap_get_vals(rados_read_op_t read_op,
   tracepoint(librados, rados_read_op_omap_get_vals_exit, *iter);
 }
 
+extern "C" void rados_read_op_omap_get_vals2(rados_read_op_t read_op,
+					     const char *start_after,
+					     const char *filter_prefix,
+					     uint64_t max_return,
+					     rados_omap_iter_t *iter,
+					     unsigned char *pmore,
+					     int *prval)
+{
+  tracepoint(librados, rados_read_op_omap_get_vals_enter, read_op, start_after, filter_prefix, max_return, prval);
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  const char *start = start_after ? start_after : "";
+  const char *filter = filter_prefix ? filter_prefix : "";
+  ((::ObjectOperation *)read_op)->omap_get_vals(
+    start,
+    filter,
+    max_return,
+    &omap_iter->values,
+    (bool*)pmore,
+    prval);
+  ((::ObjectOperation *)read_op)->add_handler(new C_OmapIter(omap_iter));
+  *iter = omap_iter;
+  tracepoint(librados, rados_read_op_omap_get_vals_exit, *iter);
+}
+
 struct C_OmapKeysIter : public Context {
   RadosOmapIter *iter;
   std::set<std::string> keys;
@@ -5753,6 +5903,25 @@ extern "C" void rados_read_op_omap_get_keys(rados_read_op_t read_op,
   ((::ObjectOperation *)read_op)->omap_get_keys(
     start_after ? start_after : "",
     max_return, &ctx->keys, nullptr, prval);
+  ((::ObjectOperation *)read_op)->add_handler(ctx);
+  *iter = omap_iter;
+  tracepoint(librados, rados_read_op_omap_get_keys_exit, *iter);
+}
+
+extern "C" void rados_read_op_omap_get_keys2(rados_read_op_t read_op,
+					     const char *start_after,
+					     uint64_t max_return,
+					     rados_omap_iter_t *iter,
+					     unsigned char *pmore,
+					     int *prval)
+{
+  tracepoint(librados, rados_read_op_omap_get_keys_enter, read_op, start_after, max_return, prval);
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  C_OmapKeysIter *ctx = new C_OmapKeysIter(omap_iter);
+  ((::ObjectOperation *)read_op)->omap_get_keys(
+    start_after ? start_after : "",
+    max_return, &ctx->keys,
+    (bool*)pmore, prval);
   ((::ObjectOperation *)read_op)->add_handler(ctx);
   *iter = omap_iter;
   tracepoint(librados, rados_read_op_omap_get_keys_exit, *iter);
