@@ -39,8 +39,8 @@ protected:
     rados_omap_iter_t iter_vals, iter_keys, iter_vals_by_key;
     int r_vals, r_keys, r_vals_by_key;
     rados_read_op_t op = rados_create_read_op();
-    rados_read_op_omap_get_vals(op, NULL, NULL, 100, &iter_vals, &r_vals);
-    rados_read_op_omap_get_keys(op, NULL, 100, &iter_keys, &r_keys);
+    rados_read_op_omap_get_vals2(op, NULL, NULL, 100, &iter_vals, NULL, &r_vals);
+    rados_read_op_omap_get_keys2(op, NULL, 100, &iter_keys, NULL, &r_keys);
     rados_read_op_omap_get_vals_by_keys(op, keys, len,
 					&iter_vals_by_key, &r_vals_by_key);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
@@ -490,7 +490,7 @@ TEST_F(CReadOpsTest, Omap) {
   // with no omap entries
   rados_omap_iter_t iter_vals;
   rados_read_op_t rop = rados_create_read_op();
-  rados_read_op_omap_get_vals(rop, "", "", 10, &iter_vals, NULL);
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, NULL);
   ASSERT_EQ(-ENOENT, rados_read_op_operate(rop, ioctx, obj, 0));
   rados_release_read_op(rop);
   compare_omap_vals(NULL, NULL, NULL, 0, iter_vals);
@@ -510,8 +510,8 @@ TEST_F(CReadOpsTest, Omap) {
   rados_omap_iter_t iter_keys;
   int r_vals = -1, r_keys = -1;
   rop = rados_create_read_op();
-  rados_read_op_omap_get_vals(rop, "", "test", 1, &iter_vals, &r_vals);
-  rados_read_op_omap_get_keys(rop, "test", 1, &iter_keys, &r_keys);
+  rados_read_op_omap_get_vals2(rop, "", "test", 1, &iter_vals, NULL, &r_vals);
+  rados_read_op_omap_get_keys2(rop, "test", 1, &iter_keys, NULL, &r_keys);
   ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
   rados_release_read_op(rop);
   EXPECT_EQ(0, r_vals);
