@@ -5811,6 +5811,12 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   dout(10) << " src " << srcpath << dendl;
   CInode *in;
   int r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &trace, &in, MDS_TRAVERSE_DISCOVERXLOCK);
+  if (r > 0) return;
+  if (r == -ESTALE) {
+    mdcache->find_ino_peers(srcpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
+	mdr->slave_to_mds);
+    return;
+  }
   assert(r == 0);
   CDentry *dn = trace[trace.size()-1];
   dout(10) << " dn " << *dn << dendl;
