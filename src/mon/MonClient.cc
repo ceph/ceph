@@ -53,17 +53,12 @@ MonClient::MonClient(CephContext *cct_) :
   no_keyring_disabled_cephx(false),
   log_client(NULL),
   more_log_pending(false),
-  auth_supported(NULL),
   hunting(true),
   want_monmap(true),
   want_keys(0), global_id(0),
   authenticate_err(0),
-  session_established_context(NULL),
   had_a_connection(false),
   reopen_interval_multiplier(1.0),
-  auth(NULL),
-  keyring(NULL),
-  rotating_secrets(NULL),
   last_mon_command_tid(0),
   version_req_id(0)
 {
@@ -71,11 +66,6 @@ MonClient::MonClient(CephContext *cct_) :
 
 MonClient::~MonClient()
 {
-  delete auth_supported;
-  delete session_established_context;
-  delete auth;
-  delete keyring;
-  delete rotating_secrets;
 }
 
 int MonClient::build_initial_monmap()
@@ -358,19 +348,19 @@ int MonClient::init()
   Mutex::Locker l(monc_lock);
 
   string method;
-    if (!cct->_conf->auth_supported.empty())
-      method = cct->_conf->auth_supported;
-    else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
-             entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-             entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
-      method = cct->_conf->auth_cluster_required;
-    else
-      method = cct->_conf->auth_client_required;
-  auth_supported = new AuthMethodList(cct, method);
+  if (!cct->_conf->auth_supported.empty())
+    method = cct->_conf->auth_supported;
+  else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
+    method = cct->_conf->auth_cluster_required;
+  else
+    method = cct->_conf->auth_client_required;
+  auth_supported.reset(new AuthMethodList(cct, method));
   ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << " method " << method << dendl;
 
   int r = 0;
-  keyring = new KeyRing; // initializing keyring anyway
+  keyring.reset(new KeyRing); // initializing keyring anyway
 
   if (auth_supported->is_supported_auth(CEPH_AUTH_CEPHX)) {
     r = keyring->from_ceph_context(cct);
@@ -389,7 +379,8 @@ int MonClient::init()
     return r;
   }
 
-  rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
+  rotating_secrets.reset(
+    new RotatingKeyRing(cct, cct->get_module_type(), keyring.get()));
 
   initialized = true;
 
@@ -481,8 +472,8 @@ void MonClient::handle_auth(MAuthReply *m)
   bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
-      delete auth;
-      auth = get_auth_client_handler(cct, m->protocol, rotating_secrets);
+      auth.reset(get_auth_client_handler(cct, m->protocol,
+					 rotating_secrets.get()));
       if (!auth) {
 	ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
 	if (m->result == -ENOTSUP) {
@@ -552,8 +543,7 @@ void MonClient::handle_auth(MAuthReply *m)
 	send_log();
       }
       if (session_established_context) {
-        cb = session_established_context;
-        session_established_context = NULL;
+        cb = session_established_context.release();
       }
     }
   
