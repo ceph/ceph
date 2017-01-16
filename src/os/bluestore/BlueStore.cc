@@ -416,9 +416,23 @@ static void rewrite_extent_shard_key(uint32_t offset, string *key)
 {
   assert(key->size() > sizeof(uint32_t) + 1);
   assert(*key->rbegin() == EXTENT_SHARD_KEY_SUFFIX);
-  string offstr;
-  _key_encode_u32(offset, &offstr);
-  key->replace(key->size() - sizeof(uint32_t) - 1, sizeof(uint32_t), offstr);
+  _key_encode_u32(offset, key->size() - sizeof(uint32_t) - 1, key);
+}
+
+template<typename S>
+static void generate_extent_shard_key_and_apply(
+  const S& onode_key,
+  uint32_t offset,
+  string *key,
+  std::function<void(const string& final_key)> apply)
+{
+  if (key->empty()) { // make full key
+    assert(!onode_key.empty());
+    get_extent_shard_key(onode_key, offset, key);
+  } else {
+    rewrite_extent_shard_key(offset, key);
+  }
+  apply(*key);
 }
 
 int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
@@ -1748,10 +1762,13 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     }
     //schedule DB update for dirty shards
     auto it = dirty_shards.begin();
+    string key;
     while (it != dirty_shards.end()) {
-      string key;
-      get_extent_shard_key(onode->key, it->offset, &key);
-      t->set(PREFIX_OBJ, key, it->bl);
+      generate_extent_shard_key_and_apply(onode->key, it->offset, &key,
+        [&](const string& final_key) {
+          t->set(PREFIX_OBJ, final_key, it->bl);
+        }
+      );
       ++it;
     }
   }
@@ -2136,24 +2153,22 @@ void BlueStore::ExtentMap::fault_range(
     return;
 
   assert(last >= start);
-  bool first_key = true;
   string key;
   while (start <= last) {
     assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
-      if (first_key) {
-        get_extent_shard_key(onode->key, p->offset, &key);
-        first_key = false;
-      } else
-        rewrite_extent_shard_key(p->offset, &key);
       bufferlist v;
-      int r = db->get(PREFIX_OBJ, key, &v);
-      if (r < 0) {
-	derr << __func__ << " missing shard 0x" << std::hex << p->offset
-	     << std::dec << " for " << onode->oid << dendl;
-	assert(r >= 0);
-      }
+      generate_extent_shard_key_and_apply(onode->key, p->offset, &key,
+        [&](const string& final_key) {
+          int r = db->get(PREFIX_OBJ, final_key, &v);
+          if (r < 0) {
+	    derr << __func__ << " missing shard 0x" << std::hex << p->offset
+	         << std::dec << " for " << onode->oid << dendl;
+	    assert(r >= 0);
+          }
+        }
+      );
       decode_some(v);
       p->loaded = true;
       dout(20) << __func__ << " open shard 0x" << std::hex << p->offset
@@ -6567,10 +6582,13 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     }
     if (reshard) {
       dout(20) << __func__ << "  resharding extents for " << o->oid << dendl;
+      string key;
       for (auto &s : o->extent_map.shards) {
-	string key;
-	get_extent_shard_key(o->key, s.offset, &key);
-	t->rmkey(PREFIX_OBJ, key);
+	generate_extent_shard_key_and_apply(o->key, s.offset, &key,
+          [&](const string& final_key) {
+            t->rmkey(PREFIX_OBJ, final_key);
+          }
+        );
       }
       o->extent_map.fault_range(db, 0, o->onode.size);
       o->extent_map.reshard();
@@ -8533,10 +8551,13 @@ int BlueStore::_do_remove(
   o->exists = false;
   o->onode = bluestore_onode_t();
   txc->removed(o);
+  string key;
   for (auto &s : o->extent_map.shards) {
-    string key;
-    get_extent_shard_key(o->key, s.offset, &key);
-    txc->t->rmkey(PREFIX_OBJ, key);
+    generate_extent_shard_key_and_apply(o->key, s.offset, &key,
+      [&](const string& final_key) {
+        txc->t->rmkey(PREFIX_OBJ, final_key);
+      }
+    );
   }
   txc->t->rmkey(PREFIX_OBJ, o->key.c_str(), o->key.size());
   o->extent_map.clear();
@@ -9076,13 +9097,18 @@ int BlueStore::_rename(TransContext *txc,
   txc->t->rmkey(PREFIX_OBJ, oldo->key.c_str(), oldo->key.size());
 
   // rewrite shards
-  oldo->extent_map.fault_range(db, 0, oldo->onode.size);
-  get_object_key(cct, new_oid, &new_okey);
-  for (auto &s : oldo->extent_map.shards) {
+  {
+    oldo->extent_map.fault_range(db, 0, oldo->onode.size);
+    get_object_key(cct, new_oid, &new_okey);
     string key;
-    get_extent_shard_key(oldo->key, s.offset, &key);
-    txc->t->rmkey(PREFIX_OBJ, key);
-    s.dirty = true;
+    for (auto &s : oldo->extent_map.shards) {
+      generate_extent_shard_key_and_apply(oldo->key, s.offset, &key,
+        [&](const string& final_key) {
+          txc->t->rmkey(PREFIX_OBJ, final_key);
+        }
+      );
+      s.dirty = true;
+    }
   }
 
   newo = oldo;
