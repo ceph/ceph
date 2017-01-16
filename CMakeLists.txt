@@ -232,6 +232,13 @@ option(WITH_KVS "Key value store is here" ON)
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
 
+# KERNEL remote block storage
+option(WITH_KRBD "Kernel Remote block storage is here" ON)
+
+if(WITH_KRBD AND WITHOUT_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+endif()
+
 # embedded ceph daemon static library
 # NOTE: Ceph is mostly LGPL (see COPYING), which means that
 # static linking brings with it restrictions. Please be sure
@@ -289,7 +296,7 @@ if(NOT JEMALLOC_FOUND)
   CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 endif()
 
-if(WITH_LIBCEPHFS OR WITH_RBD)
+if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
 endif()
 

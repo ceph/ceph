@@ -139,6 +139,9 @@
 /* define if rbd enabled */
 #cmakedefine WITH_RBD
 
+/* define if kernel rbd enabled */
+#cmakedefine WITH_KRBD
+
 /* define if key-value-store is enabled */
 #cmakedefine WITH_KVS
 
