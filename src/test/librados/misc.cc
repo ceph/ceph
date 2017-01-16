@@ -464,7 +464,7 @@ TEST_F(LibRadosMiscPP, Tmap2OmapPP) {
     map<string, bufferlist> m;
     ObjectReadOperation o;
     o.omap_get_header(&got, NULL);
-    o.omap_get_vals("", 1024, &m, NULL);
+    o.omap_get_vals2("", 1024, &m, nullptr, nullptr);
     ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
 
     // compare header
