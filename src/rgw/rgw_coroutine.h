@@ -7,6 +7,7 @@
 #endif
 
 #include <boost/asio.hpp>
+#include <boost/intrusive_ptr.hpp>
 
 #ifdef NEED_ASSERT_H
 #pragma pop_macro("_ASSERT_H")
@@ -30,7 +31,8 @@ class RGWAioCompletionNotifier;
 class RGWCompletionManager : public RefCountedObject {
   CephContext *cct;
   list<void *> complete_reqs;
-  set<RGWAioCompletionNotifier *> cns;
+  using NotifierRef = boost::intrusive_ptr<RGWAioCompletionNotifier>;
+  set<NotifierRef> cns;
 
   Mutex lock;
   Cond cond;
