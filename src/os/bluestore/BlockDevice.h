@@ -108,7 +108,7 @@ public:
 
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
-  virtual int open(string path) = 0;
+  virtual int open(const string& path) = 0;
   virtual void close() = 0;
 };
 
