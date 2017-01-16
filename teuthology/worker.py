@@ -227,7 +227,7 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
         return
 
     log.info('Creating archive dir %s', job_config['archive_path'])
-    safepath.makedirs(archive_dir, safe_archive)
+    safepath.makedirs('/', job_config['archive_path'])
     log.info('Running job %s', job_config['job_id'])
 
     suite_path = job_config['suite_path']
