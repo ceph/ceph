@@ -556,7 +556,7 @@ public:
     return
       get_num_mds(STATE_RESOLVE) > 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
-      failed.empty();
+      failed.empty() && damaged.empty();
   }
   bool is_rejoining() const {
     // nodes are rejoining cache state
