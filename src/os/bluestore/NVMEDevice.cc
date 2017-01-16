@@ -772,7 +772,7 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 }
 
 
-int NVMEDevice::open(string p)
+int NVMEDevice::open(const string& p)
 {
   int r = 0;
   dout(1) << __func__ << " path " << p << dendl;
