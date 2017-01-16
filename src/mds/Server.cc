@@ -6645,9 +6645,7 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
   prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
 
   list<ScatterLock*> updated_scatterlocks;
-  mdcache->migrator->decode_import_inode(srcdn, blp, 
-					 srcdn->authority().first,
-					 mdr->ls, 0,
+  mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
 					 mdr->more()->cap_imports, updated_scatterlocks);
 
   // hack: force back to !auth and clean, temporarily
