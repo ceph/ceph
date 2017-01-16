@@ -58,9 +58,9 @@ to_cstr() const
 bool EntityName::
 from_str(const string& s)
 {
-  int pos = s.find('.');
+  size_t pos = s.find('.');
 
-  if (pos < 0)
+  if (pos == string::npos)
     return false;
  
   string type_ = s.substr(0, pos);
