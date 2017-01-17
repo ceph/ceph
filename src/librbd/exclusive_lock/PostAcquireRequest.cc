@@ -9,7 +9,6 @@
 #include "common/WorkQueue.h"
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"

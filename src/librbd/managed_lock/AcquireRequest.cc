@@ -3,18 +3,17 @@
 
 #include "librbd/managed_lock/AcquireRequest.h"
 #include "librbd/Watcher.h"
-#include "librbd/ManagedLock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "include/stringify.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
-
-#include "librbd/ImageCtx.h"
+#include "librbd/managed_lock/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -25,10 +24,10 @@ using std::string;
 
 namespace librbd {
 
-using util::detail::C_AsyncCallback;
-using util::create_context_callback;
-using util::create_rados_safe_callback;
-using util::create_rados_ack_callback;
+using librbd::util::detail::C_AsyncCallback;
+using librbd::util::create_context_callback;
+using librbd::util::create_rados_safe_callback;
+using librbd::util::create_rados_ack_callback;
 
 namespace managed_lock {
 
@@ -110,7 +109,7 @@ void AcquireRequest<I>::send_lock() {
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME,
                          m_exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED, m_cookie,
-                         ManagedLock<I>::WATCHER_LOCK_TAG, "", utime_t(), 0);
+                         util::get_watcher_lock_tag(), "", utime_t(), 0);
 
   using klass = AcquireRequest;
   librados::AioCompletion *rados_completion =

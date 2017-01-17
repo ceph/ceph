@@ -16,9 +16,6 @@
 #include "librbd/managed_lock/ReacquireRequest.cc"
 template class librbd::managed_lock::ReacquireRequest<librbd::MockImageCtx>;
 
-#include "librbd/ManagedLock.cc"
-template class librbd::ManagedLock<librbd::MockImageCtx>;
-
 namespace {
 
 MATCHER_P(IsLockType, exclusive, "") {
@@ -44,7 +41,6 @@ using ::testing::StrEq;
 class TestMockManagedLockReacquireRequest : public TestMockFixture {
 public:
   typedef ReacquireRequest<MockImageCtx> MockReacquireRequest;
-  typedef ManagedLock<MockImageCtx> MockManagedLock;
 
   void expect_set_cookie(MockImageCtx &mock_image_ctx, int r,
                          bool exclusive = true) {

@@ -18,8 +18,6 @@ template class librbd::exclusive_lock::PreReleaseRequest<librbd::MockImageCtx>;
 
 namespace librbd {
 
-using librbd::ManagedLock;
-
 namespace exclusive_lock {
 
 namespace {

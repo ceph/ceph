@@ -23,9 +23,6 @@ struct Traits<MockImageCtx> {
 #include "librbd/managed_lock/ReleaseRequest.cc"
 template class librbd::managed_lock::ReleaseRequest<librbd::MockImageCtx>;
 
-#include "librbd/ManagedLock.cc"
-template class librbd::ManagedLock<librbd::MockImageCtx>;
-
 namespace librbd {
 namespace managed_lock {
 
@@ -40,7 +37,6 @@ static const std::string TEST_COOKIE("auto 123");
 class TestMockManagedLockReleaseRequest : public TestMockFixture {
 public:
   typedef ReleaseRequest<MockImageCtx> MockReleaseRequest;
-  typedef ManagedLock<MockImageCtx> MockManagedLock;
 
   void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
