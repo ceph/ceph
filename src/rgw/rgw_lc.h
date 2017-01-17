@@ -165,7 +165,7 @@ public:
 
   void add_rule(LCRule* rule);
 
-  bool check_and_add_rule(LCRule* rule);
+  int check_and_add_rule(LCRule* rule);
 
   bool validate();
 
