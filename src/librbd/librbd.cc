@@ -106,7 +106,7 @@ struct C_OpenAfterCloseComplete : public Context {
   virtual void finish(int r) {
     ldout(ictx->cct, 20) << "C_OpenAfterCloseComplete::finish: r=" << r
 			 << dendl;
-    ictx->state->open(new C_OpenComplete(ictx, comp, ictxp, true));
+    ictx->state->open(false, new C_OpenComplete(ictx, comp, ictxp, true));
   }
 };
 
@@ -229,7 +229,7 @@ namespace librbd {
       image.ctx = NULL;
     }
 
-    int r = ictx->state->open();
+    int r = ictx->state->open(false);
     if (r < 0) {
       delete ictx;
       tracepoint(librbd, open_image_exit, r);
@@ -252,7 +252,7 @@ namespace librbd {
       reinterpret_cast<ImageCtx*>(image.ctx)->state->close(
 	new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
     } else {
-      ictx->state->open(new C_OpenComplete(ictx, get_aio_completion(c),
+      ictx->state->open(false, new C_OpenComplete(ictx, get_aio_completion(c),
 					   &image.ctx));
     }
     tracepoint(librbd, aio_open_image_exit, 0);
@@ -271,7 +271,7 @@ namespace librbd {
       image.ctx = NULL;
     }
 
-    int r = ictx->state->open();
+    int r = ictx->state->open(false);
     if (r < 0) {
       delete ictx;
       tracepoint(librbd, open_image_exit, r);
@@ -294,7 +294,7 @@ namespace librbd {
       reinterpret_cast<ImageCtx*>(image.ctx)->state->close(
 	new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
     } else {
-      ictx->state->open(new C_OpenComplete(ictx, get_aio_completion(c),
+      ictx->state->open(false, new C_OpenComplete(ictx, get_aio_completion(c),
 					   &image.ctx));
     }
     tracepoint(librbd, aio_open_image_exit, 0);
@@ -2050,7 +2050,7 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
 						false);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
-  int r = ictx->state->open();
+  int r = ictx->state->open(false);
   if (r < 0) {
     delete ictx;
   } else {
@@ -2071,7 +2071,7 @@ extern "C" int rbd_aio_open(rados_ioctx_t p, const char *name,
 						false);
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only, comp->pc);
-  ictx->state->open(new C_OpenComplete(ictx, get_aio_completion(comp), image));
+  ictx->state->open(false, new C_OpenComplete(ictx, get_aio_completion(comp), image));
   tracepoint(librbd, aio_open_image_exit, 0);
   return 0;
 }
@@ -2086,7 +2086,7 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
 						true);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
-  int r = ictx->state->open();
+  int r = ictx->state->open(false);
   if (r < 0) {
     delete ictx;
   } else {
@@ -2107,7 +2107,8 @@ extern "C" int rbd_aio_open_read_only(rados_ioctx_t p, const char *name,
 						true);
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only, comp->pc);
-  ictx->state->open(new C_OpenComplete(ictx, get_aio_completion(comp), image));
+  ictx->state->open(false, new C_OpenComplete(ictx, get_aio_completion(comp),
+                                              image));
   tracepoint(librbd, aio_open_image_exit, 0);
   return 0;
 }
@@ -3332,7 +3333,7 @@ extern "C" int rbd_image_get_group(rados_ioctx_t image_p,
   librados::IoCtx::from_rados_ioctx_t(image_p, io_ctx);
 
   librbd::ImageCtx *ictx = new librbd::ImageCtx(image_name, "", "", io_ctx, false);
-  int r = ictx->state->open();
+  int r = ictx->state->open(false);
   if (r < 0) {
     delete ictx;
     tracepoint(librbd, open_image_exit, r);
