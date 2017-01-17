@@ -198,12 +198,10 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
     log_t.op_alloc_rm(id, p.offset, p.length);
 =======
   int count = 0;
-  uint64_t got = 0;
-  r = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
-                          extents, &count, &got);
-
-  assert(r >= 0);
-  if (got < want)
+  int64_t got = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
+				    extents, &count);
+  assert(got > 0);
+  if (got < (int64_t)want)
     alloc[id]->unreserve(want - got);
 
   for (int i = 0; i < count; i++) {
@@ -1802,12 +1800,17 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   if (alloc_len < (int64_t)left) {
 =======
   int count = 0;
-  uint64_t alloc_len = 0;
   AllocExtentVector extents;
+<<<<<<< HEAD
   r = alloc[id]->allocate(left, min_alloc_size, hint,
                           &extents, &count, &alloc_len);
   if (r < 0 || alloc_len < left) {
 >>>>>>> os/bluestore: manage vector from ExtentList
+=======
+  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
+                          &extents, &count);
+  if (alloc_len < (int64_t)left) {
+>>>>>>> os/bluestore: return blocks allocated from allocate()
     derr << __func__ << " allocate failed on 0x" << std::hex << left
 	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
     alloc[id]->dump();
