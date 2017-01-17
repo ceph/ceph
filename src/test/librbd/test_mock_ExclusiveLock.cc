@@ -114,6 +114,15 @@ std::list<T *> BaseRequest<T>::s_requests;
 
 template <>
 struct AcquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<AcquireRequest<MockExclusiveLockImageCtx> > {
+  static AcquireRequest* create(librados::IoCtx& ioctx,
+                                MockImageWatcher *watcher,
+                                ContextWQ *work_queue, const std::string& oid,
+                                const std::string& cookie,
+                                bool blacklist_on_break_lock,
+                                uint32_t blacklist_expire_seconds,
+                                Context *on_finish) {
+    return BaseRequest::create(ioctx, watcher, work_queue, oid, cookie, on_finish);
+  }
   MOCK_METHOD0(send, void());
 };
 

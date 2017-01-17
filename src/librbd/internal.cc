@@ -33,8 +33,6 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
-#include "librbd/managed_lock/BreakRequest.h"
-#include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/Types.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -1568,12 +1566,14 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
+    if (!ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+      lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+      return -EINVAL;
+    }
+
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    auto get_owner_req = managed_lock::GetLockerRequest<>::create(
-      *ictx, &locker, &get_owner_ctx);
-    get_owner_req->send();
-
+    ExclusiveLock<>(*ictx).get_locker(&locker, &get_owner_ctx);
     int r = get_owner_ctx.wait();
     if (r == -ENOENT) {
       return r;
@@ -1601,12 +1601,22 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       return -EOPNOTSUPP;
     }
 
+    if (ictx->read_only) {
+      return -EROFS;
+    }
+
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    auto get_owner_req = managed_lock::GetLockerRequest<>::create(
-      *ictx, &locker, &get_owner_ctx);
-    get_owner_req->send();
+    {
+      RWLock::RLocker l(ictx->owner_lock);
 
+      if (ictx->exclusive_lock == nullptr) {
+        lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+        return -EINVAL;
+      }
+
+      ictx->exclusive_lock->get_locker(&locker, &get_owner_ctx);
+    }
     int r = get_owner_ctx.wait();
     if (r == -ENOENT) {
       return r;
@@ -1621,10 +1631,16 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     }
 
     C_SaferCond break_ctx;
-    auto break_req = managed_lock::BreakRequest<>::create(
-      *ictx, locker, ictx->blacklist_on_break_lock, true, &break_ctx);
-    break_req->send();
+    {
+      RWLock::RLocker l(ictx->owner_lock);
 
+      if (ictx->exclusive_lock == nullptr) {
+        lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+        return -EINVAL;
+      }
+
+      ictx->exclusive_lock->break_lock(locker, true, &break_ctx);
+    }
     r = break_ctx.wait();
     if (r == -ENOENT) {
       return r;
