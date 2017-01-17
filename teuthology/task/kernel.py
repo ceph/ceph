@@ -158,18 +158,6 @@ def validate_config(ctx, config):
                 if role in config:
                     del config[role]
 
-def _vsplitter(version):
-    """Kernels from Calxeda are named ...ceph-<sha1>...highbank.
-    Kernels that we generate are named ...-g<sha1>.
-    This routine finds the text in front of the sha1 that is used by
-    need_to_install() to extract information from the kernel name.
-
-    :param version: Name of the kernel
-    """
-    if version.endswith('highbank'):
-        return 'ceph-'
-    return '-g'
-
 
 def need_to_install(ctx, role, version):
     """
@@ -203,16 +191,11 @@ def need_to_install(ctx, role, version):
             ret = False
     else:
         # version is sha1, need to try to extract sha1 from cur_version
-        splt = _vsplitter(cur_version)
-        if splt in cur_version:
-            _, cur_sha1 = cur_version.rsplit(splt, 1)
-            dloc = cur_sha1.find('-')
-            if dloc > 0:
-                cur_sha1 = cur_sha1[0:dloc]
+        match = re.search('[-_]g([0-9a-f]{6,40})', cur_version)
+        if match:
+            cur_sha1 = match.group(1)
             log.debug('extracting sha1, {ver} -> {sha1}'.format(
                       ver=cur_version, sha1=cur_sha1))
-            # FIXME: The above will match things like ...-generic on Ubuntu
-            # distro kernels resulting in 'eneric' cur_sha1.
             m = min(len(cur_sha1), len(version))
             assert m >= 6, "cur_sha1 and/or version is too short, m = %d" % m
             if cur_sha1[0:m] == version[0:m]:
