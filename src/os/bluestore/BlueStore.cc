@@ -8105,6 +8105,7 @@ int BlueStore::_do_alloc_write(
     }
 
     AllocExtentVector extents;
+    extents.reserve(4);  // 4 should be (more than) enough for most allocations
     int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
                             hint, &extents);
     assert(got == (int64_t)final_length);
