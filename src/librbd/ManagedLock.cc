@@ -3,8 +3,11 @@
 
 #include "librbd/ManagedLock.h"
 #include "librbd/managed_lock/AcquireRequest.h"
+#include "librbd/managed_lock/BreakRequest.h"
+#include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/ReleaseRequest.h"
 #include "librbd/managed_lock/ReacquireRequest.h"
+#include "librbd/managed_lock/Types.h"
 #include "librbd/Watcher.h"
 #include "librbd/ImageCtx.h"
 #include "cls/lock/cls_lock_client.h"
@@ -43,13 +46,17 @@ const std::string ManagedLock<I>::WATCHER_LOCK_TAG("internal");
 
 template <typename I>
 ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
-                            const string& oid, Watcher *watcher)
+                            const string& oid, Watcher *watcher,
+                            bool blacklist_on_break_lock,
+                            uint32_t blacklist_expire_seconds)
   : m_lock(util::unique_lock_name("librbd::ManagedLock<I>::m_lock", this)),
     m_state(STATE_UNLOCKED),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_work_queue(work_queue),
     m_oid(oid),
-    m_watcher(watcher) {
+    m_watcher(watcher),
+    m_blacklist_on_break_lock(blacklist_on_break_lock),
+    m_blacklist_expire_seconds(blacklist_expire_seconds) {
 }
 
 template <typename I>
@@ -62,6 +69,14 @@ ManagedLock<I>::~ManagedLock() {
 template <typename I>
 bool ManagedLock<I>::is_lock_owner() const {
   Mutex::Locker locker(m_lock);
+
+  return is_lock_owner(m_lock);
+}
+
+template <typename I>
+bool ManagedLock<I>::is_lock_owner(Mutex &lock) const {
+
+  assert(m_lock.is_locked());
 
   bool lock_owner;
 
@@ -176,6 +191,33 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
   if (on_reacquired != nullptr) {
     on_reacquired->complete(0);
   }
+}
+
+template <typename I>
+void ManagedLock<I>::get_locker(managed_lock::Locker *locker,
+                                Context *on_finish) {
+  ldout(m_cct, 10) << dendl;
+
+  auto req = managed_lock::GetLockerRequest<I>::create(
+    m_ioctx, m_oid, locker, on_finish);
+  req->send();
+}
+
+template <typename I>
+void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
+                                bool force_break_lock, Context *on_finish) {
+  {
+    Mutex::Locker l(m_lock);
+    if (!is_lock_owner(m_lock)) {
+      auto req = managed_lock::BreakRequest<I>::create(
+        m_ioctx, m_work_queue, m_oid, locker, m_blacklist_on_break_lock,
+        m_blacklist_expire_seconds, force_break_lock, on_finish);
+      req->send();
+      return;
+    }
+  }
+
+  on_finish->complete(-EBUSY);
 }
 
 template <typename I>
@@ -376,9 +418,10 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
   }
 
   using managed_lock::AcquireRequest;
-  AcquireRequest<I>* req = AcquireRequest<I>::create(m_ioctx, m_watcher,
-      m_work_queue, m_oid, m_cookie,
-      util::create_context_callback<
+  AcquireRequest<I>* req = AcquireRequest<I>::create(
+    m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie,
+    m_blacklist_on_break_lock, m_blacklist_expire_seconds,
+    util::create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<AcquireRequest<I>>(req), 0);
 }
