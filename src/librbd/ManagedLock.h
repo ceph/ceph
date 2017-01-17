@@ -30,8 +30,6 @@ private:
   typedef typename TypeTraits::Watcher Watcher;
 
 public:
-  static const std::string WATCHER_LOCK_TAG;
-
   static ManagedLock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
                              const std::string& oid, Watcher *watcher,
                              managed_lock::Mode mode,
@@ -66,8 +64,6 @@ public:
   bool is_locked_state() const {
     return m_state == STATE_LOCKED;
   }
-
-  static bool decode_lock_cookie(const std::string &tag, uint64_t *handle);
 
 protected:
 
@@ -173,8 +169,6 @@ private:
   State m_post_next_state;
 
   ActionsContexts m_actions_contexts;
-
-  static std::string encode_lock_cookie(uint64_t watch_handle);
 
   bool is_lock_owner(Mutex &lock) const;
   bool is_transition_state() const;

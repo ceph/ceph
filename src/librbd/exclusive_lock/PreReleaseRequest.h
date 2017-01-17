@@ -12,8 +12,6 @@ class Context;
 namespace librbd {
 
 struct ImageCtx;
-template <typename> class ManagedLock;
-template <typename> class Journal;
 
 namespace exclusive_lock {
 

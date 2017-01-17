@@ -6,7 +6,6 @@
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"

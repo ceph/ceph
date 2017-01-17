@@ -8,6 +8,7 @@
 #include "librbd/managed_lock/ReleaseRequest.h"
 #include "librbd/managed_lock/ReacquireRequest.h"
 #include "librbd/managed_lock/Types.h"
+#include "librbd/managed_lock/Utils.h"
 #include "librbd/Watcher.h"
 #include "librbd/ImageCtx.h"
 #include "cls/lock/cls_lock_client.h"
@@ -15,7 +16,6 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/Utils.h"
-#include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -27,8 +27,6 @@ using std::string;
 using namespace managed_lock;
 
 namespace {
-
-const std::string WATCHER_LOCK_COOKIE_PREFIX = "auto";
 
 template <typename R>
 struct C_SendLockRequest : public Context {
@@ -42,15 +40,17 @@ struct C_SendLockRequest : public Context {
 
 } // anonymous namespace
 
-template <typename I>
-const std::string ManagedLock<I>::WATCHER_LOCK_TAG("internal");
+using librbd::util::create_context_callback;
+using librbd::util::unique_lock_name;
+using managed_lock::util::decode_lock_cookie;
+using managed_lock::util::encode_lock_cookie;
 
 template <typename I>
 ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
                             const string& oid, Watcher *watcher, Mode mode,
                             bool blacklist_on_break_lock,
                             uint32_t blacklist_expire_seconds)
-  : m_lock(util::unique_lock_name("librbd::ManagedLock<I>::m_lock", this)),
+  : m_lock(unique_lock_name("librbd::ManagedLock<I>::m_lock", this)),
     m_state(STATE_UNLOCKED),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_work_queue(work_queue),
@@ -254,25 +254,6 @@ void  ManagedLock<I>::post_release_lock_handler(bool shutting_down, int r,
 }
 
 template <typename I>
-bool ManagedLock<I>::decode_lock_cookie(const std::string &tag,
-                                        uint64_t *handle) {
-  std::string prefix;
-  std::istringstream ss(tag);
-  if (!(ss >> prefix >> *handle) || prefix != WATCHER_LOCK_COOKIE_PREFIX) {
-    return false;
-  }
-  return true;
-}
-
-template <typename I>
-string ManagedLock<I>::encode_lock_cookie(uint64_t watch_handle) {
-  assert(watch_handle != 0);
-  std::ostringstream ss;
-  ss << WATCHER_LOCK_COOKIE_PREFIX << " " << watch_handle;
-  return ss.str();
-}
-
-template <typename I>
 bool ManagedLock<I>::is_transition_state() const {
   switch (m_state) {
   case STATE_ACQUIRING:
@@ -402,10 +383,10 @@ void ManagedLock<I>::send_acquire_lock() {
     m_state = STATE_WAITING_FOR_REGISTER;
     return;
   }
-  m_cookie = ManagedLock<I>::encode_lock_cookie(watch_handle);
+  m_cookie = encode_lock_cookie(watch_handle);
 
   m_work_queue->queue(new FunctionContext([this](int r) {
-    pre_acquire_lock_handler(util::create_context_callback<
+    pre_acquire_lock_handler(create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_pre_acquire_lock>(this));
   }));
 }
@@ -423,7 +404,7 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
   AcquireRequest<I>* req = AcquireRequest<I>::create(
     m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie, m_mode == EXCLUSIVE,
     m_blacklist_on_break_lock, m_blacklist_expire_seconds,
-    util::create_context_callback<
+    create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<AcquireRequest<I>>(req), 0);
 }
@@ -444,7 +425,7 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
   m_post_next_state = (r < 0 ? STATE_UNLOCKED : STATE_LOCKED);
 
   m_work_queue->queue(new FunctionContext([this, r](int ret) {
-    post_acquire_lock_handler(r, util::create_context_callback<
+    post_acquire_lock_handler(r, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_post_acquire_lock>(this));
   }));
 }
@@ -496,7 +477,7 @@ void ManagedLock<I>::send_reacquire_lock() {
      return;
   }
 
-  m_new_cookie = ManagedLock<I>::encode_lock_cookie(watch_handle);
+  m_new_cookie = encode_lock_cookie(watch_handle);
   if (m_cookie == m_new_cookie) {
     ldout(m_cct, 10) << ": skipping reacquire since cookie still valid"
                      << dendl;
@@ -510,7 +491,7 @@ void ManagedLock<I>::send_reacquire_lock() {
   using managed_lock::ReacquireRequest;
   ReacquireRequest<I>* req = ReacquireRequest<I>::create(m_ioctx, m_oid,
       m_cookie, m_new_cookie, m_mode == EXCLUSIVE,
-      util::create_context_callback<
+      create_context_callback<
         ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<ReacquireRequest<I>>(req));
 }
@@ -574,7 +555,7 @@ void ManagedLock<I>::send_release_lock() {
   m_state = STATE_PRE_RELEASING;
 
   m_work_queue->queue(new FunctionContext([this](int r) {
-    pre_release_lock_handler(false, util::create_context_callback<
+    pre_release_lock_handler(false, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_pre_release_lock>(this));
   }));
 }
@@ -591,7 +572,7 @@ void ManagedLock<I>::handle_pre_release_lock(int r) {
   using managed_lock::ReleaseRequest;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
       m_work_queue, m_oid, m_cookie,
-      util::create_context_callback<
+      create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_release_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<ReleaseRequest<I>>(req), 0);
 }
@@ -610,7 +591,7 @@ void ManagedLock<I>::handle_release_lock(int r) {
   m_post_next_state = r < 0 ? STATE_LOCKED : STATE_UNLOCKED;
 
   m_work_queue->queue(new FunctionContext([this, r](int ret) {
-    post_release_lock_handler(false, r, util::create_context_callback<
+    post_release_lock_handler(false, r, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_post_release_lock>(this));
   }));
 }
@@ -630,7 +611,7 @@ void ManagedLock<I>::send_shutdown() {
   if (m_state == STATE_UNLOCKED) {
     m_state = STATE_SHUTTING_DOWN;
     m_work_queue->queue(new FunctionContext([this](int r) {
-      shutdown_handler(r, util::create_context_callback<
+      shutdown_handler(r, create_context_callback<
           ManagedLock<I>, &ManagedLock<I>::handle_shutdown>(this));
     }));
     return;
@@ -659,7 +640,7 @@ void ManagedLock<I>::send_shutdown_release() {
   Mutex::Locker locker(m_lock);
 
   m_work_queue->queue(new FunctionContext([this](int r) {
-    pre_release_lock_handler(true, util::create_context_callback<
+    pre_release_lock_handler(true, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_shutdown_pre_release>(this));
   }));
 }
@@ -678,7 +659,7 @@ void ManagedLock<I>::handle_shutdown_pre_release(int r) {
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
       m_work_queue, m_oid, cookie,
       new FunctionContext([this](int r) {
-        post_release_lock_handler(true, r, util::create_context_callback<
+        post_release_lock_handler(true, r, create_context_callback<
             ManagedLock<I>, &ManagedLock<I>::handle_shutdown_post_release>(this));
       }));
   req->send();
