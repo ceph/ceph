@@ -22,9 +22,17 @@ void ExtentList::add_extents(int64_t start, int64_t count) {
   bool can_merge = false;
 
   if (!m_extents->empty()) {
+<<<<<<< HEAD
     last_extent = &(m_extents->back());
     uint64_t last_offset = last_extent->end() / m_block_size;
     uint32_t last_length = last_extent->length / m_block_size;
+=======
+    last_extent = &((*m_extents)[m_extents->size() - 1]);
+    uint64_t last_offset = (last_extent->offset + last_extent->length) / 
+			m_block_size; 
+    uint32_t last_length = last_extent->length / m_block_size; 
+    int64_t max_blocks = m_max_alloc_size / m_block_size;
+>>>>>>> os/bluestore: manage vector from ExtentList
     if ((last_offset == (uint64_t) start) &&
         (!m_max_blocks || (last_length + count) <= m_max_blocks)) {
       can_merge = true;
