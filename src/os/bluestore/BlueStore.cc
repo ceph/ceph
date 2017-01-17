@@ -3809,17 +3809,16 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     assert(r == 0);
 
     int count = 0;
-    uint64_t alloc_len = 0;
     AllocExtentVector exts;
-    r = alloc->allocate(gift, cct->_conf->bluefs_alloc_size, 0, 0, &exts,
-			&count, &alloc_len);
+    int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+					0, 0, &exts, &count);
 
-    if (r < 0 || alloc_len < gift) {
+    if (alloc_len < (int64_t)gift) {
       derr << __func__ << " allocate failed on 0x" << std::hex << gift
            << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
       alloc->dump();
       assert(0 == "allocate failed, wtf");
-      return r;
+      return -ENOSPC;
     }
     assert(count > 0);
     
@@ -8109,20 +8108,17 @@ int BlueStore::_do_alloc_write(
     }
 
     int count = 0;
-    uint64_t alloc_len = 0;
     AllocExtentVector extents;
-    int r = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
-                            hint, &extents, &count, &alloc_len);
-    assert(r == 0 && alloc_len == final_length);
-    need -= final_length;
-    txc->statfs_delta.allocated() += final_length;
-    assert(count > 0);
-    hint = extents[count - 1].end();
-
-    for (int i = 0; i < count; i++) {
-      bluestore_pextent_t e = bluestore_pextent_t(extents[i]);
+    int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
+                            hint, &extents, &count);
+    assert(got == (int64_t)final_length);
+    need -= got;
+    txc->statfs_delta.allocated() += got;
+    for (auto& p : extents) {
+      bluestore_pextent_t e = bluestore_pextent_t(p);
       txc->allocated.insert(e.offset, e.length);
       dblob.extents.push_back(e);
+      hint = p.end();
     }
 
     dout(20) << __func__ << " blob " << *b
