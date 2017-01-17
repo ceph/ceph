@@ -281,9 +281,10 @@ TEST(BitAllocator, test_zone_alloc)
   bmap_test_assert(lock);
 
   int64_t blk_size = 1024;
-  AllocExtentVector extents = AllocExtentVector
-        (zone->size() / 2, AllocExtent(-1, -1));
-
+  AllocExtentVector extents;
+  cout << extents.size() << std::endl;
+  cout << (int)extents.empty() << std::endl;
+  extents.clear();
   ExtentList *block_list = new ExtentList(&extents, blk_size);
   allocated = zone->alloc_blocks_dis(zone->size() / 2, 1, 0, 0, block_list);
   bmap_test_assert(allocated == zone->size() / 2);
@@ -291,9 +292,7 @@ TEST(BitAllocator, test_zone_alloc)
 
   {
     int64_t blk_size = 1024;
-    AllocExtentVector extents = AllocExtentVector
-      (zone->size() / 2, AllocExtent(-1, -1));
-
+    AllocExtentVector extents;
     ExtentList *block_list = new ExtentList(&extents, blk_size);
 
     zone = new BitMapZone(total_blocks, 0);
@@ -316,11 +315,11 @@ TEST(BitAllocator, test_zone_alloc)
    */
   {
     int64_t blk_size = 1;
-    AllocExtentVector extents = AllocExtentVector
-      (zone->size() / 2, AllocExtent(-1, -1));
+    AllocExtentVector extents;
 
     for (int i = 1; i <= total_blocks - BmapEntry::size(); i = i << 1) {
       for (int64_t j = 0; j <= BmapEntry::size(); j = 1 << j) {
+	extents.clear();
         ExtentList *block_list = new ExtentList(&extents, blk_size);
         zone = new BitMapZone(total_blocks, 0);
         lock = zone->lock_excl_try();
@@ -338,6 +337,7 @@ TEST(BitAllocator, test_zone_alloc)
 
     //allocation in loop
     {
+      extents.clear();
       ExtentList *block_list = new ExtentList(&extents, blk_size);
       zone = new BitMapZone(total_blocks, 0);
       lock = zone->lock_excl_try();
@@ -369,36 +369,36 @@ TEST(BitAllocator, test_zone_alloc)
     }
 
     {
+      extents.clear();
+      ExtentList *block_list = new ExtentList(&extents, blk_size);
+      zone = new BitMapZone(total_blocks, 0);
+      lock = zone->lock_excl_try();
+      bmap_test_assert(lock);
 
-        ExtentList *block_list = new ExtentList(&extents, blk_size);
-        zone = new BitMapZone(total_blocks, 0);
-        lock = zone->lock_excl_try();
-        bmap_test_assert(lock);
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks + 1, total_blocks + 1, 0, 1024, block_list);
+      bmap_test_assert(allocated == 0);  
 
-        block_list->reset();
-        allocated = zone->alloc_blocks_dis(total_blocks + 1, total_blocks + 1, 0, 1024, block_list);
-        bmap_test_assert(allocated == 0);  
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list);
+      bmap_test_assert(allocated == 0);  
 
-        block_list->reset();
-        allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list);
-        bmap_test_assert(allocated == 0);  
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 0, 0, block_list);
+      bmap_test_assert(allocated == total_blocks);
+      bmap_test_assert(extents[0].offset == 0);
 
-        block_list->reset();
-        allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 0, 0, block_list);
-        bmap_test_assert(allocated == total_blocks);
-        bmap_test_assert(extents[0].offset == 0);
-
-        zone->free_blocks(extents[0].offset, allocated);        
+      zone->free_blocks(extents[0].offset, allocated);        
         
-        delete block_list;  
-        block_list = new ExtentList(&extents, blk_size, total_blocks / 4 * blk_size);
-        block_list->reset();
-        allocated = zone->alloc_blocks_dis(total_blocks, total_blocks / 4, 0, 0, block_list);
-        bmap_test_assert(allocated == total_blocks);
-        for (int i = 0; i < 4; i++) {
-          bmap_test_assert(extents[i].offset == (uint64_t) i * (total_blocks / 4));
-        }
-  
+      delete block_list;
+      extents.clear();
+      block_list = new ExtentList(&extents, blk_size, total_blocks / 4 * blk_size);
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks / 4, 0, 0, block_list);
+      bmap_test_assert(allocated == total_blocks);
+      for (int i = 0; i < 4; i++) {
+	bmap_test_assert(extents[i].offset == (uint64_t) i * (total_blocks / 4));
+      }
     }
   }
 }
@@ -430,8 +430,7 @@ TEST(BitAllocator, test_bmap_alloc)
     for (int64_t iter = 0; iter < max_iter; iter++) {
       for (int64_t j = 0; alloc_size <= total_blocks; j++) {
         int64_t blk_size = 1024;
-        auto extents = AllocExtentVector
-              (alloc->size(), AllocExtent(-1, -1));
+        AllocExtentVector extents;
         ExtentList *block_list = new ExtentList(&extents, blk_size, alloc_size);
         for (int64_t i = 0; i < total_blocks; i += alloc_size) {
           bmap_test_assert(alloc->reserve_blocks(alloc_size) == true);
@@ -453,8 +452,7 @@ TEST(BitAllocator, test_bmap_alloc)
     }
 
     int64_t blk_size = 1024;
-    auto extents = AllocExtentVector
-          (alloc->size(), AllocExtent(-1, -1));
+    AllocExtentVector extents;
 
     ExtentList *block_list = new ExtentList(&extents, blk_size);
   
@@ -495,8 +493,7 @@ bool alloc_extents_max_block(BitAllocator *alloc,
   int64_t allocated = 0;
   int64_t verified = 0;
   int64_t count = 0;
-  AllocExtentVector extents = AllocExtentVector
-        (total_alloc, AllocExtent(-1, -1));
+  AllocExtentVector extents;
 
   ExtentList *block_list = new ExtentList(&extents, blk_size, max_alloc);
 
@@ -540,18 +537,17 @@ do_work_dis(BitAllocator *alloc)
   int64_t alloced = 0;
   int64_t num_blocks = alloc->size() / NUM_THREADS;
 
-  AllocExtentVector extents = AllocExtentVector
-        (num_blocks, AllocExtent(-1, -1));
+  AllocExtentVector extents;
   ExtentList *block_list = new ExtentList(&extents, 4096);
 
   while (num_iters--) {
-      alloc_assert(alloc->reserve_blocks(num_blocks));
-      alloced = alloc->alloc_blocks_dis_res(num_blocks, 1, 0, block_list);
-      alloc_assert(alloced == num_blocks);
+    alloc_assert(alloc->reserve_blocks(num_blocks));
+    alloced = alloc->alloc_blocks_dis_res(num_blocks, 1, 0, block_list);
+    alloc_assert(alloced == num_blocks);
 
-      alloc_assert(alloc->is_allocated_dis(block_list, num_blocks));
-      alloc->free_blocks_dis(num_blocks, block_list);
-      block_list->reset();
+    alloc_assert(alloc->is_allocated_dis(block_list, num_blocks));
+    alloc->free_blocks_dis(num_blocks, block_list);
+    block_list->reset();
   }
 }
 

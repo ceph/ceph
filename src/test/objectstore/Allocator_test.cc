@@ -189,6 +189,7 @@ TEST_P(AllocTest, test_alloc_failure)
 			      block_size * 256, (int64_t) 0, &extents));
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
+    extents.clear();
     EXPECT_EQ(alloc->reserve(block_size * 512), 0);
     EXPECT_EQ(-ENOSPC,
 	      alloc->allocate(512 * (uint64_t)block_size,
@@ -219,6 +220,7 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   ASSERT_EQ(1u, extents.size());
   ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
 
+  extents.clear();
   allocated = alloc->allocate(1, 1, 1, zone_size * 2 - 1, &extents);
   EXPECT_EQ(1, allocated);
   ASSERT_EQ(1u, extents.size());
@@ -227,12 +229,14 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   /*
    * Wrap around with hint
    */
+  extents.clear();
   allocated = alloc->allocate(zone_size * 2, 1, 1,  blocks - zone_size * 2,
 			      &extents);
   ASSERT_EQ(zone_size * 2, allocated);
   EXPECT_EQ(zone_size * 2, (int)extents.size());
   EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
 
+  extents.clear();
   allocated = alloc->allocate(zone_size, 1, 1, blocks - zone_size, &extents);
   ASSERT_EQ(zone_size, allocated);
   EXPECT_EQ(zone_size, (int)extents.size());
