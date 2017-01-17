@@ -448,17 +448,18 @@ int get_pool_journal_names(const po::variables_map &vm,
     }
   }
 
-  if (pool_name->empty()) {
+  if (pool_name != nullptr && pool_name->empty()) {
     *pool_name = at::DEFAULT_POOL_NAME;
   }
 
-  if (journal_name != nullptr && journal_name->empty() && !image_name.empty()) {
+  if (pool_name != nullptr && journal_name != nullptr &&
+      journal_name->empty() && !image_name.empty()) {
     // Try to get journal name from image info.
     librados::Rados rados;
     librados::IoCtx io_ctx;
     librbd::Image image;
-    int r = init_and_open_image(*pool_name, image_name, "", true,
-				  &rados, &io_ctx, &image);
+    int r = init_and_open_image(*pool_name, image_name, "", true, &rados,
+                                &io_ctx, &image);
     if (r < 0) {
       std::cerr << "rbd: failed to open image " << image_name
 		<< " to get journal name: " << cpp_strerror(r) << std::endl;
