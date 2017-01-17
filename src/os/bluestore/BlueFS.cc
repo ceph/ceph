@@ -180,6 +180,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   int r = alloc[id]->reserve(want);
   assert(r == 0); // caller shouldn't ask for more than they can get
 <<<<<<< HEAD
+<<<<<<< HEAD
   int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
 				    extents);
   if (got < (int64_t)want) {
@@ -198,17 +199,26 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
     log_t.op_alloc_rm(id, p.offset, p.length);
 =======
   int count = 0;
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
   int64_t got = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
-				    extents, &count);
+				    extents);
   assert(got > 0);
   if (got < (int64_t)want)
     alloc[id]->unreserve(want - got);
 
+<<<<<<< HEAD
   for (int i = 0; i < count; i++) {
     block_all[id].erase((*extents)[i].offset, (*extents)[i].length);
     block_total[id] -= (*extents)[i].length;
     log_t.op_alloc_rm(id, (*extents)[i].offset, (*extents)[i].length);
 >>>>>>> os/bluestore/BlueFS: fix reclaim_blocks
+=======
+  for (auto& p : *extents) {
+    block_all[id].erase(p.offset, p.length);
+    block_total[id] -= p.length;
+    log_t.op_alloc_rm(id, p.offset, p.length);
+>>>>>>> os/bluestore: drop useless count arg to allocate
   }
 
   r = _flush_and_sync_log(l);
@@ -1793,6 +1803,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   AllocExtentVector extents;
   extents.reserve(4);  // 4 should be (more than) enough for most allocations
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
@@ -1800,6 +1811,8 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   if (alloc_len < (int64_t)left) {
 =======
   int count = 0;
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
   AllocExtentVector extents;
 <<<<<<< HEAD
   r = alloc[id]->allocate(left, min_alloc_size, hint,
@@ -1808,7 +1821,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 >>>>>>> os/bluestore: manage vector from ExtentList
 =======
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
-                          &extents, &count);
+                          &extents);
   if (alloc_len < (int64_t)left) {
 >>>>>>> os/bluestore: return blocks allocated from allocate()
     derr << __func__ << " allocate failed on 0x" << std::hex << left

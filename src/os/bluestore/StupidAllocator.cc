@@ -207,11 +207,15 @@ int64_t StupidAllocator::allocate(
   uint64_t max_alloc_size,
   int64_t hint,
 <<<<<<< HEAD
+<<<<<<< HEAD
   mempool::bluestore_alloc::vector<AllocExtent> *extents)
 =======
   mempool::bluestore_alloc::vector<AllocExtent> *extents,
   int *count)
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+  mempool::bluestore_alloc::vector<AllocExtent> *extents)
+>>>>>>> os/bluestore: drop useless count arg to allocate
 {
   uint64_t allocated_size = 0;
   uint64_t offset = 0;
@@ -222,9 +226,12 @@ int64_t StupidAllocator::allocate(
     max_alloc_size = want_size;
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   *count = 0;
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
 
   ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
 
@@ -243,9 +250,12 @@ int64_t StupidAllocator::allocate(
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   *count = block_list.get_extent_count();
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
   if (allocated_size == 0) {
     return -ENOSPC;
   }

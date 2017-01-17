@@ -34,11 +34,15 @@ public:
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
 <<<<<<< HEAD
+<<<<<<< HEAD
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 =======
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents,
     int *count);
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+>>>>>>> os/bluestore: drop useless count arg to allocate
 
   int64_t allocate_int(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,

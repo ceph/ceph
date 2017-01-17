@@ -58,7 +58,11 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     alloc->init_add_free(block_size, block_size);
     EXPECT_EQ(alloc->reserve(block_size), 0);
     AllocExtentVector extents;
+<<<<<<< HEAD
     EXPECT_EQ(block_size, alloc->allocate(block_size, block_size,
+=======
+    EXPECT_EQ(block_size, alloc->allocate(block_size, block_size, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 					  0, (int64_t) 0, &extents));
   }
 
@@ -68,9 +72,15 @@ TEST_P(AllocTest, test_alloc_min_alloc)
   {
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
+<<<<<<< HEAD
     AllocExtentVector extents;
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
+=======
+    AllocExtentVector extents;  
+    EXPECT_EQ(4*block_size,
+	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      0, (int64_t) 0, &extents));
     EXPECT_EQ(1u, extents.size());
     EXPECT_EQ(extents[0].length, 4 * block_size);
@@ -86,7 +96,11 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     AllocExtentVector extents;
   
     EXPECT_EQ(4*block_size,
+<<<<<<< HEAD
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
+=======
+	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      0, (int64_t) 0, &extents));
     EXPECT_EQ(2u, extents.size());
     EXPECT_EQ(extents[0].length, 2 * block_size);
@@ -109,9 +123,15 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
+<<<<<<< HEAD
     AllocExtentVector extents;
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
+=======
+    AllocExtentVector extents;  
+    EXPECT_EQ(4*block_size,
+	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      block_size, (int64_t) 0, &extents));
     for (auto e : extents) {
       EXPECT_EQ(e.length, block_size);
@@ -127,9 +147,15 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 4);
     EXPECT_EQ(alloc->reserve(block_size * 4), 0);
+<<<<<<< HEAD
     AllocExtentVector extents;
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
+=======
+    AllocExtentVector extents;  
+    EXPECT_EQ(4*block_size,
+	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      2 * block_size, (int64_t) 0, &extents));
     EXPECT_EQ(2u, extents.size());
     for (auto& e : extents) {
@@ -143,10 +169,17 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 1024);
     EXPECT_EQ(alloc->reserve(block_size * 1024), 0);
+<<<<<<< HEAD
     AllocExtentVector extents;
     EXPECT_EQ(1024 * block_size,
 	      alloc->allocate(1024 * (uint64_t)block_size,
 			      (uint64_t) block_size * 4,
+=======
+    AllocExtentVector extents;  
+    EXPECT_EQ(1024 * block_size,
+	      alloc->allocate(1024 * (uint64_t)block_size,
+			      (uint64_t) block_size * 4, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      block_size * 4, (int64_t) 0, &extents));
     for (auto& e : extents) {
       EXPECT_EQ(e.length, block_size * 4);
@@ -160,9 +193,15 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
   {
     alloc->init_add_free(0, block_size * 16);
     EXPECT_EQ(alloc->reserve(block_size * 16), 0);
+<<<<<<< HEAD
     AllocExtentVector extents;
     EXPECT_EQ(16 * block_size,
 	      alloc->allocate(16 * (uint64_t)block_size, (uint64_t) block_size,
+=======
+    AllocExtentVector extents;  
+    EXPECT_EQ(16 * block_size,
+	      alloc->allocate(16 * (uint64_t)block_size, (uint64_t) block_size, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      2 * block_size, (int64_t) 0, &extents));
 
     EXPECT_EQ(extents.size(), 8u);
@@ -183,10 +222,17 @@ TEST_P(AllocTest, test_alloc_failure)
     alloc->init_add_free(block_size * 512, block_size * 256);
 
     EXPECT_EQ(alloc->reserve(block_size * 512), 0);
+<<<<<<< HEAD
     AllocExtentVector extents;
     EXPECT_EQ(512 * block_size,
 	      alloc->allocate(512 * (uint64_t)block_size,
 			      (uint64_t) block_size * 256,
+=======
+    AllocExtentVector extents;  
+    EXPECT_EQ(512 * block_size,
+	      alloc->allocate(512 * (uint64_t)block_size,
+			      (uint64_t) block_size * 256, 
+>>>>>>> os/bluestore: drop useless count arg to allocate
 			      block_size * 256, (int64_t) 0, &extents));
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
@@ -204,7 +250,11 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   if (GetParam() == std::string("stupid")) {
     return;
   }
+<<<<<<< HEAD
   int64_t blocks = BitMapArea::get_level_factor(g_ceph_context, 2) * 4;
+=======
+  int64_t blocks = BitMapArea::get_level_factor(2) * 4;
+>>>>>>> os/bluestore: drop useless count arg to allocate
   int64_t allocated = 0;
   int64_t zone_size = 1024;
   g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone",
@@ -221,7 +271,10 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   ASSERT_EQ(1u, extents.size());
   ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
 
+<<<<<<< HEAD
   extents.clear();
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
   allocated = alloc->allocate(1, 1, 1, zone_size * 2 - 1, &extents);
   EXPECT_EQ(1, allocated);
   ASSERT_EQ(1u, extents.size());
@@ -230,14 +283,20 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   /*
    * Wrap around with hint
    */
+<<<<<<< HEAD
   extents.clear();
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
   allocated = alloc->allocate(zone_size * 2, 1, 1,  blocks - zone_size * 2,
 			      &extents);
   ASSERT_EQ(zone_size * 2, allocated);
   EXPECT_EQ(zone_size * 2, (int)extents.size());
   EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
 
+<<<<<<< HEAD
   extents.clear();
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
   allocated = alloc->allocate(zone_size, 1, 1, blocks - zone_size, &extents);
   ASSERT_EQ(zone_size, allocated);
   EXPECT_EQ(zone_size, (int)extents.size());

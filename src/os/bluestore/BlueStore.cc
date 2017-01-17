@@ -4062,11 +4062,14 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     assert(r == 0);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     AllocExtentVector exts;
     int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
 					0, 0, &exts);
 =======
     int count = 0;
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
     AllocExtentVector exts;
 <<<<<<< HEAD
     r = alloc->allocate(gift, g_conf->bluefs_alloc_size, 0, 0, &exts,
@@ -4074,8 +4077,12 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 >>>>>>> os/bluestore: manage vector from ExtentList
 =======
     int64_t alloc_len = alloc->allocate(gift, g_conf->bluefs_alloc_size,
+<<<<<<< HEAD
 					0, 0, &exts, &count);
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+					0, 0, &exts);
+>>>>>>> os/bluestore: drop useless count arg to allocate
 
     if (alloc_len < (int64_t)gift) {
       derr << __func__ << " allocate failed on 0x" << std::hex << gift
@@ -8558,6 +8565,7 @@ int BlueStore::_do_alloc_write(
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     AllocExtentVector extents;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
@@ -8569,6 +8577,8 @@ int BlueStore::_do_alloc_write(
       bluestore_pextent_t e = bluestore_pextent_t(p);
 =======
     int count = 0;
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
     AllocExtentVector extents;
 <<<<<<< HEAD
     int r = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
@@ -8584,7 +8594,7 @@ int BlueStore::_do_alloc_write(
 >>>>>>> os/bluestore: manage vector from ExtentList
 =======
     int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
-                            hint, &extents, &count);
+                            hint, &extents);
     assert(got == (int64_t)final_length);
     need -= got;
     txc->statfs_delta.allocated() += got;
