@@ -95,7 +95,6 @@ public:
   }
 };
 
-
 class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   RGWObjectCtx *obj_ctx;
