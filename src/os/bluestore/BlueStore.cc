@@ -3620,10 +3620,9 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
     int r = alloc->reserve(gift);
     assert(r == 0);
 
-    int count = 0;
     AllocExtentVector exts;
     int64_t alloc_len = alloc->allocate(gift, g_conf->bluefs_alloc_size,
-					0, 0, &exts, &count);
+					0, 0, &exts);
 
     if (alloc_len < (int64_t)gift) {
       derr << __func__ << " allocate failed on 0x" << std::hex << gift
@@ -3632,10 +3631,8 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
       assert(0 == "allocate failed, wtf");
       return -ENOSPC;
     }
-    assert(count > 0);
-    
-    for (int i = 0; i < count; i++) {
-      bluestore_pextent_t e = bluestore_pextent_t(exts[i]);
+    for (auto& p : exts) {
+      bluestore_pextent_t e = bluestore_pextent_t(p);
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
       extents->push_back(e);
     }
@@ -7875,10 +7872,9 @@ int BlueStore::_do_alloc_write(
       }
     }
 
-    int count = 0;
     AllocExtentVector extents;
     int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
-                            hint, &extents, &count);
+                            hint, &extents);
     assert(got == (int64_t)final_length);
     need -= got;
     txc->statfs_delta.allocated() += got;
