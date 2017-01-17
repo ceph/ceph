@@ -54,7 +54,7 @@ def task(ctx, config):
             'PATH=/usr/bin:/usr/sbin',
             'ntpdc', '-p',
         ])
-        rem.run(args)
+        rem.run(args=args)
 
     try:
         yield
