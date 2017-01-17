@@ -1668,7 +1668,7 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
     assert(discard == all_invalid); // in case of compressed blob all
 				    // or none pextents are invalid.
     if (discard) {
-      shared_blob->bc.discard(shared_blob->get_cache(), 0, blob.get_compressed_payload_original_length());
+      shared_blob->bc.discard(shared_blob->get_cache(), 0, blob.get_logical_length());
     }
   } else {
     size_t pos = 0;
@@ -1777,6 +1777,7 @@ bool BlueStore::Blob::put_ref(
       }
       pos += e.length;
     }
+    assert(b.is_compressed() || b.get_logical_length() == pos);
     b.extents.resize(1);
     b.extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
     b.extents[0].length = pos;
@@ -1861,9 +1862,12 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
     blob_offset,
     &(r->used_in_blob));
 
+  uint32_t llen_lb = 0;
+  uint32_t llen_rb = 0;
   for (auto p = lb.extents.begin(); p != lb.extents.end(); ++p, ++i) {
     if (p->length <= left) {
       left -= p->length;
+      llen_lb += p->length;
       continue;
     }
     if (left) {
@@ -1875,14 +1879,19 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 				  bluestore_pextent_t::INVALID_OFFSET,
 				  p->length - left));
       }
+      llen_rb += p->length - left;
+      llen_lb += left;
       p->length = left;
       ++i;
       ++p;
     }
     while (p != lb.extents.end()) {
+      llen_rb += p->length;
       rb.extents.push_back(*p++);
     }
     lb.extents.resize(i);
+    lb.logical_length = llen_lb;
+    rb.logical_length = llen_rb;
     break;
   }
   rb.flags = lb.flags;
@@ -9000,6 +9009,7 @@ int BlueStore::_do_alloc_write(
     }
     if (!compressed) {
       dblob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
+      dblob.logical_length = final_length;
       if (l->length() != wi.blob_length) {
 	// hrm, maybe we could do better here, but let's not bother.
 	dout(20) << __func__ << " forcing csum_order to block_size_order "
