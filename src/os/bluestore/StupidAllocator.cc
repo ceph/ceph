@@ -83,7 +83,7 @@ static uint64_t aligned_len(btree_interval_set<uint64_t>::iterator p,
     return p.get_len() - skew;
 }
 
-int StupidAllocator::allocate_int(
+int64_t StupidAllocator::allocate_int(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
@@ -201,14 +201,13 @@ int StupidAllocator::allocate_int(
   return 0;
 }
 
-int StupidAllocator::allocate(
+int64_t StupidAllocator::allocate(
   uint64_t want_size,
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
   mempool::bluestore_alloc::vector<AllocExtent> *extents,
-  int *count,
-  uint64_t *ret_len)
+  int *count)
 {
   uint64_t allocated_size = 0;
   uint64_t offset = 0;
@@ -219,7 +218,6 @@ int StupidAllocator::allocate(
     max_alloc_size = want_size;
   }
   *count = 0;
-  *ret_len = 0;
 
   ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
 
@@ -238,12 +236,10 @@ int StupidAllocator::allocate(
   }
 
   *count = block_list.get_extent_count();
-  *ret_len = allocated_size;
   if (allocated_size == 0) {
     return -ENOSPC;
   }
-
-  return 0;
+  return allocated_size;
 }
 
 int StupidAllocator::release(
