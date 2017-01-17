@@ -1,6 +1,29 @@
 ===============
  Release Notes
 ===============
+
+v11.2.0
+=======
+
+Notable Changes
+---------------
+* core: PrimaryLogPG: don't update digests for objects with mismatched names (`issue#18409 <http://tracker.ceph.com/issues/18409>`_, `pr#12803 <http://github.com/ceph/ceph/pull/12803>`_, Samuel Just)
+* librbd: remove consistency group rbd cli and API support (`issue#18231 <http://tracker.ceph.com/issues/18231>`_, `pr#12475 <http://github.com/ceph/ceph/pull/12475>`_, Jason Dillaman)
+* osd: osd/PrimaryLogPG::failed_push: update missing as well (`issue#18165 <http://tracker.ceph.com/issues/18165>`_, `pr#12911 <http://github.com/ceph/ceph/pull/12911>`_, Samuel Just)
+* osd: osdc/Objecter: resend pg commands on interval change (`issue#18358 <http://tracker.ceph.com/issues/18358>`_, `pr#12910 <http://github.com/ceph/ceph/pull/12910>`_, Samuel Just)
+* rbd: kraken: [teuthology] update Ubuntu image url after ceph.com refactor (`issue#18546 <http://tracker.ceph.com/issues/18546>`_, `issue#18542 <http://tracker.ceph.com/issues/18542>`_, `pr#12960 <http://github.com/ceph/ceph/pull/12960>`_, Jason Dillaman)
+* rbd: kraken: librbd: new API method to force break a peer's exclusive lock (`issue#18452 <http://tracker.ceph.com/issues/18452>`_, `issue#18429 <http://tracker.ceph.com/issues/18429>`_, `issue#16988 <http://tracker.ceph.com/issues/16988>`_, `issue#18327 <http://tracker.ceph.com/issues/18327>`_, `pr#12889 <http://github.com/ceph/ceph/pull/12889>`_, Jason Dillaman)
+* rbd: kraken: qa/workunits/rbd/test_lock_fence.sh fails (`issue#18392 <http://tracker.ceph.com/issues/18392>`_, `issue#18388 <http://tracker.ceph.com/issues/18388>`_, `pr#12752 <http://github.com/ceph/ceph/pull/12752>`_, Nathan Cutler)
+* rbd: kraken: tests: update rbd/singleton/all/formatted-output.yaml to support ceph-ci (`issue#18451 <http://tracker.ceph.com/issues/18451>`_, `issue#18440 <http://tracker.ceph.com/issues/18440>`_, `pr#12823 <http://github.com/ceph/ceph/pull/12823>`_, Nathan Cutler)
+* rgw: valgrind fixes for kraken (`issue#18300 <http://tracker.ceph.com/issues/18300>`_, `issue#18561 <http://tracker.ceph.com/issues/18561>`_, `issue#18564 <http://tracker.ceph.com/issues/18564>`_, `issue#18414 <http://tracker.ceph.com/issues/18414>`_, `issue#18412 <http://tracker.ceph.com/issues/18412>`_, `issue#18407 <http://tracker.ceph.com/issues/18407>`_, `pr#12949 <http://github.com/ceph/ceph/pull/12949>`_, Casey Bodley)
+* qa: Kraken yml (`pr#12814 <http://github.com/ceph/ceph/pull/12814>`_, Yuri Weinstein)
+* qa: qa/suites: switch from centos 7.2 to 7.x (`pr#12632 <http://github.com/ceph/ceph/pull/12632>`_, Sage Weil)
+* qa: qa/tasks/peer: update task based on current peering behavior (`issue#18330 <http://tracker.ceph.com/issues/18330>`_, `pr#12614 <http://github.com/ceph/ceph/pull/12614>`_, Sage Weil)
+* qa: qa/tasks/workunit: clear clone dir before retrying checkout (`issue#18336 <http://tracker.ceph.com/issues/18336>`_, `pr#12630 <http://github.com/ceph/ceph/pull/12630>`_, Sage Weil)
+* qa: Fixed link to centos distro (`pr#12768 <http://github.com/ceph/ceph/pull/12768>`_, Yuri Weinstein)
+* qa: fixed distros links (`pr#12773 <http://github.com/ceph/ceph/pull/12773>`_, Yuri Weinstein)
+
+
 v11.1.1 (release candidate)
 ===========================
 This is a release candidate for kraken, the next stable release series.
