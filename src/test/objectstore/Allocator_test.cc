@@ -168,7 +168,6 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     for (auto& e : extents) {
       EXPECT_EQ(e.length, 2 * block_size);
     }
-    EXPECT_EQ(alloc->release_extents(&extents, count), 0);
   }
 }
 
