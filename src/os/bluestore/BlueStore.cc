@@ -3181,7 +3181,7 @@ int BlueStore::_open_fm(bool create)
     fm->create(bdev->get_size(), t);
 
     uint64_t reserved = 0;
-    if (cct->_conf->bluestore_bluefs) {
+    if (cct->_conf->bluestore_bluefs && cct->_conf->bluestore_bluefs_shared_device) {
       assert(bluefs_extents.num_intervals() == 1);
       interval_set<uint64_t>::iterator p = bluefs_extents.begin();
       reserved = p.get_start() + p.get_len();
@@ -3199,7 +3199,6 @@ int BlueStore::_open_fm(bool create)
     // note: we do not mark bluefs space as allocated in the freelist; we
     // instead rely on bluefs_extents.
     fm->allocate(0, BLUEFS_START, t);
-
     if (cct->_conf->bluestore_debug_prefill > 0) {
       uint64_t end = bdev->get_size() - reserved;
       dout(1) << __func__ << " pre-fragmenting freespace, using "
@@ -3486,33 +3485,37 @@ int BlueStore::_open_db(bool create)
 	  BLUEFS_START,
 	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - BLUEFS_START);
       }
-      bluefs_shared_bdev = BlueFS::BDEV_SLOW;
+      if (cct->_conf->bluestore_bluefs_shared_device) {
+	bluefs_shared_bdev = BlueFS::BDEV_SLOW;
+      }
     } else {
       bluefs_shared_bdev = BlueFS::BDEV_DB;
+      cct->_conf->set_val("bluestore_bluefs_shared_device", "true");
     }
 
     // shared device
-    bfn = path + "/block";
-    r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
-    if (r < 0) {
-      derr << __func__ << " add block device(" << bfn << ") returned: " 
-	   << cpp_strerror(r) << dendl;
-      goto free_bluefs;
+    if (cct->_conf->bluestore_bluefs_shared_device) {
+      bfn = path + "/block";
+      r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
+      if (r < 0) {
+	derr << __func__ << " add block device(" << bfn << ") returned: " 
+	    << cpp_strerror(r) << dendl;
+	goto free_bluefs;
+      }
+      if (create) {
+	// note: we might waste a 4k block here if block.db is used, but it's
+	// simpler.
+	uint64_t initial =
+	  bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
+			      cct->_conf->bluestore_bluefs_gift_ratio);
+	initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
+	// align to bluefs's alloc_size
+	initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
+	initial += cct->_conf->bluefs_alloc_size - BLUEFS_START;
+	bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
+	bluefs_extents.insert(BLUEFS_START, initial);
+      }
     }
-    if (create) {
-      // note: we might waste a 4k block here if block.db is used, but it's
-      // simpler.
-      uint64_t initial =
-	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
-			    cct->_conf->bluestore_bluefs_gift_ratio);
-      initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
-      // align to bluefs's alloc_size
-      initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
-      initial += cct->_conf->bluefs_alloc_size - BLUEFS_START;
-      bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
-      bluefs_extents.insert(BLUEFS_START, initial);
-    }
-
     bfn = path + "/block.wal";
     if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
@@ -3590,7 +3593,7 @@ int BlueStore::_open_db(bool create)
       env->CreateDir(fn);
       if (cct->_conf->rocksdb_separate_wal_dir)
 	env->CreateDir(fn + ".wal");
-      if (cct->_conf->rocksdb_db_paths.length())
+      if (cct->_conf->bluestore_bluefs_shared_device && cct->_conf->rocksdb_db_paths.length())
 	env->CreateDir(fn + ".slow");
     }
   } else if (create) {
@@ -4229,7 +4232,7 @@ int BlueStore::mount()
   if (r < 0)
     goto out_coll;
 
-  if (bluefs) {
+  if (bluefs && cct->_conf->bluestore_bluefs_shared_device) {
     r = _reconcile_bluefs_freespace();
     if (r < 0)
       goto out_coll;
@@ -4885,9 +4888,10 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   buf->available = alloc->get_free();
 
   if (bluefs) {
-    // part of our shared device is "free" accordingly to BlueFS
-    buf->available += bluefs->get_free(bluefs_shared_bdev);
-
+    if (cct->_conf->bluestore_bluefs_shared_device) {
+      // part of our shared device is "free" accordingly to BlueFS
+      buf->available += bluefs->get_free(bluefs_shared_bdev);
+    }
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
       buf->available += bluefs->get_free(BlueFS::BDEV_DB);
@@ -6892,7 +6896,7 @@ void BlueStore::_kv_sync_thread()
       }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
-      if (bluefs) {
+      if (bluefs && cct->_conf->bluestore_bluefs_shared_device) {
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
 	if (r > 0) {
@@ -6955,7 +6959,7 @@ void BlueStore::_kv_sync_thread()
       // this is as good a place as any ...
       _reap_collections();
 
-      if (bluefs) {
+      if (bluefs && cct->_conf->bluestore_bluefs_shared_device) {
 	if (!bluefs_gift_extents.empty()) {
 	  _commit_bluefs_freespace(bluefs_gift_extents);
 	}
