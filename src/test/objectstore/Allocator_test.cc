@@ -272,9 +272,13 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   extents.clear();
 =======
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+  extents.clear();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
   allocated = alloc->allocate(1, 1, 1, zone_size * 2 - 1, &extents);
   EXPECT_EQ(1, allocated);
   ASSERT_EQ(1u, extents.size());
@@ -284,9 +288,13 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
    * Wrap around with hint
    */
 <<<<<<< HEAD
+<<<<<<< HEAD
   extents.clear();
 =======
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+  extents.clear();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
   allocated = alloc->allocate(zone_size * 2, 1, 1,  blocks - zone_size * 2,
 			      &extents);
   ASSERT_EQ(zone_size * 2, allocated);
@@ -294,9 +302,13 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   extents.clear();
 =======
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+  extents.clear();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
   allocated = alloc->allocate(zone_size, 1, 1, blocks - zone_size, &extents);
   ASSERT_EQ(zone_size, allocated);
   EXPECT_EQ(zone_size, (int)extents.size());

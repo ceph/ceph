@@ -284,6 +284,12 @@ TEST(BitAllocator, test_zone_alloc)
 
   int64_t blk_size = 1024;
   AllocExtentVector extents;
+<<<<<<< HEAD
+=======
+  cout << extents.size() << std::endl;
+  cout << (int)extents.empty() << std::endl;
+  extents.clear();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
   ExtentList *block_list = new ExtentList(&extents, blk_size);
   allocated = zone->alloc_blocks_dis(zone->size() / 2, 1, 0, 0, block_list);
   bmap_test_assert(allocated == zone->size() / 2);
@@ -370,28 +376,48 @@ TEST(BitAllocator, test_zone_alloc)
     {
       extents.clear();
       ExtentList *block_list = new ExtentList(&extents, blk_size);
+<<<<<<< HEAD
       zone = new BitMapZone(g_ceph_context, total_blocks, 0);
+=======
+      zone = new BitMapZone(total_blocks, 0);
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
       lock = zone->lock_excl_try();
       bmap_test_assert(lock);
 
       block_list->reset();
       allocated = zone->alloc_blocks_dis(total_blocks + 1, total_blocks + 1, 0, 1024, block_list);
+<<<<<<< HEAD
       bmap_test_assert(allocated == 0);
 
       block_list->reset();
       allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list);
       bmap_test_assert(allocated == 0);
+=======
+      bmap_test_assert(allocated == 0);  
+
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list);
+      bmap_test_assert(allocated == 0);  
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
 
       block_list->reset();
       allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 0, 0, block_list);
       bmap_test_assert(allocated == total_blocks);
       bmap_test_assert(extents[0].offset == 0);
 
+<<<<<<< HEAD
       zone->free_blocks(extents[0].offset, allocated);
+=======
+      zone->free_blocks(extents[0].offset, allocated);        
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
         
       delete block_list;
       extents.clear();
       block_list = new ExtentList(&extents, blk_size, total_blocks / 4 * blk_size);
+<<<<<<< HEAD
+=======
+      block_list->reset();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
       allocated = zone->alloc_blocks_dis(total_blocks, total_blocks / 4, 0, 0, block_list);
       bmap_test_assert(allocated == total_blocks);
       for (int i = 0; i < 4; i++) {
