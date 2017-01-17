@@ -608,7 +608,7 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
-  f->dump_unsigned("compressed_length_original", compressed_length_orig);
+  f->dump_unsigned("logical_length", logical_length);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
@@ -627,15 +627,19 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.push_back(new bluestore_blob_t(0));
   ls.push_back(new bluestore_blob_t);
   ls.back()->extents.push_back(bluestore_pextent_t(111, 222));
+  ls.back()->logical_length += 222;
   ls.push_back(new bluestore_blob_t);
   ls.back()->init_csum(Checksummer::CSUM_XXHASH32, 16, 65536);
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
+  ls.back()->logical_length += 0x10000;
   ls.back()->extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
+  ls.back()->logical_length += 0x1000;
   ls.back()->extents.emplace_back(bluestore_pextent_t(0x40120000, 0x10000));
   ls.back()->add_unused(0, 3);
   ls.back()->add_unused(8, 8);
+  ls.back()->logical_length += 0x10000;
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
@@ -643,7 +647,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   out << "blob(" << o.extents;
   if (o.is_compressed()) {
     out << " clen 0x" << std::hex
-	<< o.compressed_length_orig
+	<< o.logical_length
 	<< " -> 0x"
 	<< o.compressed_length
 	<< std::dec;

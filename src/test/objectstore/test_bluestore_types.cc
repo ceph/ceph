@@ -332,6 +332,7 @@ TEST(Blob, put_ref)
     b.dirty_blob().extents.push_back(
       bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x8000));
     b.dirty_blob().extents.push_back(bluestore_pextent_t(0x4071f000, 0x5000));
+    b.dirty_blob().logical_length = b.get_blob().get_ondisk_length();
     b.get_ref(&coll, 0, 0x1200);
     b.get_ref(&coll, 0xae00, 0x4200);
     ASSERT_EQ(0x5400u, b.get_referenced_bytes());
@@ -363,6 +364,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(0, mas*2));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*2);
     ASSERT_EQ(mas * 2, B.get_referenced_bytes());
     ASSERT_TRUE(b.is_allocated(0, mas*2));
@@ -385,6 +387,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(123, mas*2));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*2);
     ASSERT_EQ(mas * 2, B.get_referenced_bytes());
     B.put_ref(coll.get(), 0, mas, &r);
@@ -413,6 +416,7 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
     b.extents.push_back(bluestore_pextent_t(4, mas));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*4);
     ASSERT_EQ(mas * 4, B.get_referenced_bytes());
     B.put_ref(coll.get(), mas, mas, &r);
@@ -454,6 +458,7 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(4, mas));
     b.extents.push_back(bluestore_pextent_t(5, mas));
     b.extents.push_back(bluestore_pextent_t(6, mas));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*6);
     ASSERT_EQ(mas * 6, B.get_referenced_bytes());
     B.put_ref(coll.get(), mas, mas, &r);
@@ -491,6 +496,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 6));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*6);
     ASSERT_EQ(mas * 6, B.get_referenced_bytes());
     B.put_ref(coll.get(), mas, mas, &r);
@@ -526,6 +532,7 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*12);
     ASSERT_EQ(mas * 12, B.get_referenced_bytes());
     B.put_ref(coll.get(), mas, mas, &r);
@@ -565,6 +572,7 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*12);
     ASSERT_EQ(mas * 12, B.get_referenced_bytes());
     B.put_ref(coll.get(), mas, mas, &r);
@@ -621,6 +629,7 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*12);
     ASSERT_EQ(mas * 12, B.get_referenced_bytes());
     B.put_ref(coll.get(), mas, mas, &r);
@@ -675,6 +684,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 8));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0, mas*8);
     ASSERT_EQ(mas * 8, B.get_referenced_bytes());
     B.put_ref(coll.get(), 0, mas, &r);
@@ -719,6 +729,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
+    b.logical_length = b.get_ondisk_length();
     b.init_csum(Checksummer::CSUM_CRC32C, 14, mas * 4);
     B.get_ref(coll.get(), 0, mas*4);
     ASSERT_EQ(mas * 4, B.get_referenced_bytes());
@@ -740,7 +751,8 @@ TEST(Blob, put_ref)
     b.extents.push_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
 					    0x13000));
     b.extents.push_back(bluestore_pextent_t(0x40118000, 0x7000));
-    B.get_ref(coll.get(), 0x0, 0x3800);
+    b.logical_length = b.get_ondisk_length();
+    B.get_ref(coll.get(0, 0x0, 0x3800);
     B.get_ref(coll.get(), 0x17c00, 0x6400);
     ASSERT_EQ(0x3800u + 0x6400u, B.get_referenced_bytes());
     b.set_flag(bluestore_blob_t::FLAG_SHARED);
@@ -760,7 +772,8 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     b.extents.push_back(bluestore_pextent_t(1, 0x5000));
     b.extents.push_back(bluestore_pextent_t(2, 0x5000));
-    B.get_ref(coll.get(), 0x0, 0xa000);
+    b.logical_length = b.get_ondisk_length();
+    B.get_ref(coll.get(0, 0x0, 0xa000);
     ASSERT_EQ(0xa000u, B.get_referenced_bytes());
     cout << "before: " << B << std::endl;
     PExtentVector r;
@@ -779,6 +792,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     b.extents.push_back(bluestore_pextent_t(1, 0x7000));
     b.extents.push_back(bluestore_pextent_t(2, 0x7000));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0x0, 0xe000);
     ASSERT_EQ(0xe000u, B.get_referenced_bytes());
     cout << "before: " << B << std::endl;
@@ -806,6 +820,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     b.extents.push_back(bluestore_pextent_t(1, 0x5000));
     b.extents.push_back(bluestore_pextent_t(2, 0x7000));
+    b.logical_length = b.get_ondisk_length();
     B.get_ref(coll.get(), 0x0, 0xc000);
     ASSERT_EQ(0xc000u, B.get_referenced_bytes());
     cout << "before: " << B << std::endl;
@@ -861,6 +876,7 @@ TEST(bluestore_blob_t, prune_tail)
   ASSERT_FALSE(a.can_prune_tail());
   a.extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  a.logical_length = 0x2000 * 3;
   ASSERT_TRUE(a.can_prune_tail());
   a.prune_tail();
   ASSERT_FALSE(a.can_prune_tail());
@@ -869,6 +885,7 @@ TEST(bluestore_blob_t, prune_tail)
 
   a.extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  a.logical_length += 0x2000;
   a.init_csum(Checksummer::CSUM_CRC32C_8, 12, 0x6000);
   ASSERT_EQ(6u, a.csum_data.length());
   ASSERT_TRUE(a.can_prune_tail());
@@ -881,6 +898,7 @@ TEST(bluestore_blob_t, prune_tail)
   bluestore_blob_t b;
   b.extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  a.logical_length += 0x2000;
   ASSERT_FALSE(a.can_prune_tail());
 }
 
@@ -897,6 +915,7 @@ TEST(Blob, split)
     R.shared_blob = new BlueStore::SharedBlob(coll.get());
     R.shared_blob->get();  // hack to avoid dtor from running
     L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x2000, 0x2000));
+    L.dirty_blob().logical_length = L.get_blob().get_ondisk_length();
     L.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
     L.get_ref(coll.get(), 0, 0x2000);
     L.split(coll.get(), 0x1000, &R);
@@ -921,6 +940,7 @@ TEST(Blob, split)
     R.shared_blob->get();  // hack to avoid dtor from running
     L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x2000, 0x1000));
     L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x12000, 0x1000));
+    L.dirty_blob().logical_length = L.get_blob().get_ondisk_length();
     L.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
     L.get_ref(coll.get(), 0, 0x1000);
     L.get_ref(coll.get(), 0x1000, 0x1000);
@@ -952,6 +972,7 @@ TEST(Blob, legacy_decode)
     B.shared_blob = new BlueStore::SharedBlob(coll.get());
     B.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x1, 0x2000));
     B.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
+    B.dirty_blob().logical_length = B.get_blob().get_ondisk_length();
     B.get_ref(coll.get(), 0, 0xff0);
     B.get_ref(coll.get(), 0x1fff, 1);
 
@@ -1258,12 +1279,15 @@ TEST(GarbageCollector, BasicTest)
     b3->shared_blob = new BlueStore::SharedBlob(coll.get());
     b4->shared_blob = new BlueStore::SharedBlob(coll.get());
     b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
-    b1->dirty_blob().compressed_length_orig = 0x2000;
+    b1->dirty_blob().logical_length = 0x2000;
     b1->dirty_blob().compressed_length = 0x1000;
     b1->dirty_blob().extents.emplace_back(0, 0x1000);
     b2->dirty_blob().extents.emplace_back(1, 0x1000);
+    b2->dirty_blob().logical_length = b2->get_blob().get_ondisk_length();
     b3->dirty_blob().extents.emplace_back(2, 0x1000);
+    b3->dirty_blob().logical_length = b3->get_blob().get_ondisk_length();
     b4->dirty_blob().extents.emplace_back(3, 0x1000);
+    b4->dirty_blob().logical_length = b4->get_blob().get_ondisk_length();
     em.extent_map.insert(*new BlueStore::Extent(100, 100, 10, b1));
     b1->get_ref(coll.get(), 100, 10);
     em.extent_map.insert(*new BlueStore::Extent(200, 200, 10, b2));
@@ -1324,10 +1348,13 @@ TEST(GarbageCollector, BasicTest)
     b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
     b1->dirty_blob().extents.emplace_back(0, 0x20000);
     b1->dirty_blob().compressed_length = 0x20000;
-    b1->dirty_blob().compressed_length_orig = 0x40000;
+    b1->dirty_blob().logical_length = 0x40000;
     b2->dirty_blob().extents.emplace_back(1, 0x10000);
+    b2->dirty_blob().logical_length = b2->get_blob().get_ondisk_length();
     b3->dirty_blob().extents.emplace_back(2, 0x20000);
+    b3->dirty_blob().logical_length = b3->get_blob().get_ondisk_length();
     b4->dirty_blob().extents.emplace_back(3, 0x10000);
+    b4->dirty_blob().logical_length = b4->get_blob().get_ondisk_length();
 
     em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b1));
     b1->get_ref(coll.get(), 0, 0x8000);
@@ -1386,11 +1413,11 @@ TEST(GarbageCollector, BasicTest)
     b2->shared_blob = new BlueStore::SharedBlob(coll.get());
     b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
     b1->dirty_blob().extents.emplace_back(0, 0x2000);
-    b1->dirty_blob().compressed_length_orig = 0x4000;
+    b1->dirty_blob().logical_length = 0x4000;
     b1->dirty_blob().compressed_length = 0x2000;
     b2->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
     b2->dirty_blob().extents.emplace_back(0, 0x2000);
-    b2->dirty_blob().compressed_length_orig = 0x4000;
+    b2->dirty_blob().logical_length = 0x4000;
     b2->dirty_blob().compressed_length = 0x2000;
 
     em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x3000, b1));
@@ -1451,15 +1478,18 @@ TEST(GarbageCollector, BasicTest)
     b4->shared_blob = new BlueStore::SharedBlob(coll.get());
     b0->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
     b0->dirty_blob().extents.emplace_back(0, 0x10000);
-    b0->dirty_blob().compressed_length_orig = 0x20000;
+    b0->dirty_blob().logical_length = 0x20000;
     b0->dirty_blob().compressed_length = 0x10000;
     b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
     b1->dirty_blob().extents.emplace_back(0, 0x10000);
-    b1->dirty_blob().compressed_length_orig = 0x20000;
+    b1->dirty_blob().logical_length = 0x20000;
     b1->dirty_blob().compressed_length = 0x10000;
     b2->dirty_blob().extents.emplace_back(1, 0x10000);
+    b2->dirty_blob().logical_length = b2->get_blob().get_ondisk_length();
     b3->dirty_blob().extents.emplace_back(2, 0x20000);
+    b3->dirty_blob().logical_length = b3->get_blob().get_ondisk_length();
     b4->dirty_blob().extents.emplace_back(3, 0x1000);
+    b4->dirty_blob().logical_length = b4->get_blob().get_ondisk_length();
 
     em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b0));
     b0->get_ref(coll.get(), 0, 0x8000);

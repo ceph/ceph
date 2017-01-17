@@ -447,9 +447,8 @@ struct bluestore_blob_t {
   };
   static string get_flags_string(unsigned flags);
 
-
   PExtentVector extents;              ///< raw data position on device
-  uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
+  uint32_t logical_length = 0;        ///< < original length of data stored in the blob
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
 
@@ -467,7 +466,7 @@ struct bluestore_blob_t {
     assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
-    denc_varint_lowz(compressed_length_orig, p);
+    denc_varint_lowz(logical_length, p);
     denc_varint_lowz(compressed_length, p);
     denc(csum_type, p);
     denc(csum_chunk_order, p);
@@ -481,7 +480,7 @@ struct bluestore_blob_t {
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
-      denc_varint_lowz(compressed_length_orig, p);
+      denc_varint_lowz(logical_length, p);
       denc_varint_lowz(compressed_length, p);
     }
     if (has_csum()) {
@@ -501,8 +500,10 @@ struct bluestore_blob_t {
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
-      denc_varint_lowz(compressed_length_orig, p);
+      denc_varint_lowz(logical_length, p);
       denc_varint_lowz(compressed_length, p);
+    } else {
+      logical_length = get_ondisk_length();
     }
     if (has_csum()) {
       denc(csum_type, p);
@@ -544,7 +545,7 @@ struct bluestore_blob_t {
 
   void set_compressed(uint64_t clen_orig, uint64_t clen) {
     set_flag(FLAG_COMPRESSED);
-    compressed_length_orig = clen_orig;
+    logical_length = clen_orig;
     compressed_length = clen;
   }
   bool is_mutable() const {
@@ -573,9 +574,6 @@ struct bluestore_blob_t {
   }
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
-  }
-  uint32_t get_compressed_payload_original_length() const {
-    return is_compressed() ? compressed_length_orig : 0;
   }
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
@@ -720,11 +718,7 @@ struct bluestore_blob_t {
   }
 
   uint32_t get_logical_length() const {
-    if (is_compressed()) {
-      return compressed_length_orig;
-    } else {
-      return get_ondisk_length();
-    }
+    return logical_length;
   }
   size_t get_csum_value_size() const;
 
@@ -785,6 +779,8 @@ struct bluestore_blob_t {
       !has_unused();
   }
   void prune_tail() {
+    const auto &p = extents.back();
+    logical_length -= p.length;
     extents.pop_back();
     if (has_csum()) {
       bufferptr t;
