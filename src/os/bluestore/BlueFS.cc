@@ -1769,8 +1769,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 
   int count = 0;
   uint64_t alloc_len = 0;
-  AllocExtentVector extents = AllocExtentVector(left / min_alloc_size);
-
+  AllocExtentVector extents;
   r = alloc[id]->allocate(left, min_alloc_size, hint,
                           &extents, &count, &alloc_len);
   if (r < 0 || alloc_len < left) {
