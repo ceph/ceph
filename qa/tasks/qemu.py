@@ -378,9 +378,9 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
             client.1:
-              test: http://ceph.com/qa/test2.sh
+              test: http://download.ceph.com/qa/test2.sh
 
     Or use the same settings on all clients:
 
@@ -388,7 +388,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             all:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
 
     For tests that don't need a filesystem, set type to block::
 
@@ -396,7 +396,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               type: block
 
     The test should be configured to run on /dev/vdb and later
@@ -409,7 +409,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               type: block
               num_rbd: 2
 
@@ -419,7 +419,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               memory: 512 # megabytes
 
     If you want to run a test against a cloned rbd image, set clone to true::
@@ -428,7 +428,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               clone: true
     """
     assert isinstance(config, dict), \
