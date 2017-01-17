@@ -14,7 +14,7 @@
 
 namespace ceph {
 
-void BackTrace::print(std::ostream& out)
+void BackTrace::print(std::ostream& out) const
 {
   out << " " << pretty_version_to_str() << std::endl;
   for (size_t i = skip; i < size; i++) {
