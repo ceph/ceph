@@ -6,7 +6,7 @@ tasks:
 - pexec:
     clients:
       - cd $TESTDIR
-      - wget http://ceph.com/qa/mdtest-1.9.3.tgz
+      - wget http://download.ceph.com/qa/mdtest-1.9.3.tgz
       - mkdir mdtest-1.9.3
       - cd mdtest-1.9.3
       - tar xvfz $TESTDIR/mdtest-1.9.3.tgz
