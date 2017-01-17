@@ -283,6 +283,7 @@ private:
           break;
         default:
 	  derr << *pctx << ": invalid request command" << dendl;
+          c->release();
           return;
       }
     }
