@@ -86,28 +86,29 @@ inline static ostream& operator<<(ostream& out, const AllocExtent& e) {
 
 class ExtentList {
   AllocExtentVector *m_extents;
-  int64_t m_num_extents;
   int64_t m_block_size;
   uint64_t m_max_alloc_size;
 
 public:
-  void init(AllocExtentVector *extents, int64_t block_size, uint64_t max_alloc_size) {
+  void init(AllocExtentVector *extents, int64_t block_size,
+	    uint64_t max_alloc_size) {
     m_extents = extents;
-    m_num_extents = 0;
     m_block_size = block_size;
     m_max_alloc_size = max_alloc_size;
+    assert(m_extents->empty());
   }
 
   ExtentList(AllocExtentVector *extents, int64_t block_size) {
     init(extents, block_size, 0);
   }
 
-  ExtentList(AllocExtentVector *extents, int64_t block_size, uint64_t max_alloc_size) {
+  ExtentList(AllocExtentVector *extents, int64_t block_size,
+	     uint64_t max_alloc_size) {
     init(extents, block_size, max_alloc_size);
   }
 
   void reset() {
-    m_num_extents = 0;
+    m_extents->clear();
   }
 
   void add_extents(int64_t start, int64_t count);
@@ -123,7 +124,7 @@ public:
   }
 
   int64_t get_extent_count() {
-    return m_num_extents;
+    return m_extents->size();
   }
 };
 
