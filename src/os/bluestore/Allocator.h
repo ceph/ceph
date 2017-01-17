@@ -47,17 +47,6 @@ public:
   virtual int release(
     uint64_t offset, uint64_t length) = 0;
 
-  virtual int release_extents(AllocExtentVector *extents, int count) {
-    int res = 0;
-      for (int i = 0; i < count; i++) {
-        res = release((*extents)[i].offset, (*extents)[i].length);
-        if (res != 0) {
-	  break;
-        }
-      }
-    return res;
-  }
-
   virtual void dump() = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
