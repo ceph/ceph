@@ -1815,11 +1815,15 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 >>>>>>> os/bluestore: drop useless count arg to allocate
   AllocExtentVector extents;
 <<<<<<< HEAD
+<<<<<<< HEAD
   r = alloc[id]->allocate(left, min_alloc_size, hint,
                           &extents, &count, &alloc_len);
   if (r < 0 || alloc_len < left) {
 >>>>>>> os/bluestore: manage vector from ExtentList
 =======
+=======
+  extents.reserve(4);
+>>>>>>> os/bluestore: prealloc/reserve extent vector for common alloc path
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
                           &extents);
   if (alloc_len < (int64_t)left) {

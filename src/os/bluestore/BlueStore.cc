@@ -8567,7 +8567,11 @@ int BlueStore::_do_alloc_write(
 <<<<<<< HEAD
 <<<<<<< HEAD
     AllocExtentVector extents;
+<<<<<<< HEAD
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
+=======
+    extents.reserve(4);
+>>>>>>> os/bluestore: prealloc/reserve extent vector for common alloc path
     int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
                             hint, &extents);
     assert(got == (int64_t)final_length);
