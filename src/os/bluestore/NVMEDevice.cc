@@ -417,6 +417,7 @@ void SharedDriverData::_aio_thread()
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
+            t->release_segs();
             delete t;
             derr << __func__ << " failed to do write command" << dendl;
             ceph_abort();
