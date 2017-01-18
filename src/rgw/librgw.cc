@@ -561,8 +561,6 @@ namespace rgw {
     dout(1) << "final shutdown" << dendl;
     cct.reset();
 
-    ceph::crypto::shutdown();
-
     return 0;
   } /* RGWLib::stop() */
 
