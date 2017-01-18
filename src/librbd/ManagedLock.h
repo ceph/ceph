@@ -9,6 +9,7 @@
 #include "include/rados/librados.hpp"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/watcher/Types.h"
+#include "librbd/managed_lock/Types.h"
 #include "common/Mutex.h"
 #include <list>
 #include <string>
@@ -33,15 +34,16 @@ public:
 
   static ManagedLock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
                              const std::string& oid, Watcher *watcher,
+                             managed_lock::Mode mode,
                              bool blacklist_on_break_lock,
                              uint32_t blacklist_expire_seconds) {
-    return new ManagedLock(ioctx, work_queue, oid, watcher,
+    return new ManagedLock(ioctx, work_queue, oid, watcher, mode,
                            blacklist_on_break_lock, blacklist_expire_seconds);
   }
 
   ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
               const std::string& oid, Watcher *watcher,
-              bool blacklist_on_break_lock,
+              managed_lock::Mode mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds);
   virtual ~ManagedLock();
 
@@ -161,6 +163,7 @@ private:
   ContextWQ *m_work_queue;
   std::string m_oid;
   Watcher *m_watcher;
+  managed_lock::Mode m_mode;
   bool m_blacklist_on_break_lock;
   uint32_t m_blacklist_expire_seconds;
 

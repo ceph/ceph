@@ -38,24 +38,26 @@ AcquireRequest<I>* AcquireRequest<I>::create(librados::IoCtx& ioctx,
                                              ContextWQ *work_queue,
                                              const string& oid,
                                              const string& cookie,
+                                             bool exclusive,
 					     bool blacklist_on_break_lock,
 					     uint32_t blacklist_expire_seconds,
                                              Context *on_finish) {
     return new AcquireRequest(ioctx, watcher, work_queue, oid, cookie,
-                              blacklist_on_break_lock, blacklist_expire_seconds,
-                              on_finish);
+                              exclusive, blacklist_on_break_lock,
+                              blacklist_expire_seconds, on_finish);
 }
 
 template <typename I>
 AcquireRequest<I>::AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                                   ContextWQ *work_queue, const string& oid,
-                                  const string& cookie,
+                                  const string& cookie, bool exclusive,
                                   bool blacklist_on_break_lock,
                                   uint32_t blacklist_expire_seconds,
                                   Context *on_finish)
   : m_ioctx(ioctx), m_watcher(watcher),
     m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_work_queue(work_queue), m_oid(oid), m_cookie(cookie),
+    m_exclusive(exclusive),
     m_blacklist_on_break_lock(blacklist_on_break_lock),
     m_blacklist_expire_seconds(blacklist_expire_seconds),
     m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)) {
@@ -76,7 +78,8 @@ void AcquireRequest<I>::send_get_locker() {
 
   Context *ctx = create_context_callback<
     AcquireRequest<I>, &AcquireRequest<I>::handle_get_locker>(this);
-  auto req = GetLockerRequest<I>::create(m_ioctx, m_oid, &m_locker, ctx);
+  auto req = GetLockerRequest<I>::create(m_ioctx, m_oid, m_exclusive,
+                                         &m_locker, ctx);
   req->send();
 }
 
@@ -105,7 +108,8 @@ void AcquireRequest<I>::send_lock() {
   ldout(m_cct, 10) << dendl;
 
   librados::ObjectWriteOperation op;
-  rados::cls::lock::lock(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_cookie,
+  rados::cls::lock::lock(&op, RBD_LOCK_NAME,
+                         m_exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED, m_cookie,
                          ManagedLock<I>::WATCHER_LOCK_TAG, "", utime_t(), 0);
 
   using klass = AcquireRequest;

@@ -24,6 +24,7 @@
 namespace librbd {
 
 using std::string;
+using namespace managed_lock;
 
 namespace {
 
@@ -46,7 +47,7 @@ const std::string ManagedLock<I>::WATCHER_LOCK_TAG("internal");
 
 template <typename I>
 ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
-                            const string& oid, Watcher *watcher,
+                            const string& oid, Watcher *watcher, Mode mode,
                             bool blacklist_on_break_lock,
                             uint32_t blacklist_expire_seconds)
   : m_lock(util::unique_lock_name("librbd::ManagedLock<I>::m_lock", this)),
@@ -55,6 +56,7 @@ ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
     m_work_queue(work_queue),
     m_oid(oid),
     m_watcher(watcher),
+    m_mode(mode),
     m_blacklist_on_break_lock(blacklist_on_break_lock),
     m_blacklist_expire_seconds(blacklist_expire_seconds) {
 }
@@ -199,7 +201,7 @@ void ManagedLock<I>::get_locker(managed_lock::Locker *locker,
   ldout(m_cct, 10) << dendl;
 
   auto req = managed_lock::GetLockerRequest<I>::create(
-    m_ioctx, m_oid, locker, on_finish);
+    m_ioctx, m_oid, m_mode == EXCLUSIVE, locker, on_finish);
   req->send();
 }
 
@@ -419,7 +421,7 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
 
   using managed_lock::AcquireRequest;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
-    m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie,
+    m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie, m_mode == EXCLUSIVE,
     m_blacklist_on_break_lock, m_blacklist_expire_seconds,
     util::create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
@@ -507,7 +509,7 @@ void ManagedLock<I>::send_reacquire_lock() {
 
   using managed_lock::ReacquireRequest;
   ReacquireRequest<I>* req = ReacquireRequest<I>::create(m_ioctx, m_oid,
-      m_cookie, m_new_cookie,
+      m_cookie, m_new_cookie, m_mode == EXCLUSIVE,
       util::create_context_callback<
         ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<ReacquireRequest<I>>(req));
