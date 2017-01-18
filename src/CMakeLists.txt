@@ -460,6 +460,7 @@ set(libcommon_files
   msg/msg_types.cc
   common/hobject.cc
   osd/OSDMap.cc
+  osd/OSDMapMapping.cc
   common/histogram.cc
   osd/osd_types.cc
   osd/OpRequest.cc
