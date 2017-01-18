@@ -340,6 +340,22 @@ public:
     map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
+
+  bool try_lock_for_read(
+    const hobject_t &hoid,
+    ObcLockManager &manager) override {
+    if (is_missing_object(hoid))
+      return false;
+    auto obc = get_object_context(hoid, false, nullptr);
+    if (!obc)
+      return false;
+    return manager.try_get_read_lock(hoid, obc);
+  }
+
+  void release_locks(ObcLockManager &manager) {
+    release_object_locks(manager);
+  }
+
   void pgb_set_object_snap_mapping(
     const hobject_t &soid,
     const set<snapid_t> &snaps,
