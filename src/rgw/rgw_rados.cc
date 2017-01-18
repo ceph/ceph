@@ -6564,7 +6564,8 @@ int RGWRados::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mtime,
 }
 
 int RGWRados::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
-			       off_t ofs, bool exclusive)
+                                  off_t ofs, bool exclusive,
+                                  RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -6578,6 +6579,9 @@ int RGWRados::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
   if (exclusive)
     op.create(true);
 
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
   if (ofs == -1) {
     op.write_full(bl);
   } else {
@@ -6587,6 +6591,9 @@ int RGWRados::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
   if (r < 0)
     return r;
 
+  if (objv_tracker) {
+    objv_tracker->apply_write();
+  }
   return 0;
 }
 
