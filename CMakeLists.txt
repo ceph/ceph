@@ -232,6 +232,13 @@ option(WITH_KVS "Key value store is here" ON)
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
 
+# KERNEL remote block storage
+option(WITH_KRBD "Kernel Remote block storage is here" ON)
+
+if(WITH_KRBD AND WITHOUT_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+endif()
+
 # embedded ceph daemon static library
 # NOTE: Ceph is mostly LGPL (see COPYING), which means that
 # static linking brings with it restrictions. Please be sure
@@ -289,7 +296,7 @@ if(NOT JEMALLOC_FOUND)
   CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 endif()
 
-if(WITH_LIBCEPHFS OR WITH_RBD)
+if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
 endif()
 
@@ -338,12 +345,15 @@ endif(WITH_DPDK)
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
+option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" ON)
+option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
-  find_package(fcgi REQUIRED)
+  if(WITH_RADOSGW_FCGI_FRONTEND)
+    find_package(fcgi REQUIRED)
+  endif()
 endif(WITH_RADOSGW)
 
-option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
 
 if (WITH_RADOSGW)
   if (NOT DEFINED OPENSSL_FOUND)
@@ -489,6 +499,12 @@ if(WITH_UBSAN)
   if(HAVE_JEMALLOC)
     message(FATAL "UBSAN does not work well with JeMalloc")
   endif()
+endif()
+
+# Rocksdb
+option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
+if (WITH_SYSTEM_ROCKSDB)
+  find_package(rocksdb REQUIRED)
 endif()
 
 # Boost

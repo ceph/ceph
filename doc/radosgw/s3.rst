@@ -38,7 +38,7 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Create Bucket**               | Supported       | Different set of canned ACLs           |
 +---------------------------------+-----------------+----------------------------------------+
-| **Bucket Lifecycle**            | Not Supported   |                                        |
+| **Bucket Lifecycle**            | Supported       | Removing expired files is supported    |
 +---------------------------------+-----------------+----------------------------------------+
 | **Policy (Buckets, Objects)**   | Not Supported   | ACLs are supported                     |
 +---------------------------------+-----------------+----------------------------------------+

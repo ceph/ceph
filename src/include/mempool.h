@@ -366,23 +366,33 @@ public:
     static const mempool::pool_index_t id = mempool::mempool_##x;	\
     template<typename v>						\
     using pool_allocator = mempool::pool_allocator<id,v>;		\
+                                                                        \
+    using string = std::basic_string<char,std::char_traits<char>,       \
+                                     pool_allocator<char>>;             \
+                                                                        \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<k,v>>>;		\
+                                                                        \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<k,v>>>;	\
+                                                                        \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
+                                                                        \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
+                                                                        \
     template<typename v>						\
     using vector = std::vector<v,pool_allocator<v>>;			\
+                                                                        \
     template<typename k, typename v,					\
 	     typename h=std::hash<k>,					\
 	     typename eq = std::equal_to<k>>				\
     using unordered_map =						\
       std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
+                                                                        \
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\
     }									\

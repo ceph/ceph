@@ -13,6 +13,7 @@
 #ifndef CEPH_RBD_TYPES_H
 #define CEPH_RBD_TYPES_H
 
+#include "include/types.h"
 #include "rbd/features.h"
 
 /* New-style rbd image 'foo' consists of objects

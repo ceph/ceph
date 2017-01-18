@@ -520,20 +520,25 @@ inline typename std::enable_if<traits::supported != 0 &&
 //
 // std::string
 //
-template<>
-struct denc_traits<std::string> {
+template<typename A>
+struct denc_traits<std::basic_string<char,std::char_traits<char>,A>> {
   enum { supported = true };
   enum { featured = false };
   enum { bounded = false };
-  static void bound_encode(const std::string& s, size_t& p, uint64_t f=0) {
+  static void bound_encode(const std::basic_string<char,
+			   std::char_traits<char>,A>& s, size_t& p,
+			   uint64_t f=0) {
     p += sizeof(uint32_t) + s.size();
   }
-  static void encode(const std::string& s, buffer::list::contiguous_appender& p,
+  static void encode(const std::basic_string<char,std::char_traits<char>,A>& s,
+		     buffer::list::contiguous_appender& p,
 	      uint64_t f=0) {
     ::denc((uint32_t)s.size(), p);
     memcpy(p.get_pos_add(s.size()), s.data(), s.size());
   }
-  static void decode(std::string& s, buffer::ptr::iterator& p, uint64_t f=0) {
+  static void decode(std::basic_string<char,std::char_traits<char>,A>& s,
+		     buffer::ptr::iterator& p,
+		     uint64_t f=0) {
     uint32_t len;
     ::denc(len, p);
     s.clear();

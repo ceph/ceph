@@ -545,6 +545,8 @@ add_library(ceph-common SHARED
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:global_common_objs>)
+set_target_properties(ceph-common PROPERTIES
+  INSTALL_RPATH "")
 target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_THREAD_LIBRARY}
   ${Boost_SYSTEM_LIBRARY}
@@ -664,9 +666,13 @@ if(WITH_RBD)
   set(DENCODER_EXTRALIBS
     ${DENCODER_EXTRALIBS}
     cls_rbd_client
-    krbd
     rbd_types
     rbd_replay_types)
+  if(WITH_KRBD)
+    set(DENCODER_EXTRALIBS
+      ${DENCODER_EXTRALIBS}
+      krbd)
+  endif()
 endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
@@ -710,48 +716,52 @@ install(TARGETS ceph-mon DESTINATION bin)
 # OSD/ObjectStore
 # make rocksdb statically
 
-set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+if (NOT WITH_SYSTEM_ROCKSDB)
+  set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
 
-if(ALLOCATOR STREQUAL "jemalloc")
-  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_JEMALLOC=ON)
-endif()
+  if(ALLOCATOR STREQUAL "jemalloc")
+    list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_JEMALLOC=ON)
+  endif()
 
-if (WITH_CCACHE AND CCACHE_FOUND)
-  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=ccache)
-  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER})
-else(WITH_CCACHE AND CCACHE_FOUND)
-  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
-endif(WITH_CCACHE AND CCACHE_FOUND)
+  if (WITH_CCACHE AND CCACHE_FOUND)
+    list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=ccache)
+    list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER})
+  else(WITH_CCACHE AND CCACHE_FOUND)
+    list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
+  endif(WITH_CCACHE AND CCACHE_FOUND)
 
-list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
-list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
+  list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  list(APPEND ROCKSDB_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
-endif()
+  if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    list(APPEND ROCKSDB_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
+  endif()
 
-# we use an external project and copy the sources to bin directory to ensure
-# that object files are built outside of the source tree.
-include(ExternalProject)
-ExternalProject_Add(rocksdb_ext
-  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb
-  CMAKE_ARGS ${ROCKSDB_CMAKE_ARGS}
-  BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/rocksdb
-  BUILD_COMMAND $(MAKE) rocksdblib
-  INSTALL_COMMAND "true")
+  # we use an external project and copy the sources to bin directory to ensure
+  # that object files are built outside of the source tree.
+  include(ExternalProject)
+  ExternalProject_Add(rocksdb_ext
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb
+    CMAKE_ARGS ${ROCKSDB_CMAKE_ARGS}
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/rocksdb
+    BUILD_COMMAND $(MAKE) rocksdblib
+    INSTALL_COMMAND "true")
 
-# force rocksdb make to be called on each time
-ExternalProject_Add_Step(rocksdb_ext forcebuild
-  DEPENDEES configure
-  DEPENDERS build
-  COMMAND "true"
-  ALWAYS 1)
+  # force rocksdb make to be called on each time
+  ExternalProject_Add_Step(rocksdb_ext forcebuild
+    DEPENDEES configure
+    DEPENDERS build
+    COMMAND "true"
+    ALWAYS 1)
 
-set(ROCKSDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/include)
+  set(ROCKSDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/include)
 
-add_library(rocksdb STATIC IMPORTED)
-add_dependencies(rocksdb rocksdb_ext)
-set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdblib.a")
+  add_library(rocksdb STATIC IMPORTED)
+  add_dependencies(rocksdb rocksdb_ext)
+  set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdblib.a")
+  set(ROCKSDB_LIBRARIES rocksdb)
+
+endif(NOT WITH_SYSTEM_ROCKSDB)
 
 add_subdirectory(kv)
 add_subdirectory(os)
@@ -850,7 +860,7 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-if(WITH_LIBCEPHFS OR WITH_RBD)
+if(WITH_LIBCEPHFS OR WITH_KRBD)
   set(parse_secret_files
     common/secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_files})
@@ -887,6 +897,8 @@ if(WITH_LIBCEPHFS)
   add_executable(mount.ceph ${mount_ceph_srcs}
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:common_mountcephfs_objs>)
+  set_target_properties(mount.ceph PROPERTIES
+    INSTALL_RPATH "")
   target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
 
   install(TARGETS ceph-syn DESTINATION bin)
@@ -906,10 +918,12 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-if(${WITH_RBD})
-  add_library(krbd STATIC krbd.cc
-    $<TARGET_OBJECTS:parse_secret_objs>)
-  target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
+if(WITH_RBD)
+  if(WITH_KRBD)
+    add_library(krbd STATIC krbd.cc
+      $<TARGET_OBJECTS:parse_secret_objs>)
+    target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
+  endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
     add_subdirectory(rbd_fuse)
@@ -921,7 +935,7 @@ if(${WITH_RBD})
     ${CMAKE_SOURCE_DIR}/src/rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
-endif(${WITH_RBD})
+endif(WITH_RBD)
 
 # RadosGW
 if(WITH_KVS)

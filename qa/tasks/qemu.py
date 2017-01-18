@@ -16,7 +16,7 @@ from teuthology.config import config as teuth_config
 log = logging.getLogger(__name__)
 
 DEFAULT_NUM_RBD = 1
-DEFAULT_IMAGE_URL = 'http://ceph.com/qa/ubuntu-12.04.qcow2'
+DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
 DEFAULT_MEM = 4096 # in megabytes
 
 def create_images(ctx, config, managers):
@@ -406,9 +406,9 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
             client.1:
-              test: http://ceph.com/qa/test2.sh
+              test: http://download.ceph.com/qa/test2.sh
 
     Or use the same settings on all clients:
 
@@ -416,7 +416,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             all:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
 
     For tests that don't need a filesystem, set type to block::
 
@@ -424,7 +424,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               type: block
 
     The test should be configured to run on /dev/vdb and later
@@ -437,7 +437,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               type: block
               num_rbd: 2
 
@@ -447,7 +447,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               memory: 512 # megabytes
 
     If you want to run a test against a cloned rbd image, set clone to true::
@@ -456,7 +456,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
-              test: http://ceph.com/qa/test.sh
+              test: http://download.ceph.com/qa/test.sh
               clone: true
     """
     assert isinstance(config, dict), \

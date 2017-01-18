@@ -57,8 +57,7 @@ map is ``active + clean``.
   Ceph detects that a placement group is missing information about
   writes that may have occurred, or does not have any healthy
   copies. If you see this state, try to start any failed OSDs that may
-  contain the needed information or temporarily adjust min_size to
-  allow recovery.
+  contain the needed information.
 
 *Stale*
   The placement group is in an unknown state - the monitors have not received

@@ -133,10 +133,6 @@ public:
   int64_t index() {
     return m_cur_idx;
   }
-  void decr_idx() {
-    m_cur_idx--;
-    alloc_assert(m_cur_idx >= 0);
-  }
 };
 
 typedef unsigned long bmap_t;
@@ -184,10 +180,6 @@ public:
   int find_first_set_bits(int64_t required_blocks, int bit_offset,
           int *start_offset, int64_t *scanned);
 
-  int find_any_free_bits(int start_offset, int64_t num_blocks,
-        ExtentList *alloc_list, int64_t block_offset,
-        int64_t *scanned);
-
   void dump_state(int& count);
   ~BmapEntry();
 
@@ -217,11 +209,11 @@ public:
   static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
   virtual bool is_exhausted() = 0;
-  virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
+  virtual bool child_check_n_lock(BitMapArea *child) {
       ceph_abort();
       return true;
   }
-  virtual bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
+  virtual bool child_check_n_lock(BitMapArea *child, bool lock) {
       ceph_abort();
       return true;
   }
@@ -315,7 +307,6 @@ public:
 
   BitMapArea *next();
   int64_t index();
-  void decr_idx();
 };
 
 typedef mempool::bluestore_alloc::vector<BmapEntry> BmapEntryVector;
@@ -384,12 +375,12 @@ protected:
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks);
   virtual bool is_exhausted();
   
-  bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
+  bool child_check_n_lock(BitMapArea *child, bool lock) {
     ceph_abort();
     return false;
   }
 
-  virtual bool child_check_n_lock(BitMapArea *child, int64_t required);
+  virtual bool child_check_n_lock(BitMapArea *child);
   virtual void child_unlock(BitMapArea *child);
 
   virtual void lock_excl() {
@@ -457,12 +448,12 @@ public:
   BitMapAreaLeaf(CephContext* cct, int64_t zone_num, int64_t total_blocks,
 		 bool def);
 
-  bool child_check_n_lock(BitMapArea *child, int64_t required) {
+  bool child_check_n_lock(BitMapArea *child) {
     ceph_abort();
     return false;
   }
 
-  bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock);
+  bool child_check_n_lock(BitMapArea *child, bool lock);
   void child_unlock(BitMapArea *child);
 
   int64_t alloc_blocks_int(int64_t num_blocks, int64_t hint, int64_t *start_block);
@@ -493,13 +484,15 @@ private:
   }
 
   using BitMapArea::child_check_n_lock;
-  bool child_check_n_lock(BitMapArea *child, int64_t required);
+  bool child_check_n_lock(BitMapArea *child);
   virtual void child_unlock(BitMapArea *child);
 
   void serial_lock();
+  bool try_serial_lock();
   void serial_unlock();
   void lock_excl();
   void lock_shared();
+  bool try_lock();
   void unlock();
 
   bool check_input(int64_t num_blocks);

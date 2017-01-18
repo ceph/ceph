@@ -9,6 +9,7 @@
 #include "include/rados/librados.hpp"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/watcher/Types.h"
+#include "librbd/managed_lock/Types.h"
 #include "common/Mutex.h"
 #include <list>
 #include <string>
@@ -20,6 +21,8 @@ namespace librbd {
 
 struct ImageCtx;
 
+namespace managed_lock { struct Locker; }
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class ManagedLock {
 private:
@@ -30,12 +33,18 @@ public:
   static const std::string WATCHER_LOCK_TAG;
 
   static ManagedLock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
-                             const std::string& oid, Watcher *watcher) {
-    return new ManagedLock(ioctx, work_queue, oid, watcher);
+                             const std::string& oid, Watcher *watcher,
+                             managed_lock::Mode mode,
+                             bool blacklist_on_break_lock,
+                             uint32_t blacklist_expire_seconds) {
+    return new ManagedLock(ioctx, work_queue, oid, watcher, mode,
+                           blacklist_on_break_lock, blacklist_expire_seconds);
   }
 
   ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
-              const std::string& oid, Watcher *watcher);
+              const std::string& oid, Watcher *watcher,
+              managed_lock::Mode mode, bool blacklist_on_break_lock,
+              uint32_t blacklist_expire_seconds);
   virtual ~ManagedLock();
 
   bool is_lock_owner() const;
@@ -45,6 +54,9 @@ public:
   void try_acquire_lock(Context *on_acquired);
   void release_lock(Context *on_released);
   void reacquire_lock(Context *on_reacquired = nullptr);
+  void get_locker(managed_lock::Locker *locker, Context *on_finish);
+  void break_lock(const managed_lock::Locker &locker, bool force_break_lock,
+                  Context *on_finish);
 
   bool is_shutdown() const {
     Mutex::Locker l(m_lock);
@@ -151,6 +163,9 @@ private:
   ContextWQ *m_work_queue;
   std::string m_oid;
   Watcher *m_watcher;
+  managed_lock::Mode m_mode;
+  bool m_blacklist_on_break_lock;
+  uint32_t m_blacklist_expire_seconds;
 
   std::string m_cookie;
   std::string m_new_cookie;
@@ -161,6 +176,7 @@ private:
 
   static std::string encode_lock_cookie(uint64_t watch_handle);
 
+  bool is_lock_owner(Mutex &lock) const;
   bool is_transition_state() const;
 
   void append_context(Action action, Context *ctx);

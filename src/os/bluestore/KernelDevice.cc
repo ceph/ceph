@@ -60,7 +60,7 @@ int KernelDevice::_lock()
   return 0;
 }
 
-int KernelDevice::open(string p)
+int KernelDevice::open(const string& p)
 {
   path = p;
   int r = 0;

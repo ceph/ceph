@@ -9,6 +9,8 @@
 
 class Context;
 
+namespace librados { class IoCtx; }
+
 namespace librbd {
 
 struct ImageCtx;
@@ -20,23 +22,26 @@ struct Locker;
 template <typename ImageCtxT = ImageCtx>
 class GetLockerRequest {
 public:
-  static GetLockerRequest* create(ImageCtxT &image_ctx, Locker *locker,
-                                  Context *on_finish) {
-    return new GetLockerRequest(image_ctx, locker, on_finish);
+  static GetLockerRequest* create(librados::IoCtx& ioctx,
+                                  const std::string& oid, bool exclusive,
+                                  Locker *locker, Context *on_finish) {
+    return new GetLockerRequest(ioctx, oid, exclusive, locker, on_finish);
   }
 
   void send();
 
 private:
-  ImageCtxT &m_image_ctx;
+  librados::IoCtx &m_ioctx;
+  CephContext *m_cct;
+  std::string m_oid;
+  bool m_exclusive;
   Locker *m_locker;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
 
-  GetLockerRequest(ImageCtxT &image_ctx, Locker *locker, Context *on_finish)
-    : m_image_ctx(image_ctx), m_locker(locker),  m_on_finish(on_finish) {
-  }
+  GetLockerRequest(librados::IoCtx& ioctx, const std::string& oid,
+                   bool exclusive, Locker *locker, Context *on_finish);
 
   void send_get_lockers();
   void handle_get_lockers(int r);

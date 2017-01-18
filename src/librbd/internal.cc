@@ -33,8 +33,6 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
-#include "librbd/managed_lock/BreakRequest.h"
-#include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/Types.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -710,7 +708,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 
       for (auto &id_it : info.second) {
 	ImageCtx *imctx = new ImageCtx("", id_it, NULL, ioctx, false);
-	int r = imctx->state->open();
+	int r = imctx->state->open(false);
 	if (r < 0) {
 	  lderr(cct) << "error opening image: "
 		     << cpp_strerror(r) << dendl;
@@ -1082,7 +1080,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
-    int r = p_imctx->state->open();
+    int r = p_imctx->state->open(false);
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(r) << dendl;
@@ -1224,7 +1222,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     }
 
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
-    r = c_imctx->state->open();
+    r = c_imctx->state->open(false);
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
       delete c_imctx;
@@ -1326,7 +1324,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 		   << dstname << dendl;
 
     ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
-    int r = ictx->state->open();
+    int r = ictx->state->open(false);
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
@@ -1568,12 +1566,14 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
+    if (!ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+      lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+      return -EINVAL;
+    }
+
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    auto get_owner_req = managed_lock::GetLockerRequest<>::create(
-      *ictx, &locker, &get_owner_ctx);
-    get_owner_req->send();
-
+    ExclusiveLock<>(*ictx).get_locker(&locker, &get_owner_ctx);
     int r = get_owner_ctx.wait();
     if (r == -ENOENT) {
       return r;
@@ -1601,12 +1601,22 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       return -EOPNOTSUPP;
     }
 
+    if (ictx->read_only) {
+      return -EROFS;
+    }
+
     managed_lock::Locker locker;
     C_SaferCond get_owner_ctx;
-    auto get_owner_req = managed_lock::GetLockerRequest<>::create(
-      *ictx, &locker, &get_owner_ctx);
-    get_owner_req->send();
+    {
+      RWLock::RLocker l(ictx->owner_lock);
 
+      if (ictx->exclusive_lock == nullptr) {
+        lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+        return -EINVAL;
+      }
+
+      ictx->exclusive_lock->get_locker(&locker, &get_owner_ctx);
+    }
     int r = get_owner_ctx.wait();
     if (r == -ENOENT) {
       return r;
@@ -1621,10 +1631,16 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     }
 
     C_SaferCond break_ctx;
-    auto break_req = managed_lock::BreakRequest<>::create(
-      *ictx, locker, ictx->blacklist_on_break_lock, true, &break_ctx);
-    break_req->send();
+    {
+      RWLock::RLocker l(ictx->owner_lock);
 
+      if (ictx->exclusive_lock == nullptr) {
+        lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+        return -EINVAL;
+      }
+
+      ictx->exclusive_lock->break_lock(locker, true, &break_ctx);
+    }
     r = break_ctx.wait();
     if (r == -ENOENT) {
       return r;
@@ -1649,7 +1665,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     bool unknown_format = true;
     ImageCtx *ictx = new ImageCtx(
       (id.empty() ? name : std::string()), id, nullptr, io_ctx, false);
-    int r = ictx->state->open();
+    int r = ictx->state->open(true);
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
       delete ictx;
@@ -2011,7 +2027,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 
     ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
 					  dest_md_ctx, false);
-    r = dest->state->open();
+    r = dest->state->open(false);
     if (r < 0) {
       delete dest;
       lderr(cct) << "failed to read newly created header" << dendl;
@@ -3050,7 +3066,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
           ImageCtx *img_ctx = new ImageCtx("", img_pair.second, nullptr,
                                            io_ctx, false);
-          r = img_ctx->state->open();
+          r = img_ctx->state->open(false);
           if (r < 0) {
             lderr(cct) << "error opening image "<< img_pair.first << ": "
                        << cpp_strerror(r) << dendl;
@@ -3098,7 +3114,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
           }
         } else {
           ImageCtx *img_ctx = new ImageCtx("", img_id, nullptr, io_ctx, false);
-          r = img_ctx->state->open();
+          r = img_ctx->state->open(false);
           if (r < 0) {
             lderr(cct) << "error opening image id "<< img_id << ": "
                        << cpp_strerror(r) << dendl;

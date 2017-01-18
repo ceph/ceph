@@ -46,7 +46,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_LTTNG=OFF \
 	-D WITH_BLKID=OFF \
 	-D WITH_FUSE=OFF \
-	-D WITH_RBD=OFF \
+	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
 	-D WITH_KVS=OFF \
 	-D WITH_MANPAGE=OFF \

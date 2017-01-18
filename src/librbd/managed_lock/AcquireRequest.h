@@ -8,6 +8,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "msg/msg_types.h"
+#include "librbd/managed_lock/Types.h"
 #include "librbd/watcher/Types.h"
 #include <string>
 
@@ -29,7 +30,11 @@ private:
 public:
   static AcquireRequest* create(librados::IoCtx& ioctx, Watcher *watcher,
                                 ContextWQ *work_queue, const std::string& oid,
-                                const std::string& cookie, Context *on_finish);
+                                const std::string& cookie,
+                                bool exclusive,
+                                bool blacklist_on_break_lock,
+                                uint32_t blacklist_expire_seconds,
+                                Context *on_finish);
 
   ~AcquireRequest();
   void send();
@@ -41,26 +46,14 @@ private:
    *
    * <start>
    *    |
-   *    |
-   *    |
-   *    |     /-----------------------------------------------------------\
-   *    |     |                                                           |
-   *    |     |             (no lockers)                                  |
-   *    |     |   . . . . . . . . . . . . . . . . . . . . . .             |
-   *    |     |   .                                         .             |
-   *    |     v   v      (EBUSY)                            .             |
-   *    \--> LOCK_IMAGE * * * * * * * * > GET_LOCKERS . . . .             |
-   *              |                         |                             |
-   *              |                         v                             |
-   *              |                       GET_WATCHERS                    |
-   *              |                         |                             |
-   *              |                         v                             |
-   *              |                       BLACKLIST (skip if blacklist    |
-   *              |                         |        disabled)            |
-   *              |                         v                             |
-   *              |                       BREAK_LOCK                      |
-   *              |                         |                             |
-   *              |                         \-----------------------------/
+   *    v
+   * GET_LOCKER <---------------------------------------\
+   *    |     ^                                         |
+   *    |     . (EBUSY && no cached locker)             |
+   *    |     .                                         |
+   *    |     .          (EBUSY && cached locker)       |
+   *    \--> LOCK_IMAGE * * * * * * * * > BREAK_LOCK ---/
+   *              |
    *              v
    *          <finish>
    *
@@ -69,7 +62,9 @@ private:
 
   AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                  ContextWQ *work_queue, const std::string& oid,
-                 const std::string& cookie, Context *on_finish);
+                 const std::string& cookie, bool exclusive,
+                 bool blacklist_on_break_lock,
+                 uint32_t blacklist_expire_seconds, Context *on_finish);
 
   librados::IoCtx& m_ioctx;
   Watcher *m_watcher;
@@ -77,45 +72,25 @@ private:
   ContextWQ *m_work_queue;
   std::string m_oid;
   std::string m_cookie;
+  bool m_exclusive;
+  bool m_blacklist_on_break_lock;
+  uint32_t m_blacklist_expire_seconds;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
 
-  std::list<obj_watch_t> m_watchers;
-  int m_watchers_ret_val;
+  Locker m_locker;
 
-  entity_name_t m_locker_entity;
-  std::string m_locker_cookie;
-  std::string m_locker_address;
-  uint64_t m_locker_handle;
-
-  int m_error_result;
+  void send_get_locker();
+  void handle_get_locker(int r);
 
   void send_lock();
   void handle_lock(int r);
 
-  void send_unlock();
-  void handle_unlock(int r);
-
-  void send_get_lockers();
-  void handle_get_lockers(int r);
-
-  void send_get_watchers();
-  void handle_get_watchers(int r);
-
-  void send_blacklist();
-  void handle_blacklist(int r);
-
   void send_break_lock();
   void handle_break_lock(int r);
 
-  void finish();
-
-  void save_result(int r) {
-    if (m_error_result == 0 && r < 0) {
-      m_error_result = r;
-    }
-  }
+  void finish(int r);
 };
 
 } // namespace managed_lock

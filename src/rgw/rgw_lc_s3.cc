@@ -57,6 +57,8 @@ bool LCRule_S3::xml_end(const char *el) {
   if (!lc_status)
     return false;
   status = lc_status->get_data();
+  if (status.compare("Enabled") != 0 && status.compare("Disabled") != 0)
+    return false;
 
   lc_expiration = static_cast<LCExpiration_S3 *>(find_first("Expiration"));
   if (!lc_expiration)
@@ -78,17 +80,18 @@ void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
 
 int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfiguration& dest)
 {
+  int ret = 0;
   multimap<string, LCRule>::iterator iter;
   for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
     LCRule& src_rule = iter->second;
-    bool rule_ok = true;
-
-    if (rule_ok) {
-      dest.add_rule(&src_rule);
-    }
+    ret = dest.check_and_add_rule(&src_rule);
+    if (ret < 0)
+      return ret;
   }
-
-  return 0;
+  if (!dest.validate()) {
+    ret = -ERR_INVALID_REQUEST;
+  }
+  return ret;
 }
 
 void RGWLifecycleConfiguration_S3::dump_xml(Formatter *f) const
