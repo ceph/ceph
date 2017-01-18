@@ -89,16 +89,6 @@ protected:
     assert(m_state == STATE_ACQUIRING);
     m_state = STATE_POST_ACQUIRING;
   }
-  inline void set_state_releasing() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_PRE_RELEASING);
-    m_state = STATE_RELEASING;
-  }
-  inline void set_state_shutting_down() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_PRE_SHUTTING_DOWN);
-    m_state = STATE_SHUTTING_DOWN;
-  }
 
   bool is_state_shutdown() const;
   inline bool is_state_acquiring() const {

@@ -63,8 +63,6 @@ struct ManagedLock<MockExclusiveLockImageCtx> {
   MOCK_METHOD0(set_state_unlocked, void());
   MOCK_METHOD0(set_state_waiting_for_lock, void());
   MOCK_METHOD0(set_state_post_acquiring, void());
-  MOCK_METHOD0(set_state_releasing, void());
-  MOCK_METHOD0(set_state_shutting_down, void());
 
   MOCK_CONST_METHOD0(is_state_shutdown, bool());
   MOCK_CONST_METHOD0(is_state_acquiring, bool());
@@ -90,8 +88,7 @@ struct BaseRequest {
   Context *on_finish = nullptr;
 
   static T* create(MockExclusiveLockImageCtx &image_ctx,
-                   Context *on_lock_unlock, Context *on_finish,
-                   bool shutting_down = false) {
+                   Context *on_lock_unlock, Context *on_finish) {
     assert(!s_requests.empty());
     T* req = s_requests.front();
     req->on_lock_unlock = on_lock_unlock;
@@ -124,6 +121,11 @@ struct PostAcquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<PostAc
 
 template <>
 struct PreReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<PreReleaseRequest<MockExclusiveLockImageCtx> > {
+  static PreReleaseRequest<MockExclusiveLockImageCtx> *create(
+      MockExclusiveLockImageCtx &image_ctx, bool shutting_down,
+      Context *on_finish) {
+    return BaseRequest::create(image_ctx, nullptr, on_finish);
+  }
   MOCK_METHOD0(send, void());
 };
 

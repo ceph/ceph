@@ -240,10 +240,6 @@ void  ManagedLock<I>::post_acquire_lock_handler(int r, Context *on_finish) {
 template <typename I>
 void  ManagedLock<I>::pre_release_lock_handler(bool shutting_down,
                                                Context *on_finish) {
-  {
-    Mutex::Locker locker(m_lock);
-    m_state = shutting_down ? STATE_SHUTTING_DOWN : STATE_RELEASING;
-  }
   on_finish->complete(0);
 }
 
@@ -565,6 +561,12 @@ template <typename I>
 void ManagedLock<I>::handle_pre_release_lock(int r) {
   ldout(m_cct, 10) << ": r=" << r << dendl;
 
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_PRE_RELEASING);
+    m_state = STATE_RELEASING;
+  }
+
   if (r < 0) {
     handle_release_lock(r);
     return;
@@ -654,6 +656,9 @@ void ManagedLock<I>::handle_shutdown_pre_release(int r) {
   {
     Mutex::Locker locker(m_lock);
     cookie = m_cookie;
+
+    assert(m_state == STATE_PRE_SHUTTING_DOWN);
+    m_state = STATE_SHUTTING_DOWN;
   }
 
   using managed_lock::ReleaseRequest;
