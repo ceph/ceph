@@ -659,7 +659,7 @@ public:
       extractor.get_auth_data(s);
 
     if (access_key_id.empty() || signature.empty()) {
-      return std::make_pair(nullptr, nullptr);
+      return result_t::deny(-EINVAL);
     } else {
       return authenticate(access_key_id, signature, string_to_sign, s);
     }

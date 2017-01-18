@@ -104,58 +104,6 @@ public:
 };
 
 
-/* Interface class for authentication backends (auth engines) in RadosGW.
- *
- * An engine is supposed only to authenticate (not authorize!) requests
- * basing on their req_state and provide an upper layer with:
- *  - rgw::auth::IdentityApplier to commit all changes to the request state as
- *    well as to the RADOS store (creating an account, synchronizing
- *    user-related information with external databases and so on).
- *  - rgw::auth::Completer (optionally) to finish the authentication
- *    of the request. Typical use case is verifying message integrity
- *    in AWS Auth v4 and browser uploads (RGWPostObj).
- *
- * The authentication process consists two steps:
- *  - Engine::authenticate() supposed to be called before *initiating*
- *    any modifications to RADOS store that are related to an operation
- *    a client wants to perform (RGWOp::execute).
- *  - Completer::complete() supposed to be called, if completer has been
- *    returned, after the authenticate() step but before *committing*
- *    those modifications or sending a response (RGWOp::complete).
- *
- * An engine outlives both Applier and Completer. It's
- * intended to live since RadosGW's initialization and handle multiple
- * requests till a reconfiguration.
- *
- * Auth engine MUST NOT make any changes to req_state nor RADOS store.
- * This is solely an Applier's responsibility!
- *
- * Separation between authentication and global state modification has
- * been introduced because many auth engines are orthogonal to appliers
- * and thus they can be decoupled. Additional motivation is to clearly
- * distinguish all portions of code modifying data structures. */
-class Engine {
-public:
-  virtual ~Engine() = default;
-
-  using result_t = std::pair<std::unique_ptr<class IdentityApplier>,
-                             std::unique_ptr<class Completer>>;
-
-  /* Get name of the auth engine. */
-  virtual const char* get_name() const noexcept = 0;
-
-  /* Throwing method for identity verification. When the check is positive
-   * an implementation should return Engine::result_t containing:
-   *  - a non-null pointer to an object conforming the Applier interface.
-   *    Otherwise, the authentication is treated as failed.
-   *  - a (potentially null) pointer to an object conforming the Completer
-   *    interface.
-   *
-   * On error throws rgw::auth::Exception containing the reason. */
-  virtual result_t authenticate(const req_state* s) const = 0;
-};
-
-
 /* Interface class for completing the two-step authentication process.
  * Completer provides the second step - the complete() method that should
  * be called after Engine::authenticate() but before *committing* results
@@ -185,6 +133,140 @@ public:
 };
 
 
+/* Interface class for authentication backends (auth engines) in RadosGW.
+ *
+ * An engine is supposed only to authenticate (not authorize!) requests
+ * basing on their req_state and - if access has been granted - provide
+ * an upper layer with:
+ *  - rgw::auth::IdentityApplier to commit all changes to the request state as
+ *    well as to the RADOS store (creating an account, synchronizing
+ *    user-related information with external databases and so on).
+ *  - rgw::auth::Completer (optionally) to finish the authentication
+ *    of the request. Typical use case is verifying message integrity
+ *    in AWS Auth v4 and browser uploads (RGWPostObj).
+ *
+ * Both of them are supposed to be wrapped in Engine::AuthResult.
+ *
+ * The authentication process consists of two steps:
+ *  - Engine::authenticate() which should be called before *initiating*
+ *    any modifications to RADOS store that are related to an operation
+ *    a client wants to perform (RGWOp::execute).
+ *  - Completer::complete() supposed to be called, if completer has been
+ *    returned, after the authenticate() step but before *committing*
+ *    those modifications or sending a response (RGWOp::complete).
+ *
+ * An engine outlives both Applier and Completer. It's intended to live
+ * since RadosGW's initialization and handle multiple requests till
+ * a reconfiguration.
+ *
+ * Auth engine MUST NOT make any changes to req_state nor RADOS store.
+ * This is solely an Applier's responsibility!
+ *
+ * Separation between authentication and global state modification has
+ * been introduced because many auth engines are orthogonal to appliers
+ * and thus they can be decoupled. Additional motivation is to clearly
+ * distinguish all portions of code modifying data structures. */
+class Engine {
+public:
+  virtual ~Engine() = default;
+
+  class AuthResult {
+    struct rejection_mark_t {};
+    bool is_rejected = false;
+    int reason = 0;
+
+    std::pair<IdentityApplier::aplptr_t, Completer::cmplptr_t> result_pair;
+
+    AuthResult(const int reason)
+      : reason(reason) {
+    }
+
+    AuthResult(rejection_mark_t&&, const int reason)
+      : is_rejected(true),
+        reason(reason) {
+    }
+
+    /* Allow only the reasonable combintations - returning just Completer
+     * without accompanying IdentityApplier is strictly prohibited! */
+    AuthResult(IdentityApplier::aplptr_t&& applier)
+      : result_pair(std::move(applier), nullptr) {
+    }
+
+    AuthResult(IdentityApplier::aplptr_t&& applier,
+               Completer::cmplptr_t&& completer)
+      : result_pair(std::move(applier), std::move(completer)) {
+    }
+
+  public:
+    enum class Status {
+      /* Engine doesn't grant the access but also doesn't reject it. */
+      DENIED,
+
+      /* Engine successfully authenticated requester. */
+      GRANTED,
+
+      /* Engine strictly indicates that a request should be rejected
+       * without trying any further engine. */
+      REJECTED
+    };
+
+    Status get_status() const {
+      if (is_rejected) {
+        return Status::REJECTED;
+      } else if (! result_pair.first) {
+        return Status::DENIED;
+      } else {
+        return Status::GRANTED;
+      }
+    }
+
+    int get_reason() const {
+      return reason;
+    }
+
+    IdentityApplier::aplptr_t get_applier() {
+      return std::move(result_pair.first);
+    }
+
+    Completer::cmplptr_t get_completer() {
+      return std::move(result_pair.second);
+    }
+
+    static AuthResult reject(const int reason = -EACCES) {
+      return AuthResult(rejection_mark_t(), reason);
+    }
+
+    static AuthResult deny(const int reason = -EACCES) {
+      return AuthResult(reason);
+    }
+
+    static AuthResult grant(IdentityApplier::aplptr_t&& applier) {
+      return AuthResult(std::move(applier));
+    }
+
+    static AuthResult grant(IdentityApplier::aplptr_t&& applier,
+                            Completer::cmplptr_t&& completer) {
+      return AuthResult(std::move(applier), std::move(completer));
+    }
+  };
+
+  using result_t = AuthResult;
+
+  /* Get name of the auth engine. */
+  virtual const char* get_name() const noexcept = 0;
+
+  /* Throwing method for identity verification. When the check is positive
+   * an implementation should return Engine::result_t containing:
+   *  - a non-null pointer to an object conforming the Applier interface.
+   *    Otherwise, the authentication is treated as failed.
+   *  - a (potentially null) pointer to an object conforming the Completer
+   *    interface.
+   *
+   * On error throws rgw::auth::Exception containing the reason. */
+  virtual result_t authenticate(const req_state* s) const = 0;
+};
+
+
 /* Interface for extracting a token basing from data carried by req_state. */
 class TokenExtractor {
 public:
@@ -204,14 +286,14 @@ public:
    * The names and semantic has been borrowed mostly from libpam. */
   enum class Control {
     /* Failure of an engine injected with the REQUISITE specifier aborts
-     * the whole authentication process immediately. No other engine will
-     * be tried. */
+     * the strategy's authentication process immediately. No other engine
+     * will be tried. */
     REQUISITE,
 
     /* Success of an engine injected with the SUFFICIENT specifier ends
-     * the whole authentication process successfully. However, failure
-     * doesn't abort it - there will be fall-back to following engine
-     * it the one that failed wasn't the last. */
+     * strategy's authentication process successfully. However, denying
+     * doesn't abort it -- there will be fall-back to following engine
+     * if the one that failed wasn't the last one. */
     SUFFICIENT,
 
     /* Like SUFFICIENT with the exception that on failure the reason code

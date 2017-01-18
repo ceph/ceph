@@ -2033,12 +2033,10 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  rgw::auth::IdentityApplier::aplptr_t applier;
-  rgw::auth::Completer::cmplptr_t completer;
-  std::tie(applier, completer) = auth_strategy.authenticate(s);
-
   try {
-    if (! applier) {
+    auto result = auth_strategy.authenticate(s);
+
+    if (result.get_status() != decltype(result)::Status::GRANTED) {
       /* Access denied is acknowledged by returning a std::unique_ptr with
        * nullptr inside. */
       ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
@@ -2046,6 +2044,8 @@ int RGWHandler_REST_SWIFT::authorize()
     }
 
     try {
+      rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
+
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
       applier->load_acct_info(*s->user);
@@ -2057,7 +2057,7 @@ int RGWHandler_REST_SWIFT::authorize()
       applier->modify_request_state(s);
 
       s->auth.identity = std::move(applier);
-      s->auth.completer = std::move(completer);
+      s->auth.completer = std::move(result.get_completer());
 
       return 0;
     } catch (int err) {

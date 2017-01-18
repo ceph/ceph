@@ -1833,12 +1833,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
     const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store, &extr);
     try {
       auto result = strategy.authenticate(s);
-      auto& applier = result.first;
-      if (! applier) {
+      if (result.get_status() != decltype(result)::Status::GRANTED) {
         return -EACCES;
       }
 
       try {
+        auto applier = result.get_applier();
+
         applier->load_acct_info(*s->user);
         s->perm_mask = applier->get_perm_mask();
         applier->modify_request_state(s);
@@ -3898,11 +3899,14 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
   static const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store);
   try {
     auto result = strategy.authenticate(s);
-    auto& applier = result.first;
-    if (! applier) {
-      return -EPERM;
+    if (result.get_status() != decltype(result)::Status::GRANTED) {
+      ldout(s->cct, 5) << "Failed the S3 auth strategy, reason="
+                       << result.get_reason() << dendl;
+      return result.get_reason();
     }
     try {
+      auto applier = result.get_applier();
+
       applier->load_acct_info(*s->user);
       s->perm_mask = applier->get_perm_mask();
       applier->modify_request_state(s);
@@ -4348,7 +4352,7 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
   }
 
   if (! base64_token.valid()) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   //TODO: Uncomment, when we have a migration plan in place.
@@ -4364,12 +4368,12 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
   }*/
 
   if (ldh->auth(base64_token.id, base64_token.key) != 0) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(base64_token));
-  return std::make_pair(std::move(apl), nullptr);
+  return result_t::grant(std::move(apl));
 }
 
 
@@ -4380,17 +4384,12 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
                                                    const std::string& string_to_sign,
                                                    const req_state* const s) const
 {
-  if (access_key_id.empty() || signature.empty()) {
-    ldout(cct, 5) << "access_key_id or signature is empty" << dendl;
-    throw -EINVAL;
-  }
-
   /* get the user info */
   RGWUserInfo user_info;
   if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
       ldout(cct, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
-      return std::make_pair(nullptr, nullptr);
+      return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
@@ -4404,14 +4403,14 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {
     ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
-    throw -EPERM;
+    return result_t::deny(-EPERM);
   }
   const RGWAccessKey& k = iter->second;
 
   std::string digest;
   int ret = rgw_get_s3_header_digest(string_to_sign, k.key, digest);
   if (ret < 0) {
-    throw -EPERM;
+    return result_t::deny(-EPERM);
   }
 
   ldout(cct, 15) << "string_to_sign=" << string_to_sign << dendl;
@@ -4420,9 +4419,9 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
   ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;
 
   if (signature != digest) {
-    throw -ERR_SIGNATURE_NO_MATCH;
+    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
-  return std::make_pair(std::move(apl), nullptr);
+  return result_t::grant(std::move(apl));
 }

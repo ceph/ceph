@@ -234,7 +234,7 @@ TokenEngine::authenticate(const std::string& token,
                    << dendl;
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
                                               get_creds_info(t, roles.admin));
-    return std::make_pair(std::move(apl), nullptr);
+    return result_t::grant(std::move(apl));
   }
 
   /* Retrieve token. */
@@ -255,7 +255,7 @@ TokenEngine::authenticate(const std::string& token,
     ldout(cct, 0) << "got expired token: " << t.get_project_name()
                   << ":" << t.get_user_name()
                   << " expired: " << t.get_expires() << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   /* Check for necessary roles. */
@@ -267,14 +267,14 @@ TokenEngine::authenticate(const std::string& token,
       token_cache.add(token_id, t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));
-      return std::make_pair(std::move(apl), nullptr);
+      return result_t::grant(std::move(apl));
     }
   }
 
   ldout(cct, 0) << "user does not hold a matching role; required roles: "
                 << g_conf->rgw_keystone_accepted_roles << dendl;
 
-  return std::make_pair(nullptr, nullptr);
+  return result_t::deny();
 }
 
 
@@ -344,7 +344,7 @@ EC2Engine::get_from_keystone(const std::string& access_key_id,
   if (ret < 0) {
     ldout(cct, 2) << "s3 keystone: token validation ERROR: "
                   << token_body_bl.c_str() << dendl;
-    throw -EPERM;
+    throw ret;
   }
 
   /* if the supplied signature is wrong, we will get 401 from Keystone */
@@ -429,7 +429,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
     ldout(cct, 0) << "got expired token: " << t.get_project_name()
                   << ":" << t.get_user_name()
                   << " expired: " << t.get_expires() << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   /* check if we have a valid role */
@@ -445,7 +445,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
     ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
                      " required roles: "
                   << cct->_conf->rgw_keystone_accepted_roles << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   } else {
     /* everything seems fine, continue with this user */
     ldout(cct, 5) << "s3 keystone: validated token: " << t.get_project_name()
@@ -454,7 +454,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
                                               get_creds_info(t, accepted_roles.admin));
-    return std::make_pair(std::move(apl), nullptr);
+    return result_t::grant(std::move(apl));
   }
 }
 
