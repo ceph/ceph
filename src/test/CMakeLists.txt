@@ -165,6 +165,10 @@ endif(WITH_KVS)
 add_executable(ceph_objectstore_bench objectstore_bench.cc)
 target_link_libraries(ceph_objectstore_bench os global ${BLKID_LIBRARIES})
 
+# ceph_objectstore_perf_bench
+add_executable(ceph_objectstore_perf_bench objectstore_perf_bench.cc)
+target_link_libraries(ceph_objectstore_perf_bench global ${BLKID_LIBRARIES} os)
+
 if(${WITH_RADOSGW})
   # test_cors
   set(test_cors_srcs test_cors.cc)
@@ -413,6 +417,7 @@ install(TARGETS
   ceph_bench_log
   ceph_multi_stress_watch
   ceph_objectstore_bench
+  ceph_objectstore_perf_bench
   ceph_omapbench
   ceph_perf_local
   ceph_xattr_bench

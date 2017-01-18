@@ -1757,6 +1757,10 @@ public:
     return 256;  // arbitrary; there is no real limit internally
   }
 
+  PerfCounters *get_perf_counter() {
+    return logger;
+  };
+
   int mkfs() override;
   int mkjournal() override {
     return 0;

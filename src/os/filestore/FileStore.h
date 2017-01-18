@@ -464,6 +464,11 @@ public:
     // some margin, and cap at 100
     return 100;
   }
+
+  PerfCounters *get_perf_counter() {
+    return logger;
+  };
+
   int mkfs();
   int mkjournal();
   bool wants_journal() {

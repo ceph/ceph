@@ -165,6 +165,7 @@ SUBSYS(fuse, 1, 5)
 SUBSYS(mgr, 1, 5)
 SUBSYS(mgrc, 1, 5)
 SUBSYS(dpdk, 1, 5)
+SUBSYS(tests, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")

@@ -1529,6 +1529,10 @@ public:
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
 
+  virtual PerfCounters *get_perf_counter() {
+    return NULL;
+  }
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
