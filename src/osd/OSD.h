@@ -533,54 +533,76 @@ public:
    * down, without worrying about reopening connections from threads
    * working from old maps.
    */
+  using OSDMapRaw = const OSDMap*;
 private:
-  OSDMapRef next_osdmap;
+  // Uses two element sized vector to store two OSDMap references. Since
+  // we must await old osdmap release, so up to 2 element size is enough.
+  std::vector<OSDMapRef> saved_osdmaps;
+  std::atomic<OSDMapRaw> next_osdmap;
   Cond pre_publish_cond;
 
 public:
   void pre_publish_map(OSDMapRef map) {
     Mutex::Locker l(pre_publish_lock);
-    next_osdmap = std::move(map);
+    if (next_osdmap)
+      saved_osdmaps[1] = map;
+    else
+      saved_osdmaps[0] = map;
+    next_osdmap = map.get();
   }
 
   void activate_map();
-  /// map epochs reserved below
-  map<epoch_t, unsigned> map_reservations;
+  // the advanced seq
+  std::atomic<uint64_t> map_reserve_seq;
+  // the completed seq number
+  std::atomic<uint64_t> map_completed_seq;
+  std::atomic<uint64_t> map_reserved_waiters;
+  uint64_t map_wait_version = 0;
+  // wait_version -> pair(seq, count)
+  std::map<uint64_t, std::pair<uint64_t, uint64_t> > map_wait_pending;
 
   /// gets ref to next_osdmap and registers the epoch as reserved
-  OSDMapRef get_nextmap_reserved() {
-    Mutex::Locker l(pre_publish_lock);
-    if (!next_osdmap)
-      return OSDMapRef();
-    epoch_t e = next_osdmap->get_epoch();
-    map<epoch_t, unsigned>::iterator i =
-      map_reservations.insert(make_pair(e, 0)).first;
-    i->second++;
+  OSDMapRaw get_nextmap_reserved(uint64_t &s) {
+    s = ++map_reserve_seq;
     return next_osdmap;
   }
   /// releases reservation on map
-  void release_map(OSDMapRef osdmap) {
-    Mutex::Locker l(pre_publish_lock);
-    map<epoch_t, unsigned>::iterator i =
-      map_reservations.find(osdmap->get_epoch());
-    assert(i != map_reservations.end());
-    assert(i->second > 0);
-    if (--(i->second) == 0) {
-      map_reservations.erase(i);
+  void release_map(uint64_t seq) {
+    map_completed_seq++;
+    if (map_reserved_waiters) {
+      int has_empty = 0;
+      Mutex::Locker l(pre_publish_lock);
+      for (std::map<uint64_t, std::pair<uint64_t, uint64_t> >::iterator it = map_wait_pending.begin();
+           it != map_wait_pending.end(); ++it) {
+        if (seq <= it->second.first)
+          has_empty += (--it->second.second == 0);
+      }
+      if (has_empty)
+        pre_publish_cond.Signal();
     }
-    pre_publish_cond.Signal();
   }
   /// blocks until there are no reserved maps prior to next_osdmap
   void await_reserved_maps() {
     Mutex::Locker l(pre_publish_lock);
     assert(next_osdmap);
-    while (true) {
-      map<epoch_t, unsigned>::const_iterator i = map_reservations.cbegin();
-      if (i == map_reservations.cend() || i->first >= next_osdmap->get_epoch()) {
-	break;
-      } else {
-	pre_publish_cond.Wait(pre_publish_lock);
-      }
+    map_reserved_waiters++;
+    // barrier seq
+    uint64_t cur_seq = map_reserve_seq;
+    uint64_t completed_seq = map_completed_seq;
+    if (cur_seq == completed_seq) {
+      map_reserved_waiters--;
+    } else {
+      assert(cur_seq > completed_seq);
+      uint64_t wait_version = ++map_wait_version;
+      map_wait_pending[wait_version] = make_pair(cur_seq, cur_seq - completed_seq);
+      while (map_wait_pending[wait_version].second)
+        pre_publish_cond.Wait(pre_publish_lock);
+      map_wait_pending.erase(wait_version);
+      map_reserved_waiters--;
+    }
+    if (saved_osdmaps[1]) {
+      std::swap(saved_osdmaps[0], saved_osdmaps[1]);
+      saved_osdmaps[1] = nullptr;
     }
   }
 
@@ -1437,8 +1459,7 @@ public:
 
     Spinlock sent_epoch_lock;
     epoch_t last_sent_epoch;
-    Spinlock received_map_lock;
-    epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
+    std::atomic<epoch_t> received_map_epoch; // largest epoch seen in MOSDMap from here
 
     explicit Session(CephContext *cct) :
       RefCountedObject(cct),
