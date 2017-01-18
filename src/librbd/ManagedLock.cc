@@ -104,7 +104,7 @@ void ManagedLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_cct, 10) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(!is_shutdown_locked());
+  assert(!is_state_shutdown());
   execute_action(ACTION_SHUT_DOWN, on_shut_down);
 }
 
@@ -113,7 +113,7 @@ void ManagedLock<I>::acquire_lock(Context *on_acquired) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    if (is_shutdown_locked()) {
+    if (is_state_shutdown()) {
       r = -ESHUTDOWN;
     } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
@@ -132,7 +132,7 @@ void ManagedLock<I>::try_acquire_lock(Context *on_acquired) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    if (is_shutdown_locked()) {
+    if (is_state_shutdown()) {
       r = -ESHUTDOWN;
     } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
@@ -151,7 +151,7 @@ void ManagedLock<I>::release_lock(Context *on_released) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    if (is_shutdown_locked()) {
+    if (is_state_shutdown()) {
       r = -ESHUTDOWN;
     } else if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
@@ -177,7 +177,7 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
       assert(active_action == ACTION_TRY_LOCK ||
              active_action == ACTION_ACQUIRE_LOCK);
       execute_next_action();
-    } else if (!is_shutdown_locked() &&
+    } else if (!is_state_shutdown() &&
                (m_state == STATE_LOCKED ||
                 m_state == STATE_ACQUIRING ||
                 m_state == STATE_POST_ACQUIRING ||
@@ -358,7 +358,7 @@ void ManagedLock<I>::complete_active_action(State next_state, int r) {
 }
 
 template <typename I>
-bool ManagedLock<I>::is_shutdown_locked() const {
+bool ManagedLock<I>::is_state_shutdown() const {
   assert(m_lock.is_locked());
 
   return ((m_state == STATE_SHUTDOWN) ||
@@ -439,7 +439,8 @@ void ManagedLock<I>::handle_post_acquire_lock(int r) {
   if (r < 0 && m_post_next_state == STATE_LOCKED) {
     // release_lock without calling pre and post handlers
     revert_to_unlock_state(r);
-  } else {
+  } else if (r != -ECANCELED) {
+    // fail the lock request
     complete_active_action(m_post_next_state, r);
   }
 }
@@ -511,7 +512,7 @@ void ManagedLock<I>::handle_reacquire_lock(int r) {
                    << dendl;
     }
 
-    if (!is_shutdown_locked()) {
+    if (!is_state_shutdown()) {
       // queue a release and re-acquire of the lock since cookie cannot
       // be updated on older OSDs
       execute_action(ACTION_RELEASE_LOCK, nullptr);
