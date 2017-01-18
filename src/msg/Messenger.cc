@@ -14,9 +14,10 @@
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 {
+	std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
-  return Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(),
+  return Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(),
 			   std::move(lname), nonce, 0);
 }
 

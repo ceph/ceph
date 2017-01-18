@@ -99,7 +99,7 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-int EventCenter::init(int n, unsigned i, std::string &t)
+int EventCenter::init(int n, unsigned i,const std::string &t)
 {
   // can't init multi times
   assert(nevent == 0);
