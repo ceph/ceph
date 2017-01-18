@@ -5654,6 +5654,41 @@ TEST_P(StoreTest, OnodeSizeTracking) {
 
 }
 
+TEST_P(StoreTest, KVDBHistogramTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  ObjectStore::Sequencer osr("test");
+  int NUM_OBJS = 200;
+  int r = 0;
+  coll_t cid;
+  string base("testobj.");
+  bufferlist a;
+  bufferptr ap(0x1000);
+  memset(ap.c_str(), 'a', 0x1000);
+  a.append(ap);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  for (int i = 0; i < NUM_OBJS; ++i) {
+    ObjectStore::Transaction t;
+    char buf[100];
+    snprintf(buf, sizeof(buf), "%d", i);
+    ghobject_t hoid(hobject_t(sobject_t(base + string(buf), CEPH_NOSNAP)));
+    t.write(cid, hoid, 0, 0x1000, a);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
+  store->generate_db_histogram(f);
+  f->flush(cout);
+  cout << std::endl;
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
