@@ -200,7 +200,7 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 
 void bluestore_extent_ref_map_t::put(
   uint64_t offset, uint32_t length,
-  vector<bluestore_pextent_t> *release)
+  PExtentVector *release)
 {
   auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {

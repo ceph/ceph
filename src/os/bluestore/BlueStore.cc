@@ -1461,9 +1461,9 @@ bool BlueStore::Blob::put_ref(
   Collection *coll,
   uint64_t offset,
   uint64_t length,
-  vector<bluestore_pextent_t> *r)
+  PExtentVector *r)
 {
-  vector<bluestore_pextent_t> logical;
+  PExtentVector logical;
   ref_map.put(offset, length, &logical);
   r->clear();
 
@@ -1521,7 +1521,7 @@ bool BlueStore::Blob::put_ref(
 
     // cut it out of extents
     struct vecbuilder {
-      vector<bluestore_pextent_t> v;
+      PExtentVector v;
       uint64_t invalid = 0;
 
       void add_invalid(uint64_t length) {
@@ -3723,7 +3723,7 @@ int BlueStore::_reconcile_bluefs_freespace()
   return 0;
 }
 
-int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
+int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 {
   int ret = 0;
   assert(bluefs);
@@ -3848,7 +3848,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
 }
 
 void BlueStore::_commit_bluefs_freespace(
-  const vector<bluestore_pextent_t>& bluefs_gift_extents)
+  const PExtentVector& bluefs_gift_extents)
 {
   dout(10) << __func__ << dendl;
   for (auto& p : bluefs_gift_extents) {
@@ -4339,7 +4339,7 @@ static void apply(uint64_t off,
 
 int BlueStore::_fsck_check_extents(
   const ghobject_t& oid,
-  const vector<bluestore_pextent_t>& extents,
+  const PExtentVector& extents,
   bool compressed,
   boost::dynamic_bitset<> &used_blocks,
   store_statfs_t& expected_statfs)
@@ -4717,7 +4717,7 @@ int BlueStore::fsck(bool deep)
 	       << sbi.ref_map << dendl;
 	  ++errors;
 	}
-	vector<bluestore_pextent_t> extents;
+	PExtentVector extents;
 	for (auto &r : shared_blob.ref_map.ref_map) {
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
@@ -5403,7 +5403,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
-      vector<bluestore_pextent_t> pex;
+      PExtentVector pex;
       int r = blob->map(
 	bad,
 	blob->get_csum_chunk_size(),
@@ -6891,7 +6891,7 @@ void BlueStore::_kv_sync_thread()
 	}
       }
 
-      vector<bluestore_pextent_t> bluefs_gift_extents;
+      PExtentVector bluefs_gift_extents;
       if (bluefs) {
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
@@ -8156,7 +8156,7 @@ void BlueStore::_wctx_finish(
     dout(20) << __func__ << " lex_old " << lo << dendl;
     BlobRef b = lo.blob;
     const bluestore_blob_t& blob = b->get_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     if (b->put_ref(c.get(), lo.blob_offset, lo.length, &r)) {
       if (blob.is_compressed()) {
 	txc->statfs_delta.compressed() -= blob.get_compressed_payload_length();
@@ -8169,12 +8169,12 @@ void BlueStore::_wctx_finish(
     if (!r.empty()) {
       dout(20) << __func__ << "  blob release " << r << dendl;
       if (blob.is_shared()) {
-	vector<bluestore_pextent_t> final;
+	PExtentVector final;
 	if (!b->shared_blob->loaded) {
 	  c->load_shared_blob(b->shared_blob);
 	}
 	for (auto e : r) {
-	  vector<bluestore_pextent_t> cur;
+	  PExtentVector cur;
 	  b->shared_blob->shared_blob.ref_map.put(e.offset, e.length, &cur);
 	  final.insert(final.end(), cur.begin(), cur.end());
 	}
