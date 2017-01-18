@@ -88,14 +88,14 @@ class ExtentList {
   AllocExtentVector *m_extents;
   int64_t m_num_extents;
   int64_t m_block_size;
-  uint64_t m_max_alloc_size;
+  int64_t m_max_blocks;
 
 public:
   void init(AllocExtentVector *extents, int64_t block_size, uint64_t max_alloc_size) {
     m_extents = extents;
     m_num_extents = 0;
     m_block_size = block_size;
-    m_max_alloc_size = max_alloc_size;
+    m_max_blocks = max_alloc_size / block_size;
   }
 
   ExtentList(AllocExtentVector *extents, int64_t block_size) {
