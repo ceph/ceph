@@ -24,13 +24,16 @@ public:
                                   const std::string& oid,
                                   const std::string& old_cookie,
                                   const std::string &new_cookie,
+                                  bool exclusive,
                                   Context *on_finish) {
-    return new ReacquireRequest(ioctx, oid, old_cookie, new_cookie, on_finish);
+    return new ReacquireRequest(ioctx, oid, old_cookie, new_cookie, exclusive,
+                                on_finish);
   }
 
   ReacquireRequest(librados::IoCtx& ioctx, const std::string& oid,
                    const std::string& old_cookie,
-                   const std::string &new_cookie, Context *on_finish);
+                   const std::string &new_cookie, bool exclusive,
+                   Context *on_finish);
 
   void send();
 
@@ -52,6 +55,7 @@ private:
   std::string m_oid;
   std::string m_old_cookie;
   std::string m_new_cookie;
+  bool m_exclusive;
   Context *m_on_finish;
 
   void set_cookie();

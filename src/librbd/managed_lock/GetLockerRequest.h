@@ -23,9 +23,9 @@ template <typename ImageCtxT = ImageCtx>
 class GetLockerRequest {
 public:
   static GetLockerRequest* create(librados::IoCtx& ioctx,
-                                  const std::string& oid,
+                                  const std::string& oid, bool exclusive,
                                   Locker *locker, Context *on_finish) {
-    return new GetLockerRequest(ioctx, oid, locker, on_finish);
+    return new GetLockerRequest(ioctx, oid, exclusive, locker, on_finish);
   }
 
   void send();
@@ -34,13 +34,14 @@ private:
   librados::IoCtx &m_ioctx;
   CephContext *m_cct;
   std::string m_oid;
+  bool m_exclusive;
   Locker *m_locker;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
 
   GetLockerRequest(librados::IoCtx& ioctx, const std::string& oid,
-                   Locker *locker, Context *on_finish);
+                   bool exclusive, Locker *locker, Context *on_finish);
 
   void send_get_lockers();
   void handle_get_lockers(int r);

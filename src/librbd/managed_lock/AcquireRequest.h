@@ -31,6 +31,7 @@ public:
   static AcquireRequest* create(librados::IoCtx& ioctx, Watcher *watcher,
                                 ContextWQ *work_queue, const std::string& oid,
                                 const std::string& cookie,
+                                bool exclusive,
                                 bool blacklist_on_break_lock,
                                 uint32_t blacklist_expire_seconds,
                                 Context *on_finish);
@@ -61,7 +62,8 @@ private:
 
   AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                  ContextWQ *work_queue, const std::string& oid,
-                 const std::string& cookie, bool blacklist_on_break_lock,
+                 const std::string& cookie, bool exclusive,
+                 bool blacklist_on_break_lock,
                  uint32_t blacklist_expire_seconds, Context *on_finish);
 
   librados::IoCtx& m_ioctx;
@@ -70,6 +72,7 @@ private:
   ContextWQ *m_work_queue;
   std::string m_oid;
   std::string m_cookie;
+  bool m_exclusive;
   bool m_blacklist_on_break_lock;
   uint32_t m_blacklist_expire_seconds;
   Context *m_on_finish;
