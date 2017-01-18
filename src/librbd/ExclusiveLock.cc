@@ -30,8 +30,7 @@ ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
           image_ctx.blacklist_on_break_lock,
           image_ctx.blacklist_expire_seconds),
-    m_image_ctx(image_ctx), m_pre_post_callback(nullptr),
-    m_shutting_down(false) {
+    m_image_ctx(image_ctx) {
   Mutex::Locker locker(ML<I>::m_lock);
   ML<I>::set_state_uninitialized();
 }
@@ -249,32 +248,11 @@ void ExclusiveLock<I>::pre_release_lock_handler(bool shutting_down,
   ldout(m_image_ctx.cct, 10) << dendl;
   Mutex::Locker locker(ML<I>::m_lock);
 
-  m_shutting_down = shutting_down;
-
-  using EL = ExclusiveLock<I>;
-  PreReleaseRequest<I> *req = PreReleaseRequest<I>::create(m_image_ctx,
-      util::create_context_callback<EL, &EL::handle_pre_releasing_lock>(this),
-      on_finish, shutting_down);
-
+  PreReleaseRequest<I> *req = PreReleaseRequest<I>::create(
+    m_image_ctx, shutting_down, on_finish);
   m_image_ctx.op_work_queue->queue(new FunctionContext([req](int r) {
     req->send();
   }));
-}
-
-template <typename I>
-void ExclusiveLock<I>::handle_pre_releasing_lock(int r) {
-  ldout(m_image_ctx.cct, 10) << dendl;
-
-  Mutex::Locker locker(ML<I>::m_lock);
-
-  assert(r == 0);
-
-  // all IO and ops should be blocked/canceled by this point
-  if (!m_shutting_down) {
-    ML<I>::set_state_releasing();
-  } else {
-    ML<I>::set_state_shutting_down();
-  }
 }
 
 template <typename I>

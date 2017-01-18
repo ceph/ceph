@@ -92,8 +92,7 @@ private:
   };
 
   ImageCtxT& m_image_ctx;
-  Context *m_pre_post_callback;
-  bool m_shutting_down;
+  Context *m_pre_post_callback = nullptr;
 
   uint32_t m_request_blocked_count = 0;
   int m_request_blocked_ret_val = 0;
@@ -103,7 +102,6 @@ private:
   void handle_init_complete();
   void handle_post_acquiring_lock(int r);
   void handle_post_acquired_lock(int r);
-  void handle_pre_releasing_lock(int r);
 };
 
 } // namespace librbd
