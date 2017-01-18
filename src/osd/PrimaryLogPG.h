@@ -345,6 +345,8 @@ public:
   bool try_lock_for_read(
     const hobject_t &hoid,
     ObcLockManager &manager) override {
+    if (is_missing_object(hoid))
+      return false;
     auto obc = get_object_context(hoid, false, nullptr);
     if (!obc)
       return false;
