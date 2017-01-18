@@ -423,6 +423,9 @@ set(HAVE_LIBROCKSDB 1)
 # -lz link into kv
 find_package(ZLIB REQUIRED)
 
+#option for EventTrace
+option(WITH_EVENTTRACE "Event tracing support" OFF)
+
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
