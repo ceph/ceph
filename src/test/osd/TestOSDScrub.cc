@@ -36,12 +36,13 @@ public:
       int id,
       Messenger *internal,
       Messenger *external,
-      Messenger *hb_client,
+      Messenger *hb_client_front,
+	  Messenger *hb_client_back,
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev) :
-      OSD(cct_, store_, id, internal, external, hb_client, hb_front_server, hb_back_server, osdc_messenger, mc, dev, jdev)
+      OSD(cct_, store_, id, internal, external, hb_client_front, hb_client_back, hb_front_server, hb_back_server, osdc_messenger, mc, dev, jdev)
   {
   }
 
@@ -50,20 +51,29 @@ public:
   }
 };
 
+std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->ms_type : g_conf->ms_cluster_type;
 TEST(TestOSDScrub, scrub_time_permit) {
   ObjectStore *store = ObjectStore::create(g_ceph_context,
              g_conf->osd_objectstore,
              g_conf->osd_data,
              g_conf->osd_journal);
-  Messenger *ms = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_public = Messenger::create(g_ceph_context, public_msgr_type,
 				    entity_name_t::OSD(0), "make_checker",
 				    getpid(), 0);
-  ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  ms->set_default_policy(Messenger::Policy::stateless_server(0, 0));
-  ms->bind(g_conf->public_addr);
+  Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msgr_type,
+				    entity_name_t::OSD(0), "make_checker",
+				    getpid(), 0);
+  ms_public->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_public->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+  ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+  ms_public->bind(g_conf->public_addr);
+  ms_cluster->bind(g_conf->cluster_addr);
   MonClient mc(g_ceph_context);
   mc.build_initial_monmap();
-  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, &mc, "", "");
+  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms_cluster, ms_public, ms_public,
+		  	  	  	  ms_cluster, ms_public, ms_cluster, ms_public, &mc, "", "");
 
   g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "0");
   g_ceph_context->_conf->set_val("osd_scrub_end_hour", "24");
