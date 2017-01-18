@@ -316,7 +316,7 @@ class TestDevicePartitionCrypt(Base):
             partition.map()
             assert m['_dmcrypt_map'].called
             m['get_dmcrypt_key'].assert_called_with(
-                uuid, '/etc/ceph/dmcrypt-keys', True)
+                uuid, '/etc/ceph/dmcrypt-keys', True, 'ceph')
 
 
 class TestCryptHelpers(Base):
