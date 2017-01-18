@@ -4117,15 +4117,21 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
 				     &extents);
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> os/bluestore/BlueFS: handle failure to reclaim blocks without crashing
       if (r < 0) {
 	derr << __func__ << " failed to reclaim space from bluefs"
 	     << dendl;
 	break;
       }
+<<<<<<< HEAD
 =======
       assert(r >= 0);
 
 >>>>>>> os/bluestore/BlueFS: fix reclaim_blocks
+=======
+>>>>>>> os/bluestore/BlueFS: handle failure to reclaim blocks without crashing
       for (auto e : extents) {
 	bluefs_extents.erase(e.offset, e.length);
 	bluefs_extents_reclaiming.insert(e.offset, e.length);

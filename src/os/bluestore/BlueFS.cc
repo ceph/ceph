@@ -203,9 +203,14 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 >>>>>>> os/bluestore: drop useless count arg to allocate
   int64_t got = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
 				    extents);
-  assert(got > 0);
-  if (got < (int64_t)want)
-    alloc[id]->unreserve(want - got);
+  if (got < (int64_t)want) {
+    alloc[id]->unreserve(want - MAX(0, got));
+  }
+  if (got <= 0) {
+    derr << __func__ << " failed to allocate space to return to bluestore"
+	 << dendl;
+    return got;
+  }
 
 <<<<<<< HEAD
   for (int i = 0; i < count; i++) {
