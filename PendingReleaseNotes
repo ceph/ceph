@@ -1,12 +1,23 @@
 12.0.0
 ------
 
- * The omap_get_keys and omap_get_vals librados functions have been deprecated
-   in favor of omap_get_vals2 and omap_get_keys2.  The new methods include an
-   output argument indicating whether there are additional keys left to fetch.
-   Previously this had to be inferred from the requested key count vs the
-   number of keys returned, but this breaks with new OSD-side limits on the
-   number of keys or bytes that can be returned by a single omap request.  These
-   limits were introduced by kraken but were effectively disabled (by setting a
-   very large limit of 1 GB) because users of the newly deprecated interface
-   cannot tell whether they should fetch more keys or not.
+ * Some varients of the omap_get_keys and omap_get_vals librados
+   functions have been deprecated in favor of omap_get_vals2 and
+   omap_get_keys2.  The new methods include an output argument
+   indicating whether there are additional keys left to fetch.
+   Previously this had to be inferred from the requested key count vs
+   the number of keys returned, but this breaks with new OSD-side
+   limits on the number of keys or bytes that can be returned by a
+   single omap request.  These limits were introduced by kraken but
+   are effectively disabled by default (by setting a very large limit
+   of 1 GB) because users of the newly deprecated interface cannot
+   tell whether they should fetch more keys or not.  In the case of
+   the standalone calls in the C++ interface
+   (IoCtx::get_omap_{keys,vals}), librados has been updated to loop on
+   the client side to provide a correct result via multiple calls to
+   the OSD.  In the case of the methods used for building
+   multi-operation transactions, however, client-side looping is not
+   practical, and the methods have been deprecated.  Note that use of
+   either the IoCtx methods on older librados versions or the
+   deprecated methods on any version of librados will lead to
+   incomplete results if/when the new OSD limits are enabled.
