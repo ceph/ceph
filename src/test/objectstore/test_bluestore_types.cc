@@ -29,6 +29,7 @@ TEST(bluestore, sizeof) {
   P(BlueStore::Buffer);
   P(bluestore_onode_t);
   P(bluestore_blob_t);
+  P(bluestore_blob_t::extents);
   P(bluestore_extent_ref_map_t);
   P(bluestore_extent_ref_map_t::record_t);
   P(std::atomic_int);
@@ -36,6 +37,7 @@ TEST(bluestore, sizeof) {
   P(boost::intrusive::set_base_hook<>);
   P(boost::intrusive::unordered_set_base_hook<>);
   P(bufferlist);
+  P(bufferptr);
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t,uint64_t>) << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char,char>) << std::endl;
 }
@@ -115,7 +117,7 @@ TEST(bluestore_extent_ref_map_t, get)
 TEST(bluestore_extent_ref_map_t, put)
 {
   bluestore_extent_ref_map_t m;
-  vector<bluestore_pextent_t> r;
+  PExtentVector r;
   m.get(10, 30);
   m.put(10, 30, &r);
   cout << m << " " << r << std::endl;
@@ -331,7 +333,7 @@ TEST(Blob, put_ref)
     b.get_ref(0, 0x1200);
     b.get_ref(0xae00, 0x4200);
     cout << b << std::endl;
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
 
     b.put_ref(&coll, 0, 0x1200, &r);
     cout << " r " << r << std::endl;
@@ -354,7 +356,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(0, mas*2));
     B.get_ref(0, mas*2);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
@@ -374,7 +376,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(123, mas*2));
     B.get_ref(0, mas*2);
     B.put_ref(&coll, 0, mas, &r);
@@ -395,7 +397,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
@@ -430,7 +432,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
@@ -468,7 +470,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 6));
     B.get_ref(0, mas*6);
     B.put_ref(&coll, mas, mas, &r);
@@ -497,7 +499,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -532,7 +534,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -582,7 +584,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -632,7 +634,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 8));
     B.get_ref(0, mas*8);
     B.put_ref(&coll, 0, mas, &r);
@@ -670,7 +672,7 @@ TEST(Blob, put_ref)
     B.shared_blob = new BlueStore::SharedBlob(nullptr);
     B.shared_blob->get();  // hack to avoid dtor from running
     bluestore_blob_t& b = B.dirty_blob();
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
     b.init_csum(Checksummer::CSUM_CRC32C, 14, mas * 4);
     B.get_ref(0, mas*4);
@@ -697,7 +699,7 @@ TEST(Blob, put_ref)
     b.init_csum(Checksummer::CSUM_CRC32C, 12, 0x1e000);
 
     cout << "before: " << B << std::endl;
-    vector<bluestore_pextent_t> r;
+    PExtentVector r;
     B.put_ref(&coll, 0x1800, 0x2000, &r);
     cout << "after: " << B << std::endl;
     cout << "r " << r << std::endl;
