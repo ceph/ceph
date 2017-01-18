@@ -26,3 +26,6 @@ docs/teuthology.openstack.rst
 docs/teuthology.openstack.test.rst
 docs/teuthology.orchestra.rst
 docs/teuthology.task.tests.rst
+
+# PyCharm
+.idea
