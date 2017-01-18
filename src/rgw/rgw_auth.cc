@@ -104,47 +104,123 @@ static inline const std::string make_spec_item(const std::string& tenant,
 }
 
 
+static inline std::pair<bool, rgw::auth::Engine::result_t>
+strategy_handle_rejected(rgw::auth::Engine::result_t&& engine_result,
+                         const rgw::auth::Strategy::Control policy,
+                         rgw::auth::Engine::result_t&& strategy_result)
+{
+  using Control = rgw::auth::Strategy::Control;
+  switch (policy) {
+    case Control::REQUISITE:
+      /* Don't try next. */
+      return std::make_pair(false, std::move(engine_result));
+
+    case Control::SUFFICIENT:
+      /* Don't try next. */
+      return std::make_pair(false, std::move(engine_result));
+
+    case Control::FALLBACK:
+      /* Don't try next. */
+      return std::make_pair(false, std::move(strategy_result));
+
+    default:
+      /* Huh, memory corruption? */
+      abort();
+  }
+}
+
+static inline std::pair<bool, rgw::auth::Engine::result_t>
+strategy_handle_denied(rgw::auth::Engine::result_t&& engine_result,
+                       const rgw::auth::Strategy::Control policy,
+                       rgw::auth::Engine::result_t&& strategy_result)
+{
+  using Control = rgw::auth::Strategy::Control;
+  switch (policy) {
+    case Control::REQUISITE:
+      /* Don't try next. */
+      return std::make_pair(false, std::move(engine_result));
+
+    case Control::SUFFICIENT:
+      /* Just try next. */
+      return std::make_pair(true, std::move(engine_result));
+
+    case Control::FALLBACK:
+      return std::make_pair(true, std::move(strategy_result));
+
+    default:
+      /* Huh, memory corruption? */
+      abort();
+  }
+}
+
+static inline std::pair<bool, rgw::auth::Engine::result_t>
+strategy_handle_granted(rgw::auth::Engine::result_t&& engine_result,
+                        const rgw::auth::Strategy::Control policy,
+                        rgw::auth::Engine::result_t&& strategy_result)
+{
+  using Control = rgw::auth::Strategy::Control;
+  switch (policy) {
+    case Control::REQUISITE:
+      /* Try next. */
+      return std::make_pair(true, std::move(engine_result));
+
+    case Control::SUFFICIENT:
+      /* Don't try next. */
+      return std::make_pair(false, std::move(engine_result));
+
+    case Control::FALLBACK:
+      /* Don't try next. */
+      return std::make_pair(false, std::move(engine_result));
+
+    default:
+      /* Huh, memory corruption? */
+      abort();
+  }
+}
+
 rgw::auth::Engine::result_t
 rgw::auth::Strategy::authenticate(const req_state* const s) const
 {
-  int previous_error = 0;
+  result_t strategy_result = result_t::deny();
+
   for (const stack_item_t& kv : auth_stack) {
     const rgw::auth::Engine& engine = kv.first;
     const auto& policy = kv.second;
 
-    rgw::auth::Engine::result_t res;
+    result_t engine_result = result_t::deny();
     try {
-      res = engine.authenticate(s);
+      engine_result = engine.authenticate(s);
     } catch (const int err) {
-      previous_error = err;
+      engine_result = result_t::deny(err);
     }
 
-    const auto& applier = res.first;
-    if (! applier) {
-      /* The current auth engine denied authenticate the request returning
-       * a null rgw::auth::Applier. As it has been included into strategy
-       * as an obligatory one, we quite immediately. */
-      switch (policy) {
-        case Control::REQUISITE:
-          goto auth_fail;
-        case Control::SUFFICIENT:
-          /* Just try next. */
-          continue;
-        case Control::FALLBACK:
-          throw previous_error;
-        default:
-          /* Huh, memory corruption? */
-          abort();
-      }
-    } else {
-      /* Success. */
-      return std::move(res);
+    bool try_next = true;
+    switch (engine_result.get_status()) {
+      case result_t::Status::REJECTED:
+        std::tie(try_next, strategy_result) = \
+          strategy_handle_rejected(std::move(engine_result), policy,
+                                   std::move(strategy_result));
+          break;
+      case result_t::Status::DENIED:
+        std::tie(try_next, strategy_result) = \
+          strategy_handle_denied(std::move(engine_result), policy,
+                                 std::move(strategy_result));
+          break;
+      case result_t::Status::GRANTED:
+        std::tie(try_next, strategy_result) = \
+          strategy_handle_granted(std::move(engine_result), policy,
+                                  std::move(strategy_result));
+          break;
+      default:
+        abort();
+    }
+
+    if (! try_next) {
+      break;
     }
   }
 
-auth_fail:
-  /* Returning nullptr as the rgw::auth::Applier means access denied. */
-  return Engine::result_t(nullptr, nullptr);
+  return strategy_result;
 }
 
 void
@@ -332,7 +408,7 @@ rgw::auth::Engine::result_t
 rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
 {
   if (! is_applicable()) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   } else {
     RGWUserInfo user_info;
     rgw_get_anon_user(user_info);
@@ -340,6 +416,6 @@ rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
     // FIXME: over 80 columns
     auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                              rgw::auth::LocalApplier::NO_SUBUSER);
-    return std::make_pair(std::move(apl), nullptr);
+    return result_t::grant(std::move(apl));
   }
 }

@@ -194,14 +194,14 @@ TempURLEngine::result_t
 TempURLEngine::authenticate(const req_state* const s) const
 {
   if (! is_applicable(s)) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   const string& temp_url_sig = s->info.args.get("temp_url_sig");
   const string& temp_url_expires = s->info.args.get("temp_url_expires");
 
   if (temp_url_sig.empty() || temp_url_expires.empty()) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   RGWUserInfo owner_info;
@@ -209,17 +209,17 @@ TempURLEngine::authenticate(const req_state* const s) const
     get_owner_info(s, owner_info);
   } catch (...) {
     ldout(cct, 5) << "cannot get user_info of account's owner" << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::reject();
   }
 
   if (owner_info.temp_url_keys.empty()) {
     ldout(cct, 5) << "user does not have temp url key set, aborting" << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::reject();
   }
 
   if (is_expired(temp_url_expires)) {
     ldout(cct, 5) << "temp url link expired" << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::reject();
   }
 
   /* We need to verify two paths because of compliance with Swift, Tempest
@@ -270,7 +270,7 @@ TempURLEngine::authenticate(const req_state* const s) const
 
         if (sig_helper.is_equal_to(temp_url_sig)) {
           auto apl = apl_factory->create_apl_turl(cct, s, owner_info);
-          return std::make_pair(std::move(apl), nullptr);
+          return result_t::grant(std::move(apl));
         } else {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
                             << " != " << temp_url_sig  << dendl;
@@ -279,7 +279,7 @@ TempURLEngine::authenticate(const req_state* const s) const
     }
   }
 
-  return std::make_pair(nullptr, nullptr);
+  return result_t::reject();
 }
 
 
@@ -300,7 +300,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
                                   const req_state* const s) const
 {
   if (! is_applicable(token)) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   std::string auth_url = g_conf->rgw_swift_auth_url;
@@ -328,17 +328,17 @@ ExternalTokenEngine::authenticate(const std::string& token,
                 ",", swift_groups);
 
     if (0 == swift_groups.size()) {
-      return std::make_pair(nullptr, nullptr);
+      return result_t::deny();
     } else {
       swift_user = std::move(swift_groups[0]);
     }
   } catch (std::out_of_range) {
     /* The X-Auth-Groups header isn't present in the response. */
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   if (swift_user.empty()) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   ldout(cct, 10) << "swift user=" << swift_user << dendl;
@@ -352,7 +352,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
 
   auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
                                            extract_swift_subuser(swift_user));
-  return std::make_pair(std::move(apl), nullptr);
+  return result_t::grant(std::move(apl));
 }
 
 static int build_token(const string& swift_user,
@@ -416,7 +416,7 @@ SignedTokenEngine::authenticate(const std::string& token,
                                 const req_state* const s) const
 {
   if (! is_applicable(token)) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   /* Effective token string is the part after the prefix. */
@@ -458,7 +458,7 @@ SignedTokenEngine::authenticate(const std::string& token,
     ldout(cct, 0) << "NOTICE: old timed out token was used now=" << now
 	          << " token.expiration=" << expiration
                   << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   RGWUserInfo user_info;
@@ -471,7 +471,7 @@ SignedTokenEngine::authenticate(const std::string& token,
 
   const auto siter = user_info.swift_keys.find(swift_user);
   if (siter == std::end(user_info.swift_keys)) {
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   const auto swift_key = siter->second;
@@ -487,7 +487,7 @@ SignedTokenEngine::authenticate(const std::string& token,
                   << " tok_bl.length()=" << tok_bl.length()
 	          << " local_tok_bl.length()=" << local_tok_bl.length()
                   << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
@@ -498,12 +498,12 @@ SignedTokenEngine::authenticate(const std::string& token,
                local_tok_bl.length(), buf);
 
     ldout(cct, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
-    return std::make_pair(nullptr, nullptr);
+    return result_t::deny();
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                            extract_swift_subuser(swift_user));
-  return std::make_pair(std::move(apl), nullptr);
+  return result_t::grant(std::move(apl));
 }
 
 } /* namespace swift */
