@@ -39,6 +39,8 @@
 
 #include "bluestore_types.h"
 #include "BlockDevice.h"
+#include "common/EventTrace.h"
+
 class Allocator;
 class FreelistManager;
 class BlueFS;
@@ -1196,10 +1198,36 @@ public:
       return "???";
     }
 
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+    const char *get_state_latency_name(int state) {
+      switch (state) {
+      case l_bluestore_state_prepare_lat: return "prepare";
+      case l_bluestore_state_aio_wait_lat: return "aio_wait";
+      case l_bluestore_state_io_done_lat: return "io_done";
+      case l_bluestore_state_kv_queued_lat: return "kv_queued";
+      case l_bluestore_state_kv_committing_lat: return "kv_committing";
+      case l_bluestore_state_kv_done_lat: return "kv_done";
+      case l_bluestore_state_wal_queued_lat: return "wal_queued";
+      case l_bluestore_state_wal_applying_lat: return "wal_applying";
+      case l_bluestore_state_wal_aio_wait_lat: return "wal_aio_wait";
+      case l_bluestore_state_wal_cleanup_lat: return "wal_cleanup";
+      case l_bluestore_state_finishing_lat: return "finishing";
+      case l_bluestore_state_done_lat: return "done";
+      }
+      return "???";
+    }
+#endif
+
     void log_state_latency(PerfCounters *logger, int state) {
       utime_t lat, now = ceph_clock_now();
       lat = now - last_stamp;
       logger->tinc(state, lat);
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+      if (state >= l_bluestore_state_prepare_lat && state <= l_bluestore_state_done_lat) {
+        double usecs = (now.to_nsec()-last_stamp.to_nsec())/1000;
+        OID_ELAPSED("", usecs, get_state_latency_name(state));
+      }
+#endif
       last_stamp = now;
     }
 

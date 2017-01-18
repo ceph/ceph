@@ -47,6 +47,7 @@
 #include "RadosClient.h"
 
 #include "include/assert.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix

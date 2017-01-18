@@ -29,6 +29,7 @@
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
+#include "common/EventTrace.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -5197,6 +5198,7 @@ int BlueStore::_do_read(
   bufferlist& bl,
   uint32_t op_flags)
 {
+  FUNCTRACE();
   boost::intrusive::set<Extent>::iterator ep, eend;
   int r = 0;
 
@@ -7117,6 +7119,7 @@ int BlueStore::queue_transactions(
     TrackedOpRef op,
     ThreadPool::TPHandle *handle)
 {
+  FUNCTRACE();
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;

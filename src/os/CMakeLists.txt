@@ -112,3 +112,7 @@ if(WITH_SPDK)
     list(APPEND SPDK_LIBRARIES spdk_${lib})
   endforeach()
 endif(WITH_SPDK)
+
+if(WITH_LTTNG AND WITH_EVENTTRACE)
+  add_dependencies(os eventtrace_tp)
+endif()
