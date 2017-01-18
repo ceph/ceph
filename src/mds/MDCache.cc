@@ -3513,6 +3513,8 @@ void MDCache::disambiguate_imports()
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
       cancel_ambiguous_import(dir);
 
+      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
+
       // subtree may have been swallowed by another node claiming dir
       // as their own.
       CDir *root = get_subtree_root(dir);
@@ -3520,8 +3522,6 @@ void MDCache::disambiguate_imports()
 	dout(10) << "  subtree root is " << *root << dendl;
       assert(root->dir_auth.first != mds->get_nodeid());  // no us!
       try_trim_non_auth_subtree(root);
-
-      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
     } else {
       dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
       finish_ambiguous_import(q->first);
