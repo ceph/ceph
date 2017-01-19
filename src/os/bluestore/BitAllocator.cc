@@ -685,7 +685,7 @@ bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
-  if (child->is_exhausted()) {
+  if (child->is_exhausted(required)) {
     child->unlock();
     return false;
   }
@@ -705,9 +705,9 @@ void BitMapAreaIN::child_unlock(BitMapArea *child)
   child->unlock();
 }
 
-bool BitMapAreaIN::is_exhausted()
+bool BitMapAreaIN::is_exhausted(int64_t required)
 {
-  return get_used_blocks() == size();
+  return ((get_used_blocks() + required) > size());
 }
 
 int64_t BitMapAreaIN::add_used_blocks(int64_t blks)
@@ -806,7 +806,7 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
         m_child_list, hint / m_child_size_blocks, wrap);
 
   while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1)) {
+    if (!child_check_n_lock(child, min_alloc)) {
       hint = 0;
       continue;
     }
@@ -1037,7 +1037,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
    * so there is no business to go through vptr and thus prohibit
    * compiler to inline the stuff. Consult BitMapAreaLeaf::init. */
   while ((child = static_cast<BitMapZone*>(iter.next()))) {
-    if (!child_check_n_lock(child, 1, false)) {
+    if (!child_check_n_lock(child, min_alloc, false)) {
       hint = 0;
       continue;
     }
@@ -1250,7 +1250,7 @@ bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
-  if (child->is_exhausted()) {
+  if (child->is_exhausted(required)) {
     child->unlock();
     return false;
   }

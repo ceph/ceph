@@ -211,7 +211,7 @@ public:
   static int get_level(CephContext* cct, int64_t total_blocks);
   static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
-  virtual bool is_exhausted() = 0;
+  virtual bool is_exhausted(int64_t required) = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
       ceph_abort();
       return true;
@@ -364,7 +364,7 @@ public:
   static void incr_count() { count++;}
   static int64_t get_total_blocks() {return total_blocks;}
   bool is_allocated(int64_t start_block, int64_t num_blocks);
-  bool is_exhausted();
+  bool is_exhausted(int64_t required);
   void reset_marker();
 
   int64_t sub_used_blocks(int64_t num_blocks);
@@ -412,8 +412,8 @@ protected:
   BitMapAreaList *m_child_list;
 
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks);
-  virtual bool is_exhausted();
-
+  virtual bool is_exhausted(int64_t required);
+  
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
     ceph_abort();
     return false;
