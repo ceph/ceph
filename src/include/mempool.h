@@ -139,15 +139,17 @@ namespace mempool {
 // define memory pools
 
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
-  f(unittest_1)			      \
-  f(unittest_2)			      \
-  f(buffer_meta)		      \
-  f(buffer_data)		      \
-  f(osd)			      \
+  f(bloom_filter)		      \
   f(bluestore_meta_onode)	      \
   f(bluestore_meta_other)	      \
   f(bluestore_alloc)		      \
-  f(bluefs)
+  f(bluefs)			      \
+  f(buffer_meta)		      \
+  f(buffer_data)		      \
+  f(osd)			      \
+  f(unittest_1)			      \
+  f(unittest_2)
+
 
 // give them integer ids
 #define P(x) mempool_##x,
