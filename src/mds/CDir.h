@@ -397,6 +397,7 @@ protected:
   friend class CDirExport;
   friend class C_IO_Dir_TMAP_Fetched;
   friend class C_IO_Dir_OMAP_Fetched;
+  friend class C_IO_Dir_OMAP_FetchedMore;
   friend class C_IO_Dir_Committed;
 
   std::unique_ptr<bloom_filter> bloom;
@@ -613,6 +614,9 @@ protected:
   compact_set<string> wanted_items;
 
   void _omap_fetch(MDSInternalContextBase *fin, const std::set<dentry_key_t>& keys);
+  void _omap_fetch_more(
+    bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+    MDSInternalContextBase *fin);
   CDentry *_load_dentry(
       const std::string &key,
       const std::string &dname,
