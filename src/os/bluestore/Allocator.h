@@ -35,28 +35,17 @@ public:
    * Apart from that extents can vary between these lower and higher limits according
    * to free block search algorithm and availability of contiguous space.
    */
-  virtual int allocate(uint64_t want_size, uint64_t alloc_unit,
-                       uint64_t max_alloc_size, int64_t hint,
-                       AllocExtentVector *extents, int *count, uint64_t *ret_len) = 0;
+  virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
+			   uint64_t max_alloc_size, int64_t hint,
+			   AllocExtentVector *extents) = 0;
 
   int allocate(uint64_t want_size, uint64_t alloc_unit,
-               int64_t hint, AllocExtentVector *extents, int *count, uint64_t *ret_len) {
-    return allocate(want_size, alloc_unit, want_size, hint, extents, count, ret_len);
+               int64_t hint, AllocExtentVector *extents) {
+    return allocate(want_size, alloc_unit, want_size, hint, extents);
   }
 
   virtual int release(
     uint64_t offset, uint64_t length) = 0;
-
-  virtual int release_extents(AllocExtentVector *extents, int count) {
-    int res = 0;
-      for (int i = 0; i < count; i++) {
-        res = release((*extents)[i].offset, (*extents)[i].length);
-        if (res != 0) {
-	  break;
-        }
-      }
-    return res;
-  }
 
   virtual void dump() = 0;
 
