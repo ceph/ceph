@@ -21,8 +21,8 @@ void ExtentList::add_extents(int64_t start, int64_t count) {
   AllocExtent *last_extent = NULL;
   bool can_merge = false;
 
-  if (m_num_extents > 0) {
-    last_extent = &((*m_extents)[m_num_extents - 1]);
+  if (!m_extents->empty()) {
+    last_extent = &(m_extents->back());
     uint64_t last_offset = last_extent->end() / m_block_size;
     uint32_t last_length = last_extent->length / m_block_size;
     if ((last_offset == (uint64_t) start) &&
@@ -34,11 +34,9 @@ void ExtentList::add_extents(int64_t start, int64_t count) {
   if (can_merge) {
     last_extent->length += (count * m_block_size);
   } else {
-    (*m_extents)[m_num_extents].offset = start * m_block_size;
-    (*m_extents)[m_num_extents].length = count * m_block_size;
-    m_num_extents++;
+    m_extents->emplace_back(AllocExtent(start * m_block_size,
+					count * m_block_size));
   }
-  assert((int64_t) m_extents->size() >= m_num_extents);
 }
 
 // bluestore_bdev_label_t
