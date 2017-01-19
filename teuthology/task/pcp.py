@@ -19,6 +19,11 @@ from . import Task
 log = logging.getLogger(__name__)
 
 
+# Because PCP output is nonessential, set a timeout to avoid stalling
+# tests if the server does not respond promptly.
+GRAPHITE_DOWNLOAD_TIMEOUT = 60
+
+
 class PCPDataSource(object):
     def __init__(self, hosts, time_from, time_until='now'):
         self.hosts = hosts
@@ -157,7 +162,7 @@ class GraphiteGrapher(PCPGrapher):
                 self.dest_dir,
                 filename,
             )
-            resp = requests.get(url)
+            resp = requests.get(url, timeout=GRAPHITE_DOWNLOAD_TIMEOUT)
             if not resp.ok:
                 log.warn(
                     "Graph download failed with error %s %s: %s",
@@ -313,7 +318,7 @@ class PCP(Task):
             try:
                 self.graphite.download_graphs()
                 self.graphite.write_html(mode='static')
-            except requests.ConnectionError:
+            except (requests.ConnectionError, requests.ReadTimeout):
                 log.exception("Downloading graphs failed!")
                 self.graphite.write_html()
         if self.fetch_archives:
