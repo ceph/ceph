@@ -1699,11 +1699,22 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     }
     //schedule DB update for dirty shards
     auto it = dirty_shards.begin();
+    static uint32_t num_dirty_more_than_one_count;
+    static uint32_t num_dirty_one_shard_count;
+    uint32_t dirty_cnt =0;
     while (it != dirty_shards.end()) {
       string key;
       get_extent_shard_key(onode->key, it->offset, &key);
       t->set(PREFIX_OBJ, key, it->bl);
       ++it;
+      ++dirty_cnt;
+      if (dirty_cnt > 1) {
+        ++num_dirty_more_than_one_count;
+        dout(1) << __func__ << " Total shard count > 1 per io = " << num_dirty_more_than_one_count << dendl;
+      } else {
+        ++num_dirty_one_shard_count;
+        dout(1) << __func__ << " Total one shard count per io = " << num_dirty_one_shard_count << dendl;
+      }
     }
   }
   return false;
@@ -1963,6 +1974,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   uint64_t pos = 0;
   uint64_t prev_len = 0;
   unsigned n = 0;
+  //dout(1) << __func__ << " num = " << num;
   while (!p.end()) {
     Extent *le = new Extent();
     uint64_t blobid;
@@ -2098,12 +2110,16 @@ void BlueStore::ExtentMap::fault_range(
 	     << std::dec << " for " << onode->oid << dendl;
 	assert(r >= 0);
       }
+      if (!g_conf->bluestore_skip_2_for_dbg) {
       decode_some(v);
+      }
       p->loaded = true;
       dout(20) << __func__ << " open shard 0x" << std::hex << p->offset
 	       << std::dec << " (" << v.length() << " bytes)" << dendl;
       assert(p->dirty == false);
+      if (!g_conf->bluestore_skip_2_for_dbg) { 
       assert(v.length() == p->shard_info->bytes);
+      }
     }
     ++start;
   }
@@ -6371,7 +6387,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       {
         uint32_t shard_no = txc->osr->parent->shard_hint.hash_to_shard(
                             kv_sync_thread_list.size());
-        dout(1) << __func__ << " Assigned IO shard Q = " << shard_no << dendl;
+        dout(2) << __func__ << " Assigned IO shard Q = " << shard_no << dendl;
         kv_sync_shard* kv_shard = kv_sync_shard_list[shard_no];     
 	std::lock_guard<std::mutex> l(kv_shard->kv_lock_shard);
 	kv_shard->kv_queue_shard.push_back(txc);
@@ -6916,7 +6932,7 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
       deque<TransContext*> kv_submitting;
       deque<TransContext*> kv_committing_local;
       deque<TransContext*> wal_cleaning;
-      dout(1) << __func__ << " committing " << kv_shard->kv_queue_shard.size()
+      dout(2) << __func__ << " committing " << kv_shard->kv_queue_shard.size()
                << " submitting " << kv_shard->kv_queue_unsubmitted_shard.size()
                << " cleaning " << kv_shard->wal_cleanup_queue_shard.size() << dendl;
        
@@ -7051,8 +7067,10 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
         assert(txc->state == TransContext::STATE_KV_QUEUED);
         _txc_finalize_kv(txc, txc->t);
         txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+        if (!g_conf->bluestore_skip_db_write_for_dbg) {
         int r = db->submit_transaction(txc->t);
         assert(r == 0);
+        }
         --txc->osr->kv_committing_serially;
         txc->state = TransContext::STATE_KV_SUBMITTED;
       }
@@ -7088,12 +7106,16 @@ void BlueStore::_kv_sync_thread(uint32_t tid)
         // cleanup the wal
         string key;
         get_wal_key(wt.seq, &key);
-        synct->rm_single_key(PREFIX_WAL, key);
+        if (!g_conf->bluestore_skip_wal_for_dbg) {
+          synct->rm_single_key(PREFIX_WAL, key);
+        }
       }
 
       // submit synct synchronously (block and wait for it to commit)
+      if (!g_conf->bluestore_skip_db_write_for_dbg) {
       int r = db->submit_transaction_sync(synct);
       assert(r == 0);
+      }
 
       if (new_nid_max) {
         nid_max = new_nid_max;
@@ -7203,7 +7225,7 @@ int BlueStore::_wal_finish(TransContext *txc)
   txc->osr->qcond.notify_all();
   uint32_t shard_no = txc->osr->parent->shard_hint.hash_to_shard(
                                         kv_sync_thread_list.size());
-  dout(1) << __func__ << " Assigned IO shard Q = " << shard_no << dendl;
+  dout(2) << __func__ << " Assigned IO shard Q = " << shard_no << dendl;
   kv_sync_shard* kv_shard = kv_sync_shard_list[shard_no];
   std::lock_guard<std::mutex> l(kv_shard->kv_lock_shard);
 
@@ -7314,6 +7336,12 @@ int BlueStore::queue_transactions(
   txc->onreadable_sync = onreadable_sync;
   txc->oncommit = ondisk;
 
+  if (g_conf->bluestore_skip_1_for_dbg) {
+    txc->state = TransContext::STATE_KV_SUBMITTED;
+    _txc_state_proc(txc);
+    return 0;
+  }
+
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     (*p).set_osr(osr);
     txc->ops += (*p).get_num_ops();
@@ -7322,6 +7350,12 @@ int BlueStore::queue_transactions(
   }
 
   _txc_write_nodes(txc, txc->t);
+
+  if (g_conf->bluestore_skip_2_for_dbg) {
+    //txc->state = TransContext::STATE_KV_SUBMITTED;
+    _txc_state_proc(txc);
+    return 0;
+  }
 
   // journal wal items
   if (txc->wal_txn) {
@@ -7334,7 +7368,9 @@ int BlueStore::queue_transactions(
     ::encode(*txc->wal_txn, bl);
     string key;
     get_wal_key(txc->wal_txn->seq, &key);
-    txc->t->set(PREFIX_WAL, key, bl);
+    if (!g_conf->bluestore_skip_wal_for_dbg) {
+      txc->t->set(PREFIX_WAL, key, bl);
+    }
   }
 
   if (handle)
@@ -8554,6 +8590,7 @@ int BlueStore::_do_write(
 	   << std::dec << dendl;
 
   o->extent_map.fault_range(db, offset, length);
+  if (!g_conf->bluestore_skip_2_for_dbg) {
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
 
   r = _do_alloc_write(txc, c, &wctx);
@@ -8564,6 +8601,7 @@ int BlueStore::_do_write(
   }
 
   _wctx_finish(txc, c, o, &wctx);
+  }
 
   o->extent_map.compress_extent_map(offset, length);
 

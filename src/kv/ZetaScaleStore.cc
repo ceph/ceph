@@ -686,7 +686,9 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
       }
     }
   }
+  if (!g_conf->bluestore_skip_ZS_fm_for_dbg) {
   fm.flush();
+  }
   fm.unlock();
 
   if (i) {
@@ -698,8 +700,10 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
   }
 
   if (l1) {
+    if (!g_conf->bluestore_skip_ZS_log_for_dbg) {
     status = ZSMPut(_thd_state(), cguid_lc, l1, objs_lc, 0, &objs_written);
     assert(status != ZS_SUCCESS || objs_written == l1);
+    }
   }
 
   dtrace << "ZSMPut flush=" << i << " l1=" << l1
