@@ -505,6 +505,7 @@ set(libcommon_files
   common/Graylog.cc
   common/fs_types.cc
   common/dns_resolve.cc
+  common/hostname.cc
   ${arch_files}
   ${auth_files}
   ${mds_files})
