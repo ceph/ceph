@@ -169,7 +169,6 @@ namespace rgw {
     using dirent_string = basic_sstring<char, uint16_t, 32>;
 
     using marker_cache_t = flat_map<uint64_t, dirent_string>;
-    using name_cache_t = flat_map<dirent_string, uint8_t>;
 
     struct State {
       uint64_t dev;
@@ -199,19 +198,10 @@ namespace rgw {
 
       uint32_t flags;
       marker_cache_t marker_cache;
-      name_cache_t name_cache;
 
       directory() : flags(FLAG_NONE) {}
 
-      void clear_state() {
-	marker_cache.clear();
-	name_cache.clear();
-      }
-
-      void set_overflow() {
-	clear_state();
-	flags |= FLAG_OVERFLOW;
-      }
+      void clear_state();
     };
 
     boost::variant<file, directory> variant_type;
@@ -469,18 +459,9 @@ namespace rgw {
 	// XXXX check for failure (dup key)
 	d->marker_cache.insert(
 	  marker_cache_t::value_type(off, marker.data()));
-	/* 90% of directories hold <= 32 entries (Yifan Wang, CMU),
-	 * but go big */
-	if (d->name_cache.size() < 128) {
-	  d->name_cache.insert(
-	    name_cache_t::value_type(marker.data(), obj_type));
-	} else {
-	  d->set_overflow(); // too many
-	}
       }
     }
 
-    /* XXX */
     std::string find_marker(uint64_t off) { // XXX copy
       using std::get;
       directory* d = get<directory>(&variant_type);
@@ -607,6 +588,8 @@ namespace rgw {
     void decode_attrs(const ceph::buffer::list* ux_key1,
 		      const ceph::buffer::list* ux_attrs1);
 
+    void invalidate();
+
     virtual bool reclaim();
 
     typedef cohort::lru::LRU<std::mutex> FhLRU;
@@ -704,6 +687,9 @@ namespace rgw {
     CephContext* cct;
     struct rgw_fs fs;
     RGWFileHandle root_fh;
+    rgw_fh_callback_t invalidate_cb;
+    void *invalidate_arg;
+    bool shutdown;
 
     mutable std::atomic<uint64_t> refcnt;
 
@@ -732,6 +718,9 @@ namespace rgw {
 	: t(t), fhk(k), ts(ts) {}
     };
 
+    friend std::ostream& operator<<(std::ostream &os,
+				    RGWLibFS::event const &ev);
+
     using event_vector = /* boost::small_vector<event, 16> */
       std::vector<event>;
 
@@ -759,7 +748,6 @@ namespace rgw {
       State() : flags(0) {}
 
       void push_event(const event& ev) {
-	lock_guard guard(mtx);
 	events.push_back(ev);
       }
     } state;
@@ -774,7 +762,8 @@ namespace rgw {
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
-      : cct(_cct), root_fh(this, get_inst()), refcnt(1),
+      : cct(_cct), root_fh(this, get_inst()), invalidate_cb(nullptr),
+	invalidate_arg(nullptr), shutdown(false), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
 		 cct->_conf->rgw_nfs_fhcache_size),
 	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
@@ -816,6 +805,8 @@ namespace rgw {
     inline void rele() {
       intrusive_ptr_release(this);
     }
+
+    void stop() { shutdown = true; }
 
     void release_evict(RGWFileHandle* fh) {
       /* remove from cache, releases sentinel ref */
@@ -859,6 +850,12 @@ namespace rgw {
       }
       return ret;
     } /* authorize */
+
+    int register_invalidate(rgw_fh_callback_t cb, void *arg, uint32_t flags) {
+      invalidate_cb = cb;
+      invalidate_arg = arg;
+      return 0;
+    }
 
     /* find RGWFileHandle by id  */
     LookupFHResult lookup_fh(const fh_key& fhk,
@@ -1050,6 +1047,15 @@ namespace rgw {
       fh->mtx.unlock(); /* !LOCKED */
     out:
       lat.lock->unlock(); /* !LATCHED */
+
+      /* special case:  lookup root_fh */
+      if (! fh) {
+	if (unlikely(fh_hk == root_fh.fh.fh_hk)) {
+	  fh = &root_fh;
+	  ref(fh);
+	}
+      }
+
       return fh;
     }
 
