@@ -1974,4 +1974,6 @@ extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
+extern bool validate_access_key(string& key);
+extern bool char_is_unreserved_url(char c);
 #endif

@@ -477,22 +477,6 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   return 0;
 }
 
-static bool char_is_unreserved_url(char c)
-{
-  if (isalnum(c))
-    return true;
-
-  switch (c) {
-  case '-':
-  case '.':
-  case '_':
-  case '~':
-    return true;
-  default:
-    return false;
-  }
-}
-
 struct rgw_flags_desc {
   uint32_t mask;
   const char *str;
@@ -549,17 +533,6 @@ uint32_t rgw_str_to_perm(const char *str)
     return RGW_PERM_FULL_CONTROL;
 
   return RGW_PERM_INVALID;
-}
-
-static bool validate_access_key(string& key)
-{
-  const char *p = key.c_str();
-  while (*p) {
-    if (!char_is_unreserved_url(*p))
-      return false;
-    p++;
-  }
-  return true;
 }
 
 static void set_err_msg(std::string *sink, std::string msg)

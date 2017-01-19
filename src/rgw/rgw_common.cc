@@ -1468,3 +1468,29 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
   return parse_list_of_flags(op_type_mapping, str, perm);
 }
 
+bool validate_access_key(string& key)
+{
+  const char *p = key.c_str();
+  while (*p) {
+    if (!char_is_unreserved_url(*p))
+      return false;
+    p++;
+  }
+  return true;
+}
+
+bool char_is_unreserved_url(char c)
+{
+  if (isalnum(c))
+    return true;
+
+  switch (c) {
+  case '-':
+  case '.':
+  case '_':
+  case '~':
+    return true;
+  default:
+    return false;
+  }
+}

@@ -183,6 +183,18 @@ target_link_libraries(radosgw-object-expirer rgw_a librados
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
+set(radosgw_sts_srcs
+  rgw_sts.cc
+  rgw_sts_main.cc)
+add_executable(radosgw-sts ${radosgw_sts_srcs})
+target_link_libraries(radosgw-sts rgw_a librados
+  cls_rgw_client cls_lock_client cls_refcount_client
+  cls_log_client cls_statelog_client cls_timeindex_client
+  cls_version_client cls_replica_log_client cls_user_client
+  global ${FCGI_LIBRARY} ${LIB_RESOLV}
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
+install(TARGETS radosgw-sts DESTINATION bin)
+
 set(librgw_srcs
   librgw.cc
   rgw_file.cc)
