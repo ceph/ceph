@@ -180,7 +180,7 @@ Major Changes from Jewel
 - *RGW*:
 
   * RGW now supports a new zone type that can be used for metadata indexing
-    via Elasticseasrch.
+    via Elasticsearch.
   * RGW now supports the S3 multipart object copy-part API.
   * It is possible now to reshard an existing bucket. Note that bucket
     resharding currently requires that all IO (especially writes) to
