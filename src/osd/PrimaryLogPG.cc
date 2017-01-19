@@ -1565,6 +1565,15 @@ void PrimaryLogPG::calc_trim_to()
     pg_trim_to = new_trim_to;
     assert(pg_trim_to <= pg_log.get_head());
     assert(pg_trim_to <= min_last_complete_ondisk);
+  } else if (pg_trim_to == eversion_t()) {
+    // may trim log on peers
+    eversion_t new_trim_to = MIN(
+      pg_log.get_log().log.begin()->version,
+      limit);
+    dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
+    pg_trim_to = new_trim_to;
+    assert(pg_trim_to <= pg_log.get_head());
+    assert(pg_trim_to <= min_last_complete_ondisk);
   }
 }
 
