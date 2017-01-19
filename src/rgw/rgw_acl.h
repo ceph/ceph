@@ -8,6 +8,9 @@
 #include <string>
 #include <include/types.h>
 
+#include <boost/optional.hpp>
+#include <boost/utility/string_ref.hpp>
+
 #include "common/debug.h"
 
 #include "rgw_basic_types.h"
@@ -214,20 +217,20 @@ struct ACLReferer {
       perm(perm) {
   }
 
-  bool is_match(std::string http_referer) const {
-    if (http_referer == url_spec) {
-      return true;
+  bool is_match(boost::string_ref http_referer) const {
+    const auto http_host = get_http_host(http_referer);
+    if (!http_host || http_host->length() < url_spec.length()) {
+      return false;
     }
 
-    if (http_referer.length() < url_spec.length()) {
-      return false;
+    if (http_host->compare(url_spec) == 0) {
+      return true;
     }
 
     if ('.' == url_spec[0]) {
       /* Wildcard support: a referer matches the spec when its last char are
        * perfectly equal to spec. */
-      return !http_referer.compare(http_referer.length() - url_spec.length(),
-                                   url_spec.length(), url_spec);
+      return http_host->ends_with(url_spec);
     }
 
     return false;
@@ -246,6 +249,26 @@ struct ACLReferer {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+
+private:
+  boost::optional<boost::string_ref> get_http_host(const boost::string_ref url) const {
+    size_t pos = url.find("://");
+    if (pos == boost::string_ref::npos || url.starts_with("://") ||
+        url.ends_with("://") || url.ends_with('@')) {
+      return boost::none;
+    }
+    boost::string_ref url_sub = url.substr(pos + strlen("://"));  
+    pos = url_sub.find('@');
+    if (pos != boost::string_ref::npos) {
+      url_sub = url_sub.substr(pos + 1);
+    }
+    pos = url_sub.find_first_of("/:");
+    if (pos == boost::string_ref::npos) {
+      /* no port or path exists */
+      return url_sub;
+    }
+    return url_sub.substr(0, pos);
+  }
 };
 WRITE_CLASS_ENCODER(ACLReferer)
 
