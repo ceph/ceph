@@ -293,6 +293,12 @@ void add_size_option(boost::program_options::options_description *opt) {
      "image size (in M/G/T)");
 }
 
+void add_sparse_size_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (IMAGE_SPARSE_SIZE.c_str(), po::value<ImageObjectSize>(),
+    "sparse size in B/K/M [default: 4K]");
+}
+
 void add_path_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt,
                       const std::string &description) {
