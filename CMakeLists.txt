@@ -2,10 +2,14 @@ cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
 <<<<<<< HEAD
+<<<<<<< HEAD
 set(VERSION 12.0.0)
 =======
 set(VERSION 11.1.1)
 >>>>>>> 11.1.1
+=======
+set(VERSION 11.2.0)
+>>>>>>> 11.2.0
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)

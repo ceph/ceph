@@ -1,10 +1,19 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 ceph (12.0.0-1) stable; urgency=medium
 
   * New upstream release
 
  -- Ceph Release Team <ceph-maintainers@ceph.com>  Wed, 08 Feb 2017 13:57:30 +0000
 =======
+=======
+ceph (11.2.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Thu, 19 Jan 2017 13:07:31 +0000
+
+>>>>>>> 11.2.0
 ceph (11.1.1-1) stable; urgency=medium
 
   * New upstream release
