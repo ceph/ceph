@@ -13,7 +13,7 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_without cephfs_java
+%bcond_with cephfs_java
 %if 0%{?suse_version}
 %bcond_with ceph_test_package
 %else
