@@ -30,6 +30,7 @@
 #include <typeinfo>
 
 #include <common/Formatter.h>
+#include "include/assert.h"
 
 
 /*
@@ -413,6 +414,13 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
+#define MEMPOOL_DECLARE_FACTORY(obj, factoryname, pool)			\
+  namespace mempool {							\
+    namespace pool {							\
+      extern pool_allocator<obj> alloc_##factoryname;			\
+    }									\
+  }
+
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
   namespace mempool {							\
     namespace pool {							\
