@@ -13,6 +13,7 @@
  */
 #include <sys/types.h>
 #include <string.h>
+#include <chrono>
 
 #include "include/types.h"
 #include "include/rados/librgw.h"
@@ -79,6 +80,8 @@ namespace rgw {
     m_tp.drain(&req_wq);
   }
 
+#define MIN_EXPIRE_S 120
+
   void RGWLibProcess::run()
   {
     /* write completion interval */
@@ -91,6 +94,14 @@ namespace rgw {
     /* gc loop */
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
+
+      /* dirent invalidate timeout--basically, the upper-bound on
+       * inconsistency with the S3 namespace */
+      auto expire_s = cct->_conf->rgw_nfs_namespace_expire_secs;
+
+      /* delay between gc cycles */
+      auto delay_s = std::max(1, std::min(MIN_EXPIRE_S, expire_s/2));
+
       unique_lock uniq(mtx);
     restart:
       int cur_gen = gen;
@@ -105,7 +116,7 @@ namespace rgw {
 	  goto restart; /* invalidated */
       }
       uniq.unlock();
-      std::this_thread::sleep_for(std::chrono::seconds(120));
+      std::this_thread::sleep_for(std::chrono::seconds(delay_s));
     }
   }
 

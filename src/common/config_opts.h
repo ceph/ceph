@@ -1329,6 +1329,9 @@ OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
 OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
 OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
 OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+OPTION(rgw_nfs_namespace_expire_secs, OPT_INT, 300) /* namespace invalidate
+						     * timer */
+OPTION(rgw_nfs_max_gc, OPT_INT, 300) /* max gc events per cycle */
 OPTION(rgw_nfs_write_completion_interval_s, OPT_INT, 10) /* stateless (V3)
 							  * commit
 							  * delay */
