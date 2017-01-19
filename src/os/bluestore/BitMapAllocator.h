@@ -20,8 +20,9 @@ class BitMapAllocator : public Allocator {
 
   void insert_free(uint64_t offset, uint64_t len);
 
-  int allocate_dis(uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-                        int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len);
+  int64_t allocate_dis(
+    uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 
 public:
   BitMapAllocator();
@@ -31,9 +32,9 @@ public:
   int reserve(uint64_t need);
   void unreserve(uint64_t unused);
 
-  int allocate(
+  int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len);
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 
   int release(
     uint64_t offset, uint64_t length);
