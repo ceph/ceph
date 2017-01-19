@@ -190,6 +190,7 @@ namespace librbd {
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
+    int mirroring_replay_delay;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -277,9 +278,10 @@ namespace librbd {
     void user_flushed();
     void flush_cache(Context *onfinish);
     void shut_down_cache(Context *on_finish);
-    int invalidate_cache(bool purge_on_error=false);
-    void invalidate_cache(Context *on_finish);
+    int invalidate_cache(bool purge_on_error);
+    void invalidate_cache(bool purge_on_error, Context *on_finish);
     void clear_nonexistence_cache();
+    bool is_cache_empty();
     void register_watch(Context *on_finish);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);

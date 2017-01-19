@@ -53,6 +53,7 @@ using namespace std;
 #include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
+#include "common/EventTrace.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -638,7 +639,7 @@ public:
     utime_t sched_time;
     /// the hard upper bound of scrub time
     utime_t deadline;
-    ScrubJob() {}
+    ScrubJob() : cct(nullptr) {}
     explicit ScrubJob(CephContext* cct, const spg_t& pg,
 		      const utime_t& timestamp,
 		      double pool_scrub_min_interval = 0,
@@ -683,6 +684,22 @@ public:
       return false;
     *out = *iter;
     return true;
+  }
+
+  void dumps_scrub(Formatter *f) {
+    assert(f != nullptr);
+    Mutex::Locker l(sched_scrub_lock);
+
+    f->open_array_section("scrubs");
+    for (const auto &i: sched_scrub_pg) {
+      f->open_object_section("scrub");
+      f->dump_stream("pgid") << i.pgid;
+      f->dump_stream("sched_time") << i.sched_time;
+      f->dump_stream("deadline") << i.deadline;
+      f->dump_bool("forced", i.sched_time == i.deadline);
+      f->close_section();
+    }
+    f->close_section();
   }
 
   bool can_inc_scrubs_pending();
@@ -1851,6 +1868,7 @@ private:
     };
 
     void dequeue(PG *pg) {
+      FUNCTRACE();
       return dequeue_and_get_ops(pg, nullptr);
     }
 

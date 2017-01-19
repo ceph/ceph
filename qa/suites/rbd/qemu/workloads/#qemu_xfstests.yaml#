@@ -1,7 +1,0 @@
-tasks:
-- qemu:
-    all:
-      type: block
-      num_rbd: 2
-      grtest: http://git.ceph.com/?p=ceph.git;a=blob_plain;f=qa/run_xfstests_qemu.sh
-exclude_arch: armv7l

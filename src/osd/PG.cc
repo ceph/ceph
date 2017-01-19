@@ -52,6 +52,7 @@
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "common/BackTrace.h"
+#include "common/EventTrace.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -6043,6 +6044,7 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result
@@ -6096,6 +6098,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->publish_stats_to_osd();
   post_event(RemoteBackfillReserved());
 }
 
@@ -6161,6 +6164,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
+  pg->publish_stats_to_osd();
 
   pg->schedule_backfill_full_retry();
 
@@ -6181,6 +6185,7 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
       pg, pg->get_osdmap()->get_epoch(),
       LocalBackfillReserved()),
     pg->get_backfill_priority());
+  pg->publish_stats_to_osd();
 }
 
 void PG::RecoveryState::WaitLocalBackfillReserved::exit()
@@ -6197,6 +6202,8 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/NotBackfilling")
 {
   context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result
@@ -6411,6 +6418,7 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
       pg, pg->get_osdmap()->get_epoch(),
       LocalRecoveryReserved()),
     pg->get_recovery_priority());
+  pg->publish_stats_to_osd();
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
@@ -6470,6 +6478,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_set(PG_STATE_RECOVERING);
+  pg->publish_stats_to_osd();
   pg->queue_recovery();
 }
 
@@ -7373,7 +7382,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
        ++p) {
     if (*p == pg->pg_whoami) continue;
     pg_info_t& ri = pg->peer_info[*p];
-    if (ri.last_update >= best.log_tail && ri.last_update < request_log_from)
+    if (ri.last_update < pg->info.log_tail && ri.last_update >= best.log_tail &&
+        ri.last_update < request_log_from)
       request_log_from = ri.last_update;
   }
 
@@ -7859,48 +7869,6 @@ PG::PriorSet::PriorSet(CephContext* cct,
 		       const PG *debug_pg)
   : cct(cct), ec_pool(ec_pool), pg_down(false), pcontdec(c)
 {
-  /*
-   * We have to be careful to gracefully deal with situations like
-   * so. Say we have a power outage or something that takes out both
-   * OSDs, but the monitor doesn't mark them down in the same epoch.
-   * The history may look like
-   *
-   *  1: A B
-   *  2:   B
-   *  3:       let's say B dies for good, too (say, from the power spike) 
-   *  4: A
-   *
-   * which makes it look like B may have applied updates to the PG
-   * that we need in order to proceed.  This sucks...
-   *
-   * To minimize the risk of this happening, we CANNOT go active if
-   * _any_ OSDs in the prior set are down until we send an MOSDAlive
-   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
-   * Then, we have something like
-   *
-   *  1: A B
-   *  2:   B   up_thru[B]=0
-   *  3:
-   *  4: A
-   *
-   * -> we can ignore B, bc it couldn't have gone active (alive_thru
-   *    still 0).
-   *
-   * or,
-   *
-   *  1: A B
-   *  2:   B   up_thru[B]=0
-   *  3:   B   up_thru[B]=2
-   *  4:
-   *  5: A    
-   *
-   * -> we must wait for B, bc it was alive through 2, and could have
-   *    written to the pg.
-   *
-   * If B is really dead, then an administrator will need to manually
-   * intervene by marking the OSD as "lost."
-   */
-
   // Include current acting and up nodes... not because they may
   // contain old data (this interval hasn't gone active, obviously),
   // but because we want their pg_info to inform choose_acting(), and

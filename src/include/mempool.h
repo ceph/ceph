@@ -100,7 +100,7 @@ BlueStore::Onode, we need to do
   MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
                                 bluestore_meta);
 
-(This is just because we need to name some static varables and we
+(This is just because we need to name some static variables and we
 can't use :: in a variable name.)
 
 In order to use the STL containers, simply use the namespaced variant
@@ -120,7 +120,7 @@ This will dump information about *all* memory pools.  When debug mode
 is enabled, the runtime complexity of dump is O(num_shards *
 num_types).  When debug name is disabled it is O(num_shards).
 
-You can also interogate a specific pool programatically with
+You can also interrogate a specific pool programmatically with
 
   size_t bytes = mempool::unittest_2::allocated_bytes();
   size_t items = mempool::unittest_2::allocated_items();
@@ -366,23 +366,33 @@ public:
     static const mempool::pool_index_t id = mempool::mempool_##x;	\
     template<typename v>						\
     using pool_allocator = mempool::pool_allocator<id,v>;		\
+                                                                        \
+    using string = std::basic_string<char,std::char_traits<char>,       \
+                                     pool_allocator<char>>;             \
+                                                                        \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<k,v>>>;		\
+                                                                        \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<k,v>>>;	\
+                                                                        \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
+                                                                        \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
+                                                                        \
     template<typename v>						\
     using vector = std::vector<v,pool_allocator<v>>;			\
+                                                                        \
     template<typename k, typename v,					\
 	     typename h=std::hash<k>,					\
 	     typename eq = std::equal_to<k>>				\
     using unordered_map =						\
       std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
+                                                                        \
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\
     }									\

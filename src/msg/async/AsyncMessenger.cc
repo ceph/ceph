@@ -25,6 +25,10 @@
 #include "common/Timer.h"
 #include "common/errno.h"
 
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "common/EventTrace.h"
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -51,7 +55,7 @@ class Processor::C_processor_accept : public EventCallback {
   }
 };
 
-Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n)
+Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c)
   : msgr(r), net(c), worker(w),
     listen_handler(new C_processor_accept(this)) {}
 
@@ -256,7 +260,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   if (stack->support_local_listen_table())
     processor_num = stack->get_num_worker();
   for (unsigned i = 0; i < processor_num; ++i)
-    processors.push_back(new Processor(this, stack->get_worker(i), cct, _nonce));
+    processors.push_back(new Processor(this, stack->get_worker(i), cct));
 }
 
 /**
@@ -500,6 +504,12 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
+  FUNCTRACE();
+  if (m && m->get_type() == CEPH_MSG_OSD_OP)
+    OID_EVENT_TRACE(((MOSDOp *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP");
+  else if (m && m->get_type() == CEPH_MSG_OSD_OPREPLY)
+    OID_EVENT_TRACE(((MOSDOpReply *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP_REPLY");
+
   ldout(cct, 1) << __func__ << "--> " << dest.name << " "
       << dest.addr << " -- " << *m << " -- ?+"
       << m->get_data().length() << " " << m << dendl;

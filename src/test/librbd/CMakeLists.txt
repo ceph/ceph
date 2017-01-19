@@ -30,16 +30,20 @@ set(unittest_librbd_srcs
   test_mock_AioImageRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
+  test_mock_ManagedLock.cc
   test_mock_ObjectMap.cc
-  test_mock_ObjectWatcher.cc
-  exclusive_lock/test_mock_AcquireRequest.cc
-  exclusive_lock/test_mock_ReacquireRequest.cc
-  exclusive_lock/test_mock_ReleaseRequest.cc
+  exclusive_lock/test_mock_PreAcquireRequest.cc
+  exclusive_lock/test_mock_PostAcquireRequest.cc
+  exclusive_lock/test_mock_PreReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
-  image_watcher/test_mock_RewatchRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
+  managed_lock/test_mock_AcquireRequest.cc
+  managed_lock/test_mock_BreakRequest.cc
+  managed_lock/test_mock_GetLockerRequest.cc
+  managed_lock/test_mock_ReacquireRequest.cc
+  managed_lock/test_mock_ReleaseRequest.cc
   mirror/test_mock_DisableRequest.cc
   object_map/test_mock_InvalidateRequest.cc
   object_map/test_mock_LockRequest.cc
@@ -59,6 +63,7 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRemoveRequest.cc
   operation/test_mock_SnapshotRollbackRequest.cc
   operation/test_mock_SnapshotUnprotectRequest.cc
+  watcher/test_mock_RewatchRequest.cc
   )
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
@@ -112,7 +117,7 @@ add_executable(ceph_test_librbd_api
 target_link_libraries(ceph_test_librbd_api
   librbd
   librados
-  common
+  ceph-common
   radostest
   ${UNITTEST_LIBS})
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
@@ -132,7 +137,6 @@ target_link_libraries(ceph_test_librbd_fsx
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
-  blkid
   )
 
 install(TARGETS

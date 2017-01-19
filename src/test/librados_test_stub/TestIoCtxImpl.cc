@@ -203,6 +203,20 @@ int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl 
   return ret;
 }
 
+void TestIoCtxImpl::aio_selfmanaged_snap_create(uint64_t *snapid,
+                                                AioCompletionImpl *c) {
+  m_client->add_aio_operation(
+    "", true,
+    boost::bind(&TestIoCtxImpl::selfmanaged_snap_create, this, snapid), c);
+}
+
+void TestIoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
+                                                AioCompletionImpl *c) {
+  m_client->add_aio_operation(
+    "", true,
+    boost::bind(&TestIoCtxImpl::selfmanaged_snap_remove, this, snapid), c);
+}
+
 int TestIoCtxImpl::selfmanaged_snap_set_write_ctx(snap_t seq,
                                                   std::vector<snap_t>& snaps) {
   std::vector<snapid_t> snap_ids(snaps.begin(), snaps.end());

@@ -165,6 +165,7 @@ SUBSYS(fuse, 1, 5)
 SUBSYS(mgr, 1, 5)
 SUBSYS(mgrc, 1, 5)
 SUBSYS(dpdk, 1, 5)
+SUBSYS(eventtrace, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -1045,6 +1046,7 @@ OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
 OPTION(bluestore_extent_map_shard_target_size_slop, OPT_DOUBLE, .2)
 OPTION(bluestore_extent_map_inline_shard_prealloc_size, OPT_U32, 256)
 OPTION(bluestore_cache_trim_interval, OPT_DOUBLE, .1)
+OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onodes pinned in cache before we give up
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
@@ -1056,7 +1058,7 @@ OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
-OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456")
+OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
@@ -1292,6 +1294,7 @@ OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be valid
 OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
 OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether to automatically acquire/release exclusive lock until it is explicitly requested, i.e. before we know the user of librbd is properly using the lock API
 OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
+OPTION(rbd_mirroring_replay_delay, OPT_INT, 0) // time-delay in seconds for rbd-mirror asynchronous replication
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1611,6 +1614,8 @@ OPTION(rgw_torrent_comment, OPT_STR, "")    // torrent field comment
 OPTION(rgw_torrent_encoding, OPT_STR, "")    // torrent field encoding
 OPTION(rgw_torrent_origin, OPT_STR, "")    // torrent origin
 OPTION(rgw_torrent_sha_unit, OPT_INT, 512*1024)    // torrent field piece length 512K
+
+OPTION(event_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -54,7 +54,7 @@ public:
 
   void expect_init_journaler(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, init(_))
-                  .WillOnce(CompleteContext(r, NULL));
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler,

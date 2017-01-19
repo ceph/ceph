@@ -19,7 +19,6 @@
 
 #include <queue>
 #include <map>
-#include <pciaccess.h>
 #include <limits>
 
 // since _Static_assert introduced in c11
@@ -55,7 +54,6 @@ class NVMEDevice : public BlockDevice {
   uint64_t block_size;
 
   bool aio_stop;
-  bufferptr zeros;
 
   struct BufferedExtents {
     struct Extent {
@@ -232,7 +230,7 @@ class NVMEDevice : public BlockDevice {
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
-  int open(string path) override;
+  int open(const string& path) override;
   void close() override;
 };
 

@@ -107,7 +107,8 @@ namespace librbd {
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     ImageOptions& opts,
              const std::string &non_primary_global_image_id,
-             const std::string &primary_mirror_uuid);
+             const std::string &primary_mirror_uuid,
+             bool skip_mirror_enable);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
@@ -131,6 +132,10 @@ namespace librbd {
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
   int lock_acquire(ImageCtx *ictx, rbd_lock_mode_t lock_mode);
   int lock_release(ImageCtx *ictx);
+  int lock_get_owners(ImageCtx *ictx, rbd_lock_mode_t *lock_mode,
+                      std::list<std::string> *lock_owners);
+  int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
+                 const std::string &lock_owner);
 
   int remove(librados::IoCtx& io_ctx, const std::string &image_name,
              const std::string &image_id, ProgressContext& prog_ctx,

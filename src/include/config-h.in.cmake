@@ -139,11 +139,17 @@
 /* define if rbd enabled */
 #cmakedefine WITH_RBD
 
+/* define if kernel rbd enabled */
+#cmakedefine WITH_KRBD
+
 /* define if key-value-store is enabled */
 #cmakedefine WITH_KVS
 
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
+
+/* define if radosgw enabled */
+#cmakedefine WITH_RADOSGW_FCGI_FRONTEND
 
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB

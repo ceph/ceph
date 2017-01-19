@@ -295,17 +295,14 @@ def build_ceph_cluster(ctx, config):
         # try the next block which will wait up to 15 minutes to gatherkeys.
         execute_ceph_deploy(mon_create_nodes)
 
-        estatus_gather = execute_ceph_deploy(gather_keys)
-        max_gather_tries = 90
-        gather_tries = 0
-        while (estatus_gather != 0):
-            gather_tries += 1
-            if gather_tries >= max_gather_tries:
-                msg = 'ceph-deploy was not able to gatherkeys after 15 minutes'
-                raise RuntimeError(msg)
-            estatus_gather = execute_ceph_deploy(gather_keys)
-            time.sleep(10)
+        # create-keys is explicit now
+        # http://tracker.ceph.com/issues/16036
+        mons = ctx.cluster.only(teuthology.is_type('mon'))
+        for remote in mons.remotes.iterkeys():
+            remote.run(args=['sudo', 'ceph-create-keys', '--cluster', 'ceph',
+                             '--id', remote.shortname])
 
+        estatus_gather = execute_ceph_deploy(gather_keys)
         if mds_nodes:
             estatus_mds = execute_ceph_deploy(deploy_mds)
             if estatus_mds != 0:
@@ -406,9 +403,7 @@ def build_ceph_cluster(ctx, config):
 
             if mds_nodes:
                 log.info('Configuring CephFS...')
-                ceph_fs = Filesystem(ctx)
-                if not ceph_fs.legacy_configured():
-                    ceph_fs.create()
+                ceph_fs = Filesystem(ctx, create=True)
         elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")

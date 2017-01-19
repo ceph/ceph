@@ -2005,37 +2005,47 @@ void Locker::issue_truncate(CInode *in)
     check_inode_max_size(in);
 }
 
+
+void Locker::revoke_stale_caps(Capability *cap)
+{
+  CInode *in = cap->get_inode();
+  if (in->state_test(CInode::STATE_EXPORTINGCAPS)) {
+    // if export succeeds, the cap will be removed. if export fails, we need to
+    // revoke the cap if it's still stale.
+    in->state_set(CInode::STATE_EVALSTALECAPS);
+    return;
+  }
+
+  int issued = cap->issued();
+  if (issued & ~CEPH_CAP_PIN) {
+    dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;
+    cap->revoke();
+
+    if (in->is_auth() &&
+	in->inode.client_ranges.count(cap->get_client()))
+      in->state_set(CInode::STATE_NEEDSRECOVER);
+
+    if (!in->filelock.is_stable()) eval_gather(&in->filelock);
+    if (!in->linklock.is_stable()) eval_gather(&in->linklock);
+    if (!in->authlock.is_stable()) eval_gather(&in->authlock);
+    if (!in->xattrlock.is_stable()) eval_gather(&in->xattrlock);
+
+    if (in->is_auth()) {
+      try_eval(in, CEPH_CAP_LOCKS);
+    } else {
+      request_inode_file_caps(in);
+    }
+  }
+}
+
 void Locker::revoke_stale_caps(Session *session)
 {
   dout(10) << "revoke_stale_caps for " << session->info.inst.name << dendl;
-  client_t client = session->get_client();
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
     cap->mark_stale();
-    CInode *in = cap->get_inode();
-    int issued = cap->issued();
-    if (issued & ~CEPH_CAP_PIN) {
-      dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;      
-      cap->revoke();
-
-      if (in->is_auth() &&
-	  in->inode.client_ranges.count(client))
-	in->state_set(CInode::STATE_NEEDSRECOVER);
-
-      if (!in->filelock.is_stable()) eval_gather(&in->filelock);
-      if (!in->linklock.is_stable()) eval_gather(&in->linklock);
-      if (!in->authlock.is_stable()) eval_gather(&in->authlock);
-      if (!in->xattrlock.is_stable()) eval_gather(&in->xattrlock);
-
-      if (in->is_auth()) {
-	try_eval(in, CEPH_CAP_LOCKS);
-      } else {
-	request_inode_file_caps(in);
-      }
-    } else {
-      dout(10) << " nothing issued on " << *in << dendl;
-    }
+    revoke_stale_caps(cap);
   }
 }
 
@@ -2050,6 +2060,14 @@ void Locker::resume_stale_caps(Session *session)
     if (cap->is_stale()) {
       dout(10) << " clearing stale flag on " << *in << dendl;
       cap->clear_stale();
+
+      if (in->state_test(CInode::STATE_EXPORTINGCAPS)) {
+	// if export succeeds, the cap will be removed. if export fails,
+	// we need to re-issue the cap if it's not stale.
+	in->state_set(CInode::STATE_EVALSTALECAPS);
+	continue;
+      }
+
       if (!in->is_auth() || !eval(in, CEPH_CAP_LOCKS))
 	issue_caps(in, cap);
     }
@@ -2261,7 +2279,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     }
   }
 
-  MutationRef mut(new MutationImpl);
+  auto mut(std::make_shared<MutationImpl>());
   mut->ls = mds->mdlog->get_current_segment();
     
   inode_t *pi = in->project_inode();
@@ -2496,6 +2514,18 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    if (!session) {
+      dout(5) << " no session, dropping " << *m << dendl;
+      m->put();
+      return;
+    }
+    if (session->is_closed() ||
+	session->is_closing() ||
+	session->is_killing()) {
+      dout(7) << " session closed|closing|killing, dropping " << *m << dendl;
+      m->put();
+      return;
+    }
     if (mds->is_reconnect() &&
 	m->get_dirty() && m->get_client_tid() > 0 &&
 	!session->have_completed_flush(m->get_client_tid())) {
@@ -2505,7 +2535,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     return;
   }
 
-  if (m->get_client_tid() > 0 &&
+  if (m->get_client_tid() > 0 && session &&
       session->have_completed_flush(m->get_client_tid())) {
     dout(7) << "handle_client_caps already flushed tid " << m->get_client_tid()
 	    << " for client." << client << dendl;
@@ -2532,7 +2562,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
 
   // "oldest flush tid" > 0 means client uses unique TID for each flush
-  if (m->get_oldest_flush_tid() > 0) {
+  if (m->get_oldest_flush_tid() > 0 && session) {
     if (session->trim_completed_flushes(m->get_oldest_flush_tid())) {
       mds->mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
 
@@ -2925,7 +2955,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 
   EUpdate *le = new EUpdate(mds->mdlog, "snap flush");
   mds->mdlog->start_entry(le);
-  MutationRef mut(new MutationImpl);
+  auto mut(std::make_shared<MutationImpl>());
   mut->ls = mds->mdlog->get_current_segment();
 
   // normal metadata updates that we can apply to the head as well.
@@ -3220,7 +3250,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   inode_t *pi = in->project_inode(px);
   pi->version = in->pre_dirty();
 
-  MutationRef mut(new MutationImpl);
+  auto mut(std::make_shared<MutationImpl>());
   mut->ls = mds->mdlog->get_current_segment();
 
   _update_cap_fields(in, dirty, m, pi);
@@ -4225,7 +4255,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // journal
-  MutationRef mut(new MutationImpl);
+  auto mut(std::make_shared<MutationImpl>());
   mut->ls = mds->mdlog->get_current_segment();
 
   // forcefully take a wrlock
@@ -5038,6 +5068,9 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
   case LOCK_AC_LOCKFLUSHED:
     (static_cast<ScatterLock *>(lock))->finish_flush();
     (static_cast<ScatterLock *>(lock))->clear_flushed();
+    // wake up scatter_nudge waiters
+    if (lock->is_stable())
+      lock->finish_waiters(SimpleLock::WAIT_STABLE);
     break;
     
   case LOCK_AC_MIX:

@@ -46,8 +46,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
     aio_thread(this),
     injecting_crash(0)
 {
-  zeros = buffer::create_page_aligned(1048576);
-  zeros.zero();
 }
 
 int KernelDevice::_lock()
@@ -56,15 +54,13 @@ int KernelDevice::_lock()
   memset(&l, 0, sizeof(l));
   l.l_type = F_WRLCK;
   l.l_whence = SEEK_SET;
-  l.l_start = 0;
-  l.l_len = 0;
   int r = ::fcntl(fd_direct, F_SETLK, &l);
   if (r < 0)
     return -errno;
   return 0;
 }
 
-int KernelDevice::open(string p)
+int KernelDevice::open(const string& p)
 {
   path = p;
   int r = 0;
@@ -72,7 +68,7 @@ int KernelDevice::open(string p)
 
   fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
   if (fd_direct < 0) {
-    int r = -errno;
+    r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     return r;
   }

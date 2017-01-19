@@ -234,7 +234,8 @@ ImageState<I>::ImageState(I *image_ctx)
   : m_image_ctx(image_ctx), m_state(STATE_UNINITIALIZED),
     m_lock(util::unique_lock_name("librbd::ImageState::m_lock", this)),
     m_last_refresh(0), m_refresh_seq(0),
-    m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)) {
+    m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)),
+    m_skip_open_parent_image(false) {
 }
 
 template <typename I>
@@ -244,19 +245,20 @@ ImageState<I>::~ImageState() {
 }
 
 template <typename I>
-int ImageState<I>::open() {
+int ImageState<I>::open(bool skip_open_parent) {
   C_SaferCond ctx;
-  open(&ctx);
+  open(skip_open_parent, &ctx);
   return ctx.wait();
 }
 
 template <typename I>
-void ImageState<I>::open(Context *on_finish) {
+void ImageState<I>::open(bool skip_open_parent, Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
   m_lock.Lock();
   assert(m_state == STATE_UNINITIALIZED);
+  m_skip_open_parent_image = skip_open_parent;
 
   Action action(ACTION_TYPE_OPEN);
   action.refresh_seq = m_refresh_seq;
@@ -304,7 +306,7 @@ void ImageState<I>::handle_update_notification() {
 template <typename I>
 bool ImageState<I>::is_refresh_required() const {
   Mutex::Locker locker(m_lock);
-  return (m_last_refresh != m_refresh_seq);
+  return (m_last_refresh != m_refresh_seq || find_pending_refresh() != nullptr);
 }
 
 template <typename I>
@@ -336,7 +338,14 @@ int ImageState<I>::refresh_if_required() {
   C_SaferCond ctx;
   {
     m_lock.Lock();
-    if (m_last_refresh == m_refresh_seq) {
+    Action action(ACTION_TYPE_REFRESH);
+    action.refresh_seq = m_refresh_seq;
+
+    auto refresh_action = find_pending_refresh();
+    if (refresh_action != nullptr) {
+      // if a refresh is in-flight, delay until it is finished
+      action = *refresh_action;
+    } else if (m_last_refresh == m_refresh_seq) {
       m_lock.Unlock();
       return 0;
     } else if (is_closed()) {
@@ -344,12 +353,26 @@ int ImageState<I>::refresh_if_required() {
       return -ESHUTDOWN;
     }
 
-    Action action(ACTION_TYPE_REFRESH);
-    action.refresh_seq = m_refresh_seq;
     execute_action_unlock(action, &ctx);
   }
 
   return ctx.wait();
+}
+
+template <typename I>
+const typename ImageState<I>::Action *
+ImageState<I>::find_pending_refresh() const {
+  assert(m_lock.is_locked());
+
+  auto it = std::find_if(m_actions_contexts.rbegin(),
+                         m_actions_contexts.rend(),
+                         [](const ActionContexts& action_contexts) {
+      return (action_contexts.first == ACTION_TYPE_REFRESH);
+    });
+  if (it != m_actions_contexts.rend()) {
+    return &it->first;
+  }
+  return nullptr;
 }
 
 template <typename I>
@@ -555,7 +578,7 @@ void ImageState<I>::send_open_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_open>(this));
   image::OpenRequest<I> *req = image::OpenRequest<I>::create(
-    m_image_ctx, ctx);
+    m_image_ctx, m_skip_open_parent_image, ctx);
 
   m_lock.Unlock();
   req->send();
@@ -620,7 +643,7 @@ void ImageState<I>::send_refresh_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_refresh>(this));
   image::RefreshRequest<I> *req = image::RefreshRequest<I>::create(
-    *m_image_ctx, false, ctx);
+    *m_image_ctx, false, false, ctx);
 
   m_lock.Unlock();
   req->send();

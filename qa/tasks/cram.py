@@ -7,6 +7,7 @@ import os
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
+from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
@@ -26,9 +27,9 @@ def task(ctx, config):
         - cram:
             clients:
               client.0:
-              - http://ceph.com/qa/test.t
-              - http://ceph.com/qa/test2.t]
-              client.1: [http://ceph.com/qa/test.t]
+              - http://download.ceph.com/qa/test.t
+              - http://download.ceph.com/qa/test2.t]
+              client.1: [http://download.ceph.com/qa/test.t]
             branch: foo
 
     You can also run a list of cram tests on all clients::
@@ -37,7 +38,7 @@ def task(ctx, config):
         - ceph:
         - cram:
             clients:
-              all: [http://ceph.com/qa/test.t]
+              all: [http://download.ceph.com/qa/test.t]
 
     :param ctx: Context
     :param config: Configuration
@@ -61,6 +62,12 @@ def task(ctx, config):
     if refspec is None:
         refspec = 'HEAD'
 
+    # hack: the git_url is always ceph-ci or ceph
+    git_url = teuth_config.get_ceph_git_url()
+    repo_name = 'ceph.git'
+    if git_url.count('ceph-ci'):
+        repo_name = 'ceph-ci.git'
+
     try:
         for client, tests in clients.iteritems():
             (remote,) = ctx.cluster.only(client).remotes.iterkeys()
@@ -76,11 +83,12 @@ def task(ctx, config):
                     ],
                 )
             for test in tests:
-                log.info('fetching test %s for %s', test, client)
+                url = test.format(repo=repo_name, branch=refspec)
+                log.info('fetching test %s for %s', url, client)
                 assert test.endswith('.t'), 'tests must end in .t'
                 remote.run(
                     args=[
-                        'wget', '-nc', '-nv', '-P', client_dir, '--', test.format(branch=refspec),
+                        'wget', '-nc', '-nv', '-P', client_dir, '--', url,
                         ],
                     )
 

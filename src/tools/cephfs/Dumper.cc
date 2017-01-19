@@ -260,7 +260,7 @@ int Dumper::undump(const char *dump_file)
   lock.Lock();
   objecter->write_full(oid, oloc, snapc, hbl,
 		       ceph::real_clock::now(), 0,
-		       NULL, &header_cond);
+		       &header_cond);
   lock.Unlock();
 
   r = header_cond.wait();
@@ -306,7 +306,7 @@ int Dumper::undump(const char *dump_file)
     C_SaferCond write_cond;
     lock.Lock();
     filer.write(ino, &h.layout, snapc, pos, l, j,
-		ceph::real_clock::now(), 0, NULL, &write_cond);
+		ceph::real_clock::now(), 0, &write_cond);
     lock.Unlock();
 
     r = write_cond.wait();

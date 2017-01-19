@@ -120,7 +120,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
       dout(10) << __func__ << " remove dirfrag " << oid << dendl;
       mds->objecter->remove(oid, oloc, nullsnapc,
 			    ceph::real_clock::now(),
-			    0, NULL, gather.new_sub());
+			    0, gather.new_sub());
     }
     assert(gather.has_subs());
     gather.activate();
@@ -164,7 +164,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
 			  ceph::real_clock::now(), 0,
-			  NULL, gather.new_sub());
+			  gather.new_sub());
   }
   // remove old backtrace objects
   for (compact_set<int64_t>::iterator p = pi->old_pools.begin();
@@ -175,7 +175,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
 	     << " old pool " << *p << " snapc " << snapc << dendl;
     mds->objecter->remove(oid, oloc, *snapc,
 			  ceph::real_clock::now(), 0,
-			  NULL, gather.new_sub());
+			  gather.new_sub());
   }
   assert(gather.has_subs());
   gather.activate();
@@ -771,20 +771,20 @@ void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
     }
   }
   assert(remote_dn->last == CEPH_NOSNAP);
-    // NOTE: we repeat this check in _rename(), since our submission path is racey.
-    if (!remote_dn->is_projected()) {
-      if (remote_dn->is_auth() && remote_dn->dir->can_auth_pin()) {
-        reintegrate_stray(stray_dn, remote_dn);
-      } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
-        migrate_stray(stray_dn, remote_dn->authority().first);
-      } else {
-        dout(20) << __func__ << ": not reintegrating" << dendl;
-      }
+  // NOTE: we repeat this check in _rename(), since our submission path is racey.
+  if (!remote_dn->is_projected()) {
+    if (remote_dn->is_auth() && remote_dn->dir->can_auth_pin()) {
+      reintegrate_stray(stray_dn, remote_dn);
+    } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
+      migrate_stray(stray_dn, remote_dn->authority().first);
     } else {
-      // don't do anything if the remote parent is projected, or we may
-      // break user-visible semantics!
-      dout(20) << __func__ << ": not reintegrating (projected)" << dendl;
+      dout(20) << __func__ << ": not reintegrating" << dendl;
     }
+  } else {
+    // don't do anything if the remote parent is projected, or we may
+    // break user-visible semantics!
+    dout(20) << __func__ << ": not reintegrating (projected)" << dendl;
+  }
 }
 
 void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
@@ -809,7 +809,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
  
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
-  CInode *in = dn->get_linkage()->get_inode();
+  CInode *in = dn->get_projected_linkage()->get_inode();
   assert(in);
   CInode *diri = dn->dir->get_inode();
   assert(diri->is_stray());
@@ -822,10 +822,11 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   // rename it to another mds.
   filepath src;
   dn->make_path(src);
+  assert(src.depth() == 2);
 
-  string dname;
-  in->name_stray_dentry(dname);
-  filepath dst(dname, MDS_INO_STRAY(to, 0));
+  filepath dst(MDS_INO_MDSDIR(to));
+  dst.push_dentry(src[0]);
+  dst.push_dentry(src[1]);
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
@@ -916,7 +917,7 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
     filer.zero(in->ino(), &in->inode.layout, *snapc,
 	       0, in->inode.layout.object_size,
 	       ceph::real_clock::now(),
-	       0, true, NULL, gather.new_sub());
+	       0, true, gather.new_sub());
   }
 
   assert(gather.has_subs());

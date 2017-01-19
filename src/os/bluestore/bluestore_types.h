@@ -80,18 +80,22 @@ public:
   }
 };
 
+inline static ostream& operator<<(ostream& out, const AllocExtent& e) {
+  return out << "0x" << std::hex << e.offset << "~" << e.length << std::dec;
+}
+
 class ExtentList {
   AllocExtentVector *m_extents;
   int64_t m_num_extents;
   int64_t m_block_size;
-  uint64_t m_max_alloc_size;
+  int64_t m_max_blocks;
 
 public:
   void init(AllocExtentVector *extents, int64_t block_size, uint64_t max_alloc_size) {
     m_extents = extents;
     m_num_extents = 0;
     m_block_size = block_size;
-    m_max_alloc_size = max_alloc_size;
+    m_max_blocks = max_alloc_size / block_size;
   }
 
   ExtentList(AllocExtentVector *extents, int64_t block_size) {
@@ -125,7 +129,7 @@ public:
 
 
 /// pextent: physical extent
-struct bluestore_pextent_t : public AllocExtent{
+struct bluestore_pextent_t : public AllocExtent {
   const static uint64_t INVALID_OFFSET = ~0ull;
 
   bluestore_pextent_t() : AllocExtent() {}
@@ -148,25 +152,27 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
+typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector;
+
 template<>
-struct denc_traits<vector<bluestore_pextent_t>> {
+struct denc_traits<PExtentVector> {
   enum { supported = true };
   enum { bounded = false };
   enum { featured = false };
-  static void bound_encode(const vector<bluestore_pextent_t>& v, size_t& p) {
+  static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     size_t per = 0;
     denc(*(bluestore_pextent_t*)nullptr, per);
     p += per * v.size();
   }
-  static void encode(const vector<bluestore_pextent_t>& v,
+  static void encode(const PExtentVector& v,
 		     bufferlist::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
     }
   }
-  static void decode(vector<bluestore_pextent_t>& v, bufferptr::iterator& p) {
+  static void decode(PExtentVector& v, bufferptr::iterator& p) {
     unsigned num;
     denc_varint(num, p);
     v.clear();
@@ -204,7 +210,7 @@ struct bluestore_extent_ref_map_t {
   }
 
   void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
+  void put(uint64_t offset, uint32_t len, PExtentVector *release);
 
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;
@@ -279,7 +285,8 @@ struct bluestore_blob_t {
   };
   static string get_flags_string(unsigned flags);
 
-  vector<bluestore_pextent_t> extents;///< raw data position on device
+
+  PExtentVector extents;              ///< raw data position on device
   uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
@@ -656,7 +663,7 @@ ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
-  map<string, bufferptr> attrs;        ///< attrs
+  map<mempool::bluestore_meta_other::string, bufferptr> attrs;        ///< attrs
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
@@ -738,7 +745,7 @@ struct bluestore_wal_op_t {
   } type_t;
   __u8 op = 0;
 
-  vector<bluestore_pextent_t> extents;
+  PExtentVector extents;
   bufferlist data;
 
   DENC(bluestore_wal_op_t, v, p) {

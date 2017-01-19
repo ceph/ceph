@@ -42,6 +42,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_AIO_FLUSH 1
 #define LIBRBD_SUPPORTS_INVALIDATE 1
 #define LIBRBD_SUPPORTS_AIO_OPEN 1
+#define LIBRBD_SUPPORTS_LOCKING 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API    __attribute__ ((visibility ("default")))
@@ -337,6 +338,14 @@ CEPH_RBD_API int rbd_set_image_notification(rbd_image_t image, int fd, int type)
 CEPH_RBD_API int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner);
 CEPH_RBD_API int rbd_lock_acquire(rbd_image_t image, rbd_lock_mode_t lock_mode);
 CEPH_RBD_API int rbd_lock_release(rbd_image_t image);
+CEPH_RBD_API int rbd_lock_get_owners(rbd_image_t image,
+                                     rbd_lock_mode_t *lock_mode,
+                                     char **lock_owners,
+                                     size_t *max_lock_owners);
+CEPH_RBD_API void rbd_lock_get_owners_cleanup(char **lock_owners,
+                                              size_t lock_owner_count);
+CEPH_RBD_API int rbd_lock_break(rbd_image_t image, rbd_lock_mode_t lock_mode,
+                                const char *lock_owner);
 
 /* object map feature */
 CEPH_RBD_API int rbd_rebuild_object_map(rbd_image_t image,
@@ -418,6 +427,10 @@ CEPH_RBD_API int rbd_snap_set_limit(rbd_image_t image, uint64_t limit);
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
+
+CEPH_RBD_API int rbd_flatten_with_progress(rbd_image_t image,
+                                           librbd_progress_fn_t cb,
+                                           void *cbdata);
 
 /**
  * List all images that are cloned from the image at the

@@ -101,9 +101,11 @@ struct librados::IoCtxImpl {
   int snap_get_stamp(uint64_t snapid, time_t *t);
   int snap_create(const char* snapname);
   int selfmanaged_snap_create(uint64_t *snapid);
+  void aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletionImpl *c);
   int snap_remove(const char* snapname);
   int rollback(const object_t& oid, const char *snapName);
   int selfmanaged_snap_remove(uint64_t snapid);
+  void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletionImpl *c);
   int selfmanaged_snap_rollback_object(const object_t& oid,
                                        ::SnapContext& snapc, uint64_t snapid);
 
@@ -159,12 +161,6 @@ struct librados::IoCtxImpl {
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
 		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 
-  struct C_aio_Ack : public Context {
-    librados::AioCompletionImpl *c;
-    explicit C_aio_Ack(AioCompletionImpl *_c);
-    void finish(int r);
-  };
-
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
     time_t *pmtime;
@@ -181,9 +177,12 @@ struct librados::IoCtxImpl {
     void finish(int r);
   };
 
-  struct C_aio_Safe : public Context {
+  struct C_aio_Complete : public Context {
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+    object_t oid;
+#endif
     AioCompletionImpl *c;
-    explicit C_aio_Safe(AioCompletionImpl *_c);
+    explicit C_aio_Complete(AioCompletionImpl *_c);
     void finish(int r);
   };
 

@@ -400,7 +400,7 @@ protected:
 
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
-  void sync_write_commit(InodeRef& in);
+  void _sync_write_commit(Inode *in);
 
 protected:
   Filer                 *filer;     
@@ -433,7 +433,7 @@ protected:
 
   // Optional extra metadata about me to send to the MDS
   std::map<std::string, std::string> metadata;
-  void populate_metadata();
+  void populate_metadata(const std::string &mount_root);
 
 
   /* async block write barrier support */
@@ -498,7 +498,6 @@ protected:
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_C_Tick; // Asserts on client_lock
-  friend class C_Client_SyncCommit; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
   friend void intrusive_ptr_release(Inode *in);
@@ -621,7 +620,7 @@ protected:
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags, const UserPerm& perms);
-  Cap* remove_cap(Cap *cap, bool queue_release);
+  void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);

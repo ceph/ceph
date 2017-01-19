@@ -24,6 +24,7 @@ import testtools
 
 import ceph_detect_init
 from ceph_detect_init import alpine
+from ceph_detect_init import arch
 from ceph_detect_init import centos
 from ceph_detect_init import debian
 from ceph_detect_init import exc
@@ -42,6 +43,9 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_alpine(self):
         self.assertEqual('openrc', alpine.choose_init())
+
+    def test_arch(self):
+        self.assertEqual('systemd', arch.choose_init())
 
     def test_freebsd(self):
         self.assertEqual('bsdrc', freebsd.choose_init())

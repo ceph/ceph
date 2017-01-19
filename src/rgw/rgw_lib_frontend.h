@@ -32,6 +32,7 @@ namespace rgw {
 
     void run();
     void checkpoint();
+    void stop() { shutdown = true; }
 
     void register_fs(RGWLibFS* fs) {
       lock_guard guard(mtx);
@@ -75,6 +76,11 @@ namespace rgw {
       : RGWProcessFrontend(pe, _conf) {}
 		
     int init();
+
+    virtual void stop() {
+      RGWProcessFrontend::stop();
+      get_process()->stop();
+    }
 
     RGWLibProcess* get_process() {
       return static_cast<RGWLibProcess*>(pprocess);

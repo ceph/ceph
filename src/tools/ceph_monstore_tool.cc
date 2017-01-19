@@ -436,7 +436,7 @@ int rewrite_crush(const char* progname,
   // store the transaction into store as a proposal
   const string prefix("paxos");
   version_t pending_v = store.get(prefix, "last_committed") + 1;
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   bufferlist bl;
   rewrite_txn.encode(bl);
   cout << "adding pending commit " << pending_v
@@ -482,7 +482,7 @@ int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
 
   version_t first = st.get("pgmap", "first_committed");
   version_t ver = last;
-  MonitorDBStore::TransactionRef txn(new MonitorDBStore::Transaction);
+  auto txn(std::make_shared<MonitorDBStore::Transaction>());
   for (unsigned i = 0; i < n; i++) {
     bufferlist trans_bl;
     bufferlist dirty_pgs;
@@ -1012,7 +1012,7 @@ int main(int argc, char **argv) {
       if (bl.length() == 0)
 	break;
       cout << "\n--- " << v << " ---" << std::endl;
-      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+      auto tx(std::make_shared<MonitorDBStore::Transaction>());
       Paxos::decode_append_transaction(tx, bl);
       JSONFormatter f(true);
       tx->dump(&f);
@@ -1192,7 +1192,7 @@ int main(int argc, char **argv) {
     unsigned num = 0;
     for (unsigned i = 0; i < ntrans; ++i) {
       std::cerr << "Applying trans " << i << std::endl;
-      MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+      auto t(std::make_shared<MonitorDBStore::Transaction>());
       string prefix;
       prefix.push_back((i%26)+'a');
       for (unsigned j = 0; j < tsize; ++j) {
@@ -1234,7 +1234,7 @@ int main(int argc, char **argv) {
     do {
       uint64_t num_keys = 0;
 
-      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+      auto tx(std::make_shared<MonitorDBStore::Transaction>());
 
       while (it->valid() && num_keys < 128) {
         pair<string,string> k = it->raw_key();
