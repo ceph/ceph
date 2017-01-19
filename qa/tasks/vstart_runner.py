@@ -3,25 +3,25 @@ vstart_runner: override Filesystem and Mount interfaces to run a CephFSTestCase 
 ceph instance instead of a packaged/installed cluster.  Use this to turn around test cases
 quickly during development.
 
-Simple usage (assuming teuthology, ceph, ceph-qa-suite checked out in ~/git):
+Simple usage (assuming teuthology and ceph checked out in ~/git):
 
     # Activate the teuthology virtualenv
     source ~/git/teuthology/virtualenv/bin/activate
     # Go into your ceph build directory
     cd ~/git/ceph/build
     # Invoke a test using this script
-    python ~/git/ceph-qa-suite/tasks/vstart_runner.py --create tasks.cephfs.test_data_scan
+    python ~/git/ceph/qa/tasks/vstart_runner.py --create tasks.cephfs.test_data_scan
 
 Alternative usage:
 
     # Alternatively, if you use different paths, specify them as follows:
-    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph-qa-suite:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph-qa-suite/tasks/vstart_runner.py
+    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph/qa:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph/qa/tasks/vstart_runner.py
 
     # If you wish to drop to a python shell on failures, use --interactive:
-    python ~/git/ceph-qa-suite/tasks/vstart_runner.py --interactive
+    python ~/git/ceph/qa/tasks/vstart_runner.py --interactive
 
     # If you wish to run a named test case, pass it as an argument:
-    python ~/git/ceph-qa-suite/tasks/vstart_runner.py tasks.cephfs.test_data_scan
+    python ~/git/ceph/qa/tasks/vstart_runner.py tasks.cephfs.test_data_scan
 
 """
 
