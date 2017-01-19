@@ -193,10 +193,10 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << dendl;
 
-    Context *ctx = util::create_context_callback<
-      C_InvokeAsyncRequest<I>,
-      &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
-        this);
+    Context *ctx = util::create_async_context_callback(
+      image_ctx, util::create_context_callback<
+        C_InvokeAsyncRequest<I>,
+        &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(this));
 
     if (request_lock) {
       // current lock owner doesn't support op -- try to perform
