@@ -27,7 +27,7 @@
 # no gperftools/tcmalloc on s390(x)
 %bcond_with tcmalloc
 %endif
-%bcond_with lowmem_builder
+%bcond_without lowmem_builder
 %bcond_with minimal_debugging_information
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_with ocf
