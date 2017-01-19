@@ -299,10 +299,13 @@ A: The target branch depends on the nature of your change:
    branches (for example, the "hammer" or "infernalis" branches), then you
    should file a Redmine ticket describing your issue and fill out the
    "Backport: <branchname>" form field. This will notify other developers that
-   your commit should be cherry-picked to these stable branches. For example,
-   you should set "Backport: hammer" in your Redmine ticket to indicate that
-   you are fixing a bug that exists on the "hammer" branch and that you
-   desire that your change be cherry-picked to that branch.
+   your commit should be cherry-picked to one or more stable branches. Then,
+   target the "master" branch in your pull request.
+
+   For example, you should set "Backport: jewel, kraken" in your Redmine ticket
+   to indicate that you are fixing a bug that exists on the "jewel" and
+   "kraken" branches and that you desire that your change be cherry-picked to
+   those branches after it is merged into master.
 
 Q: How to include ``Reviewed-by: tag(s)`` in my pull request?
 
