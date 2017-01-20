@@ -75,13 +75,8 @@ License:	LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-with-auto
 Group:         System/Filesystems
 %endif
 URL:		http://ceph.com/
-%if 0%{?rhel}
 Source0:	http://ceph.com/download/@TARBALL_BASENAME@.tar.bz2
-%endif
-%if ! 0%{?rhel}
-Source0:	%{name}-%{version}.tar.bz2
 # _insert_obs_source_lines_here
-%endif
 %if 0%{?suse_version}
 %if 0%{?is_opensuse}
 ExclusiveArch:  x86_64 aarch64 ppc64 ppc64le
