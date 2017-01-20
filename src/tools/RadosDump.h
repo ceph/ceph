@@ -308,7 +308,7 @@ struct metadata_section {
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 6, bl);
     ::encode(struct_ver, bl);
     ::encode(map_epoch, bl);
     ::encode(info, bl);
@@ -322,13 +322,15 @@ struct metadata_section {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     ::decode(struct_ver, bl);
     ::decode(map_epoch, bl);
     ::decode(info, bl);
     ::decode(log, bl);
-    if (struct_v > 1) {
+    if (struct_v >= 6) {
       ::decode(past_intervals, bl);
+    } else if (struct_v > 1) {
+      past_intervals.decode_classic(bl);
     } else {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
     }
