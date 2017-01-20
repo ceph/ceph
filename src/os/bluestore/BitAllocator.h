@@ -211,7 +211,8 @@ public:
   static int get_level(CephContext* cct, int64_t total_blocks);
   static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
-  virtual bool is_exhausted(int64_t required) = 0;
+  virtual bool reserve_blks(int64_t required) = 0;
+  virtual void unreserve_blks(int64_t allocated, int64_t reserve) = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
       ceph_abort();
       return true;
@@ -237,9 +238,6 @@ public:
 
   virtual int64_t sub_used_blocks(int64_t num_blocks) = 0;
   virtual int64_t add_used_blocks(int64_t num_blocks) = 0;
-  virtual bool reserve_blocks(int64_t num_blocks) = 0;
-  virtual void unreserve(int64_t num_blocks, int64_t allocated) = 0;
-  virtual int64_t get_reserved_blocks() = 0;
   virtual int64_t get_used_blocks() = 0;
 
   virtual void shutdown() = 0;
@@ -364,14 +362,12 @@ public:
   static void incr_count() { count++;}
   static int64_t get_total_blocks() {return total_blocks;}
   bool is_allocated(int64_t start_block, int64_t num_blocks);
-  bool is_exhausted(int64_t required);
+  bool reserve_blks(int64_t required);
+  void unreserve_blks(int64_t allocated, int64_t reserve);
   void reset_marker();
 
   int64_t sub_used_blocks(int64_t num_blocks);
   int64_t add_used_blocks(int64_t num_blocks);
-  bool reserve_blocks(int64_t num_blocks);
-  void unreserve(int64_t num_blocks, int64_t allocated);
-  int64_t get_reserved_blocks();
   int64_t get_used_blocks();
   int64_t size() {
     return get_total_blocks();
@@ -412,7 +408,8 @@ protected:
   BitMapAreaList *m_child_list;
 
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks);
-  virtual bool is_exhausted(int64_t required);
+  virtual bool reserve_blks(int64_t required);
+  virtual void unreserve_blks(int64_t allocated, int64_t reserve);
   
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
     ceph_abort();
@@ -451,8 +448,8 @@ public:
   void shutdown();
   virtual int64_t sub_used_blocks(int64_t num_blocks);
   virtual int64_t add_used_blocks(int64_t num_blocks);
-  virtual bool reserve_blocks(int64_t num_blocks);
-  virtual void unreserve(int64_t num_blocks, int64_t allocated);
+  virtual bool reserve_blks_ext(int64_t num_blocks);
+  virtual void unreserve_blks_ext(int64_t num_blocks, int64_t allocated);
   virtual int64_t get_reserved_blocks();
   virtual int64_t get_used_blocks();
   virtual int64_t get_used_blocks_adj();
@@ -539,7 +536,7 @@ private:
   bool check_input_dis(int64_t num_blocks);
   void init_check(int64_t total_blocks, int64_t zone_size_block,
                  bmap_alloc_mode_t mode, bool def, bool stats_on);
-  int64_t alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list, bool reserved);
+  int64_t alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list);
 
   int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, 
            int64_t hint, int64_t area_blk_off, ExtentList *block_list);
@@ -559,6 +556,7 @@ public:
 
   void free_blocks(int64_t start_block, int64_t num_blocks);
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
+  bool reserve_blocks(int64_t num);
   void unreserve_blocks(int64_t blocks);
 
   int64_t alloc_blocks_dis_res(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list);
