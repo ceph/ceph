@@ -251,6 +251,57 @@ void Throttle::reset()
   }
 }
 
+enum {
+  l_backoff_throttle_first = l_throttle_last + 1,
+  l_backoff_throttle_val,
+  l_backoff_throttle_max,
+  l_backoff_throttle_get,
+  l_backoff_throttle_get_sum,
+  l_backoff_throttle_take,
+  l_backoff_throttle_take_sum,
+  l_backoff_throttle_put,
+  l_backoff_throttle_put_sum,
+  l_backoff_throttle_wait,
+  l_backoff_throttle_last,
+};
+
+BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n, unsigned expected_concurrency, bool _use_perf)
+  : cct(cct), name(n), logger(NULL),
+    conds(expected_concurrency),///< [in] determines size of conds
+    use_perf(_use_perf)
+{
+  if (!use_perf)
+    return;
+
+  if (cct->_conf->throttler_perf_counter) {
+    PerfCountersBuilder b(cct, string("throttle-") + name, l_backoff_throttle_first, l_backoff_throttle_last);
+    b.add_u64(l_backoff_throttle_val, "val", "Currently available throttle");
+    b.add_u64(l_backoff_throttle_max, "max", "Max value for throttle");
+    b.add_u64_counter(l_backoff_throttle_get, "get", "Gets");
+    b.add_u64_counter(l_backoff_throttle_get_sum, "get_sum", "Got data");
+    b.add_u64_counter(l_backoff_throttle_take, "take", "Takes");
+    b.add_u64_counter(l_backoff_throttle_take_sum, "take_sum", "Taken data");
+    b.add_u64_counter(l_backoff_throttle_put, "put", "Puts");
+    b.add_u64_counter(l_backoff_throttle_put_sum, "put_sum", "Put data");
+    b.add_time_avg(l_backoff_throttle_wait, "wait", "Waiting latency");
+
+    logger = b.create_perf_counters();
+    cct->get_perfcounters_collection()->add(logger);
+    logger->set(l_backoff_throttle_max, max);
+  }
+}
+
+BackoffThrottle::~BackoffThrottle()
+{
+  if (!use_perf)
+    return;
+
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+  }
+}
+
 bool BackoffThrottle::set_params(
   double _low_threshhold,
   double _high_threshhold,
@@ -332,6 +383,9 @@ bool BackoffThrottle::set_params(
   max_delay_per_count = _max_multiple / _expected_throughput;
   max = _throttle_max;
 
+  if (logger)
+    logger->set(l_backoff_throttle_max, max);
+
   if (high_threshhold - low_threshhold > 0) {
     s0 = high_delay_per_count / (high_threshhold - low_threshhold);
   } else {
@@ -373,18 +427,31 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
   locker l(lock);
   auto delay = _get_delay(c);
 
+  if (logger) {
+    logger->inc(l_backoff_throttle_get);
+    logger->inc(l_backoff_throttle_get_sum, c);
+  }
+
   // fast path
   if (delay == std::chrono::duration<double>(0) &&
       waiters.empty() &&
       ((max == 0) || (current == 0) || ((current + c) <= max))) {
     current += c;
+
+    if (logger) {
+      logger->set(l_backoff_throttle_val, current);
+    }
+
     return std::chrono::duration<double>(0);
   }
 
   auto ticket = _push_waiter();
+  utime_t wait_from = ceph_clock_now();
+  bool waited = false;
 
   while (waiters.begin() != ticket) {
     (*ticket)->wait(l);
+    waited = true;
   }
 
   auto start = std::chrono::system_clock::now();
@@ -392,8 +459,10 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
   while (true) {
     if (!((max == 0) || (current == 0) || (current + c) <= max)) {
       (*ticket)->wait(l);
+      waited = true;
     } else if (delay > std::chrono::duration<double>(0)) {
       (*ticket)->wait_for(l, delay);
+      waited = true;
     } else {
       break;
     }
@@ -404,6 +473,14 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
   _kick_waiters();
 
   current += c;
+
+  if (logger) {
+    logger->set(l_backoff_throttle_val, current);
+    if (waited) {
+      logger->tinc(l_backoff_throttle_wait, ceph_clock_now() - wait_from);
+    }
+  }
+
   return std::chrono::system_clock::now() - start;
 }
 
@@ -413,6 +490,13 @@ uint64_t BackoffThrottle::put(uint64_t c)
   assert(current >= c);
   current -= c;
   _kick_waiters();
+
+  if (logger) {
+    logger->inc(l_backoff_throttle_put);
+    logger->inc(l_backoff_throttle_put_sum, c);
+    logger->set(l_backoff_throttle_val, current);
+  }
+
   return current;
 }
 
@@ -420,6 +504,13 @@ uint64_t BackoffThrottle::take(uint64_t c)
 {
   locker l(lock);
   current += c;
+
+  if (logger) {
+    logger->inc(l_backoff_throttle_take);
+    logger->inc(l_backoff_throttle_take_sum, c);
+    logger->set(l_backoff_throttle_val, current);
+  }
+
   return current;
 }
 
