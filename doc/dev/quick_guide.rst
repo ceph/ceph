@@ -117,9 +117,9 @@ You can now use the swift python client to communicate with the RadosGW.
 
 .. code::
 
-    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf list
-    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf upload mycontainer ceph
-    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf list
+    $ swift -A http://localhost:8000/auth -U test:tester -K testing list
+    $ swift -A http://localhost:8000/auth -U test:tester -K testing upload mycontainer ceph
+    $ swift -A http://localhost:8000/auth -U test:tester -K testing list
 
 
 Run unit tests

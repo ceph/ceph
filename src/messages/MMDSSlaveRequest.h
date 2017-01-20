@@ -96,10 +96,11 @@ class MMDSSlaveRequest : public Message {
   __s16 op;
   __u16 flags;
 
-  static const unsigned FLAG_NONBLOCK	= 1;
-  static const unsigned FLAG_WOULDBLOCK	= 2;
-  static const unsigned FLAG_NOTJOURNALED = 4;
-  static const unsigned FLAG_EROFS = 8;
+  static const unsigned FLAG_NONBLOCK	=	1<<0;
+  static const unsigned FLAG_WOULDBLOCK	=	1<<1;
+  static const unsigned FLAG_NOTJOURNALED =	1<<2;
+  static const unsigned FLAG_EROFS =		1<<3;
+  static const unsigned FLAG_ABORT =		1<<4;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -139,6 +140,8 @@ public:
   bool is_not_journaled() { return (flags & FLAG_NOTJOURNALED); }
   void mark_error_rofs() { flags |= FLAG_EROFS; }
   bool is_error_rofs() { return (flags & FLAG_EROFS); }
+  bool is_abort() { return (flags & FLAG_ABORT); }
+  void mark_abort() { flags |= FLAG_ABORT; }
 
   void set_lock_type(int t) { lock_type = t; }
 

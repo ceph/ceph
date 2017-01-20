@@ -3,7 +3,8 @@ include(MergeStaticLibraries)
 add_library(cephd_base STATIC
   libcephd.cc
   ../ceph_mon.cc
-  ../ceph_osd.cc)
+  ../ceph_osd.cc
+  ../ceph_mds.cc)
 
 set_target_properties(cephd_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
 
@@ -15,17 +16,22 @@ set(merge_libs
   cephd_cls_kvs
   cephd_rados
   cephd_rbd
-  common
+  cephd_rgw
+  cephd_common
   common_utf8
   erasure_code
   global
   json_spirit
   kv
+  mds
   mon
   os
   osd
-  osdc
-  rocksdb)
+  osdc)
+
+if(NOT WITH_SYSTEM_ROCKSDB)
+  list(APPEND merge_libs ${ROCKSDB_LIBRARIES})
+endif(NOT WITH_SYSTEM_ROCKSDB)
 
 if(HAVE_ARMV8_CRC)
   list(APPEND merge_libs common_crc_aarch64)

@@ -11,10 +11,10 @@
  * at a time single thread can be active as well as single biggest
  * contiguous allocation that can be requested.
  *
- * Rest of the nodes are classified in to three catagories:
+ * Rest of the nodes are classified into three catagories:
  *   root note or Allocator
  *   internal nodes or BitMapAreaIN
- *   finally nodes that contains Zones called BitMapAreaLeaf
+ *   final nodes that contains Zones called BitMapAreaLeaf
  * This classification is according to their own implmentation of some
  * of the interfaces defined in BitMapArea.
  */
@@ -104,12 +104,6 @@ int64_t BmapEntityListIter::index()
   return m_cur_idx;
 }
 
-void BmapEntityListIter::decr_idx()
-{
-  m_cur_idx--;
-  alloc_assert(m_cur_idx >= 0);
-}
-
 /*
  * Bitmap Entry functions.
  */
@@ -167,7 +161,6 @@ bmap_t BmapEntry::align_mask(int x)
 bmap_t BmapEntry::bit_mask(int bit)
 {
   return m_bit_to_mask[bit];
-//  return ((bmap_t) 0x1 << ((BmapEntry::size() - 1) - bit));
 }
 bool BmapEntry::check_bit(int bit)
 {
@@ -252,7 +245,7 @@ int BmapEntry::find_n_cont_bits(int start_offset, int64_t num_bits)
 }
 
 /*
- * Find N free bits starting search from an given offset.
+ * Find N free bits starting search from a given offset.
  *
  * Returns number of bits found, start bit and end of
  * index next to bit where our search ended + 1.
@@ -341,40 +334,9 @@ BmapEntry::find_first_set_bits(int64_t required_blocks,
   return allocated;
 }
 
-/*
- * Find N number of free bits in bitmap. Need not be contiguous.
- */
-int BmapEntry::find_any_free_bits(int start_offset, int64_t num_blocks,
-        ExtentList *allocated_blocks, int64_t block_offset, int64_t *scanned)
-{
-  int allocated = 0;
-  int required = num_blocks;
-  int i = 0;
-
-  *scanned = 0;
-
-  if (atomic_fetch() == BmapEntry::full_bmask()) {
-    return 0;
-  }
-
-  /*
-   * Do a serial scan on bitmap.
-   */
-  for (i = start_offset; i < BmapEntry::size() &&
-        allocated < required; i++) {
-    if (check_n_set_bit(i)) {
-      allocated_blocks->add_extents(i + block_offset, 1);
-      allocated++;
-    }
-  }
-
-  *scanned = i - start_offset;
-  return allocated;
-}
-
 void BmapEntry::dump_state(int& count)
 {
-  dout(0) << count << ":: 0x" << std::hex << m_bits << dendl;
+  dout(0) << count << ":: 0x" << std::hex << m_bits << std::dec << dendl;
 }
 
 /*
@@ -582,6 +544,9 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
           m_bmap_list, bmap_idx);
   bmap = iter.next();
+  if (!bmap) {
+    return 0;
+  }
 
   while (allocated < num_blocks) {
     blk_off = zone_blk_off + bmap_idx * bmap->size();
@@ -740,7 +705,7 @@ bmap_area_type_t BitMapArea::get_type()
  * BitMapArea Leaf and Internal
  */
 BitMapAreaIN::BitMapAreaIN(CephContext* cct)
-  : BitMapArea(cct)
+  : BitMapArea(cct), m_child_list(nullptr)
 {
   // nothing
 }
@@ -817,7 +782,7 @@ void BitMapAreaIN::shutdown()
   unlock();
 }
 
-bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
+bool BitMapAreaIN::child_check_n_lock(BitMapArea *child)
 {
   child->lock_shared();
 
@@ -929,8 +894,8 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
         m_child_list, hint / m_child_size_blocks, wrap);
 
   while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1)) {
-    hint = 0;
+    if (!child_check_n_lock(child)) {
+      hint = 0;
       continue;
     }
 
@@ -1089,7 +1054,6 @@ void BitMapAreaLeaf::init(int64_t total_blocks, int64_t area_idx,
   alloc_assert(num_child);
   m_child_size_blocks = total_blocks / num_child;
 
-  alloc_assert(m_level == 1);
   BitMapArea **children = new BitMapArea*[num_child];
   for (int i = 0; i < num_child; i++) {
     children[i] = new BitMapZone(cct, m_child_size_blocks, i, def);
@@ -1119,7 +1083,7 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
   unlock();
 }
 
-bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, int64_t required, bool lock)
+bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, bool lock)
 {
   if (lock) {
     child->lock_excl();
@@ -1150,8 +1114,8 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
         m_child_list, hint / m_child_size_blocks, false);
 
   while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1, false)) {
-    hint = 0;
+    if (!child_check_n_lock(child, false)) {
+      hint = 0;
       continue;
     }
 
@@ -1162,7 +1126,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
     if (allocated == num_blocks) {
       break;
     }
-  hint = 0;
+    hint = 0;
   }
   return allocated;
 }
@@ -1268,7 +1232,7 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
   init(total_blocks, 0, def);
   if (!def && unaligned_blocks) {
     /*
-     * Mark extra padded blocks used from begning.
+     * Mark extra padded blocks used from beginning.
      */
     set_blocks_used(total_blocks - m_extra_blocks, m_extra_blocks);
   }
@@ -1282,6 +1246,16 @@ void BitAllocator::lock_excl()
 void BitAllocator::lock_shared()
 {
   pthread_rwlock_rdlock(&m_rw_lock);
+}
+
+bool BitAllocator::try_lock()
+{
+  bool get_lock = false;
+  if (pthread_rwlock_trywrlock(&m_rw_lock) == 0) {
+    get_lock = true;
+  }
+
+  return get_lock;
 }
 
 void BitAllocator::unlock()
@@ -1309,8 +1283,11 @@ BitAllocator::~BitAllocator()
 void
 BitAllocator::shutdown()
 {
-  lock_excl();
-  serial_lock();
+  bool get_lock = try_lock();
+  assert(get_lock);
+  bool get_serial_lock = try_serial_lock();
+  assert(get_serial_lock);
+  serial_unlock();
   unlock();
 }
 
@@ -1333,7 +1310,20 @@ void BitAllocator::serial_unlock()
   }
 }
 
-bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
+bool BitAllocator::try_serial_lock()
+{
+  bool get_lock = false;
+  if (m_alloc_mode == SERIAL) {
+    if (m_serial_mutex.try_lock() == 0) {
+      get_lock = true;
+    }
+  } else {
+    get_lock = true;
+  }
+  return get_lock;
+}
+
+bool BitAllocator::child_check_n_lock(BitMapArea *child)
 {
   child->lock_shared();
 
@@ -1353,11 +1343,7 @@ void BitAllocator::child_unlock(BitMapArea *child)
 
 bool BitAllocator::check_input_dis(int64_t num_blocks)
 {
-  if (num_blocks == 0) {
-    return false;
-  }
-
-  if (num_blocks > size()) {
+  if (num_blocks == 0 || num_blocks > size()) {
     return false;
   }
   return true;
@@ -1365,11 +1351,7 @@ bool BitAllocator::check_input_dis(int64_t num_blocks)
 
 bool BitAllocator::check_input(int64_t num_blocks)
 {
-  if (num_blocks == 0) {
-    return false;
-  }
-
-  if (num_blocks > get_zone_size(cct)) {
+  if (num_blocks == 0 || num_blocks > get_zone_size(cct)) {
     return false;
   }
   return true;

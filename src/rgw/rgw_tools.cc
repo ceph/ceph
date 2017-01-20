@@ -16,7 +16,7 @@
 
 #define READ_CHUNK_LEN (512 * 1024)
 
-static map<string, string> ext_mime_map;
+static std::map<std::string, std::string>* ext_mime_map;
 
 int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid, const char *data, size_t size, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
@@ -97,7 +97,7 @@ void parse_mime_map_line(const char *start, const char *end)
   do {
     ext = strsep(&l, DELIMS);
     if (ext && *ext) {
-      ext_mime_map[ext] = mime;
+      (*ext_mime_map)[ext] = mime;
     }
   } while (ext);
 }
@@ -164,8 +164,8 @@ done:
 
 const char *rgw_find_mime_by_ext(string& ext)
 {
-  map<string, string>::iterator iter = ext_mime_map.find(ext);
-  if (iter == ext_mime_map.end())
+  map<string, string>::iterator iter = ext_mime_map->find(ext);
+  if (iter == ext_mime_map->end())
     return NULL;
 
   return iter->second.c_str();
@@ -173,6 +173,7 @@ const char *rgw_find_mime_by_ext(string& ext)
 
 int rgw_tools_init(CephContext *cct)
 {
+  ext_mime_map = new std::map<std::string, std::string>;
   int ret = ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
   if (ret < 0)
     return ret;
@@ -182,5 +183,6 @@ int rgw_tools_init(CephContext *cct)
 
 void rgw_tools_cleanup()
 {
-  ext_mime_map.clear();
+  delete ext_mime_map;
+  ext_mime_map = nullptr;
 }

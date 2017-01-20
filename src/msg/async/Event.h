@@ -171,7 +171,7 @@ class EventCenter {
   int notify_send_fd;
   NetHandler net;
   EventCallbackRef notify_handler;
-  unsigned idx = 10000;
+  unsigned idx;
   AssociatedCenters *global_centers = nullptr;
 
   int process_time_events();
@@ -186,7 +186,7 @@ class EventCenter {
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c),
-    notify_handler(NULL) { }
+    notify_handler(NULL), idx(0) { }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 

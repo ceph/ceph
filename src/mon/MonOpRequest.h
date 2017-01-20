@@ -86,7 +86,9 @@ private:
   op_type_t op_type;
 
   MonOpRequest(Message *req, OpTracker *tracker) :
-    TrackedOp(tracker, req->get_recv_stamp()),
+    TrackedOp(tracker,
+      req->get_recv_stamp().is_zero() ?
+      req->get_recv_stamp() : ceph_clock_now()),
     request(req),
     session(NULL),
     con(NULL),

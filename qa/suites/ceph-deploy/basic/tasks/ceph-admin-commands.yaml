@@ -1,12 +1,3 @@
-overrides:
-  ceph-deploy:
-    conf:
-      global:
-        debug ms: 1
-      osd:
-        debug osd: 10
-      mon:
-        debug mon: 10
 roles:
 - - mon.a
   - mds.0

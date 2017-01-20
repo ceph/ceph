@@ -795,8 +795,10 @@ namespace librados
       __attribute__ ((deprecated));
 
     int selfmanaged_snap_create(uint64_t *snapid);
+    void aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletion *c);
 
     int selfmanaged_snap_remove(uint64_t snapid);
+    void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion *c);
 
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
 

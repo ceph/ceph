@@ -230,6 +230,6 @@ Shell::Action action(
   {"import-diff"}, {}, "Import an incremental diff.", "", &get_arguments,
   &execute);
 
-} // namespace list
+} // namespace import_diff
 } // namespace action
 } // namespace rbd

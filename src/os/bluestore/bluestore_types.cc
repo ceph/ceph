@@ -23,12 +23,10 @@ void ExtentList::add_extents(int64_t start, int64_t count) {
 
   if (m_num_extents > 0) {
     last_extent = &((*m_extents)[m_num_extents - 1]);
-    uint64_t last_offset = (last_extent->offset + last_extent->length) / 
-			m_block_size; 
-    uint32_t last_length = last_extent->length / m_block_size; 
-    int64_t max_blocks = m_max_alloc_size / m_block_size;
+    uint64_t last_offset = last_extent->end() / m_block_size;
+    uint32_t last_length = last_extent->length / m_block_size;
     if ((last_offset == (uint64_t) start) &&
-        (!max_blocks || (last_length + count) <= max_blocks)) {
+        (!m_max_blocks || (last_length + count) <= m_max_blocks)) {
       can_merge = true;
     }
   }
@@ -200,7 +198,7 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 
 void bluestore_extent_ref_map_t::put(
   uint64_t offset, uint32_t length,
-  vector<bluestore_pextent_t> *release)
+  PExtentVector *release)
 {
   auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
@@ -559,10 +557,9 @@ void bluestore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("nid", nid);
   f->dump_unsigned("size", size);
   f->open_object_section("attrs");
-  for (map<string,bufferptr>::const_iterator p = attrs.begin();
-       p != attrs.end(); ++p) {
+  for (auto p = attrs.begin(); p != attrs.end(); ++p) {
     f->open_object_section("attr");
-    f->dump_string("name", p->first);
+    f->dump_string("name", p->first.c_str());  // it's not quite std::string
     f->dump_unsigned("len", p->second.length());
     f->close_section();
   }

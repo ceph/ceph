@@ -196,6 +196,11 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return -EINVAL;
   }
 
+  if (io_size > std::numeric_limits<uint32_t>::max()) {
+    std::cerr << "rbd: io-size should be less than 4G" << std::endl;
+    return -EINVAL;
+  }
+
   rbd_bencher b(&image, io_type, io_size);
 
   std::cout << "bench "
@@ -350,12 +355,20 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   } else {
     bench_io_size = 4096;
   }
+  if (bench_io_size == 0) {
+    std::cerr << "rbd: --io-size should be greater than zero." << std::endl;
+    return -EINVAL;
+  }
 
   uint32_t bench_io_threads;
   if (vm.count("io-threads")) {
     bench_io_threads = vm["io-threads"].as<uint32_t>();
   } else {
     bench_io_threads = 16;
+  }
+  if (bench_io_threads == 0) {
+    std::cerr << "rbd: --io-threads should be greater than zero." << std::endl;
+    return -EINVAL;
   }
 
   uint64_t bench_bytes;

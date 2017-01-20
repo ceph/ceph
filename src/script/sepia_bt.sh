@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 function die() {
     echo $@ >&2
@@ -29,30 +29,50 @@ fi
 
 prog=`file $core_path | grep -oP "from '\K[^ ]+"`
 case $prog in
+    ceph_test_*)
+        pkg=ceph-test
+        ;;
     ceph-osd|ceph-mon)
+        pkg=$prog
+        ;;
+    */python*)
+        pkg=librados2
         ;;
     *)
-        die "unknown prog: $prog";;
+        die "unknown prog: $prog"
+        ;;
 esac
+
+flavor=default
+arch=x86_64
 
 case $distro in
     ubuntu)
-        base_url=http://gitbuilder.ceph.com/ceph-deb-trusty-x86_64-basic/sha1/%s/pool/main/c/ceph/%s_%s-1trusty_amd64.deb;
-        pkgs="$prog $prog-dbg";;
+        distro_ver=14.04
+        pkg_path=pool/main/c/ceph/%s_%s-1trusty_amd64.deb
+        pkgs="$pkg $pkg-dbg"
+        ;;
     centos)
+        distro_ver=7
+        pkg_path=${arch}/%s-%s.x86_64.rpm
         # 11.0.2-1022-g5b25cd3 => 11.0.2-1022.g5b25cd3
         release=$(echo $release | sed s/-/./2)
-        base_url=http://gitbuilder.ceph.com/ceph-rpm-centos7-x86_64-basic/sha1/%s/x86_64/%s-%s.x64_64.rpm;
-        pkgs="$prog ceph-debuginfo"
+        pkgs="$pkg ceph-debuginfo"
+        ;;
     *)
-        die "unknown distro: $distro";;
+        die "unknown distro: $distro"
+        ;;
 esac
+
+query_url="https://shaman.ceph.com/api/search?status=ready&project=ceph&flavor=${flavor}&distros=${distro}%2F${distro_ver}%2F${arch}&sha1=${sha1}"
+repo_url=`curl -L -s "${query_url}" | jq -r '.[0] | .url'`
+pkg_url=${repo_url}/${pkg_path}
 
 mkdir -p $run/$job
 cd $run/$job
 
-for pkg in pkgs; do
-    url=`printf $base_url $sha1 $pkg $release`
+for pkg in ${pkgs}; do
+    url=`printf $pkg_url $pkg $release`
     wget $url
     fname=`basename $url`
     case $fname in

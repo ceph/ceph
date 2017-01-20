@@ -21,7 +21,7 @@
 
 #include "KStore.h"
 #include "osd/osd_types.h"
-#include "kv.h"
+#include "os/kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
 #include "common/errno.h"

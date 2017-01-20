@@ -1112,7 +1112,7 @@ Usage::
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
 
-Subcommand ``ls-by-pool`` lists pg with pool = [poolname | poolid]
+Subcommand ``ls-by-pool`` lists pg with pool = [poolname]
 
 Usage::
 

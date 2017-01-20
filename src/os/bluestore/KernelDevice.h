@@ -29,7 +29,6 @@ class KernelDevice : public BlockDevice {
   string path;
   FS *fs;
   bool aio, dio;
-  bufferptr zeros;
 
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
@@ -96,7 +95,7 @@ public:
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
-  int open(string path) override;
+  int open(const string& path) override;
   void close() override;
 };
 

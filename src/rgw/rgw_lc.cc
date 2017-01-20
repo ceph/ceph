@@ -30,6 +30,18 @@ const char* LC_STATUS[] = {
 
 using namespace std;
 using namespace librados;
+
+bool LCRule::validate()
+{
+  if (id.length() > MAX_ID_LEN) {
+    return false;
+  }
+  else if (expiration.get_days() <= 0) {
+    return false;
+  }
+  return true;
+}
+
 void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 {
   string id;
@@ -41,6 +53,47 @@ void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 void RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 {
   prefix_map[rule->get_prefix()] = rule->get_expiration().get_days();
+}
+
+int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
+{
+  if (!rule->validate()) {
+    return -EINVAL;
+  }
+  string id;
+  rule->get_id(id);
+  if (rule_map.find(id) != rule_map.end()) {  //id shouldn't be the same 
+    return -EINVAL;
+  }
+  rule_map.insert(pair<string, LCRule>(id, *rule));
+
+  auto ret = prefix_map.insert(pair<string, int>(rule->get_prefix(), rule->get_expiration().get_days()));
+  //Now prefix shouldn't be the same. When we add noncurrent expiration or other action, prefix may be same.
+  if (!ret.second) {
+    return -ERR_INVALID_REQUEST;
+  }
+  return 0;
+}
+
+//Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
+//define same action(now only support expiration days). 
+bool RGWLifecycleConfiguration::validate() 
+{
+  if (prefix_map.size() < 2) {
+    return true;
+  }
+  auto next_iter = prefix_map.begin();
+  auto cur_iter = next_iter++;
+  while (next_iter != prefix_map.end()) {
+    string c_pre = cur_iter->first;
+    string n_pre = next_iter->first;
+    if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
+      return false;
+    }
+    ++next_iter;
+    ++cur_iter;
+  }
+  return true;
 }
 
 void *RGWLC::LCWorker::entry() {

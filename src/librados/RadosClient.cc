@@ -47,6 +47,7 @@
 #include "RadosClient.h"
 
 #include "include/assert.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -398,15 +399,12 @@ struct C_aio_watch_flush_Complete : public Context {
   virtual void finish(int r) {
     c->lock.Lock();
     c->rval = r;
-    c->ack = true;
-    c->safe = true;
+    c->complete = true;
     c->cond.Signal();
 
-    if (c->callback_complete) {
+    if (c->callback_complete ||
+	c->callback_safe) {
       client->finisher.queue(new librados::C_AioComplete(c));
-    }
-    if (c->callback_safe) {
-      client->finisher.queue(new librados::C_AioSafe(c));
     }
     c->put_unlock();
   }
@@ -789,6 +787,12 @@ int librados::RadosClient::blacklist_add(const string& client_address,
   cmds.push_back(cmd.str());
   bufferlist inbl;
   int r = mon_command(cmds, inbl, NULL, NULL);
+  if (r < 0) {
+    return r;
+  }
+
+  // ensure we have the latest osd map epoch before proceeding
+  r = wait_for_latest_osdmap();
   return r;
 }
 

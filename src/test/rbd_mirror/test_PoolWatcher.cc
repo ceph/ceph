@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
@@ -128,7 +128,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
     {
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_name.c_str(),
 						    "", "", pioctx, false);
-      ictx->state->open();
+      ictx->state->open(false);
       EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str(),
 						 cls::rbd::UserSnapshotNamespace()));
       EXPECT_EQ(0, ictx->operations->snap_protect(snap_name.c_str()));

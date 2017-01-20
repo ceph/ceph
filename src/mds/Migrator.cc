@@ -322,7 +322,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     }
     dir->unfreeze_tree();
     cache->adjust_subtree_auth(dir, mds->get_nodeid());
-    cache->try_subtree_merge(dir);  // NOTE: this may journal subtree_map as side effect
+    cache->try_subtree_merge(dir);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
@@ -493,7 +493,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	  
 	  // adjust auth back to the exporter
 	  cache->adjust_subtree_auth(dir, q->second.peer);
-	  cache->try_subtree_merge(dir);   // NOTE: may journal subtree_map as side-effect
+	  cache->try_subtree_merge(dir);
 
 	  // bystanders?
 	  if (q->second.bystanders.empty()) {
@@ -958,7 +958,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     return;
   }
 
-  it->second.mut = MutationRef(new MutationImpl);
+  it->second.mut = std::make_shared<MutationImpl>();
   if (diri->is_auth())
     it->second.mut->auth_pin(diri);
   mds->locker->rdlock_take_set(rdlocks, it->second.mut);
@@ -1638,6 +1638,8 @@ void Migrator::export_reverse(CDir *dir)
 {
   dout(7) << "export_reverse " << *dir << dendl;
 
+  set<CInode*> to_eval;
+
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
@@ -1654,6 +1656,10 @@ void Migrator::export_reverse(CDir *dir)
 	continue;
       CInode *in = p->second->get_linkage()->get_inode();
       in->abort_export();
+      if (in->state_test(CInode::STATE_EVALSTALECAPS)) {
+	in->state_clear(CInode::STATE_EVALSTALECAPS);
+	to_eval.insert(in);
+      }
       if (in->is_dir())
 	in->get_nested_dirfrags(rq);
     }
@@ -1670,7 +1676,7 @@ void Migrator::export_reverse(CDir *dir)
 
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
-  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as side-effect
+  cache->try_subtree_merge(dir);
 
   // notify bystanders
   export_notify_abort(dir, bounds);
@@ -1680,6 +1686,22 @@ void Migrator::export_reverse(CDir *dir)
   
   // unfreeze
   dir->unfreeze_tree();
+
+  // revoke/resume stale caps
+  for (auto in : to_eval) {
+    bool need_issue = false;
+    for (auto& p : in->get_client_caps()) {
+      Capability *cap = p.second;
+      if (cap->is_stale()) {
+	mds->locker->revoke_stale_caps(cap);
+      } else {
+	need_issue = true;
+      }
+    }
+    if (need_issue &&
+	(!in->is_auth() || !mds->locker->eval(in, CEPH_CAP_LOCKS)))
+      mds->locker->issue_caps(in);
+  }
 
   cache->show_cache();
 }
@@ -1810,11 +1832,6 @@ void Migrator::export_finish(CDir *dir)
   C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather> *fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather>(g_ceph_context);
   finish_export_dir(dir, ceph_clock_now(), it->second.peer,
 		    it->second.peer_imported, fin->contexts, &num_dentries);
-  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
-
-  // unfreeze
-  dout(7) << "export_finish unfreezing" << dendl;
-  dir->unfreeze_tree();
   
   // unpin bounds
   set<CDir*> bounds;
@@ -1830,12 +1847,21 @@ void Migrator::export_finish(CDir *dir)
   // adjust auth, with possible subtree merge.
   //  (we do this _after_ removing EXPORTBOUND pins, to allow merges)
   cache->adjust_subtree_auth(dir, it->second.peer);
-  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as sideeffect
+  cache->try_subtree_merge(dir);
 
   // no more auth subtree? clear scatter dirty
   if (!dir->get_inode()->is_auth() &&
-      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
+      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dir->get_inode()->clear_scatter_dirty();
+    // wake up scatter_nudge waiters
+    dir->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, fin->contexts);
+  }
+
+  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
+
+  // unfreeze
+  dout(7) << "export_finish unfreezing" << dendl;
+  dir->unfreeze_tree();
 
   // discard delayed expires
   cache->discard_delayed_expire(dir);
@@ -2166,7 +2192,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   if (!mds->mdcache->is_readonly() &&
       dir->get_inode()->filelock.can_wrlock(-1) &&
       dir->get_inode()->nestlock.can_wrlock(-1)) {
-    it->second.mut = MutationRef(new MutationImpl);
+    it->second.mut = std::make_shared<MutationImpl>();
     // force some locks.  hacky.
     mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
     mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
@@ -2368,9 +2394,13 @@ void Migrator::import_reverse(CDir *dir)
 
   cache->adjust_subtree_auth(dir, stat.peer);
 
+  C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather> *fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather>(g_ceph_context);
   if (!dir->get_inode()->is_auth() &&
-      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
+      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dir->get_inode()->clear_scatter_dirty();
+    // wake up scatter_nudge waiters
+    dir->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, fin->contexts);
+  }
 
   int num_dentries = 0;
   // adjust auth bits.
@@ -2406,8 +2436,10 @@ void Migrator::import_reverse(CDir *dir)
 	if (in->is_dirty()) 
 	  in->mark_clean();
 	in->clear_dirty_rstat();
-	if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
+	if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
 	  in->clear_scatter_dirty();
+	  in->take_waiting(CInode::WAIT_ANY_MASK, fin->contexts);
+	}
 
 	in->clear_dirty_parent();
 
@@ -2430,6 +2462,8 @@ void Migrator::import_reverse(CDir *dir)
       ++num_dentries;
     }
   }
+
+  dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
   if (stat.state == IMPORT_ACKING) {
     // remove imported caps
@@ -2459,7 +2493,7 @@ void Migrator::import_reverse(CDir *dir)
   // log our failure
   mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
 
-  cache->try_subtree_merge(dir);  // NOTE: this may journal subtree map as side effect
+  cache->try_subtree_merge(dir);
 
   cache->trim(-1, num_dentries); // try trimming dentries
 
@@ -2517,8 +2551,6 @@ void Migrator::import_reverse_unfreeze(CDir *dir)
   assert(dir);
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   dir->unfreeze_tree();
-  list<MDSInternalContextBase*> ls;
-  mds->queue_waiters(ls);
   cache->discard_delayed_expire(dir);
   import_reverse_final(dir);
 }
@@ -2657,14 +2689,6 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
     return;
   }
 
-  // clear updated scatterlocks
-  /*
-  for (list<ScatterLock*>::iterator p = import_updated_scatterlocks[dir].begin();
-       p != import_updated_scatterlocks[dir].end();
-       ++p) 
-    (*p)->clear_updated();
-  */
-
   // remove pins
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
@@ -2686,7 +2710,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 
   mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
 
-  cache->try_subtree_merge(dir);   // NOTE: this may journal subtree_map as sideffect
+  cache->try_subtree_merge(dir);
 
   // process delayed expires
   cache->process_delayed_expire(dir);

@@ -554,6 +554,7 @@ public:
    *
    * @param m The Message we are fast dispatching. We take ownership
    * of one reference to it.
+   * If none of our Dispatchers can handle it, ceph_abort().
    */
   void ms_fast_dispatch(Message *m) {
     m->set_dispatch_stamp(ceph_clock_now());
@@ -580,7 +581,7 @@ public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, ceph_abort().
+   *  If none of our Dispatchers can handle it, assert(0).
    *
    *  @param m The Message to deliver. We take ownership of
    *  one reference to it.

@@ -9,6 +9,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/types.h"
+#include "include/utime.h"
 #include <iosfwd>
 #include <list>
 #include <boost/none.hpp>
@@ -67,9 +68,7 @@ struct AioWriteEvent {
   uint64_t length;
   bufferlist data;
 
-  static uint32_t get_fixed_size() {
-    return 30; /// version encoding, type, offset, length
-  }
+  static uint32_t get_fixed_size();
 
   AioWriteEvent() : offset(0), length(0) {
   }
@@ -372,12 +371,18 @@ typedef boost::variant<AioDiscardEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {
+  static uint32_t get_fixed_size() {
+    return EVENT_FIXED_SIZE + METADATA_FIXED_SIZE;
+  }
+
   EventEntry() : event(UnknownEvent()) {
   }
-  EventEntry(const Event &_event) : event(_event) {
+  EventEntry(const Event &_event, const utime_t &_timestamp = utime_t())
+    : event(_event), timestamp(_timestamp) {
   }
 
   Event event;
+  utime_t timestamp;
 
   EventType get_event_type() const;
 
@@ -386,6 +391,13 @@ struct EventEntry {
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<EventEntry *> &o);
+
+private:
+  static const uint32_t EVENT_FIXED_SIZE = 14; /// version encoding, type
+  static const uint32_t METADATA_FIXED_SIZE = 14; /// version encoding, timestamp
+
+  void encode_metadata(bufferlist& bl) const;
+  void decode_metadata(bufferlist::iterator& it);
 };
 
 // Journal Client data structures

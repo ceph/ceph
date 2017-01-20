@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_TEST_LIBRBD_MOCK_EXCLUSIVE_LOCK_H
@@ -23,7 +23,7 @@ struct MockExclusiveLock {
   MOCK_METHOD1(block_requests, void(int));
   MOCK_METHOD0(unblock_requests, void());
 
-  MOCK_METHOD1(request_lock, void(Context *));
+  MOCK_METHOD1(acquire_lock, void(Context *));
   MOCK_METHOD1(release_lock, void(Context *));
 };
 

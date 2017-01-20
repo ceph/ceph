@@ -150,7 +150,7 @@ class SharedDriverData {
   std::function<void ()> run_func;
 
   uint64_t block_size = 0;
-  uint64_t sector_size = 0;
+  uint32_t sector_size = 0;
   uint64_t size = 0;
   std::vector<NVMEDevice*> registered_devices;
   friend class AioCompletionThread;
@@ -182,7 +182,6 @@ class SharedDriverData {
   std::set<uint64_t> flush_waiter_seqs;
 
  public:
-  bool zero_command_support;
   std::atomic_ulong completed_op_seq, queue_op_seq;
   PerfCounters *logger = nullptr;
 
@@ -198,13 +197,11 @@ class SharedDriverData {
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
-    enum spdk_nvme_qprio qprio = SPDK_NVME_QPRIO_URGENT;
 
     sector_size = spdk_nvme_ns_get_sector_size(ns);
-    block_size = std::max(CEPH_PAGE_SIZE, spdk_nvme_ns_get_sector_size(ns));
-    size = spdk_nvme_ns_get_sector_size(ns) * spdk_nvme_ns_get_num_sectors(ns);
-    zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
-    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, qprio);
+    block_size = std::max(CEPH_PAGE_SIZE, sector_size);
+    size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
+    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, SPDK_NVME_QPRIO_URGENT);
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
@@ -316,16 +313,16 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 
   if (t->io_request.cur_seg_left) {
     *length = t->io_request.cur_seg_left;
-    *address = (void *)(rte_malloc_virt2phy(addr) + data_buffer_size - t->io_request.cur_seg_left);
+    *address = (void *)((uint64_t)addr + data_buffer_size - t->io_request.cur_seg_left);
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
       if (tail) {
-        *address = (void *)(rte_malloc_virt2phy(addr) + tail - t->io_request.cur_seg_left);
+        *address = (void *)((uint64_t)addr + tail - t->io_request.cur_seg_left);
       }
     }
     t->io_request.cur_seg_left = 0;
   } else {
-    *address = (void *)rte_malloc_virt2phy(addr);
+    *address = addr;
     *length = data_buffer_size;
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
@@ -376,8 +373,7 @@ void SharedDriverData::_aio_thread()
 
   if (data_buf_mempool.empty()) {
     for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-      void *b = rte_malloc_socket(
-          "nvme_data_buffer", data_buffer_size, CEPH_PAGE_SIZE, rte_socket_id());
+      void *b = spdk_zmalloc(data_buffer_size, CEPH_PAGE_SIZE, NULL);
       if (!b) {
         derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
         assert(b);
@@ -446,6 +442,7 @@ void SharedDriverData::_aio_thread()
             derr << __func__ << " failed to read" << dendl;
             --t->ctx->num_reading;
             t->return_code = r;
+            t->release_segs();
             std::unique_lock<std::mutex> l(t->ctx->lock);
             t->ctx->cond.notify_all();
           } else {
@@ -462,6 +459,7 @@ void SharedDriverData::_aio_thread()
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
             t->return_code = r;
+            t->release_segs();
             std::unique_lock<std::mutex> l(t->ctx->lock);
             t->ctx->cond.notify_all();
           } else {
@@ -774,7 +772,7 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 }
 
 
-int NVMEDevice::open(string p)
+int NVMEDevice::open(const string& p)
 {
   int r = 0;
   dout(1) << __func__ << " path " << p << dendl;
@@ -813,10 +811,6 @@ int NVMEDevice::open(string p)
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
-  if (!driver->zero_command_support) {
-    zeros = buffer::create_page_aligned(1048576);
-    zeros.zero();
-  }
 
   //nvme is non-rotational device.
   rotational = false;
