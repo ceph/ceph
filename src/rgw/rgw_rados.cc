@@ -2290,6 +2290,7 @@ struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
   struct put_obj_aio_info info;
   info = pending.front();
   pending.pop_front();
+  pending_size -= info.size;
   return info;
 }
 
@@ -2328,7 +2329,7 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait)
+int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait)
 {
   bool _wait = need_to_wait;
 
@@ -2336,9 +2337,11 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool
     struct put_obj_aio_info info;
     info.handle = handle;
     info.obj = obj;
+    info.size = size;
+    pending_size += size;
     pending.push_back(info);
   }
-  size_t orig_size = pending.size();
+  size_t orig_size = pending_size;
 
   /* first drain complete IOs */
   while (pending_has_completed()) {
@@ -2350,12 +2353,16 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool
   }
 
   /* resize window in case messages are draining too fast */
-  if (orig_size - pending.size() >= max_chunks) {
-    max_chunks++;
+  if (orig_size - pending_size >= window_size) {
+    window_size += store->ctx()->_conf->rgw_max_chunk_size;
+    uint64_t max_window_size = store->ctx()->_conf->rgw_put_obj_max_window_size;
+    if (window_size > max_window_size) {
+      window_size = max_window_size;
+    }
   }
 
   /* now throttle. Note that need_to_wait should only affect the first IO operation */
-  if (pending.size() > max_chunks || _wait) {
+  if (pending_size > window_size || _wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
@@ -2375,6 +2382,15 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   *pobj = cur_obj;
 
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
+}
+
+int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
+{
+  RGWPutObjProcessor::prepare(store, oid_rand);
+
+  window_size = store->ctx()->_conf->rgw_put_obj_min_window_size;
+
+  return 0;
 }
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
@@ -2418,7 +2434,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
 
 int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, oid_rand);
+  RGWPutObjProcessor_Aio::prepare(store, oid_rand);
 
   int r = store->get_max_chunk_size(bucket, &max_chunk_size);
   if (r < 0) {
@@ -2495,13 +2511,14 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     }
     bufferlist bl;
     pending_data_bl.splice(0, max_write_size, &bl);
+    uint64_t write_len = bl.length();
     int r = write_data(bl, data_ofs, &handle, &obj, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
       return r;
     }
-    data_ofs += bl.length();
-    r = throttle_data(handle, obj, false);
+    data_ofs += write_len;
+    r = throttle_data(handle, obj, write_len, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
       return r;
@@ -6719,6 +6736,7 @@ public:
     do {
       void *handle = NULL;
       rgw_obj obj;
+      uint64_t size = bl.length();
       int ret = filter->handle_data(bl, ofs, &handle, &obj, &again);
       if (ret < 0)
         return ret;
@@ -6730,7 +6748,7 @@ public:
         ret = opstate->renew_state();
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
-          int r = filter->throttle_data(handle, obj, false);
+          int r = filter->throttle_data(handle, obj, size, false);
           if (r < 0) {
             ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
           }
@@ -6741,7 +6759,7 @@ public:
         need_opstate = false;
       }
 
-      ret = filter->throttle_data(handle, obj, false);
+      ret = filter->throttle_data(handle, obj, size, false);
       if (ret < 0)
         return ret;
     } while (again);
@@ -7654,7 +7672,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       if (ret < 0) {
         return ret;
       }
-      ret = processor.throttle_data(handle, obj, false);
+      ret = processor.throttle_data(handle, obj, end - ofs + 1, false);
       if (ret < 0)
         return ret;
     } while (again);
