@@ -1547,7 +1547,8 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   if (keys.empty()) {
     assert(!c);
-    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->more, &fin->ret2);
+    rd.omap_get_vals("", "", g_conf->mds_dir_keys_per_op,
+		     &fin->omap, &fin->more, &fin->ret2);
   } else {
     assert(c);
     std::set<std::string> str_keys;
@@ -1584,7 +1585,7 @@ void CDir::_omap_fetch_more(
   ObjectOperation rd;
   rd.omap_get_vals(fin->omap.rbegin()->first,
 		   "", /* filter prefix */
-		   (uint64_t)-1,
+		   g_conf->mds_dir_keys_per_op,
 		   &fin->omap_more,
 		   &fin->more,
 		   &fin->ret);
