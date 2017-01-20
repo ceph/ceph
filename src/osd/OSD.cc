@@ -1883,6 +1883,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                          cct->_conf->osd_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                            cct->_conf->osd_op_history_duration);
+  op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
+                                                    cct->_conf->osd_op_history_slow_op_threshold);
 }
 
 OSD::~OSD()
@@ -8986,6 +8988,11 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("osd_op_history_duration")) {
     op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                              cct->_conf->osd_op_history_duration);
+  }
+  if (changed.count("osd_op_history_slow_op_size") ||
+      changed.count("osd_op_history_slow_op_threshold")) {
+    op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
+                                                      cct->_conf->osd_op_history_slow_op_threshold);
   }
   if (changed.count("osd_enable_op_tracker")) {
       op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);
