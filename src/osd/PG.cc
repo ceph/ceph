@@ -2734,10 +2734,12 @@ void PG::init(
 
 void PG::upgrade(ObjectStore *store)
 {
-  assert(info_struct_v <= 9);
+  assert(info_struct_v <= 10);
   ObjectStore::Transaction t;
 
   assert(info_struct_v >= 7);
+
+  // no special action needed for 9->10, just write out the biginfo
 
   // 8 -> 9
   if (info_struct_v <= 8) {
@@ -3134,7 +3136,11 @@ int PG::read_info(
     ::decode(info, p);
 
     p = values[biginfo_key].begin();
-    ::decode(past_intervals, p);
+    if (struct_v >= 10) {
+      ::decode(past_intervals, p);
+    } else {
+      past_intervals.decode_classic(p);
+    }
     ::decode(info.purged_snaps, p);
 
     p = values[fastinfo_key].begin();
