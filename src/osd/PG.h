@@ -923,8 +923,7 @@ public:
     }
   }
   void check_past_interval_bounds() const;
-  void trim_past_intervals();
-	PastIntervals::PriorSet build_prior();
+  PastIntervals::PriorSet build_prior();
 
   void remove_down_peer_info(const OSDMapRef osdmap);
 

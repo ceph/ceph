@@ -235,6 +235,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p), pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
+  past_intervals(
+    curmap->get_pools().at(p.pgid.pool()).ec_pool(),
+    *curmap),
   stat_queue_item(this),
   scrub_queued(false),
   recovery_queued(false),
@@ -762,21 +765,6 @@ void PG::check_past_interval_bounds() const
   }
 }
 
-/*
- * Trim past_intervals.
- *
- * This gets rid of all the past_intervals that happened before last_epoch_clean.
- */
-void PG::trim_past_intervals()
-{
-  past_intervals.trim(
-    info.history.last_epoch_clean,
-    [&](const PastIntervals::pg_interval_t &trimmed) {
-      dout(10) << __func__ << ": trimming " << trimmed << dendl;
-      dirty_big_info = true;
-    });
-}
-
 bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
 {
   epoch_t up_thru = osdmap->get_up_thru(osd->whoami);
@@ -857,7 +845,6 @@ PastIntervals::PriorSet PG::build_prior()
     pool.info.ec_pool(),
     get_pgbackend()->get_is_recoverable_predicate(),
     *get_osdmap(),
-    past_intervals,
     up,
     acting,
     info,
@@ -1966,7 +1953,7 @@ void PG::mark_clean()
   // strays yet.
   info.history.last_epoch_clean = get_osdmap()->get_epoch();
 
-  trim_past_intervals();
+  past_intervals.clear();
 
   if (is_active()) {
     /* The check is needed because if we are below min_size we're not
@@ -5705,6 +5692,7 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
+  past_intervals.update_type_from_map(pool.info.ec_pool(), *osdmap);
   if (cct->_conf->osd_debug_verify_cached_snaps) {
     interval_set<snapid_t> actual_removed_snaps;
     const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());

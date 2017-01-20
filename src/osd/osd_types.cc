@@ -2858,28 +2858,145 @@ void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>&
 }
 
 WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
-void PastIntervals::encode(bufferlist &bl) const
+
+class pi_simple_rep : public PastIntervals::interval_rep {
+  map<epoch_t, PastIntervals::pg_interval_t> interval_map;
+public:
+  size_t size() const override { return interval_map.size(); }
+  bool empty() const override { return interval_map.empty(); }
+  void clear() override { interval_map.clear(); }
+  pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const override {
+    auto iter = interval_map.begin();
+    if (iter != interval_map.end()) {
+      auto riter = interval_map.rbegin();
+      return make_pair(
+	make_pair(iter->second.first, iter->second.last + 1),
+	riter->second.last + 1);
+    } else {
+      assert(0 == "get_bounds only valid if !empty()");
+      return make_pair(make_pair(0, 0), 0);
+    }
+  }
+  set<pg_shard_t> get_might_have_unfound(
+    pg_shard_t pg_whoami,
+    bool ec_pool) const override {
+    set<pg_shard_t> might_have_unfound;
+
+    // We need to decide who might have unfound objects that we need
+    auto p = interval_map.rbegin();
+    auto end = interval_map.rend();
+    for (; p != end; ++p) {
+      const PastIntervals::pg_interval_t &interval(p->second);
+      // If nothing changed, we don't care about this interval.
+      if (!interval.maybe_went_rw)
+	continue;
+
+      int i = 0;
+      std::vector<int>::const_iterator a = interval.acting.begin();
+      std::vector<int>::const_iterator a_end = interval.acting.end();
+      for (; a != a_end; ++a, ++i) {
+	pg_shard_t shard(*a, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
+	if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
+	  might_have_unfound.insert(shard);
+      }
+    }
+    return might_have_unfound;
+  }
+  void add_interval(
+    bool ec_pool,
+    const PastIntervals::pg_interval_t &interval) override {
+    interval_map[interval.first] = interval;
+  }
+  unique_ptr<PastIntervals::interval_rep> clone() const override {
+    return unique_ptr<PastIntervals::interval_rep>(new pi_simple_rep(*this));
+  }
+  ostream &print(ostream &out) const override {
+    return out << interval_map;
+  }
+  void encode(bufferlist &bl) const override {
+    ::encode(interval_map, bl);
+  }
+  void decode(bufferlist::iterator &bl) override {
+    ::decode(interval_map, bl);
+  }
+  void dump(Formatter *f) const override {
+    f->open_array_section("PastIntervals::compat_rep");
+    for (auto &&i: interval_map) {
+      f->open_object_section("pg_interval_t");
+      f->dump_int("epoch", i.first);
+      f->open_object_section("interval");
+      i.second.dump(f);
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+  }
+  bool is_classic() const override {
+    return true;
+  }
+  static void generate_test_instances(list<pi_simple_rep*> &o) {
+    /* todo */
+    return;
+  }
+  void iterate_mayberw_back_to(
+    bool ec_pool,
+    epoch_t les,
+    std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const override {
+    for (auto i = interval_map.rbegin(); i != interval_map.rend(); ++i) {
+      if (i->second.last < les)
+	break;
+      set<pg_shard_t> actingset;
+      for (unsigned j = 0; j < i->second.acting.size(); ++j) {
+	if (i->second.acting[j] == CRUSH_ITEM_NONE)
+	  continue;
+	actingset.insert(
+	  pg_shard_t(
+	    i->second.acting[j],
+	    ec_pool ? shard_id_t(j) : shard_id_t::NO_SHARD));
+      }
+      f(i->second.first, actingset);
+    }
+  }
+  virtual ~pi_simple_rep() override {}
+};
+
+
+PastIntervals::PastIntervals(const PastIntervals &rhs)
+  : past_intervals(rhs.past_intervals ?
+		   rhs.past_intervals->clone() :
+		   nullptr) {}
+
+PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
 {
-  ::encode(past_intervals, bl);
+  PastIntervals other(rhs);
+  ::swap(other, *this);
+  return *this;
+}
+
+ostream& operator<<(ostream& out, const PastIntervals &i)
+{
+  assert(i.past_intervals);
+  return i.past_intervals->print(out);
 }
 
 void PastIntervals::decode(bufferlist::iterator &bl)
 {
-  ::decode(past_intervals, bl);
+  DECODE_START(1, bl);
+  __u8 classic = 0;
+  ::decode(classic, bl);
+  if (classic) {
+    past_intervals.reset(new pi_simple_rep);
+    past_intervals->decode(bl);
+  } else {
+    assert(0 == "not implemented");
+  }
+  DECODE_FINISH(bl);
 }
 
-void PastIntervals::dump(Formatter *f) const
+void PastIntervals::decode_classic(bufferlist::iterator &bl)
 {
-  f->open_array_section("PastIntervals");
-  for (auto &&i: past_intervals) {
-    f->open_object_section("pg_interval_t");
-    f->dump_int("epoch", i.first);
-    f->open_object_section("interval");
-    i.second.dump(f);
-    f->close_section();
-    f->close_section();
-  }
-  f->close_section();
+  past_intervals.reset(new pi_simple_rep);
+  past_intervals->decode(bl);
 }
 
 void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
@@ -2888,122 +3005,21 @@ void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
   return;
 }
 
-ostream& operator<<(ostream& out, const PastIntervals &i)
+void PastIntervals::update_type_from_map(bool ec_pool, const OSDMap &osdmap)
 {
-  return out << i.past_intervals;
-}
-
-
-set<pg_shard_t> PastIntervals::get_might_have_unfound(
-  pg_shard_t pg_whoami,
-  bool ec_pool) const
-{
-  set<pg_shard_t> might_have_unfound;
-
-  // We need to decide who might have unfound objects that we need
-  PastIntervals::const_reverse_iterator p = past_intervals.rbegin();
-  PastIntervals::const_reverse_iterator end = past_intervals.rend();
-  for (; p != end; ++p) {
-
-    const PastIntervals::pg_interval_t &interval(p->second);
-    // If nothing changed, we don't care about this interval.
-    if (!interval.maybe_went_rw)
-      continue;
-
-    int i = 0;
-    std::vector<int>::const_iterator a = interval.acting.begin();
-    std::vector<int>::const_iterator a_end = interval.acting.end();
-    for (; a != a_end; ++a, ++i) {
-      pg_shard_t shard(*a, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
-      if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
-	might_have_unfound.insert(shard);
+  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (!past_intervals) {
+      past_intervals.reset(new pi_simple_rep);
+    } else {
+      assert(is_classic());
+    }
+  } else {
+    if (!past_intervals) {
+      // inialize new type
+    } else if (!is_classic()) {
+      // upgrade
     }
   }
-  return might_have_unfound;
-}
-
-bool PastIntervals::has_crashed_interval_since(
-  epoch_t since,
-  const vector<int> &acting,
-  const vector<int> &up,
-  const OSDMap &osdmap,
-  const DoutPrefixProvider *dpp) const {
-  bool crashed = false;
-
-  for (PastIntervals::const_reverse_iterator p = past_intervals.rbegin();
-       p != past_intervals.rend();
-       ++p) {
-    const PastIntervals::pg_interval_t &interval = p->second;
-    ldpp_dout(dpp,10) << "may_need_replay " << interval << dendl;
-
-    if (interval.last < since)
-      break;  // we don't care
-
-    if (interval.acting.empty())
-      continue;
-
-    if (!interval.maybe_went_rw)
-      continue;
-
-    // look at whether any of the osds during this interval survived
-    // past the end of the interval (i.e., didn't crash and
-    // potentially fail to COMMIT a write that it ACKed).
-    bool any_survived_interval = false;
-
-    // consider ACTING osds
-    for (unsigned i=0; i<interval.acting.size(); i++) {
-      int o = interval.acting[i];
-      if (o == CRUSH_ITEM_NONE)
-	continue;
-
-      const osd_info_t *pinfo = 0;
-      if (osdmap.exists(o))
-	pinfo = &osdmap.get_info(o);
-
-      // does this osd appear to have survived through the end of the
-      // interval?
-      if (pinfo) {
-	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
-	  ldpp_dout(dpp, 10) << "may_need_replay  osd." << o
-			     << " up_from " << pinfo->up_from
-			     << " up_thru " << pinfo->up_thru
-			     << " survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from <= interval.first &&
-		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
-		  std::find(up.begin(), up.end(), o) != up.end())) {
-	  ldpp_dout(dpp, 10) << "may_need_replay  osd." << o
-			     << " up_from " << pinfo->up_from
-			     << " and is in acting|up,"
-			     << " assumed to have survived the interval"
-			     << dendl;
-	  // (if it hasn't, we will rebuild PriorSet)
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from > interval.last &&
-		 pinfo->last_clean_begin <= interval.first &&
-		 pinfo->last_clean_end > interval.last) {
-	  ldpp_dout(dpp, 10) << "may_need_replay  prior osd." << o
-			     << " up_from " << pinfo->up_from
-			     << " and last clean interval ["
-			     << pinfo->last_clean_begin << ","
-			     << pinfo->last_clean_end
-			     << ") survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-      }
-    }
-
-    if (!any_survived_interval) {
-      ldpp_dout(dpp, 3) << "may_need_replay  no known survivors of interval "
-			<< interval.first << "-" << interval.last
-			<< ", may need replay" << dendl;
-      crashed = true;
-      break;
-    }
-  }
-  return crashed;
 }
 
 bool PastIntervals::is_new_interval(
@@ -3129,6 +3145,8 @@ bool PastIntervals::check_new_interval(
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
   //  do not change.
+  assert(past_intervals);
+  assert(past_intervals->past_intervals);
   if (is_new_interval(
 	old_acting_primary,
 	new_acting_primary,
@@ -3141,7 +3159,7 @@ bool PastIntervals::check_new_interval(
 	osdmap,
 	lastmap,
 	pgid)) {
-    pg_interval_t& i = past_intervals->past_intervals[same_interval_since];
+    pg_interval_t i;
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
     assert(i.first <= i.last);
@@ -3210,6 +3228,7 @@ bool PastIntervals::check_new_interval(
       if (out)
 	*out << __func__ << " " << i << " : acting set is too small" << std::endl;
     }
+    past_intervals->past_intervals->add_interval(old_pg_pool.ec_pool(), i);
     return true;
   } else {
     return false;
@@ -3217,10 +3236,10 @@ bool PastIntervals::check_new_interval(
 }
 
 PastIntervals::PriorSet::PriorSet(
+  const PastIntervals &past_intervals,
   bool ec_pool,
   IsPGRecoverablePredicate *c,
   const OSDMap &osdmap,
-  const PastIntervals &past_intervals,
   const vector<int> &up,
   const vector<int> &acting,
   const pg_info_t &info,
@@ -3285,77 +3304,66 @@ PastIntervals::PriorSet::PriorSet(
       probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
 
-  for (PastIntervals::const_reverse_iterator p = past_intervals.rbegin();
-       p != past_intervals.rend();
-       ++p) {
-    const PastIntervals::pg_interval_t &interval = p->second;
-    ldpp_dout(dpp, 10) << "build_prior " << interval << dendl;
+  past_intervals.iterate_mayberw_back_to(
+    ec_pool,
+    info.history.last_epoch_started,
+    [&](epoch_t start, const set<pg_shard_t> &acting) {
+      ldpp_dout(dpp, 10) << "build_prior maybe_rw interval:" << start
+			 << ", acting: " << acting << dendl;
 
-    if (interval.last < info.history.last_epoch_started)
-      break;  // we don't care
+      // look at candidate osds during this interval.  each falls into
+      // one of three categories: up, down (but potentially
+      // interesting), or lost (down, but we won't wait for it).
+      set<pg_shard_t> up_now;
+      // any candidates down now (that might have useful data)
+      bool any_down_now = false;
 
-    if (interval.acting.empty())
-      continue;
+      // consider ACTING osds
+      for (auto &&so: acting) {
+	const osd_info_t *pinfo = 0;
+	if (osdmap.exists(so.osd))
+	  pinfo = &osdmap.get_info(so.osd);
 
-    if (!interval.maybe_went_rw)
-      continue;
-
-    // look at candidate osds during this interval.  each falls into
-    // one of three categories: up, down (but potentially
-    // interesting), or lost (down, but we won't wait for it).
-    set<pg_shard_t> up_now;
-    bool any_down_now = false;  // any candidates down now (that might have useful data)
-
-    // consider ACTING osds
-    for (unsigned i = 0; i < interval.acting.size(); i++) {
-      int o = interval.acting[i];
-      if (o == CRUSH_ITEM_NONE)
-	continue;
-      pg_shard_t so(o, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
-
-      const osd_info_t *pinfo = 0;
-      if (osdmap.exists(o))
-	pinfo = &osdmap.get_info(o);
-
-      if (osdmap.is_up(o)) {
-	// include past acting osds if they are up.
-	probe.insert(so);
-	up_now.insert(so);
-      } else if (!pinfo) {
-	ldpp_dout(dpp, 10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
-	down.insert(o);
-      } else if (pinfo->lost_at > interval.first) {
-	ldpp_dout(dpp, 10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
-	up_now.insert(so);
-	down.insert(o);
-      } else {
-	ldpp_dout(dpp, 10) << "build_prior  prior osd." << o << " is down" << dendl;
-	down.insert(o);
-	any_down_now = true;
-      }
-    }
-
-    // if not enough osds survived this interval, and we may have gone rw,
-    // then we need to wait for one of those osds to recover to
-    // ensure that we haven't lost any information.
-    if (!(*pcontdec)(up_now) && any_down_now) {
-      // fixme: how do we identify a "clean" shutdown anyway?
-      ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw, insufficient up;"
-	       << " including down osds" << dendl;
-      for (vector<int>::const_iterator i = interval.acting.begin();
-	   i != interval.acting.end();
-	   ++i) {
-	if (osdmap.exists(*i) &&   // if it doesn't exist, we already consider it lost.
-	    osdmap.is_down(*i)) {
-	  pg_down = true;
-
-	  // make note of when any down osd in the cur set was lost, so that
-	  // we can notice changes in prior_set_affected.
-	  blocked_by[*i] = osdmap.get_info(*i).lost_at;
+	if (osdmap.is_up(so.osd)) {
+	  // include past acting osds if they are up.
+	  probe.insert(so);
+	  up_now.insert(so);
+	} else if (!pinfo) {
+	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
+			     << " no longer exists" << dendl;
+	  down.insert(so.osd);
+	} else if (pinfo->lost_at > start) {
+	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
+			     << " is down, but lost_at " << pinfo->lost_at << dendl;
+	  up_now.insert(so);
+	  down.insert(so.osd);
+	} else {
+	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
+			     << " is down" << dendl;
+	  down.insert(so.osd);
+	  any_down_now = true;
 	}
       }
-    }
-  }
+
+      // if not enough osds survived this interval, and we may have gone rw,
+      // then we need to wait for one of those osds to recover to
+      // ensure that we haven't lost any information.
+      if (!(*pcontdec)(up_now) && any_down_now) {
+	// fixme: how do we identify a "clean" shutdown anyway?
+	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw, insufficient up;"
+			   << " including down osds" << dendl;
+	for (auto &&so: acting) {
+	  if (osdmap.exists(so.osd) &&   // if it doesn't exist, we already consider it lost.
+	      osdmap.is_down(so.osd)) {
+	    pg_down = true;
+
+	    // make note of when any down osd in the cur set was lost, so that
+	    // we can notice changes in prior_set_affected.
+	    blocked_by[so.osd] = osdmap.get_info(so.osd).lost_at;
+	  }
+	}
+      }
+    });
 
   ldpp_dout(dpp, 10) << "build_prior final: probe " << probe
 	   << " down " << down

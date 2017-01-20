@@ -2497,13 +2497,75 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<pg_interval_t*>& o);
   };
+
+  PastIntervals() = default;
+  PastIntervals(bool ec_pool, const OSDMap &osdmap) : PastIntervals() {
+    update_type_from_map(ec_pool, osdmap);
+  }
+  PastIntervals(bool ec_pool, bool compact) : PastIntervals() {
+    update_type(ec_pool, compact);
+  }
+  PastIntervals(PastIntervals &&rhs) = default;
+  PastIntervals &operator=(PastIntervals &&rhs) = default;
+
+  PastIntervals(const PastIntervals &rhs);
+  PastIntervals &operator=(const PastIntervals &rhs);
+
+  class interval_rep {
+  public:
+    virtual size_t size() const = 0;
+    virtual bool empty() const = 0;
+    virtual void clear() = 0;
+    virtual pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const = 0;
+    virtual set<pg_shard_t> get_might_have_unfound(
+      pg_shard_t pg_whoami,
+      bool ec_pool) const = 0;
+    virtual void add_interval(bool ec_pool, const pg_interval_t &interval) = 0;
+    virtual unique_ptr<interval_rep> clone() const = 0;
+    virtual ostream &print(ostream &out) const = 0;
+    virtual void encode(bufferlist &bl) const = 0;
+    virtual void decode(bufferlist::iterator &bl) = 0;
+    virtual void dump(Formatter *f) const = 0;
+    virtual bool is_classic() const = 0;
+    virtual void iterate_mayberw_back_to(
+      bool ec_pool,
+      epoch_t les,
+      std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const = 0;
+    virtual ~interval_rep() {}
+  };
+  friend class pi_simple_rep;
+  friend class pi_compact_rep;
 private:
-  map<epoch_t, pg_interval_t> past_intervals;
+
+  unique_ptr<interval_rep> past_intervals;
 
 public:
-  void encode(bufferlist &bl) const;
+  bool is_classic() const {
+    assert(past_intervals);
+    return past_intervals->is_classic();
+  }
+
+  void encode(bufferlist &bl) const {
+    assert(past_intervals);
+    ENCODE_START(1, 1, bl);
+    __u8 classic = is_classic();
+    ::encode(classic, bl);
+    past_intervals->encode(bl);
+    ENCODE_FINISH(bl);
+  }
+  void encode_classic(bufferlist &bl) const {
+    assert(past_intervals);
+    assert(past_intervals->is_classic());
+    past_intervals->encode(bl);
+  }
+
   void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
+  void decode_classic(bufferlist::iterator &bl);
+
+  void dump(Formatter *f) const {
+    assert(past_intervals);
+    past_intervals->dump(f);
+  }
   static void generate_test_instances(list<PastIntervals *> & o);
 
   /**
@@ -2571,25 +2633,31 @@ public:
   friend ostream& operator<<(ostream& out, const PastIntervals &i);
 
   template <typename F>
-  void trim(epoch_t bound, F &&f) {
-    PastIntervals::iterator pif = past_intervals.begin();
-    PastIntervals::iterator end = past_intervals.end();
-    while (pif != end) {
-      if (pif->second.last >= bound)
-	return;
-      f(pif->second);
-      past_intervals.erase(pif++);
-    }
+  void iterate_mayberw_back_to(
+    bool ec_pool,
+    epoch_t les,
+    F &&f) const {
+    assert(past_intervals);
+    past_intervals->iterate_mayberw_back_to(ec_pool, les, std::forward<F>(f));
   }
-  void clear() { past_intervals.clear(); }
+  void clear() {
+    assert(past_intervals);
+    past_intervals->clear();
+  }
 
   /**
    * Should return a value which gives an indication of the amount
    * of state contained
    */
-  size_t size() const { return past_intervals.size(); }
+  size_t size() const {
+    assert(past_intervals);
+    return past_intervals->size();
+  }
 
-  bool empty() const { return past_intervals.empty(); }
+  bool empty() const {
+    assert(past_intervals);
+    return past_intervals->empty();
+  }
 
   void swap(PastIntervals &other) {
     ::swap(other.past_intervals, past_intervals);
@@ -2601,14 +2669,10 @@ public:
    */
   set<pg_shard_t> get_might_have_unfound(
     pg_shard_t pg_whoami,
-    bool ec_pool) const;
-
-  bool has_crashed_interval_since(
-    epoch_t since,
-    const vector<int> &acting,
-    const vector<int> &up,
-    const OSDMap& osdmap,
-    const DoutPrefixProvider *dpp) const;
+    bool ec_pool) const {
+    assert(past_intervals);
+    return past_intervals->get_might_have_unfound(pg_whoami, ec_pool);
+  }
 
   /* Return the set of epochs
    * [(start_interval_start, start_interval_end), end) represented by the
@@ -2617,16 +2681,8 @@ public:
    * the first interval so a user can verify that last_epoch_started falls
    * within it */
   pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const {
-    auto iter = past_intervals.begin();
-    if (iter != past_intervals.end()) {
-      auto riter = past_intervals.rbegin();
-      return make_pair(
-	make_pair(iter->second.first, iter->second.last + 1),
-	riter->second.last + 1);
-    } else {
-      assert(0 == "get_bounds only valid if !empty()");
-      return make_pair(make_pair(0, 0), 0);
-    }
+    assert(past_intervals);
+    return past_intervals->get_bounds();
   }
 
   struct PriorSet {
@@ -2651,10 +2707,10 @@ public:
 
   private:
     PriorSet(
+      const PastIntervals &past_intervals,
       bool ec_pool,
       IsPGRecoverablePredicate *c,
       const OSDMap &osdmap,
-      const PastIntervals &past_intervals,
       const vector<int> &up,
       const vector<int> &acting,
       const pg_info_t &info,
@@ -2663,25 +2719,12 @@ public:
     friend class PastIntervals;
   };
 
+  void update_type_from_map(const OSDMap &osdmap);
+
   template <typename... Args>
   PriorSet get_prior_set(Args&&... args) const {
-    return PriorSet(std::forward<Args>(args)...);
+    return PriorSet(*this, std::forward<Args>(args)...);
   }
-
-private:
-  using iterator = map<epoch_t, pg_interval_t>::iterator;
-  using const_iterator = map<epoch_t, pg_interval_t>::const_iterator;
-  using reverse_iterator = map<epoch_t, pg_interval_t>::reverse_iterator;
-  using const_reverse_iterator =
-    map<epoch_t, pg_interval_t>::const_reverse_iterator;
-  iterator begin() { return past_intervals.begin(); }
-  iterator end() { return past_intervals.end(); }
-  const_iterator begin() const { return past_intervals.begin(); }
-  const_iterator end() const { return past_intervals.end(); }
-  reverse_iterator rbegin() { return past_intervals.rbegin(); }
-  reverse_iterator rend() { return past_intervals.rend(); }
-  const_reverse_iterator rbegin() const { return past_intervals.rbegin(); }
-  const_reverse_iterator rend() const { return past_intervals.rend(); }
 };
 WRITE_CLASS_ENCODER(PastIntervals)
 
