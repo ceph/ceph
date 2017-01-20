@@ -1,6 +1,8 @@
 #ifndef CEPH_RGW_CR_RADOS_H
 #define CEPH_RGW_CR_RADOS_H
 
+#include <boost/intrusive_ptr.hpp>
+#include "include/assert.h"
 #include "rgw_coroutine.h"
 #include "rgw_rados.h"
 #include "common/WorkQueue.h"
@@ -462,6 +464,19 @@ public:
   int request_complete() override {
     return rval;
   }
+};
+
+class RGWRadosRemoveCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+  librados::IoCtx ioctx;
+  const rgw_raw_obj obj;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+
+public:
+  RGWRadosRemoveCR(RGWRados *store, const rgw_raw_obj& obj);
+
+  int send_request();
+  int request_complete();
 };
 
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
