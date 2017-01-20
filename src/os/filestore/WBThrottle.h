@@ -34,6 +34,7 @@ enum {
   l_wbthrottle_ios_wb,
   l_wbthrottle_inodes_dirtied,
   l_wbthrottle_inodes_wb,
+  l_wbthrottle_lat,
   l_wbthrottle_last
 };
 

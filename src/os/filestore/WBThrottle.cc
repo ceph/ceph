@@ -28,6 +28,7 @@ WBThrottle::WBThrottle(CephContext *cct) :
   b.add_u64(l_wbthrottle_ios_wb, "ios_wb", "Written operations");
   b.add_u64(l_wbthrottle_inodes_dirtied, "inodes_dirtied", "Entries waiting for write");
   b.add_u64(l_wbthrottle_inodes_wb, "inodes_wb", "Written entries");
+  b.add_time_avg(l_wbthrottle_lat, "wbthrottle_wait", "wbthrottle latency");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
   for (unsigned i = l_wbthrottle_first + 1; i != l_wbthrottle_last; ++i)
@@ -261,7 +262,13 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
 
 void WBThrottle::throttle()
 {
+  utime_t start = ceph_clock_now();
   Mutex::Locker l(lock);
-  while (!stopping && need_flush())
+
+  while (!stopping && need_flush()) {
     cond.Wait(lock);
+    utime_t end = ceph_clock_now();
+    logger->tinc(l_wbthrottle_lat, end - start);
+    start = end;
+  }
 }
