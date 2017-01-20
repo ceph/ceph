@@ -174,6 +174,39 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration)
   return true;
 }
 
+void OpHistory::dump_slow_ops(utime_t now, Formatter *f)
+{
+  Mutex::Locker history_lock(ops_history_lock);
+  cleanup(now);
+  f->open_object_section("OpHistory slow ops");
+  f->dump_int("num to keep", history_slow_op_size);
+  f->dump_int("threshold to keep", history_slow_op_threshold);
+  {
+    f->open_array_section("Ops");
+    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
+	   slow_op.begin();
+	 i != slow_op.end();
+	 ++i) {
+      f->open_object_section("Op");
+      i->second->dump(now, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool OpTracker::dump_historic_slow_ops(Formatter *f)
+{
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
+
+  utime_t now = ceph_clock_now();
+  history.dump_slow_ops(now, f);
+  return true;
+}
+
 bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
 {
   RWLock::RLocker l(lock);
