@@ -98,7 +98,7 @@ target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${
 
 if(WITH_RADOSGW)
   add_executable(test_build_librgw buildtest_skeleton.cc)
-  target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_RADOSGW)
 
 if(WITH_LIBCEPHFS)
@@ -459,7 +459,6 @@ set_target_properties(ceph_test_stress_watch PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_stress_watch
   librados
-  global
   ${UNITTEST_LIBS}
   radostest
   ${EXTRALIBS}
@@ -474,12 +473,6 @@ if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
-  target_link_libraries(ceph_test_cfuse_cache_invalidate
-    global
-    os
-    ${EXTRALIBS}
-    ${CMAKE_DL_LIBS}
-    )
 endif(WITH_FUSE)
 
 if(${WITH_CEPHFS})
@@ -488,11 +481,7 @@ if(${WITH_CEPHFS})
     )
   target_link_libraries(test_c_headers
     librados
-    cephfs
-    ${EXTRALIBS}
-    ${BLKID_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    )
+    cephfs)
 endif(${WITH_CEPHFS})
 
 if(HAVE_BLKID)
