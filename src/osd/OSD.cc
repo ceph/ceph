@@ -7954,7 +7954,9 @@ void OSD::handle_pg_create(OpRequestRef op)
     bool mapped = osdmap->get_primary_shard(on, &pgid);
     assert(mapped);
 
-    PastIntervals pi;
+    PastIntervals pi(
+      osdmap->get_pools().at(pgid.pool()).ec_pool(),
+      *osdmap);
     pg_history_t history;
     history.epoch_created = created;
     history.last_scrub_stamp = ci->second;
@@ -8554,7 +8556,9 @@ void OSD::handle_pg_query(OpRequestRef op)
 	    it->second.epoch_sent,
 	    osdmap->get_epoch(),
 	    empty),
-	  PastIntervals()));
+	  PastIntervals(
+	    osdmap->get_pools().at(pgid.pool()).ec_pool(),
+	    *osdmap)));
     }
   }
   do_notifies(notify_list, osdmap);
