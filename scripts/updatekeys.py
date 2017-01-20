@@ -6,7 +6,9 @@ import teuthology.lock.cli
 
 doc = """
 usage: teuthology-updatekeys -h
-       teuthology-updatekeys [-v] [-t <targets> | -a | <machine> ...]
+       teuthology-updatekeys [-v] -t <targets>
+       teuthology-updatekeys [-v] <machine> ...
+       teuthology-updatekeys [-v] -a
 
 Update any hostkeys that have changed. You can list specific machines to run
 on, or use -a to check all of them automatically.
