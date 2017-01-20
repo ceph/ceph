@@ -34,6 +34,7 @@ void OpHistory::on_shutdown()
   Mutex::Locker history_lock(ops_history_lock);
   arrived.clear();
   duration.clear();
+  slow_op.clear();
   shutdown = true;
 }
 
@@ -44,6 +45,8 @@ void OpHistory::insert(utime_t now, TrackedOpRef op)
     return;
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_initiated(), op));
+  if (op->get_duration() >= history_slow_op_threshold)
+    slow_op.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
 }
 
@@ -63,6 +66,12 @@ void OpHistory::cleanup(utime_t now)
 	duration.begin()->second->get_initiated(),
 	duration.begin()->second));
     duration.erase(duration.begin());
+  }
+
+  while (slow_op.size() > history_slow_op_size) {
+    slow_op.erase(make_pair(
+	slow_op.begin()->second->get_initiated(),
+	slow_op.begin()->second));
   }
 }
 
