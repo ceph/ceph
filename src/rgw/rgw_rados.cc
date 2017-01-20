@@ -3965,7 +3965,8 @@ int RGWRados::init_complete()
 
   /* no point of running sync thread if we don't have a master zone configured
      or there is no rest_master_conn */
-  if (get_zonegroup().master_zone.empty() || !rest_master_conn) {
+  if (get_zonegroup().master_zone.empty() || !rest_master_conn
+      || current_period.get_id().empty()) {
     run_sync_thread = false;
   }
 
