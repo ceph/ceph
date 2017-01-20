@@ -1215,7 +1215,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     // determine appropriate features
     if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
       dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
-      features &= ~CEPH_FEATURE_SERVER_JEWEL;
+      features &= ~(CEPH_FEATURE_SERVER_JEWEL |
+	  CEPH_FEATURE_NEW_OSDOP_ENCODING |
+	  CEPH_FEATURE_CRUSH_TUNABLES5);
     }
     dout(10) << __func__ << " encoding full map with " << features << dendl;
 
