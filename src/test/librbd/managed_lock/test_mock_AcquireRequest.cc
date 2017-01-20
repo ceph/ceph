@@ -81,9 +81,6 @@ GetLockerRequest<librbd::MockImageCtx> *GetLockerRequest<librbd::MockImageCtx>::
 #include "librbd/managed_lock/AcquireRequest.cc"
 template class librbd::managed_lock::AcquireRequest<librbd::MockImageCtx>;
 
-#include "librbd/ManagedLock.cc"
-template class librbd::ManagedLock<librbd::MockImageCtx>;
-
 namespace {
 
 MATCHER_P(IsLockType, exclusive, "") {
@@ -116,7 +113,6 @@ public:
   typedef AcquireRequest<MockImageCtx> MockAcquireRequest;
   typedef BreakRequest<MockImageCtx> MockBreakRequest;
   typedef GetLockerRequest<MockImageCtx> MockGetLockerRequest;
-  typedef ManagedLock<MockImageCtx> MockManagedLock;
 
   void expect_lock(MockImageCtx &mock_image_ctx, int r,
                              bool exclusive = true) {

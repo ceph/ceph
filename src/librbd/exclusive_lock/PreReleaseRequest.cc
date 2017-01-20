@@ -6,7 +6,6 @@
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
@@ -25,17 +24,15 @@ using util::create_context_callback;
 
 template <typename I>
 PreReleaseRequest<I>* PreReleaseRequest<I>::create(I &image_ctx,
-                                                   Context *on_releasing,
-                                                   Context *on_finish,
-                                                   bool shutting_down) {
-  return new PreReleaseRequest(image_ctx, on_releasing, on_finish,
-                               shutting_down);
+                                                   bool shutting_down,
+                                                   Context *on_finish) {
+  return new PreReleaseRequest(image_ctx, shutting_down, on_finish);
 }
 
 template <typename I>
-PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx, Context *on_releasing,
-                                        Context *on_finish, bool shutting_down)
-  : m_image_ctx(image_ctx), m_on_releasing(on_releasing),
+PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx, bool shutting_down,
+                                        Context *on_finish)
+  : m_image_ctx(image_ctx),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_shutting_down(shutting_down), m_error_result(0), m_object_map(nullptr),
     m_journal(nullptr) {
@@ -46,7 +43,6 @@ PreReleaseRequest<I>::~PreReleaseRequest() {
   if (!m_shutting_down) {
     m_image_ctx.state->handle_prepare_lock_complete();
   }
-  delete m_on_releasing;
 }
 
 template <typename I>
@@ -273,12 +269,6 @@ template <typename I>
 void PreReleaseRequest<I>::send_unlock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
-
-  if (m_on_releasing != nullptr) {
-    // alert caller that we no longer own the exclusive lock
-    m_on_releasing->complete(0);
-    m_on_releasing = nullptr;
-  }
 
   finish();
 }

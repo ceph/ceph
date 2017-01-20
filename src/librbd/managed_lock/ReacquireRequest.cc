@@ -3,14 +3,13 @@
 
 #include "librbd/managed_lock/ReacquireRequest.h"
 #include "librbd/Watcher.h"
-#include "librbd/ManagedLock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/Utils.h"
-
 #include "librbd/ImageCtx.h"
+#include "librbd/Utils.h"
+#include "librbd/managed_lock/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -49,7 +48,7 @@ void ReacquireRequest<I>::set_cookie() {
   librados::ObjectWriteOperation op;
   rados::cls::lock::set_cookie(&op, RBD_LOCK_NAME,
                                m_exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
-                               m_old_cookie, ManagedLock<I>::WATCHER_LOCK_TAG,
+                               m_old_cookie, util::get_watcher_lock_tag(),
                                m_new_cookie);
 
   librados::AioCompletion *rados_completion = create_rados_safe_callback<
