@@ -986,13 +986,20 @@ bool verify_object_permission(struct req_state * const s,
     return false;
   }
 
-  bool ret = object_acl->verify_permission(*s->auth_identity, s->perm_mask, perm);
-  if (ret) {
-    return true;
-  }
+  /* allow configuration to skip object acl checks for swift requests */
+  bool verify_object_acl = !(s->prot_flags & RGW_REST_SWIFT) ||
+                           !s->cct->_conf->rgw_enforce_swift_acls ||
+                           s->cct->_conf->rgw_swift_verify_object_acl;
+  if (verify_object_acl) {
+    bool ret = object_acl->verify_permission(*s->auth_identity, s->perm_mask, perm);
+    if (ret) {
+      return true;
+    }
 
-  if (!s->cct->_conf->rgw_enforce_swift_acls)
-    return ret;
+    if (!s->cct->_conf->rgw_enforce_swift_acls) {
+      return ret;
+    }
+  }
 
   if ((perm & (int)s->perm_mask) != perm)
     return false;
