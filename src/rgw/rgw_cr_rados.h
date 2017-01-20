@@ -409,6 +409,7 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
   string marker;
   map<string, bufferlist> *entries;
   int max_entries;
+  bool *pmore;
 
   int rval;
   rgw_rados_ref ref;
@@ -419,9 +420,10 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
 
 public:
   RGWRadosGetOmapKeysCR(RGWRados *_store,
-		      const rgw_raw_obj& _obj,
-		      const string& _marker,
-		      map<string, bufferlist> *_entries, int _max_entries);
+		        const rgw_raw_obj& _obj,
+		        const string& _marker,
+		        map<string, bufferlist> *_entries,
+                        int _max_entries, bool *pm);
 
   ~RGWRadosGetOmapKeysCR() override;
 
