@@ -116,14 +116,14 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 
 int RGWAsyncPutSystemObj::_send_request()
 {
-  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive);
+  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive, objv_tracker);
 }
 
 RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                     rgw_obj& _obj, bool _exclusive,
-                     bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                       obj(_obj), exclusive(_exclusive),
-                                                       bl(_bl)
+                     RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+                     bool _exclusive, bufferlist& _bl)
+  : RGWAsyncRadosRequest(caller, cn), store(_store), objv_tracker(_objv_tracker),
+    obj(_obj), exclusive(_exclusive), bl(_bl)
 {
 }
 

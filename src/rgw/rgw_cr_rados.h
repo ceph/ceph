@@ -116,6 +116,7 @@ public:
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
   RGWRados *store;
+  RGWObjVersionTracker *objv_tracker;
   rgw_obj obj;
   bool exclusive;
   bufferlist bl;
@@ -124,8 +125,8 @@ protected:
   int _send_request();
 public:
   RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                       rgw_obj& _obj, bool _exclusive,
-                       bufferlist& _bl);
+                       RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+                       bool _exclusive, bufferlist& _bl);
 };
 
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
@@ -187,16 +188,18 @@ class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   T *result;
   /// on ENOENT, call handle_data() with an empty object instead of failing
   const bool empty_on_enoent;
+  RGWObjVersionTracker *objv_tracker;
 
   RGWAsyncGetSystemObj *req{nullptr};
 
 public:
   RGWSimpleRadosReadCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      const rgw_bucket& _pool, const string& _oid,
-		      T *_result, bool empty_on_enoent = true)
+		      T *_result, bool empty_on_enoent = true,
+		      RGWObjVersionTracker *objv_tracker = nullptr)
     : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
       obj_ctx(store), pool(_pool), oid(_oid), result(_result),
-      empty_on_enoent(empty_on_enoent) {}
+      empty_on_enoent(empty_on_enoent), objv_tracker(objv_tracker) {}
   ~RGWSimpleRadosReadCR() {
     request_cleanup();
   }
@@ -221,7 +224,7 @@ int RGWSimpleRadosReadCR<T>::send_request()
 {
   rgw_obj obj = rgw_obj(pool, oid);
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         store, &obj_ctx, NULL,
+			         store, &obj_ctx, objv_tracker,
 				 obj,
 				 &bl, 0, -1);
   if (pattrs) {
@@ -306,17 +309,16 @@ class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
 
   rgw_bucket pool;
   string oid;
+  RGWObjVersionTracker *objv_tracker;
 
-  RGWAsyncPutSystemObj *req;
+  RGWAsyncPutSystemObj *req{nullptr};
 
 public:
   RGWSimpleRadosWriteCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      const rgw_bucket& _pool, const string& _oid,
-		      const T& _data) : RGWSimpleCoroutine(_store->ctx()),
-                                                async_rados(_async_rados),
-						store(_store),
-						pool(_pool), oid(_oid),
-                                                req(NULL) {
+		      const T& _data, RGWObjVersionTracker *objv_tracker = nullptr)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados),
+      store(_store), pool(_pool), oid(_oid), objv_tracker(objv_tracker) {
     ::encode(_data, bl);
   }
 
@@ -334,7 +336,7 @@ public:
   int send_request() {
     rgw_obj obj = rgw_obj(pool, oid);
     req = new RGWAsyncPutSystemObj(this, stack->create_completion_notifier(),
-			           store, obj, false, bl);
+			           store, objv_tracker, obj, false, bl);
     async_rados->queue(req);
     return 0;
   }
