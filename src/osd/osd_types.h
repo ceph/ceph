@@ -2531,6 +2531,14 @@ public:
       bool ec_pool,
       epoch_t les,
       std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const = 0;
+
+    virtual bool has_full_intervals() const { return false; }
+    virtual void iterate_all_intervals(
+      std::function<void(const pg_interval_t &)> &&f) const {
+      assert(!has_full_intervals());
+      assert(0 == "not valid for this implementation");
+    }
+
     virtual ~interval_rep() {}
   };
   friend class pi_simple_rep;
@@ -2719,7 +2727,8 @@ public:
     friend class PastIntervals;
   };
 
-  void update_type_from_map(const OSDMap &osdmap);
+  void update_type(bool ec_pool, bool compact);
+  void update_type_from_map(bool ec_pool, const OSDMap &osdmap);
 
   template <typename... Args>
   PriorSet get_prior_set(Args&&... args) const {
