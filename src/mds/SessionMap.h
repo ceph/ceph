@@ -604,7 +604,8 @@ public:
       int values_r,
       bool first,
       bufferlist &header_bl,
-      std::map<std::string, bufferlist> &session_vals);
+      std::map<std::string, bufferlist> &session_vals,
+      bool more_session_vals);
 
   void load_legacy();
   void _load_legacy_finish(int r, bufferlist &bl);
