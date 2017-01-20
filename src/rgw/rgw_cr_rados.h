@@ -412,6 +412,7 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
   string marker;
   std::set<std::string> *entries;
   int max_entries;
+  bool *pmore;
 
   rgw_rados_ref ref;
 
@@ -423,7 +424,8 @@ public:
   RGWRadosGetOmapKeysCR(RGWRados *_store,
 		      const rgw_raw_obj& _obj,
 		      const string& _marker,
-		      std::set<std::string> *_entries, int _max_entries);
+		      std::set<std::string> *_entries,
+                        int _max_entries, bool *pmore);
 
   int send_request() override;
   int request_complete() override;
