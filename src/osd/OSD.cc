@@ -1979,6 +1979,11 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (admin_command == "dump_historic_slow_ops") {
+    if (!op_tracker.dump_historic_slow_ops(f)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
   } else if (admin_command == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
@@ -2537,6 +2542,10 @@ void OSD::final_init()
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
+				     "show recent ops");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_historic_slow_ops", "dump_historic_slow_ops",
+				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
@@ -2975,6 +2984,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_blocked_ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops_by_duration");
+  cct->get_admin_socket()->unregister_command("dump_historic_slow_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
   cct->get_admin_socket()->unregister_command("dump_watchers");
