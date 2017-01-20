@@ -184,7 +184,7 @@ bool RGWReadDataSyncRecoveringShardsCR::spawn_next()
  
   string error_oid = RGWDataSyncStatusManager::shard_obj_name(env->source_zone, shard_id) + ".retry";
   spawn(new RGWRadosGetOmapKeysCR(env->store, rgw_raw_obj(env->store->get_zone_params().log_pool, error_oid),
-                                  marker, &entries_map[shard_id], max_entries), false);
+                                  marker, &entries_map[shard_id], max_entries, nullptr), false);
 
   ++shard_id;
   return true;
@@ -1156,6 +1156,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   std::set<std::string> entries;
   std::set<std::string>::iterator iter;
+  bool more = false;
 
   string oid;
 
@@ -1316,7 +1317,9 @@ public:
           drain_all();
           return set_cr_error(-ECANCELED);
         }
-        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid), sync_marker.marker, &entries, max_entries));
+        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
+                                             sync_marker.marker, &entries,
+                                             max_entries, &more));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: RGWRadosGetOmapKeysCR() returned ret=" << retcode));
           lease_cr->go_down();
@@ -1350,7 +1353,7 @@ public:
             }
           }
         }
-      } while ((int)entries.size() == max_entries);
+      } while (more);
 
       drain_all_but_stack(lease_stack.get());
 
@@ -1429,7 +1432,7 @@ public:
           /* process bucket shards that previously failed */
           yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, error_oid),
                                                error_marker, &error_entries,
-                                               max_error_entries));
+                                               max_error_entries, &more));
           tn->log(20, SSTR("read error repo, got " << error_entries.size() << " entries"));
           iter = error_entries.begin();
           for (; iter != error_entries.end(); ++iter) {
@@ -1437,7 +1440,7 @@ public:
             tn->log(20, SSTR("handle error entry: " << error_marker));
             spawn(new RGWDataSyncSingleEntryCR(sync_env, error_marker, error_marker, nullptr /* no marker tracker */, error_repo, true, tn), false);
           }
-          if ((int)error_entries.size() != max_error_entries) {
+          if (!more) {
             if (error_marker.empty() && error_entries.empty()) {
               /* the retry repo is empty, we back off a bit before calling it again */
               retry_backoff_secs *= 2;
@@ -2122,6 +2125,7 @@ class RGWReadRecoveringBucketShardsCoroutine : public RGWCoroutine {
 
   set<string> error_entries;
   int max_omap_entries;
+  bool more = false;
   int count;
 
 public:
@@ -2144,7 +2148,7 @@ int RGWReadRecoveringBucketShardsCoroutine::operate()
     count = 0;
     do {
       yield call(new RGWRadosGetOmapKeysCR(store, rgw_raw_obj(store->get_zone_params().log_pool, error_oid), 
-            marker, &error_entries, max_omap_entries));
+            marker, &error_entries, max_omap_entries, &more));
 
       if (retcode == -ENOENT) {
         break;
@@ -2164,7 +2168,7 @@ int RGWReadRecoveringBucketShardsCoroutine::operate()
       marker = *error_entries.rbegin();
       recovering_buckets.insert(std::make_move_iterator(error_entries.begin()),
                                 std::make_move_iterator(error_entries.end()));
-    }while((int)error_entries.size() == max_omap_entries && count < max_entries);
+    } while(more && count < max_entries);
   
     return set_cr_done();
   }
