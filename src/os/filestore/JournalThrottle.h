@@ -95,7 +95,7 @@ public:
 
   JournalThrottle(
     unsigned expected_concurrency ///< [in] determines size of conds
-    ) : throttle(expected_concurrency) {}
+    ) : throttle(g_ceph_context, "filestore_journal", expected_concurrency) {}
 };
 
 #endif
