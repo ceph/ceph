@@ -41,6 +41,11 @@
 
 #include <ostream>
 #include <sys/ioctl.h>
+#ifdef CEPH_HAVE_SPLICE
+#include "sys/socket.h"
+#include "linux/if_alg.h"
+#include "fcntl.h"
+#endif
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
@@ -115,7 +120,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return buffer_c_str_accesses.read();
   }
 
-  static atomic_t buffer_max_pipe_size;
+  static atomic_t buffer_max_pipe_size(0);
   int update_max_pipe_size() {
 #ifdef CEPH_HAVE_SETPIPE_SZ
     char buf[32];
@@ -498,14 +503,12 @@ public:
   explicit raw_splice_kcrypt(unsigned len) : raw(len),
       pipe_curr_write_fd(-1),
       actual_content_size(0) {
-    update_max_pipe_size();
     if (get_max_pipe_size()<min_pipe_size) {
       data = new char[len];
       return;
     }
     int no_pipes = len / get_max_pipe_size() + 1; //this is estimated #pipes to be needed
     pipe_read_elements.reserve(no_pipes);
-    //we will have as much data as we read
   }
 
   ~raw_splice_kcrypt() {
@@ -528,12 +531,75 @@ public:
     }
   }
 
+
+#ifndef AF_ALG
+#define AF_ALG 38
+#endif
+#ifndef SOL_ALG
+#define SOL_ALG 279
+#endif
+
+
 /*
  * TODO - make crc32c calculation using kcrypto crc32c-intel algorithm, if possible
  */
-  uint32_t crc32c(unsigned int off, unsigned int len,uint32_t init_crc) {
+  uint32_t crc32c(unsigned int off, unsigned int len, uint32_t init_crc) {
     uint32_t crc;
-    get_data(); //make 'data' meaningfull
+    int serv = -1;
+    int targ = -1;
+    int r;
+    if (!is_data_local()) {
+      try {
+        serv = socket(AF_ALG, SOCK_SEQPACKET, 0);
+        if (serv == -1) {
+          throw __LINE__;
+        }
+        struct sockaddr_alg addr = {0};
+        addr.salg_family = AF_ALG;
+        memcpy(addr.salg_type, "hash", 5);
+        memcpy(addr.salg_name, "crc32c", 7);
+        r = bind(serv, (struct sockaddr *)&addr, sizeof(addr));
+        if (r != 0) {
+          throw __LINE__;
+        }
+        uint32_t swapped_crc = htonl(init_crc);
+        r = setsockopt(serv, SOL_ALG, ALG_SET_KEY, &swapped_crc, 4);
+        if (r != 0) {
+          throw __LINE__;
+        }
+        targ = accept(serv, nullptr, 0);
+        if (targ < 0) {
+          throw __LINE__;
+        }
+
+        ssize_t l = len;
+        ssize_t w;
+        do {
+          w = copy_to_fd(targ, off, l, -1);
+          if (w <= 0) {
+            throw __LINE__;
+          }
+          off += w;
+          l -= w;
+        } while (l > 0);
+        r = read(targ, &crc, 4);
+        if (r != 4) {
+          throw __LINE__;
+        }
+        crc = ~crc;
+        set_crc(make_pair(off, off + len), make_pair(init_crc, crc));
+        return crc;
+      } catch (int line) {
+        if (serv != -1) {
+          close(serv);
+        }
+        if (targ != -1) {
+          close(targ);
+        }
+        get_data(); //make 'data' meaningfull
+      }
+    }
+    //fallback when data in buffer
     crc = ceph_crc32c(init_crc, reinterpret_cast<unsigned char*>(data) + off, len);
     set_crc(make_pair(off, off + len), make_pair(init_crc, crc));
     return crc;
