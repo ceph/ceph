@@ -3331,7 +3331,7 @@ public:
   RGWPutObjDataProcessor(){}
   virtual ~RGWPutObjDataProcessor(){}
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) = 0;
-  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
+  virtual int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait) = 0;
 }; /* RGWPutObjDataProcessor */
 
 
@@ -3374,12 +3374,16 @@ public:
 struct put_obj_aio_info {
   void *handle;
   rgw_obj obj;
+  uint64_t size;
 };
+
+#define RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT (16 * 1024 * 1024)
 
 class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 {
   list<struct put_obj_aio_info> pending;
-  size_t max_chunks;
+  uint64_t window_size{RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT};
+  uint64_t pending_size{0};
 
   struct put_obj_aio_info pop_pending();
   int wait_pending_front();
@@ -3388,7 +3392,7 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   rgw_obj last_written_obj;
 
 protected:
-  uint64_t obj_len;
+  uint64_t obj_len{0};
 
   set<rgw_obj> written_objs;
 
@@ -3400,9 +3404,10 @@ protected:
   int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
 
 public:
-  int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait);
+  int prepare(RGWRados *store, string *oid_rand);
+  int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait);
 
-  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
+  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info) {}
   virtual ~RGWPutObjProcessor_Aio();
 }; /* RGWPutObjProcessor_Aio */
 

@@ -117,8 +117,6 @@ using ceph::crypto::MD5;
 
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
-#define RGW_MAX_PENDING_CHUNKS  16
-
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
