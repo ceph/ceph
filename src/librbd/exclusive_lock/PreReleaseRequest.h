@@ -12,16 +12,14 @@ class Context;
 namespace librbd {
 
 struct ImageCtx;
-template <typename> class ManagedLock;
-template <typename> class Journal;
 
 namespace exclusive_lock {
 
 template <typename ImageCtxT = ImageCtx>
 class PreReleaseRequest {
 public:
-  static PreReleaseRequest* create(ImageCtxT &image_ctx, Context *on_releasing,
-                                   Context *on_finish, bool shutting_down);
+  static PreReleaseRequest* create(ImageCtxT &image_ctx, bool shutting_down,
+                                   Context *on_finish);
 
   ~PreReleaseRequest();
   void send();
@@ -59,11 +57,10 @@ private:
    * @endverbatim
    */
 
-  PreReleaseRequest(ImageCtxT &image_ctx, Context *on_releasing,
-                    Context *on_finish, bool shutting_down);
+  PreReleaseRequest(ImageCtxT &image_ctx, bool shutting_down,
+                    Context *on_finish);
 
   ImageCtxT &m_image_ctx;
-  Context *m_on_releasing;
   Context *m_on_finish;
   bool m_shutting_down;
 

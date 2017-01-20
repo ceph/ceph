@@ -14,9 +14,6 @@ class Context;
 
 namespace librbd {
 
-template <typename> class Journal;
-template <typename> class ManagedLock;
-
 namespace exclusive_lock {
 
 template <typename ImageCtxT = ImageCtx>

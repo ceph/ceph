@@ -7,7 +7,6 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "cls/lock/cls_lock_ops.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

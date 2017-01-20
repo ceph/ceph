@@ -8,9 +8,9 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/Utils.h"
 #include "librbd/managed_lock/Types.h"
+#include "librbd/managed_lock/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -20,7 +20,7 @@
 namespace librbd {
 namespace managed_lock {
 
-using util::create_rados_ack_callback;
+using librbd::util::create_rados_ack_callback;
 
 template <typename I>
 GetLockerRequest<I>::GetLockerRequest(librados::IoCtx& ioctx,
@@ -78,7 +78,7 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
     return;
   }
 
-  if (lock_tag != ManagedLock<>::WATCHER_LOCK_TAG) {
+  if (lock_tag != util::get_watcher_lock_tag()) {
     ldout(m_cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
     finish(-EBUSY);
     return;
@@ -96,8 +96,7 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t>::iterator iter = lockers.begin();
-  if (!ManagedLock<>::decode_lock_cookie(iter->first.cookie,
-                                         &m_locker->handle)) {
+  if (!util::decode_lock_cookie(iter->first.cookie, &m_locker->handle)) {
     ldout(m_cct, 5) << "locked by external mechanism: "
 		    << "cookie=" << iter->first.cookie << dendl;
     finish(-EBUSY);
