@@ -51,14 +51,14 @@ ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
                             bool blacklist_on_break_lock,
                             uint32_t blacklist_expire_seconds)
   : m_lock(unique_lock_name("librbd::ManagedLock<I>::m_lock", this)),
-    m_state(STATE_UNLOCKED),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_work_queue(work_queue),
     m_oid(oid),
     m_watcher(watcher),
     m_mode(mode),
     m_blacklist_on_break_lock(blacklist_on_break_lock),
-    m_blacklist_expire_seconds(blacklist_expire_seconds) {
+    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_state(STATE_UNLOCKED) {
 }
 
 template <typename I>
