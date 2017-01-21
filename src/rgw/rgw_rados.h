@@ -2458,7 +2458,8 @@ public:
 
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
-                     bool assume_noent);
+                     bool assume_noent,
+                     void *index_op);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
@@ -2550,17 +2551,17 @@ public:
       RGWRados::Bucket *target;
       string optag;
       rgw_obj obj;
-      RGWObjState *obj_state;
-      uint16_t bilog_flags;
+      uint16_t bilog_flags{0};
       BucketShard bs;
-      bool bs_initialized;
+      bool bs_initialized{false};
       bool blind;
+      bool prepared{false};
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0),
-                                                                                   bs(target->get_store()), bs_initialized(false) {
-                                                                                     blind = (target->get_bucket_info().index_type == RGWBIType_Indexless);
-                                                                                   }
+      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj) : target(_target), obj(_obj),
+                                                              bs(target->get_store()) {
+                                                                blind = (target->get_bucket_info().index_type == RGWBIType_Indexless);
+                                                              }
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
@@ -2578,7 +2579,7 @@ public:
         bilog_flags = flags;
       }
 
-      int prepare(RGWModifyOp);
+      int prepare(RGWModifyOp, const string *write_tag);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
@@ -2588,6 +2589,10 @@ public:
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        list<rgw_obj_key> *remove_objs);
       int cancel();
+
+      const string *get_optag() { return &optag; }
+
+      bool is_prepared() { return prepared; }
     };
 
     struct List {
