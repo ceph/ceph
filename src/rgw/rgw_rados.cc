@@ -6294,8 +6294,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
-                                        map<string, bufferlist>& attrs)
+int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
+                                           map<string, bufferlist>& attrs, bool assume_noent)
 {
   rgw_bucket bucket;
   rgw_rados_ref ref;
@@ -6304,7 +6304,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   ObjectWriteOperation op;
 
   RGWObjState *state;
-  int r = target->get_state(&state, false);
+  int r = target->get_state(&state, false, assume_noent);
   if (r < 0)
     return r;
 
@@ -6427,6 +6427,10 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
                 before and now it does */
+    if (r == -EEXIST && assume_noent) {
+      target->invalidate_state();
+      return r;
+    }
     goto done_cancel;
   }
 
@@ -6492,7 +6496,10 @@ done_cancel:
    * should treat it as a success
    */
   if (meta.if_match == NULL && meta.if_nomatch == NULL) {
-    if (r == -ECANCELED || r == -ENOENT || r == -EEXIST) {
+    if (r == -ECANCELED || r == -ENOENT ||
+        (r == -EEXIST && !assume_noent)) /* if assume_noent, we want to send back error so that
+                                          * we'd be called again with assume_noent == false
+                                          */ {
       r = 0;
     }
   } else {
@@ -6519,6 +6526,23 @@ done_cancel:
     }
   }
 
+  return r;
+}
+
+int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
+                                           map<string, bufferlist>& attrs)
+{
+  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
+  int r;
+  if (assume_noent) {
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent);
+    if (r == -EEXIST) {
+      assume_noent = false;
+    }
+  }
+  if (!assume_noent) {
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent);
+  }
   return r;
 }
 
@@ -8509,7 +8533,7 @@ int RGWRados::get_system_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState
   return ret;
 }
 
-int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh)
+int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent)
 {
   bool need_follow_olh = follow_olh && !obj.have_instance();
 
@@ -8525,7 +8549,11 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
 
   s->obj = obj;
 
-  int r = RGWRados::raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL);
+  int r = -ENOENT;
+
+  if (!assume_noent) {
+    r = RGWRados::raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL);
+  }
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -8651,12 +8679,12 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   return 0;
 }
 
-int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh)
+int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent)
 {
   int ret;
 
   do {
-    ret = get_obj_state_impl(rctx, obj, state, follow_olh);
+    ret = get_obj_state_impl(rctx, obj, state, follow_olh, assume_noent);
   } while (ret == -EAGAIN);
 
   return ret;
@@ -8812,9 +8840,9 @@ int RGWRados::append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
   return 0;
 }
 
-int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh)
+int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh, bool assume_noent)
 {
-  return store->get_obj_state(&ctx, obj, pstate, follow_olh);
+  return store->get_obj_state(&ctx, obj, pstate, follow_olh, assume_noent);
 }
 
 void RGWRados::Object::invalidate_state()
