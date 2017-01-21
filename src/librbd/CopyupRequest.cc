@@ -46,9 +46,8 @@ public:
       RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
       assert(m_image_ctx.exclusive_lock->is_lock_owner());
       assert(m_image_ctx.object_map != nullptr);
-      bool sent = m_image_ctx.object_map->aio_update(m_object_no, OBJECT_EXISTS,
-                                                     boost::optional<uint8_t>(),
-                                                     this);
+      bool sent = m_image_ctx.object_map->aio_update<Context>(
+        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, this);
       return (sent ? 0 : 1);
     }
 
@@ -64,8 +63,9 @@ public:
       return 1;
     }
 
-    m_image_ctx.object_map->aio_update(snap_id, m_object_no, m_object_no + 1,
-                                       state, boost::optional<uint8_t>(), this);
+    bool sent = m_image_ctx.object_map->aio_update<Context>(
+      snap_id, m_object_no, state, {}, this);
+    assert(sent);
     return 0;
   }
 

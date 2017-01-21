@@ -22,7 +22,7 @@ using ::testing::StrEq;
 class TestMockObjectMapResizeRequest : public TestMockFixture {
 public:
   void expect_resize(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, snap_id));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (snap_id == CEPH_NOSNAP) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))

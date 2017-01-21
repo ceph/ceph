@@ -76,7 +76,7 @@ int remove_object_map(ImageCtx *ictx) {
   int r;
   for (std::map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
        it != ictx->snap_info.end(); ++it) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, it->first));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, it->first));
     r = ictx->md_ctx.remove(oid);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "failed to remove object map " << oid << ": "
@@ -85,7 +85,7 @@ int remove_object_map(ImageCtx *ictx) {
     }
   }
 
-  r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
+  r = ictx->md_ctx.remove(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP));
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove object map: " << cpp_strerror(r) << dendl;
     return r;
@@ -107,7 +107,7 @@ int create_object_map(ImageCtx *ictx) {
     snap_ids.push_back(it->first);
   }
 
-  if (!ObjectMap::is_compatible(ictx->layout, max_size)) {
+  if (!ObjectMap<>::is_compatible(ictx->layout, max_size)) {
     lderr(cct) << "image size not compatible with object map" << dendl;
     return -EINVAL;
   }
@@ -115,7 +115,7 @@ int create_object_map(ImageCtx *ictx) {
   for (std::vector<uint64_t>::iterator it = snap_ids.begin();
     it != snap_ids.end(); ++it) {
     librados::ObjectWriteOperation op;
-    std::string oid(ObjectMap::object_map_name(ictx->id, *it));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, *it));
     uint64_t snap_size = ictx->get_image_size(*it);
     cls_client::object_map_resize(&op, Striper::get_num_objects(ictx->layout, snap_size),
                                   OBJECT_NONEXISTENT);
@@ -1139,7 +1139,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         layout.stripe_count = stripe_count;
       }
 
-      if (!ObjectMap::is_compatible(layout, size)) {
+      if (!ObjectMap<>::is_compatible(layout, size)) {
         lderr(cct) << "image size not compatible with object map" << dendl;
         goto err_remove_header;
       }
@@ -1147,7 +1147,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       librados::ObjectWriteOperation op;
       cls_client::object_map_resize(&op, Striper::get_num_objects(layout, size),
                                     OBJECT_NONEXISTENT);
-      r = io_ctx.operate(ObjectMap::object_map_name(id, CEPH_NOSNAP), &op);
+      r = io_ctx.operate(ObjectMap<>::object_map_name(id, CEPH_NOSNAP), &op);
       if (r < 0) {
         lderr(cct) << "error creating initial object map: "
                    << cpp_strerror(r) << dendl;
@@ -1204,7 +1204,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
   err_remove_object_map:
     if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-      remove_r = ObjectMap::remove(io_ctx, id);
+      remove_r = ObjectMap<>::remove(io_ctx, id);
       if (remove_r < 0) {
         lderr(cct) << "error cleaning up object map after creation failed: "
                    << cpp_strerror(remove_r) << dendl;
@@ -2247,7 +2247,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
 
         ldout(cct, 10) << "removing object map..." << dendl;
-        r = ObjectMap::remove(io_ctx, id);
+        r = ObjectMap<>::remove(io_ctx, id);
         if (r < 0 && r != -ENOENT) {
           lderr(cct) << "error removing image object map" << dendl;
           return r;
