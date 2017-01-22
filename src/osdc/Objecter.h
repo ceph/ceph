@@ -376,17 +376,39 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   struct C_ObjectOperation_decodevals : public Context {
+    uint64_t max_entries;
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
+    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodevals(std::map<std::string,bufferlist> *pa, int *pr)
-      : pattrs(pa), prval(pr) {}
+    C_ObjectOperation_decodevals(uint64_t m, std::map<std::string,bufferlist> *pa,
+				 bool *pt, int *pr)
+      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
+      if (ptruncated) {
+	*ptruncated = false;
+      }
+    }
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
+	  if (ptruncated) {
+	    std::map<std::string,bufferlist> ignore;
+	    if (!pattrs) {
+	      ::decode(ignore, p);
+	      pattrs = &ignore;
+	    }
+	    if (!p.end()) {
+	      ::decode(*ptruncated, p);
+	    } else {
+	      // the OSD did not provide this.  since old OSDs do not
+	      // enfoce omap result limits either, we can infer it from
+	      // the size of the result
+	      *ptruncated = (pattrs->size() == max_entries);
+	    }
+	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -396,17 +418,39 @@ struct ObjectOperation {
     }
   };
   struct C_ObjectOperation_decodekeys : public Context {
+    uint64_t max_entries;
     bufferlist bl;
     std::set<std::string> *pattrs;
+    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodekeys(std::set<std::string> *pa, int *pr)
-      : pattrs(pa), prval(pr) {}
+    C_ObjectOperation_decodekeys(uint64_t m, std::set<std::string> *pa, bool *pt,
+				 int *pr)
+      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
+      if (ptruncated) {
+	*ptruncated = false;
+      }
+    }
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
+	  if (ptruncated) {
+	    std::set<std::string> ignore;
+	    if (!pattrs) {
+	      ::decode(ignore, p);
+	      pattrs = &ignore;
+	    }
+	    if (!p.end()) {
+	      ::decode(*ptruncated, p);
+	    } else {
+	      // the OSD did not provide this.  since old OSDs do not
+	      // enfoce omap result limits either, we can infer it from
+	      // the size of the result
+	      *ptruncated = (pattrs->size() == max_entries);
+	    }
+	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -490,7 +534,7 @@ struct ObjectOperation {
     if (pattrs || prval) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h
-	= new C_ObjectOperation_decodevals(pattrs, prval);
+	= new C_ObjectOperation_decodevals(0, pattrs, nullptr, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -549,6 +593,7 @@ struct ObjectOperation {
   void omap_get_keys(const string &start_after,
 		     uint64_t max_to_get,
 		     std::set<std::string> *out_set,
+		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     bufferlist bl;
@@ -557,10 +602,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set) {
+    if (prval || ptruncated || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodekeys *h =
-	new C_ObjectOperation_decodekeys(out_set, prval);
+	new C_ObjectOperation_decodekeys(max_to_get, out_set, ptruncated, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -571,6 +616,7 @@ struct ObjectOperation {
 		     const string &filter_prefix,
 		     uint64_t max_to_get,
 		     std::map<std::string, bufferlist> *out_set,
+		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     bufferlist bl;
@@ -580,10 +626,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set) {
+    if (prval || out_set || ptruncated) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(out_set, prval);
+	new C_ObjectOperation_decodevals(max_to_get, out_set, ptruncated, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -602,7 +648,7 @@ struct ObjectOperation {
     if (prval || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(out_set, prval);
+	new C_ObjectOperation_decodevals(0, out_set, nullptr, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;

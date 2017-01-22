@@ -219,8 +219,9 @@ void SessionMap::_load_finish(
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
     C_IO_SM_Load *c = new C_IO_SM_Load(this, false);
     ObjectOperation op;
+#warning fixme use the pmore arg
     op.omap_get_vals(last_key, "", g_conf->mds_sessionmap_keys_per_op,
-        &c->session_vals, &c->values_r);
+		     &c->session_vals, nullptr, &c->values_r);
     mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0,
         new C_OnFinisher(c, mds->finisher));
   } else {
@@ -262,8 +263,9 @@ void SessionMap::load(MDSInternalContextBase *onload)
 
   ObjectOperation op;
   op.omap_get_header(&c->header_bl, &c->header_r);
+#warning use the pmore arg
   op.omap_get_vals("", "", g_conf->mds_sessionmap_keys_per_op,
-      &c->session_vals, &c->values_r);
+		   &c->session_vals, nullptr, &c->values_r);
 
   mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
 }
