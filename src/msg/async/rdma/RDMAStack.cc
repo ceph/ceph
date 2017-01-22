@@ -122,7 +122,7 @@ void RDMADispatcher::polling()
           dead_queue_pairs.pop_back();
         }
       }
-      // handle_async_event();
+      handle_async_event();
       if (done)
         break;
 
