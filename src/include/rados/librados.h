@@ -3099,7 +3099,29 @@ CEPH_RADOS_API void rados_read_op_omap_get_vals(rados_read_op_t read_op,
 				                const char *filter_prefix,
 				                uint64_t max_return,
 				                rados_omap_iter_t *iter,
-				                int *prval);
+				                int *prval)
+  __attribute__((deprecated)); /* use v2 below */
+
+/**
+ * Start iterating over key/value pairs on an object.
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param filter_prefix list only keys beginning with filter_prefix
+ * @param max_return list no more than max_return key/value pairs
+ * @param iter where to store the iterator
+ * @param pmore flag indicating whether there are more keys to fetch
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_read_op_omap_get_vals2(rados_read_op_t read_op,
+						 const char *start_after,
+						 const char *filter_prefix,
+						 uint64_t max_return,
+						 rados_omap_iter_t *iter,
+						 unsigned char *pmore,
+						 int *prval);
 
 /**
  * Start iterating over keys on an object.
@@ -3117,7 +3139,28 @@ CEPH_RADOS_API void rados_read_op_omap_get_keys(rados_read_op_t read_op,
 				                const char *start_after,
 				                uint64_t max_return,
 				                rados_omap_iter_t *iter,
-				                int *prval);
+				                int *prval)
+  __attribute__((deprecated)); /* use v2 below */
+
+/**
+ * Start iterating over keys on an object.
+ *
+ * They will be returned sorted by key, and the iterator
+ * will fill in NULL for all values if specified.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param max_return list no more than max_return keys
+ * @param iter where to store the iterator
+ * @param pmore flag indicating whether there are more keys to fetch
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_read_op_omap_get_keys2(rados_read_op_t read_op,
+						 const char *start_after,
+						 uint64_t max_return,
+						 rados_omap_iter_t *iter,
+						 unsigned char *pmore,
+						 int *prval);
 
 /**
  * Start iterating over specific key/value pairs

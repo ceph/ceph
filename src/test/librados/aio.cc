@@ -2117,8 +2117,8 @@ TEST(LibRadosAio, OmapPP) {
 
     bufferlist header;
 
-    op.omap_get_keys("", 1, &set_got, 0);
-    op.omap_get_vals("foo", 1, &map_got, 0);
+    op.omap_get_keys2("", 1, &set_got, nullptr, 0);
+    op.omap_get_vals2("foo", 1, &map_got, nullptr, 0);
 
     to_get.insert("foo");
     to_get.insert("qfoo3");
@@ -2126,7 +2126,7 @@ TEST(LibRadosAio, OmapPP) {
 
     op.omap_get_header(&header, 0);
 
-    op.omap_get_vals("foo2", "q", 1, &got4, 0);
+    op.omap_get_vals2("foo2", "q", 1, &got4, nullptr, 0);
 
     ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
     {
@@ -2166,7 +2166,7 @@ TEST(LibRadosAio, OmapPP) {
     ObjectReadOperation op;
 
     set<string> set_got;
-    op.omap_get_keys("", -1, &set_got, 0);
+    op.omap_get_keys2("", -1, &set_got, nullptr, 0);
     ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
     {
       TestAlarm alarm;
@@ -2193,7 +2193,7 @@ TEST(LibRadosAio, OmapPP) {
     ObjectReadOperation op;
 
     set<string> set_got;
-    op.omap_get_keys("", -1, &set_got, 0);
+    op.omap_get_keys2("", -1, &set_got, nullptr, 0);
     ioctx.aio_operate("test_obj", my_completion.get(), &op, 0);
     {
       TestAlarm alarm;
@@ -2238,7 +2238,7 @@ TEST(LibRadosAio, OmapPP) {
     ObjectReadOperation op;
     set<string> set_got;
     bufferlist hdr;
-    op.omap_get_keys("", -1, &set_got, 0);
+    op.omap_get_keys2("", -1, &set_got, nullptr, 0);
     op.omap_get_header(&hdr, NULL);
     ioctx.aio_operate("foo3", my_completion.get(), &op, 0);
     {

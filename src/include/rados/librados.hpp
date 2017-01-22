@@ -515,6 +515,23 @@ namespace librados
       const std::string &start_after,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      int *prval) __attribute__ ((deprecated));  // use v2
+
+    /**
+     * omap_get_vals: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals2(
+      const std::string &start_after,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
       int *prval);
 
     /**
@@ -533,6 +550,26 @@ namespace librados
       const std::string &filter_prefix,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      int *prval) __attribute__ ((deprecated));  // use v2
+
+    /**
+     * omap_get_vals2: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list keys starting after start_after
+     * @param filter_prefix [in] list only keys beginning with filter_prefix
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals2(
+      const std::string &start_after,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
       int *prval);
 
 
@@ -549,7 +586,24 @@ namespace librados
     void omap_get_keys(const std::string &start_after,
                        uint64_t max_return,
                        std::set<std::string> *out_keys,
-                       int *prval);
+                       int *prval) __attribute__ ((deprecated)); // use v2
+
+    /**
+     * omap_get_keys2: keys from the object omap
+     *
+     * Get up to max_return keys beginning after start_after
+     *
+     * @param start_after [in] list keys starting after start_after
+     * @param max_return [in] list no more than max_return keys
+     * @param out_keys [out] place returned values in out_keys on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_keys2(const std::string &start_after,
+			uint64_t max_return,
+			std::set<std::string> *out_keys,
+			bool *pmore,
+			int *prval);
 
     /**
      * omap_get_header: get header from object omap
@@ -735,15 +789,31 @@ namespace librados
                       const std::string& start_after,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,
                       const std::string& filter_prefix,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       const std::string& filter_prefix,
+		       uint64_t max_return,
+		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
     int omap_get_keys(const std::string& oid,
                       const std::string& start_after,
                       uint64_t max_return,
                       std::set<std::string> *out_keys);
+    int omap_get_keys2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+		       std::set<std::string> *out_keys,
+		       bool *pmore);
     int omap_get_header(const std::string& oid,
                         bufferlist *bl);
     int omap_get_vals_by_keys(const std::string& oid,
