@@ -876,32 +876,6 @@ TRACEPOINT_EVENT(librados, rados_writesame_exit,
     )
 )
 
-TRACEPOINT_EVENT(librados, rados_clone_range_enter,
-    TP_ARGS(
-        rados_ioctx_t, ioctx,
-        const char*, dst,
-        uint64_t, dst_off,
-        const char*, src,
-        uint64_t, src_off,
-        size_t, len),
-    TP_FIELDS(
-        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
-        ctf_string(dst, dst)
-        ctf_integer(uint64_t, dst_off, dst_off)
-        ctf_string(src, src)
-        ctf_integer(uint64_t, src_off, src_off)
-        ctf_integer(size_t, len, len)
-    )
-)
-
-TRACEPOINT_EVENT(librados, rados_clone_range_exit,
-    TP_ARGS(
-        int, retval),
-    TP_FIELDS(
-        ctf_integer(int, retval, retval)
-    )
-)
-
 TRACEPOINT_EVENT(librados, rados_trunc_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,

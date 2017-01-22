@@ -942,9 +942,6 @@ CEPH_RADOS_API int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf,
  * operations of the io context - until a different locator key is
  * set, all objects in this io context will be placed in the same pg.
  *
- * This is useful if you need to do clone_range operations, which must
- * be done with the source and destination objects in the same pg.
- *
  * @param io the io context to change
  * @param key the key to use as the object locator, or NULL to discard
  * any previously set key
@@ -1390,28 +1387,6 @@ CEPH_RADOS_API int rados_write_full(rados_ioctx_t io, const char *oid,
 CEPH_RADOS_API int rados_writesame(rados_ioctx_t io, const char *oid,
                                    const char *buf, size_t data_len,
                                    size_t write_len, uint64_t off);
-
-/**
- * Efficiently copy a portion of one object to another
- *
- * If the underlying filesystem on the OSD supports it, this will be a
- * copy-on-write clone.
- *
- * The src and dest objects must be in the same pg. To ensure this,
- * the io context should have a locator key set (see
- * rados_ioctx_locator_set_key()).
- *
- * @param io the context in which the data is cloned
- * @param dst the name of the destination object
- * @param dst_off the offset within the destination object (in bytes)
- * @param src the name of the source object
- * @param src_off the offset within the source object (in bytes)
- * @param len how much data to copy
- * @returns 0 on success, negative error code on failure
- */
-CEPH_RADOS_API int rados_clone_range(rados_ioctx_t io, const char *dst,
-                                     uint64_t dst_off, const char *src,
-                                     uint64_t src_off, size_t len);
 
 /**
  * Append *len* bytes from *buf* into the *oid* object. The value of
