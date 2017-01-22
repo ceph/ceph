@@ -3712,7 +3712,11 @@ int RGWRados::init_zg_from_period(bool *initialized)
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	if (zonegroup.get_id() == zg.get_id()) {
 	  zonegroup.master_zone = master->second.id;
-	  zonegroup.update();
+	  ret = zonegroup.update();
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error updating zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
 	} else {
 	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
 	  ret = fixed_zg.init(cct, this);
@@ -3721,7 +3725,11 @@ int RGWRados::init_zg_from_period(bool *initialized)
 	    return ret;
 	  }
 	  fixed_zg.master_zone = master->second.id;
-	  fixed_zg.update();
+	  ret = fixed_zg.update();
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
 	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for master_zone=" <<
@@ -3775,7 +3783,11 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
 	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing master_zone, setting zone " <<
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	zonegroup.master_zone = master->second.id;
-	zonegroup.update();
+	ret = zonegroup.update();
+	if (ret < 0) {
+	  ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
           "master_zone=" << zonegroup.master_zone << dendl;
