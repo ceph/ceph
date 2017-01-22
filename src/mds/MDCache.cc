@@ -1770,8 +1770,18 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
       return;
   }
 
-  if (cur->last >= floor)
-    _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
+  if (cur->last >= floor) {
+    bool update = true;
+    if (cur->state_test(CInode::STATE_AMBIGUOUSAUTH) && cur->is_auth()) {
+      // rename src inode is not projected in the slave rename prep case. so we should
+      // avoid updateing the inode.
+      assert(linkunlink < 0);
+      assert(cur->is_frozen_inode());
+      update = false;
+    }
+    _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent,
+				 linkunlink, update);
+  }
 
   if (g_conf->mds_snap_rstat) {
     for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
@@ -1783,7 +1793,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
       if (q == snaps.end() || *q > *p)
 	continue;
       if (*p >= floor)
-	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
+	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0, false);
     }
   }
   cur->dirty_old_rstats.clear();
@@ -1791,7 +1801,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 
 
 void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
-					  CDir *parent, int linkunlink)
+					  CDir *parent, int linkunlink, bool update_inode)
 {
   dout(10) << "_project_rstat_inode_to_frag [" << ofirst << "," << last << "]" << dendl;
   dout(20) << "  inode           rstat " << inode.rstat << dendl;
@@ -1807,7 +1817,8 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
   }
   dout(20) << "                  delta " << delta << dendl;
 
-  inode.accounted_rstat = inode.rstat;
+  if (update_inode)
+    inode.accounted_rstat = inode.rstat;
 
   while (last >= ofirst) {
     /*
@@ -1900,7 +1911,8 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
     dout(20) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
     assert(last >= first);
     prstat->add(delta);
-    inode.accounted_rstat = inode.rstat;
+    if (update_inode)
+      inode.accounted_rstat = inode.rstat;
     dout(20) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
 
     last = first-1;

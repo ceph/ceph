@@ -350,7 +350,7 @@ public:
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
 				   int linkunlink, SnapRealm *prealm);
   void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
-				    CDir *parent, int linkunlink=0);
+				    CDir *parent, int linkunlink, bool update_inode);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
