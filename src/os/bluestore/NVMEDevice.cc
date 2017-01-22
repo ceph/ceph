@@ -798,10 +798,12 @@ int NVMEDevice::open(string p)
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
     return r;
   }
-  while (r > 0 && !isalpha(buf[r-1])) {
-    --r;
+  /* scan buf from the beginning with isxdigit. */
+  int i = 0;
+  while (i < r && isxdigit(buf[i])) {
+    i++;
   }
-  serial_number = string(buf, r);
+  serial_number = string(buf, i);
   r = manager.try_get(serial_number, &driver);
   if (r < 0) {
     derr << __func__ << " failed to get nvme device with sn " << serial_number << dendl;
