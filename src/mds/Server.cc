@@ -7723,7 +7723,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
   if (srcdn && srcdn->authority().first == whoami) {
     nest_info_t blah;
     _rollback_repair_dir(mut, srcdir, rollback.orig_src, rollback.ctime,
-			 in ? in->is_dir() : false, 1, pi ? pi->rstat : blah);
+			 in ? in->is_dir() : false, 1, pi ? pi->accounted_rstat : blah);
   }
 
   // repair dest
