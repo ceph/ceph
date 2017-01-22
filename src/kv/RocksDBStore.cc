@@ -311,6 +311,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
   rocksdb::BlockBasedTableOptions bbt_opts;
   bbt_opts.block_size = g_conf->rocksdb_block_size;
   bbt_opts.block_cache = cache;
+  if (g_conf->rocksdb_kstore_bloom_bits_per_key > 0) {
+    dout(10) << __func__ << " bloom bits per key: " <<
+      g_conf->kstore_rocksdb_bloom_bits_per_key << dendl;
+    bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(g_conf->kstore_rocksdb_bloom_bits_per_key));
+  }
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
            << " cache size to " << g_conf->rocksdb_cache_size
