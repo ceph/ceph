@@ -2981,7 +2981,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   // O_TRUNC
-  if ((flags & O_TRUNC) && !mdr->has_completed) {
+  if ((flags & O_TRUNC) && !mdr->has_completed && cur->inode.is_file()) {
     assert(cur->is_auth());
 
     xlocks.insert(&cur->filelock);
