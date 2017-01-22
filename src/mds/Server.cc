@@ -1737,6 +1737,12 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
   mds_rank_t from = mds_rank_t(m->get_source().num());
   
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    metareqid_t r = m->get_reqid();
+    if (!mdcache->have_uncommitted_master(r)) {
+      dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << r << dendl;
+      m->put();
+      return;
+    }
     dout(3) << "not clientreplay|active yet, waiting" << dendl;
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -1750,11 +1756,6 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
   }
 
   MDRequestRef mdr = mdcache->request_get(m->get_reqid());
-  if (!mdr.get()) {
-    dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << m->get_reqid() << dendl;
-    m->put();
-    return;
-  }
   if (m->get_attempt() != mdr->attempt) {
     dout(10) << "handle_slave_request_reply " << *mdr << " ignoring reply from other attempt "
 	     << m->get_attempt() << dendl;
