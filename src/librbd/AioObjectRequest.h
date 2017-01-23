@@ -80,8 +80,15 @@ public:
   virtual void send() = 0;
 
   bool has_parent() const {
-    return !m_parent_extents.empty();
+    return m_has_parent;
   }
+
+  virtual bool is_op_payload_empty() const {
+    return false;
+  }
+
+  virtual const char *get_op_type() const = 0;
+  virtual bool pre_object_map_update(uint8_t *new_state) = 0;
 
 protected:
   bool compute_parent_extents();
@@ -93,6 +100,9 @@ protected:
   Context *m_completion;
   Extents m_parent_extents;
   bool m_hide_enoent;
+
+private:
+  bool m_has_parent = false;
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -134,6 +144,15 @@ public:
   ExtentMap &get_extent_map() {
     return m_ext_map;
   }
+
+  const char *get_op_type() const {
+    return "read";
+  }
+
+  bool pre_object_map_update(uint8_t *new_state) {
+    return false;
+  }
+
 private:
   Extents m_buffer_extents;
   bool m_tried_parent;
@@ -190,17 +209,19 @@ public:
    * Writes go through the following state machine to deal with
    * layering and the object map:
    *
-   * <start>
-   *  .  |
-   *  .  |
-   *  .  \---> LIBRBD_AIO_WRITE_PRE
-   *  .           |         |
-   *  . . . . . . | . . . . | . . . . . . . . . . .
-   *      .       |   -or-  |                     .
-   *      .       |         |                     v
-   *      .       |         \----------------> LIBRBD_AIO_WRITE_FLAT . . .
-   *      .       |                                               |      .
-   *      v       v         need copyup                           |      .
+   *   <start>
+   *      |
+   *      |\
+   *      | \       -or-
+   *      |  ---------------------------------> LIBRBD_AIO_WRITE_PRE
+   *      |                          .                            |
+   *      |                          .                            |
+   *      |                          .                            v
+   *      |                          . . .  . > LIBRBD_AIO_WRITE_FLAT. . .
+   *      |                                                       |      .
+   *      |                                                       |      .
+   *      |                                                       |      .
+   *      v                need copyup   (copyup performs pre)    |      .
    * LIBRBD_AIO_WRITE_GUARD -----------> LIBRBD_AIO_WRITE_COPYUP  |      .
    *  .       |                               |        .          |      .
    *  .       |                               |        .          |      .
@@ -235,21 +256,21 @@ protected:
   uint64_t m_snap_seq;
   std::vector<librados::snap_t> m_snaps;
   bool m_object_exist;
+  bool m_guard = true;
 
   virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
-  virtual const char* get_write_type() const = 0;
   virtual void guard_write();
-  virtual void pre_object_map_update(uint8_t *new_state) = 0;
   virtual bool post_object_map_update() {
     return false;
   }
   virtual void send_write();
-  virtual void send_write_op(bool write_guard);
+  virtual void send_write_op();
   virtual void handle_write_guard();
 
+  void send_pre_object_map_update();
+
 private:
-  void send_pre();
-  bool send_post();
+  bool send_post_object_map_update();
   void send_copyup();
 };
 
@@ -264,16 +285,22 @@ public:
       m_write_data(data), m_op_flags(op_flags) {
   }
 
-protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+  bool is_op_payload_empty() const {
+    return (m_write_data.length() == 0);
+  }
 
-  virtual const char* get_write_type() const {
+  virtual const char *get_op_type() const {
     return "write";
   }
 
-  virtual void pre_object_map_update(uint8_t *new_state) {
+  virtual bool pre_object_map_update(uint8_t *new_state) {
     *new_state = OBJECT_EXISTS;
+    return true;
   }
+
+protected:
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+
   virtual void send_write();
 
 private:
@@ -290,28 +317,21 @@ public:
       m_object_state(OBJECT_NONEXISTENT) {
   }
 
-protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-    if (has_parent()) {
-      wr->truncate(0);
-    } else {
-      wr->remove();
-    }
-  }
-
-  virtual const char* get_write_type() const {
+  virtual const char* get_op_type() const {
     if (has_parent()) {
       return "remove (trunc)";
     }
     return "remove";
   }
-  virtual void pre_object_map_update(uint8_t *new_state) {
+
+  virtual bool pre_object_map_update(uint8_t *new_state) {
     if (has_parent()) {
       m_object_state = OBJECT_EXISTS;
     } else {
       m_object_state = OBJECT_PENDING;
     }
     *new_state = m_object_state;
+    return true;
   }
 
   virtual bool post_object_map_update() {
@@ -323,6 +343,15 @@ protected:
 
   virtual void guard_write();
   virtual void send_write();
+
+protected:
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+    if (has_parent()) {
+      wr->truncate(0);
+    } else {
+      wr->remove();
+    }
+  }
 
 private:
   uint8_t m_object_state;
@@ -339,21 +368,22 @@ public:
     : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
                              true), m_post_object_map_update(post_object_map_update) { }
 
-protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-    wr->remove();
-  }
-
-  virtual const char* get_write_type() const {
+  virtual const char* get_op_type() const {
     return "remove (trim)";
   }
 
-  virtual void pre_object_map_update(uint8_t *new_state) {
+  virtual bool pre_object_map_update(uint8_t *new_state) {
     *new_state = OBJECT_PENDING;
+    return true;
   }
 
   virtual bool post_object_map_update() {
     return m_post_object_map_update;
+  }
+
+protected:
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+    wr->remove();
   }
 
 private:
@@ -369,22 +399,24 @@ public:
                              completion, true) {
   }
 
-protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-    wr->truncate(m_object_off);
-  }
-
-  virtual const char* get_write_type() const {
+  virtual const char* get_op_type() const {
     return "truncate";
   }
 
-  virtual void pre_object_map_update(uint8_t *new_state) {
+  virtual bool pre_object_map_update(uint8_t *new_state) {
     if (!m_object_exist && !has_parent())
       *new_state = OBJECT_NONEXISTENT;
     else
       *new_state = OBJECT_EXISTS;
+    return true;
   }
+
   virtual void send_write();
+
+protected:
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+    wr->truncate(m_object_off);
+  }
 };
 
 class AioObjectZero : public AbstractAioObjectWrite {
@@ -396,17 +428,18 @@ public:
                              snapc, completion, true) {
   }
 
-protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-    wr->zero(m_object_off, m_object_len);
-  }
-
-  virtual const char* get_write_type() const {
+  virtual const char* get_op_type() const {
     return "zero";
   }
 
-  virtual void pre_object_map_update(uint8_t *new_state) {
+  virtual bool pre_object_map_update(uint8_t *new_state) {
     *new_state = OBJECT_EXISTS;
+    return true;
+  }
+
+protected:
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+    wr->zero(m_object_off, m_object_len);
   }
 };
 
