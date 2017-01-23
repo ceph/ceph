@@ -608,6 +608,7 @@ public:
   int get_pg_num(int pg_pool) const
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
+    assert(NULL != pool);
     return pool->get_pg_num();
   }
 
