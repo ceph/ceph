@@ -1820,6 +1820,13 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       }
 
       if (!id.empty()) {
+	ldout(cct, 2) << "removing header..." << dendl;
+	r = io_ctx.remove(util::header_name(id));
+	if (r < 0 && r != -ENOENT) {
+	  lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
+	  return r;
+	}
+
         ldout(cct, 10) << "removing journal..." << dendl;
         r = Journal<>::remove(io_ctx, id);
         if (r < 0 && r != -ENOENT) {
