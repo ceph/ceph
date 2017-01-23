@@ -87,6 +87,10 @@ namespace ceph {
     {
       dump_string(name, s);
     }
+    virtual void dump_string_linewrap(const char *name, const std::string& s)
+    {
+      dump_string(name, s);
+    }
   };
 
   class JSONFormatter : public Formatter {
@@ -163,6 +167,7 @@ namespace ceph {
     void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
+    void dump_string_linewrap(const char *name, const std::string& s);
   protected:
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
