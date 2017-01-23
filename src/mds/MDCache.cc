@@ -2506,6 +2506,8 @@ ESubtreeMap *MDCache::create_subtree_map()
     mydir = myin->get_dirfrag(frag_t());
   }
 
+  list<CDir*> maybe;
+
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -2532,6 +2534,15 @@ ESubtreeMap *MDCache::create_subtree_map()
     }
 
     le->subtrees[dir->dirfrag()].clear();
+
+    if (dir->get_dir_auth().second != CDIR_AUTH_UNKNOWN &&
+	le->ambiguous_subtrees.count(dir->dirfrag()) == 0 &&
+	p->second.empty()) {
+      dout(10) << " maybe journal " << *dir << dendl;
+      maybe.push_back(dir);
+      continue;
+    }
+
     le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
     le->metablob.add_dir(dir, false);
 
@@ -2643,6 +2654,18 @@ ESubtreeMap *MDCache::create_subtree_map()
       }
     }
   }
+
+  for (list<CDir*>::iterator p = maybe.begin(); p != maybe.end(); ++p) {
+    CDir *dir = *p;
+    if (le->subtrees.count(dir->dirfrag())) {
+      // not swallowed by above code
+      le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
+      le->metablob.add_dir(dir, false);
+    } else {
+      dout(10) << "simplify: not journal " << *dir << dendl;
+    }
+  }
+
   dout(15) << " subtrees " << le->subtrees << dendl;
   dout(15) << " ambiguous_subtrees " << le->ambiguous_subtrees << dendl;
 
