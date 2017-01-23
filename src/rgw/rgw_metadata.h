@@ -254,6 +254,27 @@ struct RGWMetadataLogData {
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
+struct RGWMetadataLogHistory {
+  epoch_t oldest_realm_epoch;
+  std::string oldest_period_id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(oldest_realm_epoch, bl);
+    ::encode(oldest_period_id, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(oldest_realm_epoch, p);
+    ::decode(oldest_period_id, p);
+    DECODE_FINISH(p);
+  }
+
+  static const std::string oid;
+};
+WRITE_CLASS_ENCODER(RGWMetadataLogHistory)
+
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
   CephContext *cct;
