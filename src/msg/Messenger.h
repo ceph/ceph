@@ -409,6 +409,14 @@ public:
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
+   * Bind the 'client' Messenger to a specific address.Messenger will bind
+   * the address before connect to others when option ms_bind_before_connect
+   * is true.
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 on error, or -errno if
+   */
+  virtual int client_bind(const entity_addr_t& bind_addr) = 0;
+  /**
    * @} // Configuration
    */
 
