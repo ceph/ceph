@@ -191,6 +191,12 @@ test_remove() {
 	rbd rm test2
 	rbd ls | wc -l | grep "^0$"
 
+        # remove with id missing
+	rbd create --image-format 2 -s 1 test2
+	rados -p rbd rm rbd_id.test2
+	rbd rm test2
+	rbd ls | wc -l | grep "^0$"
+
         # remove with header and id missing
 	rbd create --image-format 2 -s 1 test2
 	HEADER=$(rados -p rbd ls | grep '^rbd_header')
