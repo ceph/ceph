@@ -2497,6 +2497,8 @@ struct MasterTrimEnv : public TrimEnv {
   }
 };
 
+using PeerTrimEnv = TrimEnv;
+
 } // anonymous namespace
 
 
@@ -2637,6 +2639,41 @@ int MetaMasterTrimCR::operate()
       }
     }
     // ignore any errors during purge/trim because we want to hold the lock open
+    return set_cr_done();
+  }
+  return 0;
+}
+
+
+class MetaPeerTrimCR : public RGWCoroutine {
+  PeerTrimEnv& env;
+  rgw_mdlog_info mdlog_info; //< master's mdlog info
+
+ public:
+  MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
+
+  int operate();
+};
+
+int MetaPeerTrimCR::operate()
+{
+  reenter(this) {
+    ldout(cct, 10) << "fetching master mdlog info" << dendl;
+    yield {
+      // query mdlog_info from master for oldest_log_period
+      rgw_http_param_pair params[] = {
+        { "type", "metadata" },
+        { nullptr, nullptr }
+      };
+
+      using LogInfoCR = RGWReadRESTResourceCR<rgw_mdlog_info>;
+      call(new LogInfoCR(cct, env.store->rest_master_conn, env.http,
+                         "/admin/log/", params, &mdlog_info));
+    }
+    if (retcode < 0) {
+      ldout(cct, 4) << "failed to read mdlog info from master" << dendl;
+      return set_cr_error(retcode);
+    }
     return set_cr_done();
   }
   return 0;
