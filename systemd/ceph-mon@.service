@@ -24,7 +24,8 @@ PrivateTmp=true
 TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
-StartLimitBurst=3
+StartLimitBurst=5
+RestartSec=10
 
 [Install]
 WantedBy=ceph-mon.target
