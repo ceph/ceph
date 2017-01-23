@@ -2629,6 +2629,12 @@ int MetaMasterTrimCR::operate()
         ldout(cct, 10) << "mdlogs already purged up to realm_epoch "
             << env.last_trim_epoch << dendl;
       }
+
+      // if realm_epoch == current, trim mdlog based on markers
+      if (epoch == env.current.get_epoch()) {
+        auto mdlog = store->meta_mgr->get_log(env.current.get_period().get_id());
+        spawn(new MetaMasterTrimShardCollectCR(env, mdlog, min_status), true);
+      }
     }
     // ignore any errors during purge/trim because we want to hold the lock open
     return set_cr_done();
