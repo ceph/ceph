@@ -2929,3 +2929,12 @@ class MetaPeerTrimPollCR : public MetaTrimPollCR {
       env(store, http, num_shards)
   {}
 };
+
+RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
+                                      int num_shards, utime_t interval)
+{
+  if (store->is_meta_master()) {
+    return new MetaMasterTrimPollCR(store, http, num_shards, interval);
+  }
+  return new MetaPeerTrimPollCR(store, http, num_shards, interval);
+}

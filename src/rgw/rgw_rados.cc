@@ -3088,9 +3088,20 @@ public:
     return http.set_threaded();
   }
   int process() override {
-    crs.run(create_data_log_trim_cr(store, &http,
-                                    cct->_conf->rgw_data_log_num_shards,
-                                    trim_interval));
+    list<RGWCoroutinesStack*> stacks;
+    auto meta = new RGWCoroutinesStack(store->ctx(), &crs);
+    meta->call(create_meta_log_trim_cr(store, &http,
+                                       cct->_conf->rgw_md_log_max_shards,
+                                       trim_interval));
+    stacks.push_back(meta);
+
+    auto data = new RGWCoroutinesStack(store->ctx(), &crs);
+    data->call(create_data_log_trim_cr(store, &http,
+                                       cct->_conf->rgw_data_log_num_shards,
+                                       trim_interval));
+    stacks.push_back(data);
+
+    crs.run(stacks);
     return 0;
   }
 };
