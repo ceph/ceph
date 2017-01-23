@@ -2645,6 +2645,145 @@ int MetaMasterTrimCR::operate()
 }
 
 
+/// read the first entry of the master's mdlog shard and trim to that position
+class MetaPeerTrimShardCR : public RGWCoroutine {
+  RGWMetaSyncEnv& env;
+  RGWMetadataLog *mdlog;
+  const std::string& period_id;
+  const int shard_id;
+  RGWMetadataLogInfo info;
+  ceph::real_time stable; //< safe timestamp to trim, according to master
+  ceph::real_time *last_trim; //< last trimmed timestamp, updated on trim
+  rgw_mdlog_shard_data result; //< result from master's mdlog listing
+
+ public:
+  MetaPeerTrimShardCR(RGWMetaSyncEnv& env, RGWMetadataLog *mdlog,
+                      const std::string& period_id, int shard_id,
+                      ceph::real_time *last_trim)
+    : RGWCoroutine(env.store->ctx()), env(env), mdlog(mdlog),
+      period_id(period_id), shard_id(shard_id), last_trim(last_trim)
+  {}
+
+  int operate() override;
+};
+
+int MetaPeerTrimShardCR::operate()
+{
+  reenter(this) {
+    // query master's first mdlog entry for this shard
+    yield call(new RGWListRemoteMDLogShardCR(&env, period_id, shard_id,
+                                             "", 1, &result));
+    if (retcode < 0) {
+      ldout(cct, 5) << "failed to read first entry from master's mdlog shard "
+          << shard_id << " for period " << period_id
+          << ": " << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+    if (result.entries.empty()) {
+      // if there are no mdlog entries, we don't have a timestamp to compare. we
+      // can't just trim everything, because there could be racing updates since
+      // this empty reply. query the mdlog shard info to read its max timestamp,
+      // then retry the listing to make sure it's still empty before trimming to
+      // that
+      ldout(cct, 10) << "empty master mdlog shard " << shard_id
+          << ", reading last timestamp from shard info" << dendl;
+      // read the mdlog shard info for the last timestamp
+      using ShardInfoCR = RGWReadRemoteMDLogShardInfoCR;
+      yield call(new ShardInfoCR(&env, period_id, shard_id, &info));
+      if (retcode < 0) {
+        ldout(cct, 5) << "failed to read info from master's mdlog shard "
+            << shard_id << " for period " << period_id
+            << ": " << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+      if (ceph::real_clock::is_zero(info.last_update)) {
+        return set_cr_done(); // nothing to trim
+      }
+      ldout(cct, 10) << "got mdlog shard info with last update="
+          << info.last_update << dendl;
+      // re-read the master's first mdlog entry to make sure it hasn't changed
+      yield call(new RGWListRemoteMDLogShardCR(&env, period_id, shard_id,
+                                               "", 1, &result));
+      if (retcode < 0) {
+        ldout(cct, 5) << "failed to read first entry from master's mdlog shard "
+            << shard_id << " for period " << period_id
+            << ": " << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+      // if the mdlog is still empty, trim to max marker
+      if (result.entries.empty()) {
+        stable = info.last_update;
+      } else {
+        stable = result.entries.front().timestamp;
+
+        // can only trim -up to- master's first timestamp, so subtract a second.
+        // (this is why we use timestamps instead of markers for the peers)
+        stable -= std::chrono::seconds(1);
+      }
+    } else {
+      stable = result.entries.front().timestamp;
+      stable -= std::chrono::seconds(1);
+    }
+
+    if (stable <= *last_trim) {
+      ldout(cct, 10) << "skipping log shard " << shard_id
+          << " at timestamp=" << stable
+          << " last_trim=" << *last_trim << dendl;
+      return set_cr_done();
+    }
+
+    ldout(cct, 10) << "trimming log shard " << shard_id
+        << " at timestamp=" << stable
+        << " last_trim=" << *last_trim << dendl;
+    yield {
+      std::string oid;
+      mdlog->get_shard_oid(shard_id, oid);
+      call(new RGWRadosTimelogTrimCR(env.store, oid, real_time{}, stable, "", ""));
+    }
+    if (retcode < 0 && retcode != -ENODATA) {
+      ldout(cct, 1) << "failed to trim mdlog shard " << shard_id
+          << ": " << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+    *last_trim = stable;
+    return set_cr_done();
+  }
+  return 0;
+}
+
+class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
+  static constexpr int MAX_CONCURRENT_SHARDS = 16;
+
+  PeerTrimEnv& env;
+  RGWMetadataLog *mdlog;
+  const std::string& period_id;
+  RGWMetaSyncEnv meta_env; //< for RGWListRemoteMDLogShardCR
+  int shard_id{0};
+
+ public:
+  MetaPeerTrimShardCollectCR(PeerTrimEnv& env, RGWMetadataLog *mdlog)
+    : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
+      env(env), mdlog(mdlog), period_id(env.current.get_period().get_id())
+  {
+    meta_env.init(cct, env.store, env.store->rest_master_conn,
+                  env.store->get_async_rados(), env.http, nullptr);
+  }
+
+  bool spawn_next() override;
+};
+
+bool MetaPeerTrimShardCollectCR::spawn_next()
+{
+  if (shard_id >= env.num_shards) {
+    return false;
+  }
+  auto& last_trim = env.last_trim_timestamps[shard_id];
+  spawn(new MetaPeerTrimShardCR(meta_env, mdlog, period_id, shard_id, &last_trim),
+        false);
+  shard_id++;
+  return true;
+}
+
 class MetaPeerTrimCR : public RGWCoroutine {
   PeerTrimEnv& env;
   rgw_mdlog_info mdlog_info; //< master's mdlog info
