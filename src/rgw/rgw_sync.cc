@@ -2674,6 +2674,15 @@ int MetaPeerTrimCR::operate()
       ldout(cct, 4) << "failed to read mdlog info from master" << dendl;
       return set_cr_error(retcode);
     }
+
+    if (mdlog_info.realm_epoch > env.last_trim_epoch + 1) {
+      // delete any prior mdlog periods
+      yield spawn(new PurgePeriodLogsCR(env.store, mdlog_info.realm_epoch,
+                                        &env.last_trim_epoch), true);
+    } else {
+      ldout(cct, 10) << "mdlogs already purged through realm_epoch "
+          << env.last_trim_epoch << dendl;
+    }
     return set_cr_done();
   }
   return 0;
