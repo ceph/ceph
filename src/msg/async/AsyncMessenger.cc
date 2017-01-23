@@ -380,6 +380,25 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   return 0;
 }
 
+int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
+{
+  lock.Lock();
+  if (did_bind) {
+    assert(my_inst.addr == bind_addr);
+    return 0;
+  }
+  if (started) {
+    ldout(cct, 10) << __func__ << " already started" << dendl;
+    lock.Unlock();
+    return -1;
+  }
+  ldout(cct, 10) << __func__ << " " << bind_addr << dendl;
+  lock.Unlock();
+
+  set_myaddr(bind_addr);
+  return 0;
+}
+
 void AsyncMessenger::_finish_bind(const entity_addr_t& bind_addr,
 				  const entity_addr_t& listen_addr)
 {
