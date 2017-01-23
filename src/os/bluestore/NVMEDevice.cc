@@ -302,6 +302,8 @@ static void data_buf_reset_sgl(void *cb_arg, uint32_t sgl_offset)
 
 static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 {
+  uint32_t size;
+  void *addr;
   Task *t = static_cast<Task*>(cb_arg);
   if (t->io_request.cur_seg_idx >= t->io_request.nseg) {
     *length = 0;
@@ -309,27 +311,25 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
     return 0;
   }
 
-  void *addr = t->io_request.extra_segs ? t->io_request.extra_segs[t->io_request.cur_seg_idx] : t->io_request.inline_segs[t->io_request.cur_seg_idx];
+  addr = t->io_request.extra_segs ? t->io_request.extra_segs[t->io_request.cur_seg_idx] : t->io_request.inline_segs[t->io_request.cur_seg_idx];
 
-  if (t->io_request.cur_seg_left) {
-    *length = t->io_request.cur_seg_left;
-    *address = (void *)((uint64_t)addr + data_buffer_size - t->io_request.cur_seg_left);
-    if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
+  size = data_buffer_size;
+  if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
       if (tail) {
-        *address = (void *)((uint64_t)addr + tail - t->io_request.cur_seg_left);
+        size = (uint32_t) tail;
       }
-    }
+  }
+ 
+  if (t->io_request.cur_seg_left) {
+    *address = (void *)((uint64_t)addr + size - t->io_request.cur_seg_left);
+    *length = t->io_request.cur_seg_left;
     t->io_request.cur_seg_left = 0;
   } else {
     *address = addr;
-    *length = data_buffer_size;
-    if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
-      uint64_t tail = t->len % data_buffer_size;
-      if (tail)
-        *length = tail;
-    }
+    *length = size;
   }
+  
   t->io_request.cur_seg_idx++;
   return 0;
 }
