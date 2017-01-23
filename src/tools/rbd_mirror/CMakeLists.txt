@@ -7,6 +7,7 @@ set(rbd_mirror_internal
   ImageDeleter.cc
   ImageSync.cc
   ImageSyncThrottler.cc
+  LeaderWatcher.cc
   Mirror.cc
   MirrorStatusWatcher.cc
   PoolWatcher.cc
