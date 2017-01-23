@@ -2500,6 +2500,62 @@ struct MasterTrimEnv : public TrimEnv {
 } // anonymous namespace
 
 
+/// spawn a trim cr for each shard that needs it, while limiting the number
+/// of concurrent shards
+class MetaMasterTrimShardCollectCR : public RGWShardCollectCR {
+ private:
+  static constexpr int MAX_CONCURRENT_SHARDS = 16;
+
+  MasterTrimEnv& env;
+  RGWMetadataLog *mdlog;
+  int shard_id{0};
+  std::string oid;
+  const rgw_meta_sync_status& sync_status;
+
+ public:
+  MetaMasterTrimShardCollectCR(MasterTrimEnv& env, RGWMetadataLog *mdlog,
+                               const rgw_meta_sync_status& sync_status)
+    : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
+      env(env), mdlog(mdlog), sync_status(sync_status)
+  {}
+
+  bool spawn_next() override;
+};
+
+bool MetaMasterTrimShardCollectCR::spawn_next()
+{
+  while (shard_id < env.num_shards) {
+    auto m = sync_status.sync_markers.find(shard_id);
+    if (m == sync_status.sync_markers.end()) {
+      shard_id++;
+      continue;
+    }
+    auto& stable = get_stable_marker(m->second);
+    auto& last_trim = env.last_trim_markers[shard_id];
+
+    if (stable <= last_trim) {
+      // already trimmed
+      ldout(cct, 20) << "skipping log shard " << shard_id
+          << " at marker=" << stable
+          << " last_trim=" << last_trim
+          << " realm_epoch=" << sync_status.sync_info.realm_epoch << dendl;
+      shard_id++;
+      continue;
+    }
+
+    mdlog->get_shard_oid(shard_id, oid);
+
+    ldout(cct, 10) << "trimming log shard " << shard_id
+        << " at marker=" << stable
+        << " last_trim=" << last_trim
+        << " realm_epoch=" << sync_status.sync_info.realm_epoch << dendl;
+    spawn(new RGWSyncLogTrimCR(env.store, oid, stable, &last_trim), false);
+    shard_id++;
+    return true;
+  }
+  return false;
+}
+
 class MetaMasterTrimCR : public RGWCoroutine {
   MasterTrimEnv& env;
   rgw_meta_sync_status min_status; //< minimum sync status of all peers
