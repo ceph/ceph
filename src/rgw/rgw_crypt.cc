@@ -11,6 +11,7 @@
 #include "include/assert.h"
 #include <boost/utility/string_ref.hpp>
 #include <rgw/rgw_keystone.h>
+#include "include/str_map.h"
 #include "../isa-l_crypto_plugin/crypto_accel.h"
 #include "../isa-l_crypto_plugin/crypto_plugin.h"
 
@@ -920,6 +921,12 @@ int request_key_from_barbican(CephContext *cct,
   return res;
 }
 
+static map<string,string> get_str_map(const string &str) {
+  map<string,string> m;
+  get_str_map(str, &m, ";, \t");
+  return m;
+}
+
 int get_actual_key_from_kms(CephContext *cct,
                             boost::string_ref key_id,
                             boost::string_ref key_selector,
@@ -927,27 +934,27 @@ int get_actual_key_from_kms(CephContext *cct,
 {
   int res = 0;
   ldout(cct, 20) << "Getting KMS encryption key for key=" << key_id << dendl;
-  if (key_id.starts_with("testkey-")) {
-    /* test keys for testing purposes */
-    boost::string_ref key = key_id.substr(sizeof("testkey-")-1);
-    std::string master_key;
-    if (key == "1")       master_key = "012345678901234567890123456789012345";
-    else if (key == "2")  master_key = "abcdefghijklmnopqrstuvwxyzabcdefghij";
-    else {
-      res = -EIO;
-      return res;
-    }
-    uint8_t _actual_key[AES_256_KEYSIZE];
-    if (AES_256_ECB_encrypt(cct,
-                            (uint8_t*)master_key.c_str(), AES_256_KEYSIZE,
-                            (uint8_t*)key_selector.data(),
-                            _actual_key, AES_256_KEYSIZE)) {
-      actual_key = std::string((char*)&_actual_key[0], AES_256_KEYSIZE);
+  static map<string,string> str_map = get_str_map(
+      cct->_conf->rgw_crypt_s3_kms_encryption_keys);
+
+  map<string, string>::iterator it = str_map.find(std::string(key_id));
+  if (it != str_map.end() ) {
+    std::string master_key = from_base64((*it).second);
+    if (master_key.length() == AES_256_KEYSIZE) {
+      uint8_t _actual_key[AES_256_KEYSIZE];
+      if (AES_256_ECB_encrypt(cct,
+          (uint8_t*)master_key.c_str(), AES_256_KEYSIZE,
+          (uint8_t*)key_selector.data(),
+          _actual_key, AES_256_KEYSIZE)) {
+        actual_key = std::string((char*)&_actual_key[0], AES_256_KEYSIZE);
+      } else {
+        res = -EIO;
+      }
     } else {
+      ldout(cct, 20) << "Wrong size for key=" << key_id << dendl;
       res = -EIO;
     }
-  }
-  else {
+  } else {
     std::string token;
     if (rgw::keystone::Service::get_keystone_barbican_token(cct, token) < 0) {
       ldout(cct, 5) << "Failed to retrieve token for barbican" << dendl;
