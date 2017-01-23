@@ -2312,6 +2312,56 @@ connection_map make_peer_connections(RGWRados *store,
   return connections;
 }
 
+/// return the marker that it's safe to trim up to
+const std::string& get_stable_marker(const rgw_meta_sync_marker& m)
+{
+  return m.state == m.FullSync ? m.next_step_marker : m.marker;
+}
+
+/// comparison operator for take_min_status()
+bool operator<(const rgw_meta_sync_marker& lhs, const rgw_meta_sync_marker& rhs)
+{
+  // sort by stable marker
+  return get_stable_marker(lhs) < get_stable_marker(rhs);
+}
+
+/// populate the status with the minimum stable marker of each shard for any
+/// peer whose realm_epoch matches the minimum realm_epoch in the input
+template <typename Iter>
+int take_min_status(CephContext *cct, Iter first, Iter last,
+                    rgw_meta_sync_status *status)
+{
+  if (first == last) {
+    return -EINVAL;
+  }
+  const size_t num_shards = cct->_conf->rgw_md_log_max_shards;
+
+  status->sync_info.realm_epoch = std::numeric_limits<epoch_t>::max();
+  for (auto p = first; p != last; ++p) {
+    // validate peer's shard count
+    if (p->sync_markers.size() != num_shards) {
+      ldout(cct, 1) << "take_min_status got peer status with "
+          << p->sync_markers.size() << " shards, expected "
+          << num_shards << dendl;
+      return -EINVAL;
+    }
+    if (p->sync_info.realm_epoch < status->sync_info.realm_epoch) {
+      // earlier epoch, take its entire status
+      *status = std::move(*p);
+    } else if (p->sync_info.realm_epoch == status->sync_info.realm_epoch) {
+      // same epoch, take any earlier markers
+      auto m = status->sync_markers.begin();
+      for (auto& shard : p->sync_markers) {
+        if (shard.second < m->second) {
+          m->second = std::move(shard.second);
+        }
+        ++m;
+      }
+    }
+  }
+  return 0;
+}
+
 struct TrimEnv {
   RGWRados *const store;
   RGWHTTPManager *const http;
@@ -2348,6 +2398,7 @@ struct MasterTrimEnv : public TrimEnv {
 
 class MetaMasterTrimCR : public RGWCoroutine {
   MasterTrimEnv& env;
+  rgw_meta_sync_status min_status; //< minimum sync status of all peers
   int ret{0};
 
  public:
@@ -2396,6 +2447,14 @@ int MetaMasterTrimCR::operate()
     if (ret < 0) {
       ldout(cct, 4) << "failed to fetch sync status from all peers" << dendl;
       drain_all();
+      return set_cr_error(ret);
+    }
+
+    // determine the minimum epoch and markers
+    ret = take_min_status(env.store->ctx(), env.peer_status.begin(),
+                          env.peer_status.end(), &min_status);
+    if (ret < 0) {
+      ldout(cct, 4) << "failed to calculate min sync status from peers" << dendl;
       return set_cr_error(ret);
     }
     return set_cr_done();
