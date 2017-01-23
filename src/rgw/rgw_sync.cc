@@ -2851,3 +2851,81 @@ int MetaPeerTrimCR::operate()
   }
   return 0;
 }
+
+class MetaTrimPollCR : public RGWCoroutine {
+  RGWRados *const store;
+  const utime_t interval; //< polling interval
+  const rgw_bucket& pool;
+  const std::string& oid;
+  const std::string name{"meta_trim"}; //< lock name
+  const std::string cookie;
+
+ protected:
+  /// allocate the coroutine to run within the lease
+  virtual RGWCoroutine* alloc_cr() = 0;
+
+ public:
+  MetaTrimPollCR(RGWRados *store, utime_t interval)
+    : RGWCoroutine(store->ctx()), store(store), interval(interval),
+      pool(store->get_zone_params().log_pool), oid(RGWMetadataLogHistory::oid),
+      cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
+  {}
+
+  int operate();
+};
+
+int MetaTrimPollCR::operate()
+{
+  reenter(this) {
+    for (;;) {
+      set_status("sleeping");
+      wait(interval);
+
+      // prevent others from trimming for our entire wait interval
+      set_status("acquiring trim lock");
+      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+                                          pool, oid, name, cookie, interval.sec()));
+      if (retcode < 0) {
+        ldout(cct, 4) << "failed to lock: " << cpp_strerror(retcode) << dendl;
+        continue;
+      }
+
+      set_status("trimming");
+      yield call(alloc_cr());
+
+      if (retcode < 0) {
+        // on errors, unlock so other gateways can try
+        set_status("unlocking");
+        yield call(new RGWSimpleRadosUnlockCR(store->get_async_rados(), store,
+                                              pool, oid, name, cookie));
+      }
+    }
+  }
+  return 0;
+}
+
+class MetaMasterTrimPollCR : public MetaTrimPollCR  {
+  MasterTrimEnv env; //< trim state to share between calls
+  RGWCoroutine* alloc_cr() override {
+    return new MetaMasterTrimCR(env);
+  }
+ public:
+  MetaMasterTrimPollCR(RGWRados *store, RGWHTTPManager *http,
+                       int num_shards, utime_t interval)
+    : MetaTrimPollCR(store, interval),
+      env(store, http, num_shards)
+  {}
+};
+
+class MetaPeerTrimPollCR : public MetaTrimPollCR {
+  PeerTrimEnv env; //< trim state to share between calls
+  RGWCoroutine* alloc_cr() override {
+    return new MetaPeerTrimCR(env);
+  }
+ public:
+  MetaPeerTrimPollCR(RGWRados *store, RGWHTTPManager *http,
+                     int num_shards, utime_t interval)
+    : MetaTrimPollCR(store, interval),
+      env(store, http, num_shards)
+  {}
+};
