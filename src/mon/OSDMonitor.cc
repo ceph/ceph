@@ -2885,9 +2885,14 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
   } else {
     int num_in_osds = 0;
     int num_down_in_osds = 0;
+    set<int> osds;
+    osdmap.crush->get_all_osds_in_crush(osds);
     for (int i = 0; i < osdmap.get_max_osd(); i++) {
-      if (!osdmap.exists(i) || osdmap.is_out(i))
+      if (!osdmap.exists(i))
 	continue;
+      osds.erase(i);
+      if (osdmap.is_out(i))
+        continue;
       ++num_in_osds;
       if (!osdmap.is_up(i)) {
 	++num_down_in_osds;
@@ -2907,6 +2912,15 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
 
+    if (!osds.empty()) {
+      ostringstream ss;
+      ss << "osd have removed form osdmap, but still keep in crushmap";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail) {
+        ss << " osds: [" << osds << "]";
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
     // warn about flags
     uint64_t warn_flags =
       CEPH_OSDMAP_FULL |

@@ -454,6 +454,20 @@ public:
    */
   bool subtree_contains(int root, int item) const;
 
+  /**
+   *  get the all device osd in crush map
+   *
+   * @para osds put all crush map osds in it
+   *
+   */ 
+  void get_all_osds_in_crush(set<int> &osds) {
+    for (const auto &p : name_map) {
+        if (p.first >= 0) {
+          osds.insert(p.first); 
+        }
+    } 
+  }
+
 private:
   /**
    * search for an item in any bucket
