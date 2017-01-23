@@ -6768,7 +6768,7 @@ public:
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data) :
                        cct(cct),
-                       filter(nullptr),
+                       filter(p),
                        compressor(compressor),
                        plugin(plugin),
                        processor(p),
