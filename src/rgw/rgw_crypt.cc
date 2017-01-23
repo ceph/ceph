@@ -353,7 +353,7 @@ public:
                      const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt)
   {
-    static CryptoAccelRef crypto_accel = get_crypto_accel(cct);
+    CryptoAccelRef crypto_accel = get_crypto_accel(cct);
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
