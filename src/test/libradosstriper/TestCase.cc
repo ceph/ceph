@@ -12,7 +12,7 @@ rados_t StriperTest::s_cluster = NULL;
 
 void StriperTest::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("rados_striper_test_param");
   ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
 }
 
@@ -39,7 +39,7 @@ librados::Rados StriperTestPP::s_cluster;
 
 void StriperTestPP::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("rados_striper_test_pp");
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
 
@@ -63,7 +63,7 @@ librados::Rados StriperTestParam::s_cluster;
 
 void StriperTestParam::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("rados_striper_test_param");
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
 

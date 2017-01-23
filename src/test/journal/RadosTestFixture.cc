@@ -12,7 +12,7 @@ RadosTestFixture::RadosTestFixture()
 }
 
 void RadosTestFixture::SetUpTestCase() {
-  _pool_name = get_temp_pool_name();
+  _pool_name = get_temp_pool_name("test-journal");
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
 
   CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());

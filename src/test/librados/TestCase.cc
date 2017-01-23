@@ -13,7 +13,7 @@ rados_t RadosTestNS::s_cluster = NULL;
 
 void RadosTestNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestNS");
   ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
 }
 
@@ -64,7 +64,7 @@ Rados RadosTestPPNS::s_cluster;
 
 void RadosTestPPNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestPPNS");
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
 
@@ -106,7 +106,7 @@ Rados RadosTestParamPPNS::s_cluster;
 
 void RadosTestParamPPNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestParamPPNS");
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
 
@@ -187,7 +187,7 @@ rados_t RadosTestECNS::s_cluster = NULL;
 
 void RadosTestECNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestECNS");
   ASSERT_EQ("", create_one_ec_pool(pool_name, &s_cluster));
 }
 
@@ -218,7 +218,7 @@ Rados RadosTestECPPNS::s_cluster;
 
 void RadosTestECPPNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestECPPNS");
   ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
 }
 
@@ -248,7 +248,7 @@ rados_t RadosTest::s_cluster = NULL;
 
 void RadosTest::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTest");
   ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
 }
 
@@ -306,7 +306,7 @@ Rados RadosTestPP::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestPP");
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
 
@@ -365,7 +365,7 @@ Rados RadosTestParamPP::s_cluster;
 
 void RadosTestParamPP::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestParamPP");
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
 
@@ -454,7 +454,7 @@ rados_t RadosTestEC::s_cluster = NULL;
 
 void RadosTestEC::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestEC");
   ASSERT_EQ("", create_one_ec_pool(pool_name, &s_cluster));
 }
 
@@ -488,7 +488,7 @@ Rados RadosTestECPP::s_cluster;
 
 void RadosTestECPP::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  pool_name = get_temp_pool_name("RadosTestECPP");
   ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
 }
 

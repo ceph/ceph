@@ -22,7 +22,8 @@
 #include <string>
 #include <unistd.h>
 
-std::string get_temp_pool_name(const std::string &prefix = "test-rados-api-");
+std::string get_temp_pool_name();
+std::string get_temp_pool_name(const std::string &prefix);
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster,
     uint32_t pg_num=0);
