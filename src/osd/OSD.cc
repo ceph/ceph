@@ -353,11 +353,12 @@ void OSDService::_maybe_split_pgid(OSDMapRef old_map,
 				  spg_t pgid)
 {
   assert(old_map->have_pg_pool(pgid.pool()));
-  if (pgid.ps() < static_cast<unsigned>(old_map->get_pg_num(pgid.pool()))) {
+  int old_pgnum = old_map->get_pg_num(pgid.pool());
+  if (pgid.ps() < static_cast<unsigned>(old_pgnum)) {
     set<spg_t> children;
-    pgid.is_split(old_map->get_pg_num(pgid.pool()),
-		  new_map->get_pg_num(pgid.pool()), &children);
-    _start_split(pgid, children);
+    if (pgid.is_split(old_pgnum,
+		  new_map->get_pg_num(pgid.pool()), &children)) { 
+      _start_split(pgid, children); }
   } else {
     assert(pgid.ps() < static_cast<unsigned>(new_map->get_pg_num(pgid.pool())));
   }
