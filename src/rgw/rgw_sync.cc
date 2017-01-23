@@ -2471,6 +2471,7 @@ struct TrimEnv {
   int num_shards;
   const std::string& zone;
   Cursor current; //< cursor to current period
+  epoch_t last_trim_epoch{0}; //< epoch of last mdlog that was purged
 
   TrimEnv(RGWRados *store, RGWHTTPManager *http, int num_shards)
     : store(store), http(http), num_shards(num_shards),
@@ -2560,6 +2561,20 @@ int MetaMasterTrimCR::operate()
       ldout(cct, 4) << "failed to calculate min sync status from peers" << dendl;
       return set_cr_error(ret);
     }
+    yield {
+      auto store = env.store;
+      auto epoch = min_status.sync_info.realm_epoch;
+      ldout(cct, 4) << "realm epoch min=" << epoch
+          << " current=" << env.current.get_epoch()<< dendl;
+      if (epoch > env.last_trim_epoch + 1) {
+        // delete any prior mdlog periods
+        spawn(new PurgePeriodLogsCR(store, epoch, &env.last_trim_epoch), true);
+      } else {
+        ldout(cct, 10) << "mdlogs already purged up to realm_epoch "
+            << env.last_trim_epoch << dendl;
+      }
+    }
+    // ignore any errors during purge/trim because we want to hold the lock open
     return set_cr_done();
   }
   return 0;
