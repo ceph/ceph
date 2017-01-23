@@ -6,6 +6,7 @@
 
 #include <type_traits>
 
+#include <boost/optional.hpp>
 #include <boost/utility/string_ref.hpp>
 
 #include "rgw_common.h"
@@ -280,6 +281,13 @@ public:
   }
 
   bool find(const std::string& token_id, TokenEnvelope& token);
+  boost::optional<TokenEnvelope> find(const std::string& token_id) {
+    TokenEnvelope token_envlp;
+    if (find(token_id, token_envlp)) {
+      return token_envlp;
+    }
+    return boost::none;
+  }
   bool find_admin(TokenEnvelope& token);
   void add(const std::string& token_id, const TokenEnvelope& token);
   void add_admin(const TokenEnvelope& token);

@@ -59,11 +59,13 @@ TokenEngine::decode_pki_token(const std::string& token) const
   return token_body;
 }
 
-TokenEngine::token_envelope_t
+boost::optional<TokenEngine::token_envelope_t>
 TokenEngine::get_from_keystone(const std::string& token) const
 {
-  using RGWValidateKeystoneToken
-    = rgw::keystone::Service::RGWValidateKeystoneToken;
+  /* Unfortunately, we can't use the short form of "using" here. It's because
+   * we're aliasing a class' member, not namespace. */
+  using RGWValidateKeystoneToken = \
+    rgw::keystone::Service::RGWValidateKeystoneToken;
 
   /* The container for plain response obtained from Keystone. It will be
    * parsed token_envelope_t::parse method. */
@@ -112,7 +114,7 @@ TokenEngine::get_from_keystone(const std::string& token) const
       validate.get_http_status() ==
           /* Most likely: non-existent token supplied by the client. */
           RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
-    throw -EACCES;
+    return boost::none;
   }
 
   TokenEngine::token_envelope_t token_body;
@@ -202,7 +204,7 @@ TokenEngine::result_t
 TokenEngine::authenticate(const std::string& token,
                           const req_state* const s) const
 {
-  TokenEngine::token_envelope_t t;
+  boost::optional<TokenEngine::token_envelope_t> t;
 
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
@@ -229,11 +231,12 @@ TokenEngine::authenticate(const std::string& token,
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
   /* Check cache first. */
-  if (token_cache.find(token_id, t)) {
-    ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
+  t = token_cache.find(token_id);
+  if (t) {
+    ldout(cct, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
-    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
-                                              get_creds_info(t, roles.admin));
+    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                              get_creds_info(*t, roles.admin));
     return result_t::grant(std::move(apl));
   }
 
@@ -250,23 +253,27 @@ TokenEngine::authenticate(const std::string& token,
     t = get_from_keystone(token);
   }
 
+  if (! t) {
+    return result_t::deny(-EACCES);
+  }
+
   /* Verify expiration. */
-  if (t.expired()) {
-    ldout(cct, 0) << "got expired token: " << t.get_project_name()
-                  << ":" << t.get_user_name()
-                  << " expired: " << t.get_expires() << dendl;
+  if (t->expired()) {
+    ldout(cct, 0) << "got expired token: " << t->get_project_name()
+                  << ":" << t->get_user_name()
+                  << " expired: " << t->get_expires() << dendl;
     return result_t::deny();
   }
 
   /* Check for necessary roles. */
   for (const auto& role : roles.plain) {
-    if (t.has_role(role) == true) {
-      ldout(cct, 0) << "validated token: " << t.get_project_name()
-                    << ":" << t.get_user_name()
-                    << " expires: " << t.get_expires() << dendl;
-      token_cache.add(token_id, t);
-      auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
-                                            get_creds_info(t, roles.admin));
+    if (t->has_role(role) == true) {
+      ldout(cct, 0) << "validated token: " << t->get_project_name()
+                    << ":" << t->get_user_name()
+                    << " expires: " << t->get_expires() << dendl;
+      token_cache.add(token_id, *t);
+      auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                            get_creds_info(*t, roles.admin));
       return result_t::grant(std::move(apl));
     }
   }
@@ -281,7 +288,7 @@ TokenEngine::authenticate(const std::string& token,
 /*
  * Try to validate S3 auth against keystone s3token interface
  */
-rgw::keystone::TokenEnvelope
+std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
 EC2Engine::get_from_keystone(const std::string& access_key_id,
                              const std::string& string_to_sign,
                              const std::string& signature) const
@@ -350,17 +357,22 @@ EC2Engine::get_from_keystone(const std::string& access_key_id,
   /* if the supplied signature is wrong, we will get 401 from Keystone */
   if (validate.get_http_status() ==
           decltype(validate)::HTTP_STATUS_UNAUTHORIZED) {
-    throw -ERR_SIGNATURE_NO_MATCH;
+    return std::make_pair(boost::none, -ERR_SIGNATURE_NO_MATCH);
+  } else if (validate.get_http_status() ==
+          decltype(validate)::HTTP_STATUS_NOTFOUND) {
+    return std::make_pair(boost::none, -ERR_INVALID_ACCESS_KEY);
   }
 
   /* now parse response */
   rgw::keystone::TokenEnvelope token_envelope;
-  if (token_envelope.parse(cct, std::string(), token_body_bl, api_version) < 0) {
-    ldout(cct, 2) << "s3 keystone: token parsing failed" << dendl;
-    throw -EPERM;
+  ret = token_envelope.parse(cct, std::string(), token_body_bl, api_version);
+  if (ret < 0) {
+    ldout(cct, 2) << "s3 keystone: token parsing failed, ret=0" << ret
+                  << dendl;
+    throw ret;
   }
 
-  return std::move(token_envelope);
+  return std::make_pair(std::move(token_envelope), 0);
 }
 
 EC2Engine::acl_strategy_t
@@ -422,20 +434,26 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
     std::vector<std::string> admin;
   } accepted_roles(cct);
 
-  const auto t = get_from_keystone(access_key_id, string_to_sign,
-                                   signature);
+  boost::optional<token_envelope_t> t;
+  int failure_reason;
+  std::tie(t, failure_reason) = \
+    get_from_keystone(access_key_id, string_to_sign, signature);
+  if (! t) {
+    return result_t::deny(failure_reason);
+  }
+
   /* Verify expiration. */
-  if (t.expired()) {
-    ldout(cct, 0) << "got expired token: " << t.get_project_name()
-                  << ":" << t.get_user_name()
-                  << " expired: " << t.get_expires() << dendl;
+  if (t->expired()) {
+    ldout(cct, 0) << "got expired token: " << t->get_project_name()
+                  << ":" << t->get_user_name()
+                  << " expired: " << t->get_expires() << dendl;
     return result_t::deny();
   }
 
   /* check if we have a valid role */
   bool found = false;
   for (const auto& role : accepted_roles.plain) {
-    if (t.has_role(role) == true) {
+    if (t->has_role(role) == true) {
       found = true;
       break;
     }
@@ -448,12 +466,12 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
     return result_t::deny();
   } else {
     /* everything seems fine, continue with this user */
-    ldout(cct, 5) << "s3 keystone: validated token: " << t.get_project_name()
-                  << ":" << t.get_user_name()
-                  << " expires: " << t.get_expires() << dendl;
+    ldout(cct, 5) << "s3 keystone: validated token: " << t->get_project_name()
+                  << ":" << t->get_user_name()
+                  << " expires: " << t->get_expires() << dendl;
 
-    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(t),
-                                              get_creds_info(t, accepted_roles.admin));
+    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                              get_creds_info(*t, accepted_roles.admin));
     return result_t::grant(std::move(apl));
   }
 }
