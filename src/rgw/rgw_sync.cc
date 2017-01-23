@@ -2497,7 +2497,20 @@ struct MasterTrimEnv : public TrimEnv {
   }
 };
 
-using PeerTrimEnv = TrimEnv;
+struct PeerTrimEnv : public TrimEnv {
+  /// last trim timestamp for each shard, only applies to current period's mdlog
+  std::vector<ceph::real_time> last_trim_timestamps;
+
+  PeerTrimEnv(RGWRados *store, RGWHTTPManager *http, int num_shards)
+    : TrimEnv(store, http, num_shards),
+      last_trim_timestamps(num_shards)
+  {}
+
+  void set_num_shards(int num_shards) {
+    this->num_shards = num_shards;
+    last_trim_timestamps.resize(num_shards);
+  }
+};
 
 } // anonymous namespace
 
@@ -2813,6 +2826,8 @@ int MetaPeerTrimCR::operate()
       ldout(cct, 4) << "failed to read mdlog info from master" << dendl;
       return set_cr_error(retcode);
     }
+    // use master's shard count instead
+    env.set_num_shards(mdlog_info.num_shards);
 
     if (mdlog_info.realm_epoch > env.last_trim_epoch + 1) {
       // delete any prior mdlog periods
@@ -2821,6 +2836,16 @@ int MetaPeerTrimCR::operate()
     } else {
       ldout(cct, 10) << "mdlogs already purged through realm_epoch "
           << env.last_trim_epoch << dendl;
+    }
+
+    // if realm_epoch == current, trim mdlog based on master's markers
+    if (mdlog_info.realm_epoch == env.current.get_epoch()) {
+      yield {
+        auto meta_mgr = env.store->meta_mgr;
+        auto mdlog = meta_mgr->get_log(env.current.get_period().get_id());
+        spawn(new MetaPeerTrimShardCollectCR(env, mdlog), true);
+        // ignore any errors during purge/trim because we want to hold the lock open
+      }
     }
     return set_cr_done();
   }
