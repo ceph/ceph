@@ -271,10 +271,12 @@ void KernelDevice::_aio_thread()
 	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
 	if (left == 0) {
 	  // check waiting count before doing callback (which may
-	  // destroy this ioc).
+	  // destroy this ioc).  and avoid ref to ioc after aio_wake()
+	  // in case that triggers destruction.
+	  void *priv = ioc->priv;
 	  ioc->aio_wake();
-	  if (ioc->priv) {
-	    aio_callback(aio_callback_priv, ioc->priv);
+	  if (priv) {
+	    aio_callback(aio_callback_priv, priv);
 	  }
 	}
       }
