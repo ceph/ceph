@@ -18,6 +18,7 @@
 
 
 class RGWRados;
+class RGWCoroutine;
 class JSONObj;
 struct RGWObjVersionTracker;
 
@@ -312,6 +313,16 @@ public:
   /// read the oldest log period, and return a cursor to it in our existing
   /// period history
   RGWPeriodHistory::Cursor read_oldest_log_period() const;
+
+  /// read the oldest log period asynchronously and write its result to the
+  /// given cursor pointer
+  RGWCoroutine* read_oldest_log_period_cr(RGWPeriodHistory::Cursor *period,
+                                          RGWObjVersionTracker *objv) const;
+
+  /// try to advance the oldest log period when the given period is trimmed,
+  /// using a rados lock to provide atomicity
+  RGWCoroutine* trim_log_period_cr(RGWPeriodHistory::Cursor period,
+                                   RGWObjVersionTracker *objv) const;
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);
