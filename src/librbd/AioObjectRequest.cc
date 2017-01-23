@@ -112,6 +112,7 @@ bool AioObjectRequest<I>::compute_parent_extents() {
     lderr(m_ictx->cct) << this << " compute_parent_extents: failed to "
                        << "retrieve parent overlap: " << cpp_strerror(r)
                        << dendl;
+    m_has_parent = false;
     m_parent_extents.clear();
     return false;
   }
@@ -122,6 +123,7 @@ bool AioObjectRequest<I>::compute_parent_extents() {
     ldout(m_ictx->cct, 20) << this << " compute_parent_extents: "
                            << "overlap " << parent_overlap << " "
                            << "extents " << m_parent_extents << dendl;
+    m_has_parent = !m_parent_extents.empty();
     return true;
   }
   return false;
@@ -357,7 +359,7 @@ void AbstractAioObjectWrite::guard_write()
 
 bool AbstractAioObjectWrite::should_complete(int r)
 {
-  ldout(m_ictx->cct, 20) << get_write_type() << " " << this << " " << m_oid
+  ldout(m_ictx->cct, 20) << get_op_type() << " " << this << " " << m_oid
                          << " " << m_object_off << "~" << m_object_len
                          << " should_complete: r = " << r << dendl;
 
@@ -369,7 +371,7 @@ bool AbstractAioObjectWrite::should_complete(int r)
       return true;
     }
 
-    send_write();
+    send_write_op();
     finished = false;
     break;
 
@@ -393,7 +395,7 @@ bool AbstractAioObjectWrite::should_complete(int r)
       break;
     }
 
-    finished = send_post();
+    finished = send_post_object_map_update();
     break;
 
   case LIBRBD_AIO_WRITE_COPYUP:
@@ -403,14 +405,14 @@ bool AbstractAioObjectWrite::should_complete(int r)
       complete(r);
       finished = false;
     } else {
-      finished = send_post();
+      finished = send_post_object_map_update();
     }
     break;
 
   case LIBRBD_AIO_WRITE_FLAT:
     ldout(m_ictx->cct, 20) << "WRITE_FLAT" << dendl;
 
-    finished = send_post();
+    finished = send_post_object_map_update();
     break;
 
   case LIBRBD_AIO_WRITE_ERROR:
@@ -427,13 +429,9 @@ bool AbstractAioObjectWrite::should_complete(int r)
 }
 
 void AbstractAioObjectWrite::send() {
-  ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this <<" "
+  ldout(m_ictx->cct, 20) << "send " << get_op_type() << " " << this <<" "
                          << m_oid << " " << m_object_off << "~"
                          << m_object_len << dendl;
-  send_pre();
-}
-
-void AbstractAioObjectWrite::send_pre() {
   {
     RWLock::RLocker snap_lock(m_ictx->snap_lock);
     if (m_ictx->object_map == nullptr) {
@@ -442,12 +440,22 @@ void AbstractAioObjectWrite::send_pre() {
       // should have been flushed prior to releasing lock
       assert(m_ictx->exclusive_lock->is_lock_owner());
       m_object_exist = m_ictx->object_map->object_may_exist(m_object_no);
+    }
+  }
 
+  send_write();
+}
+
+void AbstractAioObjectWrite::send_pre_object_map_update() {
+  ldout(m_ictx->cct, 20) << __func__ << dendl;
+
+  {
+    RWLock::RLocker snap_lock(m_ictx->snap_lock);
+    if (m_ictx->object_map != nullptr) {
       uint8_t new_state;
       pre_object_map_update(&new_state);
-
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-      ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
+      ldout(m_ictx->cct, 20) << __func__ << this << " " << m_oid << " "
                              << m_object_off << "~" << m_object_len
                              << dendl;
       m_state = LIBRBD_AIO_WRITE_PRE;
@@ -459,11 +467,10 @@ void AbstractAioObjectWrite::send_pre() {
     }
   }
 
-  // no object map update required
-  send_write();
+  send_write_op();
 }
 
-bool AbstractAioObjectWrite::send_post() {
+bool AbstractAioObjectWrite::send_post_object_map_update() {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr || !post_object_map_update()) {
     return true;
@@ -473,7 +480,7 @@ bool AbstractAioObjectWrite::send_post() {
   assert(m_ictx->exclusive_lock->is_lock_owner());
 
   RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-  ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
+  ldout(m_ictx->cct, 20) << __func__ << this << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_POST;
 
@@ -494,7 +501,7 @@ void AbstractAioObjectWrite::send_write() {
     m_state = LIBRBD_AIO_WRITE_GUARD;
     handle_write_guard();
   } else {
-    send_write_op(true);
+    send_pre_object_map_update();
   }
 }
 
@@ -524,11 +531,13 @@ void AbstractAioObjectWrite::send_copyup()
     m_ictx->copyup_list_lock.Unlock();
   }
 }
-void AbstractAioObjectWrite::send_write_op(bool write_guard)
+void AbstractAioObjectWrite::send_write_op()
 {
   m_state = LIBRBD_AIO_WRITE_FLAT;
-  if (write_guard)
+  if (m_guard) {
     guard_write();
+  }
+
   add_write_ops(&m_write);
   assert(m_write.size() != 0);
 
@@ -580,10 +589,10 @@ void AioObjectWrite::send_write() {
                          << " object exist " << m_object_exist
                          << " write_full " << write_full << dendl;
   if (write_full && !has_parent()) {
-    send_write_op(false);
-  } else {
-    AbstractAioObjectWrite::send_write();
+    m_guard = false;
   }
+
+  AbstractAioObjectWrite::send_write();
 }
 
 void AioObjectRemove::guard_write() {
@@ -596,8 +605,9 @@ void AioObjectRemove::guard_write() {
 void AioObjectRemove::send_write() {
   ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len << dendl;
-  send_write_op(true);
+  send_pre_object_map_update();
 }
+
 void AioObjectTruncate::send_write() {
   ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid
                          << " truncate " << m_object_off << dendl;
