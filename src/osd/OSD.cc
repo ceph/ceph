@@ -837,9 +837,9 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     release_map(next_map);
     return ret;
   }
-  ret.first = osd->hbclient_messenger->get_connection(next_map->get_hb_back_inst(peer));
+  ret.first = osd->hb_back_client_messenger->get_connection(next_map->get_hb_back_inst(peer));
   if (next_map->get_hb_front_addr(peer) != entity_addr_t())
-    ret.second = osd->hbclient_messenger->get_connection(next_map->get_hb_front_inst(peer));
+    ret.second = osd->hb_front_client_messenger->get_connection(next_map->get_hb_front_inst(peer));
   release_map(next_map);
   return ret;
 }
@@ -1638,7 +1638,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	 int id,
 	 Messenger *internal_messenger,
 	 Messenger *external_messenger,
-	 Messenger *hb_clientm,
+	 Messenger *hb_client_front,
+	 Messenger *hb_client_back,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
 	 Messenger *osdc_messenger,
@@ -1680,7 +1681,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false),
   heartbeat_need_update(true),
-  hbclient_messenger(hb_clientm),
+  hb_front_client_messenger(hb_client_front),
+  hb_back_client_messenger(hb_client_back),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
   daily_loadavg(0.0),
@@ -2189,7 +2191,8 @@ int OSD::init()
   client_messenger->add_dispatcher_head(this);
   cluster_messenger->add_dispatcher_head(this);
 
-  hbclient_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_front_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
@@ -2860,7 +2863,8 @@ int OSD::shutdown()
   class_handler->shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
-  hbclient_messenger->shutdown();
+  hb_front_client_messenger->shutdown();
+  hb_back_client_messenger->shutdown();
   objecter_messenger->shutdown();
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
@@ -7219,7 +7223,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
                   << " rebind hb_front_server_messenger failed" << dendl;
         }
 
-	hbclient_messenger->mark_down_all();
+	hb_front_client_messenger->mark_down_all();
+	hb_back_client_messenger->mark_down_all();
 
 	reset_heartbeat_peers();
       }
