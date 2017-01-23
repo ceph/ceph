@@ -450,4 +450,8 @@ public:
   int operate() override;
 };
 
+// MetaLogTrimCR factory function
+RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
+                                      int num_shards, utime_t interval);
+
 #endif
