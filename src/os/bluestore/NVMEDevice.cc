@@ -935,11 +935,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
-  if (ioc->num_waiting.load()) {
-    dout(20) << __func__ << " waking waiter" << dendl;
-    std::unique_lock<std::mutex> l(ioc->lock);
-    ioc->cond.notify_all();
-  }
+  ioc->aio_wake();
   return r;
 }
 
@@ -970,7 +966,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   }
   r = t->return_code;
   delete t;
-
+  ioc.aio_wake();
   return r;
 }
 
