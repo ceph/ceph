@@ -1227,8 +1227,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *name = t.get_string(buf, p);
       int64_t r = t.get_int();
       struct ceph_statx stx;
-      if (ll_inos.count(i)) {
-	  i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	  i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	  if (client->ll_lookupx(i1, name, &i2, &stx, CEPH_STATX_INO, 0, perms) == 0)
 	    ll_inos[r] = stx.stx_ino;
 	  client->ll_put(i1);
@@ -1236,15 +1237,17 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_forget") == 0) {
       int64_t i = t.get_int();
       int64_t n = t.get_int();
-      if (ll_inos.count(i) && 
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end() && 
 	  client->ll_forget(
-	    client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP)), n))
+	    client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP)), n))
 	ll_inos.erase(i);
     } else if (strcmp(op, "ll_getattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	client->ll_getattr(i1, &attr, perms);
 	client->ll_put(i1);
       }
@@ -1259,16 +1262,18 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       attr.st_mtime = t.get_int();
       attr.st_atime = t.get_int();
       int mask = t.get_int();
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	client->ll_setattr(i1, &attr, mask, perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_readlink") == 0) {
       int64_t i = t.get_int();
-      if (ll_inos.count(i)) {
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
         char buf[PATH_MAX];
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	client->ll_readlink(i1, buf, sizeof(buf), perms);
 	client->ll_put(i1);
       }
@@ -1279,8 +1284,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int r = t.get_int();
       int64_t ri = t.get_int();
       struct stat attr;
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	if (client->ll_mknod(i1, n, m, r, &attr, &i2, perms) == 0)
 	  ll_inos[ri] = attr.st_ino;
 	client->ll_put(i1);
@@ -1291,8 +1297,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int m = t.get_int();
       int64_t ri = t.get_int();
       struct stat attr;
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	if (client->ll_mkdir(i1, n, m, &attr, &i2, perms) == 0)
 	  ll_inos[ri] = attr.st_ino;
 	client->ll_put(i1);
@@ -1303,8 +1310,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *v = t.get_string(buf2, p);
       int64_t ri = t.get_int();
       struct stat attr;
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto inos_it = ll_inos.find(i);
+      if (inos_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(inos_it->second,CEPH_NOSNAP));
 	if (client->ll_symlink(i1, n, v, &attr, &i2, perms) == 0)
 	  ll_inos[ri] = attr.st_ino;
 	client->ll_put(i1);
@@ -1312,16 +1320,18 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto inos_it = ll_inos.find(i);
+      if (inos_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(inos_it->second,CEPH_NOSNAP));
 	client->ll_unlink(i1, n, perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_rmdir") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto inos_it = ll_inos.find(i);
+      if (inos_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(inos_it->second,CEPH_NOSNAP));
 	client->ll_rmdir(i1, n, perms);
 	client->ll_put(i1);
       }
@@ -1330,10 +1340,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *n = t.get_string(buf, p);
       int64_t ni = t.get_int();
       const char *nn = t.get_string(buf2, p);
-      if (ll_inos.count(i) &&
-	  ll_inos.count(ni)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	i2 = client->ll_get_inode(vinodeno_t(ll_inos[ni],CEPH_NOSNAP));
+      auto ino_it1 = ll_inos.find(i);
+      auto ino_it2 = ll_inos.find(ni);
+      if (ino_it1 != ll_inos.end() &&
+	  ino_it2 != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it1->second,CEPH_NOSNAP));
+	i2 = client->ll_get_inode(vinodeno_t(ino_it2->second,CEPH_NOSNAP));
 	client->ll_rename(i1, n, i2, nn, perms);
 	client->ll_put(i1);
 	client->ll_put(i2);
@@ -1342,10 +1354,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t i = t.get_int();
       int64_t ni = t.get_int();
       const char *nn = t.get_string(buf, p);
-      if (ll_inos.count(i) &&
-	  ll_inos.count(ni)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	i2 = client->ll_get_inode(vinodeno_t(ll_inos[ni],CEPH_NOSNAP));
+      auto ino_it1 = ll_inos.find(i);
+      auto ino_it2 = ll_inos.find(ni);
+      if (ino_it1 != ll_inos.end() &&
+	  ino_it2 != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it1->second,CEPH_NOSNAP));
+	i2 = client->ll_get_inode(vinodeno_t(ino_it2->second,CEPH_NOSNAP));
 	client->ll_link(i1, i2, nn, perms);
 	client->ll_put(i1);
 	client->ll_put(i2);
@@ -1354,16 +1368,18 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t i = t.get_int();
       int64_t r = t.get_int();
       dir_result_t *dirp;
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	if (client->ll_opendir(i1, O_RDONLY, &dirp, perms) == 0)
 	  ll_dirs[r] = dirp;
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_releasedir") == 0) {
       int64_t f = t.get_int();
-      if (ll_dirs.count(f)) {
-	client->ll_releasedir(ll_dirs[f]);
+      auto dir_it = ll_dirs.find(f);
+      if (dir_it != ll_dirs.end()) {
+	client->ll_releasedir(dir_it->second);
 	ll_dirs.erase(f);
       }
     } else if (strcmp(op, "ll_open") == 0) {
@@ -1371,8 +1387,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t f = t.get_int();
       int64_t r = t.get_int();
       Fh *fhp;
-      if (ll_inos.count(i)) {
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	if (client->ll_open(i1, f, &fhp, perms) == 0)
 	  ll_files[r] = fhp;
 	client->ll_put(i1);
@@ -1385,9 +1402,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t r = t.get_int();
       int64_t ri = t.get_int();
       struct stat attr;
-      if (ll_inos.count(i)) {
+      auto ino_it = ll_inos.find(i);
+      if (ino_it != ll_inos.end()) {
 	Fh *fhp;
-	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+	i1 = client->ll_get_inode(vinodeno_t(ino_it->second,CEPH_NOSNAP));
 	if (client->ll_create(i1, n, m, f, &attr, NULL, &fhp, perms) == 0) {
 	  ll_inos[ri] = attr.st_ino;
 	  ll_files[r] = fhp;
@@ -1398,40 +1416,45 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t f = t.get_int();
       int64_t off = t.get_int();
       int64_t size = t.get_int();
-      if (ll_files.count(f) &&
+      auto file_it = ll_files.find(f);
+      if (file_it != ll_files.end() &&
 	  !metadata_only) {
 	bufferlist bl;
-	client->ll_read(ll_files[f], off, size, &bl);
+	client->ll_read(file_it->second, off, size, &bl);
       }
     } else if (strcmp(op, "ll_write") == 0) {
       int64_t f = t.get_int();
       int64_t off = t.get_int();
       int64_t size = t.get_int();
-      if (ll_files.count(f)) {
+      auto file_it = ll_files.find(f);
+      if (file_it != ll_files.end()) {
 	if (!metadata_only) {
 	  bufferlist bl;
 	  bufferptr bp(size);
 	  bl.push_back(bp);
 	  bp.zero();
-	  client->ll_write(ll_files[f], off, size, bl.c_str());
+	  client->ll_write(file_it->second, off, size, bl.c_str());
 	} else {
-	  client->ll_write(ll_files[f], off+size, 0, NULL);
+	  client->ll_write(file_it->second, off+size, 0, NULL);
 	}
       }
     } else if (strcmp(op, "ll_flush") == 0) {
       int64_t f = t.get_int();
+      auto file_it = ll_files.find(f);
       if (!metadata_only &&
-	  ll_files.count(f)) 
-	client->ll_flush(ll_files[f]);
+	  file_it != ll_files.end())
+	client->ll_flush(file_it->second);
     } else if (strcmp(op, "ll_fsync") == 0) {
       int64_t f = t.get_int();
+      auto file_it = ll_files.find(f);
       if (!metadata_only &&
-	  ll_files.count(f)) 
-	client->ll_fsync(ll_files[f], false); // FIXME dataonly param
+	  file_it != ll_files.end())
+	client->ll_fsync(file_it->second, false); // FIXME dataonly param
     } else if (strcmp(op, "ll_release") == 0) {
       int64_t f = t.get_int();
-      if (ll_files.count(f)) {
-	client->ll_release(ll_files[f]);
+      auto file_it = ll_files.find(f);
+      if (file_it != ll_files.end()) {
+	client->ll_release(file_it->second);
 	ll_files.erase(f);
       }
     } else if (strcmp(op, "ll_statfs") == 0) {

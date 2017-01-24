@@ -81,10 +81,12 @@ struct Inode {
 
     Inode() : ref(0) {}
 
-    Inode *lookup(const string& dname) { 
-	if (dentries.count(dname))
-	    return dentries[dname];
-	return 0;
+    Inode *lookup(const string& dname)
+    {
+        auto dentry = dentries.find(dname);
+        if (dentry != dentries.end())
+            return dentry->second;
+        return 0;
     }
 };
 
@@ -152,10 +154,11 @@ void add_dentry(Inode *parent, const string& dname, Inode *in)
 {
     dout << "add_dentry " << parent->stbuf.st_ino << " " << dname << " to " << in->stbuf.st_ino << endl;
 
-    if (parent->dentries.count(dname))
-	remove_dentry(parent, dname);  // e.g., when renaming over another file..
+    auto dentry = parent->dentries.find(dname);
+    if (dentry != parent->dentries.end())
+	    remove_dentry(parent, dname);  // e.g., when renaming over another file..
 
-    parent->dentries[dname] = in;
+    dentry->second = in;
     in->parents[pair<string,ino_t>(dname,parent->stbuf.st_ino)] = parent;
 }
 
@@ -198,9 +201,10 @@ Inode *add_inode(Inode *parent, const char *name, struct stat *attr)
     dout << "add_inode " << parent->stbuf.st_ino << " " << name << " " << attr->st_ino << endl;
 
     Inode *in;
-    if (inode_map.count(attr->st_ino)) {
+    auto inode_map_it = inode_map.find(attr->st_ino);
+    if (inode_map_it != inode_map.end()) {
 	// reuse inode
-	in = inode_map[attr->st_ino];
+	in = inode_map_it->second;
 	unlink_inode(in);  // hrm.. should this close open fds?  probably.
 	dout << "** REUSING INODE **" << endl;
     } else {
