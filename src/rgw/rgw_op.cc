@@ -1303,6 +1303,7 @@ bool RGWGetObj::prefetch_data()
 
   return get_data && prefetch_first_chunk;
 }
+
 void RGWGetObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
@@ -2171,7 +2172,6 @@ static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
 
   return 0;
 }
-
 
 static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attrs,
                                const std::set<std::string>& rmattr_names,
@@ -4688,9 +4688,9 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = store->omap_get_vals(obj, header, p, num_parts + 1, parts_map);
+    ret = store->omap_get_vals(obj, p, num_parts + 1, parts_map);
   } else {
-    ret = store->omap_get_all(obj, header, parts_map);
+    ret = store->omap_get_all(obj, parts_map);
   }
   if (ret < 0)
     return ret;
@@ -5504,15 +5504,179 @@ void RGWSetAttrs::execute()
 
   store->set_atomic(s->obj_ctx, obj);
 
-  if (!s->object.empty()) {
-    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, nullptr);
-  } else {
-    for (auto& iter : attrs) {
-      s->bucket_attrs[iter.first] = std::move(iter.second);
+  if (rmattrs) {
+    /* unset */
+    if (!s->object.empty()) {
+      map<string, buffer::list> noattrs;
+      op_ret = store->set_attrs(s->obj_ctx, obj, noattrs, &attrs);
+    } else {
+      for (auto& iter : attrs) {
+	const auto& b_iter = s->bucket_attrs.find(iter.first);
+	if (b_iter != s->bucket_attrs.end()) {
+	  s->bucket_attrs.erase(iter.first);
+	}
+      }
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
+				    &s->bucket_info.objv_tracker);
     }
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
-				  &s->bucket_info.objv_tracker);
+  } else {
+    /* set */
+    if (!s->object.empty()) {
+      op_ret = store->set_attrs(s->obj_ctx, obj, attrs, nullptr);
+    } else {
+      for (auto& iter : attrs) {
+	s->bucket_attrs[iter.first] = std::move(iter.second);
+      }
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
+				    &s->bucket_info.objv_tracker);
+    }
+  } /* !rmattrs */
+}
+
+int RGWSetOmapAttrs::verify_permission()
+{
+  bool perm;
+  if (!s->object.empty()) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE);
   }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetOmapAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetOmapAttrs::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  rgw_obj obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  op_ret = store->omap_set(obj, attrs);
+  if (op_ret < 0) {
+    return;
+  }
+
+  return;
+}
+
+int RGWDelOmapKeys::verify_permission()
+{
+  bool perm;
+  if (!s->object.empty()) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE);
+  }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWDelOmapKeys::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDelOmapKeys::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  rgw_obj obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  op_ret = store->omap_rm_keys(obj, keys);
+  if (op_ret < 0) {
+    return;
+  }
+
+  return;
+}
+
+int RGWGetKeys::verify_permission()
+{
+  /* XXX check instance assert and set_atomic location--some ops
+   * do it here, others in execute() */
+  obj = rgw_obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
+  store->set_atomic(s->obj_ctx, obj);
+
+  if (!verify_object_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetKeys::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetKeys::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  uint32_t max_entries = 1000;
+
+  op_ret = store->omap_get_keys(obj, marker, max_entries, keys);
+  if (op_ret < 0) {
+    return;
+  }
+
+  return;
+}
+
+int RGWGetAttrs::verify_permission()
+{
+  /* XXX check instance assert and set_atomic location--some ops
+   * do it here, others in execute() */
+  obj = rgw_obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
+  store->set_atomic(s->obj_ctx, obj);
+
+  if (!verify_object_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetAttrs::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  uint32_t max_entries = 1000;
+
+  op_ret = store->omap_get_vals(obj, marker, max_entries, attrs);
+  if (op_ret < 0) {
+    return;
+  }
+
+  return;
 }
 
 RGWHandler::~RGWHandler()

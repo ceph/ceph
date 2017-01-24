@@ -434,6 +434,14 @@ namespace rgw {
       return full_object_name(true /* omit_bucket */);
     }
 
+    inline std::string relative_object_name2() {
+      std::string rname = full_object_name(true /* omit_bucket */);
+      if (is_dir()) {
+	rname += "/";
+      }
+      return rname;
+    }
+
     inline std::string format_child_name(const std::string& cbasename) {
       std::string child_name{relative_object_name()};
       if ((child_name.size() > 0) &&
@@ -657,7 +665,7 @@ namespace rgw {
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
 			       std::mutex> FHCache;
 
-    virtual ~RGWFileHandle() {}
+    virtual ~RGWFileHandle();
 
     class Factory : public cohort::lru::ObjectFactory
     {
@@ -961,6 +969,10 @@ namespace rgw {
 	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
+	  /* ref parent (non-initial ref cannot fail on valid object) */
+	  if (! parent->is_root()) {
+	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
+	  }
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
@@ -986,6 +998,17 @@ namespace rgw {
 
     int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
 		uint32_t flags);
+
+    int getxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs,
+		  rgw_getxattr_cb cb, void *cb_arg, uint32_t flags);
+
+    int lsxattrs(RGWFileHandle* rgw_fh, rgw_xattrstr *start_at,
+		 rgw_xattrstr *filter_prefix, rgw_getxattr_cb cb,
+		 void *cb_arg, uint32_t flags);
+
+    int setxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs, uint32_t flags);
+
+    int rmxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs, uint32_t flags);
 
     LookupFHResult stat_bucket(RGWFileHandle* parent,
 			       const char *path, uint32_t flags);
@@ -2182,6 +2205,128 @@ public:
 
 }; /* RGWCopyObjRequest */
 
+class RGWGetKeysRequest : public RGWLibRequest,
+			  public RGWGetKeys /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+
+  RGWGetKeysRequest(CephContext* _cct, RGWUserInfo *_user,
+		    const std::string& _bname, const std::string& _oname,
+		    const std::string& _marker)
+    : RGWLibRequest(_cct, _user), RGWGetKeys(_marker), bucket_name(_bname),
+      obj_name(_oname) {
+    op = this;
+  }
+
+  void set_marker(const std::string& _marker) {
+    marker = _marker;
+  }
+
+  const std::set<std::string>& get_keys() {
+    return keys;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    std::string uri = make_uri(bucket_name, obj_name);
+    s->relative_uri = uri;
+    s->info.request_uri = uri;
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+}; /* RGWGetKeysRequest */
+
+class RGWGetAttrsRequest : public RGWLibRequest,
+			   public RGWGetAttrs /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+
+  RGWGetAttrsRequest(CephContext* _cct, RGWUserInfo *_user,
+		     const std::string& _bname, const std::string& _oname,
+		     const std::string& _marker)
+    : RGWLibRequest(_cct, _user), RGWGetAttrs(_marker), bucket_name(_bname),
+      obj_name(_oname) {
+    op = this;
+  }
+
+  const std::map<std::string, buffer::list>& get_attrs() {
+    return attrs;
+  }
+
+  void set_marker(const std::string& _marker) {
+    marker = _marker;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    std::string uri = make_uri(bucket_name, obj_name);
+    s->relative_uri = uri;
+    s->info.request_uri = uri;
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+}; /* RGWGetAttrsRequest */
+
 class RGWSetAttrsRequest : public RGWLibRequest,
 			   public RGWSetAttrs /* RGWOp */
 {
@@ -2190,9 +2335,15 @@ public:
   const std::string& obj_name;
 
   RGWSetAttrsRequest(CephContext* _cct, RGWUserInfo *_user,
-		     const std::string& _bname, const std::string& _oname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+		     const std::string& _bname, const std::string& _oname,
+		     bool _rmattrs = false)
+    : RGWLibRequest(_cct, _user), RGWSetAttrs(_rmattrs), bucket_name(_bname),
+      obj_name(_oname) {
     op = this;
+  }
+
+  const std::map<std::string, buffer::list>& get_attrs() {
+    return attrs;
   }
 
   virtual bool only_bucket() { return false; }
@@ -2235,6 +2386,124 @@ public:
   virtual void send_response() {}
 
 }; /* RGWSetAttrsRequest */
+
+class RGWSetOmapAttrsRequest : public RGWLibRequest,
+			       public RGWSetOmapAttrs /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+
+  RGWSetOmapAttrsRequest(CephContext* _cct, RGWUserInfo *_user,
+			 const std::string& _bname, const std::string& _oname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname),
+      obj_name(_oname) {
+    op = this;
+  }
+
+  const std::map<std::string, buffer::list>& get_attrs() {
+    return attrs;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT";
+    s->op = OP_PUT;
+
+    /* XXX derp derp derp */
+    std::string uri = make_uri(bucket_name, obj_name);
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+}; /* RGWSetOmapAttrsRequest */
+
+  class RGWDelOmapKeysRequest : public RGWLibRequest,
+				public RGWDelOmapKeys /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+
+  RGWDelOmapKeysRequest(CephContext* _cct, RGWUserInfo *_user,
+			const std::string& _bname, const std::string& _oname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname),
+      obj_name(_oname) {
+    op = this;
+  }
+
+  const std::set<std::string>& get_keys() {
+    return keys;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT";
+    s->op = OP_PUT;
+
+    /* XXX derp derp derp */
+    std::string uri = make_uri(bucket_name, obj_name);
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+}; /* RGWDelOmapKeysRequest */
 
 } /* namespace rgw */
 

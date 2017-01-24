@@ -1741,12 +1741,66 @@ static inline void complete_etag(MD5& hash, string *etag)
   *etag = etag_buf_str;
 } /* complete_etag */
 
+class RGWGetKeys : public RGWOp {
+protected:
+  set<std::string> keys;
+  std::string marker;
+  rgw_obj obj;
+
+public:
+  RGWGetKeys(const std::string& _marker) : marker(_marker)  {}
+  virtual ~RGWGetKeys() {}
+
+  void emplace_key(std::string&& key) {
+    keys.emplace(std::move(key));
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_keys"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_OMAP_KEYS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWGetAttrs : public RGWOp {
+protected:
+  std::map<std::string, buffer::list> attrs;
+  string marker;
+  rgw_obj obj;
+
+public:
+  RGWGetAttrs(const std::string _marker = "") : marker(_marker)
+  {}
+
+  virtual ~RGWGetAttrs() {}
+
+  void emplace_key(std::string&& key) {
+    buffer::list nobl;
+    attrs.emplace(std::move(key), std::move(nobl));
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_OMAP_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
 class RGWSetAttrs : public RGWOp {
 protected:
   map<string, buffer::list> attrs;
+  bool rmattrs;
 
 public:
-  RGWSetAttrs() {}
+  RGWSetAttrs(bool _rmattrs = false) : rmattrs(_rmattrs)  {}
   virtual ~RGWSetAttrs() {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
@@ -1761,6 +1815,53 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "set_attrs"; }
   virtual RGWOpType get_type() { return RGW_OP_SET_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWSetOmapAttrs : public RGWOp {
+protected:
+  map<string, buffer::list> attrs;
+  bool rmattrs;
+
+public:
+  RGWSetOmapAttrs(bool _rmattrs = false) : rmattrs(_rmattrs)  {}
+  virtual ~RGWSetOmapAttrs() {}
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl));
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_omap_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_OMAP_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWDelOmapKeys : public RGWOp {
+protected:
+  std::set<std::string> keys;
+
+public:
+  RGWDelOmapKeys() {}
+  virtual ~RGWDelOmapKeys() {}
+
+  void emplace_key(std::string&& key) {
+    keys.emplace(std::move(key));
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_omap_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_DELETE_OMAP_KEYS; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 

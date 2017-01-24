@@ -2935,11 +2935,17 @@ public:
 
   void gen_rand_obj_instance_name(rgw_obj *target);
 
-  int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
-  virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
-  virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
-  virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
+  int omap_get_keys(rgw_obj& obj, const std::string& marker, uint64_t count,
+		    std::set<string>& keys);
+  int omap_get_vals(rgw_obj& obj, const std::string& marker, uint64_t count,
+		    std::map<string, buffer::list>& m);
+  int omap_get_vals_by_keys(rgw_obj& obj, const std::set<std::string>& keys,
+			    std::map<string, buffer::list>& m);
+  virtual int omap_get_all(rgw_obj& obj, std::map<string, buffer::list>& m);
+  virtual int omap_set(rgw_obj& obj, std::string& key, buffer::list& bl);
+  virtual int omap_set(rgw_obj& obj, map<std::string, buffer::list>& m);
   virtual int omap_del(rgw_obj& obj, const std::string& key);
+  virtual int omap_rm_keys(rgw_obj& obj, const std::set<std::string>& keys);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 

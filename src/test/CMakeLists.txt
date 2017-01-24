@@ -340,6 +340,19 @@ target_link_libraries(ceph_test_librgw_file_aw
   ${EXTRALIBS}
   )
 
+# ceph_test_librgw_file_xattr (attribute ops)
+add_executable(ceph_test_librgw_file_xattr
+  librgw_file_xattr.cc
+  )
+set_target_properties(ceph_test_librgw_file_xattr PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_file_xattr
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
 # ceph_test_rgw_token
 add_executable(ceph_test_rgw_token
   test_rgw_token.cc

@@ -5546,7 +5546,7 @@ int RGWRados::select_legacy_bucket_placement(const string& tenant_name, const st
 read_omap:
   if (m.empty()) {
     bufferlist header;
-    ret = omap_get_all(obj, header, m);
+    ret = omap_get_all(obj, m);
 
     write_map = true;
   }
@@ -5609,7 +5609,7 @@ int RGWRados::update_placement_map()
   bufferlist header;
   map<string, bufferlist> m;
   rgw_obj obj(get_zone_params().domain_root, avail_pools);
-  int ret = omap_get_all(obj, header, m);
+  int ret = omap_get_all(obj, m);
   if (ret < 0)
     return ret;
 
@@ -5657,7 +5657,7 @@ int RGWRados::list_placement_set(set<string>& names)
   map<string, bufferlist> m;
 
   rgw_obj obj(get_zone_params().domain_root, avail_pools);
-  int ret = omap_get_all(obj, header, m);
+  int ret = omap_get_all(obj, m);
   if (ret < 0)
     return ret;
 
@@ -11284,7 +11284,25 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
   return 0;
 }
 
-int RGWRados::omap_get_vals(rgw_obj& obj, bufferlist& header, const string& marker, uint64_t count, std::map<string, bufferlist>& m)
+int RGWRados::omap_get_keys(rgw_obj& obj, const std::string& marker,
+							uint64_t count, std::set<string>& keys)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  r = ref.ioctx.omap_get_keys(ref.oid, marker, count, &keys);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::omap_get_vals(rgw_obj& obj, const std::string& marker,
+							uint64_t count, std::map<string, buffer::list>& m)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -11298,11 +11316,27 @@ int RGWRados::omap_get_vals(rgw_obj& obj, bufferlist& header, const string& mark
     return r;
 
   return 0;
- 
 }
 
-int RGWRados::omap_get_all(rgw_obj& obj, bufferlist& header,
-			   std::map<string, bufferlist>& m)
+int RGWRados::omap_get_vals_by_keys(rgw_obj& obj,
+									const std::set<std::string>& keys,
+									std::map<string, buffer::list>& m)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  r = ref.ioctx.omap_get_vals_by_keys(ref.oid, keys, &m);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::omap_get_all(rgw_obj& obj, std::map<string, bufferlist>& m)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -11375,6 +11409,19 @@ int RGWRados::omap_del(rgw_obj& obj, const std::string& key)
   k.insert(key);
 
   r = ref.ioctx.omap_rm_keys(ref.oid, k);
+  return r;
+}
+
+int RGWRados::omap_rm_keys(rgw_obj& obj, const std::set<std::string>& keys)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  r = ref.ioctx.omap_rm_keys(ref.oid, keys);
   return r;
 }
 
