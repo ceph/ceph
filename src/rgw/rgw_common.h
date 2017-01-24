@@ -1974,4 +1974,5 @@ extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
+int match(const string& pattern, const string& input, int flag);
 #endif
