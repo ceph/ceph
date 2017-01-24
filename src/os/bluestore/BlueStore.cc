@@ -5054,6 +5054,7 @@ int BlueStore::_do_read(
   blobs2read_t blobs2read;
   unsigned left = length;
   uint64_t pos = offset;
+  unsigned num_regions = 0;
   auto lp = o->extent_map.seek_lextent(offset);
   while (left > 0 && lp != o->extent_map.extent_map.end()) {
     if (pos < lp->logical_offset) {
@@ -5098,6 +5099,7 @@ int BlueStore::_do_read(
 	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
 		 << b_off << "~" << l << std::dec << dendl;
 	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
+	++num_regions;
       }
       pos += l;
       b_off += l;
@@ -5107,7 +5109,7 @@ int BlueStore::_do_read(
     ++lp;
   }
 
-  // read raw blob data
+  // read raw blob data.  use aio if we have >1 blobs to read.
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct);
   for (auto& p : blobs2read) {
@@ -5125,7 +5127,13 @@ int BlueStore::_do_read(
       r = bptr->get_blob().map(
 	0, bptr->get_blob().get_ondisk_length(),
 	[&](uint64_t offset, uint64_t length) {
-	  int r = bdev->aio_read(offset, length, &bl, &ioc);
+	  int r;
+	  // use aio if there are more regions to read than those in this blob
+	  if (num_regions > p.second.size()) {
+	    r = bdev->aio_read(offset, length, &bl, &ioc);
+	  } else {
+	    r = bdev->read(offset, length, &bl, &ioc, false);
+	  }
 	  if (r < 0)
             return r;
           return 0;
@@ -5156,18 +5164,28 @@ int BlueStore::_do_read(
 	r = bptr->get_blob().map(
 	  reg.r_off, r_len,
 	  [&](uint64_t offset, uint64_t length) {
-	    int r = bdev->aio_read(offset, length, &reg.bl, &ioc);
+	    int r;
+	    // use aio if there is more than one region to read
+	    if (num_regions > 1) {
+	      r = bdev->aio_read(offset, length, &reg.bl, &ioc);
+	    } else {
+	      r = bdev->read(offset, length, &reg.bl, &ioc, false);
+	    }
 	    if (r < 0)
               return r;
             return 0;
 	  });
         if (r < 0)
           return r;
+	assert(reg.bl.length() == r_len);
       }
     }
   }
-  bdev->aio_submit(&ioc);
-  ioc.aio_wait();
+  if (ioc.has_pending_aios()) {
+    bdev->aio_submit(&ioc);
+    dout(20) << __func__ << " waiting for aio" << dendl;
+    ioc.aio_wait();
+  }
 
   // enumerate and decompress desired blobs
   auto p = compressed_blob_bls.begin();
