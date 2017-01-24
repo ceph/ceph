@@ -100,8 +100,14 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   PGMap::Incremental pending_inc;
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
 
-  PGMapUpdater::update_creating_pgs(osd_map, pg_map, &pending_inc);
+  PGMapUpdater::update_creating_pgs(osd_map, pg_map, creating_pgs, &pending_inc);
   PGMapUpdater::register_new_pgs(osd_map, pg_map, &pending_inc);
+  creating_pgs.with_pg([&](const pg_t& p) {
+      if (p.preferred() >= 0 ||
+	  !osd_map.have_pg_pool(p.pool())) {
+	pending_inc.pg_remove.insert(p);
+      }
+    });
 
   // brute force this for now (don't bother being clever by only
   // checking osds that went up/down)
@@ -110,7 +116,29 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
 			       need_check_down_pg_osds, &pending_inc);
 
   pg_map.apply_incremental(g_ceph_context, pending_inc);
-
+  set<int64_t> deleted_pools;
+  for (const auto& pg_stat_update : pending_inc.pg_stat_updates) {
+    auto& pgid = pg_stat_update.first;
+    auto& pg_stat = pg_stat_update.second;
+    if (deleted_pools.count(pgid.pool()) ||
+	pending_inc.pg_remove.count(pgid)) {
+      // removing pg
+      auto s = pg_map.pg_stat.find(pgid);
+      if (s != pg_map.pg_stat.end()) {
+	creating_pgs.sub(pgid, s->second);
+      }
+      if (pgid.ps() == 0) {
+	deleted_pools.insert(pgid.pool());
+      }
+    } else {
+      // refreshing pg
+      auto s = pg_map.pg_stat.find(pgid);
+      if (s != pg_map.pg_stat.end()) {
+	creating_pgs.sub(pgid, s->second);
+      }
+      creating_pgs.add(pgid, pg_stat);
+    }
+  }
   // TODO: Complete the separation of PG state handling so
   // that a cut-down set of functionality remains in PGMonitor
   // while the full-blown PGMap lives only here.

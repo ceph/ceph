@@ -11,6 +11,7 @@
 
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
+#include "mon/CreatingPGs.h"
 
 #define dout_context g_ceph_context
 
@@ -358,20 +359,18 @@ void PGMap::calc_stats()
   min_last_epoch_clean = calc_min_last_epoch_clean();
 }
 
-void PGMap::update_pg(pg_t pgid, bufferlist& bl)
+void PGMap::update_pg(pg_t pgid, pg_stat_t&& stat)
 {
-  bufferlist::iterator p = bl.begin();
   ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
   epoch_t old_lec = 0, lec;
   if (s != pg_stat.end()) {
     old_lec = s->second.get_effective_last_epoch_clean();
-    stat_pg_update(pgid, s->second, p);
+    stat_pg_update(pgid, s->second, std::move(stat));
     lec = s->second.get_effective_last_epoch_clean();
   } else {
-    pg_stat_t& r = pg_stat[pgid];
-    ::decode(r, p);
-    stat_pg_add(pgid, r);
-    lec = r.get_effective_last_epoch_clean();
+    stat_pg_add(pgid, stat);
+    lec = stat.get_effective_last_epoch_clean();
+    s->second = std::move(stat);
   }
 
   if (min_last_epoch_clean &&
@@ -449,14 +448,6 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
   num_pg++;
   num_pg_by_state[s.state]++;
 
-  if ((s.state & PG_STATE_CREATING) &&
-      s.parent_split_bits == 0) {
-    creating_pgs.insert(pgid);
-    if (s.acting_primary >= 0) {
-      creating_pgs_by_osd_epoch[s.acting_primary][s.mapping_epoch].insert(pgid);
-    }
-  }
-
   if (sameosds)
     return;
 
@@ -487,19 +478,6 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   if (end == 0)
     num_pg_by_state.erase(s.state);
 
-  if ((s.state & PG_STATE_CREATING) &&
-      s.parent_split_bits == 0) {
-    creating_pgs.erase(pgid);
-    if (s.acting_primary >= 0) {
-      map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
-      r[s.mapping_epoch].erase(pgid);
-      if (r[s.mapping_epoch].empty())
-	r.erase(s.mapping_epoch);
-      if (r.empty())
-	creating_pgs_by_osd_epoch.erase(s.acting_primary);
-    }
-  }
-
   if (sameosds)
     return;
 
@@ -528,19 +506,16 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 }
 
 void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
-                           bufferlist::iterator& blp)
+                           pg_stat_t&& n)
 {
-  pg_stat_t n;
-  ::decode(n, blp);
-
   bool sameosds =
     s.acting == n.acting &&
     s.up == n.up &&
     s.blocked_by == n.blocked_by;
 
   stat_pg_sub(pgid, s, sameosds);
-  s = n;
   stat_pg_add(pgid, n, sameosds);
+  s = std::move(n);
 }
 
 void PGMap::stat_osd_add(const osd_stat_t &s)
@@ -2257,20 +2232,6 @@ void PGMapUpdater::register_new_pgs(
   }
 
   int removed = 0;
-  for (const auto &p : pg_map->creating_pgs) {
-    if (p.preferred() >= 0) {
-      dout(20) << " removing creating_pg " << p
-               << " because it is localized and obsolete" << dendl;
-      pending_inc->pg_remove.insert(p);
-      removed++;
-    }
-    if (!osd_map.have_pg_pool(p.pool())) {
-      dout(20) << " removing creating_pg " << p
-               << " because containing pool deleted" << dendl;
-      pending_inc->pg_remove.insert(p);
-      ++removed;
-    }
-  }
 
   // deleted pools?
   for (const auto &p : pg_map.pg_stat) {
@@ -2298,21 +2259,19 @@ void PGMapUpdater::register_new_pgs(
 void PGMapUpdater::update_creating_pgs(
     const OSDMap &osd_map,
     const PGMap &pg_map,
+    const CreatingPGs& creating_pgs,
     PGMap::Incremental *pending_inc)
 {
-  dout(10) << __func__ << " to " << pg_map->creating_pgs.size()
+  dout(10) << __func__ << " to " << creating_pgs.size()
            << " pgs, osdmap epoch " << osd_map.get_epoch()
            << dendl;
 
   unsigned changed = 0;
-  for (set<pg_t>::const_iterator p = pg_map->creating_pgs.begin();
-       p != pg_map->creating_pgs.end();
-       ++p) {
-    pg_t pgid = *p;
+  creating_pgs.with_pg([&](const pg_t& pgid) {
     pg_t on = pgid;
     ceph::unordered_map<pg_t,pg_stat_t>::const_iterator q =
-      pg_map->pg_stat.find(pgid);
-    assert(q != pg_map->pg_stat.end());
+      pg_map.pg_stat.find(pgid);
+    assert(q != pg_map.pg_stat.end());
     const pg_stat_t *s = &q->second;
 
     if (s->parent_split_bits)
@@ -2361,7 +2320,7 @@ void PGMapUpdater::update_creating_pgs(
 		 << dendl;
       }
     }
-  }
+  });
   if (changed) {
     dout(10) << __func__ << " " << changed << " pgs changed primary" << dendl;
   }
