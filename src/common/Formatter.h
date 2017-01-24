@@ -136,7 +136,7 @@ namespace ceph {
   class XMLFormatter : public Formatter {
   public:
     static const char *XML_1_DTD;
-    XMLFormatter(bool pretty = false, bool lowercased_underscored = false);
+    XMLFormatter(bool pretty = false, bool lowercased = false, bool underscored = true);
 
     virtual void set_status(int status, const char* status_name) {}
     virtual void output_header();
@@ -163,17 +163,20 @@ namespace ceph {
     void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
+
   protected:
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
     static std::string escape_xml_str(const char *str);
     void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
+    char to_lower_underscore(char c) const;
 
     std::stringstream m_ss, m_pending_string;
     std::deque<std::string> m_sections;
-    bool m_pretty;
-    bool m_lowercased_underscored;
+    const bool m_pretty;
+    const bool m_lowercased;
+    const bool m_underscored;
     std::string m_pending_string_name;
     bool m_header_done;
   };
