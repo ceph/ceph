@@ -38,6 +38,21 @@ struct C_SendLockRequest : public Context {
   }
 };
 
+struct C_Tracked : public Context {
+  AsyncOpTracker &tracker;
+  Context *ctx;
+  C_Tracked(AsyncOpTracker &tracker, Context *ctx)
+    : tracker(tracker), ctx(ctx) {
+    tracker.start_op();
+  }
+  virtual ~C_Tracked() {
+    tracker.finish_op();
+  }
+  virtual void finish(int r) override {
+    ctx->complete(r);
+  }
+};
+
 } // anonymous namespace
 
 using librbd::util::create_context_callback;
@@ -66,6 +81,14 @@ ManagedLock<I>::~ManagedLock() {
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_SHUTDOWN || m_state == STATE_UNLOCKED ||
          m_state == STATE_UNINITIALIZED);
+  if (m_state == STATE_UNINITIALIZED) {
+    // never initialized -- ensure any in-flight ops are complete
+    // since we wouldn't expect shut_down to be invoked
+    C_SaferCond ctx;
+    m_async_op_tracker.wait_for_ops(&ctx);
+    ctx.wait();
+  }
+  assert(m_async_op_tracker.empty());
 }
 
 template <typename I>
@@ -200,17 +223,37 @@ void ManagedLock<I>::get_locker(managed_lock::Locker *locker,
                                 Context *on_finish) {
   ldout(m_cct, 10) << dendl;
 
-  auto req = managed_lock::GetLockerRequest<I>::create(
-    m_ioctx, m_oid, m_mode == EXCLUSIVE, locker, on_finish);
-  req->send();
+  int r;
+  {
+    Mutex::Locker l(m_lock);
+    if (is_state_shutdown()) {
+      r = -ESHUTDOWN;
+    } else {
+      on_finish = new C_Tracked(m_async_op_tracker, on_finish);
+      auto req = managed_lock::GetLockerRequest<I>::create(
+        m_ioctx, m_oid, m_mode == EXCLUSIVE, locker, on_finish);
+      req->send();
+      return;
+    }
+  }
+
+  on_finish->complete(r);
 }
 
 template <typename I>
 void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
                                 bool force_break_lock, Context *on_finish) {
+  ldout(m_cct, 10) << dendl;
+
+  int r;
   {
     Mutex::Locker l(m_lock);
-    if (!is_lock_owner(m_lock)) {
+    if (is_state_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (is_lock_owner(m_lock)) {
+      r = -EBUSY;
+    } else {
+      on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
         m_ioctx, m_work_queue, m_oid, locker, m_blacklist_on_break_lock,
         m_blacklist_expire_seconds, force_break_lock, on_finish);
@@ -219,7 +262,7 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
     }
   }
 
-  on_finish->complete(-EBUSY);
+  on_finish->complete(r);
 }
 
 template <typename I>
@@ -633,7 +676,7 @@ template <typename I>
 void ManagedLock<I>::handle_shutdown(int r) {
   ldout(m_cct, 10) << ": r=" << r << dendl;
 
-  complete_shutdown(r);
+  wait_for_tracked_ops(r);
 }
 
 template <typename I>
@@ -676,7 +719,18 @@ template <typename I>
 void ManagedLock<I>::handle_shutdown_post_release(int r) {
   ldout(m_cct, 10) << ": r=" << r << dendl;
 
-  complete_shutdown(r);
+  wait_for_tracked_ops(r);
+}
+
+template <typename I>
+void ManagedLock<I>::wait_for_tracked_ops(int r) {
+  ldout(m_cct, 10) << ": r=" << r << dendl;
+
+  Context *ctx = new FunctionContext([this, r](int ret) {
+      complete_shutdown(r);
+    });
+
+  m_async_op_tracker.wait_for_ops(ctx);
 }
 
 template <typename I>
