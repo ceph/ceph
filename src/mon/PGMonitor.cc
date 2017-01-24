@@ -931,37 +931,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
 void PGMonitor::send_pg_creates()
 {
-  // We only need to do this old, spammy way of broadcasting create messages
-  // to every osd (even those that aren't connected) if there are old OSDs in
-  // the cluster. As soon as everybody has upgraded we can flipt to the new
-  // behavior instead
   OSDMap& osdmap = mon->osdmon()->osdmap;
   if (osdmap.get_num_up_osds() == 0)
     return;
 
-  if (osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB) {
-    check_subs();
-    return;
-  }
-
-  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size()
-           << " pgs" << dendl;
-
-  utime_t now = ceph_clock_now();
-  for (map<int, map<epoch_t, set<pg_t> > >::iterator p =
-         pg_map.creating_pgs_by_osd_epoch.begin();
-       p != pg_map.creating_pgs_by_osd_epoch.end();
-       ++p) {
-    int osd = p->first;
-
-    // throttle?
-    if (last_sent_pg_create.count(osd) &&
-        now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd])
-      continue;
-
-    if (osdmap.is_up(osd))
-      send_pg_creates(osd, NULL, 0);
-  }
+  assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
+  check_subs();
+  return;
 }
 
 epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
