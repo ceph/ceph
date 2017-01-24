@@ -1,6 +1,4 @@
 
-os_type: ubuntu
-
 overrides:
   ceph:
     conf:
