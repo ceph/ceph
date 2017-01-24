@@ -633,6 +633,30 @@ class Filesystem(MDSCluster):
 
         return json.loads(p.stdout.getvalue().strip())
 
+    def _write_data_xattr(self, ino_no, xattr_name, data, pool=None):
+        """
+        Write to an xattr of the 0th data object of an inode.  Will
+        succeed whether the object and/or xattr already exist or not.
+
+        :param ino_no: integer inode number
+        :param xattr_name: string name of the xattr
+        :param data: byte array data to write to the xattr
+        :param pool: name of data pool or None to use primary data pool
+        :return: None
+        """
+        remote = self.mds_daemons[self.mds_ids[0]].remote
+        if pool is None:
+            pool = self.get_data_pool_name()
+
+        obj_name = "{0:x}.00000000".format(ino_no)
+        args = [
+            os.path.join(self._prefix, "rados"), "-p", pool, "setxattr",
+            obj_name, xattr_name, data
+        ]
+        remote.run(
+            args=args,
+            stdout=StringIO())
+
     def read_backtrace(self, ino_no, pool=None):
         """
         Read the backtrace from the data pool, return a dict in the format
