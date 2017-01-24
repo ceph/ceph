@@ -18,6 +18,7 @@
 #include "common/Mutex.h"
 
 #include "osdc/Objecter.h"
+#include "mon/CreatingPGs.h"
 #include "mon/MonClient.h"
 #include "mon/PGMap.h"
 
@@ -38,6 +39,8 @@ protected:
   Mutex lock;
 
   PGMap pg_map;
+  // for tracking the pgs being created so we can update the status of them
+  CreatingPGs creating_pgs;
 
   bufferlist health_json;
   bufferlist mon_status_json;
