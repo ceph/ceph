@@ -24,6 +24,7 @@
 #include <set>
 using namespace std;
 
+#include "CreatingPGs.h"
 #include "PGMap.h"
 #include "PaxosService.h"
 #include "include/types.h"
@@ -91,6 +92,8 @@ private:
 
   void register_new_pgs();
 
+  CreatingPGs creating_pgs;
+
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
@@ -152,6 +155,14 @@ public:
 
   void check_subs();
   void check_sub(Subscription *sub);
+
+  bool is_creating(pg_t pgid) const {
+    return creating_pgs.contains(pgid);
+  }
+
+  bool is_creating_pgs() const {
+    return creating_pgs.size() > 0;
+  }
 
 private:
   // no copying allowed

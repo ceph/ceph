@@ -332,8 +332,16 @@ void PGMonitor::read_pgmap_full()
       dout(0) << "unable to parse key " << key << dendl;
       continue;
     }
+    auto s = pg_map.pg_stat.find(pgid);
+    if (s != pg_map.pg_stat.end()) {
+      creating_pgs.sub(pgid, s->second);
+    }
     bufferlist bl = i->value();
-    pg_map.update_pg(pgid, bl);
+    auto p = bl.begin();
+    pg_stat_t stat;
+    stat.decode(p);
+    creating_pgs.add(pgid, stat);
+    pg_map.update_pg(pgid, std::move(stat));
     dout(20) << " got " << pgid << dendl;
   }
 
@@ -381,7 +389,15 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     }
 
     if (r >= 0) {
-      pg_map.update_pg(pgid, pgbl);
+      auto s = pg_map.pg_stat.find(pgid);
+      if (s != pg_map.pg_stat.end()) {
+	creating_pgs.sub(pgid, s->second);
+      }
+      auto bl = pgbl.begin();
+      pg_stat_t stat;
+      stat.decode(bl);
+      creating_pgs.add(pgid, stat);
+      pg_map.update_pg(pgid, std::move(stat));
       dout(20) << " refreshing pg " << pgid
 	       << " " << pg_map.pg_stat[pgid].reported_epoch
 	       << ":" << pg_map.pg_stat[pgid].reported_seq
@@ -389,7 +405,9 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
 	       << dendl;
     } else {
       dout(20) << " removing pg " << pgid << dendl;
-      pg_map.remove_pg(pgid);
+      pg_stat_t stat;
+      if (pg_map.remove_pg(pgid, &stat))
+	creating_pgs.sub(pgid, stat);
       if (pgid.ps() == 0)
 	deleted_pools.insert(pgid.pool());
     }
@@ -883,8 +901,24 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   const OSDMap& osdmap = mon->osdmon()->osdmap;
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
-  PGMapUpdater::update_creating_pgs(osdmap, pg_map, &pending_inc);
+  PGMapUpdater::update_creating_pgs(osdmap, pg_map, creating_pgs, &pending_inc);
   PGMapUpdater::register_new_pgs(osdmap, pg_map, &pending_inc);
+  unsigned removed = 0;
+  creating_pgs.with_pg([&](const pg_t& p) {
+    if (p.preferred() >= 0) {
+      dout(20) << " removing creating_pg " << p
+               << " because it is localized and obsolete" << dendl;
+      pending_inc.pg_remove.insert(p);
+      removed++;
+    }
+    if (!osdmap.have_pg_pool(p.pool())) {
+      dout(20) << " removing creating_pg " << p
+               << " because containing pool deleted" << dendl;
+      pending_inc.pg_remove.insert(p);
+      ++removed;
+    }
+  });
+  dout(10) << __func__ << "removed " << removed << " uncreated pgs" << dendl;
 
   PGMapUpdater::check_down_pgs(osdmap, pg_map, check_all_pgs,
 			       need_check_down_pg_osds, &pending_inc);
@@ -895,35 +929,25 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
 epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 {
-  dout(30) << __func__ << " " << pg_map.creating_pgs_by_osd_epoch << dendl;
-  map<int, map<epoch_t, set<pg_t> > >::iterator p =
-    pg_map.creating_pgs_by_osd_epoch.find(osd);
-  if (p == pg_map.creating_pgs_by_osd_epoch.end())
-    return next;
-
-  assert(p->second.size() > 0);
-
-  MOSDPGCreate *m = NULL;
+  MOSDPGCreate *m = nullptr;
   epoch_t last = 0;
-  for (map<epoch_t, set<pg_t> >::iterator q = p->second.lower_bound(next);
-       q != p->second.end();
-       ++q) {
-    dout(20) << __func__ << " osd." << osd << " from " << next
-             << " : epoch " << q->first << " " << q->second.size() << " pgs"
-             << dendl;
-    last = q->first;
-    for (set<pg_t>::iterator r = q->second.begin(); r != q->second.end(); ++r) {
-      pg_stat_t &st = pg_map.pg_stat[*r];
-      if (!m)
-	m = new MOSDPGCreate(pg_map.last_osdmap_epoch);
-      m->mkpg[*r] = pg_create_t(st.created,
-                                st.parent,
-                                st.parent_split_bits);
-      // Need the create time from the monitor using its clock to set
-      // last_scrub_stamp upon pg creation.
-      m->ctimes[*r] = pg_map.pg_stat[*r].last_scrub_stamp;
-    }
-  }
+  creating_pgs.with_pgs_of_osd(osd, next, [&](epoch_t epoch, const set<pg_t>& pgs) {
+      dout(20) << __func__ << " osd." << osd << " from " << next
+	       << " : epoch " << epoch << " " << pgs.size() << " pgs"
+	       << dendl;
+      last = epoch;
+      for (const auto& pg : pgs) {
+	if (!m)
+	  m = new MOSDPGCreate(pg_map.last_osdmap_epoch);
+	const auto& st = pg_map.pg_stat[pg];
+	m->mkpg[pg] = pg_create_t(st.created,
+				  st.parent,
+				  st.parent_split_bits);
+	// Need the create time from the monitor using its clock to set
+	// last_scrub_stamp upon pg creation.
+	m->ctimes[pg] = pg_map.pg_stat[pg].last_scrub_stamp;
+      }
+    });
   if (!m) {
     dout(20) << "send_pg_creates osd." << osd << " from " << next
              << " has nothing to send" << dendl;
@@ -1326,7 +1350,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
       r = -ENOENT;
       goto reply;
     }
-    if (pg_map.creating_pgs.count(pgid)) {
+    if (creating_pgs.contains(pgid)) {
       ss << "pg " << pgid << " already creating";
       r = 0;
       goto reply;
