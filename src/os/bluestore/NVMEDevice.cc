@@ -798,7 +798,7 @@ int NVMEDevice::open(const string& p)
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
     return r;
   }
-  while (r > 0 && !isalpha(buf[r-1])) {
+  while (r > 0 && !isxdigit(buf[r-1])) {
     --r;
   }
   serial_number = string(buf, r);
