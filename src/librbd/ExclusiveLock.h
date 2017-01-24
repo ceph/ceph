@@ -77,19 +77,7 @@ private:
    * @endverbatim
    */
 
-  struct C_InitComplete : public Context {
-    ExclusiveLock *exclusive_lock;
-    Context *on_init;
-    C_InitComplete(ExclusiveLock *exclusive_lock, Context *on_init)
-      : exclusive_lock(exclusive_lock), on_init(on_init) {
-    }
-    virtual void finish(int r) override {
-      if (r == 0) {
-        exclusive_lock->handle_init_complete();
-      }
-      on_init->complete(r);
-    }
-  };
+  struct C_InitComplete;
 
   ImageCtxT& m_image_ctx;
   Context *m_pre_post_callback = nullptr;
@@ -99,7 +87,7 @@ private:
 
   int m_acquire_lock_peer_ret_val = 0;
 
-  void handle_init_complete();
+  void handle_init_complete(uint64_t features);
   void handle_post_acquiring_lock(int r);
   void handle_post_acquired_lock(int r);
 };
