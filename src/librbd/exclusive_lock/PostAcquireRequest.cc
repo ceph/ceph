@@ -20,7 +20,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::exclusive_lock::PostAcquireRequest: "
+#define dout_prefix *_dout << "librbd::exclusive_lock::PostAcquireRequest: " \
+                           << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace exclusive_lock {
@@ -68,7 +69,7 @@ void PostAcquireRequest<I>::send_refresh() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_async_context_callback(
@@ -84,11 +85,11 @@ void PostAcquireRequest<I>::send_refresh() {
 template <typename I>
 void PostAcquireRequest<I>::handle_refresh(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   if (r == -ERESTART) {
     // next issued IO or op will (re)-refresh the image and shut down lock
-    ldout(cct, 5) << ": exclusive lock dynamically disabled" << dendl;
+    ldout(cct, 5) << "exclusive lock dynamically disabled" << dendl;
     r = 0;
   } else if (r < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
@@ -121,7 +122,7 @@ void PostAcquireRequest<I>::send_open_journal() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_open_journal>(
@@ -137,7 +138,7 @@ void PostAcquireRequest<I>::send_open_journal() {
 template <typename I>
 void PostAcquireRequest<I>::handle_open_journal(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   save_result(r);
   if (r < 0) {
@@ -152,7 +153,7 @@ void PostAcquireRequest<I>::handle_open_journal(int r) {
 template <typename I>
 void PostAcquireRequest<I>::send_allocate_journal_tag() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   using klass = PostAcquireRequest<I>;
@@ -164,7 +165,7 @@ void PostAcquireRequest<I>::send_allocate_journal_tag() {
 template <typename I>
 void PostAcquireRequest<I>::handle_allocate_journal_tag(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   save_result(r);
   if (r < 0) {
@@ -180,7 +181,7 @@ void PostAcquireRequest<I>::handle_allocate_journal_tag(int r) {
 template <typename I>
 void PostAcquireRequest<I>::send_close_journal() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_close_journal>(
@@ -191,7 +192,7 @@ void PostAcquireRequest<I>::send_close_journal() {
 template <typename I>
 void PostAcquireRequest<I>::handle_close_journal(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   save_result(r);
   if (r < 0) {
@@ -209,7 +210,7 @@ void PostAcquireRequest<I>::send_open_object_map() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_open_object_map>(
@@ -222,7 +223,7 @@ void PostAcquireRequest<I>::send_open_object_map() {
 template <typename I>
 void PostAcquireRequest<I>::handle_open_object_map(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(r) << dendl;
@@ -244,7 +245,7 @@ void PostAcquireRequest<I>::send_close_object_map() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<
@@ -255,7 +256,7 @@ void PostAcquireRequest<I>::send_close_object_map() {
 template <typename I>
 void PostAcquireRequest<I>::handle_close_object_map(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   // object map should never result in an error
   assert(r == 0);
