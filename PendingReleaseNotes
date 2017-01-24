@@ -1,7 +1,16 @@
 12.0.0
 ------
 
- * Some varients of the omap_get_keys and omap_get_vals librados
+ * When assigning a network to the public network and not to
+   the cluster network the network specification of the public
+   network will be used for the cluster network as well.
+   In older versions this would lead to cluster services
+   being bound to 0.0.0.0:<port>, thus making the
+   cluster service even more publicly available than the
+   public services. When only specifying a cluster network it
+   will still result in the public services binding to 0.0.0.0.
+
+*  Some variants of the omap_get_keys and omap_get_vals librados
    functions have been deprecated in favor of omap_get_vals2 and
    omap_get_keys2.  The new methods include an output argument
    indicating whether there are additional keys left to fetch.
