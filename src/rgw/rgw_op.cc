@@ -231,6 +231,24 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
   return read_op.prepare(NULL, NULL);
 }
 
+static int modify_obj_attr(RGWRados *store, struct req_state *s, rgw_obj& obj, const char* attr_name, bufferlist& attr_val)
+{
+  map<string, bufferlist> attrs;
+  RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.perr = &s->err;
+  
+  int r = read_op.prepare(NULL, NULL);
+  if (r < 0) {
+    return r;
+  }
+  store->set_atomic(s->obj_ctx, read_op.state.obj);
+  attrs[attr_name] = attr_val;
+  return store->set_attrs(s->obj_ctx, read_op.state.obj, attrs, NULL);
+}
+
 static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
                          uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
 {
@@ -3662,16 +3680,12 @@ void RGWPutACLs::execute()
   obj.set_instance(s->object.instance);
   map<string, bufferlist> attrs;
 
-  store->set_atomic(s->obj_ctx, obj);
-
   if (!s->object.empty()) {
-    op_ret = get_obj_attrs(store, s, obj, attrs);
-    if (op_ret < 0)
-      return;
-  
-    attrs[RGW_ATTR_ACL] = bl;
-    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, NULL);
+    //if instance is empty, we should modify the latest object
+    op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_ACL, bl);
   } else {
+    store->set_atomic(s->obj_ctx, obj);
+    
     attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
