@@ -989,6 +989,18 @@ int Pipe::connect()
 
   set_socket_options();
 
+  {
+    entity_addr_t addr2bind = msgr->get_myaddr();
+    if (msgr->cct->_conf->ms_bind_before_connect && (!addr2bind.is_blank_ip())) {
+      addr2bind.set_port(0);
+      int r = ::bind(sd , addr2bind.get_sockaddr(), addr2bind.get_sockaddr_len());
+      if (r < 0) {
+        ldout(msgr->cct,2) << "client bind error " << ", " << cpp_strerror(errno) << dendl;
+        goto fail;
+      }
+    }
+  }
+
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, peer_addr.get_sockaddr(), peer_addr.get_sockaddr_len());

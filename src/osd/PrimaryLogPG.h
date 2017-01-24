@@ -518,7 +518,6 @@ public:
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 

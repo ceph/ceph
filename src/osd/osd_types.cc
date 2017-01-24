@@ -5322,18 +5322,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   if (ceph_osd_op_type_data(op.op.op)) {
     // data extent
     switch (op.op.op) {
-    case CEPH_OSD_OP_STAT:
-    case CEPH_OSD_OP_DELETE:
-    case CEPH_OSD_OP_LIST_WATCHERS:
-    case CEPH_OSD_OP_LIST_SNAPS:
-    case CEPH_OSD_OP_UNDIRTY:
-    case CEPH_OSD_OP_ISDIRTY:
-    case CEPH_OSD_OP_CACHE_FLUSH:
-    case CEPH_OSD_OP_CACHE_TRY_FLUSH:
-    case CEPH_OSD_OP_CACHE_EVICT:
-    case CEPH_OSD_OP_CACHE_PIN:
-    case CEPH_OSD_OP_CACHE_UNPIN:
-      break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;
       break;
@@ -5342,7 +5330,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@"
+	  << (int64_t)op.op.extent.truncate_size;
       break;
     case CEPH_OSD_OP_ROLLBACK:
       out << " " << snapid_t(op.op.snap.snapid);
@@ -5368,12 +5357,23 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " object_size " << op.op.alloc_hint.expected_object_size
           << " write_size " << op.op.alloc_hint.expected_write_size;
       break;
-    default:
+    case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_SYNC_READ:
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
+    case CEPH_OSD_OP_ZERO:
+    case CEPH_OSD_OP_APPEND:
+    case CEPH_OSD_OP_MAPEXT:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
-	out << " [" << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size << "]";
+	out << " [" << op.op.extent.truncate_seq << "@"
+	    << (int64_t)op.op.extent.truncate_size << "]";
       if (op.op.flags)
 	out << " [" << ceph_osd_op_flag_string(op.op.flags) << "]";
+    default:
+      // don't show any arg info
+      break;
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
@@ -5384,7 +5384,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     if (op.op.xattr.value_len)
       out << " (" << op.op.xattr.value_len << ")";
     if (op.op.op == CEPH_OSD_OP_CMPXATTR)
-      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
+      out << " op " << (int)op.op.xattr.cmp_op
+	  << " mode " << (int)op.op.xattr.cmp_mode;
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
     if (op.op.cls.class_len && op.indata.length()) {
@@ -5409,28 +5410,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_SCRUBLS:
       break;
     }
-  } else if (ceph_osd_op_type_multi(op.op.op)) {
-    switch (op.op.op) {
-    case CEPH_OSD_OP_CLONERANGE:
-      out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
-	  << " from " << op.soid
-	  << " offset " << op.op.clonerange.src_offset;
-      break;
-    case CEPH_OSD_OP_ASSERT_SRC_VERSION:
-      out << " v" << op.op.watch.ver
-	  << " of " << op.soid;
-      break;
-    case CEPH_OSD_OP_SRC_CMPXATTR:
-      out << " " << op.soid;
-      if (op.op.xattr.name_len && op.indata.length()) {
-	out << " ";
-	op.indata.write(0, op.op.xattr.name_len, out);
-      }
-      if (op.op.xattr.value_len)
-	out << " (" << op.op.xattr.value_len << ")";
-      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
-      break;
-    }
   }
   return out;
 }
@@ -5440,9 +5419,6 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 {
   bufferlist::iterator datap = in.begin();
   for (unsigned i = 0; i < ops.size(); i++) {
-    if (ceph_osd_op_type_multi(ops[i].op.op)) {
-      ::decode(ops[i].soid, datap);
-    }
     if (ops[i].op.payload_len) {
       datap.copy(ops[i].op.payload_len, ops[i].indata);
     }
@@ -5452,9 +5428,6 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
 {
   for (unsigned i = 0; i < ops.size(); i++) {
-    if (ceph_osd_op_type_multi(ops[i].op.op)) {
-      ::encode(ops[i].soid, out);
-    }
     if (ops[i].indata.length()) {
       ops[i].op.payload_len = ops[i].indata.length();
       out.append(ops[i].indata);

@@ -92,7 +92,6 @@ void usage(ostream& out)
 "   create <obj-name>                create object\n"
 "   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
-"   clonedata <src-obj> <dst-obj>    clone object data\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
 "   setxattr <obj-name> attr val\n"
@@ -333,26 +332,6 @@ static int do_copy(IoCtx& io_ctx, const char *objname,
   op.set_op_flags2(dest_fadvise_flags);
 
   return target_ctx.operate(target_obj, &op);
-}
-
-static int do_clone_data(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
-{
-  string oid(objname);
-
-  // get size
-  uint64_t size;
-  int r = target_ctx.stat(oid, &size, NULL);
-  if (r < 0)
-    return r;
-
-  librados::ObjectWriteOperation write_op;
-  string target_oid(target_obj);
-
-  /* reset data stream only */
-  write_op.create(false);
-  write_op.truncate(0);
-  write_op.clone_range(0, oid, 0, size);
-  return target_ctx.operate(target_oid, &write_op);
 }
 
 static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_pool)
@@ -2639,55 +2618,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "error copying " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-  }
-  else if (strcmp(nargs[0], "clonedata") == 0) {
-    if (!pool_name)
-      usage_exit();
-
-    if (nargs.size() < 2 || nargs.size() > 3)
-      usage_exit();
-
-    const char *target = target_pool_name;
-    if (!target)
-      target = pool_name;
-
-    const char *target_obj;
-    if (nargs.size() < 3) {
-      if (strcmp(target, pool_name) == 0) {
-        cerr << "cannot copy object into itself" << std::endl;
-        ret = -1;
-	goto out;
-      }
-      target_obj = nargs[1];
-    } else {
-      target_obj = nargs[2];
-    }
-
-    // open io context.
-    IoCtx target_ctx;
-    ret = rados.ioctx_create(target, target_ctx);
-    if (ret < 0) {
-      cerr << "error opening target pool " << target << ": "
-           << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    if (oloc.size()) {
-      target_ctx.locator_set_key(oloc);
-    } else {
-      cerr << "must specify locator for clone" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    if (nspace.size())
-      target_ctx.set_namespace(nspace);
-
-    ret = do_clone_data(io_ctx, nargs[1], target_ctx, target_obj);
-    if (ret < 0) {
-      string src_name = (nspace.size() ? nspace + "/" : "") + nargs[1];
-      string target_name = (nspace.size() ? nspace + "/" : "") + target_obj;
-      cerr << "error cloning " << pool_name << ">" << src_name << " => " << target << ">" << target_name << ": " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
   } else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
@@ -3196,10 +3126,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
 
-    librados::ObjectReadOperation read;
     set<string> out_keys;
-    read.omap_get_keys("", LONG_MAX, &out_keys, &ret);
-    io_ctx.operate(nargs[1], &read, NULL);
+    ret = io_ctx.omap_get_keys(nargs[1], "", LONG_MAX, &out_keys);
     if (ret < 0) {
       cerr << "error getting omap key set " << pool_name << "/"
 	   << nargs[1] << ": "  << cpp_strerror(ret) << std::endl;

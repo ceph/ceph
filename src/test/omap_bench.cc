@@ -232,7 +232,9 @@ int OmapBench::print_written_omap() {
     objstrm << prefix;
     objstrm << i;
     cout << "\nPrinting omap for "<<objstrm.str() << std::endl;
-    key_read.omap_get_keys("", LONG_MAX, &out_keys, &err);
+    // FIXME: we ignore pmore here.  this shouldn't happen for benchmark
+    // keys, though, unless the OSD limit is *really* low.
+    key_read.omap_get_keys2("", LONG_MAX, &out_keys, nullptr, &err);
     io_ctx.operate(objstrm.str(), &key_read, NULL);
     if (err < 0) {
       cout << "error " << err;

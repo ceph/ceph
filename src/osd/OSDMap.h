@@ -525,6 +525,8 @@ public:
   }
   
   int get_next_up_osd_after(int n) const {
+    if (get_max_osd() == 0)
+      return -1;
     for (int i = n + 1; i != n; ++i) {
       if (i >= get_max_osd())
 	i = 0;
@@ -537,6 +539,8 @@ public:
   }
 
   int get_previous_up_osd_before(int n) const {
+    if (get_max_osd() == 0)
+      return -1;
     for (int i = n - 1; i != n; --i) {
       if (i < 0)
 	i = get_max_osd() - 1;

@@ -99,13 +99,13 @@ struct failure_info_t {
     }
   }
 
-  void cancel_report(int who) {
+  MonOpRequestRef cancel_report(int who) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end())
-      return;
+      return MonOpRequestRef();
+    MonOpRequestRef ret = p->second.op;
     reporters.erase(p);
-    if (reporters.empty())
-      max_failed_since = utime_t();
+    return ret;
   }
 };
 

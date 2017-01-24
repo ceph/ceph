@@ -883,6 +883,7 @@ ssize_t AsyncConnection::_process_connection()
 
         SocketOptions opts;
         opts.priority = async_msgr->get_socket_priority();
+        opts.connect_bind_addr = msgr->get_myaddr();
         r = worker->connect(get_peer_addr(), opts, &cs);
         if (r < 0)
           goto fail;
