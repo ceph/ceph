@@ -104,7 +104,7 @@ void AcquireRequest<I>::handle_get_locker(int r) {
 
 template <typename I>
 void AcquireRequest<I>::send_lock() {
-  ldout(m_cct, 10) << dendl;
+  ldout(m_cct, 10) << "cookie=" << m_cookie << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME,
