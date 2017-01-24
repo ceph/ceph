@@ -91,6 +91,7 @@ setup(
                       'prettytable',
                       'libvirt-python',
                       'python-dateutil',
+                      'manhole',
                       ],
 
 

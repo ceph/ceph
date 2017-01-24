@@ -1,3 +1,11 @@
+# Use manhole to give us a way to debug hung processes
+# https://pypi.python.org/pypi/manhole
+import manhole
+manhole.install(
+    verbose=False,
+    # Listen for SIGUSR1
+    oneshot_on="USR1"
+)
 from gevent import monkey
 monkey.patch_all(
     dns=False,
