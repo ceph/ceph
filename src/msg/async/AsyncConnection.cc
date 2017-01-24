@@ -1861,7 +1861,7 @@ void AsyncConnection::_connect()
 void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 {
   ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd() << dendl;
-  assert(socket.fd() > 0);
+  assert(socket.fd() >= 0);
 
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);
