@@ -539,7 +539,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     goto out;
   }
   assert((uint64_t)r == len);
-  pbl->clear();
   pbl->push_back(std::move(p));
 
   dout(40) << "data: ";

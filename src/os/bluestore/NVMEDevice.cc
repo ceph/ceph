@@ -934,7 +934,6 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     while (t->return_code > 0)
       ioc->cond.wait(l);
   }
-  pbl->clear();
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
