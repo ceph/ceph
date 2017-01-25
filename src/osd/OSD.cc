@@ -7138,7 +7138,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	  service.got_stop_ack();
 	} else {
 	  clog->warn() << "map e" << osdmap->get_epoch()
-		       << " wrongly marked me down";
+		       << " wrongly marked me down at e"
+		       << osdmap->get_down_at(whoami);
 	}
       } else if (!osdmap->get_addr(whoami).probably_equals(
 		   client_messenger->get_myaddr())) {
