@@ -150,6 +150,7 @@ public:
 
   void close();
 
+  void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f);
 
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
@@ -326,6 +327,8 @@ public:
     bufferlist value();
     bufferptr value_as_ptr();
     int status();
+    size_t key_size() override;
+    size_t value_size() override;
   };
 
   /// Utility
