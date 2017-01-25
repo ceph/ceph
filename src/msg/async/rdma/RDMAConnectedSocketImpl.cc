@@ -164,7 +164,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
   NetHandler net(cct);
-  tcp_fd = net.connect(peer_addr);
+  tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
 
   if (tcp_fd < 0) {
     return -errno;
