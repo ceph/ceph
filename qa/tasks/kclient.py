@@ -104,11 +104,32 @@ def task(ctx, config):
 
         kernel_mount.mount()
 
+
+    def umount_all():
+        log.info('Unmounting kernel clients...')
+
+        forced = False
+        for mount in mounts.values():
+            if mount.is_mounted():
+                try:
+                    mount.umount()
+                except CommandFailedError:
+                    log.warn("Ordinary umount failed, forcing...")
+                    forced = True
+                    mount.umount_wait(force=True)
+
+        return forced
+
     ctx.mounts = mounts
     try:
         yield mounts
+    except:
+        umount_all()  # ignore forced retval, we are already in error handling
     finally:
-        log.info('Unmounting kernel clients...')
-        for mount in mounts.values():
-            if mount.is_mounted():
-                mount.umount()
+
+        forced = umount_all()
+        if forced:
+            # The context managers within the kclient manager worked (i.e.
+            # the test workload passed) but for some reason we couldn't
+            # umount, so turn this into a test failure.
+            raise RuntimeError("Kernel mounts did not umount cleanly")
