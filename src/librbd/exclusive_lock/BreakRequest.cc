@@ -112,7 +112,16 @@ void BreakRequest<I>::send_blacklist() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << dendl;
+  entity_name_t entity_name = entity_name_t::CLIENT(
+    m_image_ctx.md_ctx.get_instance_id());
+  ldout(cct, 10) << "local entity=" << entity_name << ", "
+                 << "locker entity=" << m_locker.entity << dendl;
+
+  if (m_locker.entity == entity_name) {
+    lderr(cct) << "attempting to self-blacklist" << dendl;
+    finish(-EINVAL);
+    return;
+  }
 
   // TODO: need async version of RadosClient::blacklist_add
   using klass = BreakRequest<I>;
