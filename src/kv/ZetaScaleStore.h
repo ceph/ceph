@@ -40,11 +40,30 @@ class ZSFreeListManager
   uint16_t log_ptr, page_ptr;
   ZS_cguid_t cguid_lc, cguid;
   uint64_t lsn;
+
+
+  /*
+   * LSN for the entries in logging containers that are not trimmed.
+   */
+  uint64_t log_lsn_last = 0;
+  uint64_t log_lsn_first = 0;
+  uint64_t log_num_items = 0;
+  int64_t log_pg_id = -5555;
+  std::vector<std::string> pending_logs;
+
+
   int enable_lock;
   pthread_mutex_t wlock;
   
 
   public:
+  std::string key_to_log_key(std::string key);
+  std::string log_key_to_key(std::string key, int64_t *seq);
+
+  std::string * add_pending_fm_logs(const std::string key);
+  std::string * add_pending_fm_logs_int(const std::string key);
+  void trim_pending_fm_logs();
+  void patch_fm_logs();
   void init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid);
 
   ZSFreeListManager() : log_ptr(0), page_ptr(sizeof(uint16_t) + sizeof(uint64_t)), lsn(0)
