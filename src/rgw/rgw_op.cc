@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <system_error>
 #include <unistd.h>
 
 #include <sstream>
@@ -53,7 +54,9 @@
 using namespace std;
 using namespace librados;
 using ceph::crypto::MD5;
+using boost::optional;
 
+using rgw::IAM::Policy;
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
@@ -142,9 +145,9 @@ static int decode_policy(CephContext *cct,
 
 
 static int get_user_policy_from_attr(CephContext * const cct,
-                                     RGWRados * const store,
-                                     map<string, bufferlist>& attrs,
-                                     RGWAccessControlPolicy& policy    /* out */)
+				     RGWRados * const store,
+				     map<string, bufferlist>& attrs,
+				     RGWAccessControlPolicy& policy    /* out */)
 {
   auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
@@ -160,11 +163,11 @@ static int get_user_policy_from_attr(CephContext * const cct,
 }
 
 static int get_bucket_instance_policy_from_attr(CephContext *cct,
-                                       RGWRados *store,
-                                       RGWBucketInfo& bucket_info,
-                                       map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy,
-                                       rgw_raw_obj& obj)
+						RGWRados *store,
+						RGWBucketInfo& bucket_info,
+						map<string, bufferlist>& bucket_attrs,
+						RGWAccessControlPolicy *policy,
+						rgw_raw_obj& obj)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -186,12 +189,12 @@ static int get_bucket_instance_policy_from_attr(CephContext *cct,
 }
 
 static int get_obj_policy_from_attr(CephContext *cct,
-                                    RGWRados *store,
-                                    RGWObjectCtx& obj_ctx,
-                                    RGWBucketInfo& bucket_info,
-                                    map<string, bufferlist>& bucket_attrs,
-                                    RGWAccessControlPolicy *policy,
-                                    rgw_obj& obj)
+				    RGWRados *store,
+				    RGWObjectCtx& obj_ctx,
+				    RGWBucketInfo& bucket_info,
+				    map<string, bufferlist>& bucket_attrs,
+				    RGWAccessControlPolicy *policy,
+				    rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
@@ -226,15 +229,27 @@ static int get_obj_policy_from_attr(CephContext *cct,
  * Returns: 0 on success, -ERR# otherwise.
  */
 static int get_bucket_policy_from_attr(CephContext *cct,
-                                RGWRados *store,
-                                RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& bucket_attrs,
-                                RGWAccessControlPolicy *policy)
+				       RGWRados *store,
+				       RGWBucketInfo& bucket_info,
+				       map<string, bufferlist>& bucket_attrs,
+				       RGWAccessControlPolicy *policy)
 {
   rgw_raw_obj instance_obj;
   store->get_bucket_instance_obj(bucket_info.bucket, instance_obj);
   return get_bucket_instance_policy_from_attr(cct, store, bucket_info, bucket_attrs,
-                                              policy, instance_obj);
+					      policy, instance_obj);
+}
+
+static optional<Policy> get_iam_policy_from_attr(CephContext* cct,
+						 RGWRados* store,
+						 map<string, bufferlist>& attrs,
+						 const string& tenant) {
+  auto i = attrs.find(RGW_ATTR_IAM_POLICY);
+  if (i != attrs.end()) {
+    return rgw::IAM::Policy(cct, tenant, i->second);
+  } else {
+    return boost::none;
+  }
 }
 
 static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
@@ -505,6 +520,16 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     }
   }
 
+  try {
+    s->iam_policy = get_iam_policy_from_attr(s->cct, store, s->bucket_attrs,
+					     s->bucket_tenant);
+  } catch (const std::exception& e) {
+    // Really this is a can't happen condition. We parse the policy
+    // when it's given to us, so perhaps we should abort or otherwise
+    // raise bloody murder.
+    lderr(s->cct) << "Error reading IAM Policy: " << e.what() << dendl;
+    ret = -EACCES;
+  }
 
   return ret;
 }
@@ -536,6 +561,66 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
   }
 
   return ret;
+}
+
+rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
+						struct req_state* s)
+{
+  rgw::IAM::Environment e;
+  const auto& m = s->info.env->get_map();
+  auto t = ceph::real_clock::now();
+  e.emplace(std::piecewise_construct,
+	    std::forward_as_tuple("aws:CurrentTime"),
+	    std::forward_as_tuple(std::to_string(
+				    ceph::real_clock::to_time_t(t))));
+  e.emplace(std::piecewise_construct,
+	    std::forward_as_tuple("aws:EpochTime"),
+	    std::forward_as_tuple(ceph::to_iso_8601(t)));
+  // TODO: This is fine for now, but once we have STS we'll need to
+  // look and see. Also this won't work with the IdentityApplier
+  // model, since we need to know the actual credential.
+  e.emplace(std::piecewise_construct,
+	    std::forward_as_tuple("aws:PrincipalType"),
+	    std::forward_as_tuple("User"));
+
+  auto i = m.find("HTTP_REFERER");
+  if (i != m.end()) {
+    e.emplace(std::piecewise_construct,
+	      std::forward_as_tuple("aws:Referer"),
+	      std::forward_as_tuple(i->second));
+  }
+
+  // These seem to be the semantics, judging from rest_rgw_s3.cc
+  i = m.find("SERVER_PORT_SECURE");
+  if (i != m.end()) {
+    e.emplace(std::piecewise_construct,
+	      std::forward_as_tuple("aws:SecureTransport"),
+	      std::forward_as_tuple("true"));
+  }
+
+  i = m.find("HTTP_HOST");
+  if (i != m.end()) {
+    e.emplace(std::piecewise_construct,
+	      std::forward_as_tuple("aws:SourceIp"),
+	      std::forward_as_tuple(i->second));
+  }
+
+  i = m.find("HTTP_USER_AGENT"); {
+  if (i != m.end())
+    e.emplace(std::piecewise_construct,
+	      std::forward_as_tuple("aws:UserAgent"),
+	      std::forward_as_tuple(i->second));
+  }
+
+  if (s->user) {
+    // What to do about aws::userid? One can have multiple access
+    // keys so that isn't really suitable. Do we have a durable
+    // identifier that can persist through name changes?
+    e.emplace(std::piecewise_construct,
+	      std::forward_as_tuple("aws:username"),
+	      std::forward_as_tuple(s->user->user_id.id));
+  }
+  return e;
 }
 
 static void rgw_bucket_object_pre_exec(struct req_state *s)
@@ -6045,6 +6130,7 @@ int RGWHandler::init(RGWRados *_store,
 int RGWHandler::do_init_permissions()
 {
   int ret = rgw_build_bucket_policies(store, s);
+  s->env = rgw_build_iam_environment(store, s);
 
   if (ret < 0) {
     ldout(s->cct, 10) << "read_permissions on " << s->bucket << " ret=" << ret << dendl;
