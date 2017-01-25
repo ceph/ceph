@@ -31,13 +31,13 @@ void do_init() {
   }
 }
 
-TEST(MutexDebug, NormalAsserts) {
+TEST(Mutex, NormalAsserts) {
   Mutex* m = new Mutex("Normal",false);
   m->Lock();
   EXPECT_THROW(m->Lock(), int);
 }
 
-TEST(MutexDebug, RecursiveWithLockdep) {
+TEST(Mutex, RecursiveWithLockdep) {
   do_init();
   g_lockdep = 1;
   Mutex* m = new Mutex("Recursive1",true);
@@ -48,7 +48,7 @@ TEST(MutexDebug, RecursiveWithLockdep) {
   delete m;
 }
 
-TEST(MutexDebug, RecursiveWithoutLockdep) {
+TEST(Mutex, RecursiveWithoutLockdep) {
   do_init();
   g_lockdep = 0;
   Mutex* m = new Mutex("Recursive2",true);
@@ -59,7 +59,7 @@ TEST(MutexDebug, RecursiveWithoutLockdep) {
   delete m;
 }
 
-TEST(MutexDebug, DeleteLocked) {
+TEST(Mutex, DeleteLocked) {
   Mutex* m = new Mutex("Recursive3",false);
   m->Lock();
   EXPECT_DEATH(delete m,".*");
