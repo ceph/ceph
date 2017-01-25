@@ -21,6 +21,7 @@
 #include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
+#include "rgw_iam_policy.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
 #include "rgw_website.h"
@@ -98,6 +99,10 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
 #define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
+
+/* IAM Policy */
+#define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
+
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -1772,6 +1777,9 @@ struct req_state {
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
+
+  rgw::IAM::Environment env;
+  boost::optional<rgw::IAM::Policy> iam_policy;
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
