@@ -1572,10 +1572,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	// we are using the page_aligned_appender, and can safely use
 	// the tail of the raw buffer.
 	const bufferptr &last = t.back();
-	if (last.unused_tail_length() != zlen) {
+	if (last.unused_tail_length() < zlen) {
 	  derr << " wtf, last is " << last << " from " << t << dendl;
+	  assert(last.unused_tail_length() >= zlen);
 	}
-	assert(last.unused_tail_length() == zlen);
 	bufferptr z = last;
 	z.set_offset(last.offset() + last.length());
 	z.set_length(zlen);
