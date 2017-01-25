@@ -1515,6 +1515,29 @@ public:
     }
   };
 
+  struct DBHistogram {
+    struct value_dist {
+      uint64_t count;
+      uint32_t max_len;
+    };
+
+    struct key_dist {
+      uint64_t count;
+      uint32_t max_len;
+      map<int, struct value_dist> val_map; ///< slab id to count, max length of value and key
+    };
+
+    map<string, map<int, struct key_dist> > key_hist;
+    map<int, uint64_t> value_hist;
+    int get_key_slab(size_t sz);
+    string get_key_slab_to_range(int slab);
+    int get_value_slab(size_t sz);
+    string get_value_slab_to_range(int slab);
+    void update_hist_entry(map<string, map<int, struct key_dist> > &key_hist,
+			  const string &prefix, size_t key_size, size_t value_size);
+    void dump(Formatter *f);
+  };
+
   // --------------------------------------------------------
   // members
 private:
@@ -1790,7 +1813,8 @@ public:
     return 0;
   }
 
-  void get_db_statistics(Formatter *f);
+  void get_db_statistics(Formatter *f) override;
+  void generate_db_histogram(Formatter *f) override;
 
 public:
   int statfs(struct store_statfs_t *buf) override;

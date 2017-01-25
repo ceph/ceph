@@ -1943,6 +1943,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     store->get_db_statistics(f);
   } else if (command == "dump_scrubs") {
     service.dumps_scrub(f);
+  } else if (command == "calc_objectstore_db_histogram") {
+    store->generate_db_histogram(f);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2414,6 +2416,10 @@ void OSD::final_init()
 				     "print scheduled scrubs");
   assert(r == 0);
 
+  r = admin_socket->register_command("calc_objectstore_db_histogram", "calc_objectstore_db_histogram", asok_hook,
+					 "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
+  assert(r == 0);
+
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
@@ -2739,6 +2745,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
+  cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
   delete asok_hook;
   asok_hook = NULL;
 

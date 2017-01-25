@@ -231,6 +231,14 @@ uint64_t BlueFS::get_free(unsigned id)
   return alloc[id]->get_free();
 }
 
+void BlueFS::dump_perf_counters(Formatter *f)
+{
+  f->open_object_section("bluefs_perf_counters");
+  logger->dump_formatted(f,0);
+  f->close_section();
+}
+
+
 void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
 {
   std::lock_guard<std::mutex> l(lock);

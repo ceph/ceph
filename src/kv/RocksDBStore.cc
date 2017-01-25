@@ -370,6 +370,15 @@ void RocksDBStore::close()
     cct->get_perfcounters_collection()->remove(logger);
 }
 
+void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss;
+    ss.str(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+}
+
 void RocksDBStore::get_statistics(Formatter *f)
 {
   if (!g_conf->rocksdb_perf)  {
@@ -379,18 +388,29 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
 
   if (g_conf->rocksdb_collect_compaction_stats) {
-    std::string stats;
-    bool status = db->GetProperty("rocksdb.stats", &stats);
+    std::string stat_str;
+    bool status = db->GetProperty("rocksdb.stats", &stat_str);
     if (status) {
       f->open_object_section("rocksdb_statistics");
-      f->dump_string("rocksdb_compaction_statistics", stats);
+      f->dump_string("rocksdb_compaction_statistics", "");
+      vector<string> stats;
+      split_stats(stat_str, '\n', stats);
+      for (auto st :stats) {
+        f->dump_string("", st);
+      }
       f->close_section();
     }
   }
   if (g_conf->rocksdb_collect_extended_stats) {
     if (dbstats) {
       f->open_object_section("rocksdb_extended_statistics");
-      f->dump_string("rocksdb_extended_statistics", dbstats->ToString().c_str());
+      string stat_str = dbstats->ToString();
+      vector<string> stats;
+      split_stats(stat_str, '\n', stats);
+      f->dump_string("rocksdb_extended_statistics", "");
+      for (auto st :stats) {
+        f->dump_string(".", st);
+      }
       f->close_section();
     }
     f->open_object_section("rocksdbstore_perf_counters");
@@ -880,6 +900,16 @@ bool RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key_is_prefixed(const stri
 bufferlist RocksDBStore::RocksDBWholeSpaceIteratorImpl::value()
 {
   return to_bufferlist(dbiter->value());
+}
+
+size_t RocksDBStore::RocksDBWholeSpaceIteratorImpl::key_size()
+{
+  return dbiter->key().size();
+}
+
+size_t RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_size()
+{
+  return dbiter->value().size();
 }
 
 bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
