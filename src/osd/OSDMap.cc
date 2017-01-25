@@ -1042,7 +1042,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
   mask |= CEPH_FEATURES_CRUSH;
 
-  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+  for (auto p = pools.begin(); p != pools.end(); ++p) {
     if (p->second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
@@ -1067,7 +1067,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     }
   }
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
-    for (map<string,map<string,string> >::const_iterator p = erasure_code_profiles.begin();
+    for (auto p = erasure_code_profiles.begin();
 	 p != erasure_code_profiles.end();
 	 ++p) {
       const map<string,string> &profile = p->second;
@@ -1093,6 +1093,19 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     }
   }
   mask |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
+
+  const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
+  if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+    features |= jewel_features;
+  }
+  mask |= jewel_features;
+
+  const uint64_t kraken_features = CEPH_FEATURE_SERVER_KRAKEN
+    | CEPH_FEATURE_MSG_ADDR2;
+  if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+    features |= kraken_features;
+  }
+  mask |= kraken_features;
 
   if (pmask)
     *pmask = mask;
