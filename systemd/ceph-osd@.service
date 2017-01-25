@@ -1,6 +1,6 @@
 [Unit]
 Description=Ceph object storage daemon
-After=network-online.target local-fs.target time-sync.target
+After=network-online.target local-fs.target time-sync.target ceph-mon.target
 Wants=network-online.target local-fs.target time-sync.target
 PartOf=ceph-osd.target
 
