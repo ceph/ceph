@@ -202,6 +202,13 @@ add_executable(unittest_mutex_debug
 add_ceph_unittest(unittest_mutex_debug ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex_debug)
 target_link_libraries(unittest_mutex_debug global ${BLKID_LIBRARIES} ${EXTRALIBS})
 
+# unittest_mutex
+add_executable(unittest_mutex
+  test_mutex.cc
+  )
+add_ceph_unittest(unittest_mutex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex)
+target_link_libraries(unittest_mutex global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
   test_shunique_lock.cc
