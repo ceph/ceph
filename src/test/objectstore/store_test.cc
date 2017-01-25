@@ -5754,7 +5754,7 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     ASSERT_EQ(r, 0);
   }
   g_ceph_context->_conf->set_val("bluestore_cache_size", "4000000");
-  g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
+  g_conf->set_val("bluestore_min_alloc_size", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 
