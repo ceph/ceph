@@ -112,12 +112,12 @@ protected:
     assert(m_lock.is_locked());
     return m_state == STATE_LOCKED;
   }
-  inline bool is_state_waiting_for_lock() {
+  inline bool is_state_waiting_for_lock() const {
     assert(m_lock.is_locked());
     return m_state == STATE_WAITING_FOR_LOCK;
   }
 
-  inline bool is_action_acquire_lock() {
+  inline bool is_action_acquire_lock() const {
     assert(m_lock.is_locked());
     return get_active_action() == ACTION_ACQUIRE_LOCK;
   }
