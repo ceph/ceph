@@ -131,6 +131,7 @@ class TestSuiteMain(object):
                 prepare_and_schedule=prepare_and_schedule,
             ):
                 main([
+                    '--ceph', 'master',
                     '--suite', suite_name,
                     '--throttle', throttle,
                     '--machine-type', machine_type,
@@ -153,11 +154,14 @@ class TestSuiteMain(object):
         ) as m:
             m['package_version_for_hash'].return_value = 'fake-9.5'
             config.suite_verify_ceph_hash = False
-            main(['--suite', suite_name,
-                  '--suite-dir', suite_dir,
-                  '--suite-relpath', '',
-                  '--throttle', throttle,
-                  '--machine-type', machine_type])
+            main([
+                '--ceph', 'master',
+                '--suite', suite_name,
+                '--suite-dir', suite_dir,
+                '--suite-relpath', '',
+                '--throttle', throttle,
+                '--machine-type', machine_type
+            ])
             m_sleep.assert_called_with(int(throttle))
             m['get_gitbuilder_hash'].assert_not_called()
 
@@ -178,9 +182,12 @@ class TestSuiteMain(object):
         ) as m:
             m['package_version_for_hash'].return_value = 'fake-9.5'
             config.suite_verify_ceph_hash = True
-            main(['--suite', suite_name,
-                  '--suite-dir', suite_dir,
-                  '--suite-relpath', '',
-                  '--throttle', throttle,
-                  '--machine-type', machine_type])
+            main([
+                '--ceph', 'master',
+                '--suite', suite_name,
+                '--suite-dir', suite_dir,
+                '--suite-relpath', '',
+                '--throttle', throttle,
+                '--machine-type', machine_type
+            ])
             m_sleep.assert_called_with(int(throttle))
