@@ -190,6 +190,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     virtual raw* clone_empty() = 0;
     raw *clone() {
       raw *c = clone_empty();
+#ifdef CEPH_HAVE_SPLICE
+      // raw_pipe::clone_empty() returns NULL
+      if (!c) {
+        return NULL;
+      }
+#endif
       memcpy(c->data, data, len);
       return c;
     }
