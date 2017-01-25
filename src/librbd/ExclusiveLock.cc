@@ -83,10 +83,8 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
     ML<I>::set_state_initializing();
   }
 
-  m_image_ctx.aio_work_queue->block_writes(new C_InitComplete(this, on_init));
-  if ((features & RBD_FEATURE_JOURNALING) != 0) {
-    m_image_ctx.aio_work_queue->set_require_lock_on_read();
-  }
+  m_image_ctx.aio_work_queue->block_writes(new C_InitComplete(this, features,
+                                                              on_init));
 }
 
 template <typename I>
@@ -114,8 +112,12 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::handle_init_complete() {
-  ldout(m_image_ctx.cct, 10) << dendl;
+void ExclusiveLock<I>::handle_init_complete(uint64_t features) {
+  ldout(m_image_ctx.cct, 10) << "features=" << features << dendl;
+
+  if ((features & RBD_FEATURE_JOURNALING) != 0) {
+    m_image_ctx.aio_work_queue->set_require_lock_on_read();
+  }
 
   Mutex::Locker locker(ML<I>::m_lock);
   ML<I>::set_state_unlocked();
@@ -290,6 +292,24 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
 
   on_finish->complete(r);
 }
+
+template <typename I>
+struct ExclusiveLock<I>::C_InitComplete : public Context {
+  ExclusiveLock *exclusive_lock;
+  uint64_t features;
+  Context *on_init;
+
+  C_InitComplete(ExclusiveLock *exclusive_lock, uint64_t features,
+                 Context *on_init)
+    : exclusive_lock(exclusive_lock), features(features), on_init(on_init) {
+  }
+  virtual void finish(int r) override {
+    if (r == 0) {
+      exclusive_lock->handle_init_complete(features);
+    }
+    on_init->complete(r);
+  }
+};
 
 } // namespace librbd
 
