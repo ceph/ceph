@@ -33,9 +33,14 @@ TEST(BackTrace, Basic) {
   boost::split(lines, bt, boost::is_any_of("\n"));
   const unsigned lineno = 1;
   ASSERT_GT(lines.size(), lineno);
-  ASSERT_EQ(lines[0].find(pretty_version_to_str()), 1);
+  ASSERT_EQ(lines[0].find(pretty_version_to_str()), 1U);
   boost::regex e{"^ 1: "
+#ifdef __FreeBSD__
+		 "<foo.*>\\s"
+		 "at\\s.*$"};
+#else
 		 "\\(foo.*\\)\\s"
 		 "\\[0x[[:xdigit:]]+\\]$"};
+#endif
   EXPECT_TRUE(boost::regex_match(lines[lineno], e));
 }
