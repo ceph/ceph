@@ -6164,31 +6164,35 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
   tout(cct) << relpath << std::endl;
 
   filepath existing(relexisting);
-  filepath path(relpath);
-  string name = path.last_dentry();
-  path.pop_dentry();
 
   InodeRef in, dir;
   int r = path_walk(existing, &in, perm, true);
   if (r < 0)
-    goto out;
+    return r;
+  if (std::string(relpath) == "/") {
+    r = -EEXIST;
+    return r;
+  }
+  filepath path(relpath);
+  string name = path.last_dentry();
+  path.pop_dentry();
+
   r = path_walk(path, &dir, perm, true);
   if (r < 0)
-    goto out;
+    return r;
   if (cct->_conf->client_permissions) {
     if (S_ISDIR(in->mode)) {
       r = -EPERM;
-      goto out;
+      return r;
     }
     r = may_hardlink(in.get(), perm);
     if (r < 0)
-      goto out;
+      return r;
     r = may_create(dir.get(), perm);
     if (r < 0)
-      goto out;
+      return r;
   }
   r = _link(in.get(), dir.get(), name.c_str(), perm);
- out:
   return r;
 }
 
@@ -6197,6 +6201,9 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
   Mutex::Locker lock(client_lock);
   tout(cct) << "unlink" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EISDIR;
 
   filepath path(relpath);
   string name = path.last_dentry();
@@ -6219,6 +6226,9 @@ int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
   tout(cct) << "rename" << std::endl;
   tout(cct) << relfrom << std::endl;
   tout(cct) << relto << std::endl;
+
+  if (std::string(relfrom) == "/" || std::string(relto) == "/")
+    return -EBUSY;
 
   filepath from(relfrom);
   filepath to(relto);
@@ -6257,6 +6267,9 @@ int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << "mkdir: " << relpath << dendl;
+
+  if (std::string(relpath) == "/")
+    return -EEXIST;
 
   filepath path(relpath);
   string name = path.last_dentry();
@@ -6327,6 +6340,10 @@ int Client::rmdir(const char *relpath, const UserPerm& perms)
   Mutex::Locker lock(client_lock);
   tout(cct) << "rmdir" << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EBUSY;
+
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
@@ -6349,6 +6366,10 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EEXIST;
+
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
@@ -6372,6 +6393,9 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
   tout(cct) << "symlink" << std::endl;
   tout(cct) << target << std::endl;
   tout(cct) << relpath << std::endl;
+
+  if (std::string(relpath) == "/")
+    return -EEXIST;
 
   filepath path(relpath);
   string name = path.last_dentry();
