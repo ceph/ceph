@@ -100,7 +100,7 @@ int num_cinode_locks = sizeof(cinode_lock_info) / sizeof(cinode_lock_info[0]);
 ostream& operator<<(ostream& out, const CInode& in)
 {
   string path;
-  in.make_path_string_projected(path);
+  in.make_path_string(path, true);
 
   out << "[inode " << in.inode.ino;
   out << " [" 
@@ -811,61 +811,47 @@ bool CInode::is_projected_ancestor_of(CInode *other)
 }
 
 /*
- * If use_parent is NULL (it should be one of inode's projected parents),
- * we use it to make path string. Otherwise, we use inode's parent dentry
- * to make path string
+ * Because a non-directory inode may have multiple links, the use_parent
+ * argument allows selecting which parent to use for path construction. This
+ * argument is only meaningful for the final component (i.e. the first of the
+ * nested calls) because directories cannot have multiple hard links. If
+ * use_parent is NULL and projected is true, the primary parent's projected
+ * inode is used all the way up the path chain. Otherwise the primary parent
+ * stable inode is used.
  */
-void CInode::make_path_string(string& s, CDentry *use_parent) const
+void CInode::make_path_string(string& s, bool projected, const CDentry *use_parent) const
 {
-  if (!use_parent)
-    use_parent = parent;
+  if (!use_parent) {
+    use_parent = projected ? get_projected_parent_dn() : parent;
+  }
 
   if (use_parent) {
-    use_parent->make_path_string(s);
-  } 
-  else if (is_root()) {
-    s = "";  // root
-  } 
-  else if (is_mdsdir()) {
+    use_parent->make_path_string(s, projected);
+  } else if (is_root()) {
+    s = "";
+  } else if (is_mdsdir()) {
     char t[40];
     uint64_t eino(ino());
     eino -= MDS_INO_MDSDIR_OFFSET;
     snprintf(t, sizeof(t), "~mds%" PRId64, eino);
     s = t;
-  }
-  else {
+  } else {
     char n[40];
     uint64_t eino(ino());
     snprintf(n, sizeof(n), "#%" PRIx64, eino);
     s += n;
   }
 }
-void CInode::make_path_string_projected(string& s) const
-{
-  make_path_string(s);
-  
-  if (!projected_parent.empty()) {
-    string q;
-    q.swap(s);
-    s = "{" + q;
-    for (list<CDentry*>::const_iterator p = projected_parent.begin();
-	 p != projected_parent.end();
-	 ++p) {
-      string q;
-      make_path_string(q, *p);
-      s += " ";
-      s += q;
-    }
-    s += "}";
-  }
-}
 
-void CInode::make_path(filepath& fp) const
+void CInode::make_path(filepath& fp, bool projected) const
 {
-  if (parent) 
-    parent->make_path(fp);
-  else
+  const CDentry *use_parent = projected ? get_projected_parent_dn() : parent;
+  if (use_parent) {
+    assert(!is_base());
+    use_parent->make_path(fp, projected);
+  } else {
     fp = filepath(ino());
+  }
 }
 
 void CInode::name_stray_dentry(string& dname)
