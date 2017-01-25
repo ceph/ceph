@@ -45,6 +45,8 @@ class StrayManager
   MDSRank *mds;
   PerfCounters *logger;
 
+  bool started;
+
   // Throttled allowances
   uint64_t ops_in_flight;
   uint64_t files_purging;
@@ -152,6 +154,7 @@ class StrayManager
   public:
   explicit StrayManager(MDSRank *mds);
   void set_logger(PerfCounters *l) {logger = l;}
+  void activate();
 
   bool eval_stray(CDentry *dn, bool delay=false);
 
