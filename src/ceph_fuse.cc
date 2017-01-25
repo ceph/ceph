@@ -71,14 +71,16 @@ void usage()
 int main(int argc, const char **argv, const char *envp[]) {
   int filer_flags = 0;
   //cerr << "ceph-fuse starting " << myrank << "/" << world << std::endl;
-  vector<const char*> args;
+  std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
     usage();
   }
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  std::vector<const char*> def_args{"--pid-file="};
+
+  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -89,7 +91,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      ceph_abort();
     } else {
       ++i;
     }
