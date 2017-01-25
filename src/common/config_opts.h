@@ -764,7 +764,10 @@ OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
 OPTION(osd_command_thread_suicide_timeout, OPT_INT, 15*60)
 OPTION(osd_heartbeat_addr, OPT_ADDR, entity_addr_t())
 OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping peers
-OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
+
+// (seconds) how long before we decide a peer has failed
+// This setting is read by the MONs and OSDs and has to be set to a equal value in both settings of the configuration
+OPTION(osd_heartbeat_grace, OPT_INT, 20)
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbeat tcp socket and set dscp as CS6 on it if true
 
