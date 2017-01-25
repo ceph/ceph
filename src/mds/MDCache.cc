@@ -4287,9 +4287,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
 	Capability *cap = rejoin_import_cap(in, q->first, q->second, from);
 	Capability::Import& im = imported_caps[p->first][q->first];
-	im.cap_id = cap->get_cap_id();
-	im.issue_seq = cap->get_last_seq();
-	im.mseq = cap->get_mseq();
+	if (cap) {
+	  im.cap_id = cap->get_cap_id();
+	  im.issue_seq = cap->get_last_seq();
+	  im.mseq = cap->get_mseq();
+	} else {
+	  // all are zero
+	}
       }
       mds->locker->eval(in, CEPH_CAP_LOCKS, true);
     }
@@ -5066,7 +5070,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
 				       cap_exports[p->first][q->first].capinfo.cap_id, 0,
                                        mds->get_osd_epoch_barrier());
-      m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, from, 0);
+      m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq,
+		      (q->second.cap_id > 0 ? from : -1), 0);
       mds->send_message_client_counted(m, session);
 
       cap_exports[p->first].erase(q->first);
@@ -5572,7 +5577,10 @@ Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_re
   dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
   Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
-  assert(session);
+  if (!session) {
+    dout(10) << " no session for client." << client << dendl;
+    return NULL;
+  }
 
   Capability *cap = in->reconnect_cap(client, icr, session);
 
