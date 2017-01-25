@@ -35,10 +35,12 @@ AuthMethodList::AuthMethodList(CephContext *cct, string str)
     } else if (iter->compare("none") == 0) {
       auth_supported.push_back(CEPH_AUTH_NONE);
     } else {
+      auth_supported.push_back(CEPH_AUTH_UNKNOWN);
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
   if (auth_supported.empty()) {
+    lderr(cct) << "WARNING: no auth protocol defined, use 'cephx' by default" << dendl;
     auth_supported.push_back(CEPH_AUTH_CEPHX);
   }
 }
