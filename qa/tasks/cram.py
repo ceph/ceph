@@ -26,9 +26,9 @@ def task(ctx, config):
         - cram:
             clients:
               client.0:
-              - http://ceph.com/qa/test.t
-              - http://ceph.com/qa/test2.t]
-              client.1: [http://ceph.com/qa/test.t]
+              - http://download.ceph.com/qa/test.t
+              - http://download.ceph.com/qa/test2.t]
+              client.1: [http://download.ceph.com/qa/test.t]
 
     You can also run a list of cram tests on all clients::
 
@@ -36,7 +36,7 @@ def task(ctx, config):
         - ceph:
         - cram:
             clients:
-              all: [http://ceph.com/qa/test.t]
+              all: [http://download.ceph.com/qa/test.t]
 
     :param ctx: Context
     :param config: Configuration
