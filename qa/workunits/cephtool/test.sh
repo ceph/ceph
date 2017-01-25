@@ -370,6 +370,15 @@ function test_tiering()
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
 
+  # make sure we can't create snapshot on tier
+  ceph osd pool create basex 2
+  ceph osd pool create cachex 2
+  ceph osd tier add basex cachex
+  expect_false ceph osd pool mksnap cache snapname
+  ceph osd tier remove basex cachex
+  ceph osd pool delete basex basex --yes-i-really-really-mean-it
+  ceph osd pool delete cachex cachex --yes-i-really-really-mean-it
+
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
   ceph osd pool create repbase 2
