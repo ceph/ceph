@@ -2460,28 +2460,36 @@ void PG::_update_calc_stats()
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
 
-  // calc copies, degraded
+  // If actingset is larger then upset we will have misplaced,
+  // so we will report based on actingset size.
+
+  // If upset is larger then we will have degraded,
+  // so we will report based on upset size.
+
+  // If target is the largest of them all, it will contribute to
+  // the degraded count because num_object_copies is
+  // computed using target and eventual used to get degraded total.
+
   unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
-  info.stats.stats.calc_copies(MAX(target, actingbackfill.size()));
+  unsigned nrep = MAX(actingset.size(), upset.size());
+  // calc num_object_copies
+  info.stats.stats.calc_copies(MAX(target, nrep));
   info.stats.stats.sum.num_objects_degraded = 0;
+  info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
   if ((is_degraded() || is_undersized() || !is_clean()) && is_peered()) {
-    // NOTE: we only generate copies, degraded, unfound values for
-    // the summation, not individual stat categories.
+    // NOTE: we only generate copies, degraded, misplaced and unfound
+    // values for the summation, not individual stat categories.
     uint64_t num_objects = info.stats.stats.sum.num_objects;
 
-    // a degraded objects has fewer replicas or EC shards than the
-    // pool specifies
-    int64_t degraded = 0;
-
-    // if acting is smaller than desired, add in those missing replicas
-    if (actingset.size() < target)
-      degraded += (target - actingset.size()) * num_objects;
-
-    // missing on primary
-    info.stats.stats.sum.num_objects_missing_on_primary =
-      pg_log.get_missing().num_missing();
-    degraded += pg_log.get_missing().num_missing();
+    // Total sum of all missing
+    int64_t missing = 0;
+    // Objects that have arrived backfilled to up OSDs (not in acting)
+    int64_t backfilled = 0;
+    // A misplaced object is not stored on the correct OSD
+    int64_t misplaced = 0;
+    // Total of object copies/shards found
+    int64_t object_copies = 0;
 
     // num_objects_missing on each peer
     for (map<pg_shard_t, pg_info_t>::iterator pi =
@@ -2496,53 +2504,57 @@ void PG::_update_calc_stats()
       }
     }
 
-    assert(!acting.empty());
-    for (set<pg_shard_t>::iterator i = actingset.begin();
-	 i != actingset.end();
+    assert(!actingbackfill.empty());
+    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+	 i != actingbackfill.end();
 	 ++i) {
-      if (*i == pg_whoami) continue;
-      assert(peer_missing.count(*i));
+      const pg_shard_t &p = *i;
 
-      // in missing set
-      degraded += peer_missing[*i].num_missing();
+      bool in_up = (upset.find(p) != upset.end());
+      bool in_acting = (actingset.find(p) != actingset.end());
+      assert(in_up || in_acting);
 
-      // not yet backfilled
-      int64_t diff = num_objects - peer_info[*i].stats.stats.sum.num_objects;
-      if (diff > 0)
-        degraded += diff;
-    }
-    info.stats.stats.sum.num_objects_degraded = degraded;
-    info.stats.stats.sum.num_objects_unfound = get_num_unfound();
-
-    // a misplaced object is not stored on the correct OSD
-    uint64_t misplaced = 0;
-    unsigned in_place = 0;
-    for (set<pg_shard_t>::const_iterator p = upset.begin();
-	 p != upset.end();
-	 ++p) {
-      const pg_shard_t &s = *p;
-      if (actingset.count(s)) {
-	++in_place;
+      // in acting                  Compute total objects excluding num_missing
+      // in acting and not in up    Compute misplaced objects excluding num_missing
+      // in up and not in acting    Compute total objects already backfilled
+      if (in_acting) {
+        int osd_missing;
+        // primary handling
+        if (p == pg_whoami) {
+          osd_missing = pg_log.get_missing().num_missing();
+          info.stats.stats.sum.num_objects_missing_on_primary =
+              osd_missing;
+          object_copies += num_objects; // My local (primary) count
+        } else {
+          assert(peer_missing.count(p));
+          osd_missing = peer_missing[p].num_missing();
+          object_copies += peer_info[p].stats.stats.sum.num_objects;
+        }
+        missing += osd_missing;
+        // Count non-missing objects not in up as misplaced
+        if (!in_up)
+	  misplaced += MAX(0, num_objects - osd_missing);
       } else {
-	// not where it should be
-	misplaced += num_objects;
-	if (actingbackfill.count(s)) {
-	  // ...but partially backfilled
-	  misplaced -= peer_info[s].stats.stats.sum.num_objects;
-	  dout(20) << __func__ << " osd." << *p << " misplaced "
-		   << num_objects << " but partially backfilled "
-		   << peer_info[s].stats.stats.sum.num_objects
-		   << dendl;
-	} else {
-	  dout(20) << __func__ << " osd." << *p << " misplaced "
-		   << num_objects << " but partially backfilled "
-		   << dendl;
-	}
+        assert(in_up && !in_acting);
+
+        // If this peer has more objects then it should, ignore them
+        backfilled += MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
       }
     }
-    // count extra replicas in acting but not in up as misplaced
-    if (in_place < actingset.size())
-      misplaced += (actingset.size() - in_place) * num_objects;
+
+    // Any objects that have been backfilled to up OSDs can deducted from misplaced
+    misplaced = MAX(0, misplaced - backfilled);
+
+    // Deduct computed total missing on acting nodes
+    object_copies -= missing;
+    // Include computed backfilled objects on up nodes
+    object_copies += backfilled;
+    // a degraded objects has fewer replicas or EC shards than the
+    // pool specifies.  num_object_copies will never be smaller than target * num_copies.
+    int64_t degraded = MAX(0, info.stats.stats.sum.num_object_copies - object_copies);
+
+    info.stats.stats.sum.num_objects_degraded = degraded;
+    info.stats.stats.sum.num_objects_unfound = get_num_unfound();
     info.stats.stats.sum.num_objects_misplaced = misplaced;
   }
 }
