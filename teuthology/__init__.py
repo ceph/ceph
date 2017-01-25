@@ -1,3 +1,9 @@
+import os
+# Tell gevent not to patch os.waitpid() since it is susceptible to race
+# conditions. See:
+# http://www.gevent.org/gevent.monkey.html#gevent.monkey.patch_os
+os.environ['GEVENT_NOWAITPID'] = 'true'
+
 # Use manhole to give us a way to debug hung processes
 # https://pypi.python.org/pypi/manhole
 import manhole
@@ -21,7 +27,6 @@ from .orchestra import monkey
 monkey.patch_all()
 
 import logging
-import os
 import subprocess
 
 __version__ = '1.0.0'
