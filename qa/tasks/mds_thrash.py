@@ -175,7 +175,7 @@ class MDSThrasher(Greenlet):
             if rank is not None:
                 try:
                     info = status.get_rank(self.fs.id, rank)
-                    if info['gid'] != gid:
+                    if info['gid'] != gid and "up:active" == info['state']:
                         self.log('mds.{name} has gained rank={rank}, replacing gid={gid}'.format(name = info['name'], rank = rank, gid = gid))
                         return status, info['name']
                 except:
