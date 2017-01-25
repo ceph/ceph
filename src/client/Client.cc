@@ -5515,6 +5515,8 @@ void Client::handle_command_reply(MCommandReply *m)
     op.on_finish->complete(m->r);
   }
 
+  commands.erase(opiter);
+
   m->put();
 }
 
