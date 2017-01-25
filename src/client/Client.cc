@@ -568,8 +568,6 @@ int Client::init()
 	       << cpp_strerror(-ret) << dendl;
   }
 
-  populate_metadata();
-
   client_lock.Lock();
   initialized = true;
   client_lock.Unlock();
@@ -1934,7 +1932,7 @@ MetaSession *Client::_get_or_open_mds_session(mds_rank_t mds)
  * Populate a map of strings with client-identifying metadata,
  * such as the hostname.  Call this once at initialization.
  */
-void Client::populate_metadata()
+void Client::populate_metadata(const std::string &mount_root)
 {
   // Hostname
   struct utsname u;
@@ -1950,7 +1948,9 @@ void Client::populate_metadata()
   metadata["entity_id"] = cct->_conf->name.get_id();
 
   // Our mount position
-  metadata["root"] = cct->_conf->client_mountpoint;
+  if (!mount_root.empty()) {
+    metadata["root"] = mount_root;
+  }
 
   // Ceph version
   metadata["ceph_version"] = pretty_version_to_str();
@@ -5449,6 +5449,12 @@ int Client::mds_command(
     return -ENOENT;
   }
 
+  if (metadata.empty()) {
+    // We are called on an unmounted client, so metadata
+    // won't be initialized yet.
+    populate_metadata("");
+  }
+
   // Send commands to targets
   C_GatherBuilder gather(cct, onfinish);
   for (const auto target_gid : non_laggy) {
@@ -5553,9 +5559,10 @@ int Client::mount(const std::string &mount_root, bool require_mds)
     }
   }
 
+  populate_metadata(mount_root.empty() ? "/" : mount_root);
+
   filepath fp(CEPH_INO_ROOT);
   if (!mount_root.empty()) {
-    metadata["root"] = mount_root.c_str();
     fp = filepath(mount_root.c_str());
   }
   while (true) {
