@@ -4,6 +4,11 @@ After=network-online.target local-fs.target
 Wants=network-online.target local-fs.target
 PartOf=ceph.target
 
+Description=Ceph object storage daemon osd.%i
+After=network-online.target local-fs.target time-sync.target ceph-mon.target
+Wants=network-online.target local-fs.target time-sync.target
+PartOf=ceph-osd.target
+
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
