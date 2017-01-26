@@ -112,7 +112,7 @@
 
 ``client_oc_target_dirty``
 
-:Description: Set the target size of corrupted data. We recommend to keep this number low.
+:Description: Set the target size of dirty data. We recommend to keep this number low.
 :Type: Integer
 :Default: ``8388608`` (8MB)
 
