@@ -4201,6 +4201,45 @@ extern "C" int rados_nobjects_list_next(rados_list_ctx_t listctx, const char **e
 }
 
 
+/*
+ * removed legacy v2 list objects stubs
+ *
+ * thse return -ENOTSUP where possible.
+ */
+extern "C" int rados_objects_list_open(
+  rados_ioctx_t io,
+  rados_list_ctx_t *ctx)
+{
+  return -ENOTSUP;
+}
+
+extern "C" uint32_t rados_objects_list_get_pg_hash_position(
+  rados_list_ctx_t ctx)
+{
+  return 0;
+}
+
+extern "C" uint32_t rados_objects_list_seek(
+  rados_list_ctx_t ctx,
+  uint32_t pos)
+{
+  return 0;
+}
+
+extern "C" int rados_objects_list_next(
+  rados_list_ctx_t ctx,
+  const char **entry,
+  const char **key)
+{
+  return -ENOTSUP;
+}
+
+extern "C" void rados_objects_list_close(
+  rados_list_ctx_t ctx)
+{
+}
+
+
 // -------------------------
 // aio
 

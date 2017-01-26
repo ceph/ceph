@@ -3450,6 +3450,25 @@ CEPH_RADOS_API int rados_monitor_log(rados_t cluster, const char *level,
 
 /** @} Mon/OSD/PG commands */
 
+/*
+ * These methods are no longer supported and return -ENOTSUP where possible.
+ */
+CEPH_RADOS_API int rados_objects_list_open(
+  rados_ioctx_t io,
+  rados_list_ctx_t *ctx) __attribute__((deprecated));
+CEPH_RADOS_API uint32_t rados_objects_list_get_pg_hash_position(
+  rados_list_ctx_t ctx) __attribute__((deprecated));
+CEPH_RADOS_API uint32_t rados_objects_list_seek(
+  rados_list_ctx_t ctx,
+  uint32_t pos) __attribute__((deprecated));
+CEPH_RADOS_API int rados_objects_list_next(
+  rados_list_ctx_t ctx,
+  const char **entry,
+  const char **key) __attribute__((deprecated));
+CEPH_RADOS_API void rados_objects_list_close(
+  rados_list_ctx_t ctx) __attribute__((deprecated));
+
+
 #ifdef __cplusplus
 }
 #endif
