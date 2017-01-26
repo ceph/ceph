@@ -2938,3 +2938,28 @@ RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
   }
   return new MetaPeerTrimPollCR(store, http, num_shards, interval);
 }
+
+
+struct MetaMasterAdminTrimCR : private MasterTrimEnv, public MetaMasterTrimCR {
+  MetaMasterAdminTrimCR(RGWRados *store, RGWHTTPManager *http, int num_shards)
+    : MasterTrimEnv(store, http, num_shards),
+      MetaMasterTrimCR(*static_cast<MasterTrimEnv*>(this))
+  {}
+};
+
+struct MetaPeerAdminTrimCR : private PeerTrimEnv, public MetaPeerTrimCR {
+  MetaPeerAdminTrimCR(RGWRados *store, RGWHTTPManager *http, int num_shards)
+    : PeerTrimEnv(store, http, num_shards),
+      MetaPeerTrimCR(*static_cast<PeerTrimEnv*>(this))
+  {}
+};
+
+RGWCoroutine* create_admin_meta_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards)
+{
+  if (store->is_meta_master()) {
+    return new MetaMasterAdminTrimCR(store, http, num_shards);
+  }
+  return new MetaPeerAdminTrimCR(store, http, num_shards);
+}

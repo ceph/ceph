@@ -451,4 +451,9 @@ public:
 RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
                                       int num_shards, utime_t interval);
 
+// factory function for mdlog trim via radosgw-admin
+RGWCoroutine* create_admin_meta_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards);
+
 #endif

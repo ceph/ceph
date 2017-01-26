@@ -371,6 +371,7 @@ enum {
   OPT_METADATA_SYNC_INIT,
   OPT_METADATA_SYNC_RUN,
   OPT_MDLOG_LIST,
+  OPT_MDLOG_AUTOTRIM,
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
   OPT_MDLOG_STATUS,
@@ -733,6 +734,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_MDLOG_LIST;
+    if (strcmp(cmd, "autotrim") == 0)
+      return OPT_MDLOG_AUTOTRIM;
     if (strcmp(cmd, "trim") == 0)
       return OPT_MDLOG_TRIM;
     if (strcmp(cmd, "fetch") == 0)
@@ -5581,6 +5584,26 @@ next:
 
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_MDLOG_AUTOTRIM) {
+    // need a full history for purging old mdlog periods
+    store->meta_mgr->init_oldest_log_period();
+
+    RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+    RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
+    int ret = http.set_threaded();
+    if (ret < 0) {
+      cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+
+    auto num_shards = g_conf->rgw_md_log_max_shards;
+    ret = crs.run(create_admin_meta_log_trim_cr(store, &http, num_shards));
+    if (ret < 0) {
+      cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_MDLOG_TRIM) {
