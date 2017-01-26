@@ -1729,6 +1729,11 @@ struct req_state {
    * of a given RGWOp). Thus, it bounds authentication and authorization steps
    * through a well-defined interface. For more details, see rgw_auth.h. */
   std::unique_ptr<RGWIdentityApplier> auth_identity;
+  struct {
+    /* TODO(rzarzynski): switch out to the static_ptr. */
+    std::unique_ptr<rgw::auth::Identity> identity;
+    std::unique_ptr<rgw::auth::Completer> completer;
+  } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;
