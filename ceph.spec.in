@@ -1354,7 +1354,7 @@ fi
 %defattr(-,root,root,-)
 %{_libdir}/librados.so.*
 %dir %{_libdir}/ceph
-%{_libdir}/ceph/libceph-common.so
+%{_libdir}/ceph/libceph-common.so.*
 %if %{with lttng}
 %{_libdir}/librados_tp.so.*
 %endif

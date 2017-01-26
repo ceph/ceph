@@ -18,7 +18,6 @@
 #include "/usr/include/asm-generic/errno.h"
 #include "/usr/include/asm-generic/errno-base.h"
 #include "common/ceph_context.h"
-#include "global/global_context.h"
 #include "common/Clock.h"
 #include "include/types.h"
 
