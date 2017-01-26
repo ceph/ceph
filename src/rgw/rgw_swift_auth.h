@@ -12,12 +12,16 @@
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
+namespace rgw {
+namespace auth {
+namespace swift {
+
 /* TempURL: applier. */
-class RGWTempURLAuthApplier : public RGWLocalAuthApplier {
+class TempURLApplier : public rgw::auth::LocalApplier {
 public:
-  RGWTempURLAuthApplier(CephContext * const cct,
-                        const RGWUserInfo& user_info)
-    : RGWLocalAuthApplier(cct, user_info, RGWLocalAuthApplier::NO_SUBUSER) {
+  TempURLApplier(CephContext* const cct,
+                 const RGWUserInfo& user_info)
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER) {
   };
 
   void modify_request_state(req_state * s) const override; /* in/out */
@@ -30,41 +34,38 @@ public:
 };
 
 /* TempURL: engine */
-class RGWTempURLAuthEngine : public RGWAuthEngine {
-protected:
-  /* const */ RGWRados * const store;
-  const req_state * const s;
-  const RGWTempURLAuthApplier::Factory * const apl_factory;
+class TempURLEngine : public rgw::auth::Engine {
+  using result_t = rgw::auth::Engine::result_t;
+
+  CephContext* const cct;
+  /* const */ RGWRados* const store;
+  const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(RGWUserInfo& owner_info) const;
+  void get_owner_info(const req_state* s,
+                      RGWUserInfo& owner_info) const;
+  bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
 
   class SignatureHelper;
 
 public:
-  RGWTempURLAuthEngine(const req_state * const s,
-                       /*const*/ RGWRados * const store,
-                       const RGWTempURLAuthApplier::Factory * const apl_factory)
-    : RGWAuthEngine(s->cct),
+  TempURLEngine(CephContext* const cct,
+                /*const*/ RGWRados* const store,
+                const TempURLApplier::Factory* const apl_factory)
+    : cct(cct),
       store(store),
-      s(s),
       apl_factory(apl_factory) {
   }
 
   /* Interface implementations. */
   const char* get_name() const noexcept override {
-    return "RGWTempURLAuthEngine";
+    return "rgw::auth::swift::TempURLEngine";
   }
 
-  bool is_applicable() const noexcept override;
-  RGWAuthApplier::aplptr_t authenticate() const override;
+  result_t authenticate(const req_state* const s) const override;
 };
 
-
-namespace rgw {
-namespace auth {
-namespace swift {
 
 /* AUTH_rgwtk */
 class SignedTokenEngine : public rgw::auth::Engine {

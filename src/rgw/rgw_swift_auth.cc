@@ -26,8 +26,12 @@
 using namespace ceph::crypto;
 
 
+namespace rgw {
+namespace auth {
+namespace swift {
+
 /* TempURL: applier */
-void RGWTempURLAuthApplier::modify_request_state(req_state * s) const       /* in/out */
+void TempURLApplier::modify_request_state(req_state* s) const       /* in/out */
 {
   bool inline_exists = false;
   const std::string& filename = s->info.args.get("filename");
@@ -53,13 +57,14 @@ void RGWTempURLAuthApplier::modify_request_state(req_state * s) const       /* i
 }
 
 /* TempURL: engine */
-bool RGWTempURLAuthEngine::is_applicable() const noexcept
+bool TempURLEngine::is_applicable(const req_state* const s) const noexcept
 {
   return s->info.args.exists("temp_url_sig") ||
          s->info.args.exists("temp_url_expires");
 }
 
-void RGWTempURLAuthEngine::get_owner_info(RGWUserInfo& owner_info) const
+void TempURLEngine::get_owner_info(const req_state* const s,
+                                   RGWUserInfo& owner_info) const
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
@@ -106,15 +111,15 @@ void RGWTempURLAuthEngine::get_owner_info(RGWUserInfo& owner_info) const
     throw ret;
   }
 
-  ldout(s->cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
-                    << dendl;
+  ldout(cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
+                 << dendl;
 
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
     throw -EPERM;
   }
 }
 
-bool RGWTempURLAuthEngine::is_expired(const std::string& expires) const
+bool TempURLEngine::is_expired(const std::string& expires) const
 {
   string err;
   const utime_t now = ceph_clock_now();
@@ -142,7 +147,7 @@ std::string extract_swift_subuser(const std::string& swift_user_name) {
   }
 }
 
-class RGWTempURLAuthEngine::SignatureHelper
+class TempURLEngine::SignatureHelper
 {
 private:
   static constexpr uint32_t output_size =
@@ -183,32 +188,38 @@ public:
     return rhs.compare(0 /* pos */,  output_size, dest_str) == 0;
   }
 
-}; /* RGWTempURLAuthEngine::SignatureHelper */
+}; /* TempURLEngine::SignatureHelper */
 
-RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
+TempURLEngine::result_t
+TempURLEngine::authenticate(const req_state* const s) const
 {
+  if (! is_applicable(s)) {
+    return std::make_pair(nullptr, nullptr);
+  }
+
   const string& temp_url_sig = s->info.args.get("temp_url_sig");
   const string& temp_url_expires = s->info.args.get("temp_url_expires");
+
   if (temp_url_sig.empty() || temp_url_expires.empty()) {
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   RGWUserInfo owner_info;
   try {
-    get_owner_info(owner_info);
+    get_owner_info(s, owner_info);
   } catch (...) {
     ldout(cct, 5) << "cannot get user_info of account's owner" << dendl;
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   if (owner_info.temp_url_keys.empty()) {
     ldout(cct, 5) << "user does not have temp url key set, aborting" << dendl;
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   if (is_expired(temp_url_expires)) {
     ldout(cct, 5) << "temp url link expired" << dendl;
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   /* We need to verify two paths because of compliance with Swift, Tempest
@@ -258,7 +269,8 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
                           << dendl;
 
         if (sig_helper.is_equal_to(temp_url_sig)) {
-          return apl_factory->create_apl_turl(cct, owner_info);
+          auto apl = apl_factory->create_apl_turl(cct, owner_info);
+          return std::make_pair(std::move(apl), nullptr);
         } else {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
                             << " != " << temp_url_sig  << dendl;
@@ -267,13 +279,9 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
     }
   }
 
-  return nullptr;
+  return std::make_pair(nullptr, nullptr);
 }
 
-
-namespace rgw {
-namespace auth {
-namespace swift {
 
 /* External token */
 bool ExternalTokenEngine::is_applicable(const std::string& token) const noexcept
