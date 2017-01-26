@@ -2031,58 +2031,12 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
+
 int RGWHandler_REST_SWIFT::authorize()
 {
-  /* Factories. */
-  class SwiftAuthFactory : public RGWTempURLAuthApplier::Factory,
-                           public RGWLocalAuthApplier::Factory,
-                           public RGWRemoteAuthApplier::Factory {
-    typedef RGWAuthApplier::aplptr_t aplptr_t;
-
-    RGWRados * const store;
-    const std::string acct_override;
-
-  public:
-    SwiftAuthFactory(RGWRados * const store,
-                     const std::string& acct_override)
-      : store(store),
-        acct_override(acct_override) {
-    }
-
-    aplptr_t create_apl_turl(CephContext * const cct,
-                             const RGWUserInfo& user_info) const override {
-      /* TempURL doesn't need any user account override. It's a Swift-specific
-       * mechanism that requires  account name internally, so there is no
-       * business with delegating the responsibility outside. */
-      return aplptr_t(new RGWTempURLAuthApplier(cct, user_info));
-    }
-
-    aplptr_t create_apl_local(CephContext * const cct,
-                              const RGWUserInfo& user_info,
-                              const std::string& subuser) const override {
-      return aplptr_t(
-        new RGWThirdPartyAccountAuthApplier<RGWLocalAuthApplier>(
-          RGWLocalAuthApplier(cct, user_info, subuser),
-          store, acct_override));
-    }
-
-    aplptr_t create_apl_remote(CephContext * const cct,
-                               RGWRemoteAuthApplier::acl_strategy_t&& acl_alg,
-                               const RGWRemoteAuthApplier::AuthInfo info
-                              ) const override {
-      return aplptr_t(
-        new RGWThirdPartyAccountAuthApplier<RGWRemoteAuthApplier>(
-          RGWRemoteAuthApplier(cct, store, std::move(acl_alg), info),
-          store, acct_override));
-    }
-  } aplfact(store, s->account_name);
-
-
-  auto strategy = rgw::auth::swift::DefaultStrategy::get_instance();
-  rgw::auth::Applier::aplptr_t applier;
+  rgw::auth::IdentityApplier::aplptr_t applier;
   rgw::auth::Completer::cmplptr_t completer;
-
-  std::tie(applier, completer) = strategy.authenticate(s);
+  std::tie(applier, completer) = auth_strategy.authenticate(s);
 
   try {
     if (! applier) {
@@ -2096,16 +2050,17 @@ int RGWHandler_REST_SWIFT::authorize()
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
       applier->load_acct_info(*s->user);
-      //s->perm_mask = applier->get_perm_mask();
+      s->perm_mask = applier->get_perm_mask();
 
       /* This is the signle place where we pass req_state as a pointer
        * to non-const and thus its modification is allowed. In the time
        * of writing only RGWTempURLEngine needed that feature. */
       applier->modify_request_state(s);
 
-      // FIXME
-      //applier->load_identity();
-      //s->auth_identity = std::move(applier);
+      s->auth.identity = std::move(applier);
+      s->auth.completer = std::move(completer);
+
+      return 0;
     } catch (int err) {
       ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
       return err;
@@ -2113,84 +2068,6 @@ int RGWHandler_REST_SWIFT::authorize()
   } catch (int err) {
     ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
     return err;
-  }
-
-  /* Extractors. */
-  RGWXAuthTokenExtractor token_extr(s);
-
-  /* Auth engines. */
-  RGWTempURLAuthEngine tempurl(s, store,                    &aplfact);
-  RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &aplfact);
-  RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &aplfact);
-  RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &aplfact);
-  RGWAnonymousAuthEngine anoneng(s->cct,        token_extr, &aplfact);
-
-  /* Pipeline. */
-  constexpr size_t ENGINES_NUM = 5;
-  const std::array<const RGWAuthEngine *, ENGINES_NUM> engines = {
-    &tempurl, &rgwtk, &keystone, &ext, &anoneng
-  };
-
-  for (const auto engine : engines) {
-    if (! engine->is_applicable()) {
-      /* Engine said it isn't suitable for handling this particular
-       * request. Let's try a next one. */
-      continue;
-    }
-
-    try {
-      ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
-
-      auto applier = engine->authenticate();
-      if (! applier) {
-        /* Access denied is acknowledged by returning a std::unique_ptr with
-         * nullptr inside. */
-        ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
-        return -EPERM;
-      }
-
-      try {
-        /* Account used by a given RGWOp is decoupled from identity employed
-         * in the authorization phase (RGWOp::verify_permissions). */
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
-
-        /* This is the signle place where we pass req_state as a pointer
-         * to non-const and thus its modification is allowed. In the time
-         * of writing only RGWTempURLEngine needed that feature. */
-        applier->modify_request_state(s);
-
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
-        return err;
-      }
-    } catch (int err) {
-      ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
-      return err;
-    }
-
-    /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
-    if (s->user->system && s->auth_identity->is_owner_of(s->user->user_id)) {
-      s->system_request = true;
-      ldout(s->cct, 20) << "system request over Swift API" << dendl;
-
-      rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-      if (!euid.empty()) {
-        RGWUserInfo einfo;
-
-        const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed, euid=" << euid
-                           << " ret=" << ret << dendl;
-          return ret;
-        }
-
-        *(s->user) = einfo;
-      }
-    }
-
-    return 0;
   }
 
   /* All engines refused to handle this authentication request by
