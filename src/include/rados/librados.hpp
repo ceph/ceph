@@ -865,14 +865,23 @@ namespace librados
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 
+    /// Get cursor for pool beginning
     ObjectCursor object_list_begin();
+
+    /// Get cursor for pool end
     ObjectCursor object_list_end();
+
+    /// Check whether a cursor is at the end of a pool
     bool object_list_is_end(const ObjectCursor &oc);
+
+    /// List some objects between two cursors
     int object_list(const ObjectCursor &start, const ObjectCursor &finish,
                     const size_t result_count,
                     const bufferlist &filter,
                     std::vector<ObjectItem> *result,
                     ObjectCursor *next);
+
+    /// Generate cursors that include the N out of Mth slice of the pool
     void object_list_slice(
         const ObjectCursor start,
         const ObjectCursor finish,

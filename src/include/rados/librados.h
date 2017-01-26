@@ -1026,15 +1026,61 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
  */
 CEPH_RADOS_API void rados_nobjects_list_close(rados_list_ctx_t ctx);
 
-CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(rados_ioctx_t io);
+/**
+ * Get cursor handle pointing to the *beginning* of a pool.
+ *
+ * This is an opaque handle pointing to the start of a pool.  It must
+ * be released with rados_object_list_cursor_free().
+ *
+ * @param io ioctx for the pool
+ * @returns handle for the pool, NULL on error (pool does not exist)
+ */
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(
+  rados_ioctx_t io);
+
+/**
+ * Get cursor handle pointing to the *end* of a pool.
+ *
+ * This is an opaque handle pointing to the start of a pool.  It must
+ * be released with rados_object_list_cursor_free().
+ *
+ * @param io ioctx for the pool
+ * @returns handle for the pool, NULL on error (pool does not exist)
+ */
 CEPH_RADOS_API rados_object_list_cursor rados_object_list_end(rados_ioctx_t io);
 
+/**
+ * Check if a cursor has reached the end of a pool
+ *
+ * @param io ioctx
+ * @param cur cursor
+ * @returns 1 if the cursor has reached the end of the pool, 0 otherwise
+ */
 CEPH_RADOS_API int rados_object_list_is_end(rados_ioctx_t io,
     rados_object_list_cursor cur);
 
+/**
+ * Release a cursor
+ *
+ * Release a cursor.  The handle may not be used after this point.
+ *
+ * @param io ioctx
+ * @param cur cursor
+ */
 CEPH_RADOS_API void rados_object_list_cursor_free(rados_ioctx_t io,
     rados_object_list_cursor cur);
 
+/**
+ * Compare two cursor positions
+ *
+ * Compare two cursors, and indicate whether the first cursor precedes,
+ * matches, or follows the second.
+ *
+ * @param io ioctx
+ * @param lhs first cursor
+ * @param rhs second cursor
+ * @returns -1, 0, or 1 for lhs < rhs, lhs == rhs, or lhs > rhs
+ */
 CEPH_RADOS_API int rados_object_list_cursor_cmp(rados_ioctx_t io,
     rados_object_list_cursor lhs, rados_object_list_cursor rhs);
 
