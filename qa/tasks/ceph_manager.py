@@ -1650,6 +1650,33 @@ class CephManager:
             time.sleep(SLEEP_TIME)
             timer += SLEEP_TIME
 
+    def wait_snap_trimming_complete(self, pool):
+        """
+        Wait for snap trimming on pool to end
+        """
+        POLL_PERIOD = 10
+        FATAL_TIMEOUT = 600
+        start = time.time()
+        poolnum = self.get_pool_num(pool)
+        poolnumstr = "%s." % (poolnum,)
+        while (True):
+            now = time.time()
+            if (now - start) > FATAL_TIMEOUT:
+                assert (now - start) < FATAL_TIMEOUT, \
+                    'failed to complete snap trimming before timeout'
+            all_stats = self.get_pg_stats()
+            trimming = False
+            for pg in all_stats:
+                if (poolnumstr in pg['pgid']) and ('snaptrim' in pg['state']):
+                    self.log("pg {pg} in trimming, state: {state}".format(
+                        pg=pg['pgid'],
+                        state=pg['state']))
+                    trimming = True
+            if not trimming:
+                break
+            self.log("{pool} still trimming, waiting".format(pool=pool))
+            time.sleep(POLL_PERIOD)
+
     def get_single_pg_stats(self, pgid):
         """
         Return pg for the pgid specified.
