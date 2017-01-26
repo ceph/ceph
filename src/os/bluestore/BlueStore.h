@@ -2040,10 +2040,12 @@ private:
 
   // --------------------------------------------------------
   // read processing internal methods
-  int _verify_csum(OnodeRef& o,
-		   const bluestore_blob_t* blob,
-		   uint64_t blob_xoffset,
-		   const bufferlist& bl) const;
+  int _verify_csum(
+    OnodeRef& o,
+    const bluestore_blob_t* blob,
+    uint64_t blob_xoffset,
+    const bufferlist& bl,
+    uint64_t logical_offset) const;
   int _decompress(bufferlist& source, bufferlist* result);
 
 
