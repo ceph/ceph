@@ -216,10 +216,21 @@ public:
     frag_t frag;
     snapid_t snap;
     filepath want_path;
+    MDSCacheObject *base;
     bool want_base_dir;
     bool want_xlocked;
 
-    discover_info_t() : tid(0), mds(-1), snap(CEPH_NOSNAP), want_base_dir(false), want_xlocked(false) {}
+    discover_info_t() :
+      tid(0), mds(-1), snap(CEPH_NOSNAP), base(NULL),
+      want_base_dir(false), want_xlocked(false) {}
+    ~discover_info_t() {
+      if (base)
+	base->put(MDSCacheObject::PIN_DISCOVERBASE);
+    }
+    void pin_base(MDSCacheObject *b) {
+      base = b;
+      base->get(MDSCacheObject::PIN_DISCOVERBASE);
+    }
   };
 
   map<ceph_tid_t, discover_info_t> discovers;

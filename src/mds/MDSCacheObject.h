@@ -66,6 +66,7 @@ class MDSCacheObject {
   static const int PIN_PTRWAITER  = -1007;
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
   static const int PIN_CLIENTLEASE = 1009;
+  static const int PIN_DISCOVERBASE = 1010;
 
   const char *generic_pin_name(int p) const {
     switch (p) {
@@ -79,6 +80,7 @@ class MDSCacheObject {
     case PIN_PTRWAITER: return "ptrwaiter";
     case PIN_TEMPEXPORTING: return "tempexporting";
     case PIN_CLIENTLEASE: return "clientlease";
+    case PIN_DISCOVERBASE: return "discoverbase";
     default: ceph_abort(); return 0;
     }
   }
