@@ -11,6 +11,7 @@
 #include "include/utime.h"
 #include "include/assert.h"
 #include "common/RWLock.h"
+#include "rgw_l2_requester.h"
 
 enum {
   UPDATE_OBJ,
@@ -24,6 +25,10 @@ enum {
 #define CACHE_FLAG_OBJV           0x10
 
 #define mydout(v) lsubdout(T::cct, rgw, v)
+
+struct get_obj_data;
+
+vector<string> str_split(const string &s, char * delim);
 
 struct ObjectMetaInfo {
   uint64_t size;
@@ -194,16 +199,6 @@ class RGWCache  : public T
     return normal_name(obj.bucket, obj.get_object());
   }
 
-  int init_rados() {
-    int ret;
-    cache.set_ctx(T::cct);
-    ret = T::init_rados();
-    if (ret < 0)
-      return ret;
-
-    return 0;
-  }
-
   bool need_watch_notify() {
     return true;
   }
@@ -222,6 +217,16 @@ public:
 
   void register_chained_cache(RGWChainedCache *cc) {
     cache.chain_cache(cc);
+  }
+
+ virtual int init_rados() {
+    int ret;
+    cache.set_ctx(T::cct);
+    ret = T::init_rados();
+    if (ret < 0)
+      return ret;
+
+    return 0;
   }
 
   int system_obj_set_attrs(void *ctx, rgw_obj& obj, 
@@ -377,7 +382,7 @@ int RGWCache<T>::system_obj_set_attrs(void *ctx, rgw_obj& obj,
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-    cache.remove(name);
+   cache.remove(name);
   }
 
   return ret;
@@ -396,8 +401,9 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mti
   ObjectCacheInfo info;
   info.xattrs = attrs;
   info.status = 0;
+  info.flags = CACHE_FLAG_XATTRS;
   info.data = data;
-  info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
+  info.flags |= CACHE_FLAG_DATA | CACHE_FLAG_META;
   if (objv_tracker) {
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
@@ -417,7 +423,7 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mti
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-    cache.remove(name);
+   cache.remove(name);
   }
 
   return ret;
@@ -447,7 +453,7 @@ int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, 
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
-      cache.remove(name);
+     cache.remove(name);
     }
   }
 
@@ -526,7 +532,8 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_obj& obj, Objec
   info.obj = obj;
   bufferlist bl;
   ::encode(info, bl);
-  return T::distribute(normal_name, bl);
+  int ret = T::distribute(normal_name, bl);
+  return ret;
 }
 
 template <class T>
@@ -568,4 +575,314 @@ int RGWCache<T>::watch_cb(uint64_t notify_id,
   return 0;
 }
 
+/* dataCache */
+struct BlockInfo {
+  CephContext *cct;
+  uint64_t size;
+  time_t access_time;
+  string address;
+  string oid;
+  atomic_t ref_cnt;
+  BlockInfo(CephContext *_cct): cct(_cct), size(0) {}
+
+  void get () {
+    ref_cnt.inc();
+  }
+
+  void put () {
+    if (!ref_cnt.dec()) {
+      delete this;
+    }
+  }
+};
+
+struct cacheAioWriteRequest{
+  string oid;
+  struct aiocb *cb;
+  void *priv;
+  CephContext *cct;
+  atomic_t ref_cnt;
+
+  cacheAioWriteRequest(CephContext *_cct) : cct(_cct) {}
+  int prep_write(const char *data, size_t len, const char *fname);
+  
+  void get () {
+    ref_cnt.inc();
+  }
+
+  void put () {
+    if (!ref_cnt.dec()) {
+      delete this;
+    }
+  }
+
+  void release() {
+    ::close(cb->aio_fildes);
+    free((void *)cb->aio_buf);
+    free(cb);
+    put();
+  }
+};
+
+class DataCache {
+private:
+  CephContext *cct;
+  Mutex  eviction_lock;
+  Mutex  cache_lock;
+  string cache_location;
+  std::map<string, BlockInfo*> cache_map;
+  std::list<string> outstanding_write_list;
+  L2CacheThreadPool *tp;
+  std::vector<string> dist_hosts;
+  
+  struct {
+    size_t free_sz;
+    size_t pending_sz;
+    size_t size;
+  } metadata;
+
+public:
+  struct {
+    unsigned char l1: 4;
+    unsigned char l2: 4;
+  } enable;
+
+  string localhost;
+
+public:
+  DataCache();
+  ~DataCache() {}
+
+  bool get (string oid);
+  void put (const char *, size_t len, string oid);
+  
+  string persistent_hash(string oid);
+
+  // L1 Functions
+  int  io_write (const char *data, size_t len, string oid);
+  int  aio_write (const char *data, size_t len, string oid);
+  void aio_write_cb (cacheAioWriteRequest *c);
+  size_t random_eviction();
+  
+  // L2 Functions
+  void submit_l2_read(struct L2CacheRequest *l2request);
+  void init_l2_request_cb(librados::completion_t c, void *arg);
+  string validate_location(string location);
+  void init(CephContext *_cct) {
+    char dilm = ';';
+    cct = _cct;
+    metadata.free_sz = cct->_conf->rgw_data_cache_size;
+    localhost = cct->_conf->host;
+    dist_hosts = str_split(cct->_conf->rgw_l2_host, &dilm);
+    cache_location = validate_location(cct->_conf->rgw_data_cache_location);
+    enable.l1 = cct->_conf->rgw_enable_l1;
+    enable.l2 = cct->_conf->rgw_enable_l2;
+  }
+  void add_io();
+};        
+
+template <class T>
+class RGWDataCache  : public RGWCache<T>
+{
+  DataCache dcache;
+  
+public:
+  RGWDataCache(); 
+  ~RGWDataCache();
+
+  int init_rados(); 
+  int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
+                        rgw_obj& obj,
+                        off_t obj_ofs, off_t read_ofs, off_t len,
+                        bool is_head_obj, void *arg);
+  int flush_read_list(struct get_obj_data *d);
+  void get_obj_aio_completion_cb(librados::completion_t cb, void *arg);
+};
+
+template <class T>
+RGWDataCache<T>::RGWDataCache() {
+
+}
+
+template <class T>
+RGWDataCache<T>::~RGWDataCache() {
+
+}
+
+template <class T>
+int RGWDataCache<T>::init_rados() {
+  int ret = 0;
+  dcache.init(T::cct);
+  ret = T::init_rados();
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+template <class T>
+int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
+                rgw_obj& obj,
+                off_t obj_ofs, off_t read_ofs, off_t len,
+                bool is_head_obj, void *arg){
+
+  RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
+  librados::ObjectReadOperation op;
+  struct get_obj_data *d = (struct get_obj_data *)arg;
+  string oid, key;
+  rgw_bucket bucket;
+  bufferlist *pbl;
+  librados::AioCompletion *c;
+  string dest = ""; 
+  int r = 0;
+
+  if (is_head_obj) {
+    /* only when reading from the head object do we need to do the atomic test */
+    r = T::append_atomic_test(rctx, obj, op, &astate);
+    if (r < 0)
+      return r;
+
+    if (astate &&
+        obj_ofs < astate->data.length()) {
+      unsigned chunk_len = min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
+      d->data_lock.Lock();
+      r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
+      d->data_lock.Unlock();
+      if (r < 0)
+        return r;
+
+      d->lock.Lock();
+      d->total_read += chunk_len;
+      d->lock.Unlock();
+
+      len -= chunk_len;
+      read_ofs += chunk_len;
+      obj_ofs += chunk_len;
+      if (!len)
+        return 0;
+    }
+ }
+
+ get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
+
+ d->throttle.get(len);
+ if (d->is_cancelled()) {
+   return d->get_err_code();
+ }
+
+ /* add io after we check that we're not cancelled, otherwise we're going to have trouble
+  * cleaning up
+ */
+  d->add_io(obj_ofs, len, oid, &pbl, &c);
+  mydout(20) << "rados->get_obj_iterate_cb oid=" << oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+  librados::IoCtx io_ctx(d->io_ctx); // Get a pointer to Librados
+  io_ctx.locator_set_key(key);
+  
+  if (dcache.get(oid)) {
+    L1CacheRequest *cc;
+    d->add_l1_request(&cc, pbl, oid, len, obj_ofs, read_ofs, key, c);
+    //r = io_ctx.cache_aio_operate(oid, cc);
+    r = d->submit_l1_aio_read(cc);
+    if (r < 0) {
+      op.read(read_ofs, len, pbl, NULL);     
+      r = io_ctx.aio_operate(oid, c, &op, NULL);            
+      if (r < 0) 
+        goto done_err;
+    }
+  }
+  else if ((dcache.enable.l2) && ((dest=dcache.persistent_hash(oid)).compare(dcache.localhost) != 0)){
+    L2CacheRequest *cc;
+    d->add_l2_request(&cc, pbl,  oid, dest, obj_ofs, read_ofs, len, key, c);
+    // r = io_ctx.cache_aio_operate(oid, cc);
+    dcache.submit_l2_read(cc);
+  }
+  else{
+    op.read(read_ofs, len, pbl, NULL); 
+    r = io_ctx.aio_operate(oid, c, &op, NULL);  
+    if (r < 0) 
+       goto done_err;
+  }
+                 
+  r = flush_read_list(d);
+  if (r < 0)
+    return r;
+        
+  return 0;
+       
+done_err:
+  mydout(20) << "cancelling io r=" << r << " obj_ofs=" << obj_ofs << dendl;
+  d->set_cancelled(r);
+  d->cancel_io(obj_ofs);
+  return r;
+}
+
+template <class T>
+int RGWDataCache<T>::flush_read_list(struct get_obj_data *d) {
+
+  d->data_lock.Lock();
+  list<bufferlist> l;
+  l.swap(d->read_list);
+  d->get();
+  d->read_list.clear();
+  d->data_lock.Unlock();
+  string oid;
+  int r = 0;
+  list<bufferlist>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    bufferlist& bl = *iter;
+    
+    oid = d->get_pending_oid();
+    if ((bl.length() == 0x400000))
+      dcache.put(bl.c_str(), bl.length(), oid);
+
+    r = d->client_cb->handle_data(bl, 0, bl.length());
+    if (r < 0) {
+      mydout(0) << "ERROR: flush_read_list(): d->client_c->handle_data() returned " << r << dendl;
+      break;
+    }
+  }
+
+  d->data_lock.Lock();
+  d->put();
+  if (r < 0) {
+    d->set_cancelled(r);
+  }
+  d->data_lock.Unlock();
+  return r;
+}
+
+template <class T>
+void RGWDataCache<T>::get_obj_aio_completion_cb(librados::completion_t cb, void *arg) {
+  
+  struct get_obj_aio_data *aio_data = (struct get_obj_aio_data *)arg;
+  struct get_obj_data *d = aio_data->op_data;
+  off_t ofs = aio_data->ofs;
+  off_t len = aio_data->len;
+
+  list<bufferlist> bl_list;
+  list<bufferlist>::iterator iter;
+  int r;
+
+  mydout(20) << "get_obj_aio_completion_cb: io completion ofs=" << ofs << " len=" << len << dendl;
+  d->throttle.put(len);
+
+  if (d->is_cancelled()) {
+    goto done;
+  }
+
+  d->data_lock.Lock();
+
+  r = d->get_complete_ios(ofs, bl_list);
+  if (r < 0) {
+    goto done_unlock;
+  }
+  d->read_list.splice(d->read_list.end(), bl_list);
+
+done_unlock:
+  d->data_lock.Unlock();
+done:
+  d->put();
+  return;
+}
+/* dataCache */
 #endif
