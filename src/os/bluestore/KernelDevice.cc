@@ -262,7 +262,8 @@ void KernelDevice::_aio_thread()
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
-		 << " with " << left << " aios left" << dendl;
+		 << " with " << (ioc->num_running.load() - 1)
+		 << " aios left" << dendl;
 	assert(r >= 0);
 	int left = --ioc->num_running;
 	// NOTE: once num_running is decremented we can no longer
