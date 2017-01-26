@@ -892,7 +892,10 @@ do_rgw()
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    n=$(($CEPH_NUM_RGW - 1))
+    for rgw in `seq 0 $n`; do
+	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1
+    done
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
