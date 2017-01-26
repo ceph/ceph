@@ -1484,6 +1484,8 @@ private:
       context< SnapTrimmer >().log_exit(state_name, enter_time);
       auto *pg = context< SnapTrimmer >().pg;
       pg->osd->snap_reserver.cancel_reservation(pg->get_pgid());
+      pg->state_clear(PG_STATE_SNAPTRIM);
+      pg->publish_stats_to_osd();
     }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
@@ -1583,6 +1585,8 @@ private:
 	pg->get_pgid(),
 	pending,
 	0);
+      pg->state_set(PG_STATE_SNAPTRIM_WAIT);
+      pg->publish_stats_to_osd();
     }
     boost::statechart::result react(const SnapTrimReserved&);
     void exit() {
@@ -1590,6 +1594,9 @@ private:
       if (pending)
 	pending->cancel();
       pending = nullptr;
+      auto *pg = context< SnapTrimmer >().pg;
+      pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
+      pg->publish_stats_to_osd();
     }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
