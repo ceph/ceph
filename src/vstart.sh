@@ -63,7 +63,7 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR=1
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS=1
 [ -z "$CEPH_MAX_MDS" ] && CEPH_MAX_MDS=1
-[ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
+[ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=0
 
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
 [ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
@@ -85,7 +85,6 @@ start_all=1
 start_mon=0
 start_mds=0
 start_osd=0
-start_rgw=0
 ip=""
 nodaemon=0
 smallmds=0
@@ -115,7 +114,6 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
-usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw)\n"
 usage=$usage"\t-n, --new (default)\n"
 usage=$usage"\t-N, --not-new: reuse existing cluster config\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
@@ -160,9 +158,6 @@ case $1 in
 	    [ -z "$2" ] && usage_exit
 	    ip="$2"
 	    shift
-	    ;;
-    -r )
-	    start_rgw=1
 	    ;;
     -e )
 	    ec=1
@@ -897,7 +892,7 @@ do_rgw()
 	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1
     done
 }
-if [ "$start_rgw" -eq 1 ]; then
+if [ "$CEPH_NUM_RGW" -gt 0 ]; then
     do_rgw
 fi
 
