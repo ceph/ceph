@@ -563,6 +563,9 @@ target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_IOSTREAMS_LIBRARY}
   ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+if(HAVE_RDMA)
+  target_link_libraries(ceph-common ${RDMA_LIBRARY})
+endif(HAVE_RDMA)
 if(NOT WITH_SYSTEM_BOOST)
   target_link_libraries(ceph-common ${ZLIB_LIBRARIES})
 endif()
