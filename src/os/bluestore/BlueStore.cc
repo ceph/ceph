@@ -5314,7 +5314,8 @@ int BlueStore::_do_read(
       if (r < 0)
         return r;
 
-      if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl) < 0) {
+      if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
+		       b2r_it->second.front().logical_offset) < 0) {
 	return -EIO;
       }
       r = _decompress(compressed_bl, &raw_bl);
@@ -5363,7 +5364,7 @@ int BlueStore::_do_read(
         if (r < 0)
           return r;
 
-	r = _verify_csum(o, &bptr->get_blob(), r_off, bl);
+	r = _verify_csum(o, &bptr->get_blob(), r_off, bl, reg.logical_offset);
 	if (r < 0) {
 	  return -EIO;
 	}
@@ -5412,7 +5413,8 @@ int BlueStore::_do_read(
 
 int BlueStore::_verify_csum(OnodeRef& o,
 			    const bluestore_blob_t* blob, uint64_t blob_xoffset,
-			    const bufferlist& bl) const
+			    const bufferlist& bl,
+			    uint64_t logical_offset) const
 {
   int bad;
   uint64_t bad_csum;
@@ -5429,13 +5431,18 @@ int BlueStore::_verify_csum(OnodeRef& o,
           return 0;
 	});
       assert(r == 0);
-      derr << __func__ << " bad " << Checksummer::get_csum_type_string(blob->csum_type)
+      derr << __func__ << " bad "
+	   << Checksummer::get_csum_type_string(blob->csum_type)
 	   << "/0x" << std::hex << blob->get_csum_chunk_size()
 	   << " checksum at blob offset 0x" << bad
 	   << ", got 0x" << bad_csum << ", expected 0x"
 	   << blob->get_csum_item(bad / blob->get_csum_chunk_size()) << std::dec
 	   << ", device location " << pex
-	   << ", object " << o->oid << dendl;
+	   << ", object " << o->oid
+	   << ", logical extent 0x" << std::hex
+	   << (logical_offset + bad - blob_xoffset) << "~"
+	   << blob->get_csum_chunk_size() << std::dec
+	   << dendl;
     } else {
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
