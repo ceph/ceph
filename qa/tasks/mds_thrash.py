@@ -234,6 +234,7 @@ class MDSThrasher(Greenlet):
                     # Now randomly deactivate mds if we shrank
                     targets = filter(lambda r: r['rank'] > 0, status.get_ranks(self.fs.id)) # can't deactivate 0
                     for target in random.sample(targets, max(0, max_mds-new_max_mds)):
+                        self.log("deactivating rank %d" % target['rank'])
                         self.fs.deactivate(target['rank'])
                         stats['deactivate'] += 1
 
