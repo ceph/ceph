@@ -626,30 +626,26 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.push_back(new bluestore_blob_t);
   ls.push_back(new bluestore_blob_t(0));
   ls.push_back(new bluestore_blob_t);
-  ls.back()->extents.push_back(bluestore_pextent_t(111, 222));
-  ls.back()->logical_length += 222;
+  ls.back()->allocated_test(bluestore_pextent_t(111, 222));
   ls.push_back(new bluestore_blob_t);
   ls.back()->init_csum(Checksummer::CSUM_XXHASH32, 16, 65536);
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
-  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
-  ls.back()->logical_length += 0x10000;
-  ls.back()->extents.emplace_back(
-    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
-  ls.back()->logical_length += 0x1000;
-  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40120000, 0x10000));
   ls.back()->add_unused(0, 3);
   ls.back()->add_unused(8, 8);
-  ls.back()->logical_length += 0x10000;
+  ls.back()->allocated_test(bluestore_pextent_t(0x40100000, 0x10000));
+  ls.back()->allocated_test(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
+  ls.back()->allocated_test(bluestore_pextent_t(0x40120000, 0x10000));
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
-  out << "blob(" << o.extents;
+  out << "blob(" << o.get_extents();
   if (o.is_compressed()) {
     out << " clen 0x" << std::hex
-	<< o.logical_length
+	<< o.get_logical_length()
 	<< " -> 0x"
-	<< o.compressed_length
+	<< o.get_compressed_payload_length()
 	<< std::dec;
   }
   if (o.flags) {
@@ -731,6 +727,194 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     return -1; // bad checksum
   else
     return 0;
+}
+
+void bluestore_blob_t::allocated(const AllocExtentVector& allocs)
+{
+  assert(extents.size() == 0);
+  
+  // if blob is compressed then logical length to be already configured
+  // otherwise - to be unset.
+  assert( (is_compressed() && logical_length != 0) ||
+          (!is_compressed() && logical_length == 0));
+  extents.reserve(allocs.size());
+  for (auto& a : allocs) {
+    extents.emplace_back(a.offset, a.length);
+    if (!is_compressed()) {
+      logical_length += a.length;
+    }
+  }
+}
+
+// cut it out of extents
+struct vecbuilder {
+  PExtentVector v;
+  uint64_t invalid = 0;
+
+  void add_invalid(uint64_t length) {
+    invalid += length;
+  }
+  void flush() {
+    if (invalid) {
+      v.emplace_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
+	invalid));
+      invalid = 0;
+    }
+  }
+  void add(uint64_t offset, uint64_t length) {
+    if (offset == bluestore_pextent_t::INVALID_OFFSET) {
+      add_invalid(length);
+    }
+    else {
+      flush();
+      v.emplace_back(bluestore_pextent_t(offset, length));
+    }
+  }
+};
+
+void bluestore_blob_t::allocated_test(const bluestore_pextent_t& alloc)
+{
+  extents.emplace_back(alloc);
+  if (!is_compressed()) {
+    logical_length += alloc.length;
+  }
+}
+
+bool bluestore_blob_t::release_extents(bool all,
+				       const PExtentVector& logical,
+				       PExtentVector* r)
+{
+  // common case: all of it?
+  if (all) {
+    uint64_t pos = 0;
+    for (auto& e : extents) {
+      if (e.is_valid()) {
+	r->push_back(e);
+      }
+      pos += e.length;
+    }
+    assert(is_compressed() || get_logical_length() == pos);
+    extents.resize(1);
+    extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
+    extents[0].length = pos;
+    return true;
+  }
+  // remove from pextents according to logical release list
+  vecbuilder vb;
+  auto loffs_it = logical.begin();
+  auto lend = logical.end();
+  uint32_t pext_loffs_start = 0; //starting loffset of the current pextent
+  uint32_t pext_loffs = 0; //current loffset
+  auto pext_it = extents.begin();
+  auto pext_end = extents.end();
+  while (pext_it != pext_end) {
+    if (loffs_it == lend ||
+        pext_loffs_start + pext_it->length <= loffs_it->offset) {
+      int delta0 = pext_loffs - pext_loffs_start;
+      assert(delta0 >= 0);
+      if ((uint32_t)delta0 < pext_it->length) {
+	vb.add(pext_it->offset + delta0, pext_it->length - delta0);
+      }
+      pext_loffs_start += pext_it->length;
+      pext_loffs = pext_loffs_start;
+      ++pext_it;
+    }
+    else {
+      //assert(pext_loffs == pext_loffs_start);
+      int delta0 = pext_loffs - pext_loffs_start;
+      assert(delta0 >= 0);
+
+      int delta = loffs_it->offset - pext_loffs;
+      assert(delta >= 0);
+      if (delta > 0) {
+	vb.add(pext_it->offset + delta0, delta);
+	pext_loffs += delta;
+      }
+
+      PExtentVector::iterator last_r = r->end();
+      if (r->begin() != last_r) {
+	--last_r;
+      }
+      uint32_t to_release = loffs_it->length;
+      do {
+	uint32_t to_release_part =
+	  MIN(pext_it->length - delta0 - delta, to_release);
+	auto o = pext_it->offset + delta0 + delta;
+	if (last_r != r->end() && last_r->offset + last_r->length == o) {
+	  last_r->length += to_release_part;
+	}
+	else {
+	  last_r = r->emplace(r->end(), o, to_release_part);
+	}
+	to_release -= to_release_part;
+	pext_loffs += to_release_part;
+	if (pext_loffs == pext_loffs_start + pext_it->length) {
+	  pext_loffs_start += pext_it->length;
+	  pext_loffs = pext_loffs_start;
+	  pext_it++;
+	  delta0 = delta = 0;
+	}
+      } while (to_release > 0 && pext_it != pext_end);
+      vb.add_invalid(loffs_it->length - to_release);
+      ++loffs_it;
+    }
+  }
+  vb.flush();
+  extents.swap(vb.v);
+  return false;
+}
+
+void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
+{
+  size_t left = blob_offset;
+  uint32_t llen_lb = 0;
+  uint32_t llen_rb = 0;
+  unsigned i = 0;
+  for (auto p = extents.begin(); p != extents.end(); ++p, ++i) {
+    if (p->length <= left) {
+      left -= p->length;
+      llen_lb += p->length;
+      continue;
+    }
+    if (left) {
+      if (p->is_valid()) {
+	rb.extents.emplace_back(bluestore_pextent_t(p->offset + left,
+	  p->length - left));
+      }
+      else {
+	rb.extents.emplace_back(bluestore_pextent_t(
+	  bluestore_pextent_t::INVALID_OFFSET,
+	  p->length - left));
+      }
+      llen_rb += p->length - left;
+      llen_lb += left;
+      p->length = left;
+      ++i;
+      ++p;
+    }
+    while (p != extents.end()) {
+      llen_rb += p->length;
+      rb.extents.push_back(*p++);
+    }
+    extents.resize(i);
+    logical_length = llen_lb;
+    rb.logical_length = llen_rb;
+    break;
+  }
+  rb.flags = flags;
+
+  if (has_csum()) {
+    rb.csum_type = csum_type;
+    rb.csum_chunk_order = csum_chunk_order;
+    size_t csum_order = get_csum_chunk_size();
+    assert(blob_offset % csum_order == 0);
+    size_t pos = (blob_offset / csum_order) * get_csum_value_size();
+    // deep copy csum data
+    bufferptr old;
+    old.swap(csum_data);
+    rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
+    csum_data = bufferptr(old.c_str(), pos);
+  }
 }
 
 // bluestore_shared_blob_t

@@ -438,6 +438,12 @@ ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& rm);
 
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
+private:
+  PExtentVector extents;              ///< raw data position on device
+  uint32_t logical_length = 0;        ///< < original length of data stored in the blob
+  uint32_t compressed_length = 0;     ///< compressed length if any
+
+public:
   enum {
     FLAG_MUTABLE = 1,         ///< blob can be overwritten or split
     FLAG_COMPRESSED = 2,      ///< blob is compressed
@@ -447,9 +453,6 @@ struct bluestore_blob_t {
   };
   static string get_flags_string(unsigned flags);
 
-  PExtentVector extents;              ///< raw data position on device
-  uint32_t logical_length = 0;        ///< < original length of data stored in the blob
-  uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
 
   uint16_t unused = 0;     ///< portion that has never been written to (bitmap)
@@ -460,6 +463,10 @@ struct bluestore_blob_t {
   bufferptr csum_data;                ///< opaque vector of csum data
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
+
+  const PExtentVector& get_extents() const {
+    return extents;
+  }
 
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
@@ -800,6 +807,21 @@ struct bluestore_blob_t {
     }
     return res;
   }
+
+  void split(uint32_t blob_offset, bluestore_blob_t& rb);
+  void allocated(const AllocExtentVector& allocs);
+  void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
+
+  /// updates blob's pextents container and return unused pextents eligible
+  /// for release.
+  /// all - indicates that the whole blob to be released.
+  /// logical - specifies set of logical extents within blob's
+  /// to be released
+  /// Returns true if blob has no more valid pextents
+  bool release_extents(
+    bool all,
+    const PExtentVector& logical,
+    PExtentVector* r);
 };
 WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
