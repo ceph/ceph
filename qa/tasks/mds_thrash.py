@@ -50,6 +50,10 @@ class MDSThrasher(Greenlet):
       max_mds]. When reduced, randomly selected MDSs other than rank 0 will be
       deactivated to reach the new max_mds.  Value should be between 0.0 and 1.0.
 
+    thrash_while_stopping: [default: false] thrash an MDS while there
+      are MDS in up:stopping (because max_mds was changed and some
+      MDS were deactivated).
+
     thrash_weights: allows specific MDSs to be thrashed more/less frequently.
       This option overrides anything specified by max_thrash.  This option is a
       dict containing mds.x: weight pairs.  For example, [mds.a: 0.7, mds.b:
@@ -173,27 +177,33 @@ class MDSThrasher(Greenlet):
             status = self.fs.status()
             max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
             ranks = list(status.get_ranks(self.fs.id))
+            stopping = filter(lambda info: "up:stopping" == info['state'], ranks)
             actives = filter(lambda info: "up:active" == info['state'] and "laggy_since" not in info, ranks)
-            if rank is not None:
-                if len(actives) >= max_mds:
-                    # no replacement can occur!
-                    return status
-                try:
-                    info = status.get_rank(self.fs.id, rank)
-                    if info['gid'] != gid and "up:active" == info['state']:
-                        self.log('mds.{name} has gained rank={rank}, replacing gid={gid}'.format(name = info['name'], rank = rank, gid = gid))
-                        return status
-                except:
-                    pass # no rank present
+
+            if not bool(self.config.get('thrash_while_stopping', False)) and len(stopping) > 0:
+                if itercount % 5 == 0:
+                    self.log('cluster is considered unstable while MDS are in up:stopping (!thrash_while_stopping)')
             else:
-                if len(actives) >= max_mds:
-                    self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
-                    return status, None
-            itercount = itercount + 1
+                if rank is not None:
+                    if len(actives) >= max_mds:
+                        # no replacement can occur!
+                        return status
+                    try:
+                        info = status.get_rank(self.fs.id, rank)
+                        if info['gid'] != gid and "up:active" == info['state']:
+                            self.log('mds.{name} has gained rank={rank}, replacing gid={gid}'.format(name = info['name'], rank = rank, gid = gid))
+                            return status
+                    except:
+                        pass # no rank present
+                else:
+                    if len(actives) >= max_mds:
+                        self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
+                        return status, None
             if itercount > 300/2: # 5 minutes
                  raise RuntimeError('timeout waiting for cluster to stabilize')
-            elif itercount > 10:
+            elif itercount % 5 == 0:
                 self.log('mds map: {status}'.format(status=self.fs.status()))
+            itercount = itercount + 1
             time.sleep(2)
 
     def do_thrash(self):
