@@ -385,7 +385,11 @@ int main(int argc, const char **argv)
   }
 
   if (apis_map.count("swift") > 0) {
-    RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
+    static const rgw::auth::swift::DefaultStrategy auth_strategy(g_ceph_context,
+                                                                 store);
+
+    RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT(
+      &auth_strategy);
 
     if (! g_conf->rgw_cross_domain_policy.empty()) {
       swift_resource->register_resource("crossdomain.xml",
@@ -396,7 +400,7 @@ int main(int argc, const char **argv)
                           set_logging(new RGWRESTMgr_SWIFT_HealthCheck));
 
     swift_resource->register_resource("info",
-                          set_logging(new RGWRESTMgr_SWIFT_Info));
+                          set_logging(new RGWRESTMgr_SWIFT_Info(&auth_strategy)));
 
     if (! swift_at_root) {
       rest.register_resource(g_conf->rgw_swift_url_prefix,
