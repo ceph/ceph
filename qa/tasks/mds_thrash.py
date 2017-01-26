@@ -187,7 +187,9 @@ class MDSThrasher(Greenlet):
                     self.log('mds cluster has {count} alive and active, now stable!'.format(count = count))
                     return status, None
             itercount = itercount + 1
-            if itercount > 10:
+            if itercount > 300/2: # 5 minutes
+                 raise RuntimeError('timeout waiting for cluster to stabilize')
+            elif itercount > 10:
                 self.log('mds map: {status}'.format(status=self.fs.status()))
             time.sleep(2)
             status = self.fs.status()
