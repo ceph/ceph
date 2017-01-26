@@ -443,6 +443,11 @@ void CreateRequest<I>::create_image() {
     oss << stringify(m_ioctx.get_id()) << ".";
   }
   oss << m_image_id;
+  if (oss.str().length() > RBD_MAX_BLOCK_NAME_PREFIX_LENGTH) {
+    lderr(m_cct) << "object prefix '" << oss.str() << "' too large" << dendl;
+    complete(-EINVAL);
+    return;
+  }
 
   librados::ObjectWriteOperation op;
   op.create(true);
