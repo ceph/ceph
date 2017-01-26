@@ -2463,14 +2463,14 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
   }
 
   if (s->init_state.url_bucket.empty()) {
-    return new RGWHandler_REST_Service_SWIFT;
+    return new RGWHandler_REST_Service_SWIFT(auth_strategy);
   }
 
   if (s->object.empty()) {
-    return new RGWHandler_REST_Bucket_SWIFT;
+    return new RGWHandler_REST_Bucket_SWIFT(auth_strategy);
   }
 
-  return new RGWHandler_REST_Obj_SWIFT;
+  return new RGWHandler_REST_Obj_SWIFT(auth_strategy);
 }
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
@@ -2478,5 +2478,5 @@ RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   const std::string& frontend_prefix)
 {
   s->prot_flags |= RGW_REST_SWIFT;
-  return new RGWHandler_REST_SWIFT_Info;
+  return new RGWHandler_REST_SWIFT_Info(auth_strategy);
 }
