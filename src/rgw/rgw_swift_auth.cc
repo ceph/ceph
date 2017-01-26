@@ -217,7 +217,7 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
 
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  boost::string_ref ref_uri = s->info.request_uri;
+  boost::string_ref ref_uri = s->decoded_uri;
   const std::array<boost::string_ref, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
