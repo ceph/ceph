@@ -1658,7 +1658,7 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
   if (blob.is_compressed()) {
     bool discard = false;
     bool all_invalid = true;
-    for (auto e : blob.extents) {
+    for (auto e : blob.get_extents()) {
       if (!e.is_valid()) {
         discard = true;
       } else {
@@ -1672,7 +1672,7 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
     }
   } else {
     size_t pos = 0;
-    for (auto e : blob.extents) {
+    for (auto e : blob.get_extents()) {
       if (!e.is_valid()) {
 	ldout(coll->store->cct, 20) << __func__ << " 0x" << std::hex << pos
 				    << "~" << e.length
@@ -1718,32 +1718,6 @@ void BlueStore::Blob::get_ref(
     length);
 }
 
-// cut it out of extents
-struct vecbuilder {
-  PExtentVector v;
-  uint64_t invalid = 0;
-
-  void add_invalid(uint64_t length) {
-    invalid += length;
-  }
-  void flush() {
-    if (invalid) {
-      v.emplace_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
-	invalid));
-      invalid = 0;
-    }
-  }
-  void add(uint64_t offset, uint64_t length) {
-    if (offset == bluestore_pextent_t::INVALID_OFFSET) {
-      add_invalid(length);
-    }
-    else {
-      flush();
-      v.emplace_back(bluestore_pextent_t(offset, length));
-    }
-  }
-};
-
 bool BlueStore::Blob::put_ref(
   Collection *coll,
   uint32_t offset,
@@ -1767,82 +1741,7 @@ bool BlueStore::Blob::put_ref(
   }
 
   bluestore_blob_t& b = dirty_blob();
-
-  // common case: all of it?
-  if (empty) {
-    uint64_t pos = 0;
-    for (auto& e : b.extents) {
-      if (e.is_valid()) {
-	r->push_back(e);
-      }
-      pos += e.length;
-    }
-    assert(b.is_compressed() || b.get_logical_length() == pos);
-    b.extents.resize(1);
-    b.extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
-    b.extents[0].length = pos;
-    return true;
-  }
-  // remove from pextents according to logical release list
-  vecbuilder vb;
-  auto loffs_it = logical.begin();
-  auto lend = logical.end();
-  uint32_t pext_loffs_start = 0; //starting loffset of the current pextent
-  uint32_t pext_loffs = 0; //current loffset
-  auto pext_it = b.extents.begin();
-  auto pext_end = b.extents.end();
-  while (pext_it != pext_end) {
-    if (loffs_it == lend || pext_loffs_start + pext_it->length <= loffs_it->offset) {
-      int delta0 = pext_loffs - pext_loffs_start;
-      assert(delta0 >= 0);
-      if ((uint32_t)delta0 < pext_it->length) {
-        vb.add(pext_it->offset + delta0, pext_it->length - delta0);
-      }
-      pext_loffs_start += pext_it->length;
-      pext_loffs = pext_loffs_start;
-      ++pext_it;
-    } else {
-      //assert(pext_loffs == pext_loffs_start);
-      int delta0 = pext_loffs - pext_loffs_start;
-      assert(delta0 >= 0);
-
-      int delta = loffs_it->offset - pext_loffs;
-      assert(delta >= 0);
-      if (delta > 0 ) {
-        vb.add(pext_it->offset + delta0, delta);
-        pext_loffs += delta;
-      }
-  
-      PExtentVector::iterator last_r = r->end();
-      if (r->begin() != last_r) {
-        --last_r;
-      }
-      uint32_t to_release = loffs_it->length;
-      do {
-        uint32_t to_release_part =
-          MIN(pext_it->length - delta0 - delta, to_release);
-        auto o = pext_it->offset + delta0 + delta;
-        if (last_r != r->end() && last_r->offset + last_r->length == o) {
-          last_r->length += to_release_part;
-        } else {
-	  last_r = r->emplace(r->end(), o, to_release_part);
-        }
-        to_release -= to_release_part;
-        pext_loffs += to_release_part;
-        if (pext_loffs == pext_loffs_start + pext_it->length) {
-          pext_loffs_start += pext_it->length;
-          pext_loffs = pext_loffs_start;
-          pext_it++;
-          delta0 = delta = 0;
-        }            
-      } while (to_release > 0 && pext_it != pext_end);
-      vb.add_invalid(loffs_it->length - to_release);
-      ++loffs_it;
-    }
-  }
-  vb.flush();
-  b.extents.swap(vb.v);
-  return false;
+  return b.release_extents(empty, logical, r);
 }
 
 void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
@@ -1855,60 +1754,11 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
   bluestore_blob_t &lb = dirty_blob();
   bluestore_blob_t &rb = r->dirty_blob();
 
-  unsigned i = 0;
-  size_t left = blob_offset;
-
   used_in_blob.split(
     blob_offset,
     &(r->used_in_blob));
 
-  uint32_t llen_lb = 0;
-  uint32_t llen_rb = 0;
-  for (auto p = lb.extents.begin(); p != lb.extents.end(); ++p, ++i) {
-    if (p->length <= left) {
-      left -= p->length;
-      llen_lb += p->length;
-      continue;
-    }
-    if (left) {
-      if (p->is_valid()) {
-	rb.extents.emplace_back(bluestore_pextent_t(p->offset + left,
-						    p->length - left));
-      } else {
-	rb.extents.emplace_back(bluestore_pextent_t(
-				  bluestore_pextent_t::INVALID_OFFSET,
-				  p->length - left));
-      }
-      llen_rb += p->length - left;
-      llen_lb += left;
-      p->length = left;
-      ++i;
-      ++p;
-    }
-    while (p != lb.extents.end()) {
-      llen_rb += p->length;
-      rb.extents.push_back(*p++);
-    }
-    lb.extents.resize(i);
-    lb.logical_length = llen_lb;
-    rb.logical_length = llen_rb;
-    break;
-  }
-  rb.flags = lb.flags;
-
-  if (lb.has_csum()) {
-    rb.csum_type = lb.csum_type;
-    rb.csum_chunk_order = lb.csum_chunk_order;
-    size_t csum_order = lb.get_csum_chunk_size();
-    assert(blob_offset % csum_order == 0);
-    size_t pos = (blob_offset / csum_order) * lb.get_csum_value_size();
-    // deep copy csum data
-    bufferptr old;
-    old.swap(lb.csum_data);
-    rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
-    lb.csum_data = bufferptr(old.c_str(), pos);
-  }
-
+  lb.split(blob_offset, rb);
   shared_blob->bc.split(shared_blob->get_cache(), blob_offset, r->shared_blob->bc);
 
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
@@ -3010,7 +2860,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   b->shared_blob->loaded = true;
   b->shared_blob->persistent = new bluestore_shared_blob_t(sbid);
   shared_blob_set.add(this, b->shared_blob.get());
-  for (auto p : blob.extents) {
+  for (auto p : blob.get_extents()) {
     if (p.is_valid()) {
       b->shared_blob->get_ref(
 	p.offset,
@@ -5257,7 +5107,7 @@ int BlueStore::fsck(bool deep)
 	  ++errors;
 	}
 	if (blob.is_compressed()) {
-	  expected_statfs.compressed += blob.compressed_length;
+	  expected_statfs.compressed += blob.get_compressed_payload_length();
 	  expected_statfs.compressed_original += 
 	    i.first->get_referenced_bytes();
 	}
@@ -5277,13 +5127,13 @@ int BlueStore::fsck(bool deep)
 	  sbi.sb = i.first->shared_blob;
 	  sbi.oids.push_back(oid);
 	  sbi.compressed = blob.is_compressed();
-	  for (auto e : blob.extents) {
+	  for (auto e : blob.get_extents()) {
 	    if (e.is_valid()) {
 	      sbi.ref_map.get(e.offset, e.length);
 	    }
 	  }
 	} else {
-	  errors += _fsck_check_extents(oid, blob.extents,
+	  errors += _fsck_check_extents(oid, blob.get_extents(),
 					blob.is_compressed(),
 					used_blocks,
 					expected_statfs);
@@ -9009,7 +8859,6 @@ int BlueStore::_do_alloc_write(
     }
     if (!compressed) {
       dblob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
-      dblob.logical_length = final_length;
       if (l->length() != wi.blob_length) {
 	// hrm, maybe we could do better here, but let's not bother.
 	dout(20) << __func__ << " forcing csum_order to block_size_order "
@@ -9031,9 +8880,9 @@ int BlueStore::_do_alloc_write(
     for (auto& p : extents) {
       bluestore_pextent_t e = bluestore_pextent_t(p);
       txc->allocated.insert(e.offset, e.length);
-      dblob.extents.push_back(e);
       hint = p.end();
     }
+    dblob.allocated(extents);
 
     dout(20) << __func__ << " blob " << *b
 	     << " csum_type " << Checksummer::get_csum_type_string(csum)
@@ -9940,7 +9789,7 @@ int BlueStore::_do_clone_range(
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
       // bump the extent refs on the copied blob's extents
-      for (auto p : blob.extents) {
+      for (auto p : blob.get_extents()) {
 	if (p.is_valid()) {
 	  e.blob->shared_blob->get_ref(p.offset, p.length);
 	}
