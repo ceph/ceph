@@ -107,36 +107,6 @@ namespace librados
     NObjectIteratorImpl *impl;
   };
 
-  // DEPRECATED; Use NObjectIterator
-  class CEPH_RADOS_API ObjectIterator : public std::iterator <std::forward_iterator_tag, std::pair<std::string, std::string> > {
-  public:
-    static const ObjectIterator __EndObjectIterator;
-    ObjectIterator() {}
-    ObjectIterator(ObjListCtx *ctx_);
-    ~ObjectIterator();
-    ObjectIterator(const ObjectIterator &rhs);
-    ObjectIterator& operator=(const ObjectIterator& rhs);
-
-    bool operator==(const ObjectIterator& rhs) const;
-    bool operator!=(const ObjectIterator& rhs) const;
-    const std::pair<std::string, std::string>& operator*() const;
-    const std::pair<std::string, std::string>* operator->() const;
-    ObjectIterator &operator++(); // Preincrement
-    ObjectIterator operator++(int); // Postincrement
-    friend class IoCtx;
-
-    /// get current hash position of the iterator, rounded to the current pg
-    uint32_t get_pg_hash_position() const;
-
-    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
-    uint32_t seek(uint32_t pos);
-
-  private:
-    void get_next();
-    ceph::shared_ptr < ObjListCtx > ctx;
-    std::pair<std::string, std::string> cur_obj;
-  };
-
   class CEPH_RADOS_API ObjectCursor
   {
     public:
@@ -894,13 +864,6 @@ namespace librados
                                    const bufferlist &filter);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
-
-    // DEPRECATED
-    ObjectIterator objects_begin() __attribute__ ((deprecated));
-    /// Start enumerating objects for a pool starting from a hash position
-    ObjectIterator objects_begin(uint32_t start_hash_position) __attribute__ ((deprecated));
-    /// Iterator indicating the end of a pool
-    const ObjectIterator& objects_end() const __attribute__ ((deprecated));
 
     ObjectCursor object_list_begin();
     ObjectCursor object_list_end();

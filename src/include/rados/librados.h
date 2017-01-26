@@ -968,7 +968,7 @@ CEPH_RADOS_API void rados_ioctx_set_namespace(rados_ioctx_t io,
 /** @} obj_loc */
 
 /**
- * @name New Listing Objects
+ * @name Listing Objects
  * @{
  */
 /**
@@ -1002,7 +1002,7 @@ CEPH_RADOS_API uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx,
 /**
  * Get the next object name and locator in the pool
  *
- * *entry and *key are valid until next call to rados_objects_list_*
+ * *entry and *key are valid until next call to rados_nobjects_list_*
  *
  * @param ctx iterator marking where you are in the listing
  * @param entry where to store the name of the entry
@@ -1075,43 +1075,6 @@ CEPH_RADOS_API void rados_object_list_slice(rados_ioctx_t io,
     rados_object_list_cursor *split_start,
     rados_object_list_cursor *split_finish);
 
-
-/** @} New Listing Objects */
-
-/**
- * @name Deprecated Listing Objects
- *
- * Older listing objects interface.  Please use the new interface.
- * @{
- */
-/**
- * @warning Deprecated: Use rados_nobjects_list_open() instead
- */
-CEPH_RADOS_API int rados_objects_list_open(rados_ioctx_t io,
-                                           rados_list_ctx_t *ctx);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_get_pg_hash_position() instead
- */
-CEPH_RADOS_API uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_seek() instead
- */
-CEPH_RADOS_API uint32_t rados_objects_list_seek(rados_list_ctx_t ctx,
-                                                uint32_t pos);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_next() instead
- */
-CEPH_RADOS_API int rados_objects_list_next(rados_list_ctx_t ctx,
-                                           const char **entry,
-                                           const char **key);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_close() instead
- */
-CEPH_RADOS_API void rados_objects_list_close(rados_list_ctx_t ctx);
 
 /** @} Listing Objects */
 
