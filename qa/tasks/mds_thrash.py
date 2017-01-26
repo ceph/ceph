@@ -168,23 +168,26 @@ class MDSThrasher(Greenlet):
 
     def wait_for_stable(self, rank = None, gid = None):
         self.log('waiting for mds cluster to stabilize...')
-        status = self.fs.status()
         itercount = 0
         while True:
+            status = self.fs.status()
             max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
+            ranks = list(status.get_ranks(self.fs.id))
+            actives = filter(lambda info: "up:active" == info['state'] and "laggy_since" not in info, ranks)
             if rank is not None:
+                if len(actives) >= max_mds:
+                    # no replacement can occur!
+                    return status
                 try:
                     info = status.get_rank(self.fs.id, rank)
                     if info['gid'] != gid and "up:active" == info['state']:
                         self.log('mds.{name} has gained rank={rank}, replacing gid={gid}'.format(name = info['name'], rank = rank, gid = gid))
-                        return status, info['name']
+                        return status
                 except:
                     pass # no rank present
             else:
-                ranks = filter(lambda info: "up:active" == info['state'] and "laggy_since" not in info, list(status.get_ranks(self.fs.id)))
-                count = len(ranks)
-                if count >= max_mds:
-                    self.log('mds cluster has {count} alive and active, now stable!'.format(count = count))
+                if len(actives) >= max_mds:
+                    self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
                     return status, None
             itercount = itercount + 1
             if itercount > 300/2: # 5 minutes
@@ -192,7 +195,6 @@ class MDSThrasher(Greenlet):
             elif itercount > 10:
                 self.log('mds map: {status}'.format(status=self.fs.status()))
             time.sleep(2)
-            status = self.fs.status()
 
     def do_thrash(self):
         """
@@ -290,8 +292,7 @@ class MDSThrasher(Greenlet):
                     self.log('{label} down, removed from mdsmap'.format(label=label, since=last_laggy_since))
 
                 # wait for a standby mds to takeover and become active
-                status, takeover_mds = self.wait_for_stable(rank, gid)
-                self.log('New active mds is mds.{_id}'.format(_id=takeover_mds))
+                status = self.wait_for_stable(rank, gid)
 
                 # wait for a while before restarting old active to become new
                 # standby
