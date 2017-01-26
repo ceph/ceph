@@ -640,30 +640,22 @@ librados::WatchCtx2::
 
 
 struct librados::ObjListCtx {
-  bool new_request;
   librados::IoCtxImpl dupctx;
   librados::IoCtxImpl *ctx;
-  Objecter::ListContext *lc;
   Objecter::NListContext *nlc;
+  bool legacy_list_api;
 
-  ObjListCtx(IoCtxImpl *c, Objecter::ListContext *l) : new_request(false), lc(l), nlc(NULL) {
-    // Get our own private IoCtxImpl so that namespace setting isn't changed by caller
-    // between uses.
-    ctx = &dupctx;
-    dupctx.dup(*c);
-  }
-  ObjListCtx(IoCtxImpl *c, Objecter::NListContext *nl) : new_request(true), lc(NULL), nlc(nl) {
-    // Get our own private IoCtxImpl so that namespace setting isn't changed by caller
-    // between uses.
+  ObjListCtx(IoCtxImpl *c, Objecter::NListContext *nl, bool legacy=false)
+    : nlc(nl),
+      legacy_list_api(legacy) {
+    // Get our own private IoCtxImpl so that namespace setting isn't
+    // changed by caller between uses.
     ctx = &dupctx;
     dupctx.dup(*c);
   }
   ~ObjListCtx() {
     ctx = NULL;
-    if (new_request)
-      delete nlc;
-    else
-      delete lc;
+    delete nlc;
   }
 };
 
@@ -691,15 +683,9 @@ librados::NObjectIteratorImpl& librados::NObjectIteratorImpl::operator=(const li
     ctx.reset();
     return *this;
   }
-  if (rhs.ctx->new_request) {
-    Objecter::NListContext *list_ctx = new Objecter::NListContext(*rhs.ctx->nlc);
-    ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
-    cur_obj = rhs.cur_obj;
-  } else {
-    Objecter::ListContext *list_ctx = new Objecter::ListContext(*rhs.ctx->lc);
-    ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
-    cur_obj = rhs.cur_obj;
-  }
+  Objecter::NListContext *list_ctx = new Objecter::NListContext(*rhs.ctx->nlc);
+  ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
+  cur_obj = rhs.cur_obj;
   return *this;
 }
 
@@ -708,19 +694,13 @@ bool librados::NObjectIteratorImpl::operator==(const librados::NObjectIteratorIm
   if (ctx.get() == NULL) {
     if (rhs.ctx.get() == NULL)
       return true;
-    if (rhs.ctx->new_request)
-      return rhs.ctx->nlc->at_end();
-    else
-      return rhs.ctx->lc->at_end();
+    return rhs.ctx->nlc->at_end();
   }
   if (rhs.ctx.get() == NULL) {
     // Redundant but same as ObjectIterator version
     if (ctx.get() == NULL)
       return true;
-    if (ctx->new_request)
-      return ctx->nlc->at_end();
-    else
-      return ctx->lc->at_end();
+    return ctx->nlc->at_end();
   }
   return ctx.get() == rhs.ctx.get();
 }
@@ -760,25 +740,14 @@ uint32_t librados::NObjectIteratorImpl::seek(uint32_t pos)
 void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
 {
   assert(ctx);
-  if (ctx->nlc) {
-    ctx->nlc->filter = bl;
-  }
-
-  if (ctx->lc) {
-    ctx->lc->filter = bl;
-  }
+  ctx->nlc->filter = bl;
 }
 
 void librados::NObjectIteratorImpl::get_next()
 {
   const char *entry, *key, *nspace;
-  if (ctx->new_request) {
-    if (ctx->nlc->at_end())
-      return;
-  } else {
-    if (ctx->lc->at_end())
-      return;
-  }
+  if (ctx->nlc->at_end())
+    return;
   int ret = rados_nobjects_list_next(ctx.get(), &entry, &key, &nspace);
   if (ret == -ENOENT) {
     return;
@@ -798,10 +767,7 @@ void librados::NObjectIteratorImpl::get_next()
 
 uint32_t librados::NObjectIteratorImpl::get_pg_hash_position() const
 {
-  if (ctx->new_request)
-    return ctx->nlc->get_pg_hash_position();
-  else
-    return ctx->lc->get_pg_hash_position();
+  return ctx->nlc->get_pg_hash_position();
 }
 
 ///////////////////////////// NObjectIterator /////////////////////////////
@@ -918,7 +884,8 @@ librados::ObjectIterator::ObjectIterator(const ObjectIterator &rhs)
   *this = rhs;
 }
 
-librados::ObjectIterator& librados::ObjectIterator::operator=(const librados::ObjectIterator &rhs)
+librados::ObjectIterator& librados::ObjectIterator::operator=(
+  const librados::ObjectIterator &rhs)
 {
   if (&rhs == this)
     return *this;
@@ -926,17 +893,17 @@ librados::ObjectIterator& librados::ObjectIterator::operator=(const librados::Ob
     ctx.reset();
     return *this;
   }
-  Objecter::ListContext *list_ctx = new Objecter::ListContext(*rhs.ctx->lc);
-  ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
+  Objecter::NListContext *list_ctx = new Objecter::NListContext(*rhs.ctx->nlc);
+  ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx, true));
   cur_obj = rhs.cur_obj;
   return *this;
 }
 
 bool librados::ObjectIterator::operator==(const librados::ObjectIterator& rhs) const {
   if (ctx.get() == NULL)
-    return rhs.ctx.get() == NULL || rhs.ctx->lc->at_end();
+    return rhs.ctx.get() == NULL || rhs.ctx->nlc->at_end();
   if (rhs.ctx.get() == NULL)
-    return ctx.get() == NULL || ctx->lc->at_end();
+    return ctx.get() == NULL || ctx->nlc->at_end();
   return ctx.get() == rhs.ctx.get();
 }
 
@@ -975,7 +942,7 @@ uint32_t librados::ObjectIterator::seek(uint32_t pos)
 void librados::ObjectIterator::get_next()
 {
   const char *entry, *key;
-  if (ctx->lc->at_end())
+  if (ctx->nlc->at_end())
     return;
   int ret = rados_objects_list_next(ctx.get(), &entry, &key);
   if (ret == -ENOENT) {
@@ -992,7 +959,7 @@ void librados::ObjectIterator::get_next()
 
 uint32_t librados::ObjectIterator::get_pg_hash_position() const
 {
-  return ctx->lc->get_pg_hash_position();
+  return ctx->nlc->get_pg_hash_position();
 }
 
 const librados::ObjectIterator librados::ObjectIterator::__EndObjectIterator(NULL);
@@ -4315,11 +4282,6 @@ extern "C" uint32_t rados_nobjects_list_seek(rados_list_ctx_t listctx,
 					    uint32_t pos)
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
-
-  // Let's do it the old way for backward compatbility if not using ANY_NSPACES
-  if (!lh->new_request)
-    return rados_objects_list_seek(listctx, pos);
-
   tracepoint(librados, rados_nobjects_list_seek_enter, listctx, pos);
   uint32_t r = lh->ctx->nlist_seek(lh->nlc, pos);
   tracepoint(librados, rados_nobjects_list_seek_exit, r);
@@ -4330,9 +4292,6 @@ extern "C" uint32_t rados_nobjects_list_get_pg_hash_position(
   rados_list_ctx_t listctx)
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
-  if (!lh->new_request)
-    return rados_objects_list_get_pg_hash_position(listctx);
-
   tracepoint(librados, rados_nobjects_list_get_pg_hash_position_enter, listctx);
   uint32_t retval = lh->nlc->get_pg_hash_position();
   tracepoint(librados, rados_nobjects_list_get_pg_hash_position_exit, retval);
@@ -4346,11 +4305,11 @@ extern "C" int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   if (ctx->oloc.nspace == librados::all_nspaces)
     return -EINVAL;
-  Objecter::ListContext *h = new Objecter::ListContext;
+  Objecter::NListContext *h = new Objecter::NListContext;
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
   h->nspace = ctx->oloc.nspace;
-  *listh = (void *)new librados::ObjListCtx(ctx, h);
+  *listh = (void *)new librados::ObjListCtx(ctx, h, true);
   tracepoint(librados, rados_objects_list_open_exit, 0, *listh);
   return 0;
 }
@@ -4369,7 +4328,7 @@ extern "C" uint32_t rados_objects_list_seek(rados_list_ctx_t listctx,
 {
   tracepoint(librados, rados_objects_list_seek_enter, listctx, pos);
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
-  uint32_t r = lh->ctx->list_seek(lh->lc, pos);
+  uint32_t r = lh->ctx->nlist_seek(lh->nlc, pos);
   tracepoint(librados, rados_objects_list_seek_exit, r);
   return r;
 }
@@ -4379,7 +4338,7 @@ extern "C" uint32_t rados_objects_list_get_pg_hash_position(
 {
   tracepoint(librados, rados_objects_list_get_pg_hash_position_enter, listctx);
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
-  uint32_t retval = lh->lc->get_pg_hash_position();
+  uint32_t retval = lh->nlc->get_pg_hash_position();
   tracepoint(librados, rados_objects_list_get_pg_hash_position_exit, retval);
   return retval;
 }
@@ -4388,14 +4347,6 @@ extern "C" int rados_nobjects_list_next(rados_list_ctx_t listctx, const char **e
 {
   tracepoint(librados, rados_nobjects_list_next_enter, listctx);
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
-  if (!lh->new_request) {
-    int retval = rados_objects_list_next(listctx, entry, key);
-    // Let's return nspace as you would expect even when asking
-    // for a specific one, since you know what it must be.
-    if (retval == 0 && nspace)
-      *nspace = lh->ctx->oloc.nspace.c_str();
-    return retval;
-  }
   Objecter::NListContext *h = lh->nlc;
 
   // if the list is non-empty, this method has been called before
@@ -4434,10 +4385,10 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
 {
   tracepoint(librados, rados_objects_list_next_enter, listctx);
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
-  Objecter::ListContext *h = lh->lc;
+  Objecter::NListContext *h = lh->nlc;
 
   // Calling wrong interface after rados_nobjects_list_open()
-  if (lh->new_request)
+  if (!lh->legacy_list_api)
     return -EINVAL;
 
   // if the list is non-empty, this method has been called before
@@ -4446,7 +4397,7 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
     h->list.pop_front();
 
   if (h->list.empty()) {
-    int ret = lh->ctx->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
+    int ret = lh->ctx->nlist(lh->nlc, RADOS_LIST_MAX_ENTRIES);
     if (ret < 0) {
       tracepoint(librados, rados_objects_list_next_exit, ret, NULL, NULL);
       return ret;
@@ -4457,11 +4408,11 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
     }
   }
 
-  *entry = h->list.front().first.name.c_str();
+  *entry = h->list.front().get_oid().c_str();
 
   if (key) {
-    if (h->list.front().second.size())
-      *key = h->list.front().second.c_str();
+    if (h->list.front().get_locator().size())
+      *key = h->list.front().get_locator().c_str();
     else
       *key = NULL;
   }
