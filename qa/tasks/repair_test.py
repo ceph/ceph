@@ -275,6 +275,7 @@ def task(ctx, config):
           - 'scrub 0 missing, 1 inconsistent'
           - 'scrub 1 errors'
           - 'size 1 != known size'
+          - 'Regular scrub request, losing deep-scrub details'
         conf:
           osd:
             filestore debug inject read err: true
