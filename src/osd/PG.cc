@@ -2518,7 +2518,7 @@ void PG::_update_calc_stats()
       // in acting and not in up    Compute misplaced objects excluding num_missing
       // in up and not in acting    Compute total objects already backfilled
       if (in_acting) {
-        int osd_missing;
+        unsigned osd_missing;
         // primary handling
         if (p == pg_whoami) {
           osd_missing = pg_log.get_missing().num_missing();
@@ -2532,8 +2532,8 @@ void PG::_update_calc_stats()
         }
         missing += osd_missing;
         // Count non-missing objects not in up as misplaced
-        if (!in_up)
-	  misplaced += MAX(0, num_objects - osd_missing);
+        if (!in_up && num_objects > osd_missing)
+	  misplaced += num_objects - osd_missing;
       } else {
         assert(in_up && !in_acting);
 
