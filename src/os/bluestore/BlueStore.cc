@@ -8826,6 +8826,17 @@ int BlueStore::_do_truncate(
     o->extent_map.punch_hole(offset, length, &wctx.old_extents);
     o->extent_map.dirty_range(txc->t, offset, length);
     _wctx_finish(txc, c, o, &wctx);
+
+    // if we have shards past EOF, ask for a reshard
+    if (!o->onode.extent_map_shards.empty() &&
+	o->onode.extent_map_shards.back().offset >= offset) {
+      dout(10) << __func__ << "  request reshard past EOF" << dendl;
+      if (offset) {
+	o->extent_map.request_reshard(offset - 1, offset + length);
+      } else {
+	o->extent_map.request_reshard(0, length);
+      }
+    }
   }
 
   o->onode.size = offset;
