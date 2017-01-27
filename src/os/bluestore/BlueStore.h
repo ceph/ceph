@@ -662,7 +662,7 @@ public:
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
-      bluestore_onode_t::shard_info *shard_info;
+      bluestore_onode_t::shard_info *shard_info = nullptr;
       uint32_t offset = 0;   ///< starting logical offset
       unsigned extents = 0;  ///< count extents in this shard
       bool loaded = false;   ///< true if shard is loaded
