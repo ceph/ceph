@@ -1793,6 +1793,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 
     auto p = shards.begin();
     unsigned pos = 0;
+    auto prev_p = p;
     while (p != shards.end()) {
       auto n = p;
       ++n;
@@ -1815,19 +1816,38 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 
 	dout(20) << __func__ << " shard 0x" << std::hex
 		 << p->offset << std::dec << " is " << len
-		 << " bytes (was " << p->shard_info->bytes << ") from " << nn
-		 << " extents" << dendl;
+		 << " bytes (was " << p->shard_info->bytes << ") from "
+		 << p->extents << " extents" << dendl;
 
-        // indicate need for reshard if force mode selected, len >
-        // shard_max size OR non-last shard size is below the min
-        // threshold. The last check is to avoid potential unneeded
-        // reshardings since this might happen permanently.
-        if (!force &&
-             (len > cct->_conf->bluestore_extent_map_shard_max_size ||
-               (n != shards.end() &&
-		len < g_conf->bluestore_extent_map_shard_min_size))) {
-	  request_reshard(p->offset, endoff);
-          return;
+        if (!force) {
+	  if (len > cct->_conf->bluestore_extent_map_shard_max_size) {
+	    // we are big; reshard ourselves
+	    request_reshard(p->offset, endoff);
+	    return;
+	  }
+	  // avoid resharding the trailing shard, even if it is small
+	  if (n != shards.end() &&
+	      len < g_conf->bluestore_extent_map_shard_min_size) {
+	    // we are small; combine with a neighbor
+	    if (p == shards.begin() && endoff == OBJECT_MAX_SIZE) {
+	      // we are an only shard
+	      request_reshard(0, OBJECT_MAX_SIZE);
+	    } else if (p == shards.begin()) {
+	      // combine with next shard
+	      request_reshard(p->offset, endoff + 1);
+	    } else if (endoff == OBJECT_MAX_SIZE) {
+	      // combine with previous shard
+	      request_reshard(prev_p->offset, endoff);
+	    } else {
+	      // combine with the smaller of the two
+	      if (prev_p->shard_info->bytes > n->shard_info->bytes) {
+		request_reshard(p->offset, endoff + 1);
+	      } else {
+		request_reshard(prev_p->offset, endoff);
+	      }
+	    }
+	    return;
+	  }
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
@@ -1836,6 +1856,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
         dirty_shards.push_back(encoded_shards[pos]);
 	p->dirty = false;
       }
+      prev_p = p;
       p = n;
       ++pos;
     }
