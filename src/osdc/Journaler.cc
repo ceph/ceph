@@ -510,12 +510,17 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
   }
 
   // adjust safe_pos
-  assert(pending_safe.count(start));
-  pending_safe.erase(start);
-  if (pending_safe.empty())
-    safe_pos = flush_pos;
-  else
-    safe_pos = *pending_safe.begin();
+  std::set<uint64_t>::iterator start_iter = pending_safe.find(start);
+  assert(start_iter != pending_safe.end());
+  if (start_iter == pending_safe.begin()) {
+    pending_safe.erase(start_iter);
+    if (pending_safe.empty())
+      safe_pos = flush_pos;
+    else
+      safe_pos = *pending_safe.begin();
+  } else {
+    pending_safe.erase(start_iter);
+  }
 
   ldout(cct, 10) << "_finish_flush safe from " << start
 		 << ", pending_safe " << pending_safe
