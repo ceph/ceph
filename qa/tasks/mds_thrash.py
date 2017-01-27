@@ -322,11 +322,11 @@ class MDSThrasher(Greenlet):
                         raise RuntimeError('timeout waiting for MDS to revive')
                     status = self.fs.status()
                     info = status.get_mds(name)
-                    if info and info['state'] in ('up:standby', 'up:standby-replay'):
+                    if info and info['state'] in ('up:standby', 'up:standby-replay', 'up:active'):
                         self.log('{label} reported in {state} state'.format(label=label, state=info['state']))
                         break
                     self.log(
-                        'waiting till mds map indicates {label} is in standby or standby-replay'.format(label=label))
+                        'waiting till mds map indicates {label} is in active, standby or standby-replay'.format(label=label))
                     time.sleep(2)
 
         for stat in stats:
