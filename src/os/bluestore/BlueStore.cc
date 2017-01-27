@@ -1749,7 +1749,7 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
       o->c->store->cct->_conf->bluestore_extent_map_inline_shard_prealloc_size) {
 }
 
-bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
+void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
   auto cct = onode->c->store->cct; //used by dout
@@ -1761,9 +1761,11 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
       assert(!never_happen);
       size_t len = inline_bl.length();
-      dout(20) << __func__ << " inline shard " << len << " bytes from " << n<< " extents" << dendl;
+      dout(20) << __func__ << " inline shard " << len << " bytes from " << n
+	       << " extents" << dendl;
       if (!force && len > cct->_conf->bluestore_extent_map_shard_max_size) {
-	return true;
+	request_reshard(0, OBJECT_MAX_SIZE);
+	return;
       }
     }
     // will persist in the onode key, see below
@@ -1804,7 +1806,11 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	unsigned nn;
         bufferlist& bl = encoded_shards[pos].bl;
 	if (encode_some(p->offset, endoff - p->offset, bl, &nn)) {
-	  return true;
+	  if (!force) {
+	    return;
+	  }
+	  dout(20) << __func__ << "  encode_some wants reshard, ignoring"
+		   << dendl;
 	}
         size_t len = bl.length();
 
@@ -1813,13 +1819,16 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 		 << " bytes (was " << p->shard_info->bytes << ") from " << nn
 		 << " extents" << dendl;
 
-        //indicate need for reshard if force mode selected, len > shard_max size OR
-        //non-last shard size is below the min threshold. The last check is to avoid potential
-        //unneeded reshardings since this might happen permanently.
+        // indicate need for reshard if force mode selected, len >
+        // shard_max size OR non-last shard size is below the min
+        // threshold. The last check is to avoid potential unneeded
+        // reshardings since this might happen permanently.
         if (!force &&
              (len > cct->_conf->bluestore_extent_map_shard_max_size ||
-               (n != shards.end() && len < g_conf->bluestore_extent_map_shard_min_size))) {
-          return true;
+               (n != shards.end() &&
+		len < g_conf->bluestore_extent_map_shard_min_size))) {
+	  request_reshard(p->offset, endoff);
+          return;
         }
 	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = len;
@@ -1843,7 +1852,6 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       ++it;
     }
   }
-  return false;
 }
 
 void BlueStore::ExtentMap::reshard()
@@ -2022,6 +2030,7 @@ bool BlueStore::ExtentMap::encode_some(
     if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	       << std::dec << " hit new spanning blob " << *p << dendl;
+      request_reshard(p->blob_start(), p->blob_end());
       return true;
     }
     denc_varint(0, bound); // blobid
@@ -6858,12 +6867,14 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize onodes
   for (auto o : txc->onodes) {
     // finalize extent_map shards
-    bool reshard = o->extent_map.needs_reshard();
-    if (!reshard) {
-      reshard = o->extent_map.update(t, false);
+    if (!o->extent_map.needs_reshard()) {
+      o->extent_map.update(t, false);
     }
-    if (reshard) {
-      dout(20) << __func__ << "  resharding extents for " << o->oid << dendl;
+    if (o->extent_map.needs_reshard()) {
+      dout(20) << __func__ << "  resharding extents for " << o->oid
+	       << " over 0x[" << std::hex << o->extent_map.needs_reshard_begin
+	       << "," << o->extent_map.needs_reshard_end << ")" << std::dec
+	       << dendl;
       string key;
       for (auto &s : o->extent_map.shards) {
 	generate_extent_shard_key_and_apply(o->key, s.offset, &key,
@@ -6874,10 +6885,11 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
       }
       o->extent_map.fault_range(db, 0, o->onode.size);
       o->extent_map.reshard();
-      reshard = o->extent_map.update(t, true);
-      if (reshard) {
+      o->extent_map.update(t, true);
+      if (o->extent_map.needs_reshard()) {
 	dout(20) << __func__ << " warning: still wants reshard, check options?"
 		 << dendl;
+	o->extent_map.clear_needs_reshard();
       }
       logger->inc(l_bluestore_onode_reshard);
     }
