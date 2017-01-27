@@ -671,7 +671,23 @@ public:
 
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
-    bool needs_reshard = false;   ///< true if we must reshard
+    uint32_t needs_reshard_begin = 0;
+    uint32_t needs_reshard_end = 0;
+
+    bool needs_reshard() const {
+      return needs_reshard_end > needs_reshard_begin;
+    }
+    void clear_needs_reshard() {
+      needs_reshard_begin = needs_reshard_end = 0;
+    }
+    void request_reshard(uint32_t begin, uint32_t end) {
+      if (begin < needs_reshard_begin) {
+	needs_reshard_begin = begin;
+      }
+      if (end > needs_reshard_end) {
+	needs_reshard_end = end;
+      }
+    }
 
     struct DeleteDisposer {
       void operator()(Extent *e) { delete e; }
@@ -686,7 +702,7 @@ public:
       extent_map.clear_and_dispose(DeleteDisposer());
       shards.clear();
       inline_bl.clear();
-      needs_reshard = false;
+      clear_needs_reshard();
     }
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
