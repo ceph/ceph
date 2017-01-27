@@ -19,6 +19,7 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 #include "OSDMonitor.h"
+#include "PGMonitor.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
@@ -1579,6 +1580,15 @@ int MDSMonitor::management_command(
     if (metadata < 0) {
       ss << "pool '" << metadata_name << "' does not exist";
       return -ENOENT;
+    }
+
+    string force;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
+    if (force != "--force" && metadata_num_objects > 0) {
+      ss << "pool '" << metadata_name
+	 << "' already contains some objects. Use an empty pool instead.";
+      return -EINVAL;
     }
 
     string data_name;
