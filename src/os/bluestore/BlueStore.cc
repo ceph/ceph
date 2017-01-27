@@ -1876,14 +1876,6 @@ void BlueStore::ExtentMap::reshard(
       );
   }
 
-  // un-span all blobs
-  auto p = spanning_blob_map.begin();
-  while (p != spanning_blob_map.end()) {
-    p->second->id = -1;
-    dout(30) << __func__ << " un-spanning " << *p->second << dendl;
-    p = spanning_blob_map.erase(p);
-  }
-
   unsigned bytes = 0;
   if (onode->onode.extent_map_shards.empty()) {
     bytes = inline_bl.length();
@@ -1906,7 +1898,14 @@ void BlueStore::ExtentMap::reshard(
   unsigned max_blob_end = 0;
   for (auto& e: extent_map) {
     dout(30) << " extent " << e << dendl;
-    assert(!e.blob->is_spanning());
+
+    // unspan spanning blobs
+    if (e.blob->is_spanning()) {
+      spanning_blob_map.erase(e.blob->id);
+      e.blob->id = -1;
+      dout(30) << __func__ << " un-spanning " << *e.blob << dendl;
+    }
+
     // disfavor shard boundaries that span a blob
     bool would_span = (e.logical_offset < max_blob_end) || e.blob_offset;
     if (estimate &&
