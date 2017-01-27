@@ -1768,10 +1768,10 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	return;
       }
     }
-    // will persist in the onode key, see below
+    // will persist in the onode key.
   } else {
 
-    struct dirty_shard_t{
+    struct dirty_shard_t {
       uint32_t offset = 0;
       bufferlist bl;
       boost::intrusive::list_member_hook<> dirty_list_item;
@@ -1785,8 +1785,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
         &dirty_shard_t::dirty_list_item> > dirty_shard_list_t;
 
     vector<dirty_shard_t> encoded_shards;
-    //allocate slots for all shards in a single call instead of
-    //doing multiple allocations - one per each dirty shard
+    // allocate slots for all shards in a single call instead of
+    // doing multiple allocations - one per each dirty shard
     encoded_shards.resize(shards.size()); 
 
     dirty_shard_list_t dirty_shards;
@@ -1839,7 +1839,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       p = n;
       ++pos;
     }
-    //schedule DB update for dirty shards
+
+    // schedule DB update for dirty shards
     auto it = dirty_shards.begin();
     string key;
     while (it != dirty_shards.end()) {
