@@ -721,7 +721,9 @@ public:
     }
 
     void update(KeyValueDB::Transaction t, bool force);
-    void reshard();
+    void reshard(
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);

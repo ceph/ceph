@@ -1854,12 +1854,27 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
   }
 }
 
-void BlueStore::ExtentMap::reshard()
+void BlueStore::ExtentMap::reshard(
+  KeyValueDB *db,
+  KeyValueDB::Transaction t)
 {
   auto cct = onode->c->store->cct; // used by dout
 
   dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
 	   << needs_reshard_end << ")" << std::dec << dendl;
+
+  fault_range(db, 0, OBJECT_MAX_SIZE);
+
+  // remove old keys
+  string key;
+  for (auto &s : shards) {
+    generate_extent_shard_key_and_apply(
+      onode->key, s.offset, &key,
+      [&](const string& final_key) {
+	t->rmkey(PREFIX_OBJ, final_key);
+      }
+      );
+  }
 
   // un-span all blobs
   auto p = spanning_blob_map.begin();
@@ -6872,20 +6887,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
       o->extent_map.update(t, false);
     }
     if (o->extent_map.needs_reshard()) {
-      dout(20) << __func__ << "  resharding extents for " << o->oid
-	       << " over 0x[" << std::hex << o->extent_map.needs_reshard_begin
-	       << "," << o->extent_map.needs_reshard_end << ")" << std::dec
-	       << dendl;
-      string key;
-      for (auto &s : o->extent_map.shards) {
-	generate_extent_shard_key_and_apply(o->key, s.offset, &key,
-          [&](const string& final_key) {
-            t->rmkey(PREFIX_OBJ, final_key);
-          }
-        );
-      }
-      o->extent_map.fault_range(db, 0, o->onode.size);
-      o->extent_map.reshard();
+      o->extent_map.reshard(db, t);
       o->extent_map.update(t, true);
       if (o->extent_map.needs_reshard()) {
 	dout(20) << __func__ << " warning: still wants reshard, check options?"
