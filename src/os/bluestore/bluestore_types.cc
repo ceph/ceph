@@ -526,17 +526,18 @@ ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& m)
   out << "use_tracker(" << std::hex;
   if (!m.num_au) {
     out << "0x" << m.au_size 
-        << " :"
+        << " "
         << "0x" << m.total_bytes;
   } else {
     out << "0x" << m.num_au 
         << "*0x" << m.au_size 
-	<< " :";
+	<< " 0x[";
     for (size_t i = 0; i < m.num_au; ++i) {
       if (i != 0)
 	out << ",";
-      out << "0x" << m.bytes_per_au[i];
+      out << m.bytes_per_au[i];
     }
+    out << "]";
   }
   out << std::dec << ")";
   return out;
