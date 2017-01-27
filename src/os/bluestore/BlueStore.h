@@ -719,7 +719,7 @@ public:
       return p->second;
     }
 
-    bool update(KeyValueDB::Transaction t, bool force);
+    void update(KeyValueDB::Transaction t, bool force);
     void reshard();
 
     /// initialize Shards from the onode
