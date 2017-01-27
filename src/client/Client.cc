@@ -2224,6 +2224,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 	   << dendl;
   
   request->mds = -1;
+  request->item.remove_myself();
   request->num_fwd = fwd->get_num_fwd();
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->Signal();
