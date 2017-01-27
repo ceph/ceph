@@ -4782,6 +4782,12 @@ int BlueStore::fsck(bool deep)
 	dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
 	expecting_shards.push_back(string());
 	get_extent_shard_key(o->key, s.offset, &expecting_shards.back());
+	if (s.offset >= o->onode.size) {
+	  derr << __func__ << " " << oid << " shard 0x" << std::hex
+	       << s.offset << " past EOF at 0x" << o->onode.size
+	       << std::dec << dendl;
+	  ++errors;
+	}
       }
       // lextents
       uint64_t pos = 0;
