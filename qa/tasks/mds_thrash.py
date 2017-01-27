@@ -4,6 +4,7 @@ Thrash mds by simulating failures
 import logging
 import contextlib
 import ceph_manager
+import itertools
 import random
 import time
 
@@ -172,8 +173,7 @@ class MDSThrasher(Greenlet):
 
     def wait_for_stable(self, rank = None, gid = None):
         self.log('waiting for mds cluster to stabilize...')
-        itercount = 0
-        while True:
+        for itercount in itertools.count():
             status = self.fs.status()
             max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
             ranks = list(status.get_ranks(self.fs.id))
@@ -203,7 +203,6 @@ class MDSThrasher(Greenlet):
                  raise RuntimeError('timeout waiting for cluster to stabilize')
             elif itercount % 5 == 0:
                 self.log('mds map: {status}'.format(status=self.fs.status()))
-            itercount = itercount + 1
             time.sleep(2)
 
     def do_thrash(self):
@@ -318,7 +317,9 @@ class MDSThrasher(Greenlet):
                 self.log('reviving {label}'.format(label=label))
                 self.revive_mds(name)
 
-                while True:
+                for itercount in itertools.count():
+                    if itercount > 300/2: # 5 minutes
+                        raise RuntimeError('timeout waiting for MDS to revive')
                     status = self.fs.status()
                     info = status.get_mds(name)
                     if info and info['state'] in ('up:standby', 'up:standby-replay'):
