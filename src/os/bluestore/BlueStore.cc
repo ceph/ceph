@@ -1884,14 +1884,6 @@ void BlueStore::ExtentMap::reshard(
     p = spanning_blob_map.erase(p);
   }
 
-  if (extent_map.size() <= 1) {
-    dout(20) << __func__ << " <= 1 extent, going inline" << dendl;
-    shards.clear();
-    onode->onode.extent_map_shards.clear();
-    clear_needs_reshard();
-    return;
-  }
-
   unsigned bytes = 0;
   if (onode->onode.extent_map_shards.empty()) {
     bytes = inline_bl.length();
@@ -1903,9 +1895,9 @@ void BlueStore::ExtentMap::reshard(
   unsigned target = cct->_conf->bluestore_extent_map_shard_target_size;
   unsigned slop = target *
     cct->_conf->bluestore_extent_map_shard_target_size_slop;
-  unsigned extent_avg = bytes / extent_map.size();
-  dout(20) << __func__ << " extent_avg " << extent_avg << " target " << target
-	   << " slop " << slop << dendl;
+  unsigned extent_avg = bytes / MAX(1, extent_map.size());
+  dout(20) << __func__ << "  extent_avg " << extent_avg << ", target " << target
+	   << ", slop " << slop << dendl;
 
   // reshard
   unsigned estimate = 0;
