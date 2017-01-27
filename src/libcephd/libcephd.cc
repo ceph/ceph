@@ -7,6 +7,7 @@
 #include "common/PluginRegistry.h"
 #include "compressor/snappy/CompressionPluginSnappy.h"
 #include "compressor/zlib/CompressionPluginZlib.h"
+#include "compressor/zstd/CompressionPluginZstd.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
 #include "erasure-code/isa/ErasureCodePluginIsa.h"
@@ -164,6 +165,13 @@ void cephd_preload_embedded_plugins()
 
     plugin = new CompressionPluginZlib(g_ceph_context);
     r = reg->add("compressor", "zlib", plugin);
+    if (r == -EEXIST) {
+      delete plugin;
+    }
+    assert(r == 0);
+
+    plugin = new CompressionPluginZstd(g_ceph_context);
+    r = reg->add("compressor", "zstd", plugin);
     if (r == -EEXIST) {
       delete plugin;
     }

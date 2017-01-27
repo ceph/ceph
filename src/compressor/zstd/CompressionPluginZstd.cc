@@ -12,32 +12,11 @@
  *
  */
 
-#include <ostream>
-
-// -----------------------------------------------------------------------------
+#include "acconfig.h"
 #include "ceph_ver.h"
-#include "compressor/CompressionPlugin.h"
-#include "ZstdCompressor.h"
-// -----------------------------------------------------------------------------
+#include "CompressionPluginZstd.h"
 
-class CompressionPluginZstd : public CompressionPlugin {
-
-public:
-
-  explicit CompressionPluginZstd(CephContext* cct) : CompressionPlugin(cct)
-  {}
-
-  virtual int factory(CompressorRef *cs,
-                      std::ostream *ss)
-  {
-    if (compressor == 0) {
-      ZstdCompressor *interface = new ZstdCompressor();
-      compressor = CompressorRef(interface);
-    }
-    *cs = compressor;
-    return 0;
-  }
-};
+#ifndef BUILDING_FOR_EMBEDDED
 
 // -----------------------------------------------------------------------------
 
@@ -56,3 +35,5 @@ int __ceph_plugin_init(CephContext *cct,
 
   return instance->add(type, name, new CompressionPluginZstd(cct));
 }
+
+#endif // !BUILDING_FOR_EMBEDDED
