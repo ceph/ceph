@@ -1753,7 +1753,7 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
   auto cct = onode->c->store->cct; //used by dout
-  assert(!needs_reshard);
+  assert(!needs_reshard());
   if (onode->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
@@ -1848,9 +1848,10 @@ bool BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 
 void BlueStore::ExtentMap::reshard()
 {
-  auto cct = onode->c->store->cct; //used by dout
+  auto cct = onode->c->store->cct; // used by dout
 
-  needs_reshard = false;
+  dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
+	   << needs_reshard_end << ")" << std::dec << dendl;
 
   // un-span all blobs
   auto p = spanning_blob_map.begin();
@@ -1864,6 +1865,7 @@ void BlueStore::ExtentMap::reshard()
     dout(20) << __func__ << " <= 1 extent, going inline" << dendl;
     shards.clear();
     onode->onode.extent_map_shards.clear();
+    clear_needs_reshard();
     return;
   }
 
@@ -1989,6 +1991,8 @@ void BlueStore::ExtentMap::reshard()
       }
     }
   }
+
+  clear_needs_reshard();
 }
 
 bool BlueStore::ExtentMap::encode_some(
@@ -2482,8 +2486,8 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   }
   Extent *le = new Extent(logical_offset, blob_offset, length, b);
   extent_map.insert(*le);
-  if (!needs_reshard && spans_shard(logical_offset, length)) {
-    needs_reshard = true;
+  if (spans_shard(logical_offset, length)) {
+    request_reshard(logical_offset, logical_offset + length);
   }
   return le;
 }
@@ -6854,7 +6858,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize onodes
   for (auto o : txc->onodes) {
     // finalize extent_map shards
-    bool reshard = o->extent_map.needs_reshard;
+    bool reshard = o->extent_map.needs_reshard();
     if (!reshard) {
       reshard = o->extent_map.update(t, false);
     }
