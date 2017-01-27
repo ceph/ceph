@@ -664,6 +664,7 @@ public:
     struct Shard {
       bluestore_onode_t::shard_info *shard_info;
       uint32_t offset = 0;   ///< starting logical offset
+      unsigned extents = 0;  ///< count extents in this shard
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
@@ -707,7 +708,7 @@ public:
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
-    void decode_some(bufferlist& bl);
+    unsigned decode_some(bufferlist& bl);
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(bufferlist::contiguous_appender& p);

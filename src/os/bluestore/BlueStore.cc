@@ -1803,9 +1803,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	} else {
 	  endoff = n->offset;
 	}
-	unsigned nn;
         bufferlist& bl = encoded_shards[pos].bl;
-	if (encode_some(p->offset, endoff - p->offset, bl, &nn)) {
+	if (encode_some(p->offset, endoff - p->offset, bl, &p->extents)) {
 	  if (!force) {
 	    return;
 	  }
@@ -2106,7 +2105,7 @@ bool BlueStore::ExtentMap::encode_some(
   return false;
 }
 
-void BlueStore::ExtentMap::decode_some(bufferlist& bl)
+unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
 {
   /*
   derr << __func__ << ":";
@@ -2177,6 +2176,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   }
 
   assert(n == num);
+  return num;
 }
 
 void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
@@ -2278,7 +2278,7 @@ void BlueStore::ExtentMap::fault_range(
           }
         }
       );
-      decode_some(v);
+      p->extents = decode_some(v);
       p->loaded = true;
       dout(20) << __func__ << " open shard 0x" << std::hex << p->offset
 	       << std::dec << " (" << v.length() << " bytes)" << dendl;
