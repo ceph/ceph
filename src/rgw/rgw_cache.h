@@ -231,7 +231,7 @@ public:
               bufferlist& data,
               RGWObjVersionTracker *objv_tracker,
               real_time set_mtime) override;
-  int put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl, off_t ofs, bool exclusive,
+  int put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl, bool exclusive,
                           RGWObjVersionTracker *objv_tracker = nullptr) override;
 
   int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
@@ -423,36 +423,30 @@ int RGWCache<T>::put_system_obj_impl(rgw_raw_obj& obj, uint64_t size, real_time 
 }
 
 template <class T>
-int RGWCache<T>::put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& data, off_t ofs, bool exclusive,
+int RGWCache<T>::put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& data, bool exclusive,
                                      RGWObjVersionTracker *objv_tracker)
 {
   rgw_pool pool;
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
   ObjectCacheInfo info;
-  bool cacheable = false;
-  if ((ofs == 0) || (ofs == -1)) {
-    cacheable = true;
-    info.data = data;
-    info.meta.size = data.length();
-    info.status = 0;
-    info.flags = CACHE_FLAG_DATA;
-  }
+  info.data = data;
+  info.meta.size = data.length();
+  info.status = 0;
+  info.flags = CACHE_FLAG_DATA;
   if (objv_tracker) {
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
   }
-  int ret = T::put_system_obj_data(ctx, obj, data, ofs, exclusive, objv_tracker);
-  if (cacheable) {
-    string name = normal_name(pool, oid);
-    if (ret >= 0) {
-      cache.put(name, info, NULL);
-      int r = distribute_cache(name, obj, info, UPDATE_OBJ);
-      if (r < 0)
-        mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
-    } else {
-      cache.remove(name);
-    }
+  int ret = T::put_system_obj_data(ctx, obj, data, exclusive, objv_tracker);
+  string name = normal_name(pool, oid);
+  if (ret >= 0) {
+    cache.put(name, info, NULL);
+    int r = distribute_cache(name, obj, info, UPDATE_OBJ);
+    if (r < 0)
+      mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+  } else {
+    cache.remove(name);
   }
 
   return ret;

@@ -3002,10 +3002,10 @@ public:
               ceph::real_time set_mtime /* 0 for don't set */);
 
   virtual int put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
-              off_t ofs, bool exclusive,
+              bool exclusive,
               RGWObjVersionTracker *objv_tracker = nullptr);
-  int aio_put_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
-                        off_t ofs, bool exclusive, void **handle);
+  int aio_put_obj_data(rgw_raw_obj& obj, bufferlist& bl,
+                       off_t ofs, bool exclusive, void **handle);
 
   int put_system_obj(void *ctx, rgw_raw_obj& obj, const char *data, size_t len, bool exclusive,
               ceph::real_time *mtime, map<std::string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
