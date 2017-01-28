@@ -1742,7 +1742,7 @@ function test_admin_heap_profiler()
 
   [[ $do_test -eq 0 ]] && return 0
 
-  admin_socket = "--admin-deamon out/osd.0.asok"
+  admin_socket = "--admin-daemon out/osd.0.asok"
 
   ceph --admin $admin_socket heap start_profiler
   ceph --admin $admin_socket heap dump

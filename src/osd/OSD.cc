@@ -1872,7 +1872,7 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+  bool call(std::string admin_command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) override {
     stringstream ss;
     bool r = osd->asok_command(admin_command, cmdmap, format, ss);
@@ -1911,12 +1911,12 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_historic_ops") {
+  } else if (admin_command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f, false)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_historic_ops_by_duration") {
+  } else if (admin_command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
@@ -2046,13 +2046,13 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
-  } else if (command == "dump_objectstore_kv_stats") {
+  } else if (admin_command == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
-  } else if (command == "dump_scrubs") {
+  } else if (admin_command == "dump_scrubs") {
     service.dumps_scrub(f);
   } else if (admin_command == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
-  } else if (command == "flush_store_cache") {
+  } else if (admin_command == "flush_store_cache") {
     store->flush_cache();
   } else {
     assert(0 == "broken asok registration");
@@ -9567,13 +9567,12 @@ int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os)
   }
   
   string cmd;
-  std::vector<std::string> cmd_vec;
- 
-  if (false == cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
+  if (!cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
         os << "unable to get value for command \"" << cmd << "\"";
        return -EINVAL;
    }
   
+  std::vector<std::string> cmd_vec;
   get_str_vec(cmd, cmd_vec);
   
   ceph_heap_profiler_handle_command(cmd_vec, os);
