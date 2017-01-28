@@ -525,9 +525,7 @@ namespace librbd {
 
     void snapshot_list_start(librados::ObjectReadOperation *op,
                              const std::vector<snapid_t> &ids) {
-      for (vector<snapid_t>::const_iterator it = ids.begin();
-           it != ids.end(); ++it) {
-        snapid_t snap_id = it->val;
+      for (auto snap_id : ids) {
         bufferlist bl1, bl2, bl3, bl4;
         ::encode(snap_id, bl1);
         op->exec("rbd", "get_snapshot_name", bl1);
@@ -594,21 +592,63 @@ namespace librbd {
                                   protection_statuses);
     }
 
-    void snap_namespace_list_start(librados::ObjectReadOperation *op,
-                             const std::vector<snapid_t> &ids)
+    void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
+                                       const std::vector<snapid_t> &ids)
     {
-      for (vector<snapid_t>::const_iterator it = ids.begin();
-           it != ids.end(); ++it) {
-        snapid_t snap_id = it->val;
+      for (auto snap_id : ids) {
         bufferlist bl;
         ::encode(snap_id, bl);
-	op->exec("rbd", "get_snapshot_namespace", bl);
+        op->exec("rbd", "get_snapshot_timestamp", bl);
       }
     }
 
-    int snap_namespace_list_finish(bufferlist::iterator *it,
-				   const std::vector<snapid_t> &ids,
-				   std::vector<cls::rbd::SnapshotNamespace> *namespaces)
+    int snapshot_timestamp_list_finish(bufferlist::iterator *it,
+                                       const std::vector<snapid_t> &ids,
+                                       std::vector<utime_t> *timestamps)
+    {
+      timestamps->resize(ids.size());
+      try {
+        for (size_t i = 0; i < timestamps->size(); ++i) {
+          utime_t t;
+          ::decode(t, *it);
+          (*timestamps)[i] = t;
+        }
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
+                                const std::vector<snapid_t> &ids,
+                                std::vector<utime_t> *timestamps)
+    {
+      librados::ObjectReadOperation op;
+      snapshot_timestamp_list_start(&op, ids);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return snapshot_timestamp_list_finish(&it, ids, timestamps);
+    }
+
+    void snapshot_namespace_list_start(librados::ObjectReadOperation *op,
+                                       const std::vector<snapid_t> &ids)
+    {
+      for (auto snap_id : ids) {
+        bufferlist bl;
+        ::encode(snap_id, bl);
+        op->exec("rbd", "get_snapshot_namespace", bl);
+      }
+    }
+
+    int snapshot_namespace_list_finish(bufferlist::iterator *it,
+                                       const std::vector<snapid_t> &ids,
+                                       std::vector<cls::rbd::SnapshotNamespace> *namespaces)
     {
       namespaces->resize(ids.size());
       try {
@@ -623,12 +663,12 @@ namespace librbd {
       return 0;
     }
 
-    int snap_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
-			    const std::vector<snapid_t> &ids,
-			    std::vector<cls::rbd::SnapshotNamespace> *namespaces)
+    int snapshot_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
+                                const std::vector<snapid_t> &ids,
+                                std::vector<cls::rbd::SnapshotNamespace> *namespaces)
     {
       librados::ObjectReadOperation op;
-      snap_namespace_list_start(&op, ids);
+      snapshot_namespace_list_start(&op, ids);
 
       bufferlist out_bl;
       int r = ioctx->operate(oid, &op, &out_bl);
@@ -637,7 +677,7 @@ namespace librbd {
       }
 
       bufferlist::iterator it = out_bl.begin();
-      return snap_namespace_list_finish(&it, ids, namespaces);
+      return snapshot_namespace_list_finish(&it, ids, namespaces);
     }
 
     void old_snapshot_add(librados::ObjectWriteOperation *op,

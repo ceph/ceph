@@ -296,6 +296,7 @@ public:
   int snap_rename(const char *srcname, const char *dstname);
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);
+  int snap_get_timestamp(uint64_t snap_id, struct timespec *timestamp);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

@@ -1956,6 +1956,15 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     return r;
   }
 
+  int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp)
+  {
+    std::map<librados::snap_t, SnapInfo>::iterator snap_it = ictx->snap_info.find(snap_id);
+    assert(snap_it != ictx->snap_info.end());
+    utime_t time = snap_it->second.timestamp;
+    time.to_timespec(timestamp);
+    return 0;
+  }
+
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
   {
     int r = cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
