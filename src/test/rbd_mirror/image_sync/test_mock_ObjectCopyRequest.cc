@@ -4,6 +4,7 @@
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "include/interval_set.h"
 #include "include/rbd/librbd.hpp"
+#include "include/rbd/object_map_types.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -108,9 +109,10 @@ public:
                                      0, on_finish);
   }
 
-  void expect_read(librados::MockTestMemIoCtxImpl &mock_io_ctx, uint64_t offset,
-                   uint64_t length, int r) {
-    auto &expect = EXPECT_CALL(mock_io_ctx, read(_, length, offset, _));
+  void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx, uint64_t offset,
+                          uint64_t length, int r) {
+
+    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -118,10 +120,10 @@ public:
     }
   }
 
-  void expect_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
+  void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                    const interval_set<uint64_t> &extents, int r) {
     for (auto extent : extents) {
-      expect_read(mock_io_ctx, extent.first, extent.second, r);
+      expect_sparse_read(mock_io_ctx, extent.first, extent.second, r);
       if (r < 0) {
         break;
       }
@@ -212,6 +214,7 @@ public:
     }
     m_snap_map[remote_snap_id] = local_snap_ids;
     m_local_snap_ids.push_back(local_snap_id);
+
     return 0;
   }
 
@@ -348,7 +351,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Write) {
 
   InSequence seq;
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
-  expect_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
   expect_write(mock_local_io_ctx, 0, one.range_end(), 0);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
@@ -381,7 +384,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, ReadError) {
 
   InSequence seq;
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
-  expect_read(mock_remote_io_ctx, 0, one.range_end(), -EINVAL);
+  expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(),  -EINVAL);
 
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -412,7 +415,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteError) {
 
   InSequence seq;
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
-  expect_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
   expect_write(mock_local_io_ctx, 0, one.range_end(), -EINVAL);
 
   request->send();
@@ -455,9 +458,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteSnaps) {
 
   InSequence seq;
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
-  expect_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
   expect_write(mock_local_io_ctx, 0, one.range_end(), 0);
-  expect_read(mock_remote_io_ctx, two, 0);
+  expect_sparse_read(mock_remote_io_ctx, two, 0);
   expect_write(mock_local_io_ctx, two, 0);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
@@ -504,7 +507,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
 
   InSequence seq;
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
-  expect_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
   expect_write(mock_local_io_ctx, 0, one.range_end(), 0);
   expect_truncate(mock_local_io_ctx, trim_offset, 0);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
@@ -546,7 +549,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Remove) {
 
   InSequence seq;
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
-  expect_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
   expect_write(mock_local_io_ctx, 0, one.range_end(), 0);
   expect_remove(mock_local_io_ctx, 0);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,

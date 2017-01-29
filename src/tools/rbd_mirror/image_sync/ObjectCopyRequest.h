@@ -81,10 +81,11 @@ private:
     SYNC_OP_TYPE_REMOVE
   };
 
-  typedef std::tuple<SyncOpType, uint64_t, uint64_t, bufferlist> SyncOp;
+  typedef std::tuple<SyncOpType, uint64_t, uint64_t, bufferlist, std::map<uint64_t, uint64_t> > SyncOp;
   typedef std::list<SyncOp> SyncOps;
   typedef std::map<librados::snap_t, SyncOps> SnapSyncOps;
   typedef std::map<librados::snap_t, uint8_t> SnapObjectStates;
+  typedef std::map<librados::snap_t, uint64_t> SnapObjectSizes;
 
   ImageCtxT *m_local_image_ctx;
   ImageCtxT *m_remote_image_ctx;
@@ -102,6 +103,7 @@ private:
 
   SnapSyncOps m_snap_sync_ops;
   SnapObjectStates m_snap_object_states;
+  SnapObjectSizes m_snap_object_sizes;
 
   void send_list_snaps();
   void handle_list_snaps(int r);
