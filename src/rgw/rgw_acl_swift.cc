@@ -59,6 +59,7 @@ static bool uid_is_public(const string& uid)
     return false;
 
   return sub.compare(".r") == 0 ||
+         sub.compare(".ref") == 0 ||
          sub.compare(".referer") == 0 ||
          sub.compare(".referrer") == 0;
 }
@@ -75,6 +76,7 @@ static bool extract_referer_urlspec(const std::string& uid,
   url_spec = uid.substr(pos + 1);
 
   return sub.compare(".r") == 0 ||
+         sub.compare(".ref") == 0 ||
          sub.compare(".referer") == 0 ||
          sub.compare(".referrer") == 0;
 }
