@@ -986,98 +986,96 @@ void OSDMonitor::maybe_prime_pg_temp()
   next.deepish_copy_from(osdmap);
   next.apply_incremental(pending_inc);
 
-  PGMap *pg_map = &mon->pgmon()->pg_map;
+  PGMap *pg_map = &mon->pgmon()->pg_map;  // FIMXE: use new creating_pgs map
 
   utime_t stop = ceph_clock_now();
   stop += g_conf->mon_osd_prime_pg_temp_max_time;
   int chunk = 1000;
   int n = chunk;
+  bool abort = false;
 
   if (all) {
-    for (ceph::unordered_map<pg_t, pg_stat_t>::iterator pp =
-	   pg_map->pg_stat.begin();
-	 pp != pg_map->pg_stat.end();
-	 ++pp) {
-      prime_pg_temp(next, pp);
-      if (--n <= 0) {
-	n = chunk;
-	if (ceph_clock_now() > stop) {
-	  dout(10) << __func__ << " consumed more than "
-		   << g_conf->mon_osd_prime_pg_temp_max_time
-		   << " seconds, stopping"
-		   << dendl;
-	  break;
+    for (auto& pi : osdmap.get_pools()) {
+      for (unsigned ps = 0; ps < pi.second.get_pg_num(); ++ps) {
+	pg_t pgid(ps, pi.first);
+	if (!pg_map->creating_pgs.count(pgid)) {
+	  prime_pg_temp(next, pgid);
 	}
+	if (--n <= 0) {
+	  n = chunk;
+	  if (ceph_clock_now() > stop) {
+	    dout(10) << __func__ << " consumed more than "
+		     << g_conf->mon_osd_prime_pg_temp_max_time
+		     << " seconds, stopping"
+		     << dendl;
+	    abort = true;
+	    break;
+	  }
+	}
+      }
+      if (abort) {
+	break;
       }
     }
   } else {
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
-    for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
-      n -= prime_pg_temp(next, pg_map, *p);
-      if (n <= 0) {
-	n = chunk;
-	if (ceph_clock_now() > stop) {
-	  dout(10) << __func__ << " consumed more than "
-		   << g_conf->mon_osd_prime_pg_temp_max_time
-		   << " seconds, stopping"
-		   << dendl;
-	  break;
+    for (auto osd : osds) {
+      const vector<pg_t>& pgs = mapping.get_osd_acting_pgs(osd);
+      dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
+      for (auto pgid : pgs) {
+	if (!pg_map->creating_pgs.count(pgid)) {
+	  prime_pg_temp(next, pgid);
 	}
+	if (--n <= 0) {
+	  n = chunk;
+	  if (ceph_clock_now() > stop) {
+	    dout(10) << __func__ << " consumed more than "
+		     << g_conf->mon_osd_prime_pg_temp_max_time
+		     << " seconds, stopping"
+		     << dendl;
+	    abort = true;
+	    break;
+	  }
+	}
+      }
+      if (abort) {
+	break;
       }
     }
   }
 }
 
-void OSDMonitor::prime_pg_temp(OSDMap& next,
-			       ceph::unordered_map<pg_t, pg_stat_t>::iterator pp)
+void OSDMonitor::prime_pg_temp(
+  OSDMap& next,
+  pg_t pgid)
 {
-  // do not prime creating pgs
-  if (pp->second.state & PG_STATE_CREATING)
-    return;
   // do not touch a mapping if a change is pending
-  if (pending_inc.new_pg_temp.count(pp->first))
+  if (pending_inc.new_pg_temp.count(pgid))
     return;
+  vector<int> old_acting;
+  mapping.get(pgid, nullptr, nullptr, &old_acting, nullptr);
   vector<int> up, acting;
   int up_primary, acting_primary;
-  next.pg_to_up_acting_osds(pp->first, &up, &up_primary, &acting, &acting_primary);
-  if (acting == pp->second.acting)
+  next.pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &acting_primary);
+  if (acting == old_acting)
     return;  // no change since last pg update, skip
   vector<int> cur_up, cur_acting;
-  osdmap.pg_to_up_acting_osds(pp->first, &cur_up, &up_primary,
+  osdmap.pg_to_up_acting_osds(pgid, &cur_up, &up_primary,
 			      &cur_acting, &acting_primary);
   if (cur_acting == acting)
     return;  // no change this epoch; must be stale pg_stat
   if (cur_acting.empty())
     return;  // if previously empty now we can be no worse off
-  const pg_pool_t *pool = next.get_pg_pool(pp->first.pool());
+  const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
   if (pool && cur_acting.size() < pool->min_size)
     return;  // can be no worse off than before
 
-  dout(20) << __func__ << " " << pp->first << " " << cur_up << "/" << cur_acting
+  dout(20) << __func__ << " " << pgid << " " << cur_up << "/" << cur_acting
 	   << " -> " << up << "/" << acting
 	   << ", priming " << cur_acting
 	   << dendl;
-  pending_inc.new_pg_temp[pp->first] = cur_acting;
+  pending_inc.new_pg_temp[pgid] = cur_acting;
 }
-
-int OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd)
-{
-  dout(10) << __func__ << " osd." << osd << dendl;
-  int num = 0;
-  ceph::unordered_map<int, set<pg_t> >::iterator po = pg_map->pg_by_osd.find(osd);
-  if (po != pg_map->pg_by_osd.end()) {
-    for (set<pg_t>::iterator p = po->second.begin();
-	 p != po->second.end();
-	 ++p, ++num) {
-      ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.find(*p);
-      if (pp == pg_map->pg_stat.end())
-	continue;
-      prime_pg_temp(next, pp);
-    }
-  }
-  return num;
-}
-
 
 /**
  * @note receiving a transaction in this function gives a fair amount of
