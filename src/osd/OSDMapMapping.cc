@@ -4,6 +4,10 @@
 #include "OSDMapMapping.h"
 #include "OSDMap.h"
 
+#define dout_subsys ceph_subsys_mon
+
+#include "common/debug.h"
+
 // ensure that we have a PoolMappings for each pool and that
 // the dimensions (pg_num and size) match up.
 void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
@@ -34,12 +38,17 @@ void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
 
 void OSDMapMapping::update(const OSDMap& osdmap)
 {
-  _init_mappings(osdmap);
+  _start(osdmap);
   for (auto& p : osdmap.get_pools()) {
     _update_range(osdmap, p.first, 0, p.second.get_pg_num());
   }
-  _build_rmap(osdmap);
+  _finish(osdmap);
   //_dump();  // for debugging
+}
+
+void OSDMapMapping::update(const OSDMap& osdmap, pg_t pgid)
+{
+  _update_range(osdmap, pgid.pool(), pgid.ps(), pgid.ps() + 1);
 }
 
 void OSDMapMapping::_build_rmap(const OSDMap& osdmap)
@@ -67,6 +76,12 @@ void OSDMapMapping::_build_rmap(const OSDMap& osdmap)
       }
     }
   }
+}
+
+void OSDMapMapping::_finish(const OSDMap& osdmap)
+{
+  _build_rmap(osdmap);
+  epoch = osdmap.get_epoch();
 }
 
 void OSDMapMapping::_dump()
@@ -100,4 +115,56 @@ void OSDMapMapping::_update_range(
     i->second.set(ps, std::move(up), up_primary,
 		  std::move(acting), acting_primary);
   }
+}
+
+// ---------------------------
+
+void ParallelOSDMapper::Job::finish_one()
+{
+  Context *fin = nullptr;
+  {
+    Mutex::Locker l(lock);
+    if (--shards == 0) {
+      if (!aborted) {
+	mapping->_finish(*osdmap);
+      }
+      cond.Signal();
+      fin = onfinish;
+      onfinish = nullptr;
+    }
+  }
+  if (fin) {
+    fin->complete(0);
+  }
+}
+
+void ParallelOSDMapper::WQ::_process(
+  item *i,
+  ThreadPool::TPHandle &h)
+{
+  ldout(m->cct, 10) << __func__ << " " << i->osdmap << " " << i->pool << " ["
+		    << i->begin << "," << i->end << ")" << dendl;
+  i->mapping->_update_range(*i->osdmap, i->pool, i->begin, i->end);
+  i->job->finish_one();
+  delete i;
+}
+
+std::unique_ptr<ParallelOSDMapper::Job> ParallelOSDMapper::queue(
+  const OSDMap& osdmap,
+  OSDMapMapping *mapping,
+  unsigned pgs_per_item)
+{
+  std::unique_ptr<Job> job(new Job(&osdmap, mapping));
+  mapping->_start(osdmap);
+  for (auto& p : osdmap.get_pools()) {
+    for (unsigned ps = 0; ps < p.second.get_pg_num(); ps += pgs_per_item) {
+      unsigned ps_end = MIN(ps + pgs_per_item, p.second.get_pg_num());
+      job->start_one();
+      wq.queue(new item(job.get(), &osdmap, mapping, p.first, ps, ps_end));
+      ldout(cct, 20) << __func__ << " queue " << &osdmap << " "
+		     << p.first << " [" << ps
+		     << "," << ps_end << ")" << dendl;
+    }
+  }
+  return job;
 }
