@@ -1068,29 +1068,28 @@ void OSDMonitor::prime_pg_temp(
   // do not touch a mapping if a change is pending
   if (pending_inc.new_pg_temp.count(pgid))
     return;
-  vector<int> old_acting;
-  mapping->get(pgid, nullptr, nullptr, &old_acting, nullptr);
+
   vector<int> up, acting;
-  int up_primary, acting_primary;
-  next.pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &acting_primary);
-  if (acting == old_acting)
-    return;  // no change since last pg update, skip
-  vector<int> cur_up, cur_acting;
-  osdmap.pg_to_up_acting_osds(pgid, &cur_up, &up_primary,
-			      &cur_acting, &acting_primary);
-  if (cur_acting == acting)
-    return;  // no change this epoch; must be stale pg_stat
-  if (cur_acting.empty())
+  mapping->get(pgid, &up, nullptr, &acting, nullptr);
+
+  vector<int> next_up, next_acting;
+  int next_up_primary, next_acting_primary;
+  next.pg_to_up_acting_osds(pgid, &next_up, &next_up_primary,
+			    &next_acting, &next_acting_primary);
+  if (acting == next_acting)
+    return;  // no change since last epoch
+
+  if (acting.empty())
     return;  // if previously empty now we can be no worse off
   const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
-  if (pool && cur_acting.size() < pool->min_size)
+  if (pool && acting.size() < pool->min_size)
     return;  // can be no worse off than before
 
-  dout(20) << __func__ << " " << pgid << " " << cur_up << "/" << cur_acting
-	   << " -> " << up << "/" << acting
-	   << ", priming " << cur_acting
+  dout(20) << __func__ << " " << pgid << " " << up << "/" << acting
+	   << " -> " << next_up << "/" << next_acting
+	   << ", priming " << acting
 	   << dendl;
-  pending_inc.new_pg_temp[pgid] = cur_acting;
+  pending_inc.new_pg_temp[pgid] = acting;
 }
 
 /**
