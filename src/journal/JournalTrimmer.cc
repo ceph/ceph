@@ -79,8 +79,10 @@ void JournalTrimmer::remove_objects(bool force, Context *on_finish) {
 
         if (registered_clients.size() == 0) {
           on_finish->complete(-EINVAL);
+          return;
         } else if (registered_clients.size() > 1) {
           on_finish->complete(-EBUSY);
+          return;
         }
       }
 
