@@ -75,9 +75,14 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap)
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
-OSDMonitor::OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name)
+OSDMonitor::OSDMonitor(
+  CephContext *cct,
+  Monitor *mn,
+  Paxos *p,
+  const string& service_name)
  : PaxosService(mn, p, service_name),
    cct(cct),
+   mapper(mn->cct, &mn->cpu_tp),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    last_attempted_minwait_time(utime_t()),
@@ -337,6 +342,20 @@ void OSDMonitor::update_msgr_features()
   }
 }
 
+void OSDMonitor::_calc_mapping(const OSDMap& osdmap, OSDMapMapping *mapping)
+{
+  utime_t start = ceph_clock_now();
+  if (g_conf->mon_cpu_threads) {
+    auto job = mapper.queue(osdmap, mapping,
+			    g_conf->mon_osd_mapping_pgs_per_chunk);
+    job->wait();
+  } else {
+    mapping->update(osdmap);
+  }
+  utime_t end = ceph_clock_now();
+  dout(10) << __func__ << " in " << (end - start) << dendl;
+}
+
 void OSDMonitor::on_active()
 {
   update_logger();
@@ -356,10 +375,7 @@ void OSDMonitor::on_active()
   }
 
   // FIXME: hacky synchronous blocking mapping update
-  utime_t start = ceph_clock_now();
-  mapping.update(osdmap);
-  utime_t end = ceph_clock_now();
-  dout(10) << __func__ << " updated mapping in " << (end - start) << dendl;
+  _calc_mapping(osdmap, mapping.get());
 }
 
 void OSDMonitor::on_shutdown()
@@ -1020,7 +1036,7 @@ void OSDMonitor::maybe_prime_pg_temp()
   } else {
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
     for (auto osd : osds) {
-      const vector<pg_t>& pgs = mapping.get_osd_acting_pgs(osd);
+      const vector<pg_t>& pgs = mapping->get_osd_acting_pgs(osd);
       dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
       for (auto pgid : pgs) {
 	if (!pg_map->creating_pgs.count(pgid)) {
@@ -1053,7 +1069,7 @@ void OSDMonitor::prime_pg_temp(
   if (pending_inc.new_pg_temp.count(pgid))
     return;
   vector<int> old_acting;
-  mapping.get(pgid, nullptr, nullptr, &old_acting, nullptr);
+  mapping->get(pgid, nullptr, nullptr, &old_acting, nullptr);
   vector<int> up, acting;
   int up_primary, acting_primary;
   next.pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &acting_primary);
