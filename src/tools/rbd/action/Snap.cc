@@ -19,7 +19,35 @@ namespace snap {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int do_list_snaps(librbd::Image& image, Formatter *f)
+static bool is_not_user_snap_namespace(const librbd::snap_info_t &snap_info)
+{
+  return boost::get<librbd::user_snap_namespace_t>(&snap_info.snap_namespace) ==
+	 nullptr;
+}
+
+class ToStringVisitor : public boost::static_visitor<std::string> {
+public:
+  template <typename T>
+  inline std::string operator()(const T& t) const {
+    return t.to_string();
+  }
+};
+
+class FormatVisitor : public boost::static_visitor<void> {
+public:
+
+  explicit FormatVisitor(ceph::Formatter *f) : formatter(f) {}
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    t.dump(formatter);
+  }
+private:
+  ceph::Formatter *formatter;
+
+};
+
+int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps)
 {
   std::vector<librbd::snap_info_t> snaps;
   TextTable t;
@@ -29,12 +57,22 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
   if (r < 0)
     return r;
 
+  if (!all_snaps) {
+    snaps.erase(remove_if(snaps.begin(),
+			  snaps.end(),
+			  is_not_user_snap_namespace),
+		snaps.end());
+  }
+
   if (f) {
     f->open_array_section("snapshots");
   } else {
     t.define_column("SNAPID", TextTable::RIGHT, TextTable::RIGHT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+    if (all_snaps) {
+      t.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
+    }
   }
 
   for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
@@ -44,10 +82,24 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
       f->dump_unsigned("id", s->id);
       f->dump_string("name", s->name);
       f->dump_unsigned("size", s->size);
+      if (all_snaps) {
+	f->open_object_section("namespace");
+	boost::apply_visitor(FormatVisitor(f), s->snap_namespace);
+	f->close_section();
+      }
       f->close_section();
     } else {
-      t << s->id << s->name << stringify(prettybyte_t(s->size))
-        << TextTable::endrow;
+      std::string namespace_string;
+      if (all_snaps) {
+	namespace_string = static_cast<std::string>(
+				  boost::apply_visitor(ToStringVisitor(),
+						       s->snap_namespace));
+      }
+      t << s->id << s->name << stringify(prettybyte_t(s->size));
+      if (all_snaps) {
+	t << namespace_string;
+      }
+      t << TextTable::endrow;
     }
   }
 
@@ -170,6 +222,7 @@ void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
+  at::add_all_option(options, "list snapshots from all namespaces");
 }
 
 int execute_list(const po::variables_map &vm) {
@@ -177,6 +230,7 @@ int execute_list(const po::variables_map &vm) {
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
+  bool all_snaps = vm[at::ALL_NAME].as<bool>();
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
@@ -199,7 +253,7 @@ int execute_list(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_list_snaps(image, formatter.get());
+  r = do_list_snaps(image, formatter.get(), all_snaps);
   if (r < 0) {
     cerr << "rbd: failed to list snapshots: " << cpp_strerror(r)
          << std::endl;

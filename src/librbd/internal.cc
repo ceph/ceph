@@ -1866,6 +1866,53 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     return 0;
   }
 
+  class ConvertVisitor : public boost::static_visitor<snap_namespace_t> {
+    public:
+      explicit ConvertVisitor(librados::IoCtx *image_ioctx) : image_ioctx(image_ioctx), r(0) {}
+
+      inline snap_namespace_t operator()(const cls::rbd::UserSnapshotNamespace&) {
+	return user_snap_namespace_t();
+      }
+      inline snap_namespace_t operator()(const cls::rbd::GroupSnapshotNamespace& snap_namespace) {
+
+	librados::Rados rados(*image_ioctx);
+	IoCtx group_ioctx;
+	rados.ioctx_create2(snap_namespace.group_pool, group_ioctx);
+
+	cls::rbd::GroupSnapshot group_snapshot;
+
+	std::string group_name;
+	r = cls_client::dir_get_name(&group_ioctx, RBD_GROUP_DIRECTORY,
+				     snap_namespace.group_id, &group_name);
+
+	string group_header_oid = util::group_header_name(snap_namespace.group_id);
+
+	r = cls_client::group_snap_get_by_id(&group_ioctx, group_header_oid,
+					     snap_namespace.snapshot_id, &group_snapshot);
+
+	return group_snap_namespace_t {
+			  .group_pool = group_ioctx.get_pool_name(),
+			  .group_name = group_name,
+			  .snap_name = group_snapshot.name,
+			  };
+      }
+      inline snap_namespace_t operator()(const cls::rbd::UnknownSnapshotNamespace&) {
+	return unknown_snap_namespace_t();
+      }
+
+      librados::IoCtx *image_ioctx;
+      int r;
+  };
+
+  static int from_cls_rbd_namespace(librados::IoCtx& image_ioctx,
+						 const cls::rbd::SnapshotNamespace &nmsp,
+						 snap_namespace_t *snap_namespace)
+  {
+    ConvertVisitor cv = ConvertVisitor(&image_ioctx);
+    *snap_namespace = static_cast<snap_namespace_t>(boost::apply_visitor(cv, nmsp));
+    return cv.r;
+  }
+
   int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)
   {
     ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
@@ -1881,6 +1928,12 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       info.name = it->second.name;
       info.id = it->first;
       info.size = it->second.size;
+      r = from_cls_rbd_namespace(ictx->data_ctx,
+				 it->second.snap_namespace,
+				 &info.snap_namespace);
+      if (r < 0) {
+	return r;
+      }
       snaps.push_back(info);
     }
 

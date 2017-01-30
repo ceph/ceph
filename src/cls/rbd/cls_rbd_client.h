@@ -337,7 +337,6 @@ namespace librbd {
     void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 
     // Consistency groups functions
-    int group_create(librados::IoCtx *ioctx, const std::string &oid);
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		    const std::string &start, uint64_t max_return,
 		    map<string, string> *groups);
@@ -362,6 +361,19 @@ namespace librbd {
                                cls::rbd::GroupSpec *group_spec);
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec);
+    int group_snap_add(librados::IoCtx *ioctx, const std::string &oid,
+		       const cls::rbd::GroupSnapshot &snapshot);
+    int group_snap_update(librados::IoCtx *ioctx, const std::string &oid,
+			  const cls::rbd::GroupSnapshot &snapshot);
+    int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
+			  const std::string &snap_id);
+    int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
+			     const std::string &snap_id,
+			     cls::rbd::GroupSnapshot *snapshot);
+    int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
+			const cls::rbd::GroupSnapshot &start,
+			uint64_t max_return,
+			std::vector<cls::rbd::GroupSnapshot> *snapshots);
 
   } // namespace cls_client
 } // namespace librbd
