@@ -114,9 +114,11 @@ class OSDMonitor : public PaxosService {
   CephContext *cct;
 public:
   OSDMap osdmap;
-  OSDMapMapping mapping;
+  unique_ptr<OSDMapMapping> mapping;
 
 private:
+  ParallelOSDMapper mapper;
+
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int, bufferlist> pending_metadata;
@@ -145,6 +147,8 @@ private:
     FAST_READ_ON,
     FAST_READ_DEFAULT
   };
+
+  void _calc_mapping(const OSDMap& osdmap, OSDMapMapping *mapping);
 
   // svc
 public:  
