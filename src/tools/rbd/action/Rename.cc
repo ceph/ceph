@@ -42,9 +42,9 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  std::string dst_pool_name;
   std::string dst_image_name;
   std::string dst_snap_name;
+  std::string dst_pool_name = pool_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name, &dst_image_name,
     &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
