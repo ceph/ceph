@@ -68,6 +68,7 @@ namespace librbd {
                                         // a format librados can understand
     std::map<librados::snap_t, SnapInfo> snap_info;
     std::map<std::string, librados::snap_t> snap_ids;
+    std::map<cls::rbd::SnapshotNamespace, librados::snap_t> snap_namespace_ids;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
     // whether the image was opened read-only. cannot be changed after opening
@@ -228,6 +229,7 @@ namespace librbd {
     int snap_set(std::string in_snap_name);
     void snap_unset();
     librados::snap_t get_snap_id(std::string in_snap_name) const;
+    librados::snap_t get_snap_id_from_namespace(cls::rbd::SnapshotNamespace in_snap_namespace) const;
     const SnapInfo* get_snap_info(librados::snap_t in_snap_id) const;
     int get_snap_name(librados::snap_t in_snap_id,
 		      std::string *out_snap_name) const;

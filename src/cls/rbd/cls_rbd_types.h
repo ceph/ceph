@@ -22,6 +22,7 @@ namespace rbd {
 
 static const uint32_t MAX_OBJECT_MAP_OBJECT_COUNT = 256000000;
 static const string RBD_GROUP_IMAGE_KEY_PREFIX = "image_";
+static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
 
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
@@ -237,6 +238,10 @@ struct UserSnapshotNamespace {
     return true;
   }
 
+  inline bool operator<(const UserSnapshotNamespace& usn) const {
+    return false;
+  }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
@@ -248,13 +253,13 @@ struct GroupSnapshotNamespace {
 
   GroupSnapshotNamespace(int64_t _group_pool,
 			 const string &_group_id,
-			 const snapid_t &_snapshot_id) :group_pool(_group_pool),
-							group_id(_group_id),
-							snapshot_id(_snapshot_id) {}
+			 const string &_snapshot_id) :group_pool(_group_pool),
+						      group_id(_group_id),
+						      snapshot_id(_snapshot_id) {}
 
   int64_t group_pool;
   string group_id;
-  snapid_t snapshot_id;
+  string snapshot_id;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
@@ -265,6 +270,17 @@ struct GroupSnapshotNamespace {
     return group_pool == gsn.group_pool &&
 	   group_id == gsn.group_id &&
 	   snapshot_id == gsn.snapshot_id;
+  }
+
+  inline bool operator<(const GroupSnapshotNamespace& gsn) const {
+    if (group_pool < gsn.group_pool) {
+      return true;
+    } else if (group_id < gsn.group_id) {
+      return true;
+    } else {
+      return (snapshot_id < gsn.snapshot_id);
+    }
+    return false;
   }
 
 };
@@ -281,6 +297,9 @@ struct UnknownSnapshotNamespace {
   void dump(Formatter *f) const {}
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
     return true;
+  }
+  inline bool operator<(const UnknownSnapshotNamespace& gsn) const {
+    return false;
   }
 };
 
@@ -309,6 +328,52 @@ struct SnapshotNamespaceOnDisk {
   }
 };
 WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
+
+enum GroupSnapshotState {
+  GROUP_SNAPSHOT_STATE_PENDING = 0,
+  GROUP_SNAPSHOT_STATE_COMPLETE = 1,
+};
+
+inline void encode(const GroupSnapshotState &state, bufferlist& bl, uint64_t features=0)
+{
+  ::encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(GroupSnapshotState &state, bufferlist::iterator& it)
+{
+  uint8_t int_state;
+  ::decode(int_state, it);
+  state = static_cast<GroupSnapshotState>(int_state);
+}
+
+struct ImageSnapshotRef {
+  int64_t pool;
+  string image_id;
+  snapid_t snap_id;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ImageSnapshotRef);
+
+struct GroupSnapshot {
+  std::string id;
+  std::string name;
+  GroupSnapshotState state;
+
+  vector<ImageSnapshotRef> snaps;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<GroupSnapshot *> &o);
+
+  std::string snap_key() const;
+};
+WRITE_CLASS_ENCODER(GroupSnapshot);
 
 } // namespace rbd
 } // namespace cls

@@ -15,14 +15,18 @@
 #ifndef __LIBRBD_HPP
 #define __LIBRBD_HPP
 
+#include <boost/variant.hpp>
 #include <stdbool.h>
 #include <string>
 #include <list>
 #include <map>
 #include <vector>
+#include "common/Formatter.h"
 #include "../rados/buffer.h"
 #include "../rados/librados.hpp"
 #include "librbd.h"
+#include "include/types.h"
+#include "include/stringify.h"
 
 namespace librbd {
 
@@ -35,9 +39,51 @@ namespace librbd {
   typedef void (*callback_t)(completion_t cb, void *arg);
 
   typedef struct {
+    void dump(ceph::Formatter *f) const {
+	f->dump_string("name", "user");
+    }
+
+    std::string to_string() const {
+      return "user snapshot";
+    }
+  } user_snap_namespace_t;
+
+  typedef struct {
+    void dump(ceph::Formatter *f) const {
+	f->dump_string("name", "unknown");
+    }
+
+    std::string to_string() const {
+      return "unknown snapshot";
+    }
+  } unknown_snap_namespace_t;
+
+  typedef struct {
+    std::string group_pool;
+    std::string group_name;
+    std::string snap_name;
+
+    void dump(ceph::Formatter *f) const {
+	f->dump_string("name", "group");
+	f->dump_string("group_pool", group_pool);
+	f->dump_string("group_name", group_name);
+	f->dump_string("group_snap_name", snap_name);
+    }
+
+    std::string to_string() const {
+      return "group snapshot member - " + group_pool +
+				   "/" + group_name +
+				   "@" + snap_name;
+    }
+  } group_snap_namespace_t;
+
+  typedef boost::variant<user_snap_namespace_t, group_snap_namespace_t, unknown_snap_namespace_t> snap_namespace_t;
+
+  typedef struct {
     uint64_t id;
     uint64_t size;
     std::string name;
+    snap_namespace_t snap_namespace;
   } snap_info_t;
 
   typedef struct {
@@ -75,14 +121,21 @@ namespace librbd {
 
   typedef struct {
     std::string name;
-    int64_t pool;
+    std::string pool;
     group_image_state_t state;
   } group_image_status_t;
 
   typedef struct {
     std::string name;
-    int64_t pool;
+    std::string pool;
   } group_spec_t;
+
+  typedef rbd_group_snap_state_t group_snap_state_t;
+
+  typedef struct {
+    std::string name;
+    group_snap_state_t state;
+  } group_snap_spec_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -172,6 +225,15 @@ public:
 			 IoCtx& image_io_ctx, const char *image_name);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
 		       std::vector<group_image_status_t> *images);
+
+  int group_snap_create(IoCtx& io_ctx, const char *group_name,
+			const char *snap_name);
+  int group_snap_remove(IoCtx& io_ctx, const char *group_name,
+			const char *snap_name);
+  int group_snap_list(IoCtx& group_ioctx, const char *group_name,
+		      std::vector<group_snap_spec_t> *snaps);
+  int group_snap_rename(IoCtx& group_ioctx, const char *group_name,
+			const char *old_snap_name, const char *new_snap_name);
 
 private:
   /* We don't allow assignment or copying */
