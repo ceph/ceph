@@ -19,9 +19,11 @@ int RGWMongoose::write_data(const char *buf, int len)
     data.append(buf, len);
     return len;
   }
-  int r = mg_write(conn, buf, len);
-  if (r == 0) {
-    /* didn't send anything, error out */
+  const int r = mg_write(conn, buf, len);
+  if (r <= 0) {
+    /* According to the documentation of mg_write() it always returns -1 on
+     * error. The details aren't available, so we will just throw EIO. Same
+     * goes to 0 that is associated with writing to a closed connection. */
     return -EIO;
   }
   return r;
@@ -36,7 +38,8 @@ RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
 
 int RGWMongoose::read_data(char *buf, int len)
 {
-  return mg_read(conn, buf, len);
+  const int ret = mg_read(conn, buf, len);
+  return (ret >= 0) ? ret : -EIO;
 }
 
 void RGWMongoose::flush()
