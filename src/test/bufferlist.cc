@@ -946,7 +946,7 @@ TEST_F(TestRawPipePerformance, crc32c) {
   utime_t end;
   size_t total;
 
-  start = ceph_clock_now(NULL);
+  start = ceph_clock_now();
   total = 0;
   for (size_t pos = 10; pos < 500000 ; pos = pos * 15/14 + 1 )
   {
@@ -955,10 +955,10 @@ TEST_F(TestRawPipePerformance, crc32c) {
     memory_it.crc32c(size, 0);
     total += size;
   }
-  end = ceph_clock_now(NULL);
+  end = ceph_clock_now();
   std::cout << "memory perf=" << total/(end-start)/1024/1024 << " MB/s" << std::endl;
 
-  start = ceph_clock_now(NULL);
+  start = ceph_clock_now();
   total = 0;
   for (size_t pos = 10; pos < 500000 ; pos = pos * 15/14 + 1 )
   {
@@ -968,7 +968,7 @@ TEST_F(TestRawPipePerformance, crc32c) {
     crc_z = zero_it.crc32c(size, crc_z);
     total += size;
   }
-  end = ceph_clock_now(NULL);
+  end = ceph_clock_now();
   std::cout << "pipe perf=" << total/(end-start)/1024/1024 << " MB/s" << std::endl;
 }
 
