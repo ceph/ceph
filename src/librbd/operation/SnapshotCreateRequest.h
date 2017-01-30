@@ -60,8 +60,8 @@ public:
    * (if enabled) and bubble the originating error code back to the client.
    */
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
-		        const std::string &snap_name,
 			const cls::rbd::SnapshotNamespace &snap_namespace,
+		        const std::string &snap_name,
 			uint64_t journal_op_tid,
                         bool skip_object_map);
 
@@ -74,12 +74,12 @@ protected:
     return true;
   }
   journal::Event create_event(uint64_t op_tid) const override {
-    return journal::SnapCreateEvent(op_tid, m_snap_name, m_snap_namespace);
+    return journal::SnapCreateEvent(op_tid, m_snap_namespace, m_snap_name);
   }
 
 private:
-  std::string m_snap_name;
   cls::rbd::SnapshotNamespace m_snap_namespace;
+  std::string m_snap_name;
   bool m_skip_object_map;
 
   int m_ret_val;

@@ -260,7 +260,9 @@ void CreateImageRequest<I>::set_local_parent_snap() {
   Context *ctx = create_context_callback<
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_set_local_parent_snap>(this);
-  m_local_parent_image_ctx->state->snap_set(m_parent_snap_name, ctx);
+  m_local_parent_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					    m_parent_snap_name,
+					    ctx);
 }
 
 template <typename I>

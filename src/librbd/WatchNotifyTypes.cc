@@ -202,24 +202,31 @@ void ResizePayload::dump(Formatter *f) const {
 
 void SnapPayloadBase::encode(bufferlist &bl) const {
   ::encode(snap_name, bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void SnapPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
   ::decode(snap_name, iter);
+  if (version >= 6) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, iter);
+    snap_namespace = sn.snapshot_namespace;
+  }
 }
 
 void SnapPayloadBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
+  cls::rbd::SnapshotNamespaceOnDisk sn(snap_namespace);
+  sn.dump(f);
 }
 
 void SnapCreatePayload::encode(bufferlist &bl) const {
   SnapPayloadBase::encode(bl);
-  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
   SnapPayloadBase::decode(version, iter);
-  if (version >= 5) {
+  if (version == 5) {
     cls::rbd::SnapshotNamespaceOnDisk sn;
     ::decode(sn, iter);
     snap_namespace = sn.snapshot_namespace;
@@ -228,8 +235,6 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
 
 void SnapCreatePayload::dump(Formatter *f) const {
   SnapPayloadBase::dump(f);
-  cls::rbd::SnapshotNamespaceOnDisk sn(snap_namespace);
-  sn.dump(f);
 }
 
 void SnapRenamePayload::encode(bufferlist &bl) const {
@@ -289,7 +294,7 @@ bool NotifyMessage::check_for_refresh() const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(5, 1, bl);
+  ENCODE_START(6, 1, bl);
   boost::apply_visitor(watcher::EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -372,11 +377,11 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
   o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(SnapCreatePayload("foo",
-						  cls::rbd::UserSnapshotNamespace())));
-  o.push_back(new NotifyMessage(SnapRemovePayload("foo")));
-  o.push_back(new NotifyMessage(SnapProtectPayload("foo")));
-  o.push_back(new NotifyMessage(SnapUnprotectPayload("foo")));
+  o.push_back(new NotifyMessage(SnapCreatePayload(cls::rbd::UserSnapshotNamespace(),
+						  "foo")));
+  o.push_back(new NotifyMessage(SnapRemovePayload(cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(new NotifyMessage(SnapProtectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(new NotifyMessage(SnapUnprotectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));
   o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(RenamePayload("foo")));
   o.push_back(new NotifyMessage(UpdateFeaturesPayload(1, true)));

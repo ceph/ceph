@@ -83,13 +83,14 @@ int TestFixture::open_image(const std::string &image_name,
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
                              const std::string &snap_name) {
-  return ictx.operations->snap_create(snap_name.c_str(),
-				      cls::rbd::UserSnapshotNamespace());
+  return ictx.operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+				      snap_name.c_str());
 }
 
 int TestFixture::snap_protect(librbd::ImageCtx &ictx,
                               const std::string &snap_name) {
-  return ictx.operations->snap_protect(snap_name.c_str());
+  return ictx.operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+                                       snap_name.c_str());
 }
 
 int TestFixture::flatten(librbd::ImageCtx &ictx,

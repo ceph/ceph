@@ -250,13 +250,15 @@ public:
                             librados::snap_t snap_id) {
     auto it = std::find_if(image_ctx->snap_ids.begin(),
                            image_ctx->snap_ids.end(),
-                           [snap_id](const std::pair<std::string, librados::snap_t> &pair) {
+                           [snap_id](const std::pair<std::pair<cls::rbd::SnapshotNamespace,
+							       std::string>,
+						     librados::snap_t> &pair) {
         return (pair.second == snap_id);
       });
     if (it == image_ctx->snap_ids.end()) {
       return "";
     }
-    return it->first;
+    return it->first.second;
   }
 
   int compare_objects() {
@@ -280,12 +282,16 @@ public:
       std::cout << "comparing '" << snap_name << " (" << remote_snap_id
                 << " to " << local_snap_id << ")" << std::endl;
 
-      r = librbd::snap_set(m_remote_image_ctx, snap_name.c_str());
+      r = librbd::snap_set(m_remote_image_ctx,
+			   cls::rbd::UserSnapshotNamespace(),
+			   snap_name.c_str());
       if (r < 0) {
         return r;
       }
 
-      r = librbd::snap_set(m_local_image_ctx, snap_name.c_str());
+      r = librbd::snap_set(m_local_image_ctx,
+			   cls::rbd::UserSnapshotNamespace(),
+			   snap_name.c_str());
       if (r < 0) {
         return r;
       }
@@ -311,11 +317,15 @@ public:
       }
     }
 
-    r = librbd::snap_set(m_remote_image_ctx, nullptr);
+    r = librbd::snap_set(m_remote_image_ctx,
+			 cls::rbd::UserSnapshotNamespace(),
+			 nullptr);
     if (r < 0) {
       return r;
     }
-    r = librbd::snap_set(m_local_image_ctx, nullptr);
+    r = librbd::snap_set(m_local_image_ctx,
+			 cls::rbd::UserSnapshotNamespace(),
+			 nullptr);
     if (r < 0) {
       return r;
     }
