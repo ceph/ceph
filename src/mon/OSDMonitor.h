@@ -30,6 +30,7 @@ using namespace std;
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
+#include "osd/OSDMapMapping.h"
 
 #include "PaxosService.h"
 
@@ -113,6 +114,7 @@ class OSDMonitor : public PaxosService {
   CephContext *cct;
 public:
   OSDMap osdmap;
+  OSDMapMapping mapping;
 
 private:
   // [leader]
