@@ -5,6 +5,7 @@ import os
 import time
 import sys
 
+from datetime import datetime
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
@@ -523,6 +524,17 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
         assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
+
+    def test_snap_timestamp(self):
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        for snap in self.image.list_snaps():
+            snap_id = snap["id"]
+        time = self.image.get_snap_timestamp(snap_id)
+        assert_not_equal(b'', time.year)
+        assert_not_equal(0, time.year)
+        assert_not_equal(time.year, '1970')
+        self.image.remove_snap('snap1')
 
     def test_limit_snaps(self):
         self.image.set_snap_limit(2)

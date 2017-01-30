@@ -198,6 +198,16 @@ public:
     }
   }
 
+  void expect_snap_timestamp_list(MockRefreshImageCtx &mock_image_ctx, int r) {
+    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_timestamp"), _, _, _));
+	if (r < 0) {
+      expect.WillOnce(Return(r));
+    } else {
+      expect.WillOnce(DoDefault());
+    }
+  }
+
   void expect_snap_namespace_list(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_namespace"), _, _, _));
@@ -210,7 +220,7 @@ public:
 
   void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
                        const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _));
+    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _, _));
   }
 
   void expect_init_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,
@@ -421,6 +431,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSnapshotV2) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_get_snapshots(mock_image_ctx, 0);
+  expect_snap_timestamp_list(mock_image_ctx, 0);
   expect_snap_namespace_list(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
@@ -455,6 +466,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_get_snapshots(mock_image_ctx, 0);
+  expect_snap_timestamp_list(mock_image_ctx, 0);
   expect_snap_namespace_list(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {

@@ -545,12 +545,12 @@ struct C_InvalidateCache : public Context {
 			  cls::rbd::SnapshotNamespace in_snap_namespace,
 			  snap_t id, uint64_t in_size,
 			  parent_info parent, uint8_t protection_status,
-                          uint64_t flags)
+                          uint64_t flags, utime_t timestamp)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
     SnapInfo info(in_snap_name, in_snap_namespace,
-		  in_size, parent, protection_status, flags);
+		  in_size, parent, protection_status, flags, timestamp);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }

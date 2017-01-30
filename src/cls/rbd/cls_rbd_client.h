@@ -119,6 +119,17 @@ namespace librbd {
                              std::vector<uint64_t> *sizes,
                              std::vector<parent_info> *parents,
                              std::vector<uint8_t> *protection_statuses);
+    void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
+                                       const std::vector<snapid_t> &ids);
+
+    int snapshot_timestamp_list_finish(bufferlist::iterator *it,
+                                       const std::vector<snapid_t> &ids,
+                                       std::vector<utime_t> *timestamps);
+
+    int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
+                                const std::vector<snapid_t> &ids,
+                                std::vector<utime_t> *timestamps);
+
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
@@ -126,14 +137,14 @@ namespace librbd {
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
 
-    void snap_namespace_list_start(librados::ObjectReadOperation *op,
-				   const std::vector<snapid_t> &ids);
-    int snap_namespace_list_finish(bufferlist::iterator *it,
-				   const std::vector<snapid_t> &ids,
-				   std::vector<cls::rbd::SnapshotNamespace> *namespaces);
-    int snap_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
-			    const std::vector<snapid_t> &ids,
-			    std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+    void snapshot_namespace_list_start(librados::ObjectReadOperation *op,
+                                       const std::vector<snapid_t> &ids);
+    int snapshot_namespace_list_finish(bufferlist::iterator *it,
+                                       const std::vector<snapid_t> &ids,
+                                       std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+    int snapshot_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
+                                const std::vector<snapid_t> &ids,
+                                std::vector<cls::rbd::SnapshotNamespace> *namespaces);
 
     void get_all_features_start(librados::ObjectReadOperation *op);
     int get_all_features_finish(bufferlist::iterator *it,

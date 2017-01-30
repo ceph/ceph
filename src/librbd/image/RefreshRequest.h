@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/utime.h"
 #include "common/snap_types.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/ImageCtx.h"
@@ -58,6 +59,9 @@ private:
    *                |                                         |
    *                v                                         |
    *            V2_GET_SNAPSHOTS (skip if no snaps)           |
+   *                |                                         |
+   *                v                                         |
+   *            V2_GET_SNAP_TIMESTAMPS                        |
    *                |                                         |
    *                v                                         |
    *            V2_GET_SNAP_NAMESPACES                        |
@@ -134,6 +138,7 @@ private:
   std::vector<parent_info> m_snap_parents;
   std::vector<uint8_t> m_snap_protection;
   std::vector<uint64_t> m_snap_flags;
+  std::vector<utime_t> m_snap_timestamps;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> m_lockers;
@@ -169,6 +174,9 @@ private:
 
   void send_v2_get_snap_namespaces();
   Context *handle_v2_get_snap_namespaces(int *result);
+
+  void send_v2_get_snap_timestamps();
+  Context *handle_v2_get_snap_timestamps(int *result);
 
   void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);

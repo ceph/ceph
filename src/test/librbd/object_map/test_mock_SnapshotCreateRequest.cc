@@ -28,7 +28,7 @@ public:
     ictx->add_snap("snap name",
 	  cls::rbd::UserSnapshotNamespace(), snap_id,
 		   ictx->size, ictx->parent_md,
-                   RBD_PROTECTION_STATUS_UNPROTECTED, 0);
+                   RBD_PROTECTION_STATUS_UNPROTECTED, 0, utime_t());
   }
 
   void expect_read_map(librbd::ImageCtx *ictx, int r) {

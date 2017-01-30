@@ -1316,6 +1316,24 @@ TRACEPOINT_EVENT(librbd, snap_exists_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, snap_get_timestamp_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+    )    
+)
+
+TRACEPOINT_EVENT(librbd, snap_get_timestamp_exit,
+    TP_ARGS(
+        int, retval),
+	TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, snap_get_limit_enter,
     TP_ARGS(
         void*, imagectx,

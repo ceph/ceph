@@ -992,6 +992,49 @@ TEST_F(TestLibRBD, TestCreateLsDeleteSnap)
   rados_ioctx_destroy(ioctx);
 }
 
+int test_get_snapshot_timestamp(rbd_image_t image, uint64_t snap_id)
+{
+  struct timespec timestamp;
+  EXPECT_EQ(0, rbd_snap_get_timestamp(image, snap_id, &timestamp));
+  EXPECT_LT(0, timestamp.tv_sec);
+  return 0;
+}
+
+TEST_F(TestLibRBD, TestGetSnapShotTimeStamp)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0; 
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int num_snaps, max_size = 10;
+  rbd_snap_info_t snaps[max_size];
+  
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
+  num_snaps = rbd_snap_list(image, snaps, &max_size);
+  ASSERT_EQ(1, num_snaps); 
+  ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id));
+ 
+
+  ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
+  num_snaps = rbd_snap_list(image, snaps, &max_size);
+  ASSERT_EQ(2, num_snaps);
+  ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id)); 
+  ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[1].id));
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+
 int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
 {
   int r;

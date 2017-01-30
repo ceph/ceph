@@ -151,11 +151,11 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(is_snap_unprotected, int(librados::snap_t in_snap_id,
                                               bool *is_unprotected));
 
-  MOCK_METHOD7(add_snap, void(std::string in_snap_name,
+  MOCK_METHOD8(add_snap, void(std::string in_snap_name,
 			      cls::rbd::SnapshotNamespace in_snap_namespace,
 			      librados::snap_t id,
-                              uint64_t in_size, parent_info parent,
-                              uint8_t protection_status, uint64_t flags));
+			      uint64_t in_size, parent_info parent,
+			      uint8_t protection_status, uint64_t flags, utime_t timestamp));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
   MOCK_METHOD0(user_flushed, void());

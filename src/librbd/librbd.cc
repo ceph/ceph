@@ -1174,6 +1174,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::snap_get_timestamp(uint64_t snap_id, struct timespec *timestamp)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_get_timestamp_enter, ictx, ictx->name.c_str());
+    int r = librbd::snap_get_timestamp(ictx, snap_id, timestamp);
+    tracepoint(librbd, snap_get_timestamp_exit, r);
+    return r;
+  }
+
   int Image::snap_get_limit(uint64_t *limit)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -2579,6 +2588,15 @@ extern "C" int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
   tracepoint(librbd, snap_get_limit_enter, ictx, ictx->name.c_str());
   int r = librbd::snap_get_limit(ictx, limit);
   tracepoint(librbd, snap_get_limit_exit, r, *limit);
+  return r;
+}
+
+extern "C" int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, struct timespec *timestamp)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_get_timestamp_enter, ictx, ictx->name.c_str());
+  int r = librbd::snap_get_timestamp(ictx, snap_id, timestamp);
+  tracepoint(librbd, snap_get_timestamp_exit, r);
   return r;
 }
 

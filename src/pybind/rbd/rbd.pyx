@@ -40,6 +40,9 @@ cdef extern from "Python.h":
 
 cdef extern from "time.h":
     ctypedef long int time_t
+    cdef struct timespec:
+        time_t tv_sec
+        long tv_nsec
 
 cdef extern from "limits.h":
     cdef uint64_t INT64_MAX
@@ -235,6 +238,7 @@ cdef extern from "rbd/librbd.h" nogil:
                               int *is_protected)
     int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
     int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
+    int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
     int rbd_flatten(rbd_image_t image)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
@@ -1743,6 +1747,20 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error setting snapshot limit for %s' % self.name)
         return ret
+
+    def get_snap_timestamp(self, snap_id):
+        """
+        Get the snapshot timestamp for an image.
+        :param snap_id: the snapshot id of a snap shot
+        """
+        cdef:
+            timespec timestamp
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_timestamp(self.image, _snap_id, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot timestamp for image: %s, snap_id: %d' % (self.name, snap_id))
+        return datetime.fromtimestamp(timestamp.tv_sec)
 
     def remove_snap_limit(self):
         """

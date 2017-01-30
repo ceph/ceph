@@ -142,10 +142,11 @@ Context *RefreshRequest<I>::handle_v1_get_snapshots(int *result) {
   }
 
   //m_snap_namespaces = {m_snap_names.size(), cls::rbd::UserSnapshotNamespace()};
-  m_snap_namespaces = std::vector
-			      <cls::rbd::SnapshotNamespace>(
+  m_snap_namespaces = std::vector<cls::rbd::SnapshotNamespace>(
 					    m_snap_names.size(),
 					    cls::rbd::UserSnapshotNamespace());
+
+  m_snap_timestamps = std::vector<utime_t>(m_snap_names.size(), utime_t());
 
   send_v1_get_locks();
   return nullptr;
@@ -392,6 +393,7 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
     m_snap_sizes.clear();
     m_snap_parents.clear();
     m_snap_protection.clear();
+    m_snap_timestamps.clear();
     send_v2_refresh_parent();
     return;
   }
@@ -436,6 +438,49 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
     return m_on_finish;
   }
 
+  send_v2_get_snap_timestamps();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_v2_get_snap_timestamps() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::snapshot_timestamp_list_start(&op, m_snapc.snaps);
+
+  using klass = RefreshRequest<I>;
+  librados::AioCompletion *comp = create_rados_ack_callback<
+		  klass, &klass::handle_v2_get_snap_timestamps>(this);
+  m_out_bl.clear();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
+				  &m_out_bl);
+  assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_get_snap_timestamps(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": " << "r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::snapshot_timestamp_list_finish(&it, m_snapc.snaps, &m_snap_timestamps);
+  }
+  if (*result == -ENOENT) {
+    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
+    send_v2_get_mutable_metadata();
+    return nullptr;
+  } else if (*result == -EOPNOTSUPP) {
+    // Ignore it means no snap timestamps are available
+  } else if (*result < 0) {
+    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
+  }
+
   send_v2_get_snap_namespaces();
   return nullptr;
 }
@@ -446,7 +491,7 @@ void RefreshRequest<I>::send_v2_get_snap_namespaces() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::snap_namespace_list_start(&op, m_snapc.snaps);
+  cls_client::snapshot_namespace_list_start(&op, m_snapc.snaps);
 
   using klass = RefreshRequest<I>;
   librados::AioCompletion *comp = create_rados_ack_callback<
@@ -466,8 +511,8 @@ Context *RefreshRequest<I>::handle_v2_get_snap_namespaces(int *result) {
 
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::snap_namespace_list_finish(&it, m_snapc.snaps,
-						     &m_snap_namespaces);
+    *result = cls_client::snapshot_namespace_list_finish(&it, m_snapc.snaps,
+                                                         &m_snap_namespaces);
   }
   if (*result == -ENOENT) {
     ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
@@ -1004,7 +1049,7 @@ void RefreshRequest<I>::apply() {
       }
 
       m_image_ctx.add_snap(m_snap_names[i], m_snap_namespaces[i], m_snapc.snaps[i].val,
-                           m_snap_sizes[i], parent, protection_status, flags);
+                           m_snap_sizes[i], parent, protection_status, flags, m_snap_timestamps[i]);
     }
     m_image_ctx.snapc = m_snapc;
 
