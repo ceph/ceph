@@ -131,6 +131,9 @@ private:
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
     if (diff.empty()) {
+      if (m_diff_context.from_snap_id == 0 && !end_exists) {
+        compute_parent_overlap(diffs);
+      }
       return;
     } else if (m_diff_context.whole_object) {
       // provide the full object extents to the callback

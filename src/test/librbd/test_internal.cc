@@ -848,3 +848,55 @@ TEST_F(TestInternal, RemoveById) {
   librbd::NoOpProgressContext remove_no_op;
   ASSERT_EQ(0, librbd::remove(m_ioctx, "", image_id, remove_no_op));
 }
+
+static int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
+{
+  interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+  diff->insert(off, len);
+  return 0;
+}
+
+TEST_F(TestInternal, DiffIterateCloneOverwrite) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  uint64_t size = 20 << 20;
+  int order = 0;
+
+  ASSERT_EQ(0, rbd.open(m_ioctx, image, m_image_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ(4096, image.write(0, 4096, bl));
+
+  interval_set<uint64_t> one;
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, false, false, iterate_cb,
+                                   (void *)&one));
+  ASSERT_EQ(0, image.snap_create("one"));
+  ASSERT_EQ(0, image.snap_protect("one"));
+
+  std::string clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(m_ioctx, m_image_name.c_str(), "one", m_ioctx,
+                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "one"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("one"));
+
+  // Simulate a client that doesn't support deep flatten (old librbd / krbd)
+  // which will copy up the full object from the parent
+  std::string oid = ictx->object_prefix + ".0000000000000000";
+  librados::IoCtx io_ctx;
+  io_ctx.dup(m_ioctx);
+  io_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+  ASSERT_EQ(0, io_ctx.write(oid, bl, 4096, 4096));
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, librbd::snap_set(ictx, "one"));
+  ASSERT_EQ(0, librbd::diff_iterate(ictx, nullptr, 0, size, true, false,
+                                    iterate_cb, (void *)&diff));
+  ASSERT_EQ(one, diff);
+}
+
