@@ -93,46 +93,42 @@ struct C_ShutDownCache : public Context {
 struct C_InvalidateCache : public Context {
   ImageCtx *image_ctx;
   bool purge_on_error;
-  bool reentrant_safe;
   Context *on_finish;
 
-  C_InvalidateCache(ImageCtx *_image_ctx, bool _purge_on_error,
-                    bool _reentrant_safe, Context *_on_finish)
-    : image_ctx(_image_ctx), purge_on_error(_purge_on_error),
-      reentrant_safe(_reentrant_safe), on_finish(_on_finish) {
+  C_InvalidateCache(ImageCtx *_image_ctx, bool _purge_on_error, Context *_on_finish)
+    : image_ctx(_image_ctx), purge_on_error(_purge_on_error), on_finish(_on_finish) {
   }
   virtual void finish(int r) {
-    assert(image_ctx->cache_lock.is_locked());
-    CephContext *cct = image_ctx->cct;
+    {
+      RWLock::RLocker owner_Locker(image_ctx->owner_lock);
+      Mutex::Locker cache_locker(image_ctx->cache_lock);
+      CephContext *cct = image_ctx->cct;
 
-    if (r == -EBLACKLISTED) {
-      lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
-      image_ctx->object_cacher->purge_set(image_ctx->object_set);
-    } else if (r != 0 && purge_on_error) {
-      lderr(cct) << "invalidate cache encountered error "
-                 << cpp_strerror(r) << " !Purging cache..." << dendl;
-      image_ctx->object_cacher->purge_set(image_ctx->object_set);
-    } else if (r != 0) {
-      lderr(cct) << "flush_cache returned " << r << dendl;
-    }
+      if (r == -EBLACKLISTED) {
+	lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
+	image_ctx->object_cacher->purge_set(image_ctx->object_set);
+      } else if (r != 0 && purge_on_error) {
+	lderr(cct) << "invalidate cache encountered error "
+		   << cpp_strerror(r) << " !Purging cache..." << dendl;
+	image_ctx->object_cacher->purge_set(image_ctx->object_set);
+      } else if (r != 0) {
+	lderr(cct) << "flush_cache returned " << r << dendl;
+      }
 
-    loff_t unclean = image_ctx->object_cacher->release_set(
-      image_ctx->object_set);
-    if (unclean == 0) {
-      r = 0;
-    } else {
-      lderr(cct) << "could not release all objects from cache: "
-                 << unclean << " bytes remain" << dendl;
-      if (r == 0) {
-        r = -EBUSY;
+      loff_t unclean = image_ctx->object_cacher->release_set(
+	image_ctx->object_set);
+      if (unclean == 0) {
+	r = 0;
+      } else {
+	lderr(cct) << "could not release all objects from cache: "
+		   << unclean << " bytes remain" << dendl;
+	if (r == 0) {
+	  r = -EBUSY;
+	}
       }
     }
 
-    if (reentrant_safe) {
-      on_finish->complete(r);
-    } else {
-      image_ctx->op_work_queue->queue(on_finish, r);
-    }
+    on_finish->complete(r);
   }
 
 };
@@ -744,8 +740,10 @@ struct C_InvalidateCache : public Context {
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    C_ShutDownCache *shut_down = new C_ShutDownCache(this, on_finish);
-    flush_cache(new C_InvalidateCache(this, true, false, shut_down));
+    Context *shut_down = util::create_async_context_callback(
+      *this, new C_ShutDownCache(this, on_finish));
+    flush_cache(util::create_async_context_callback(
+      *this, new C_InvalidateCache(this, true, shut_down)));
   }
 
   int ImageCtx::invalidate_cache(bool purge_on_error) {
@@ -759,7 +757,8 @@ struct C_InvalidateCache : public Context {
     cache_lock.Unlock();
 
     C_SaferCond ctx;
-    flush_cache(new C_InvalidateCache(this, purge_on_error, true, &ctx));
+    flush_cache(util::create_async_context_callback(
+      *this, new C_InvalidateCache(this, purge_on_error, &ctx)));
 
     int result = ctx.wait();
     return result;
@@ -775,7 +774,9 @@ struct C_InvalidateCache : public Context {
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    flush_cache(new C_InvalidateCache(this, purge_on_error, false, on_finish));
+    on_finish = util::create_async_context_callback(*this, on_finish);
+    flush_cache(util::create_async_context_callback(
+      *this, new C_InvalidateCache(this, purge_on_error, on_finish)));
   }
 
   void ImageCtx::clear_nonexistence_cache() {
