@@ -2364,8 +2364,10 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   _session_op_assign(s, op);
 
+  // Keep connection ref now
+  ConnectionRef c = op->session->con;
   if (need_send) {
-    _send_op(op, m);
+    _prepare_send_op(op, c, m);
   }
 
   // Last chance to touch Op here, after giving up session lock it can
@@ -2379,6 +2381,10 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   op = NULL;
 
   sl.unlock();
+  // Don't need session lock
+  if (need_send)
+    c->send_message(m);
+
   put_session(s);
 
   ldout(cct, 5) << num_in_flight.read() << " in flight" << dendl;
@@ -3052,26 +3058,20 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   return m;
 }
 
-void Objecter::_send_op(Op *op, MOSDOp *m)
+void Objecter::_prepare_send_op(Op *op, ConnectionRef &con, MOSDOp *m)
 {
   // rwlock is locked
   // op->session->lock is locked
 
-  if (!m) {
-    assert(op->tid > 0);
-    m = _prepare_osd_op(op);
-  }
-
-  ldout(cct, 15) << "_send_op " << op->tid << " to osd." << op->session->osd
+  ldout(cct, 15) << "_prepare_send_op " << op->tid << " to osd." << op->session->osd
 		 << dendl;
 
-  ConnectionRef con = op->session->con;
   assert(con);
 
   // preallocated rx buffer?
   if (op->con) {
     ldout(cct, 20) << " revoking rx buffer for " << op->tid << " on "
-		   << op->con << dendl;
+                   << op->con << dendl;
     op->con->revoke_rx_buffer(op->tid);
   }
   if (op->outbl &&
@@ -3086,8 +3086,6 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   op->incarnation = op->session->incarnation;
 
   m->set_tid(op->tid);
-
-  op->session->con->send_message(m);
 }
 
 int Objecter::calc_op_budget(Op *op)
@@ -3264,8 +3262,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     s->ops.erase(op->tid);
     op->tid = last_tid.inc();
 
-    _send_op(op);
+    ConnectionRef con = op->session->con;
+    MOSDOp *retry_m = _prepare_osd_op(op);
+    _prepare_send_op(op, con, retry_m);
     sl.unlock();
+    // Don't need lock
+    con->send_message(retry_m);
     put_session(s);
     m->put();
     return;
