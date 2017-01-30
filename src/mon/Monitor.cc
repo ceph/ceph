@@ -141,6 +141,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf->mon_cpu_threads),
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
@@ -939,6 +940,8 @@ int Monitor::init()
   timer.init();
   new_tick();
 
+  cpu_tp.start();
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
@@ -1062,6 +1065,8 @@ void Monitor::shutdown()
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
 
   timer.shutdown();
+
+  cpu_tp.stop();
 
   remove_all_sessions();
 
