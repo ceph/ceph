@@ -218,7 +218,9 @@ int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
 } // anonymous namespace
 
 template <typename I>
-int DiffIterate<I>::diff_iterate(I *ictx, const char *fromsnapname,
+int DiffIterate<I>::diff_iterate(I *ictx,
+				 const cls::rbd::SnapshotNamespace& from_snap_namespace,
+				 const char *fromsnapname,
                                  uint64_t off, uint64_t len,
                                  bool include_parent, bool whole_object,
                                  int (*cb)(uint64_t, size_t, int, void *),
@@ -245,8 +247,8 @@ int DiffIterate<I>::diff_iterate(I *ictx, const char *fromsnapname,
     return r;
   }
 
-  DiffIterate command(*ictx, fromsnapname, off, len, include_parent,
-                      whole_object, cb, arg);
+  DiffIterate command(*ictx, from_snap_namespace, fromsnapname, off, len,
+		      include_parent, whole_object, cb, arg);
   r = command.execute();
   return r;
 }
@@ -265,7 +267,7 @@ int DiffIterate<I>::execute() {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     head_ctx.dup(m_image_ctx.data_ctx);
     if (m_from_snap_name) {
-      from_snap_id = m_image_ctx.get_snap_id(m_from_snap_name);
+      from_snap_id = m_image_ctx.get_snap_id(m_from_snap_namespace, m_from_snap_name);
       from_size = m_image_ctx.get_image_size(from_snap_id);
     }
     end_snap_id = m_image_ctx.snap_id;
@@ -317,7 +319,8 @@ int DiffIterate<I>::execute() {
     r = 0;
     if (m_image_ctx.parent && overlap > 0) {
       ldout(cct, 10) << " first getting parent diff" << dendl;
-      DiffIterate diff_parent(*m_image_ctx.parent, NULL, 0, overlap,
+      DiffIterate diff_parent(*m_image_ctx.parent, {},
+			      nullptr, 0, overlap,
                               m_include_parent, m_whole_object,
                               &simple_diff_cb,
                               &diff_context.parent_diff);

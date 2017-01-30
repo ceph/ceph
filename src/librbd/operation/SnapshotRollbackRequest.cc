@@ -64,13 +64,14 @@ private:
 template <typename I>
 SnapshotRollbackRequest<I>::SnapshotRollbackRequest(I &image_ctx,
                                                     Context *on_finish,
+						    const cls::rbd::SnapshotNamespace &snap_namespace,
                                                     const std::string &snap_name,
                                                     uint64_t snap_id,
                                                     uint64_t snap_size,
                                                     ProgressContext &prog_ctx)
-  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name),
-    m_snap_id(snap_id), m_snap_size(snap_size), m_prog_ctx(prog_ctx),
-    m_object_map(nullptr) {
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
+    m_snap_name(snap_name), m_snap_id(snap_id),
+    m_snap_size(snap_size), m_prog_ctx(prog_ctx), m_object_map(nullptr) {
 }
 
 template <typename I>

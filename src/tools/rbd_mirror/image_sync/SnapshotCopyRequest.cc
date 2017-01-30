@@ -27,11 +27,14 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
   auto snap_it = std::find_if(image_ctx->snap_ids.begin(),
                               image_ctx->snap_ids.end(),
                               [snap_id](
-      const std::pair<std::string, librados::snap_t> &pair) {
+				const std::pair<
+					  std::pair<cls::rbd::SnapshotNamespace,
+						    std::string>,
+					  librados::snap_t> &pair) {
     return pair.second == snap_id;
   });
   assert(snap_it != image_ctx->snap_ids.end());
-  return snap_it->first;
+  return snap_it->first.second;
 }
 
 } // anonymous namespace
@@ -170,7 +173,8 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_unprotect>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_unprotect(m_snap_name.c_str(),
+  m_local_image_ctx->operations->execute_snap_unprotect(cls::rbd::UserSnapshotNamespace(),
+							m_snap_name.c_str(),
                                                         ctx);
 }
 
@@ -247,7 +251,9 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_remove>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_remove(m_snap_name.c_str(), ctx);
+  m_local_image_ctx->operations->execute_snap_remove(cls::rbd::UserSnapshotNamespace(),
+						     m_snap_name.c_str(),
+						     ctx);
 }
 
 template <typename I>
@@ -362,7 +368,8 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
 
   assert(m_prev_snap_id != CEPH_NOSNAP);
 
-  auto snap_it = m_local_image_ctx->snap_ids.find(m_snap_name);
+  auto snap_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
+						   m_snap_name});
   assert(snap_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t local_snap_id = snap_it->second;
 
@@ -442,7 +449,9 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_protect>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_protect(m_snap_name.c_str(), ctx);
+  m_local_image_ctx->operations->execute_snap_protect(cls::rbd::UserSnapshotNamespace(),
+						      m_snap_name.c_str(),
+						      ctx);
 }
 
 template <typename I>

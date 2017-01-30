@@ -257,7 +257,8 @@ void ImageSync<I>::send_copy_object_map() {
   assert(!m_client_meta->sync_points.empty());
   librbd::journal::MirrorPeerSyncPoint &sync_point =
     m_client_meta->sync_points.front();
-  auto snap_id_it = m_local_image_ctx->snap_ids.find(sync_point.snap_name);
+  auto snap_id_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
+						      sync_point.snap_name});
   assert(snap_id_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t snap_id = snap_id_it->second;
 

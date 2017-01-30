@@ -40,15 +40,21 @@ public:
                       Context *on_finish);
   void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
-  void notify_snap_create(const std::string &snap_name,
-			  const cls::rbd::SnapshotNamespace &snap_namespace,
+  void notify_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
+			  const std::string &snap_name,
 			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
                           Context *on_finish);
-  void notify_snap_remove(const std::string &snap_name, Context *on_finish);
-  void notify_snap_protect(const std::string &snap_name, Context *on_finish);
-  void notify_snap_unprotect(const std::string &snap_name, Context *on_finish);
+  void notify_snap_remove(const cls::rbd::SnapshotNamespace &snap_namespace,
+			  const std::string &snap_name,
+			  Context *on_finish);
+  void notify_snap_protect(const cls::rbd::SnapshotNamespace &snap_namespace,
+			   const std::string &snap_name,
+			   Context *on_finish);
+  void notify_snap_unprotect(const cls::rbd::SnapshotNamespace &snap_namespace,
+			     const std::string &snap_name,
+			     Context *on_finish);
   void notify_rebuild_object_map(uint64_t request_id,
                                  ProgressContext &prog_ctx, Context *on_finish);
   void notify_rename(const std::string &image_name, Context *on_finish);

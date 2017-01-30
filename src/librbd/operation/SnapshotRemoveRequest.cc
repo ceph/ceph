@@ -48,10 +48,11 @@ std::ostream& operator<<(std::ostream& os,
 template <typename I>
 SnapshotRemoveRequest<I>::SnapshotRemoveRequest(I &image_ctx,
 						Context *on_finish,
+						const cls::rbd::SnapshotNamespace &snap_namespace,
 						const std::string &snap_name,
 						uint64_t snap_id)
-  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name),
-    m_snap_id(snap_id) {
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
+    m_snap_name(snap_name), m_snap_id(snap_id) {
 }
 
 template <typename I>
@@ -214,7 +215,7 @@ void SnapshotRemoveRequest<I>::remove_snap_context() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   RWLock::WLocker snap_locker(image_ctx.snap_lock);
-  image_ctx.rm_snap(m_snap_name, m_snap_id);
+  image_ctx.rm_snap(m_snap_namespace, m_snap_name, m_snap_id);
 }
 
 template <typename I>

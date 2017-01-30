@@ -117,7 +117,9 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_set(ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx,
+				cls::rbd::UserSnapshotNamespace(),
+				"snap1"));
 
   uint64_t snap_id = ictx->snap_id;
   expect_update(ictx, snap_id, 0);

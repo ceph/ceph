@@ -95,8 +95,8 @@ int TestFixture::open_image(librados::IoCtx &io_ctx,
 
 int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
                              librados::snap_t *snap_id) {
-  int r = image_ctx->operations->snap_create(snap_name,
-					     cls::rbd::UserSnapshotNamespace());
+  int r = image_ctx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+					     snap_name);
   if (r < 0) {
     return r;
   }
@@ -106,12 +106,14 @@ int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
     return r;
   }
 
-  if (image_ctx->snap_ids.count(snap_name) == 0) {
+  if (image_ctx->snap_ids.count({cls::rbd::UserSnapshotNamespace(),
+				 snap_name}) == 0) {
     return -ENOENT;
   }
 
   if (snap_id != nullptr) {
-    *snap_id = image_ctx->snap_ids[snap_name];
+    *snap_id = image_ctx->snap_ids[{cls::rbd::UserSnapshotNamespace(),
+				    snap_name}];
   }
   return 0;
 }

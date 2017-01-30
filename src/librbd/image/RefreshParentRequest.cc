@@ -152,24 +152,25 @@ void RefreshParentRequest<I>::send_set_parent_snap() {
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  int r;
+  cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
   {
     RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
-    r = m_parent_image_ctx->get_snap_name(m_parent_md.spec.snap_id, &snap_name);
-  }
-
-  if (r < 0) {
-    lderr(cct) << "failed to located snapshot: " << cpp_strerror(r) << dendl;
-    send_complete(r);
-    return;
+    const SnapInfo *info = m_parent_image_ctx->get_snap_info(m_parent_md.spec.snap_id);
+    if (!info) {
+      lderr(cct) << "failed to locate snapshot: Snapshot with this id not found" << dendl;
+      send_complete(-ENOENT);
+      return;
+    }
+    snap_namespace = info->snap_namespace;
+    snap_name = info->name;
   }
 
   using klass = RefreshParentRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_set_parent_snap, false>(this);
   SetSnapRequest<I> *req = SetSnapRequest<I>::create(
-    *m_parent_image_ctx, snap_name, ctx);
+    *m_parent_image_ctx, snap_namespace, snap_name, ctx);
   req->send();
 }
 

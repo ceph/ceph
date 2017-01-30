@@ -1049,13 +1049,15 @@ void RefreshRequest<I>::apply() {
         parent = m_snap_parents[i];
       }
 
-      m_image_ctx.add_snap(m_snap_names[i], m_snap_namespaces[i], m_snapc.snaps[i].val,
-                           m_snap_sizes[i], parent, protection_status, flags, m_snap_timestamps[i]);
+      m_image_ctx.add_snap(m_snap_namespaces[i], m_snap_names[i],
+			   m_snapc.snaps[i].val, m_snap_sizes[i], parent,
+			   protection_status, flags, m_snap_timestamps[i]);
     }
     m_image_ctx.snapc = m_snapc;
 
     if (m_image_ctx.snap_id != CEPH_NOSNAP &&
-        m_image_ctx.get_snap_id(m_image_ctx.snap_name) != m_image_ctx.snap_id) {
+        m_image_ctx.get_snap_id(m_image_ctx.snap_namespace,
+				m_image_ctx.snap_name) != m_image_ctx.snap_id) {
       lderr(cct) << "tried to read from a snapshot that no longer exists: "
                  << m_image_ctx.snap_name << dendl;
       m_image_ctx.snap_exists = false;

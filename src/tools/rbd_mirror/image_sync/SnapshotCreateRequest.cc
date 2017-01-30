@@ -190,8 +190,8 @@ void SnapshotCreateRequest<I>::send_snap_create() {
     SnapshotCreateRequest<I>, &SnapshotCreateRequest<I>::handle_snap_create>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_create(m_snap_name.c_str(),
-						     m_snap_namespace,
+  m_local_image_ctx->operations->execute_snap_create(m_snap_namespace,
+						     m_snap_name.c_str(),
 						     ctx,
                                                      0U, true);
 }
@@ -218,7 +218,8 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   }
 
   m_local_image_ctx->snap_lock.get_read();
-  auto snap_it = m_local_image_ctx->snap_ids.find(m_snap_name);
+  auto snap_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
+						   m_snap_name});
   if (snap_it == m_local_image_ctx->snap_ids.end()) {
     derr << ": failed to locate snap: " << m_snap_name << dendl;
     m_local_image_ctx->snap_lock.put_read();
