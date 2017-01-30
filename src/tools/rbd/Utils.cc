@@ -644,17 +644,12 @@ int snap_set(librbd::Image &image, const std::string &snap_name) {
 }
 
 std::string image_id(librbd::Image& image) {
-  librbd::image_info_t info;
-  int r = image.stat(info, sizeof(info));
+  std::string id;
+  int r = image.get_id(&id);
   if (r < 0) {
-    return string();
+    return std::string();
   }
-
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-  return string(prefix + strlen(RBD_DATA_PREFIX));
+  return id;
 }
 
 std::string mirror_image_state(librbd::mirror_image_state_t state) {
