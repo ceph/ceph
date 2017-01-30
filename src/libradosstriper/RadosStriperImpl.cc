@@ -770,7 +770,7 @@ int libradosstriper::RadosStriperImpl::internal_aio_write(
   uint64_t off,
   const ceph_file_layout& layout)
 {
-/// * Do not stripe object, if its size is zero byte
+  /// * Do not stripe object, if its size is zero byte
   if (len > 0) {
     vector<ObjectExtent> e;  /// * Extents to be written
     std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
