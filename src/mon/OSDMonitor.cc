@@ -354,6 +354,12 @@ void OSDMonitor::on_active()
       ls.pop_front();
     }
   }
+
+  // FIXME: hacky synchronous blocking mapping update
+  utime_t start = ceph_clock_now();
+  mapping.update(osdmap);
+  utime_t end = ceph_clock_now();
+  dout(10) << __func__ << " updated mapping in " << (end - start) << dendl;
 }
 
 void OSDMonitor::on_shutdown()
