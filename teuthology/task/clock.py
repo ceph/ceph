@@ -55,7 +55,7 @@ def task(ctx, config):
             'sudo', 'service', 'ntpd', 'start',
             run.Raw(';'),
             'PATH=/usr/bin:/usr/sbin',
-            'ntpdc', '-p',
+            'ntpq', '-p',
         ])
         rem.run(args=args)
 
@@ -68,7 +68,7 @@ def task(ctx, config):
             rem.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin',
-                    'ntpdc', '-p',
+                    'ntpq', '-p',
                     ],
                 )
 
@@ -76,7 +76,7 @@ def task(ctx, config):
 @contextlib.contextmanager
 def check(ctx, config):
     """
-    Run ntpdc at the start and the end of the task.
+    Run ntpq at the start and the end of the task.
 
     :param ctx: Context
     :param config: Configuration
@@ -86,7 +86,7 @@ def check(ctx, config):
         rem.run(
             args=[
                 'PATH=/usr/bin:/usr/sbin',
-                'ntpdc', '-p',
+                'ntpq', '-p',
                 ],
             )
 
@@ -99,6 +99,6 @@ def check(ctx, config):
             rem.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin',
-                    'ntpdc', '-p',
+                    'ntpq', '-p',
                     ],
                 )
