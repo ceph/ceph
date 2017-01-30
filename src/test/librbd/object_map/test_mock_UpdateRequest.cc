@@ -8,6 +8,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/object_map/UpdateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -23,7 +24,7 @@ using ::testing::StrEq;
 class TestMockObjectMapUpdateRequest : public TestMockFixture {
 public:
   void expect_update(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, snap_id));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (snap_id == CEPH_NOSNAP) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
@@ -56,16 +57,19 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::NoOpProgressContext no_progress;
+  ASSERT_EQ(0, ictx->operations->resize(4 << ictx->order, no_progress));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
   ceph::BitVector<2> object_map;
-  object_map.resize(1024);
+  object_map.resize(4);
   for (uint64_t i = 0; i < object_map.size(); ++i) {
     object_map[i] = i % 4;
   }
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -97,7 +101,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateHeadOnDisk) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -125,7 +129,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -152,7 +156,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateOnDiskError) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, &cond_ctx);
   {
@@ -182,7 +186,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *req = new UpdateRequest(
+  AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_EXISTS_CLEAN,
     boost::optional<uint8_t>(), &cond_ctx);
   {
