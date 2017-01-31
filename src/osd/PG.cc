@@ -6098,6 +6098,7 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result
@@ -6153,6 +6154,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->publish_stats_to_osd();
   post_event(RemoteBackfillReserved());
 }
 
@@ -6218,6 +6220,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
+  pg->publish_stats_to_osd();
 
   pg->schedule_backfill_full_retry();
 
@@ -6238,6 +6241,7 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
       pg, pg->get_osdmap()->get_epoch(),
       LocalBackfillReserved()),
     pg->get_backfill_priority());
+  pg->publish_stats_to_osd();
 }
 
 void PG::RecoveryState::WaitLocalBackfillReserved::exit()
@@ -6254,6 +6258,8 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/NotBackfilling")
 {
   context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result
@@ -6467,6 +6473,7 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
       pg, pg->get_osdmap()->get_epoch(),
       LocalRecoveryReserved()),
     pg->get_recovery_priority());
+  pg->publish_stats_to_osd();
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
@@ -6526,6 +6533,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_set(PG_STATE_RECOVERING);
+  pg->publish_stats_to_osd();
   pg->osd->queue_for_recovery(pg);
 }
 
