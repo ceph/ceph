@@ -351,6 +351,12 @@ public:
   virtual int get_params();
 };
 
+class RGWInfo_ObjStore : public RGWInfo {
+public:
+    RGWInfo_ObjStore() = default;
+    ~RGWInfo_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;
@@ -382,6 +388,9 @@ protected:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
 public:
+  static constexpr int MAX_BUCKET_NAME_LEN = 255;
+  static constexpr int MAX_OBJ_NAME_LEN = 1024;
+
   RGWHandler_REST() {}
   virtual ~RGWHandler_REST() {}
 
@@ -425,6 +434,13 @@ public:
 
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri,
 				       string *out_uri);
+
+  virtual RGWRESTMgr* get_resource_mgr_as_default(struct req_state* s,
+                                                  const std::string& uri,
+                                                  std::string* our_uri) {
+    return this;
+  }
+
   virtual RGWHandler_REST *get_handler(struct req_state *s) { return NULL; }
   virtual void put_handler(RGWHandler_REST *handler) { delete handler; }
 

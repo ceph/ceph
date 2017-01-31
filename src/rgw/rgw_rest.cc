@@ -1474,7 +1474,7 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
     // Name too short
     return -ERR_INVALID_BUCKET_NAME;
   }
-  else if (len > 255) {
+  else if (len > MAX_BUCKET_NAME_LEN) {
     // Name too long
     return -ERR_INVALID_BUCKET_NAME;
   }
@@ -1489,7 +1489,7 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
 int RGWHandler_REST::validate_object_name(const string& object)
 {
   int len = object.size();
-  if (len > 1024) {
+  if (len > MAX_OBJ_NAME_LEN) {
     // Name too long
     return -ERR_INVALID_OBJECT_NAME;
   }
@@ -1625,8 +1625,9 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri,
     }
   }
 
-  if (default_mgr)
-    return default_mgr;
+  if (default_mgr) {
+    return default_mgr->get_resource_mgr_as_default(s, uri, out_uri);
+  }
 
   return this;
 }
