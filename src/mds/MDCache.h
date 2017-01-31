@@ -915,10 +915,12 @@ protected:
     bool want_xlocked;
     version_t tid;
     int64_t pool;
+    int last_err;
     list<MDSInternalContextBase*> waiters;
     open_ino_info_t() : checking(MDS_RANK_NONE), auth_hint(MDS_RANK_NONE),
       check_peers(true), fetch_backtrace(true), discover(false),
-      want_replica(false), want_xlocked(false), tid(0), pool(-1) {}
+      want_replica(false), want_xlocked(false), tid(0), pool(-1),
+      last_err(0) {}
   };
   ceph_tid_t open_ino_last_tid;
   map<inodeno_t,open_ino_info_t> opening_inodes;
@@ -926,15 +928,14 @@ protected:
   void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
   void _open_ino_parent_opened(inodeno_t ino, int ret);
   void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
-  void _open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir);
-  MDSInternalContextBase* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
+  void _open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir, bool parent);
   int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 			    vector<inode_backpointer_t>& ancestors,
 			    bool discover, bool want_xlocked, mds_rank_t *hint);
   void open_ino_finish(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
-  void handle_open_ino(MMDSOpenIno *m);
+  void handle_open_ino(MMDSOpenIno *m, int err=0);
   void handle_open_ino_reply(MMDSOpenInoReply *m);
   friend class C_IO_MDC_OpenInoBacktraceFetched;
   friend struct C_MDC_OpenInoTraverseDir;
