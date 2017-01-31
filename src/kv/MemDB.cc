@@ -81,7 +81,7 @@ void MemDB::_save()
   while (iter != m_map.end()) {
     dout(10) << __func__ << " Key:"<< iter->first << dendl;
     _encode(iter, bl);
-    iter++;
+    ++iter;
   }
   bl.write_fd(fd);
 
@@ -484,7 +484,7 @@ int MemDB::MDBWholeSpaceIteratorImpl::next()
     return -1;
   }
   free_last();
-  m_iter++;
+  ++m_iter;
   if (m_iter != m_map_p->end()) {
     fill_current();
     return 0;
@@ -502,7 +502,7 @@ int MemDB::MDBWholeSpaceIteratorImpl:: prev()
   }
   free_last();
   if (m_iter != m_map_p->begin()) {
-    m_iter--;
+    --m_iter;
     fill_current();
     return 0;
   } else {
@@ -536,7 +536,7 @@ int MemDB::MDBWholeSpaceIteratorImpl::seek_to_last(const std::string &k)
   free_last();
   if (k.empty()) {
     m_iter = m_map_p->end();
-    m_iter--;
+    --m_iter;
   } else {
     m_iter = m_map_p->lower_bound(k);
   }
