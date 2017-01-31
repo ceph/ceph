@@ -11,6 +11,7 @@ import time
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
+from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
@@ -152,8 +153,14 @@ def _run_tests(ctx, client, tests):
 
             test_path = None
             if 'test' in config:
+                # hack: the git_url is always ceph-ci or ceph
+                git_url = teuth_config.get_ceph_git_url()
+                repo_name = 'ceph.git'
+                if git_url.count('ceph-ci'):
+                    repo_name = 'ceph-ci.git'
                 url = config['test'].format(
-                    branch=config.get('branch', 'master')
+                    branch=config.get('branch', 'master'),
+                    repo=repo_name,
                     )
                 test_path = os.path.join(tmp_dir, command)
                 remote.run(
