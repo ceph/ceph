@@ -1858,7 +1858,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (write_ordered &&
       scrubber.write_blocked_by_scrub(head, get_sort_bitwise())) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
-    waiting_for_active.push_back(op);
+    waiting_for_scrub.push_back(op);
     op->mark_delayed("waiting for scrub");
     return;
   }
@@ -2880,10 +2880,10 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
     dout(10) << __func__ << " " << hoid
 	     << " blocked by scrub" << dendl;
     if (op) {
-      waiting_for_active.push_back(op);
+      waiting_for_scrub.push_back(op);
       op->mark_delayed("waiting for scrub");
       dout(10) << __func__ << " " << hoid
-	       << " placing op in waiting_for_active" << dendl;
+	       << " placing op in waiting_for_scrub" << dendl;
     } else {
       dout(10) << __func__ << " " << hoid
 	       << " no op, dropping on the floor" << dendl;
@@ -10005,10 +10005,11 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   // requeue everything in the reverse order they should be
   // reexamined.
   requeue_ops(waiting_for_peered);
+  requeue_ops(waiting_for_active);
 
   clear_scrub_reserved();
 
-  // requeues waiting_for_active
+  // requeues waiting_for_scrub
   scrub_clear_state();
 
   cancel_copy_ops(is_primary());
@@ -12344,6 +12345,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
       if (op)
 	requeue_op(op);
       requeue_ops(waiting_for_active);
+      requeue_ops(waiting_for_scrub);
       requeue_ops(waiting_for_cache_not_full);
       objects_blocked_on_cache_full.clear();
       requeued = true;

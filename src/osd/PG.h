@@ -831,6 +831,7 @@ protected:
 
   // ops waiting on active (require peered as well)
   list<OpRequestRef>            waiting_for_active;
+  list<OpRequestRef>            waiting_for_scrub;
 
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
