@@ -1814,7 +1814,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
         if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
           if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-            lderr(cct) << "cannot enable object map" << dendl;
+            lderr(cct) << "cannot enable object-map. exclusive-lock must be "
+                           "enabled before enabling object-map." << dendl;
             return -EINVAL;
           }
           enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
@@ -1822,7 +1823,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
         if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
           if ((new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-            lderr(cct) << "cannot enable fast diff" << dendl;
+            lderr(cct) << "cannot enable fast-diff. object-map must be "
+                           "enabled before enabling fast-diff." << dendl;
             return -EINVAL;
           }
           enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
@@ -1830,7 +1832,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
           if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-            lderr(cct) << "cannot enable journaling" << dendl;
+            lderr(cct) << "cannot enable journaling. exclusive-lock must be "
+                           "enabled before enabling journaling." << dendl;
             return -EINVAL;
           }
           features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
@@ -1857,7 +1860,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
           if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
               (new_features & RBD_FEATURE_JOURNALING) != 0) {
-            lderr(cct) << "cannot disable exclusive lock" << dendl;
+            lderr(cct) << "cannot disable exclusive-lock. object-map "
+                          "or journaling must be disabled before "
+                          "disabling exclusive-lock." << dendl;
             return -EINVAL;
           }
           features_mask |= (RBD_FEATURE_OBJECT_MAP |
@@ -1865,7 +1870,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
         if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
           if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {
-            lderr(cct) << "cannot disable object map" << dendl;
+            lderr(cct) << "cannot disable object-map. fast-diff must be "
+                          "disabled before disabling object-map." << dendl;
             return -EINVAL;
           }
 
