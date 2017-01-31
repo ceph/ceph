@@ -109,7 +109,7 @@ namespace rgw {
       ::decode(name, bl);
       ::decode(version, bl);
       ::decode(typestr, bl);
-      type = to_type(typestr.c_str());
+      type = to_type(typestr);
       ::decode(id, bl);
       ::decode(key, bl);
       DECODE_FINISH(bl);
@@ -135,7 +135,7 @@ namespace rgw {
       string typestr;
       JSONDecoder::decode_json("version", version, obj);
       JSONDecoder::decode_json("type", typestr, obj);
-      type = to_type(typestr.c_str());
+      type = to_type(typestr);
       JSONDecoder::decode_json("id", id, obj);
       JSONDecoder::decode_json("key", key, obj);
     }
