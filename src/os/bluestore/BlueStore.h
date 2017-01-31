@@ -62,6 +62,7 @@ enum {
   l_bluestore_state_wal_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_submit_lat,
   l_bluestore_commit_lat,
   l_bluestore_compress_lat,
   l_bluestore_decompress_lat,
