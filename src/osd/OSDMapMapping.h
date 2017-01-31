@@ -85,6 +85,7 @@ class OSDMapMapping {
   std::vector<std::vector<pg_t>> acting_rmap;  // osd -> pg
   //unused: std::vector<std::vector<pg_t>> up_rmap;  // osd -> pg
   epoch_t epoch;
+  uint64_t num_pgs = 0;
 
   void _init_mappings(const OSDMap& osdmap);
   void _update_range(
@@ -130,6 +131,10 @@ public:
 
   epoch_t get_epoch() const {
     return epoch;
+  }
+
+  uint64_t get_num_pgs() const {
+    return num_pgs;
   }
 };
 
