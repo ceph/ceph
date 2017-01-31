@@ -2866,8 +2866,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     size_t conf_prefix_len = start.size();
 
     if(key.size() > conf_prefix_len && !key.compare(0,conf_prefix_len,start)) {
+      // validate config setting
       string subkey = key.substr(conf_prefix_len, key.size()-conf_prefix_len);
-      int r = cct->_conf->set_val(subkey.c_str(), value);
+      int r = md_config_t().set_val(subkey.c_str(), value);
       if (r < 0)
         return r;
     }
