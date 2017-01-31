@@ -11,7 +11,6 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from tasks import rbd
 from teuthology.orchestra import run
-from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
@@ -88,26 +87,8 @@ def generate_iso(ctx, config):
     """Execute system commands to generate iso"""
     log.info('generating iso...')
     testdir = teuthology.get_testdir(ctx)
-
-    # use ctx.config instead of config, because config has been
-    # through teuthology.replace_all_with_clients()
-    refspec = ctx.config.get('branch')
-    if refspec is None:
-        refspec = ctx.config.get('tag')
-    if refspec is None:
-        refspec = ctx.config.get('sha1')
-    if refspec is None:
-        refspec = 'HEAD'
-
-    # hack: the git_url is always ceph-ci or ceph
-    git_url = teuth_config.get_ceph_git_url()
-    repo_name = 'ceph.git'
-    if git_url.count('ceph-ci'):
-        repo_name = 'ceph-ci.git'
-
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
-        test_url = client_config['test'].format(repo=repo_name, branch=refspec)
         (remote,) = ctx.cluster.only(client).remotes.keys()
         src_dir = os.path.dirname(__file__)
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
@@ -115,52 +96,22 @@ def generate_iso(ctx, config):
 
         with file(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
             test_setup = ''.join(f.readlines())
-            # configuring the commands to setup the nfs mount
-            mnt_dir = "/export/{client}".format(client=client)
-            test_setup = test_setup.format(
-                mnt_dir=mnt_dir
-            )
-
-        with file(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
-            test_teardown = ''.join(f.readlines())
 
         user_data = test_setup
-        if client_config.get('type', 'filesystem') == 'filesystem':
-            for i in xrange(0, client_config.get('num_rbd', DEFAULT_NUM_RBD)):
-                dev_letter = chr(ord('b') + i)
-                user_data += """
-- |
-  #!/bin/bash
-  mkdir /mnt/test_{dev_letter}
-  mkfs -t xfs /dev/vd{dev_letter}
-  mount -t xfs /dev/vd{dev_letter} /mnt/test_{dev_letter}
-""".format(dev_letter=dev_letter)
-
-        # this may change later to pass the directories as args to the
-        # script or something. xfstests needs that.
-        user_data += """
-- |
-  #!/bin/bash
-  test -d /mnt/test_b && cd /mnt/test_b
-  /mnt/cdrom/test.sh > /mnt/log/test.log 2>&1 && touch /mnt/log/success
-""" + test_teardown
-
+        generate_id_rsa = ['cat', '/dev/zero', run.Raw('|'), 'ssh-keygen',
+                           '-q', '-N', run.Raw('""')]
+        remote.run(args=generate_id_rsa, check_status=False)
+        remote.run(args=['chmod', '600', '.ssh/id_rsa.pub'])
+        id_rsa_pub = StringIO()
+        remote.run(args=['cat', '.ssh/id_rsa.pub'], stdout=id_rsa_pub)
+        id_rsa_pub = ''.join(id_rsa_pub.readlines())
+        ssh_auth_key = 'ssh_authorized_keys: \n'
+        user_data += ssh_auth_key + '  - ' + id_rsa_pub + '\n'
         teuthology.write_file(remote, userdata_path, StringIO(user_data))
 
         with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
             teuthology.write_file(remote, metadata_path, f)
 
-        test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
-
-        log.info('fetching test %s for %s', test_url, client)
-        remote.run(
-            args=[
-                'wget', '-nv', '-O', test_file,
-                test_url,
-                run.Raw('&&'),
-                'chmod', '755', test_file,
-                ],
-            )
         remote.run(
             args=[
                 'genisoimage', '-quiet', '-input-charset', 'utf-8',
@@ -169,7 +120,6 @@ def generate_iso(ctx, config):
                 '-graft-points',
                 'user-data={userdata}'.format(userdata=userdata_path),
                 'meta-data={metadata}'.format(metadata=metadata_path),
-                'test.sh={file}'.format(file=test_file),
                 ],
             )
     try:
@@ -183,9 +133,9 @@ def generate_iso(ctx, config):
                     '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
                     os.path.join(testdir, 'qemu', 'userdata.' + client),
                     os.path.join(testdir, 'qemu', 'metadata.' + client),
-                    '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client),
                     ],
                 )
+
 
 @contextlib.contextmanager
 def download_image(ctx, config):
