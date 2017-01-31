@@ -4108,6 +4108,16 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_db;
 
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    {
+      bufferlist bl;
+      ::encode((uint64_t)0, bl);
+      t->set(PREFIX_SUPER, "nid_max", bl);
+      t->set(PREFIX_SUPER, "blobid_max", bl);
+    }
+    db->submit_transaction_sync(t);
+  }
   _save_min_min_alloc_size(min_alloc_size);
 
   r = _open_alloc();
@@ -4157,6 +4167,9 @@ int BlueStore::mkfs()
       derr << __func__ << " fsck found " << rc << " errors" << dendl;
       r = -EIO;
     }
+  }
+  if (r < 0) {
+    derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
   }
   return r;
 }
@@ -6345,6 +6358,8 @@ int BlueStore::_open_super_meta()
       ::decode(v, p);
       nid_max = v;
     } catch (buffer::error& e) {
+      derr << __func__ << " unable to read nid_max" << dendl;
+      return -EIO;
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
     nid_last = nid_max.load();
@@ -6361,6 +6376,8 @@ int BlueStore::_open_super_meta()
       ::decode(v, p);
       blobid_max = v;
     } catch (buffer::error& e) {
+      derr << __func__ << " unable to read blobid_max" << dendl;
+      return -EIO;
     }
     dout(10) << __func__ << " old blobid_max " << blobid_max << dendl;
     blobid_last = blobid_max.load();
@@ -6405,6 +6422,8 @@ int BlueStore::_open_super_meta()
       ::decode(bluefs_extents, p);
     }
     catch (buffer::error& e) {
+      derr << __func__ << " unable to read bluefs_extents" << dendl;
+      return -EIO;
     }
     dout(10) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
 	     << std::dec << dendl;
