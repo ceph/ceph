@@ -701,19 +701,21 @@ EOF
 fi
 
 if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
-    if [ "$CEPH_NUM_FS" -gt "1" ] ; then
-        ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
-    fi
+    if [ "$CEPH_NUM_FS" -gt "0" ] ; then
+        if [ "$CEPH_NUM_FS" -gt "1" ] ; then
+            ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
+        fi
 
-    fs=0
-    for name in a b c d e f g h i j k l m n o p
-    do
-        ceph_adm osd pool create "cephfs_data_${name}" 8
-        ceph_adm osd pool create "cephfs_metadata_${name}" 8
-        ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-        fs=$(($fs + 1))
-        [ $fs -eq $CEPH_NUM_FS ] && break
-    done
+        fs=0
+        for name in a b c d e f g h i j k l m n o p
+        do
+            ceph_adm osd pool create "cephfs_data_${name}" 8
+            ceph_adm osd pool create "cephfs_metadata_${name}" 8
+            ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+            fs=$(($fs + 1))
+            [ $fs -eq $CEPH_NUM_FS ] && break
+        done
+    fi
 
     mds=0
     for name in a b c d e f g h i j k l m n o p

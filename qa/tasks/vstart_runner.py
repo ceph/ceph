@@ -3,25 +3,25 @@ vstart_runner: override Filesystem and Mount interfaces to run a CephFSTestCase 
 ceph instance instead of a packaged/installed cluster.  Use this to turn around test cases
 quickly during development.
 
-Usage (assuming teuthology, ceph, ceph-qa-suite checked out in ~/git):
+Simple usage (assuming teuthology and ceph checked out in ~/git):
 
     # Activate the teuthology virtualenv
     source ~/git/teuthology/virtualenv/bin/activate
     # Go into your ceph build directory
     cd ~/git/ceph/build
-    # Start a vstart cluster
-    MDS=2 MON=1 OSD=3 ../src/vstart.sh -n
-    # Invoke a test using this script, with PYTHONPATH set appropriately
-    python ~/git/ceph-qa-suite/tasks/vstart_runner.py
+    # Invoke a test using this script
+    python ~/git/ceph/qa/tasks/vstart_runner.py --create tasks.cephfs.test_data_scan
+
+Alternative usage:
 
     # Alternatively, if you use different paths, specify them as follows:
-    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph-qa-suite:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph-qa-suite/tasks/vstart_runner.py
+    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph/qa:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph/qa/tasks/vstart_runner.py
 
     # If you wish to drop to a python shell on failures, use --interactive:
-    python ~/git/ceph-qa-suite/tasks/vstart_runner.py --interactive
+    python ~/git/ceph/qa/tasks/vstart_runner.py --interactive
 
     # If you wish to run a named test case, pass it as an argument:
-    python ~/git/ceph-qa-suite/tasks/vstart_runner.py tasks.cephfs.test_data_scan
+    python ~/git/ceph/qa/tasks/vstart_runner.py tasks.cephfs.test_data_scan
 
 """
 
@@ -39,7 +39,7 @@ import time
 import json
 import sys
 import errno
-from unittest import suite
+from unittest import suite, loader
 import unittest
 import platform
 from teuthology.orchestra.run import Raw, quote
@@ -86,12 +86,17 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
     # A list of candidate paths for each package we need
     guesses = [
         ["~/git/teuthology", "~/scm/teuthology", "~/teuthology"],
-        ["~/git/ceph-qa-suite", "~/scm/ceph-qa-suite", "~/ceph-qa-suite"],
         ["lib/cython_modules/lib.2"],
         ["../src/pybind"],
     ]
 
     python_paths = []
+
+    # Up one level so that "tasks.foo.bar" imports work
+    python_paths.append(os.path.abspath(
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+    ))
+
     for package_guesses in guesses:
         for g in package_guesses:
             g_exp = os.path.abspath(os.path.expanduser(g))
@@ -122,9 +127,11 @@ import subprocess
 if os.path.exists("./CMakeCache.txt"):
     # Running in build dir of a cmake build
     BIN_PREFIX = "./bin/"
+    SRC_PREFIX = "../src"
 else:
     # Running in src/ of an autotools build
     BIN_PREFIX = "./"
+    SRC_PREFIX = "./"
 
 
 class LocalRemoteProcess(object):
@@ -224,7 +231,7 @@ class LocalRemote(object):
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None):
+            logger=None, label=None, env=None):
         log.info("run args={0}".format(args))
 
         # We don't need no stinkin' sudo
@@ -269,7 +276,8 @@ class LocalRemote(object):
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        stdin=subprocess.PIPE,
-                                       cwd=cwd)
+                                       cwd=cwd,
+                                       env=env)
 
         if stdin:
             if not isinstance(stdin, basestring):
@@ -338,6 +346,25 @@ class LocalDaemon(object):
         pid = self._get_pid()
         log.info("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGKILL)
+
+        waited = 0
+        while pid is not None:
+            new_pid = self._get_pid()
+            if new_pid is not None and new_pid != pid:
+                log.info("Killing new PID {0}".format(new_pid))
+                pid = new_pid
+                os.kill(pid, signal.SIGKILL)
+
+            if new_pid is None:
+                break
+            else:
+                if waited > timeout:
+                    raise MaxWhileTries(
+                        "Timed out waiting for daemon {0}.{1}".format(
+                            self.daemon_type, self.daemon_id))
+                time.sleep(1)
+                waited += 1
+
         self.wait(timeout=timeout)
 
     def restart(self):
@@ -500,6 +527,8 @@ class LocalCephManager(CephManager):
         # A minority of CephManager fns actually bother locking for when
         # certain teuthology tests want to run tasks in parallel
         self.lock = threading.RLock()
+
+        self.log = lambda x: log.info(x)
 
     def find_remote(self, daemon_type, daemon_id):
         """
@@ -751,7 +780,97 @@ class InteractiveFailureResult(unittest.TextTestResult):
         interactive.task(ctx=None, config=None)
 
 
+def enumerate_methods(s):
+    log.info("e: {0}".format(s))
+    for t in s._tests:
+        if isinstance(t, suite.BaseTestSuite):
+            for sub in enumerate_methods(t):
+                yield sub
+        else:
+            yield s, t
+
+
+def load_tests(modules, loader):
+    if modules:
+        log.info("Executing modules: {0}".format(modules))
+        module_suites = []
+        for mod_name in modules:
+            # Test names like cephfs.test_auto_repair
+            module_suites.append(loader.loadTestsFromName(mod_name))
+        log.info("Loaded: {0}".format(list(module_suites)))
+        return suite.TestSuite(module_suites)
+    else:
+        log.info("Executing all cephfs tests")
+        return loader.discover(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "cephfs")
+        )
+
+
+def scan_tests(modules):
+    overall_suite = load_tests(modules, loader.TestLoader())
+
+    max_required_mds = 0
+    max_required_clients = 0
+
+    for suite, case in enumerate_methods(overall_suite):
+        max_required_mds = max(max_required_mds,
+                               getattr(case, "MDSS_REQUIRED", 0))
+        max_required_clients = max(max_required_clients,
+                               getattr(case, "CLIENTS_REQUIRED", 0))
+
+    return max_required_mds, max_required_clients
+
+
+class LocalCluster(object):
+    def __init__(self, rolename="placeholder"):
+        self.remotes = {
+            LocalRemote(): [rolename]
+        }
+
+    def only(self, requested):
+        return self.__class__(rolename=requested)
+
+
+class LocalContext(object):
+    def __init__(self):
+        self.config = {}
+        self.teuthology_config = teuth_config
+        self.cluster = LocalCluster()
+        self.daemons = DaemonGroup()
+
+        # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
+        # tests that want to look these up via ctx can do so.
+        # Inspect ceph.conf to see what roles exist
+        for conf_line in open("ceph.conf").readlines():
+            for svc_type in ["mon", "osd", "mds", "mgr"]:
+                if svc_type not in self.daemons.daemons:
+                    self.daemons.daemons[svc_type] = {}
+                match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
+                if match:
+                    svc_id = match.group(1)
+                    self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
+
+    def __del__(self):
+        shutil.rmtree(self.teuthology_config['test_path'])
+
+
 def exec_test():
+    # Parse arguments
+    interactive_on_error = False
+    create_cluster = False
+
+    args = sys.argv[1:]
+    flags = [a for a in args if a.startswith("-")]
+    modules = [a for a in args if not a.startswith("-")]
+    for f in flags:
+        if f == "--interactive":
+            interactive_on_error = True
+        elif f == "--create":
+            create_cluster = True
+        else:
+            log.error("Unknown option '{0}'".format(f))
+            sys.exit(-1)
+
     # Help developers by stopping up-front if their tree isn't built enough for all the
     # tools that the tests might want to use (add more here if needed)
     require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
@@ -761,10 +880,7 @@ def exec_test():
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 
-    test_dir = tempfile.mkdtemp()
-
-    # Create as many of these as the biggest test requires
-    clients = ["0", "1", "2", "3"]
+    max_required_mds, max_required_clients = scan_tests(modules)
 
     remote = LocalRemote()
 
@@ -773,48 +889,39 @@ def exec_test():
         args=["ps", "-u"+str(os.getuid())]
     ).stdout.getvalue().strip()
     lines = ps_txt.split("\n")[1:]
-
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
             pid = int(line.split()[0])
             log.warn("Killing stray process {0}".format(line))
             os.kill(pid, signal.SIGKILL)
 
-    class LocalCluster(object):
-        def __init__(self, rolename="placeholder"):
-            self.remotes = {
-                remote: [rolename]
-            }
+    # Fire up the Ceph cluster if the user requested it
+    if create_cluster:
+        log.info("Creating cluster with {0} MDS daemons".format(
+            max_required_mds))
+        remote.run([os.path.join(SRC_PREFIX, "stop.sh")], check_status=False)
+        remote.run(["rm", "-rf", "./out"])
+        remote.run(["rm", "-rf", "./dev"])
+        vstart_env = os.environ.copy()
+        vstart_env["FS"] = "0"
+        vstart_env["MDS"] = max_required_mds.__str__()
+        vstart_env["OSD"] = "1"
+        vstart_env["MGR"] = "1"
 
-        def only(self, requested):
-            return self.__class__(rolename=requested)
+        remote.run([os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d", "--nolockdep"],
+                   env=vstart_env)
 
+        # Wait for OSD to come up so that subsequent injectargs etc will
+        # definitely succeed
+        LocalCephCluster(LocalContext()).mon_manager.wait_for_all_up(timeout=30)
+
+    # List of client mounts, sufficient to run the selected tests
+    clients = [i.__str__() for i in range(0, max_required_clients)]
+
+    test_dir = tempfile.mkdtemp()
     teuth_config['test_path'] = test_dir
 
-    class LocalContext(object):
-        def __init__(self):
-            self.config = {}
-            self.teuthology_config = teuth_config
-            self.cluster = LocalCluster()
-            self.daemons = DaemonGroup()
-
-            # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
-            # tests that want to look these up via ctx can do so.
-            # Inspect ceph.conf to see what roles exist
-            for conf_line in open("ceph.conf").readlines():
-                for svc_type in ["mon", "osd", "mds", "mgr"]:
-                    if svc_type not in self.daemons.daemons:
-                        self.daemons.daemons[svc_type] = {}
-                    match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
-                    if match:
-                        svc_id = match.group(1)
-                        self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
-
-        def __del__(self):
-            shutil.rmtree(self.teuthology_config['test_path'])
-
-    ctx = LocalContext()
-
+    # Construct Mount classes
     mounts = []
     for client_id in clients:
         # Populate client keyring (it sucks to use client.admin for test clients
@@ -837,6 +944,8 @@ def exec_test():
         else:
             if os.path.exists(mount.mountpoint):
                 os.rmdir(mount.mountpoint)
+
+    ctx = LocalContext()
     ceph_cluster = LocalCephCluster(ctx)
     mds_cluster = LocalMDSCluster(ctx)
     mgr_cluster = LocalMgrCluster(ctx)
@@ -891,39 +1000,7 @@ def exec_test():
     import teuthology.packaging
     teuthology.packaging.get_package_version = _get_package_version
 
-    def enumerate_methods(s):
-        for t in s._tests:
-            if isinstance(t, suite.BaseTestSuite):
-                for sub in enumerate_methods(t):
-                    yield sub
-            else:
-                yield s, t
-
-    interactive_on_error = False
-
-    args = sys.argv[1:]
-    flags = [a for a in args if a.startswith("-")]
-    modules = [a for a in args if not a.startswith("-")]
-    for f in flags:
-        if f == "--interactive":
-            interactive_on_error = True
-        else:
-            log.error("Unknown option '{0}'".format(f))
-            sys.exit(-1)
-
-    if modules:
-        log.info("Executing modules: {0}".format(modules))
-        module_suites = []
-        for mod_name in modules:
-            # Test names like cephfs.test_auto_repair
-            module_suites.append(decorating_loader.loadTestsFromName(mod_name))
-        log.info("Loaded: {0}".format(list(module_suites)))
-        overall_suite = suite.TestSuite(module_suites)
-    else:
-        log.info("Executing all cephfs tests")
-        overall_suite = decorating_loader.discover(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "cephfs")
-        )
+    overall_suite = load_tests(modules, decorating_loader)
 
     # Filter out tests that don't lend themselves to interactive running,
     victims = []
