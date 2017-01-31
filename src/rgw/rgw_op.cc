@@ -4449,7 +4449,8 @@ void RGWDeleteMultiObj::execute()
   for (iter = multi_delete->objects.begin();
         iter != multi_delete->objects.end() && num_processed < max_to_delete;
         ++iter, num_processed++) {
-    rgw_obj obj(bucket, *iter);
+    rgw_obj obj(bucket, iter->name);
+    obj.set_instance(iter->instance);
 
     obj_ctx->set_atomic(obj);
 
