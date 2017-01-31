@@ -2786,14 +2786,20 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
 	do_propose = true;
       }
     }
-  }
+  } else {
+    // There were no failures to replace, so try using any available standbys
+    // as standby-replay daemons.
 
-  // There were no failures to replace, so try using any available standbys
-  // as standby-replay daemons.
-  if (failed.empty()) {
+    // Take a copy of the standby GIDs so that we can iterate over
+    // them while perhaps-modifying standby_daemons during the loop
+    // (if we promote anyone they are removed from standby_daemons)
+    std::vector<mds_gid_t> standby_gids;
     for (const auto &j : pending_fsmap.standby_daemons) {
-      const auto &gid = j.first;
-      const auto &info = j.second;
+      standby_gids.push_back(j.first);
+    }
+
+    for (const auto &gid : standby_gids) {
+      const auto &info = pending_fsmap.standby_daemons.at(gid);
       assert(info.state == MDSMap::STATE_STANDBY);
 
       if (!info.standby_replay) {
