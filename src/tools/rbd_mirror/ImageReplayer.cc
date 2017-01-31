@@ -607,6 +607,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
   Context *ctx = new FunctionContext([this, r, desc](int _r) {
       {
         Mutex::Locker locker(m_lock);
+        assert(m_state == STATE_STARTING);
         m_state = STATE_STOPPING;
         if (r < 0 && r != -ECANCELED) {
           derr << "start failed: " << cpp_strerror(r) << dendl;
@@ -1060,6 +1061,12 @@ template <typename I>
 void ImageReplayer<I>::process_entry() {
   dout(20) << "processing entry tid=" << m_replay_entry.get_commit_tid()
            << dendl;
+
+  // stop replaying events if stop has been requested
+  if (on_replay_interrupted()) {
+    m_event_replay_tracker.finish_op();
+    return;
+  }
 
   Context *on_ready = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
