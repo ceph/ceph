@@ -309,7 +309,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
   }
 
   if (c != buffers.end() && (*c)->over())
-    c++;
+    ++c;
   buffers.erase(buffers.begin(), c);
   ldout(cct, 25) << __func__ << " got " << read  << " bytes, buffers size: " << buffers.size() << dendl;
   return read;
