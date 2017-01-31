@@ -33,6 +33,7 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "common/perf_counters.h"
 
 #include "common/Mutex.h"
 #include "HashIndex.h"
@@ -474,6 +475,11 @@ public:
   }
   bool needs_journal() {
     return false;
+  }
+  void dump_perf_counters(Formatter *f) override {
+    f->open_object_section("perf_counters");
+    logger->dump_formatted(f, false);
+    f->close_section();
   }
 
   int write_version_stamp();
