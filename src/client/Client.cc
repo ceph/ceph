@@ -4741,6 +4741,9 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
     } else {
       ldout(cct, 5) << "handle_cap_flushedsnap mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
+      InodeRef tmp_ref;
+      if (in->get_num_ref() == 1)
+	tmp_ref = in; // make sure inode not get freed while erasing item from in->cap_snaps
       in->cap_snaps.erase(follows);
       if (in->flushing_caps == 0 && in->cap_snaps.empty())
 	in->flushing_cap_item.remove_myself();
