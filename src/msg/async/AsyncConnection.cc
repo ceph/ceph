@@ -174,6 +174,9 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
   nread = cs.read(buf, len);
   if (nread < 0) {
     if (nread == -EAGAIN) {
+      // FIXME: I think this needs to get changed to look like
+      // SimpleMessenger's Pipe::do_recv() EAGAIN handling with
+      // ms_socket_retry_on_eagain
       nread = 0;
     } else if (nread == -EINTR) {
       goto again;

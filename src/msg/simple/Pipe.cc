@@ -2609,10 +2609,21 @@ int Pipe::tcp_read_wait()
 
 ssize_t Pipe::do_recv(char *buf, size_t len, int flags)
 {
+  int retries = 0;
 again:
   ssize_t got = ::recv( sd, buf, len, flags );
   if (got < 0) {
     if (errno == EINTR) {
+      goto again;
+    } else if (errno == EAGAIN &&
+	       msgr->cct->_conf->ms_socket_retry_on_eagain > retries) {
+      ++retries;
+      ldout(msgr->cct, 1) << __func__ << " socket " << sd
+			  << " unexpectedly got EAGAIN! Retrying again for "
+			  << retries << '/'
+			  << msgr->cct->_conf->ms_socket_retry_on_eagain
+			  << " time (ms_socket_retry_on_eagain config)"
+			  << dendl;
       goto again;
     }
     ldout(msgr->cct, 10) << __func__ << " socket " << sd << " returned "
