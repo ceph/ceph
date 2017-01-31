@@ -168,93 +168,43 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
     return;
 
   assert(version >= pg_map.version);
+  if (format_version < 1) {
+    derr << __func__ << "unsupported monitor protocol: "
+	 << get_service_name() << ".format_version = "
+	 << format_version << dendl;
+  }
+  assert(format_version >= 1);
 
-  if (format_version == 0) {
-    // old format
+  // pg/osd keys in leveldb
+  // read meta
+  epoch_t last_pg_scan = pg_map.last_pg_scan;
 
-    /* Obtain latest full pgmap version, if available and whose version is
-     * greater than the current pgmap's version.
-     */
-    version_t latest_full = get_version_latest_full();
-    if ((latest_full > 0) && (latest_full > pg_map.version)) {
-      bufferlist latest_bl;
-      int err = get_version_full(latest_full, latest_bl);
-      assert(err == 0);
-      dout(7) << __func__ << " loading latest full pgmap v"
-              << latest_full << dendl;
-      try {
-	PGMap tmp_pg_map;
-	bufferlist::iterator p = latest_bl.begin();
-	tmp_pg_map.decode(p);
-	pg_map = tmp_pg_map;
-      } catch (const std::exception& e) {
-	dout(0) << __func__ << ": error parsing update: "
-	        << e.what() << dendl;
-	assert(0 == "update_from_paxos: error parsing update");
-	return;
-      }
+  while (version > pg_map.version) {
+    // load full state?
+    if (pg_map.version == 0) {
+      dout(10) << __func__ << " v0, read_full" << dendl;
+      read_pgmap_full();
+      goto out;
     }
 
-    // walk through incrementals
-    while (version > pg_map.version) {
-      bufferlist bl;
-      int err = get_version(pg_map.version+1, bl);
-      assert(err == 0);
-      assert(bl.length());
-
-      dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
-      PGMap::Incremental inc;
-      try {
-	bufferlist::iterator p = bl.begin();
-	inc.decode(p);
-      } catch (const std::exception &e)   {
-	dout(0) << "update_from_paxos: error parsing "
-	        << "incremental update: " << e.what() << dendl;
-	assert(0 == "update_from_paxos: error parsing incremental update");
-	return;
-      }
-
-      pg_map.apply_incremental(g_ceph_context, inc);
-
-      dout(10) << pg_map << dendl;
-
-      if (inc.pg_scan)
-	last_sent_pg_create.clear();  // reset pg_create throttle timer
+    // incremental state?
+    dout(10) << __func__ << " read_incremental" << dendl;
+    bufferlist bl;
+    int r = get_version(pg_map.version + 1, bl);
+    if (r == -ENOENT) {
+      dout(10) << __func__ << " failed to read_incremental, read_full" << dendl;
+      read_pgmap_full();
+      goto out;
     }
+    assert(r == 0);
+    apply_pgmap_delta(bl);
+  }
 
-  } else if (format_version == 1) {
-    // pg/osd keys in leveldb
-
-    // read meta
-    epoch_t last_pg_scan = pg_map.last_pg_scan;
-
-    while (version > pg_map.version) {
-      // load full state?
-      if (pg_map.version == 0) {
-	dout(10) << __func__ << " v0, read_full" << dendl;
-	read_pgmap_full();
-	goto out;
-      }
-
-      // incremental state?
-      dout(10) << __func__ << " read_incremental" << dendl;
-      bufferlist bl;
-      int r = get_version(pg_map.version + 1, bl);
-      if (r == -ENOENT) {
-	dout(10) << __func__ << " failed to read_incremental, read_full" << dendl;
-	read_pgmap_full();
-	goto out;
-      }
-      assert(r == 0);
-      apply_pgmap_delta(bl);
-    }
-
-    read_pgmap_meta();
+  read_pgmap_meta();
 
 out:
-    if (last_pg_scan != pg_map.last_pg_scan)
-      last_sent_pg_create.clear();  // reset pg_create throttle timer
-  }
+  if (last_pg_scan != pg_map.last_pg_scan)
+    last_sent_pg_create.clear();  // reset pg_create throttle timer
 
   assert(version == pg_map.version);
 
@@ -931,37 +881,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
 void PGMonitor::send_pg_creates()
 {
-  // We only need to do this old, spammy way of broadcasting create messages
-  // to every osd (even those that aren't connected) if there are old OSDs in
-  // the cluster. As soon as everybody has upgraded we can flipt to the new
-  // behavior instead
   OSDMap& osdmap = mon->osdmon()->osdmap;
   if (osdmap.get_num_up_osds() == 0)
     return;
 
-  if (osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB) {
-    check_subs();
-    return;
-  }
-
-  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size()
-           << " pgs" << dendl;
-
-  utime_t now = ceph_clock_now();
-  for (map<int, map<epoch_t, set<pg_t> > >::iterator p =
-         pg_map.creating_pgs_by_osd_epoch.begin();
-       p != pg_map.creating_pgs_by_osd_epoch.end();
-       ++p) {
-    int osd = p->first;
-
-    // throttle?
-    if (last_sent_pg_create.count(osd) &&
-        now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd])
-      continue;
-
-    if (osdmap.is_up(osd))
-      send_pg_creates(osd, NULL, 0);
-  }
+  assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
+  check_subs();
+  return;
 }
 
 epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
