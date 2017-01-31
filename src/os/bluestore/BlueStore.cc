@@ -4116,7 +4116,7 @@ int BlueStore::mkfs()
     _set_alloc_sizes();
     {
       bufferlist bl;
-      ::encode(min_alloc_size, bl);
+      ::encode((uint64_t)min_alloc_size, bl);
       t->set(PREFIX_SUPER, "min_alloc_size", bl);
     }
 
@@ -6461,7 +6461,9 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "min_alloc_size", &bl);
     auto p = bl.begin();
     try {
-      ::decode(min_alloc_size, p);
+      uint64_t val;
+      ::decode(val, p);
+      min_alloc_size = val;
     } catch (buffer::error& e) {
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
@@ -6494,7 +6496,9 @@ int BlueStore::_upgrade_super()
       db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
       auto p = bl.begin();
       try {
-	::decode(min_alloc_size, p);
+	uint64_t val;
+	::decode(val, p);
+	min_alloc_size = val;
       } catch (buffer::error& e) {
 	derr << __func__ << " failed to read min_min_alloc_size" << dendl;
 	return -EIO;
