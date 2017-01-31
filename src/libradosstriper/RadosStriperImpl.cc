@@ -676,7 +676,6 @@ int libradosstriper::RadosStriperImpl::aio_generic_stat
     // nothing is really started so cancel everything
     delete multi_completion;
     delete cdata;
-    delete stat_completion;
     return rc;
   }
   // use a regular AioCompletion for the getxattr async call
@@ -692,7 +691,6 @@ int libradosstriper::RadosStriperImpl::aio_generic_stat
     // the async stat is ongoing, so we need to go on
     // we mark the getxattr as failed in the data object
     cdata->m_getxattrRC = rc;
-    delete getxattr_completion;
     multi_completion->complete_request(rc);
     multi_completion->put();
     return rc;
