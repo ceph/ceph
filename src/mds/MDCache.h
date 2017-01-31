@@ -31,6 +31,7 @@
 #include "StrayManager.h"
 #include "MDSContext.h"
 #include "MDSMap.h"
+#include "Mutation.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
@@ -67,10 +68,6 @@ struct MClientSnap;
 class MMDSFragmentNotify;
 
 class ESubtreeMap;
-
-struct MDRequestImpl;
-typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
-struct MDSlaveUpdate;
 
 enum {
   l_mdc_first = 3000,

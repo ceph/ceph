@@ -1022,7 +1022,7 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestR
   if (mdr) {
     string event_str("submit entry: ");
     event_str += event;
-    mdr->mark_event(event_str);
+    mdr->mark_event_string(event_str);
   } 
   mdlog->submit_entry(le, fin);
 }
@@ -5366,7 +5366,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
   assert(mdr || mds->is_resolve());
 
-  auto mut(std::make_shared<MutationImpl>(rollback.reqid));
+  MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CInode *in = mdcache->get_inode(rollback.ino);
@@ -7619,7 +7619,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
   // need to finish this update before sending resolve to claim the subtree
   mdcache->add_rollback(rollback.reqid, master);
 
-  auto mut(std::make_shared<MutationImpl>(rollback.reqid));
+  MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CDentry *srcdn = NULL;

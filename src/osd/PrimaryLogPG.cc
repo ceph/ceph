@@ -1705,7 +1705,9 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
 
-  m->finish_decode();
+  if (m->finish_decode()) {
+    op->reset_desc();   // for TrackedOp
+  }
   m->clear_payload();
 
   dout(20) << __func__ << ": op " << *m << dendl;

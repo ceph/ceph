@@ -137,18 +137,6 @@ public:
   epoch_t sent_epoch;
   bool hitset_inserted;
   Message *get_req() const { return request; }
-  bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
-  bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
-  bool been_delayed() { return hit_flag_points & flag_delayed; }
-  bool been_started() { return hit_flag_points & flag_started; }
-  bool been_sub_op_sent() { return hit_flag_points & flag_sub_op_sent; }
-  bool been_commit_sent() { return hit_flag_points & flag_commit_sent; }
-  bool currently_queued_for_pg() { return latest_flag_point & flag_queued_for_pg; }
-  bool currently_reached_pg() { return latest_flag_point & flag_reached_pg; }
-  bool currently_delayed() { return latest_flag_point & flag_delayed; }
-  bool currently_started() { return latest_flag_point & flag_started; }
-  bool currently_sub_op_sent() { return latest_flag_point & flag_sub_op_sent; }
-  bool currently_commit_sent() { return latest_flag_point & flag_commit_sent; }
 
   const char *state_string() const {
     switch(latest_flag_point) {
@@ -170,13 +158,13 @@ public:
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
   void mark_delayed(const string& s) {
-    mark_flag_point(flag_delayed, s);
+    mark_flag_point_string(flag_delayed, s);
   }
   void mark_started() {
     mark_flag_point(flag_started, "started");
   }
   void mark_sub_op_sent(const string& s) {
-    mark_flag_point(flag_sub_op_sent, s);
+    mark_flag_point_string(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
     mark_flag_point(flag_commit_sent, "commit_sent");
@@ -193,11 +181,12 @@ public:
     return reqid;
   }
 
-  typedef ceph::shared_ptr<OpRequest> Ref;
+  typedef boost::intrusive_ptr<OpRequest> Ref;
 
 private:
   void set_rmw_flags(int flags);
-  void mark_flag_point(uint8_t flag, const string& s);
+  void mark_flag_point(uint8_t flag, const char *s);
+  void mark_flag_point_string(uint8_t flag, const string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
