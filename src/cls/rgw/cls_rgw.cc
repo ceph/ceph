@@ -3414,7 +3414,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bu
     return ret;
   map<string, bufferlist>::iterator it;
   pair<string, int> entry;
-  for (it = vals.begin(); it != vals.end(); it++) {
+  for (it = vals.begin(); it != vals.end(); ++it) {
     iter = it->second.begin();
     try {
     ::decode(entry, iter);
