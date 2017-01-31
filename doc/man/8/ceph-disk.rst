@@ -56,6 +56,8 @@ zap
     Zap/erase/destroy a device's partition table (and contents)
 trigger
     Trigger an event (caled by udev)
+fix
+    Fix SELinux labels and/or file permissions
 
 Description
 ===========
