@@ -824,8 +824,8 @@ protected:
 	if (scrubber.write_blocked_by_scrub(
 	      p.first.get_head(),
 	      get_sort_bitwise())) {
-	  waiting_for_active.splice(
-	    waiting_for_active.begin(),
+	  waiting_for_scrub.splice(
+	    waiting_for_scrub.begin(),
 	    p.second,
 	    p.second.begin(),
 	    p.second.end());

@@ -2215,6 +2215,7 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_degraded_object.empty());
   assert(waiting_for_ondisk.empty());
   assert(waiting_for_active.empty());
+  assert(waiting_for_scrub.empty());
 
   osd->dequeue_pg(this, &waiting_for_peered);
 
@@ -4311,7 +4312,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	scrubber.run_callbacks();
 
         // requeue the writes from the chunk that just finished
-        requeue_ops(waiting_for_active);
+        requeue_ops(waiting_for_scrub);
 
 	scrubber.state = PG::Scrubber::WAIT_DIGEST_UPDATES;
 
@@ -4361,7 +4362,7 @@ void PG::scrub_clear_state()
   if (scrubber.active)
     osd->dec_scrubs_active();
 
-  requeue_ops(waiting_for_active);
+  requeue_ops(waiting_for_scrub);
 
   if (scrubber.queue_snap_trim) {
     dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
