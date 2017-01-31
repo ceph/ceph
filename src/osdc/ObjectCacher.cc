@@ -1027,7 +1027,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
     if (bh->snapc.seq > snapc.seq)
       snapc = bh->snapc;
     if (bh->last_write > last_write)
-      bh->last_write = bh->last_write;
+      last_write = bh->last_write;
   }
 
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
