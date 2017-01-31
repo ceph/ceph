@@ -2875,6 +2875,8 @@ void BlueStore::_init_logger()
     "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
+  b.add_time_avg(l_bluestore_submit_lat, "submit_lat",
+    "Average submit latency");
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
     "Average commit latency");
   b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
@@ -7185,7 +7187,7 @@ int BlueStore::queue_transactions(
     delete onreadable_sync;
     return 0;
   }
-
+  utime_t start = ceph_clock_now();
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
@@ -7241,6 +7243,8 @@ int BlueStore::queue_transactions(
 
   // execute (start)
   _txc_state_proc(txc);
+
+  logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
   return 0;
 }
 
