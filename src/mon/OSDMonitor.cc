@@ -8282,7 +8282,7 @@ bool OSDMonitor::_check_become_tier(
   if (tier_pool->has_tiers()) {
     *ss << "pool '" << tier_pool_name << "' has following tier(s) already:";
     for (set<uint64_t>::iterator it = tier_pool->tiers.begin();
-         it != tier_pool->tiers.end(); it++)
+         it != tier_pool->tiers.end(); ++it)
       *ss << "'" << osdmap.get_pool_name(*it) << "',";
     *ss << " multiple tiers are not yet supported.";
     *err = -EINVAL;
