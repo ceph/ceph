@@ -104,7 +104,8 @@ class Device {
   int get_gid_idx(int p) { return get_port(p)->get_gid_idx(); }
 
   QueuePair *create_queue_pair(int port,
-			       ibv_qp_type type);
+			       ibv_qp_type type,
+			       CMHandler *cm_handler = NULL);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   CompletionChannel *create_comp_channel(CephContext *c);
   CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);

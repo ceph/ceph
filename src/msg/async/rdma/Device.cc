@@ -255,10 +255,11 @@ Port *Device::get_port(int ibport)
  * See QueuePair::QueuePair for parameter documentation.
  */
 Infiniband::QueuePair* Device::create_queue_pair(int port,
-						 ibv_qp_type type)
+						 ibv_qp_type type,
+						 CMHandler *cm_handler)
 {
   Infiniband::QueuePair *qp = new QueuePair(
-      cct, *this, type, port, srq, tx_cq, rx_cq, max_send_wr, max_recv_wr);
+      cct, *this, type, port, srq, tx_cq, rx_cq, max_send_wr, max_recv_wr, 0, cm_handler);
   if (qp->init()) {
     delete qp;
     return NULL;

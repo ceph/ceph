@@ -14,9 +14,12 @@
  *
  */
 
+#include <rdma/rdma_cma.h>
+
 #include "Infiniband.h"
 #include "RDMAStack.h"
 #include "Device.h"
+#include "RDMAConnCM.h"
 
 #include "common/errno.h"
 #include "common/debug.h"
@@ -31,7 +34,7 @@ Infiniband::QueuePair::QueuePair(
     CephContext *c, Device &device, ibv_qp_type type,
     int port, ibv_srq *srq,
     Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq,
-    uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key)
+    uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key, CMHandler *cm_handler)
 : cct(c), ibdev(device),
   type(type),
   ctxt(ibdev.ctxt),
@@ -45,7 +48,8 @@ Infiniband::QueuePair::QueuePair(
   max_send_wr(max_send_wr),
   max_recv_wr(max_recv_wr),
   q_key(q_key),
-  dead(false)
+  dead(false),
+  cm_handler(cm_handler)
 {
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
@@ -68,7 +72,18 @@ int Infiniband::QueuePair::init()
   qpia.qp_type = type;                 // RC, UC, UD, or XRC
   qpia.sq_sig_all = 0;                 // only generate CQEs on requested WQEs
 
-  qp = ibv_create_qp(pd, &qpia);
+  if (cm_handler) {
+    int err;
+
+    err = rdma_create_qp(cm_handler->id, pd, &qpia);
+    if (err)
+      lderr(cct) << __func__ << " failed to create queue pair. err: " << err << " errno: " << cpp_strerror(errno) << dendl;
+
+    qp = err ? NULL : cm_handler->id->qp;
+  } else {
+    qp = ibv_create_qp(pd, &qpia);
+  }
+
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
     if (errno == ENOMEM) {
@@ -109,7 +124,7 @@ int Infiniband::QueuePair::init()
 
   int ret = ibv_modify_qp(qp, &qpa, mask);
   if (ret) {
-    ibv_destroy_qp(qp);
+    destroy_qp();
     lderr(cct) << __func__ << " failed to transition to INIT state: "
                << cpp_strerror(errno) << dendl;
     return -1;
@@ -619,10 +634,24 @@ Device *Infiniband::get_device(const struct ibv_context *ctxt)
 
 Infiniband::QueuePair::~QueuePair()
 {
-  if (qp) {
-    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+  destroy_qp();
+  if (cm_handler)
+    cm_handler->put();
+}
+
+void Infiniband::QueuePair::destroy_qp()
+{
+  if (!qp)
+    return;
+
+  ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+
+  if (cm_handler)
+    rdma_destroy_qp(cm_handler->id);
+  else
     assert(!ibv_destroy_qp(qp));
-  }
+
+  qp = nullptr;
 }
 
 /**
