@@ -50,6 +50,9 @@
 #include "include/interval_set.h"
 #include "include/stringify.h"
 
+#include "global/global_context.h"
+#include "osdc/Striper.h"
+
 #include <boost/assign/list_of.hpp>
 #include <boost/scope_exit.hpp>
 
@@ -90,9 +93,12 @@ static int get_features(bool *old_format, uint64_t *features)
   return 0;
 }
 
+static const uint64_t IMAGE_STRIPE_UNIT = 65536;
+static const uint64_t IMAGE_STRIPE_COUNT = 16;
+
 static int create_image_full(rados_ioctx_t ioctx, const char *name,
-			      uint64_t size, int *order, int old_format,
-			      uint64_t features)
+                             uint64_t size, int *order, int old_format,
+                             uint64_t features)
 {
   if (old_format) {
     // ensure old-format tests actually use the old format
@@ -103,11 +109,43 @@ static int create_image_full(rados_ioctx_t ioctx, const char *name,
     }
     return rbd_create(ioctx, name, size, order);
   } else if ((features & RBD_FEATURE_STRIPINGV2) != 0) {
-    return rbd_create3(ioctx, name, size, features, order, 65536, 16);
+    uint64_t stripe_unit = IMAGE_STRIPE_UNIT;
+    if (*order) {
+      // use a conservative stripe_unit for non default order
+      stripe_unit = (1ull << (*order-1));
+    }
+
+    printf("creating image with stripe unit: %ld, stripe count: %ld\n",
+           stripe_unit, IMAGE_STRIPE_COUNT);
+    return rbd_create3(ioctx, name, size, features, order,
+                       stripe_unit, IMAGE_STRIPE_COUNT);
   } else {
     return rbd_create2(ioctx, name, size, features, order);
   }
 }
+
+static int clone_image(rados_ioctx_t p_ioctx,
+                       rbd_image_t p_image, const char *p_name,
+                       const char *p_snap_name, rados_ioctx_t c_ioctx,
+                       const char *c_name, uint64_t features, int *c_order)
+{
+  uint64_t stripe_unit, stripe_count;
+
+  int r;
+  r = rbd_get_stripe_unit(p_image, &stripe_unit);
+  if (r != 0) {
+    return r;
+  }
+
+  r = rbd_get_stripe_count(p_image, &stripe_count);
+  if (r != 0) {
+    return r;
+  }
+
+  return rbd_clone2(p_ioctx, p_name, p_snap_name, c_ioctx,
+                    c_name, features, c_order, stripe_unit, stripe_count);
+}
+
 
 static int create_image(rados_ioctx_t ioctx, const char *name,
 			uint64_t size, int *order)
@@ -1252,6 +1290,51 @@ void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, siz
   *passed = true;
 }
 
+void generate_random_iomap(rbd_image_t image, int num_objects, int object_size,
+                           int max_count, map<uint64_t, uint64_t> &iomap)
+{
+  uint64_t stripe_unit, stripe_count;
+
+  ASSERT_EQ(0, rbd_get_stripe_unit(image, &stripe_unit));
+  ASSERT_EQ(0, rbd_get_stripe_count(image, &stripe_count));
+
+  while (max_count-- > 0) {
+    // generate random image offset based on base random object
+    // number and object offset and then map that back to an
+    // object number based on stripe unit and count.
+    uint64_t ono = rand() % num_objects;
+    uint64_t offset = rand() % (object_size - TEST_IO_SIZE);
+    uint64_t imageoff = (ono * object_size) + offset;
+
+    file_layout_t layout;
+    layout.object_size = object_size;
+    layout.stripe_unit = stripe_unit;
+    layout.stripe_count = stripe_count;
+
+    vector<ObjectExtent> ex;
+    Striper::file_to_extents(g_ceph_context, 1, &layout, imageoff, TEST_IO_SIZE, 0, ex);
+
+    // lets not worry if IO spans multiple extents (>1 object). in such
+    // as case we would perform the write multiple times to the same
+    // offset, but we record all objects that would be generated with
+    // this IO. TODO: fix this if such a need is required by your
+    // test.
+    vector<ObjectExtent>::iterator it;
+    map<uint64_t, uint64_t> curr_iomap;
+    for (it = ex.begin(); it != ex.end(); ++it) {
+      if (iomap.find((*it).objectno) != iomap.end()) {
+        break;
+      }
+
+      curr_iomap.insert(make_pair((*it).objectno, imageoff));
+    }
+
+    if (it == ex.end()) {
+      iomap.insert(curr_iomap.begin(), curr_iomap.end());
+    }
+  }
+}
+
 void aio_discard_test_data(rbd_image_t image, uint64_t off, uint64_t len, bool *passed)
 {
   rbd_completion_t comp;
@@ -2018,13 +2101,19 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
 
 TEST_F(TestLibRBD, TestClone)
 {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
   rados_ioctx_t ioctx;
   rbd_image_info_t pinfo, cinfo;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  int features = RBD_FEATURE_LAYERING;
+  bool old_format;
+  uint64_t features;
   rbd_image_t parent, child;
   int order = 0;
+
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
 
   std::string parent_name = get_temp_image_name();
   std::string child_name = get_temp_image_name();
@@ -2039,8 +2128,8 @@ TEST_F(TestLibRBD, TestClone)
   ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 0, strlen(data), data));
 
   // can't clone a non-snapshot, expect failure
-  EXPECT_NE(0, rbd_clone(ioctx, parent_name.c_str(), NULL, ioctx,
-			 child_name.c_str(), features, &order));
+  EXPECT_NE(0, clone_image(ioctx, parent, parent_name.c_str(), NULL, ioctx,
+                           child_name.c_str(), features, &order));
 
   // verify that there is no parent info on "parent"
   ASSERT_EQ(-ENOENT, rbd_get_parent_info(parent, NULL, 0, NULL, 0, NULL, 0));
@@ -2052,8 +2141,8 @@ TEST_F(TestLibRBD, TestClone)
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, "parent_snap"));
 
-  ASSERT_EQ(-EINVAL, rbd_clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
-			       child_name.c_str(), features, &order));
+  ASSERT_EQ(-EINVAL, clone_image(ioctx, parent, parent_name.c_str(), "parent_snap",
+                                 ioctx, child_name.c_str(), features, &order));
 
   // unprotected image should fail unprotect
   ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
@@ -2065,8 +2154,8 @@ TEST_F(TestLibRBD, TestClone)
   printf("can't protect a protected snap\n");
 
   // This clone and open should work
-  ASSERT_EQ(0, rbd_clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
-			 child_name.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx, parent, parent_name.c_str(), "parent_snap",
+                           ioctx, child_name.c_str(), features, &order));
   ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &child, NULL));
   printf("made and opened clone \"child\"\n");
 
@@ -2134,12 +2223,18 @@ TEST_F(TestLibRBD, TestClone)
 
 TEST_F(TestLibRBD, TestClone2)
 {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  int features = RBD_FEATURE_LAYERING;
+  bool old_format;
+  uint64_t features;
   rbd_image_t parent, child;
   int order = 0;
+
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
 
   std::string parent_name = get_temp_image_name();
   std::string child_name = get_temp_image_name();
@@ -2156,8 +2251,8 @@ TEST_F(TestLibRBD, TestClone2)
   ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 12, strlen(data), data));
 
   // can't clone a non-snapshot, expect failure
-  EXPECT_NE(0, rbd_clone(ioctx, parent_name.c_str(), NULL, ioctx,
-			 child_name.c_str(), features, &order));
+  EXPECT_NE(0, clone_image(ioctx, parent, parent_name.c_str(), NULL, ioctx,
+                           child_name.c_str(), features, &order));
 
   // verify that there is no parent info on "parent"
   ASSERT_EQ(-ENOENT, rbd_get_parent_info(parent, NULL, 0, NULL, 0, NULL, 0));
@@ -2169,8 +2264,8 @@ TEST_F(TestLibRBD, TestClone2)
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, "parent_snap"));
 
-  ASSERT_EQ(-EINVAL, rbd_clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
-			       child_name.c_str(), features, &order));
+  ASSERT_EQ(-EINVAL, clone_image(ioctx, parent, parent_name.c_str(), "parent_snap",
+                                 ioctx, child_name.c_str(), features, &order));
 
   // unprotected image should fail unprotect
   ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
@@ -2182,8 +2277,8 @@ TEST_F(TestLibRBD, TestClone2)
   printf("can't protect a protected snap\n");
 
   // This clone and open should work
-  ASSERT_EQ(0, rbd_clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
-			 child_name.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx, parent, parent_name.c_str(), "parent_snap",
+                           ioctx, child_name.c_str(), features, &order));
   ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &child, NULL));
   printf("made and opened clone \"child\"\n");
 
@@ -2213,6 +2308,8 @@ TEST_F(TestLibRBD, TestClone2)
 
 TEST_F(TestLibRBD, TestCoR)
 {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
   std::string config_value;
   ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", config_value));
   if (config_value == "false") {
@@ -2220,10 +2317,14 @@ TEST_F(TestLibRBD, TestCoR)
     return;
   }
 
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  int features = RBD_FEATURE_LAYERING;
   rbd_image_t parent, child;
   int order = 12; // smallest object size is 4K
   const uint64_t image_size = 4<<20;
@@ -2245,40 +2346,33 @@ TEST_F(TestLibRBD, TestCoR)
   char test_data[TEST_IO_SIZE + 1];
   char zero_data[TEST_IO_SIZE + 1];
   int i;
-  int count = 0;
 
   for (i = 0; i < TEST_IO_SIZE; ++i) 
     test_data[i] = (char) (rand() % (126 - 33) + 33);
   test_data[TEST_IO_SIZE] = '\0';
   memset(zero_data, 0, sizeof(zero_data));
 
-  // generate a random map which covers every objects with random offset
-  while (count < 100) {
-    uint64_t ono = rand() % object_num;
-    if (write_tracker.find(ono) == write_tracker.end()) {
-      uint64_t offset = rand() % (object_size - TEST_IO_SIZE);
-      write_tracker.insert(pair<uint64_t, uint64_t>(ono, offset));
-      count++;
-    }
-  }
+  // generate a random map which covers every objects with random
+  // offset
+  generate_random_iomap(parent, object_num, object_size, 100, write_tracker);
 
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr)
     printf("\t [%-8ld, %-8ld]\n",
-	   (unsigned long)itr->first, (unsigned long)itr->second);
+           (unsigned long)itr->first, (unsigned long)itr->second);
 
   printf("write data based on random map\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
     printf("\twrite object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(write_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(write_test_data, parent, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
          itr != write_tracker.end(); ++itr) {
     printf("\tread object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(read_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, parent, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   // find out what objects the parent image has generated
@@ -2308,8 +2402,8 @@ TEST_F(TestLibRBD, TestCoR)
   printf("made snapshot \"parent@parent_snap\" and protect it\n");
 
   // create a copy-on-read clone and open it
-  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
-	    features, &order));
+  ASSERT_EQ(0, clone_image(ioctx, parent, "parent",
+                           "parent_snap", ioctx, "child", features, &order));
   ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
   printf("made and opened clone \"child\"\n");
 
@@ -2317,20 +2411,20 @@ TEST_F(TestLibRBD, TestCoR)
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
     printf("\tread object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, child, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
     printf("\tread object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, child, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   printf("read again reversely\n");
   for (map<uint64_t, uint64_t>::iterator itr = --write_tracker.end();
      itr != write_tracker.begin(); --itr) {
     printf("\tread object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, child, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   // close child to flush all copy-on-read
@@ -2411,6 +2505,8 @@ static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
 
 TEST_F(TestLibRBD, ListChildren)
 {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
   rados_ioctx_t ioctx1, ioctx2;
   string pool_name1 = create_pool(true);
   string pool_name2 = create_pool(true);
@@ -2419,9 +2515,13 @@ TEST_F(TestLibRBD, ListChildren)
   rados_ioctx_create(_cluster, pool_name1.c_str(), &ioctx1);
   rados_ioctx_create(_cluster, pool_name2.c_str(), &ioctx2);
 
-  int features = RBD_FEATURE_LAYERING;
+  bool old_format;
+  uint64_t features;
   rbd_image_t parent;
   int order = 0;
+
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
 
   std::string parent_name = get_temp_image_name();
   std::string child_name1 = get_temp_image_name();
@@ -2441,23 +2541,23 @@ TEST_F(TestLibRBD, ListChildren)
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx1, parent_name.c_str(), &parent, "parent_snap"));
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx2,
-			 child_name1.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx2, child_name1.c_str(), features, &order));
   test_list_children(parent, 1, pool_name2.c_str(), child_name1.c_str());
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx1,
-			 child_name2.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx1, child_name2.c_str(), features, &order));
   test_list_children(parent, 2, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str());
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx2,
-		         child_name3.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx2, child_name3.c_str(), features, &order));
   test_list_children(parent, 3, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name3.c_str());
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx2,
-			 child_name4.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx2, child_name4.c_str(), features, &order));
   test_list_children(parent, 4, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name3.c_str(),
@@ -2491,6 +2591,8 @@ TEST_F(TestLibRBD, ListChildren)
 
 TEST_F(TestLibRBD, ListChildrenTiered)
 {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
   string pool_name1 = m_pool_name;
   string pool_name2 = create_pool(true);
   string pool_name3 = create_pool(true);
@@ -2525,9 +2627,13 @@ TEST_F(TestLibRBD, ListChildrenTiered)
   rados_ioctx_create(_cluster, pool_name1.c_str(), &ioctx1);
   rados_ioctx_create(_cluster, pool_name2.c_str(), &ioctx2);
 
-  int features = RBD_FEATURE_LAYERING;
+  bool old_format;
+  uint64_t features;
   rbd_image_t parent;
   int order = 0;
+
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
 
   // make a parent to clone from
   ASSERT_EQ(0, create_image_full(ioctx1, parent_name.c_str(), 4<<20, &order,
@@ -2541,12 +2647,12 @@ TEST_F(TestLibRBD, ListChildrenTiered)
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx1, parent_name.c_str(), &parent, "parent_snap"));
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx2,
-			 child_name1.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx2, child_name1.c_str(), features, &order));
   test_list_children(parent, 1, pool_name2.c_str(), child_name1.c_str());
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx1,
-			 child_name2.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx1, child_name2.c_str(), features, &order));
   test_list_children(parent, 2, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str());
 
@@ -2560,14 +2666,14 @@ TEST_F(TestLibRBD, ListChildrenTiered)
   free(buf);
   ASSERT_EQ(0, rbd_close(tier_image));
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx2,
-			 child_name3.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx2, child_name3.c_str(), features, &order));
   test_list_children(parent, 3, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name3.c_str());
 
-  ASSERT_EQ(0, rbd_clone(ioctx1, parent_name.c_str(), "parent_snap", ioctx2,
-			 child_name4.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
+                           ioctx2, child_name4.c_str(), features, &order));
   test_list_children(parent, 4, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name3.c_str(),
@@ -3386,12 +3492,18 @@ TEST_F(TestLibRBD, LargeCacheRead)
 
 TEST_F(TestLibRBD, TestPendingAio)
 {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  int features = RBD_FEATURE_LAYERING;
+  bool old_format;
+  uint64_t features;
   rbd_image_t image;
   int order = 0;
+
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
 
   std::string name = get_temp_image_name();
 
@@ -3492,7 +3604,7 @@ TEST_F(TestLibRBD, FlattenNoEmptyObjects)
   librbd::RBD rbd;
   std::string parent_name = get_temp_image_name();
   uint64_t size = 4 << 20;
-  int order = 12; // smallest object size is 4K
+  int order = 13; // smallest object size is 4K
 
   bool old_format;
   uint64_t features;
@@ -3521,16 +3633,8 @@ TEST_F(TestLibRBD, FlattenNoEmptyObjects)
 
   // generate a random map which covers every objects with random
   // offset
-  int count = 0;
   map<uint64_t, uint64_t> write_tracker;
-  while (count < 10) {
-    uint64_t ono = rand() % object_num;
-    if (write_tracker.find(ono) == write_tracker.end()) {
-      uint64_t offset = rand() % (object_size - TEST_IO_SIZE);
-      write_tracker.insert(pair<uint64_t, uint64_t>(ono, offset));
-      count++;
-    }
-  }
+  generate_random_iomap(parent, object_num, object_size, 10, write_tracker);
 
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
@@ -3542,13 +3646,13 @@ TEST_F(TestLibRBD, FlattenNoEmptyObjects)
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
     printf("\twrite object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(write_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(write_test_data, parent, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
          itr != write_tracker.end(); ++itr) {
     printf("\tread object-%-4ld\t", (unsigned long)itr->first);
-    ASSERT_PASSED(read_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, parent, test_data, itr->second, TEST_IO_SIZE, 0);
   }
 
   // find out what objects the parent image has generated
@@ -3566,6 +3670,7 @@ TEST_F(TestLibRBD, FlattenNoEmptyObjects)
   while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
     if (strstr(entry, p_info.block_name_prefix)) {
       const char *block_name_suffix = entry + strlen(p_info.block_name_prefix) + 1;
+      printf("parent object: %s\n", entry);
       obj_checker.insert(block_name_suffix);
     }
   }
@@ -3582,9 +3687,8 @@ TEST_F(TestLibRBD, FlattenNoEmptyObjects)
   printf("made snapshot and protected: \"%s@parent_snap\"\n", parent_name.c_str());
 
   std::string child_name = get_temp_image_name();
-  // create a copy-on-read clone and open it
-  ASSERT_EQ(0, rbd_clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
-                         child_name.c_str(), features, &order));
+  ASSERT_EQ(0, clone_image(ioctx, parent, parent_name.c_str(),
+                                  "parent_snap", ioctx, child_name.c_str(), features, &order));
 
   rbd_image_t child;
   ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &child, NULL));
@@ -3601,6 +3705,7 @@ TEST_F(TestLibRBD, FlattenNoEmptyObjects)
     if (strstr(entry, c_info.block_name_prefix)) {
       const char *block_name_suffix = entry + strlen(c_info.block_name_prefix) + 1;
       set<string>::iterator it = obj_checker.find(block_name_suffix);
+      printf("child object: %s\n", entry);
       ASSERT_TRUE(it != obj_checker.end());
       obj_checker.erase(it);
     }
@@ -4765,8 +4870,8 @@ TEST_F(TestLibRBD, TestImageOptions)
   //make create image options
   uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2 ;
   uint64_t order = 0;
-  uint64_t stripe_unit = 65536;
-  uint64_t stripe_count = 16;
+  uint64_t stripe_unit = IMAGE_STRIPE_UNIT;
+  uint64_t stripe_count = IMAGE_STRIPE_COUNT;
   rbd_image_options_t opts;
   rbd_image_options_create(&opts);
 
@@ -4841,8 +4946,8 @@ TEST_F(TestLibRBD, TestImageOptionsPP)
   //make create image options
   uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2 ;
   uint64_t order = 0;
-  uint64_t stripe_unit = 65536;
-  uint64_t stripe_count = 16;
+  uint64_t stripe_unit = IMAGE_STRIPE_UNIT;
+  uint64_t stripe_count = IMAGE_STRIPE_COUNT;
   librbd::ImageOptions opts;
   ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2)));
   ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_FEATURES, features));
