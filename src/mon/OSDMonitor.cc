@@ -1014,6 +1014,23 @@ void OSDMonitor::maybe_prime_pg_temp()
   if (!all && osds.empty())
     return;
 
+  if (!all) {
+    unsigned estimate =
+      mapping->get_osd_acting_pgs(*osds.begin()).size() * osds.size();
+    if (estimate > mapping->get_num_pgs() *
+	g_conf->mon_osd_prime_pg_temp_max_estimate) {
+      dout(10) << __func__ << " estimate " << estimate << " pgs on "
+	       << osds.size() << " osds >= "
+	       << g_conf->mon_osd_prime_pg_temp_max_estimate << " of total "
+	       << mapping->get_num_pgs() << " pgs, all"
+	       << dendl;
+      all = true;
+    } else {
+      dout(10) << __func__ << " estimate " << estimate << " pgs on "
+	       << osds.size() << " osds" << dendl;
+    }
+  }
+
   OSDMap next;
   next.deepish_copy_from(osdmap);
   next.apply_incremental(pending_inc);
