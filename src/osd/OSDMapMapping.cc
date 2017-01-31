@@ -12,8 +12,10 @@
 // the dimensions (pg_num and size) match up.
 void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
 {
+  num_pgs = 0;
   auto q = pools.begin();
   for (auto& p : osdmap.get_pools()) {
+    num_pgs += p.second.get_pg_num();
     // drop unneeded pools
     while (q != pools.end() && q->first < p.first) {
       q = pools.erase(q);
