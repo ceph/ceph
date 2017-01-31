@@ -1775,6 +1775,20 @@ private:
     }
     return val1;
   }
+
+  // -- ondisk version ---
+public:
+  const int32_t latest_ondisk_format = 2;        ///< our version
+  const int32_t min_readable_ondisk_format = 1;  ///< what we can read
+  const int32_t min_compat_ondisk_format = 2;    ///< who can read us
+
+private:
+  int32_t ondisk_format = 0;  ///< value detected on mount
+
+  int _upgrade_super();  ///< upgrade (called during open_super)
+  void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
+
+  // --- public interface ---
 public:
   BlueStore(CephContext *cct, const string& path);
   BlueStore(CephContext *cct, const string& path, uint64_t min_alloc_size); // Ctor for UT only

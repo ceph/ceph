@@ -4116,6 +4116,8 @@ int BlueStore::mkfs()
       t->set(PREFIX_SUPER, "nid_max", bl);
       t->set(PREFIX_SUPER, "blobid_max", bl);
     }
+    ondisk_format = latest_ondisk_format;
+    _prepare_ondisk_format_super(t);
     db->submit_transaction_sync(t);
   }
   _save_min_min_alloc_size(min_alloc_size);
@@ -6314,6 +6316,25 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 
 // -----------------
 // write helpers
+
+void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
+{
+  dout(10) << __func__ << " ondisk_format " << ondisk_format
+	   << " min_compat_ondisk_format " << min_compat_ondisk_format
+	   << dendl;
+  assert(ondisk_format == latest_ondisk_format);
+  {
+    bufferlist bl;
+    ::encode(ondisk_format, bl);
+    t->set(PREFIX_SUPER, "ondisk_format", bl);
+  }
+  {
+    bufferlist bl;
+    ::encode(min_compat_ondisk_format, bl);
+    t->set(PREFIX_SUPER, "min_compat_ondisk_format", bl);
+  }
+}
+
 void BlueStore::_save_min_min_alloc_size(uint64_t new_val)
 {
   assert(new_val > 0);
@@ -6428,6 +6449,81 @@ int BlueStore::_open_super_meta()
     dout(10) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
 	     << std::dec << dendl;
   }
+
+  // ondisk format
+  int32_t compat_ondisk_format = 0;
+  {
+    bufferlist bl;
+    int r = db->get(PREFIX_SUPER, "ondisk_format", &bl);
+    if (r < 0) {
+      // base case: kraken bluestore is v1 and readable by v1
+      dout(20) << __func__ << " missing ondisk_format; assuming kraken"
+	       << dendl;
+      ondisk_format = 1;
+      compat_ondisk_format = 1;
+    } else {
+      auto p = bl.begin();
+      try {
+	::decode(ondisk_format, p);
+      } catch (buffer::error& e) {
+	derr << __func__ << " unable to read ondisk_format" << dendl;
+	return -EIO;
+      }
+      bl.clear();
+      {
+	r = db->get(PREFIX_SUPER, "min_compat_ondisk_format", &bl);
+	auto p = bl.begin();
+	try {
+	  ::decode(compat_ondisk_format, p);
+	} catch (buffer::error& e) {
+	  derr << __func__ << " unable to read compat_ondisk_format" << dendl;
+	  return -EIO;
+	}
+      }
+    }
+    dout(10) << __func__ << " ondisk_format " << ondisk_format
+	     << " compat_ondisk_format " << compat_ondisk_format
+	     << dendl;
+  }
+
+  if (latest_ondisk_format < compat_ondisk_format) {
+    derr << __func__ << " compat_ondisk_format is "
+	 << compat_ondisk_format << " but we only understand version "
+	 << latest_ondisk_format << dendl;
+    return -EPERM;
+  }
+  if (ondisk_format < latest_ondisk_format) {
+    int r = _upgrade_super();
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  _set_alloc_sizes();
+  return 0;
+}
+
+int BlueStore::_upgrade_super()
+{
+  dout(1) << __func__ << " from " << ondisk_format << ", latest "
+	  << latest_ondisk_format << dendl;
+  assert(ondisk_format > 0);
+  assert(ondisk_format < latest_ondisk_format);
+
+  if (ondisk_format == 1) {
+    // changes:
+    // - super: added ondisk_format
+    // - super: added min_readable_ondisk_format
+    // - super: added min_compat_ondisk_format
+    KeyValueDB::Transaction t = db->get_transaction();
+    ondisk_format = 2;
+    _prepare_ondisk_format_super(t);
+    int r = db->submit_transaction_sync(t);
+    assert(r == 0);
+  }
+
+  // done
+  dout(1) << __func__ << " done" << dendl;
   return 0;
 }
 
