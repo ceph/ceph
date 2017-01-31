@@ -83,7 +83,7 @@ class OSDMapMapping {
 
   std::map<int64_t,PoolMapping> pools;
   std::vector<std::vector<pg_t>> acting_rmap;  // osd -> pg
-  std::vector<std::vector<pg_t>> up_rmap;  // osd -> pg
+  //unused: std::vector<std::vector<pg_t>> up_rmap;  // osd -> pg
   epoch_t epoch;
 
   void _init_mappings(const OSDMap& osdmap);
@@ -118,10 +118,12 @@ public:
     assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }
+  /* unsued
   const std::vector<pg_t>& get_osd_up_pgs(unsigned osd) {
     assert(osd < up_rmap.size());
     return up_rmap[osd];
   }
+  */
 
   void update(const OSDMap& map);
   void update(const OSDMap& map, pg_t pgid);
