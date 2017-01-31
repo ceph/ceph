@@ -336,7 +336,10 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
     // enqueue a write transaction on the collection's sequencer
     ObjectStore::Transaction t;
     t.write(coll.cid, object.oid, u->offset, u->xfer_buflen, bl, flags);
-    os->queue_transaction(&coll.sequencer, std::move(t), new UnitComplete(u));
+    os->queue_transaction(&coll.sequencer,
+                          std::move(t),
+                          nullptr,
+                          new UnitComplete(u));
     return FIO_Q_QUEUED;
   }
 
