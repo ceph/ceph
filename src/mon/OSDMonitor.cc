@@ -67,6 +67,20 @@
 #include "include/str_map.h"
 
 #define dout_subsys ceph_subsys_mon
+
+struct C_PrintTime : public Context {
+  utime_t start;
+  epoch_t epoch;
+  C_PrintTime(epoch_t e) : start(ceph_clock_now()), epoch(e) {}
+  void finish(int r) {
+    if (r >= 0) {
+      utime_t end = ceph_clock_now();
+      dout(10) << "osdmap epoch " << epoch << " mapping took "
+	       << (end - start) << " seconds" << dendl;
+    }
+  }
+};
+
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, osdmap)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap) {
@@ -342,20 +356,6 @@ void OSDMonitor::update_msgr_features()
   }
 }
 
-void OSDMonitor::_calc_mapping(const OSDMap& osdmap, OSDMapMapping *mapping)
-{
-  utime_t start = ceph_clock_now();
-  if (g_conf->mon_cpu_threads) {
-    auto job = mapper.queue(osdmap, mapping,
-			    g_conf->mon_osd_mapping_pgs_per_chunk);
-    job->wait();
-  } else {
-    mapping->update(osdmap);
-  }
-  utime_t end = ceph_clock_now();
-  dout(10) << __func__ << " in " << (end - start) << dendl;
-}
-
 void OSDMonitor::on_active()
 {
   update_logger();
@@ -374,13 +374,29 @@ void OSDMonitor::on_active()
     }
   }
 
-  // FIXME: hacky synchronous blocking mapping update
-  _calc_mapping(osdmap, mapping.get());
+  // initiate mapping job
+  if (mapping_job) {
+    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
+	     << dendl;
+    mapping_job->abort();
+  }
+  C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
+  mapping.reset(new OSDMapMapping);
+  mapping_job = mapper.queue(osdmap, mapping.get(),
+			     g_conf->mon_osd_mapping_pgs_per_chunk);
+  dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	   << " at " << fin->start << dendl;
+  mapping_job->set_finish_event(fin);
 }
 
 void OSDMonitor::on_shutdown()
 {
   dout(10) << __func__ << dendl;
+  if (mapping_job) {
+    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
+	     << dendl;
+    mapping_job->abort();
+  }
 
   // discard failure info, waiters
   list<MonOpRequestRef> ls;
@@ -1107,8 +1123,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
 
-  if (g_conf->mon_osd_prime_pg_temp)
-    maybe_prime_pg_temp();
+  if (g_conf->mon_osd_prime_pg_temp) {
+    if (mapping && mapping_job) {
+      if (!mapping_job->is_done()) {
+	dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
+		<< mapping_job.get() << " did not complete, "
+		<< mapping_job->shards << " left" << dendl;
+	mapping_job->abort();
+      } else if (mapping->get_epoch() == osdmap.get_epoch()) {
+	dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
+		<< mapping_job.get() << " is prior epoch "
+		<< mapping->get_epoch() << dendl;
+      } else {
+	maybe_prime_pg_temp();
+      }
+    } else {
+      dout(1) << __func__ << " skipping prime_pg_temp; mapping job did not start"
+	      << dendl;
+    }
+  }
+  mapping_job.reset();
 
   bufferlist bl;
 

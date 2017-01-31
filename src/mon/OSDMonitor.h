@@ -115,6 +115,7 @@ class OSDMonitor : public PaxosService {
 public:
   OSDMap osdmap;
   unique_ptr<OSDMapMapping> mapping;
+  unique_ptr<ParallelOSDMapper::Job> mapping_job;
 
 private:
   ParallelOSDMapper mapper;
@@ -147,8 +148,6 @@ private:
     FAST_READ_ON,
     FAST_READ_DEFAULT
   };
-
-  void _calc_mapping(const OSDMap& osdmap, OSDMapMapping *mapping);
 
   // svc
 public:  
