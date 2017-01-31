@@ -16,7 +16,7 @@ from teuthology.config import config as teuth_config
 log = logging.getLogger(__name__)
 
 DEFAULT_NUM_RBD = 1
-DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
+DEFAULT_IMAGE_URL = 'https://cloud-images.ubuntu.com/releases/14.04/release/ubuntu-14.04-server-cloudimg-amd64-disk1.img'
 DEFAULT_MEM = 4096 # in megabytes
 
 def create_images(ctx, config, managers):
