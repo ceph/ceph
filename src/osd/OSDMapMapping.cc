@@ -121,14 +121,15 @@ void OSDMapMapping::_update_range(
 
 // ---------------------------
 
-void ParallelOSDMapper::Job::finish_one()
+void ParallelPGMapper::Job::finish_one()
 {
   Context *fin = nullptr;
   {
     Mutex::Locker l(lock);
     if (--shards == 0) {
       if (!aborted) {
-	mapping->_finish(*osdmap);
+	finish = ceph_clock_now();
+	complete();
       }
       cond.Signal();
       fin = onfinish;
@@ -140,33 +141,26 @@ void ParallelOSDMapper::Job::finish_one()
   }
 }
 
-void ParallelOSDMapper::WQ::_process(
-  item *i,
-  ThreadPool::TPHandle &h)
+void ParallelPGMapper::WQ::_process(Item *i, ThreadPool::TPHandle &h)
 {
-  ldout(m->cct, 10) << __func__ << " " << i->osdmap << " " << i->pool << " ["
-		    << i->begin << "," << i->end << ")" << dendl;
-  i->mapping->_update_range(*i->osdmap, i->pool, i->begin, i->end);
+  ldout(m->cct, 20) << __func__ << " " << i->job << " " << i->pool
+		    << " [" << i->begin << "," << i->end << ")" << dendl;
+  i->job->process(i->pool, i->begin, i->end);
   i->job->finish_one();
   delete i;
 }
 
-std::unique_ptr<ParallelOSDMapper::Job> ParallelOSDMapper::queue(
-  const OSDMap& osdmap,
-  OSDMapMapping *mapping,
+void ParallelPGMapper::queue(
+  Job *job,
   unsigned pgs_per_item)
 {
-  std::unique_ptr<Job> job(new Job(&osdmap, mapping));
-  mapping->_start(osdmap);
-  for (auto& p : osdmap.get_pools()) {
+  for (auto& p : job->osdmap->get_pools()) {
     for (unsigned ps = 0; ps < p.second.get_pg_num(); ps += pgs_per_item) {
       unsigned ps_end = MIN(ps + pgs_per_item, p.second.get_pg_num());
       job->start_one();
-      wq.queue(new item(job.get(), &osdmap, mapping, p.first, ps, ps_end));
-      ldout(cct, 20) << __func__ << " queue " << &osdmap << " "
-		     << p.first << " [" << ps
+      wq.queue(new Item(job, p.first, ps, ps_end));
+      ldout(cct, 20) << __func__ << " " << job << " " << p.first << " [" << ps
 		     << "," << ps_end << ")" << dendl;
     }
   }
-  return job;
 }

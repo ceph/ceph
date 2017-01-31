@@ -382,8 +382,8 @@ void OSDMonitor::on_active()
   }
   C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
   mapping.reset(new OSDMapMapping);
-  mapping_job = mapper.queue(osdmap, mapping.get(),
-			     g_conf->mon_osd_mapping_pgs_per_chunk);
+  mapping_job = mapping->start_update(osdmap, mapper,
+				      g_conf->mon_osd_mapping_pgs_per_chunk);
   dout(10) << __func__ << " started mapping job " << mapping_job.get()
 	   << " at " << fin->start << dendl;
   mapping_job->set_finish_event(fin);
