@@ -32,6 +32,7 @@
 #include "LocalLock.h"
 #include "Capability.h"
 #include "SnapRealm.h"
+#include "Mutation.h"
 
 #include <list>
 #include <set>
@@ -51,8 +52,6 @@ class Session;
 class MClientCaps;
 struct ObjectOperation;
 class EMetaBlob;
-struct MDRequestImpl;
-typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 
 ostream& operator<<(ostream& out, const CInode& in);
