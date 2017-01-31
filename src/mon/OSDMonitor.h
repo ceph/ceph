@@ -112,13 +112,13 @@ struct failure_info_t {
 
 class OSDMonitor : public PaxosService {
   CephContext *cct;
+
+  ParallelPGMapper mapper;                        ///< for background pg work
+  unique_ptr<OSDMapMapping> mapping;              ///< pg <-> osd mappings
+  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
+
 public:
   OSDMap osdmap;
-  unique_ptr<OSDMapMapping> mapping;
-  unique_ptr<ParallelOSDMapper::Job> mapping_job;
-
-private:
-  ParallelOSDMapper mapper;
 
   // [leader]
   OSDMap::Incremental pending_inc;
