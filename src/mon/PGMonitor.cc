@@ -1381,10 +1381,13 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
     {
-      pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
-      s.state = PG_STATE_CREATING;
-      s.created = epoch;
-      s.last_change = ceph_clock_now();
+      PGMapUpdater::register_pg(
+	mon->osdmon()->osdmap,
+	pgid,
+	epoch,
+	true,
+	&pg_map,
+	&pending_inc);
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
