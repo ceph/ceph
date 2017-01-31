@@ -3115,19 +3115,6 @@ int BlueStore::_check_or_set_bdev_label(
 
 void BlueStore::_set_alloc_sizes(void)
 {
-  /*
-   * Set device block size according to its media
-   */
-  if (cct->_conf->bluestore_min_alloc_size) {
-    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
-  } else {
-    assert(bdev);
-    if (bdev->is_rotational()) {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
-    } else {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
-    }
-  }
   min_alloc_size_order = ctz(min_alloc_size);
   assert(min_alloc_size == 1u << min_alloc_size_order);
 
@@ -3160,8 +3147,6 @@ int BlueStore::_open_bdev(bool create)
   block_mask = ~(block_size - 1);
   block_size_order = ctz(block_size);
   assert(block_size == 1u << block_size_order);
-
-  _set_alloc_sizes();
   return 0;
 
  fail_close:
@@ -3285,7 +3270,7 @@ int BlueStore::_open_alloc()
   assert(bdev->get_size());
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
-                            min_min_alloc_size);
+                            min_alloc_size);
   uint64_t num = 0, bytes = 0;
 
   // initialize from freelist
@@ -4116,11 +4101,29 @@ int BlueStore::mkfs()
       t->set(PREFIX_SUPER, "nid_max", bl);
       t->set(PREFIX_SUPER, "blobid_max", bl);
     }
+
+    // choose min_alloc_size
+    if (cct->_conf->bluestore_min_alloc_size) {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size;
+    } else {
+      assert(bdev);
+      if (bdev->is_rotational()) {
+	min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
+      } else {
+	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
+      }
+    }
+    _set_alloc_sizes();
+    {
+      bufferlist bl;
+      ::encode(min_alloc_size, bl);
+      t->set(PREFIX_SUPER, "min_alloc_size", bl);
+    }
+
     ondisk_format = latest_ondisk_format;
     _prepare_ondisk_format_super(t);
     db->submit_transaction_sync(t);
   }
-  _save_min_min_alloc_size(min_alloc_size);
 
   r = _open_alloc();
   if (r < 0)
@@ -6335,37 +6338,6 @@ void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
   }
 }
 
-void BlueStore::_save_min_min_alloc_size(uint64_t new_val)
-{
-  assert(new_val > 0);
-  if (new_val == min_min_alloc_size && min_min_alloc_size > 0) {
-    return;
-  }
-
-  if (new_val > min_min_alloc_size && min_min_alloc_size > 0) {
-    derr << "warning: bluestore_min_alloc_size "
-         << new_val << " > min_min_alloc_size " << min_min_alloc_size << ","
-         << " may impact performance." << dendl;
-    return;
-  }
-
-  if (new_val < min_min_alloc_size && min_min_alloc_size > 0) {
-    derr << "warning: bluestore_min_alloc_size value decreased from "
-         << min_min_alloc_size << " to " << new_val << "."
-         << " Decreased value could have performance impact." << dendl;
-  }
-
-
-  KeyValueDB::Transaction t = db->get_transaction();
-  {
-    bufferlist bl;
-    encode(new_val, bl);
-    t->set(PREFIX_SUPER, "min_min_alloc_size", bl);
-    db->submit_transaction_sync(t);
-  }
-  min_min_alloc_size = new_val;
-}
-
 int BlueStore::_open_super_meta()
 {
   // nid
@@ -6416,21 +6388,6 @@ int BlueStore::_open_super_meta()
       dout(10) << __func__ << " freelist_type " << freelist_type
 	       << " (legacy bluestore instance)" << dendl;
     }
-  }
-
-  // Min min_alloc_size
-  {
-    bufferlist bl;
-    min_min_alloc_size = 0;
-    db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
-    bufferlist::iterator p = bl.begin();
-    try {
-      ::decode(min_min_alloc_size, p);
-    } catch (buffer::error& e) {
-    }
-
-    _save_min_min_alloc_size(min_alloc_size);
-    dout(10) << __func__ << " min_min_alloc_size " << min_min_alloc_size << dendl;
   }
 
   // bluefs alloc
@@ -6499,7 +6456,21 @@ int BlueStore::_open_super_meta()
     }
   }
 
+  {
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "min_alloc_size", &bl);
+    auto p = bl.begin();
+    try {
+      ::decode(min_alloc_size, p);
+    } catch (buffer::error& e) {
+      derr << __func__ << " unable to read min_alloc_size" << dendl;
+      return -EIO;
+    }
+    dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+	     << std::dec << dendl;
+  }
   _set_alloc_sizes();
+
   return 0;
 }
 
@@ -6515,7 +6486,22 @@ int BlueStore::_upgrade_super()
     // - super: added ondisk_format
     // - super: added min_readable_ondisk_format
     // - super: added min_compat_ondisk_format
+    // - super: added min_alloc_size
+    // - super: removed min_min_alloc_size
     KeyValueDB::Transaction t = db->get_transaction();
+    {
+      bufferlist bl;
+      db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
+      auto p = bl.begin();
+      try {
+	::decode(min_alloc_size, p);
+      } catch (buffer::error& e) {
+	derr << __func__ << " failed to read min_min_alloc_size" << dendl;
+	return -EIO;
+      }
+      t->set(PREFIX_SUPER, "min_alloc_size", bl);
+      t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
+    }
     ondisk_format = 2;
     _prepare_ondisk_format_super(t);
     int r = db->submit_transaction_sync(t);

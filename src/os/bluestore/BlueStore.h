@@ -1602,7 +1602,6 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  uint64_t min_min_alloc_size = 0; ///< minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
@@ -1687,7 +1686,6 @@ private:
   int _check_or_set_bdev_label(string path, uint64_t size, string desc,
 			       bool create);
 
-  void _save_min_min_alloc_size(uint64_t new_val);
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
