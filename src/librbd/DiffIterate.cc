@@ -263,7 +263,7 @@ int DiffIterate::execute() {
   if (m_include_parent && from_snap_id == 0) {
     RWLock::RLocker l(m_image_ctx.snap_lock);
     RWLock::RLocker l2(m_image_ctx.parent_lock);
-    uint64_t overlap = end_size;
+    uint64_t overlap = 0;
     m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
     r = 0;
     if (m_image_ctx.parent && overlap > 0) {
