@@ -129,7 +129,6 @@ private:
    */
   bool map_pg_creates();
 
-  void send_pg_creates();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
