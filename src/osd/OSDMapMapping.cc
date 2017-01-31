@@ -54,13 +54,13 @@ void OSDMapMapping::update(const OSDMap& osdmap, pg_t pgid)
 void OSDMapMapping::_build_rmap(const OSDMap& osdmap)
 {
   acting_rmap.resize(osdmap.get_max_osd());
-  up_rmap.resize(osdmap.get_max_osd());
+  //up_rmap.resize(osdmap.get_max_osd());
   for (auto& v : acting_rmap) {
     v.resize(0);
   }
-  for (auto& v : up_rmap) {
-    v.resize(0);
-  }
+  //for (auto& v : up_rmap) {
+  //  v.resize(0);
+  //}
   for (auto& p : pools) {
     pg_t pgid(0, p.first);
     for (unsigned ps = 0; ps < p.second.pg_num; ++ps) {
@@ -71,9 +71,9 @@ void OSDMapMapping::_build_rmap(const OSDMap& osdmap)
 	  acting_rmap[row[4 + i]].push_back(pgid);
 	}
       }
-      for (int i = 0; i < row[3]; ++i) {
-	up_rmap[row[4 + p.second.size + i]].push_back(pgid);
-      }
+      //for (int i = 0; i < row[3]; ++i) {
+      //up_rmap[row[4 + p.second.size + i]].push_back(pgid);
+      //}
     }
   }
 }
