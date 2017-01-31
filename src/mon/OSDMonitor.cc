@@ -1051,10 +1051,14 @@ void OSDMonitor::maybe_prime_pg_temp()
     }
   } else {
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
+    std::unordered_set<pg_t> did_pgs;
     for (auto osd : osds) {
       const vector<pg_t>& pgs = mapping->get_osd_acting_pgs(osd);
       dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
       for (auto pgid : pgs) {
+	if (!did_pgs.insert(pgid).second) {
+	  continue;
+	}
 	if (!pg_map->creating_pgs.count(pgid)) {
 	  prime_pg_temp(next, pgid);
 	}
