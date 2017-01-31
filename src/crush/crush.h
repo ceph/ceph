@@ -31,7 +31,10 @@
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
 #define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
-#define CRUSH_ITEM_NONE   0x7fffffff  /* no result */
+/** @ingroup API
+ * The equivalent of NULL for an item, i.e. the absence of an item.
+ */
+#define CRUSH_ITEM_NONE   0x7fffffff
 
 /*
  * CRUSH uses user-defined "rules" to describe how inputs should be
@@ -44,8 +47,11 @@ struct crush_rule_step {
 	__s32 arg2;
 };
 
-/* step op codes */
-enum {
+/** @ingroup API
+ */
+enum crush_opcodes {
+        /*! do nothing
+         */
 	CRUSH_RULE_NOOP = 0,
 	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */
 	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */
@@ -95,24 +101,92 @@ struct crush_rule {
 
 /*
  * A bucket is a named container of other items (either devices or
- * other buckets).  Items within a bucket are chosen using one of a
- * few different algorithms.  The table summarizes how the speed of
- * each option measures up against mapping stability when items are
- * added or removed.
- *
- *  Bucket Alg     Speed       Additions    Removals
- *  ------------------------------------------------
- *  uniform         O(1)       poor         poor
- *  list            O(n)       optimal      poor
- *  tree            O(log n)   good         good
- *  straw           O(n)       better       better
- *  straw2          O(n)       optimal      optimal
+ * other buckets).
  */
-enum {
+
+/** @ingroup API
+ *
+ * Items within a bucket are chosen with crush_do_rule() using one of
+ * three algorithms representing a tradeoff between performance and
+ * reorganization efficiency. If you are unsure of which bucket type
+ * to use, we recommend using ::CRUSH_BUCKET_STRAW2.
+ *
+ * The table summarizes how the speed of each option measures up
+ * against mapping stability when items are added or removed.
+ *
+ * 	Bucket Alg     Speed       Additions    Removals
+ * 	------------------------------------------------
+ * 	uniform         O(1)       poor         poor
+ * 	list            O(n)       optimal      poor
+ * 	straw2          O(n)       optimal      optimal
+ */
+enum crush_algorithm {
+       /*!
+        * Devices are rarely added individually in a large system.
+        * Instead, new storage is typically deployed in blocks of identical
+        * devices, often as an additional shelf in a server rack or perhaps
+        * an entire cabinet. Devices reaching their end of life are often
+        * similarly decommissioned as a set (individual failures aside),
+        * making it natural to treat them as a unit.  CRUSH uniform buckets
+        * are used to represent an identical set of devices in such
+        * circumstances. The key advantage in doing so is performance
+        * related: CRUSH can map replicas into uniform buckets in constant
+        * time. In cases where the uniformity restrictions are not
+        * appropriate, other bucket types can be used.  If the size of a
+        * uniform bucket changes, there is a complete reshuffling of data
+        * between devices, much like conventional hash-based distribution
+        * strategies.
+        */
 	CRUSH_BUCKET_UNIFORM = 1,
+        /*!
+         * List buckets structure their contents as a linked list, and
+         * can contain items with arbitrary weights.  To place a
+         * replica, CRUSH begins at the head of the list with the most
+         * recently added item and compares its weight to the sum of
+         * all remaining items’ weights.  Depending on the value of
+         * hash( x , r , item), either the current item is chosen with
+         * the appropriate probability, or the process continues
+         * recursively down the list.  This is a natural and intuitive
+         * choice for an expanding cluster: either an object is
+         * relocated to the newest device with some appropriate
+         * probability, or it remains on the older devices as before.
+         * The result is optimal data migration when items are added
+         * to the bucket. Items removed from the middle or tail of the
+         * list, however, can result in a significant amount of
+         * unnecessary movement, making list buckets most suitable for
+         * circumstances in which they never (or very rarely) shrink.
+         */
 	CRUSH_BUCKET_LIST = 2,
+        /*! @cond INTERNAL */
 	CRUSH_BUCKET_TREE = 3,
 	CRUSH_BUCKET_STRAW = 4,
+	/*! @endcond */
+        /*!
+         * List and tree buckets are structured such that a limited
+         * number of hash values need to be calculated and compared to
+         * weights in order to select a bucket item.  In doing so,
+         * they divide and conquer in a way that either gives certain
+         * items precedence (e. g., those at the beginning of a list)
+         * or obviates the need to consider entire subtrees of items
+         * at all. That im- proves the performance of the replica
+         * placement process, but can also introduce suboptimal
+         * reorganization behavior when the contents of a bucket
+         * change due an addition, removal, or re-weighting of an
+         * item.
+         *
+         * The straw2 bucket type allows all items to fairly “compete”
+         * against each other for replica placement through a process
+         * analogous to a draw of straws.  To place a replica, a straw
+         * of random length is drawn for each item in the bucket.  The
+         * item with the longest straw wins.  The length of each straw
+         * is initially a value in a fixed range.  Each straw length
+         * is scaled by a factor based on the item’s weight so that
+         * heavily weighted items are more likely to win the draw.
+         * Although this process is almost twice as slow (on average)
+         * than a list bucket and even slower than a tree bucket
+         * (which scales logarithmically), straw2 buckets result in
+         * optimal data movement between nested items when modified.
+         */
 	CRUSH_BUCKET_STRAW2 = 5,
 };
 extern const char *crush_bucket_alg_name(int alg);
@@ -126,27 +200,66 @@ extern const char *crush_bucket_alg_name(int alg);
 		(1 << CRUSH_BUCKET_LIST) |	\
 		(1 << CRUSH_BUCKET_STRAW))
 
+/** @ingroup API
+ *
+ * A bucket contains __size__ __items__ which are either positive
+ * numbers or negative numbers that reference other buckets and is
+ * uniquely identified with __id__ which is a negative number.  The
+ * __weight__ of a bucket is the cumulative weight of all its
+ * children.  A bucket is assigned a ::crush_algorithm that is used by
+ * crush_do_rule() to draw an item depending on its weight.  A bucket
+ * can be assigned a strictly positive (> 0) __type__ defined by the
+ * caller. The __type__ can be used by crush_do_rule(), when it is
+ * given as an argument of a rule step.
+ *
+ * A pointer to crush_bucket can safely be cast into the following
+ * structure, depending on the value of __alg__:
+ *
+ * - __alg__ == ::CRUSH_BUCKET_UNIFORM cast to crush_bucket_uniform
+ * - __alg__ == ::CRUSH_BUCKET_LIST cast to crush_bucket_list
+ * - __alg__ == ::CRUSH_BUCKET_STRAW2 cast to crush_bucket_straw2
+ *
+ * The weight of each item depends on the algorithm and the
+ * information about it is available in the corresponding structure
+ * (crush_bucket_uniform, crush_bucket_list or crush_bucket_straw2).
+ *
+ * See crush_map for more information on how __id__ is used
+ * to reference the bucket.
+ */
 struct crush_bucket {
-	__s32 id;        /* this'll be negative */
-	__u16 type;      /* non-zero; type=0 is reserved for devices */
-	__u8 alg;        /* one of CRUSH_BUCKET_* */
+	__s32 id;        /*!< bucket identifier, < 0 and unique within a crush_map */
+	__u16 type;      /*!< > 0 bucket type, defined by the caller */
+	__u8 alg;        /*!< the item selection ::crush_algorithm */
+        /*! @cond INTERNAL */
 	__u8 hash;       /* which hash function to use, CRUSH_HASH_* */
-	__u32 weight;    /* 16-bit fixed point */
-	__u32 size;      /* num items */
-	__s32 *items;
-
+	/*! @endcond */
+	__u32 weight;    /*!< 16.16 fixed point cumulated children weight */
+	__u32 size;      /*!< size of the __items__ array */
+        __s32 *items;    /*!< array of children: < 0 are buckets, >= 0 items */
 };
 
+/** @ingroup API
+ * The weight of each item in the bucket when
+ * __h.alg__ == ::CRUSH_BUCKET_UNIFORM.
+ */
 struct crush_bucket_uniform {
-	struct crush_bucket h;
-	__u32 item_weight;  /* 16-bit fixed point; all items equally weighted */
+       struct crush_bucket h; /*!< generic bucket information */
+	__u32 item_weight;  /*!< 16.16 fixed point weight for each item */
 };
 
+/** @ingroup API
+ * The weight of each item in the bucket when
+ * __h.alg__ == ::CRUSH_BUCKET_LIST.
+ *
+ * The weight of __h.items[i]__ is __item_weights[i]__ for i in
+ * [0,__h.size__[. The __sum_weight__[i] is the sum of the __item_weights[j]__
+ * for j in [0,i[.
+ *
+ */
 struct crush_bucket_list {
-	struct crush_bucket h;
-	__u32 *item_weights;  /* 16-bit fixed point */
-	__u32 *sum_weights;   /* 16-bit fixed point.  element i is sum
-				 of weights 0..i, inclusive */
+        struct crush_bucket h; /*!< generic bucket information */
+	__u32 *item_weights;  /*!< 16.16 fixed point weight for each item */
+	__u32 *sum_weights;   /*!< 16.16 fixed point sum of the weights */
 };
 
 struct crush_bucket_tree {
@@ -162,48 +275,71 @@ struct crush_bucket_straw {
 	__u32 *straws;         /* 16-bit fixed point */
 };
 
+/** @ingroup API
+ * The weight of each item in the bucket when
+ * __h.alg__ == ::CRUSH_BUCKET_STRAW2.
+ *
+ * The weight of __h.items[i]__ is __item_weights[i]__ for i in
+ * [0,__h.size__[.
+ */
 struct crush_bucket_straw2 {
-	struct crush_bucket h;
-	__u32 *item_weights;   /* 16-bit fixed point */
+        struct crush_bucket h; /*!< generic bucket information */
+	__u32 *item_weights;   /*!< 16.16 fixed point weight for each item */
 };
 
 
 
-/*
- * CRUSH map includes all buckets, rules, etc.
+/** @ingroup API
+ *
+ * A crush map define a hierarchy of crush_bucket that end with leaves
+ * (buckets and leaves are called items) and a set of crush_rule to
+ * map an integer to items with the crush_do_rule() function.
+ *
  */
 struct crush_map {
+        /*! An array of crush_bucket pointers of size __max_buckets__.
+         * An element of the array may be NULL if the bucket was removed with
+         * crush_remove_bucket(). The buckets must be added with crush_add_bucket().
+         * The bucket found at __buckets[i]__ must have a crush_bucket.id == -1-i.
+         */
 	struct crush_bucket **buckets;
+        /*! An array of crush_rule pointers of size __max_rules__.
+         * An element of the array may be NULL if the rule was removed (there is
+         * no API to do so but there may be one in the future). The rules must be added
+         * with crush_add_rule().
+         */
 	struct crush_rule **rules;
-
-	__s32 max_buckets;
-	__u32 max_rules;
+        __s32 max_buckets; /*!< the size of __buckets__ */
+	__u32 max_rules; /*!< the size of __rules__ */
+        /*! The value of the highest item stored in the crush_map + 1
+         */
 	__s32 max_devices;
 
-	/* choose local retries before re-descent */
+	/*! choose local retries before re-descent */
 	__u32 choose_local_tries;
-	/* choose local attempts using a fallback permutation before
-	 * re-descent */
+	/*! choose local attempts using a fallback permutation before
+	 *! re-descent */
 	__u32 choose_local_fallback_tries;
-	/* choose attempts before giving up */
+	/*! choose attempts before giving up */
 	__u32 choose_total_tries;
-	/* attempt chooseleaf inner descent once for firstn mode; on
-	 * reject retry outer descent.  Note that this does *not*
-	 * apply to a collision: in that case we will retry as we used
-	 * to. */
+	/*! attempt chooseleaf inner descent once for firstn mode; on
+	 *! reject retry outer descent.  Note that this does *not*
+	 *! apply to a collision: in that case we will retry as we used
+	 *! to. */
 	__u32 chooseleaf_descend_once;
 
-	/* if non-zero, feed r into chooseleaf, bit-shifted right by (r-1)
-	 * bits.  a value of 1 is best for new clusters.  for legacy clusters
-	 * that want to limit reshuffling, a value of 3 or 4 will make the
-	 * mappings line up a bit better with previous mappings. */
+	/*! if non-zero, feed r into chooseleaf, bit-shifted right by (r-1)
+	 *! bits.  a value of 1 is best for new clusters.  for legacy clusters
+	 *! that want to limit reshuffling, a value of 3 or 4 will make the
+	 *! mappings line up a bit better with previous mappings. */
 	__u8 chooseleaf_vary_r;
 
-	/* if true, it makes chooseleaf firstn to return stable results (if
-	 * no local retry) so that data migrations would be optimal when some
-	 * device fails. */
+	/*! if true, it makes chooseleaf firstn to return stable results (if
+	 *! no local retry) so that data migrations would be optimal when some
+	 *! device fails. */
 	__u8 chooseleaf_stable;
 
+        /*! @cond INTERNAL */
 	/* This value is calculated after decode or construction by
 	   the builder. It is exposed here (rather than having a
 	   'build CRUSH working space' function) so that callers can
@@ -235,6 +371,7 @@ struct crush_map {
 
 	__u32 *choose_tries;
 #endif
+	/*! @endcond */
 };
 
 
@@ -247,6 +384,12 @@ extern void crush_destroy_bucket_straw(struct crush_bucket_straw *b);
 extern void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b);
 extern void crush_destroy_bucket(struct crush_bucket *b);
 extern void crush_destroy_rule(struct crush_rule *r);
+/** @ingroup API
+ *
+ * Deallocate the __map__, previously allocated with crush_create.
+ *
+ * @param map the crush map
+ */
 extern void crush_destroy(struct crush_map *map);
 
 static inline int crush_calc_tree_node(int i)
