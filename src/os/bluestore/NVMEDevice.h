@@ -221,7 +221,11 @@ class NVMEDevice : public BlockDevice {
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
            IOContext *ioc,
            bool buffered) override;
-
+  int aio_read(
+    uint64_t off,
+    uint64_t len,
+    bufferlist *pbl,
+    IOContext *ioc) override;
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
                 bool buffered) override;
