@@ -199,7 +199,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return data;
     }
     virtual raw* clone_empty() = 0;
-    raw *clone() {
+    virtual raw *clone() {
       raw *c = clone_empty();
       memcpy(c->data, data, len);
       return c;
@@ -540,9 +540,6 @@ public:
 #endif
 
 
-/*
- * TODO - make crc32c calculation using kcrypto crc32c-intel algorithm, if possible
- */
   uint32_t crc32c(unsigned int off, unsigned int len, uint32_t init_crc) {
     uint32_t crc;
     int serv = -1;
@@ -924,9 +921,49 @@ public:
   }
 
   buffer::raw* clone_empty() {
-    // cloning doesn't make sense for pipe-based buffers,
-    // and is only used by unit tests for other types of buffers
-    return NULL;
+    assert(false&&"raw_splice_kcrypt::clone_empty should never be invoked");
+    return nullptr;
+  }
+
+  buffer::raw* clone() {
+    buffer::raw_splice_kcrypt* c;
+    c = new raw_splice_kcrypt(len);
+    if (data != nullptr) {
+      c->data = new char[len];
+      memcpy(c->data, data, len);
+      return c;
+    }
+
+    ssize_t i;
+    for (i=0; i<(ssize_t)pipe_read_elements.size(); i++) {
+      int fds[2];
+      if (pipe2(fds, O_NONBLOCK) == 0) {
+        ssize_t moved_cnt;
+        set_pipe_size(fds[write_end]);
+        moved_cnt = tee(pipe_read_elements[i].fd, fds[write_end], pipe_read_elements[i].size, SPLICE_F_NONBLOCK);
+        if (moved_cnt == (ssize_t)pipe_read_elements[i].size) {
+          c->pipe_read_elements.emplace_back(moved_cnt, fds[read_end]);
+          c->actual_content_size += moved_cnt;
+          close(fds[write_end]);
+        } else {
+          close(fds[read_end]);
+          close(fds[write_end]);
+          goto cleanup_and_convert;
+        }
+      } else {
+        goto cleanup_and_convert;
+      }
+    }
+    return c;
+
+    cleanup_and_convert:
+    while (--i >= 0) {
+      close(c->pipe_read_elements[i].fd);
+    }
+    get_data();
+    c->data = new char[len];
+    memcpy(c->data, data, len);
+    return c;
   }
 
   char *get_data() {

@@ -692,6 +692,11 @@ TEST_F(TestRawPipe, crc32c) {
   }
 }
 
+TEST_F(TestRawPipe, clone_stream) {
+  bufferptr zero_copy = bufferptr(buffer::create_zero_copy(file_len, fd, 0));
+  bufferptr cloned = bufferptr(zero_copy.clone());
+  EXPECT_EQ(0, ::memcmp(zero_copy.c_str(), cloned.c_str(), file_len));
+}
 
 class TestRawPipePerformance : public ::testing::Test {
 protected:
