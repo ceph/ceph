@@ -34,6 +34,7 @@
 #include "include/memory.h"
 #include "include/mempool.h"
 #include "common/Finisher.h"
+#include "common/perf_counters.h"
 #include "compressor/Compressor.h"
 #include "os/ObjectStore.h"
 
@@ -1815,6 +1816,11 @@ public:
 
   void get_db_statistics(Formatter *f) override;
   void generate_db_histogram(Formatter *f) override;
+  void dump_perf_counters(Formatter *f) override {
+    f->open_object_section("perf_counters");
+    logger->dump_formatted(f, false);
+    f->close_section();
+  }
 
 public:
   int statfs(struct store_statfs_t *buf) override;
