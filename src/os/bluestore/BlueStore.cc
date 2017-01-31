@@ -2927,9 +2927,9 @@ void BlueStore::_init_logger()
 
   b.add_u64(l_bluestore_write_big, "bluestore_write_big",
 	    "Large min_alloc_size-aligned writes into fresh blobs");
-  b.add_u64(l_bluestore_write_big_bytes, "bleustore_write_big_bytes",
+  b.add_u64(l_bluestore_write_big_bytes, "bluestore_write_big_bytes",
 	    "Large min_alloc_size-aligned writes into fresh blobs (bytes)");
-  b.add_u64(l_bluestore_write_big_blobs, "bleustore_write_big_blobs",
+  b.add_u64(l_bluestore_write_big_blobs, "bluestore_write_big_blobs",
 	    "Large min_alloc_size-aligned writes into fresh blobs (blobs)");
   b.add_u64(l_bluestore_write_small, "bluestore_write_small",
 	    "Small writes into existing or sparse small blobs");
