@@ -250,6 +250,7 @@ int main(int argc, const char **argv)
     RGWFrontendConfig *config = new RGWFrontendConfig(f);
     int r = config->init();
     if (r < 0) {
+      delete config;
       cerr << "ERROR: failed to init config: " << f << std::endl;
       return EINVAL;
     }
