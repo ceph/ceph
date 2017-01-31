@@ -6,6 +6,7 @@ from cStringIO import StringIO
 import contextlib
 import logging
 import os
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -209,6 +210,7 @@ def run_qemu(ctx, config):
             'file={base},format=qcow2,if=virtio'.format(base=base_file),
             # cd holding metadata for cloud-init
             '-cdrom', '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
+            '-redir', run.Raw('tcp:5555::22')
             ]
 
         cachemode = 'none'
@@ -245,24 +247,22 @@ def run_qemu(ctx, config):
             )
 
     try:
+        log.info("Sleeping 90 seconds for cloud-config to take effect")
+        time.sleep(90)
+        log.info("Running xfs tests")
+        xfs_cmd = ['ssh', '-p', '5555',
+                   run.Raw('ubuntu@localhost'),
+                   'sudo', 'bash', '/run_xfstests_krbd.sh']
+        xfs_param = ['-c', '1', '-f', 'xfs', '-t',
+                     '/dev/vdb', '-s', '/dev/vdc']
+        xfs_cmd.extend(xfs_param)
+        xfs_out = StringIO()
+        remote.run(args=xfs_cmd, stdout=xfs_out)
         yield
     finally:
-        log.info('waiting for qemu tests to finish...')
-        run.wait(procs)
-
-        log.debug('checking that qemu tests succeeded...')
-        for client in config.iterkeys():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
-            # check for test status
-            remote.run(
-                args=[
-                    'test', '-f',
-                    '{tdir}/archive/qemu/{client}/success'.format(
-                        tdir=testdir,
-                        client=client
-                        ),
-                    ],
-                )
+            kill_qemu = ['sudo', 'pkill', 'qemu']
+            remote.run(args=kill_qemu, check_status=False)
+            log.info("xfs tests completed")
 
 
 @contextlib.contextmanager
