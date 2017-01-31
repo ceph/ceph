@@ -6133,7 +6133,11 @@ void MDCache::identify_files_to_recover()
     }
 
     if (recover) {
-      in->auth_pin(&in->filelock);
+      if (in->filelock.is_stable()) {
+	in->auth_pin(&in->filelock);
+      } else {
+	assert(in->filelock.get_state() == LOCK_XLOCKSNAP);
+      }
       in->filelock.set_state(LOCK_PRE_SCAN);
       rejoin_recover_q.push_back(in);
     } else {
@@ -6145,6 +6149,8 @@ void MDCache::identify_files_to_recover()
 void MDCache::start_files_to_recover()
 {
   for (CInode *in : rejoin_check_q) {
+    if (in->filelock.get_state() == LOCK_XLOCKSNAP)
+      mds->locker->issue_caps(in);
     mds->locker->check_inode_max_size(in);
   }
   rejoin_check_q.clear();
@@ -6168,6 +6174,17 @@ void MDCache::do_file_recover()
 // ----------------------------
 // truncate
 
+class C_MDC_RetryTruncate : public MDCacheContext {
+  CInode *in;
+  LogSegment *ls;
+public:
+  C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegment *l) :
+    MDCacheContext(c), in(i), ls(l) {}
+  void finish(int r) {
+    mdcache->_truncate_inode(in, ls);
+  }
+};
+
 void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 {
   inode_t *pi = in->get_projected_inode();
@@ -6178,6 +6195,15 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
+  in->auth_pin(this);
+
+  if (!in->client_need_snapflush.empty() &&
+      (in->get_caps_issued() & CEPH_CAP_FILE_BUFFER)) {
+    assert(in->filelock.is_xlocked());
+    in->filelock.set_xlock_snap_sync(new C_MDC_RetryTruncate(this, in, ls));
+    mds->locker->issue_caps(in);
+    return;
+  }
 
   _truncate_inode(in, ls);
 }
@@ -6205,7 +6231,6 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   assert(pi->truncate_from < (1ULL << 63));
   assert(pi->truncate_size < pi->truncate_from);
 
-  in->auth_pin(this);
 
   SnapRealm *realm = in->find_snaprealm();
   SnapContext nullsnap;
@@ -6314,8 +6339,21 @@ void MDCache::start_recovered_truncates()
     LogSegment *ls = p->second;
     for (set<CInode*>::iterator q = ls->truncating_inodes.begin();
 	 q != ls->truncating_inodes.end();
-	 ++q)
-      _truncate_inode(*q, ls);
+	 ++q) {
+      CInode *in = *q;
+      in->auth_pin(this);
+
+      if (!in->client_need_snapflush.empty() &&
+	  (in->get_caps_issued() & CEPH_CAP_FILE_BUFFER)) {
+	assert(in->filelock.is_stable());
+	in->filelock.set_state(LOCK_XLOCKDONE);
+	in->auth_pin(&in->filelock);
+	in->filelock.set_xlock_snap_sync(new C_MDC_RetryTruncate(this, in, ls));
+	// start_files_to_recover will revoke caps
+	continue;
+      }
+      _truncate_inode(in, ls);
+    }
   }
 }
 

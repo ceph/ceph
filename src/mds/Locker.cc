@@ -1578,6 +1578,7 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
   if (lock->get_num_rdlocks() == 0 &&
       lock->get_num_wrlocks() == 0 &&
       lock->get_num_client_lease() == 0 &&
+      lock->get_state() != LOCK_XLOCKSNAP &&
       lock->get_type() != CEPH_LOCK_DN) {
     CInode *in = static_cast<CInode*>(lock->get_parent());
     client_t loner = in->get_target_loner();
@@ -1594,7 +1595,7 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
     }
   }
   // the xlocker may have CEPH_CAP_GSHARED, need to revoke it if next state is LOCK_LOCK
-  eval_gather(lock, true, pneed_issue);
+  eval_gather(lock, lock->get_state() != LOCK_XLOCKSNAP, pneed_issue);
 }
 
 void Locker::xlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue)
