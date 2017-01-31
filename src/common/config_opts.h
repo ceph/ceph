@@ -284,6 +284,7 @@ OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, true)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
+OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT, .25) // max estimate of pg total before we do all pgs in parallel
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
 OPTION(mon_stat_smooth_intervals, OPT_INT, 6)  // smooth stats over last N PGMap maps
 OPTION(mon_election_timeout, OPT_FLOAT, 5)  // on election proposer, max waiting time for all ACKs
