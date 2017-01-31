@@ -24,6 +24,7 @@
 #include "include/assert.h" // fio.h clobbers our assert.h
 
 #define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_
 
 namespace {
 
@@ -83,7 +84,13 @@ struct Engine {
     std::lock_guard<std::mutex> l(lock);
     --ref_count;
     if (!ref_count) {
+      ostringstream ostr;
+      Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+      os->dump_perf_counters(f);
+      f->flush(ostr);
+      delete f;
       os->umount();
+      dout(0) << "FIO plugin " << ostr.str() << dendl;
     }
   }
 };
