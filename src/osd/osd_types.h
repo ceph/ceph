@@ -1220,6 +1220,8 @@ public:
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
   epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
+  /// last epoch that forced clients to resend (pre-luminous clients only)
+  epoch_t last_force_op_resend_preluminous;
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -1334,6 +1336,7 @@ public:
       pg_num(0), pgp_num(0),
       last_change(0),
       last_force_op_resend(0),
+      last_force_op_resend_preluminous(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
@@ -1390,6 +1393,9 @@ public:
   }
   epoch_t get_last_change() const { return last_change; }
   epoch_t get_last_force_op_resend() const { return last_force_op_resend; }
+  epoch_t get_last_force_op_resend_preluminous() const {
+    return last_force_op_resend_preluminous;
+  }
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
@@ -1464,6 +1470,7 @@ public:
 
   void set_last_force_op_resend(uint64_t t) {
     last_force_op_resend = t;
+    last_force_op_resend_preluminous = t;
   }
 
   void calc_pg_masks();

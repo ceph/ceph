@@ -1130,6 +1130,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
+  f->dump_stream("last_force_op_resend_preluminous")
+    << get_last_force_op_resend_preluminous();
   f->dump_unsigned("auid", get_auid());
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
@@ -1482,11 +1484,16 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 24;
+  uint8_t v = 25;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
+  }
+  if ((features &
+       (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) !=
+      (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) {
+    v = 24;
   }
 
   ENCODE_START(v, 5, bl);
@@ -1528,7 +1535,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_flush_age, bl);
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
-  ::encode(last_force_op_resend, bl);
+  ::encode(last_force_op_resend_preluminous, bl);
   ::encode(min_read_recency_for_promote, bl);
   ::encode(expected_num_objects, bl);
   if (v >= 19) {
@@ -1549,6 +1556,9 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
   if (v >= 24) {
     ::encode(opts, bl);
+  }
+  if (v >= 25) {
+    ::encode(last_force_op_resend, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -1653,9 +1663,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(erasure_code_profile, bl);
   }
   if (struct_v >= 15) {
-    ::decode(last_force_op_resend, bl);
+    ::decode(last_force_op_resend_preluminous, bl);
   } else {
-    last_force_op_resend = 0;
+    last_force_op_resend_preluminous = 0;
   }
   if (struct_v >= 16) {
     ::decode(min_read_recency_for_promote, bl);
@@ -1697,6 +1707,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 24) {
     ::decode(opts, bl);
   }
+  if (struct_v >= 25) {
+    ::decode(last_force_op_resend, bl);
+  } else {
+    last_force_op_resend = last_force_op_resend_preluminous;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1715,6 +1730,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.pgp_num = 5;
   a.last_change = 9;
   a.last_force_op_resend = 123823;
+  a.last_force_op_resend_preluminous = 123824;
   a.snap_seq = 10;
   a.snap_epoch = 11;
   a.auid = 12;
@@ -1772,8 +1788,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
       << " last_change " << p.get_last_change();
-  if (p.get_last_force_op_resend())
-    out << " lfor " << p.get_last_force_op_resend();
+  if (p.get_last_force_op_resend() ||
+      p.get_last_force_op_resend_preluminous())
+    out << " lfor " << p.get_last_force_op_resend() << "/"
+	<< p.get_last_force_op_resend_preluminous();
   if (p.get_auid())
     out << " owner " << p.get_auid();
   if (p.flags)
