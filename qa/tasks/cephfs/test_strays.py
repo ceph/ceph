@@ -415,9 +415,8 @@ class TestStrays(CephFSTestCase):
         """
 
         # Set up two MDSs
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "allow_multimds",
-                                                   "true", "--yes-i-really-mean-it")
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "2")
+        self.fs.set_allow_multimds(True)
+        self.fs.set_max_mds(2)
 
         # See that we have two active MDSs
         self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
@@ -486,8 +485,8 @@ class TestStrays(CephFSTestCase):
         self.assertTrue(self.fs.data_objects_present(ino, size_mb * 1024 * 1024))
 
         # Shut down rank 1
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "1")
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'deactivate', "1")
+        self.fs.set_max_mds(1)
+        self.fs.deactivate(1)
 
         # Wait til we get to a single active MDS mdsmap state
         def is_stopped():
@@ -693,7 +692,7 @@ class TestStrays(CephFSTestCase):
         That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
-        self.fs.mon_manager.raw_cluster_cmd("mds", "set", "allow_dirfrags", "true", "--yes-i-really-mean-it")
+        self.fs.set_allow_dirfrags(True)
 
         LOW_LIMIT = 50
         for mds in self.fs.get_daemon_names():
