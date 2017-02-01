@@ -30,6 +30,7 @@
 #include <typeinfo>
 
 #include <common/Formatter.h>
+#include "include/assert.h"
 
 
 /*
@@ -139,15 +140,17 @@ namespace mempool {
 // define memory pools
 
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
-  f(unittest_1)			      \
-  f(unittest_2)			      \
-  f(buffer_meta)		      \
-  f(buffer_data)		      \
-  f(osd)			      \
+  f(bloom_filter)		      \
   f(bluestore_meta_onode)	      \
   f(bluestore_meta_other)	      \
   f(bluestore_alloc)		      \
-  f(bluefs)
+  f(bluefs)			      \
+  f(buffer_meta)		      \
+  f(buffer_data)		      \
+  f(osd)			      \
+  f(unittest_1)			      \
+  f(unittest_2)
+
 
 // give them integer ids
 #define P(x) mempool_##x,
@@ -411,6 +414,13 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
+#define MEMPOOL_DECLARE_FACTORY(obj, factoryname, pool)			\
+  namespace mempool {							\
+    namespace pool {							\
+      extern pool_allocator<obj> alloc_##factoryname;			\
+    }									\
+  }
+
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
   namespace mempool {							\
     namespace pool {							\
