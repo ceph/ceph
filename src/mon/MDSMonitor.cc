@@ -2618,11 +2618,11 @@ void MDSMonitor::check_sub(Subscription *sub)
       mds_map = &(fsmap.filesystems.at(fscid)->mds_map);
     }
 
+    assert(mds_map != nullptr);
     dout(10) << __func__ << " selected MDS map epoch " <<
       mds_map->epoch << " for namespace " << fscid << " for subscriber "
       << sub->session->inst.name << " who wants epoch " << sub->next << dendl;
 
-    assert(mds_map != nullptr);
     if (sub->next > mds_map->epoch) {
       return;
     }
