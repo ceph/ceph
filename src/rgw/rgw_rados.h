@@ -989,6 +989,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_bucket user_email_pool;
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
+  rgw_bucket roles_pool;
 
   RGWAccessKey system_key;
 
@@ -1022,7 +1023,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const string& placement_rule) const;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(8, 1, bl);
+    ENCODE_START(9, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -1040,11 +1041,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(realm_id, bl);
     ::encode(lc_pool, bl);
     ::encode(tier_config, bl);
+    ::encode(roles_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(8, bl);
+    DECODE_START(9, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -1077,6 +1079,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
     }
     if (struct_v >= 8) {
       ::decode(tier_config, bl);
+    }
+    if (struct_v >= 9) {
+      ::decode(roles_pool, bl);
+    } else {
+      roles_pool = name + ".rgw.roles";
     }
     DECODE_FINISH(bl);
   }

@@ -78,6 +78,13 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
   return 0;
 }
 
+int rgw_delete_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid,
+                          RGWObjVersionTracker *objv_tracker)
+{
+  rgw_obj obj(bucket, oid);
+  return rgwstore->delete_system_obj(obj, objv_tracker);
+}
+
 void parse_mime_map_line(const char *start, const char *end)
 {
   char line[end - start + 1];
