@@ -5271,11 +5271,19 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if (m->get_map_epoch() < pool.info.last_force_op_resend &&
-      m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
-    dout(7) << __func__ << " sent before last_force_op_resend "
-	    << pool.info.last_force_op_resend << ", dropping" << *m << dendl;
-    return true;
+  if (m->get_connection()->has_feature(CEPH_FEATURE_RESEND_ON_SPLIT)) {
+    if (m->get_map_epoch() < pool.info.get_last_force_op_resend()) {
+      dout(7) << __func__ << " sent before last_force_op_resend "
+	      << pool.info.last_force_op_resend << ", dropping" << *m << dendl;
+      return true;
+    }
+  } else if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
+    if (m->get_map_epoch() < pool.info.get_last_force_op_resend_preluminous()) {
+      dout(7) << __func__ << " sent before last_force_op_resend_preluminous "
+	      << pool.info.last_force_op_resend_preluminous
+	      << ", dropping" << *m << dendl;
+      return true;
+    }
   }
 
   return false;
