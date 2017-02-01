@@ -25,7 +25,7 @@ from ..task.internal import check_lock, add_remotes, connect
 from .actions import (
     check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
     reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
-    remove_kernel_mounts, remove_ceph_packages, synch_clocks,
+    remove_ceph_packages, synch_clocks,
     unlock_firmware_repo, remove_configuration_files, undo_multipath,
     reset_syslog_dir, remove_ceph_data, remove_testing_tree,
     remove_yum_timedhosts, kill_valgrind,
@@ -329,7 +329,6 @@ def nuke_helper(ctx, should_unlock):
     remove_osd_mounts(ctx)
     remove_osd_tmpfs(ctx)
     kill_hadoop(ctx)
-    remove_kernel_mounts(ctx)
     remove_ceph_packages(ctx)
     synch_clocks(remotes)
     unlock_firmware_repo(ctx)
