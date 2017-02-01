@@ -3242,9 +3242,9 @@ int RGWRados::convert_regionmap()
 {
   RGWZoneGroupMap zonegroupmap;
 
-  string pool_name = cct->_conf->rgw_zone_root_pool;
+  string pool_name = cct->_conf->rgw_region_root_pool;
   if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+    pool_name = RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
   }
   string oid = region_map_oid; 
 

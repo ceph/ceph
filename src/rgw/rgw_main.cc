@@ -255,6 +255,20 @@ int main(int argc, const char **argv)
     }
   }
 
+  // maintain existing region root pool for new multisite objects
+  if (!g_conf->rgw_region_root_pool.empty()) {
+    const char *root_pool = g_conf->rgw_region_root_pool.c_str();
+    if (g_conf->rgw_zonegroup_root_pool.empty()) {
+      g_conf->set_val_or_die("rgw_zonegroup_root_pool", root_pool);
+    }
+    if (g_conf->rgw_period_root_pool.empty()) {
+      g_conf->set_val_or_die("rgw_period_root_pool", root_pool);
+    }
+    if (g_conf->rgw_realm_root_pool.empty()) {
+      g_conf->set_val_or_die("rgw_realm_root_pool", root_pool);
+    }
+  }
+
   check_curl();
 
   if (g_conf->daemonize) {
