@@ -737,10 +737,15 @@ struct rgw_bucket {
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
-  rgw_bucket(const cls_user_bucket& b) : name(b.name), data_pool(b.data_pool),
-					 data_extra_pool(b.data_extra_pool),
-					 index_pool(b.index_pool), marker(b.marker),
-					 bucket_id(b.bucket_id) {}
+  explicit rgw_bucket(const rgw_user& u, const cls_user_bucket& b)
+    : tenant(u.tenant),
+      name(b.name),
+      data_pool(b.data_pool),
+      data_extra_pool(b.data_extra_pool),
+      index_pool(b.index_pool),
+      marker(b.marker),
+      bucket_id(b.bucket_id) {
+  }
   rgw_bucket(const string& s) : name(s) {
     data_pool = index_pool = s;
     marker = "";
@@ -1414,11 +1419,13 @@ struct RGWBucketEnt {
 
   RGWBucketEnt() : size(0), size_rounded(0), count(0) {}
 
-  explicit RGWBucketEnt(const cls_user_bucket_entry& e) : bucket(e.bucket),
-		  					  size(e.size), 
-			  				  size_rounded(e.size_rounded),
-							  creation_time(e.creation_time),
-							  count(e.count) {}
+  explicit RGWBucketEnt(const rgw_user& u, const cls_user_bucket_entry& e)
+    : bucket(u, e.bucket),
+      size(e.size),
+      size_rounded(e.size_rounded),
+      creation_time(e.creation_time),
+      count(e.count) {
+  }
 
   void convert(cls_user_bucket_entry *b) {
     bucket.convert(&b->bucket);
