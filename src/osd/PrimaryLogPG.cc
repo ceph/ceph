@@ -1627,6 +1627,47 @@ void PrimaryLogPG::do_request(
   if (can_discard_request(op)) {
     return;
   }
+
+  // pg-wide backoffs
+  Message *m = op->get_req();
+  if (m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF)) {
+    SessionRef session((Session *)m->get_connection()->get_priv());
+    if (!session)
+      return;  // drop it.
+    session->put();  // get_priv takes a ref, and so does the SessionRef
+
+    if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+      Backoff *b = session->have_backoff(info.pgid.pgid.get_hobj_start());
+      if (b) {
+	dout(10) << " have backoff " << *b << " " << *m << dendl;
+	assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);
+	return;
+      }
+
+      bool backoff =
+	is_down() ||
+	is_incomplete() ||
+	(!is_active() && is_peered());
+      if (g_conf->osd_peering_aggressive_backoff && !backoff) {
+	if (is_peering()) {
+	  backoff = true;
+	}
+      }
+      if (backoff) {
+	add_pg_backoff(session);
+	return;
+      }
+    }
+    // pg backoff acks at pg-level
+    if (op->get_req()->get_type() == CEPH_MSG_OSD_BACKOFF) {
+      MOSDBackoff *ba = static_cast<MOSDBackoff*>(m);
+      if (ba->begin != ba->end) {
+	handle_backoff(op);
+	return;
+      }
+    }
+  }
+
   if (flushes_in_progress > 0) {
     dout(20) << flushes_in_progress
 	     << " flushes_in_progress pending "
