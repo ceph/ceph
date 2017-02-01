@@ -7,10 +7,11 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/AsyncOpTracker.h"
+#include "common/Mutex.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/watcher/Types.h"
 #include "librbd/managed_lock/Types.h"
-#include "common/Mutex.h"
 #include <list>
 #include <string>
 #include <utility>
@@ -111,12 +112,12 @@ protected:
     assert(m_lock.is_locked());
     return m_state == STATE_LOCKED;
   }
-  inline bool is_state_waiting_for_lock() {
+  inline bool is_state_waiting_for_lock() const {
     assert(m_lock.is_locked());
     return m_state == STATE_WAITING_FOR_LOCK;
   }
 
-  inline bool is_action_acquire_lock() {
+  inline bool is_action_acquire_lock() const {
     assert(m_lock.is_locked());
     return get_active_action() == ACTION_ACQUIRE_LOCK;
   }
@@ -219,6 +220,7 @@ private:
   State m_post_next_state;
 
   ActionsContexts m_actions_contexts;
+  AsyncOpTracker m_async_op_tracker;
 
   bool is_lock_owner(Mutex &lock) const;
   bool is_transition_state() const;
@@ -228,7 +230,6 @@ private:
 
   Action get_active_action() const;
   void complete_active_action(State next_state, int r);
-
 
   void send_acquire_lock();
   void handle_pre_acquire_lock(int r);
@@ -249,6 +250,7 @@ private:
   void send_shutdown_release();
   void handle_shutdown_pre_release(int r);
   void handle_shutdown_post_release(int r);
+  void wait_for_tracked_ops(int r);
   void complete_shutdown(int r);
 };
 

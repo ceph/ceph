@@ -1365,6 +1365,9 @@ OPTION(rbd_mirror_pool_replayers_refresh_interval, OPT_INT, 30) // interval to r
 OPTION(rbd_mirror_delete_retry_interval, OPT_DOUBLE, 30) // interval to check and retry the failed requests in deleter
 OPTION(rbd_mirror_image_directory_refresh_interval, OPT_INT, 30) // interval to refresh images in pool watcher
 OPTION(rbd_mirror_image_state_check_interval, OPT_INT, 30) // interval to get images from pool watcher and set sources in replayer
+OPTION(rbd_mirror_leader_heartbeat_interval, OPT_INT, 5) // interval (in seconds) between mirror leader heartbeats
+OPTION(rbd_mirror_leader_max_missed_heartbeats, OPT_INT, 2) // number of missed heartbeats for non-lock owner to attempt to acquire lock
+OPTION(rbd_mirror_leader_max_acquire_attempts_before_break, OPT_INT, 3) // number of failed attempts to acquire lock after missing heartbeats before breaking lock
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
