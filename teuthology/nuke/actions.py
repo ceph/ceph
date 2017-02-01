@@ -95,25 +95,6 @@ def kill_valgrind(ctx):
     )
 
 
-def remove_kernel_mounts(ctx):
-    """
-    properly we should be able to just do a forced unmount,
-    but that doesn't seem to be working, so you should reboot instead
-    """
-    log.info("Removing kernel mounts...")
-    ctx.cluster.run(
-        args=[
-            'grep', 'ceph', '/etc/mtab', run.Raw('|'),
-            'grep', '-o', "on /.* type", run.Raw('|'),
-            'grep', '-o', "/.* ", run.Raw('|'),
-            'xargs', '-r',
-            'sudo', 'umount', '-f', run.Raw(';'),
-        ],
-        check_status=False,
-        timeout=60
-    )
-
-
 def remove_osd_mounts(ctx):
     """
     unmount any osd data mounts (scratch disks)
