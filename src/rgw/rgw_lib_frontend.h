@@ -33,6 +33,13 @@ namespace rgw {
     void run();
     void checkpoint();
 
+    void stop() {
+      shutdown = true;
+      for (const auto& fs: mounted_fs) {
+	fs.second->stop();
+      }
+    }
+
     void register_fs(RGWLibFS* fs) {
       lock_guard guard(mtx);
       mounted_fs.insert(FSMAP::value_type(fs, fs));
