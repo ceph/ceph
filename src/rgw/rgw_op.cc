@@ -33,6 +33,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
+#include "rgw_role.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
