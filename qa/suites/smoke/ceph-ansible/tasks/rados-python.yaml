@@ -1,0 +1,9 @@
+tasks:
+- ssh-keys:
+- ceph-ansible:
+- install.ship_utilities:
+- workunit:
+    clients:
+      client.0:
+        - rados/test_python.sh
+
