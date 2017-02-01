@@ -1,0 +1,30 @@
+overrides:
+  ceph-ansible:
+    group_vars:
+      all:
+        ceph_conf_overrides:
+          global:
+            osd_default_pool_size: 3
+            osd_pool_default_pg_num: 128
+            osd_pool_default_pgp_num: 128
+    vars:
+        osd_auto_discovery: false
+        ceph_test: True
+        ceph_origin: distro
+        journal_collocation: True
+        journal_size: 1024
+        ceph_stable: True
+        ceph_stable_rh_storage: True
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+- - osd.6
+  - osd.7
+  - osd.8
+- - rgw.0
+  - client.0

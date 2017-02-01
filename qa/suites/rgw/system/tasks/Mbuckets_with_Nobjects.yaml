@@ -1,0 +1,11 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible: null
+- rgw-system-test:
+    test-name: test_Mbuckets_with_Nobjects
+    config:
+      user_count: 100
+      bucket_count: 500
+      objects_count: 100
+      min_file_size: 1000
+      max_file_size: 1500

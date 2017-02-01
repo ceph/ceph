@@ -1,0 +1,12 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible: null
+- rgw-system-test:
+    test-name: test_suspend_versioning
+    config:
+       user_count: 100
+       bucket_count: 500
+       objects_count: 90
+       version_count: 5
+       min_file_size: 1000
+       max_file_size: 1500
