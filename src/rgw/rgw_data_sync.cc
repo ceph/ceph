@@ -2694,9 +2694,6 @@ int RGWBucketSyncStatusManager::init()
     return -EINVAL;
   }
 
-  async_rados = new RGWAsyncRadosProcessor(store, store->ctx()->_conf->rgw_num_async_rados_threads);
-  async_rados->start();
-
   int ret = http_manager.set_threaded();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
@@ -2724,6 +2721,8 @@ int RGWBucketSyncStatusManager::init()
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
   int effective_num_shards = (num_shards ? num_shards : 1);
+
+  auto async_rados = store->get_async_rados();
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(store, this, async_rados, &http_manager);
