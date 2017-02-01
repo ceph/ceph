@@ -63,12 +63,6 @@ public:
   }
 
   void expect_snap_create(MockImageCtx &mock_image_ctx, int r) {
-    if (!mock_image_ctx.old_format &&
-         mock_image_ctx.exclusive_lock != nullptr) {
-      EXPECT_CALL(*mock_image_ctx.exclusive_lock, assert_header_locked(_))
-                    .Times(r == -ESTALE ? 2 : 1);
-    }
-
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq(mock_image_ctx.old_format ? "snap_add" :

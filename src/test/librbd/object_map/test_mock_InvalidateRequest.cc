@@ -56,9 +56,6 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
-                .WillOnce(DoDefault());
-  EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
               exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(DoDefault());
 
@@ -85,9 +82,6 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, ictx->snap_id, false,
                                                 &cond_ctx);
 
-  EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
-                .Times(0);
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
               exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(DoDefault());
@@ -133,9 +127,6 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
-  EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
-                .WillOnce(DoDefault());
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
               exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(Return(-EINVAL));
