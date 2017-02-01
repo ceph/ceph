@@ -270,7 +270,7 @@ cleanup() {
 
 test_omap() {
     cleanup
-    for i in $(seq 1 1 600)
+    for i in $(seq 1 1 10)
     do
 	if [ $(($i % 2)) -eq 0 ]; then
             $RADOS_TOOL -p $POOL setomapval $OBJ $i $i
@@ -279,7 +279,26 @@ test_omap() {
 	fi
         $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "|$i|\$"
     done
-    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 600
+    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 10
+    for i in $(seq 1 1 5)
+    do
+        $RADOS_TOOL -p $POOL rmomapkey $OBJ $i
+    done
+    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 5
+    cleanup
+
+    for i in $(seq 1 1 10)
+    do
+        dd if=/dev/urandom bs=128 count=1 > $TDIR/omap_key
+        if [ $(($i % 2)) -eq 0 ]; then
+            $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key setomapval $OBJ $i
+        else
+            echo -n "$i" | $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key setomapval $OBJ
+        fi
+        $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key getomapval $OBJ | grep -q "|$i|\$"
+        $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key rmomapkey $OBJ
+        $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 0
+    done
     cleanup
 }
 
