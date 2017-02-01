@@ -1,0 +1,54 @@
+versions:
+   supported:
+     - '1.3.0'
+     - '1.3.1'
+     - '1.3.2'
+     - '1.3.3'
+     - '1.3.3A'
+     - '2.0'
+     - '2.1'
+     - '2.2'
+   rpm:
+      mapped:
+         '1.3.0' : '0.94.1'
+         '1.3.1' : '0.94.3'
+         '1.3.2' : '0.94.5'
+         '1.3.3' : '0.94.7'
+         '1.3.3A' : '0.94.9'
+         '2.0': '10.2.2'
+         '2.1': '10.2.3'
+         '2.2': '10.2.5'
+   deb:
+      mapped:
+         '1.3.0' : '0.94.1'
+         '1.3.1' : '0.94.3'
+         '1.3.2' : '0.94.5'
+         '1.3.3' : '0.94.7'
+         '1.3.3A' : '0.94.9'
+         '2.0': '10.2.2'
+         '2.1': '10.2.3'
+         '2.2': '10.2.5'
+pkgs:
+   rpm:
+    - ceph-mon
+    - ceph-osd
+    - ceph-mds
+    - ceph-radosgw
+    - ceph-test
+    - ceph-selinux
+    - ceph-fuse
+    - python-rados
+    - python-rbd
+    - python-cephfs
+    - rbd-mirror
+   deb:
+    - ceph-mon
+    - ceph-osd
+    - ceph-mds
+    - ceph-test
+    - ceph-fuse
+    - radosgw
+    - python-rados
+    - python-rbd
+    - python-cephfs
+    - rbd-mirror
