@@ -5514,7 +5514,7 @@ librados::ObjectCursor librados::IoCtx::object_list_begin()
 {
   hobject_t *h = new hobject_t(io_ctx_impl->objecter->enumerate_objects_begin());
   ObjectCursor oc;
-  oc.c_cursor = (rados_object_list_cursor)h;
+  oc.set((rados_object_list_cursor)h);
   return oc;
 }
 
@@ -5523,7 +5523,7 @@ librados::ObjectCursor librados::IoCtx::object_list_end()
 {
   hobject_t *h = new hobject_t(io_ctx_impl->objecter->enumerate_objects_end());
   librados::ObjectCursor oc;
-  oc.c_cursor = (rados_object_list_cursor)h;
+  oc.set((rados_object_list_cursor)h);
   return oc;
 }
 
