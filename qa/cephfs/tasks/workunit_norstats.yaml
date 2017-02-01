@@ -1,0 +1,15 @@
+tasks:
+- workunit:
+    timeout: 6h
+    clients:
+      all:
+        - fs/norstats
+
+overrides:
+  kclient:
+    client.0:
+      no_rbytes: true
+  ceph:
+    conf:
+      client:
+        client dirsize rbytes: false
