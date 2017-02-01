@@ -1,0 +1,81 @@
+overrides:
+  ceph-ansible:
+    vars:
+      ceph_stable: true
+      ceph_origin: distro
+      ceph_stable_rh_storage: true
+      journal_collocation: true
+      journal_size: 1024
+      osd_auto_discovery: false
+      ceph_test: true
+set-cdn-repo:
+    rhbuild: '2.0'
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - osd.3
+  - osd.4
+  - osd.5
+- - mon.c
+- - client.0
+- - client.1
+- - client.2
+- - client.3
+tasks:
+- ssh-keys:
+- ceph-ansible:
+    rhbuild: '2.0'
+- install.ship_utilities: 
+- parallel:
+  - ceph-deploy.upgrade_simple:
+      latest: true
+      roles:
+       - mon.a
+       - mon.b 
+  - rados:
+      clients:
+      - client.0
+      ec_pool: true
+      objects: 50
+      op_weights:
+        append: 100
+        copy_from: 50
+        delete: 50
+        read: 100
+        rmattr: 25
+        rollback: 50
+        setattr: 25
+        snap_create: 50
+        snap_remove: 50
+        write: 0
+      ops: 4000
+      write_append_excl: false
+  - print: '**** done rados ec task'
+  - workunit:
+      branch: jewel
+      clients:
+        client.0:
+        - cls
+  - print: '**** done cls workload'
+  - workunit:
+      branch: jewel
+      clients:
+        client.1:
+        - rados/load-gen-big.sh
+  - print: '**** done rados/load-gen-big.sh workload'
+  - workunit:
+      branch: jewel
+      clients:
+        client.2:
+        - rbd/test_librbd.sh
+  - print: '**** done rbd/test_librbd.sh workload'
+  - workunit:
+      branch: jewel
+      clients:
+        client.3:
+        - rbd/test_librbd_python.sh
+  - print: '**** done rbd/test_librbd_python.sh workload'

@@ -1,0 +1,49 @@
+overrides:
+  ceph-deploy:
+    prepare_activate: true
+    conf:
+      client:
+        log file: /var/log/ceph/ceph-$name.$pid.log
+      mon:
+        debug mon: 1
+        debug ms: 20
+        debug paxos: 20
+      osd:
+        debug filestore: 20
+        debug journal: 20
+        debug ms: 1
+        debug osd: 20
+      global:
+        mon pg warn min per osd: 2
+        osd pool default size: 2
+roles:
+- [mon.a]
+- [osd.0, osd.1, osd.2]
+- [osd.3, osd.4, osd.5, client.1]
+tasks:
+- ssh-keys:
+- ceph-deploy:
+    rhbuild: '1.3.2' 
+    fs: xfs
+- ceph-deploy.upgrade:
+    latest: true
+    roles:
+     - mon.a
+- ceph-deploy.upgrade:
+    latest: true
+    roles:
+     - osd.0
+- ceph-deploy.upgrade:
+    latest: true
+    roles:
+     - osd.3
+- ceph.crush_setup:
+    cluster: ceph
+- rbd_fio:
+    client.1:
+       fio-io-size: 90%
+       formats: [2]
+       features: [[layering]]
+       io-engine: sync
+       rw: randrw
+       runtime: 900
