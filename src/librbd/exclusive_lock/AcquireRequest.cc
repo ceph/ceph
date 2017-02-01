@@ -15,6 +15,7 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/image/RefreshRequest.h"
 #include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -71,12 +72,35 @@ AcquireRequest<I>::AcquireRequest(I &image_ctx, const std::string &cookie,
 
 template <typename I>
 AcquireRequest<I>::~AcquireRequest() {
+  if (!m_prepare_lock_completed) {
+    m_image_ctx.state->handle_prepare_lock_complete();
+  }
   delete m_on_acquire;
 }
 
 template <typename I>
 void AcquireRequest<I>::send() {
+  send_prepare_lock();
+}
+
+template <typename I>
+void AcquireRequest<I>::send_prepare_lock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  // acquire the lock if the image is not busy performing other actions
+  Context *ctx = create_context_callback<
+    AcquireRequest<I>, &AcquireRequest<I>::handle_prepare_lock>(this);
+  m_image_ctx.state->prepare_lock(ctx);
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_prepare_lock(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
   send_flush_notifies();
+  return nullptr;
 }
 
 template <typename I>
@@ -107,7 +131,7 @@ void AcquireRequest<I>::send_lock() {
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_cookie,
-                         ExclusiveLock<I>::WATCHER_LOCK_TAG, "", utime_t(), 0);
+                         ExclusiveLock<>::WATCHER_LOCK_TAG, "", utime_t(), 0);
 
   using klass = AcquireRequest<I>;
   librados::AioCompletion *rados_completion =
@@ -144,8 +168,14 @@ Context *AcquireRequest<I>::send_refresh() {
   ldout(cct, 10) << __func__ << dendl;
 
   using klass = AcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_refresh>(this);
-  m_image_ctx.state->acquire_lock_refresh(ctx);
+  Context *ctx = create_async_context_callback(
+    m_image_ctx, create_context_callback<klass, &klass::handle_refresh>(this));
+
+  // ImageState is blocked waiting for lock to complete -- safe to directly
+  // refresh
+  image::RefreshRequest<I> *req = image::RefreshRequest<I>::create(
+    m_image_ctx, true, ctx);
+  req->send();
   return nullptr;
 }
 
@@ -154,7 +184,11 @@ Context *AcquireRequest<I>::handle_refresh(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  if (*ret_val < 0) {
+  if (*ret_val == -ERESTART) {
+    // next issued IO or op will (re)-refresh the image and shut down lock
+    ldout(cct, 5) << ": exclusive lock dynamically disabled" << dendl;
+    *ret_val = 0;
+  } else if (*ret_val < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(*ret_val)
                << dendl;
     m_error_result = *ret_val;
@@ -403,7 +437,7 @@ Context *AcquireRequest<I>::handle_get_lockers(int *ret_val) {
     return nullptr;
   }
 
-  if (lock_tag != ExclusiveLock<I>::WATCHER_LOCK_TAG) {
+  if (lock_tag != ExclusiveLock<>::WATCHER_LOCK_TAG) {
     ldout(cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
     *ret_val = -EBUSY;
     return m_on_finish;
@@ -417,7 +451,7 @@ Context *AcquireRequest<I>::handle_get_lockers(int *ret_val) {
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t>::iterator iter = lockers.begin();
-  if (!ExclusiveLock<I>::decode_lock_cookie(iter->first.cookie,
+  if (!ExclusiveLock<>::decode_lock_cookie(iter->first.cookie,
                                             &m_locker_handle)) {
     ldout(cct, 5) << "locked by external mechanism: "
                   << "cookie=" << iter->first.cookie << dendl;
@@ -556,12 +590,17 @@ Context *AcquireRequest<I>::handle_break_lock(int *ret_val) {
 
 template <typename I>
 void AcquireRequest<I>::apply() {
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  assert(m_image_ctx.object_map == nullptr);
-  m_image_ctx.object_map = m_object_map;
+  {
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    assert(m_image_ctx.object_map == nullptr);
+    m_image_ctx.object_map = m_object_map;
 
-  assert(m_image_ctx.journal == nullptr);
-  m_image_ctx.journal = m_journal;
+    assert(m_image_ctx.journal == nullptr);
+    m_image_ctx.journal = m_journal;
+  }
+
+  m_prepare_lock_completed = true;
+  m_image_ctx.state->handle_prepare_lock_complete();
 }
 
 template <typename I>
