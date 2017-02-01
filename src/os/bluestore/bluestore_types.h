@@ -528,7 +528,7 @@ struct bluestore_blob_t {
   }
   void map_bl(uint64_t x_off,
 	      bufferlist& bl,
-	      std::function<void(uint64_t,uint64_t,bufferlist&)> f) const {
+	      std::function<void(uint64_t,bufferlist&)> f) const {
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
@@ -543,7 +543,7 @@ struct bluestore_blob_t {
       uint64_t l = MIN(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
-      f(p->offset + x_off, l, t);
+      f(p->offset + x_off, t);
       x_off = 0;
       x_len -= l;
       ++p;
