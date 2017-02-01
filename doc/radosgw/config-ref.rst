@@ -791,10 +791,17 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift API. 
+:Description: The URL prefix for the Swift StorageURL that goes in front of
+              the "/v1" part. This allows to run several Gateway instances
+              on the same host. For compatibility, setting this configuration
+              variable to empty causes the default "/swift" to be used.
+              Use explicit prefix "/" to start StorageURL at the root.
+              WARNING: setting this option to "/" will NOT work if S3 API is
+              enabled. From the other side disabling S3 will make impossible
+              to deploy RadosGW in the multi-site configuration!
 :Default: ``swift``
-:Example: http://fqdn.com/swift
-	
+:Example: "/swift-testing"
+
 
 ``rgw swift auth url``
 
