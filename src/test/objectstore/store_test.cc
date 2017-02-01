@@ -3465,7 +3465,8 @@ public:
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
     uint64_t srcoff = u1(*rng);
-    uint64_t dstoff = u1(*rng);
+    // make src and dst offsets match, since that's what the osd does
+    uint64_t dstoff = srcoff; //u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
       srcoff = ROUND_UP_TO(srcoff, write_alignment);
