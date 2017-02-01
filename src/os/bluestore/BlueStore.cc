@@ -7880,7 +7880,7 @@ void BlueStore::_do_write_small(
       if (!g_conf->bluestore_debug_omit_block_device_write) {
         b->get_blob().map_bl(
 	  b_off, padded,
-	  [&](uint64_t offset, uint64_t length, bufferlist& t) {
+	  [&](uint64_t offset, bufferlist& t) {
 	    bdev->aio_write(offset, t,
 			    &txc->ioc, wctx->buffered);
 	  });
@@ -8204,7 +8204,7 @@ int BlueStore::_do_alloc_write(
     if (!g_conf->bluestore_debug_omit_block_device_write) {
       b->get_blob().map_bl(
         b_off, *l,
-        [&](uint64_t offset, uint64_t length, bufferlist& t) {
+        [&](uint64_t offset, bufferlist& t) {
   	  bdev->aio_write(offset, t, &txc->ioc, false);
         });
     }
