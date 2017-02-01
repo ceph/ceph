@@ -34,6 +34,7 @@
 #include "osd_types.h"
 #include "include/xlist.h"
 #include "SnapMapper.h"
+#include "Session.h"
 
 #include "PGLog.h"
 #include "OSDMap.h"
@@ -1083,6 +1084,29 @@ public:
 
   friend class C_OSD_RepModify_Commit;
 
+  // -- backoff --
+  Mutex backoff_lock;  // orders inside Backoff::lock
+  map<hobject_t,set<BackoffRef>,hobject_t::BitwiseComparator> backoffs;
+
+  void add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end);
+  void release_backoffs(const hobject_t& begin, const hobject_t& end);
+  void release_backoffs(const hobject_t& o) {
+    release_backoffs(o, o);
+  }
+  void clear_backoffs();
+
+  void add_pg_backoff(SessionRef s) {
+    hobject_t begin = info.pgid.pgid.get_hobj_start();
+    hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+    add_backoff(s, begin, end);
+  }
+  void release_pg_backoffs() {
+    hobject_t begin = info.pgid.pgid.get_hobj_start();
+    hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+    release_backoffs(begin, end);
+  }
+
+  void rm_backoff(BackoffRef b);
 
   // -- scrub --
   struct Scrubber {
@@ -2167,6 +2191,7 @@ public:
   bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
+  bool       is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
