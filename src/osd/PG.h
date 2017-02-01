@@ -1094,6 +1094,7 @@ public:
     release_backoffs(o, o);
   }
   void clear_backoffs();
+  void split_backoffs(PG *child, unsigned split_bits);
 
   void add_pg_backoff(SessionRef s) {
     hobject_t begin = info.pgid.pgid.get_hobj_start();
