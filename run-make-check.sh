@@ -74,6 +74,14 @@ function run() {
 }
 
 function main() {
+    echo -n "Checking hostname sanity... "
+    if hostname --fqdn >/dev/null 2>&1 ; then
+        echo "OK"
+    else
+        echo "NOT OK"
+        echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
+        return 1
+    fi
     if run "$@" ; then
         echo "make check: successful run on $(git rev-parse HEAD)"
         rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
