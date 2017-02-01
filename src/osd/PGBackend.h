@@ -173,6 +173,12 @@ struct shard_info_wrapper;
        const hobject_t &hoid,
        map<string, bufferlist> &attrs) = 0;
 
+     virtual bool try_lock_for_read(
+       const hobject_t &hoid,
+       ObcLockManager &manager) = 0;
+
+     virtual void release_locks(ObcLockManager &manager) = 0;
+
      virtual void op_applied(
        const eversion_t &applied_version) = 0;
 

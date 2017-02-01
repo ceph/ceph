@@ -378,11 +378,28 @@ public:
   const pg_pool_t &get_pool() const {
     return pool.info;
   }
+
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
+
+  bool try_lock_for_read(
+    const hobject_t &hoid,
+    ObcLockManager &manager) override {
+    if (is_missing_object(hoid))
+      return false;
+    auto obc = get_object_context(hoid, false, nullptr);
+    if (!obc)
+      return false;
+    return manager.try_get_read_lock(hoid, obc);
+  }
+
+  void release_locks(ObcLockManager &manager) {
+    release_object_locks(manager);
+  }
+
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,
