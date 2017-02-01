@@ -48,6 +48,9 @@ protected:
     WATCH_STATE_REWATCHING
   };
 
+  librados::IoCtx& m_ioctx;
+  ContextWQ *m_work_queue;
+  std::string m_oid;
   CephContext *m_cct;
   mutable RWLock m_watch_lock;
   uint64_t m_watch_handle;
@@ -58,7 +61,7 @@ protected:
                    Context *on_finish = nullptr);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             bufferlist &bl) = 0;
+                             uint64_t notifier_id, bufferlist &bl) = 0;
 
   virtual void handle_error(uint64_t cookie, int err);
 
@@ -123,10 +126,6 @@ private:
       on_finish->complete(r);
     }
   };
-
-  librados::IoCtx& m_ioctx;
-  ContextWQ *m_work_queue;
-  std::string m_oid;
 
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;

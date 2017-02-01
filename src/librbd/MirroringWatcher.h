@@ -59,7 +59,7 @@ private:
                       Context *on_notify_ack);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             bufferlist &bl);
+                             uint64_t notifier_id, bufferlist &bl);
 };
 
 } // namespace librbd

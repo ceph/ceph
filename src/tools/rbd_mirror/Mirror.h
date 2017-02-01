@@ -45,6 +45,7 @@ public:
   void stop();
   void restart();
   void flush();
+  void release_leader();
 
 private:
   typedef ClusterWatcher::PoolPeers PoolPeers;

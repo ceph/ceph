@@ -678,6 +678,7 @@ if(WITH_RBD)
   set(DENCODER_EXTRALIBS
     ${DENCODER_EXTRALIBS}
     cls_rbd_client
+    rbd_mirror_types
     rbd_types
     rbd_replay_types)
   if(WITH_KRBD)
