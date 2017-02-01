@@ -334,39 +334,15 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        Filesystem(ctx, create='cephfs')
+        fs = Filesystem(ctx, create='cephfs')
 
         is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
-        mon_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'ceph', 'mds', 'set', 'allow_multimds', 'true',
-                '--yes-i-really-mean-it'],
-	    check_status=False,  # probably old version, upgrade test
-        )
-        mon_remote.run(args=[
-            'sudo',
-            'adjust-ulimits',
-            'ceph-coverage',
-            coverage_dir,
-            'ceph',
-            '--cluster', cluster_name,
-            'mds', 'set_max_mds', str(num_active)])
-        mon_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'ceph', 'mds', 'set', 'allow_dirfrags', 'true',
-                '--yes-i-really-mean-it'],
-	    check_status=False,  # probably old version, upgrade test
-        )
+
+        fs.set_allow_multimds(True)
+        fs.set_max_mds(num_active)
+        fs.set_allow_dirfrags(True)
 
     yield
 
