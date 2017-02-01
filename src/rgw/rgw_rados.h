@@ -1227,6 +1227,7 @@ struct RGWPeriodMap
   void reset() {
     zonegroups.clear();
     zonegroups_by_api.clear();
+    master_zonegroup.clear();
   }
 
   uint32_t get_zone_short_id(const string& zone_id) const;
