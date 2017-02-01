@@ -1,4 +1,4 @@
-tasks:
+stress-tasks:
 - ceph.restart:
     daemons: [mon.a]
     wait-for-healthy: false

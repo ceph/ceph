@@ -8,6 +8,9 @@ overrides:
     - detected stalls on CPUs
     - failed to encode map e
 tasks:
+- parallel:
+  - stress-tasks
+stress-tasks:
 - thrashosds:
     timeout: 1200
     chance_pgnum_grow: 1

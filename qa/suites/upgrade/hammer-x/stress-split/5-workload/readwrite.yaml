@@ -1,4 +1,4 @@
-tasks:
+stress-tasks:
 - full_sequential:
   - rados:
       clients: [client.0]
