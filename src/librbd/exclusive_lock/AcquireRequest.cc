@@ -15,6 +15,9 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/exclusive_lock/BreakRequest.h"
+#include "librbd/exclusive_lock/GetLockerRequest.h"
+#include "librbd/image/RefreshRequest.h"
 #include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -28,30 +31,6 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 using util::create_rados_ack_callback;
 using util::create_rados_safe_callback;
-
-namespace {
-
-template <typename I>
-struct C_BlacklistClient : public Context {
-  I &image_ctx;
-  std::string locker_address;
-  Context *on_finish;
-
-  C_BlacklistClient(I &image_ctx, const std::string &locker_address,
-                    Context *on_finish)
-    : image_ctx(image_ctx), locker_address(locker_address),
-      on_finish(on_finish) {
-  }
-
-  virtual void finish(int r) override {
-    librados::Rados rados(image_ctx.md_ctx);
-    r = rados.blacklist_add(locker_address,
-                            image_ctx.blacklist_expire_seconds);
-    on_finish->complete(r);
-  }
-};
-
-} // anonymous namespace
 
 template <typename I>
 AcquireRequest<I>* AcquireRequest<I>::create(I &image_ctx,
@@ -71,12 +50,35 @@ AcquireRequest<I>::AcquireRequest(I &image_ctx, const std::string &cookie,
 
 template <typename I>
 AcquireRequest<I>::~AcquireRequest() {
+  if (!m_prepare_lock_completed) {
+    m_image_ctx.state->handle_prepare_lock_complete();
+  }
   delete m_on_acquire;
 }
 
 template <typename I>
 void AcquireRequest<I>::send() {
+  send_prepare_lock();
+}
+
+template <typename I>
+void AcquireRequest<I>::send_prepare_lock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  // acquire the lock if the image is not busy performing other actions
+  Context *ctx = create_context_callback<
+    AcquireRequest<I>, &AcquireRequest<I>::handle_prepare_lock>(this);
+  m_image_ctx.state->prepare_lock(ctx);
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_prepare_lock(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
   send_flush_notifies();
+  return nullptr;
 }
 
 template <typename I>
@@ -96,6 +98,39 @@ Context *AcquireRequest<I>::handle_flush_notifies(int *ret_val) {
   ldout(cct, 10) << __func__ << dendl;
 
   assert(*ret_val == 0);
+  send_get_locker();
+  return nullptr;
+}
+
+template <typename I>
+void AcquireRequest<I>::send_get_locker() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  Context *ctx = create_context_callback<
+    AcquireRequest<I>, &AcquireRequest<I>::handle_get_locker>(this);
+  auto req = GetLockerRequest<I>::create(m_image_ctx, &m_locker, ctx);
+  req->send();
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_get_locker(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  if (*ret_val == -ENOENT) {
+    ldout(cct, 20) << "no lockers detected" << dendl;
+    m_locker = {};
+    *ret_val = 0;
+  } else if (*ret_val == -EBUSY) {
+    ldout(cct, 5) << "incompatible lock detected" << dendl;
+    return m_on_finish;
+  } else if (*ret_val < 0) {
+    lderr(cct) << "failed to retrieve lockers: " << cpp_strerror(*ret_val)
+               << dendl;
+    return m_on_finish;
+  }
+
   send_lock();
   return nullptr;
 }
@@ -107,7 +142,7 @@ void AcquireRequest<I>::send_lock() {
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_cookie,
-                         ExclusiveLock<I>::WATCHER_LOCK_TAG, "", utime_t(), 0);
+                         ExclusiveLock<>::WATCHER_LOCK_TAG, "", utime_t(), 0);
 
   using klass = AcquireRequest<I>;
   librados::AioCompletion *rados_completion =
@@ -125,12 +160,16 @@ Context *AcquireRequest<I>::handle_lock(int *ret_val) {
 
   if (*ret_val == 0) {
     return send_refresh();
+  } else if (*ret_val == -EBUSY && m_locker.cookie.empty()) {
+    ldout(cct, 5) << "already locked, refreshing locker" << dendl;
+    send_get_locker();
+    return nullptr;
   } else if (*ret_val != -EBUSY) {
     lderr(cct) << "failed to lock: " << cpp_strerror(*ret_val) << dendl;
     return m_on_finish;
   }
 
-  send_get_lockers();
+  send_break_lock();
   return nullptr;
 }
 
@@ -144,8 +183,14 @@ Context *AcquireRequest<I>::send_refresh() {
   ldout(cct, 10) << __func__ << dendl;
 
   using klass = AcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_refresh>(this);
-  m_image_ctx.state->acquire_lock_refresh(ctx);
+  Context *ctx = create_async_context_callback(
+    m_image_ctx, create_context_callback<klass, &klass::handle_refresh>(this));
+
+  // ImageState is blocked waiting for lock to complete -- safe to directly
+  // refresh
+  image::RefreshRequest<I> *req = image::RefreshRequest<I>::create(
+    m_image_ctx, true, ctx);
+  req->send();
   return nullptr;
 }
 
@@ -154,7 +199,11 @@ Context *AcquireRequest<I>::handle_refresh(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  if (*ret_val < 0) {
+  if (*ret_val == -ERESTART) {
+    // next issued IO or op will (re)-refresh the image and shut down lock
+    ldout(cct, 5) << ": exclusive lock dynamically disabled" << dendl;
+    *ret_val = 0;
+  } else if (*ret_val < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(*ret_val)
                << dendl;
     m_error_result = *ret_val;
@@ -359,183 +408,15 @@ Context *AcquireRequest<I>::handle_unlock(int *ret_val) {
 }
 
 template <typename I>
-void AcquireRequest<I>::send_get_lockers() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  rados::cls::lock::get_lock_info_start(&op, RBD_LOCK_NAME);
-
-  using klass = AcquireRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_ack_callback<klass, &klass::handle_get_lockers>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op, &m_out_bl);
-  assert(r == 0);
-  rados_completion->release();
-}
-
-template <typename I>
-Context *AcquireRequest<I>::handle_get_lockers(int *ret_val) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
-
-  std::map<rados::cls::lock::locker_id_t,
-           rados::cls::lock::locker_info_t> lockers;
-  ClsLockType lock_type;
-  std::string lock_tag;
-  if (*ret_val == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
-    *ret_val = rados::cls::lock::get_lock_info_finish(&it, &lockers,
-                                                      &lock_type, &lock_tag);
-  }
-
-  if (*ret_val < 0) {
-    lderr(cct) << "failed to retrieve lockers: " << cpp_strerror(*ret_val)
-               << dendl;
-    return m_on_finish;
-  }
-
-  if (lockers.empty()) {
-    ldout(cct, 20) << "no lockers detected" << dendl;
-    send_lock();
-    return nullptr;
-  }
-
-  if (lock_tag != ExclusiveLock<I>::WATCHER_LOCK_TAG) {
-    ldout(cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
-    *ret_val = -EBUSY;
-    return m_on_finish;
-  }
-
-  if (lock_type == LOCK_SHARED) {
-    ldout(cct, 5) << "shared lock type detected" << dendl;
-    *ret_val = -EBUSY;
-    return m_on_finish;
-  }
-
-  std::map<rados::cls::lock::locker_id_t,
-           rados::cls::lock::locker_info_t>::iterator iter = lockers.begin();
-  if (!ExclusiveLock<I>::decode_lock_cookie(iter->first.cookie,
-                                            &m_locker_handle)) {
-    ldout(cct, 5) << "locked by external mechanism: "
-                  << "cookie=" << iter->first.cookie << dendl;
-    *ret_val = -EBUSY;
-    return m_on_finish;
-  }
-
-  m_locker_entity = iter->first.locker;
-  m_locker_cookie = iter->first.cookie;
-  m_locker_address = stringify(iter->second.addr);
-  if (m_locker_cookie.empty() || m_locker_address.empty()) {
-    ldout(cct, 20) << "no valid lockers detected" << dendl;
-    send_lock();
-    return nullptr;
-  }
-
-  ldout(cct, 10) << "retrieved exclusive locker: "
-                 << m_locker_entity << "@" << m_locker_address << dendl;
-  send_get_watchers();
-  return nullptr;
-}
-
-template <typename I>
-void AcquireRequest<I>::send_get_watchers() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  op.list_watchers(&m_watchers, &m_watchers_ret_val);
-
-  using klass = AcquireRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_ack_callback<klass, &klass::handle_get_watchers>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op, &m_out_bl);
-  assert(r == 0);
-  rados_completion->release();
-}
-
-template <typename I>
-Context *AcquireRequest<I>::handle_get_watchers(int *ret_val) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
-
-  if (*ret_val == 0) {
-    *ret_val = m_watchers_ret_val;
-  }
-  if (*ret_val < 0) {
-    lderr(cct) << "failed to retrieve watchers: " << cpp_strerror(*ret_val)
-               << dendl;
-    return m_on_finish;
-  }
-
-  for (auto &watcher : m_watchers) {
-    if ((strncmp(m_locker_address.c_str(),
-                 watcher.addr, sizeof(watcher.addr)) == 0) &&
-        (m_locker_handle == watcher.cookie)) {
-      ldout(cct, 10) << "lock owner is still alive" << dendl;
-
-      *ret_val = -EAGAIN;
-      return m_on_finish;
-    }
-  }
-
-  send_blacklist();
-  return nullptr;
-}
-
-template <typename I>
-void AcquireRequest<I>::send_blacklist() {
-  if (!m_image_ctx.blacklist_on_break_lock) {
-    send_break_lock();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
-
-  // TODO: need async version of RadosClient::blacklist_add
-  using klass = AcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_blacklist>(
-    this);
-  m_image_ctx.op_work_queue->queue(new C_BlacklistClient<I>(m_image_ctx,
-                                                            m_locker_address,
-                                                            ctx), 0);
-}
-
-template <typename I>
-Context *AcquireRequest<I>::handle_blacklist(int *ret_val) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
-
-  if (*ret_val < 0) {
-    lderr(cct) << "failed to blacklist lock owner: " << cpp_strerror(*ret_val)
-               << dendl;
-    return m_on_finish;
-  }
-  send_break_lock();
-  return nullptr;
-}
-
-template <typename I>
 void AcquireRequest<I>::send_break_lock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
-  librados::ObjectWriteOperation op;
-  rados::cls::lock::break_lock(&op, RBD_LOCK_NAME, m_locker_cookie,
-                               m_locker_entity);
-
-  using klass = AcquireRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_safe_callback<klass, &klass::handle_break_lock>(this);
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
+  Context *ctx = create_context_callback<
+    AcquireRequest<I>, &AcquireRequest<I>::handle_break_lock>(this);
+  auto req = BreakRequest<I>::create(
+    m_image_ctx, m_locker, m_image_ctx.blacklist_on_break_lock, false, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -543,25 +424,31 @@ Context *AcquireRequest<I>::handle_break_lock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  if (*ret_val == -ENOENT) {
-    *ret_val = 0;
+  if (*ret_val == -EAGAIN) {
+    ldout(cct, 5) << "lock owner is still alive" << dendl;
+    return m_on_finish;
   } else if (*ret_val < 0) {
-    lderr(cct) << "failed to break lock: " << cpp_strerror(*ret_val) << dendl;
+    lderr(cct) << "failed to break lock : " << cpp_strerror(*ret_val) << dendl;
     return m_on_finish;
   }
 
-  send_lock();
+  send_get_locker();
   return nullptr;
 }
 
 template <typename I>
 void AcquireRequest<I>::apply() {
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  assert(m_image_ctx.object_map == nullptr);
-  m_image_ctx.object_map = m_object_map;
+  {
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    assert(m_image_ctx.object_map == nullptr);
+    m_image_ctx.object_map = m_object_map;
 
-  assert(m_image_ctx.journal == nullptr);
-  m_image_ctx.journal = m_journal;
+    assert(m_image_ctx.journal == nullptr);
+    m_image_ctx.journal = m_journal;
+  }
+
+  m_prepare_lock_completed = true;
+  m_image_ctx.state->handle_prepare_lock_complete();
 }
 
 template <typename I>

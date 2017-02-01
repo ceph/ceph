@@ -8,6 +8,7 @@
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
@@ -28,26 +29,57 @@ template <typename I>
 ReleaseRequest<I>* ReleaseRequest<I>::create(I &image_ctx,
                                              const std::string &cookie,
                                              Context *on_releasing,
-                                             Context *on_finish) {
-  return new ReleaseRequest(image_ctx, cookie, on_releasing, on_finish);
+                                             Context *on_finish,
+                                             bool shutting_down) {
+  return new ReleaseRequest(image_ctx, cookie, on_releasing, on_finish,
+                            shutting_down);
 }
 
 template <typename I>
 ReleaseRequest<I>::ReleaseRequest(I &image_ctx, const std::string &cookie,
-                                  Context *on_releasing, Context *on_finish)
+                                  Context *on_releasing, Context *on_finish,
+                                  bool shutting_down)
   : m_image_ctx(image_ctx), m_cookie(cookie), m_on_releasing(on_releasing),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
-    m_object_map(nullptr), m_journal(nullptr) {
+    m_shutting_down(shutting_down), m_object_map(nullptr), m_journal(nullptr) {
 }
 
 template <typename I>
 ReleaseRequest<I>::~ReleaseRequest() {
+  if (!m_shutting_down) {
+    m_image_ctx.state->handle_prepare_lock_complete();
+  }
   delete m_on_releasing;
 }
 
 template <typename I>
 void ReleaseRequest<I>::send() {
+  send_prepare_lock();
+}
+
+template <typename I>
+void ReleaseRequest<I>::send_prepare_lock() {
+  if (m_shutting_down) {
+    send_cancel_op_requests();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  // release the lock if the image is not busy performing other actions
+  Context *ctx = create_context_callback<
+    ReleaseRequest<I>, &ReleaseRequest<I>::handle_prepare_lock>(this);
+  m_image_ctx.state->prepare_lock(ctx);
+}
+
+template <typename I>
+Context *ReleaseRequest<I>::handle_prepare_lock(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
   send_cancel_op_requests();
+  return nullptr;
 }
 
 template <typename I>
@@ -95,7 +127,54 @@ Context *ReleaseRequest<I>::handle_block_writes(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  if (*ret_val < 0) {
+  if (*ret_val == -EBLACKLISTED) {
+    // allow clean shut down if blacklisted
+    lderr(cct) << "failed to block writes because client is blacklisted"
+               << dendl;
+  } else if (*ret_val < 0) {
+    lderr(cct) << "failed to block writes: " << cpp_strerror(*ret_val) << dendl;
+    m_image_ctx.aio_work_queue->unblock_writes();
+    return m_on_finish;
+  }
+
+  send_invalidate_cache(false);
+  return nullptr;
+}
+
+template <typename I>
+void ReleaseRequest<I>::send_invalidate_cache(bool purge_on_error) {
+  if (m_image_ctx.object_cacher == nullptr) {
+    send_flush_notifies();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": purge_on_error=" << purge_on_error << dendl;
+
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  Context *ctx = create_async_context_callback(
+    m_image_ctx, create_context_callback<
+      ReleaseRequest<I>,
+      &ReleaseRequest<I>::handle_invalidate_cache>(this));
+  m_image_ctx.invalidate_cache(purge_on_error, ctx);
+}
+
+template <typename I>
+Context *ReleaseRequest<I>::handle_invalidate_cache(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  if (*ret_val == -EBLACKLISTED) {
+    lderr(cct) << "failed to invalidate cache because client is blacklisted"
+               << dendl;
+    if (!m_image_ctx.is_cache_empty()) {
+      // force purge the cache after after being blacklisted
+      send_invalidate_cache(true);
+      return nullptr;
+    }
+  } else if (*ret_val < 0 && *ret_val != -EBUSY) {
+    lderr(cct) << "failed to invalidate cache: " << cpp_strerror(*ret_val)
+               << dendl;
     m_image_ctx.aio_work_queue->unblock_writes();
     return m_on_finish;
   }

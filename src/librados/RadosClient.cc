@@ -758,6 +758,12 @@ int librados::RadosClient::blacklist_add(const string& client_address,
   cmds.push_back(cmd.str());
   bufferlist inbl;
   int r = mon_command(cmds, inbl, NULL, NULL);
+  if (r < 0) {
+    return r;
+  }
+
+  // ensure we have the latest osd map epoch before proceeding
+  r = wait_for_latest_osdmap();
   return r;
 }
 

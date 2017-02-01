@@ -27,6 +27,10 @@ set(librbd_internal_srcs
   Operations.cc
   Utils.cc
   exclusive_lock/AcquireRequest.cc
+  exclusive_lock/AutomaticPolicy.cc
+  exclusive_lock/BreakRequest.cc
+  exclusive_lock/GetLockerRequest.cc
+  exclusive_lock/ReacquireRequest.cc
   exclusive_lock/ReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
   image/CloseRequest.cc
@@ -36,6 +40,7 @@ set(librbd_internal_srcs
   image/SetSnapRequest.cc
   image_watcher/Notifier.cc
   image_watcher/NotifyLockOwner.cc
+  image_watcher/RewatchRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   object_map/InvalidateRequest.cc

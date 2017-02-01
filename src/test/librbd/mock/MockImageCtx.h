@@ -158,8 +158,9 @@ struct MockImageCtx {
   MOCK_METHOD1(flush_copyup, void(Context *));
 
   MOCK_METHOD1(flush_cache, void(Context *));
-  MOCK_METHOD1(invalidate_cache, void(Context *));
+  MOCK_METHOD2(invalidate_cache, void(bool, Context *));
   MOCK_METHOD1(shut_down_cache, void(Context *));
+  MOCK_METHOD0(is_cache_empty, bool());
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
   MOCK_CONST_METHOD2(test_features, bool(uint64_t test_features,

@@ -16,7 +16,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::ImageState: "
+#define dout_prefix *_dout << "librbd::ImageState: " << this << " "
 
 namespace librbd {
 
@@ -318,18 +318,6 @@ template <typename I>
 void ImageState<I>::refresh(Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
-  refresh(false, on_finish);
-}
-
-template <typename I>
-void ImageState<I>::acquire_lock_refresh(Context *on_finish) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << __func__ << dendl;
-  refresh(true, on_finish);
-}
-
-template <typename I>
-void ImageState<I>::refresh(bool acquiring_lock, Context *on_finish) {
 
   m_lock.Lock();
   if (is_closed()) {
@@ -340,7 +328,6 @@ void ImageState<I>::refresh(bool acquiring_lock, Context *on_finish) {
 
   Action action(ACTION_TYPE_REFRESH);
   action.refresh_seq = m_refresh_seq;
-  action.refresh_acquiring_lock = acquiring_lock;
   execute_action_unlock(action, on_finish);
 }
 
@@ -375,6 +362,37 @@ void ImageState<I>::snap_set(const std::string &snap_name, Context *on_finish) {
 
   m_lock.Lock();
   execute_action_unlock(action, on_finish);
+}
+
+template <typename I>
+void ImageState<I>::prepare_lock(Context *on_ready) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  m_lock.Lock();
+  if (is_closed()) {
+    m_lock.Unlock();
+    on_ready->complete(-ESHUTDOWN);
+    return;
+  }
+
+  Action action(ACTION_TYPE_LOCK);
+  action.on_ready = on_ready;
+  execute_action_unlock(action, nullptr);
+}
+
+template <typename I>
+void ImageState<I>::handle_prepare_lock_complete() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  m_lock.Lock();
+  if (m_state != STATE_PREPARING_LOCK) {
+    m_lock.Unlock();
+    return;
+  }
+
+  complete_action_unlock(STATE_OPEN, 0);
 }
 
 template <typename I>
@@ -426,6 +444,7 @@ bool ImageState<I>::is_transition_state() const {
   case STATE_CLOSING:
   case STATE_REFRESHING:
   case STATE_SETTING_SNAP:
+  case STATE_PREPARING_LOCK:
     break;
   }
   return true;
@@ -478,6 +497,9 @@ void ImageState<I>::execute_next_action_unlock() {
     return;
   case ACTION_TYPE_SET_SNAP:
     send_set_snap_unlock();
+    return;
+  case ACTION_TYPE_LOCK:
+    send_prepare_lock_unlock();
     return;
   }
   assert(false);
@@ -598,7 +620,7 @@ void ImageState<I>::send_refresh_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_refresh>(this));
   image::RefreshRequest<I> *req = image::RefreshRequest<I>::create(
-    *m_image_ctx, action_context.refresh_acquiring_lock, ctx);
+    *m_image_ctx, false, ctx);
 
   m_lock.Unlock();
   req->send();
@@ -661,6 +683,30 @@ void ImageState<I>::handle_set_snap(int r) {
 
   m_lock.Lock();
   complete_action_unlock(STATE_OPEN, r);
+}
+
+template <typename I>
+void ImageState<I>::send_prepare_lock_unlock() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  assert(m_lock.is_locked());
+  m_state = STATE_PREPARING_LOCK;
+
+  assert(!m_actions_contexts.empty());
+  ActionContexts &action_contexts(m_actions_contexts.front());
+  assert(action_contexts.first.action_type == ACTION_TYPE_LOCK);
+
+  Context *on_ready = action_contexts.first.on_ready;
+  m_lock.Unlock();
+
+  if (on_ready == nullptr) {
+    complete_action_unlock(STATE_OPEN, 0);
+    return;
+  }
+
+  // wake up the lock handler now that its safe to proceed
+  on_ready->complete(0);
 }
 
 } // namespace librbd

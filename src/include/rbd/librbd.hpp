@@ -212,6 +212,11 @@ public:
 
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);
+  int lock_acquire(rbd_lock_mode_t lock_mode);
+  int lock_release();
+  int lock_get_owners(rbd_lock_mode_t *lock_mode,
+                      std::list<std::string> *lock_owners);
+  int lock_break(rbd_lock_mode_t lock_mode, const std::string &lock_owner);
 
   /* object map feature */
   int rebuild_object_map(ProgressContext &prog_ctx);
