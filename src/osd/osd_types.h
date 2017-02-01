@@ -1462,6 +1462,10 @@ public:
     return quota_max_objects;
   }
 
+  void set_last_force_op_resend(uint64_t t) {
+    last_force_op_resend = t;
+  }
+
   void calc_pg_masks();
 
   /*
