@@ -973,6 +973,8 @@ void PG::clear_primary_state()
 
   missing_loc.clear();
 
+  release_pg_backoffs();
+
   pg_log.reset_recovery_pointers();
 
   scrubber.reserved_peers.clear();
@@ -1836,6 +1838,7 @@ void PG::activate(ObjectStore::Transaction& t,
     }
 
     state_set(PG_STATE_ACTIVATING);
+    release_pg_backoffs();
   }
   if (is_primary()) {
     projected_last_update = info.last_update;
@@ -5543,6 +5546,8 @@ bool PG::can_discard_request(OpRequestRef& op)
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
     return can_discard_op(op);
+  case CEPH_MSG_OSD_BACKOFF:
+    return false; // never discard
   case MSG_OSD_SUBOP:
     return can_discard_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op);
   case MSG_OSD_REPOP:
@@ -5590,6 +5595,9 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<MOSDOp*>(op->get_req())->get_map_epoch());
+
+  case CEPH_MSG_OSD_BACKOFF:
+    return false; // we don't care about maps
 
   case MSG_OSD_SUBOP:
     return !have_same_or_newer_map(
