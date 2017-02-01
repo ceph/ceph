@@ -33,7 +33,6 @@ void RGWCompletionManager::register_completion_notifier(RGWAioCompletionNotifier
   Mutex::Locker l(lock);
   if (cn) {
     cns.insert(cn);
-    cn->get();
   }
 }
 
@@ -42,7 +41,6 @@ void RGWCompletionManager::unregister_completion_notifier(RGWAioCompletionNotifi
   Mutex::Locker l(lock);
   if (cn) {
     cns.erase(cn);
-    cn->put();
   }
 }
 
@@ -50,7 +48,6 @@ void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, void *user_in
 {
   if (cn) {
     cns.erase(cn);
-    cn->put();
   }
   complete_reqs.push_back(user_info);
   cond.Signal();
