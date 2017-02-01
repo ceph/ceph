@@ -1062,6 +1062,12 @@ public:
   int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
     return next->throttle_data(handle, obj, size, need_to_wait);
   }
+  bool is_compressed() override {
+    return next->is_compressed();
+  }
+  void set_compressed(bool c) override {
+    next->set_compressed(c);
+  }
 }; /* RGWPutObj_Filter */
 
 class RGWPostObj : public RGWOp {

@@ -44,9 +44,7 @@ public:
   ~RGWPutObj_Compress() override{}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
 
-  bool is_compressed() { return compressed; }
   vector<compression_block>& get_compression_blocks() { return blocks; }
-
 }; /* RGWPutObj_Compress */
 
 #endif /* CEPH_RGW_COMPRESSION_H */

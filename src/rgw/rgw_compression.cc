@@ -16,7 +16,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
   }
   if (bl.length() > 0) {
     // compression stuff
-    if ((ofs > 0 && compressed) ||                                // if previous part was compressed
+    if ((ofs > 0 && is_compressed()) ||                                // if previous part was compressed
         (ofs == 0)) {                                             // or it's the first part
       ldout(cct, 10) << "Compression for rgw is enabled, compress part " << bl.length() << dendl;
       int cr = compressor->compress(bl, in_bl);
@@ -26,12 +26,12 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
               << " for next part, compression process failed" << dendl;
           return -EIO;
         }
-        compressed = false;
+        set_compressed(false);
         ldout(cct, 5) << "Compression failed with exit code " << cr
             << " for first part, storing uncompressed" << dendl;
         in_bl.claim(bl);
       } else {
-        compressed = true;
+        set_compressed(true);
     
         compression_block newbl;
         size_t bs = blocks.size();
@@ -41,7 +41,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
         blocks.push_back(newbl);
       }
     } else {
-      compressed = false;
+      set_compressed(false);
       in_bl.claim(bl);
     }
     // end of compression stuff

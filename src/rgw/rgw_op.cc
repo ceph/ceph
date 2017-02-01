@@ -3024,6 +3024,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
   head_obj_op.meta.zones_trace = zones_trace;
+  head_obj_op.params.incompressible = is_compressed();
 
   int r = head_obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0)
