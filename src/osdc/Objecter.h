@@ -1225,6 +1225,21 @@ public:
 
     op_target_t() = default;
 
+    hobject_t get_hobj() {
+      return hobject_t(target_oid,
+		       target_oloc.key,
+		       CEPH_NOSNAP,
+		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
+		       target_oloc.pool,
+		       target_oloc.nspace);
+    }
+
+    bool contained_by(const hobject_t& begin, const hobject_t& end) {
+      hobject_t h = get_hobj();
+      int r = cmp_bitwise(h, begin);
+      return r == 0 || (r > 0 && cmp_bitwise(h, end) < 0);
+    }
+
     void dump(Formatter *f) const;
   };
 
@@ -1774,6 +1789,11 @@ public:
   };
 
   // -- osd sessions --
+  struct OSDBackoff {
+    uint64_t id;
+    hobject_t begin, end;
+  };
+
   struct OSDSession : public RefCountedObject {
     boost::shared_mutex lock;
     using lock_guard = std::lock_guard<decltype(lock)>;
@@ -1785,6 +1805,10 @@ public:
     map<ceph_tid_t,Op*> ops;
     map<uint64_t, LingerOp*> linger_ops;
     map<ceph_tid_t,CommandOp*> command_ops;
+
+    // backoffs
+    map<hobject_t,OSDBackoff,hobject_t::BitwiseComparator> backoffs;
+    multimap<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;
     int incarnation;
@@ -2074,6 +2098,7 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
