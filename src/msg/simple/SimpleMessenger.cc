@@ -574,6 +574,10 @@ void SimpleMessenger::wait()
       p->unregister_pipe();
       p->pipe_lock.Lock();
       p->stop_and_wait();
+      // don't generate an event here; we're shutting down anyway.
+      PipeConnectionRef con = p->connection_state;
+      if (con)
+	con->clear_pipe(p);
       p->pipe_lock.Unlock();
     }
 
