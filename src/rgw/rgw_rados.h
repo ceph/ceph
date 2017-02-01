@@ -1066,18 +1066,15 @@ WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
 struct RGWZoneGroupPlacementTarget {
   string name;
-  list<string> tags;
+  set<string> tags;
 
   bool user_permitted(list<string>& user_tags) {
     if (tags.empty()) {
       return true;
     }
-    for (list<string>::iterator uiter = user_tags.begin(); uiter != user_tags.end(); ++uiter) { /* we don't expect many of either, so we can handle this kind of lookup */
-      string& rule = *uiter;
-      for (list<string>::iterator iter = tags.begin(); iter != tags.end(); ++iter) {
-        if (rule == *iter) {
-          return true;
-        }
+    for (auto& rule : user_tags) {
+      if (tags.find(rule) != tags.end()) {
+        return true;
       }
     }
     return false;
