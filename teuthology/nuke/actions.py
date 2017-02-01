@@ -151,28 +151,36 @@ def remove_osd_tmpfs(ctx):
     )
 
 
+def stale_kernel_mount(remote):
+    proc = remote.run(
+        args=[
+            'grep', '-q', ' ceph ', '/etc/mtab',
+            run.Raw('||'),
+            'grep', '-q', '^/dev/rbd', '/etc/mtab',
+        ],
+        check_status=False
+    )
+    # grep exists with 1 if no lines were selected
+    return proc.exitstatus != 1
+
+
 def reboot(ctx, remotes):
-    nodes = {}
     for remote in remotes:
-        log.info('rebooting %s', remote.name)
+        if stale_kernel_mount(remote):
+            log.warn('Stale kernel mount on %s!', remote.name)
+            log.info('force/no-sync rebooting %s', remote.name)
+            args = ['sync', run.Raw('&'),
+                    'sleep', '5', run.Raw(';'),
+                    'sudo', 'reboot', '-f', '-n']
+        else:
+            log.info('rebooting %s', remote.name)
+            args = ['sudo', 'reboot']
         try:
-            proc = remote.run(
-                args=[
-                    'sync',
-                    run.Raw('&'),
-                    'sleep', '5',
-                    run.Raw(';'),
-                    'sudo', 'reboot',
-                    ],
-                wait=False,
-                )
+            remote.run(args=args, wait=False)
         except Exception:
             log.exception('ignoring exception during reboot command')
-        nodes[remote] = proc
         # we just ignore these procs because reboot -f doesn't actually
         # send anything back to the ssh client!
-        # for remote, proc in nodes.iteritems():
-        # proc.wait()
     if remotes:
         log.info('waiting for nodes to reboot')
         time.sleep(8)  # if we try and reconnect too quickly, it succeeds!
