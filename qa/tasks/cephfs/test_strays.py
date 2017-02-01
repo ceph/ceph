@@ -236,11 +236,11 @@ class TestStrays(CephFSTestCase):
 
         # Write some bytes to a file
         size_mb = 8
-        self.mount_a.write_n_mb("open_file", size_mb)
-        open_file_ino = self.mount_a.path_to_ino("open_file")
 
         # Hold the file open
         p = self.mount_a.open_background("open_file")
+        self.mount_a.write_n_mb("open_file", size_mb)
+        open_file_ino = self.mount_a.path_to_ino("open_file")
 
         self.assertEqual(self.get_session(mount_a_client_id)['num_caps'], 2)
 
