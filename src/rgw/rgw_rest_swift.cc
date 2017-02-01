@@ -24,6 +24,7 @@
 
 int RGWListBuckets_ObjStore_SWIFT::get_params()
 {
+  prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
   end_marker = s->info.args.get("end_marker");
 
@@ -145,14 +146,20 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
 {
-  map<string, RGWBucketEnt>& m = buckets.get_buckets();
-  map<string, RGWBucketEnt>::iterator iter;
-
-  if (!sent_data)
+  if (! sent_data) {
     return;
+  }
 
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWBucketEnt obj = iter->second;
+  /* Take care of the prefix parameter of Swift API. There is no business
+   * in applying the filter earlier as we really need to go through all
+   * entries regardless of it (the headers like X-Account-Container-Count
+   * aren't affected by specifying prefix). */
+  const std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+  for (auto iter = m.lower_bound(prefix);
+       iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
+       ++iter) {
+    const RGWBucketEnt& obj = iter->second;
+
     s->formatter->open_object_section("container");
     s->formatter->dump_string("name", obj.bucket.name);
     if (need_stats) {
@@ -160,7 +167,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
       s->formatter->dump_int("bytes", obj.size);
     }
     s->formatter->close_section();
-    if (!g_conf->rgw_swift_enforce_content_length) {
+    if (! g_conf->rgw_swift_enforce_content_length) {
       rgw_flush_formatter(s, s->formatter);
     }
   }
