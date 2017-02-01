@@ -392,6 +392,7 @@ set(libcommon_files
   common/PrebufferedStreambuf.cc
   common/BackTrace.cc
   common/perf_counters.cc
+  common/perf_histogram.cc
   common/mutex_debug.cc
   common/Mutex.cc
   common/OutputDataSocket.cc
