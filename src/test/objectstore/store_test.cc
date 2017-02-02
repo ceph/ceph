@@ -2891,11 +2891,11 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
   hoid2.hobj.pool = -1;
   {
     ObjectStore::Transaction t;
-    t.clone_range(cid, hoid, hoid2, 10, 5, 0);
+    t.clone_range(cid, hoid, hoid2, 10, 5, 10);
     cerr << "Clone range object" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
-    r = store->read(cid, hoid2, 0, 5, newdata);
+    r = store->read(cid, hoid2, 10, 5, newdata);
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(bl_eq(small, newdata));
   }
