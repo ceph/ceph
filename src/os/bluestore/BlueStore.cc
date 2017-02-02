@@ -4755,7 +4755,6 @@ int BlueStore::fsck(bool deep)
       dout(10) << __func__ << "  " << oid << dendl;
       RWLock::RLocker l(c->lock);
       OnodeRef o = c->get_onode(oid, false);
-      _dump_onode(o, 30);
       if (o->onode.nid) {
 	if (o->onode.nid > nid_max) {
 	  derr << __func__ << " " << oid << " nid " << o->onode.nid
@@ -4773,6 +4772,7 @@ int BlueStore::fsck(bool deep)
       ++num_objects;
       num_spanning_blobs += o->extent_map.spanning_blob_map.size();
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+      _dump_onode(o, 30);
       // shards
       if (!o->extent_map.shards.empty()) {
 	++num_sharded_objects;
