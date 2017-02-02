@@ -2861,7 +2861,21 @@ WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
 
 class pi_simple_rep : public PastIntervals::interval_rep {
   map<epoch_t, PastIntervals::pg_interval_t> interval_map;
+
+  pi_simple_rep(
+    bool ec_pool,
+    std::list<PastIntervals::pg_interval_t> &&intervals) {
+    for (auto &&i: intervals)
+      add_interval(ec_pool, i);
+  }
+
 public:
+  pi_simple_rep() = default;
+  pi_simple_rep(const pi_simple_rep &) = default;
+  pi_simple_rep(pi_simple_rep &&) = default;
+  pi_simple_rep &operator=(pi_simple_rep &&) = default;
+  pi_simple_rep &operator=(const pi_simple_rep &) = default;
+
   size_t size() const override { return interval_map.size(); }
   bool empty() const override { return interval_map.empty(); }
   void clear() override { interval_map.clear(); }
@@ -2935,7 +2949,33 @@ public:
     return true;
   }
   static void generate_test_instances(list<pi_simple_rep*> &o) {
-    /* todo */
+    using ival = PastIntervals::pg_interval_t;
+    using ivallst = std::list<ival>;
+    o.push_back(
+      new pi_simple_rep(
+	true, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_simple_rep(
+	false, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_simple_rep(
+	true, ivallst
+	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
+	, ival{{   0, 2}, {   0, 2}, 20, 30,  true, 0, 0}
+	, ival{{   0, 2}, {      0}, 30, 35,  false, 2, 2}
+	, ival{{   0, 2}, {2,    0}, 30, 35,  true, 2, 2}
+	, ival{{   0, 2}, {   0, 2}, 35, 50,  true, 0, 0}
+	}));
     return;
   }
   void iterate_mayberw_back_to(
@@ -3018,7 +3058,9 @@ struct compact_interval_t {
     ::decode(acting, bl);
     DECODE_FINISH(bl);
   }
-  static void generate_test_instances(list<compact_interval_t*> & o) {}
+  static void generate_test_instances(list<compact_interval_t*> & o) {
+    /* Not going to be used, we'll generate pi_compact_rep directly */
+  }
 };
 ostream &operator<<(ostream &o, const compact_interval_t &rhs)
 {
@@ -3034,7 +3076,19 @@ class pi_compact_rep : public PastIntervals::interval_rep {
   set<pg_shard_t> might_have_unfound;
 
   list<compact_interval_t> intervals;
+  pi_compact_rep(
+    bool ec_pool,
+    std::list<PastIntervals::pg_interval_t> &&intervals) {
+    for (auto &&i: intervals)
+      add_interval(ec_pool, i);
+  }
 public:
+  pi_compact_rep() = default;
+  pi_compact_rep(const pi_compact_rep &) = default;
+  pi_compact_rep(pi_compact_rep &&) = default;
+  pi_compact_rep &operator=(const pi_compact_rep &) = default;
+  pi_compact_rep &operator=(pi_compact_rep &&) = default;
+
   size_t size() const override { return intervals.size(); }
   bool empty() const override { return intervals.empty(); }
   void clear() override {
@@ -3112,8 +3166,33 @@ public:
     return false;
   }
   static void generate_test_instances(list<pi_compact_rep*> &o) {
-    /* todo */
-    return;
+    using ival = PastIntervals::pg_interval_t;
+    using ivallst = std::list<ival>;
+    o.push_back(
+      new pi_compact_rep(
+	true, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_compact_rep(
+	false, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_compact_rep(
+	true, ivallst
+	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
+	, ival{{   0, 2}, {   0, 2}, 20, 30,  true, 0, 0}
+	, ival{{   0, 2}, {      0}, 30, 35,  false, 2, 2}
+	, ival{{   0, 2}, {2,    0}, 30, 35,  true, 2, 2}
+	, ival{{   0, 2}, {   0, 2}, 35, 50,  true, 0, 0}
+	}));
   }
   void iterate_mayberw_back_to(
     bool ec_pool,
@@ -3169,7 +3248,22 @@ void PastIntervals::decode_classic(bufferlist::iterator &bl)
 
 void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
 {
-  /* todo */
+  {
+    list<pi_simple_rep *> simple;
+    pi_simple_rep::generate_test_instances(simple);
+    for (auto &&i: simple) {
+      // takes ownership of contents
+      o.push_back(new PastIntervals(i));
+    }
+  }
+  {
+    list<pi_compact_rep *> compact;
+    pi_compact_rep::generate_test_instances(compact);
+    for (auto &&i: compact) {
+      // takes ownership of contents
+      o.push_back(new PastIntervals(i));
+    }
+  }
   return;
 }
 
