@@ -1050,7 +1050,7 @@ TEST_F(TestClsRbd, snapshots_timestamps)
   ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
   ASSERT_EQ(1u, snapc.snaps.size());
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
-  ASSERT_LT(0, snap_timestamps[0].tv.tv_sec);
+  ASSERT_LT(0U, snap_timestamps[0].tv.tv_sec);
   ioctx.close();
 }
 
