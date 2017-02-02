@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #include "cls/rbd/cls_rbd_types.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
@@ -10,6 +11,7 @@
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
+#include "librbd/api/DiffIterate.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -966,8 +968,8 @@ TEST_F(TestInternal, DiffIterateCloneOverwrite) {
 
   interval_set<uint64_t> diff;
   ASSERT_EQ(0, librbd::snap_set(ictx, "one"));
-  ASSERT_EQ(0, librbd::diff_iterate(ictx, nullptr, 0, size, true, false,
-                                    iterate_cb, (void *)&diff));
+  ASSERT_EQ(0, librbd::api::DiffIterate<>::diff_iterate(
+    ictx, nullptr, 0, size, true, false, iterate_cb, (void *)&diff));
   ASSERT_EQ(one, diff);
 }
 

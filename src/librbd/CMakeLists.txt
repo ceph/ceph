@@ -7,9 +7,7 @@ set(librbd_internal_srcs
   AsyncObjectThrottle.cc
   AsyncOperation.cc
   AsyncRequest.cc
-  DiffIterate.cc
   ExclusiveLock.cc
-  Group.cc
   ImageCtx.cc
   ImageState.cc
   ImageWatcher.cc
@@ -23,6 +21,8 @@ set(librbd_internal_srcs
   Operations.cc
   Utils.cc
   Watcher.cc
+  api/DiffIterate.cc
+  api/Group.cc
   api/Image.cc
   api/Mirror.cc
   cache/ImageWriteback.cc
