@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -28,6 +28,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Mirror.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -428,45 +429,47 @@ namespace librbd {
   }
 
   int RBD::mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
-    return librbd::mirror_mode_get(io_ctx, mirror_mode);
+    return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
   }
 
   int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
-    return librbd::mirror_mode_set(io_ctx, mirror_mode);
+    return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
   }
 
   int RBD::mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                            const std::string &cluster_name,
                            const std::string &client_name) {
-    return librbd::mirror_peer_add(io_ctx, uuid, cluster_name, client_name);
+    return librbd::api::Mirror<>::peer_add(io_ctx, uuid, cluster_name,
+                                           client_name);
   }
 
   int RBD::mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid) {
-    return librbd::mirror_peer_remove(io_ctx, uuid);
+    return librbd::api::Mirror<>::peer_remove(io_ctx, uuid);
   }
 
   int RBD::mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers) {
-    return librbd::mirror_peer_list(io_ctx, peers);
+    return librbd::api::Mirror<>::peer_list(io_ctx, peers);
   }
 
   int RBD::mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
                                   const std::string &client_name) {
-    return librbd::mirror_peer_set_client(io_ctx, uuid, client_name);
+    return librbd::api::Mirror<>::peer_set_client(io_ctx, uuid, client_name);
   }
 
   int RBD::mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                                    const std::string &cluster_name) {
-    return librbd::mirror_peer_set_cluster(io_ctx, uuid, cluster_name);
+    return librbd::api::Mirror<>::peer_set_cluster(io_ctx, uuid, cluster_name);
   }
 
   int RBD::mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, mirror_image_status_t> *images) {
-    return librbd::mirror_image_status_list(io_ctx, start_id, max, images);
+    return librbd::api::Mirror<>::image_status_list(io_ctx, start_id, max,
+                                                    images);
   }
 
   int RBD::mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states) {
-    return librbd::mirror_image_status_summary(io_ctx, states);
+    return librbd::api::Mirror<>::image_status_summary(io_ctx, states);
   }
 
   int RBD::group_create(IoCtx& io_ctx, const char *group_name)
@@ -1537,41 +1540,42 @@ namespace librbd {
 
   int Image::mirror_image_enable() {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_enable(ictx, false);
+    return librbd::api::Mirror<>::image_enable(ictx, false);
   }
 
   int Image::mirror_image_disable(bool force) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_disable(ictx, force);
+    return librbd::api::Mirror<>::image_disable(ictx, force);
   }
 
   int Image::mirror_image_promote(bool force) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_promote(ictx, force);
+    return librbd::api::Mirror<>::image_promote(ictx, force);
   }
 
   int Image::mirror_image_demote() {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_demote(ictx);
+    return librbd::api::Mirror<>::image_demote(ictx);
   }
 
   int Image::mirror_image_resync()
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_resync(ictx);
+    return librbd::api::Mirror<>::image_resync(ictx);
   }
 
   int Image::mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                                    size_t info_size) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_get_info(ictx, mirror_image_info, info_size);
+    return librbd::api::Mirror<>::image_get_info(ictx, mirror_image_info,
+                                                 info_size);
   }
 
   int Image::mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 				     size_t status_size) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_get_status(ictx, mirror_image_status,
-					   status_size);
+    return librbd::api::Mirror<>::image_get_status(ictx, mirror_image_status,
+					           status_size);
   }
 
   int Image::update_watch(UpdateWatchCtx *wctx, uint64_t *handle) {
@@ -1676,14 +1680,14 @@ extern "C" int rbd_mirror_mode_get(rados_ioctx_t p,
                                    rbd_mirror_mode_t *mirror_mode) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::mirror_mode_get(io_ctx, mirror_mode);
+  return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
 }
 
 extern "C" int rbd_mirror_mode_set(rados_ioctx_t p,
                                    rbd_mirror_mode_t mirror_mode) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::mirror_mode_set(io_ctx, mirror_mode);
+  return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
 }
 
 extern "C" int rbd_mirror_peer_add(rados_ioctx_t p, char *uuid,
@@ -1700,7 +1704,8 @@ extern "C" int rbd_mirror_peer_add(rados_ioctx_t p, char *uuid,
   }
 
   std::string uuid_str;
-  int r = librbd::mirror_peer_add(io_ctx, &uuid_str, cluster_name, client_name);
+  int r = librbd::api::Mirror<>::peer_add(io_ctx, &uuid_str, cluster_name,
+                                          client_name);
   if (r >= 0) {
     strncpy(uuid, uuid_str.c_str(), uuid_max_length);
     uuid[uuid_max_length - 1] = '\0';
@@ -1711,7 +1716,7 @@ extern "C" int rbd_mirror_peer_add(rados_ioctx_t p, char *uuid,
 extern "C" int rbd_mirror_peer_remove(rados_ioctx_t p, const char *uuid) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  int r = librbd::mirror_peer_remove(io_ctx, uuid);
+  int r = librbd::api::Mirror<>::peer_remove(io_ctx, uuid);
   return r;
 }
 
@@ -1721,7 +1726,7 @@ extern "C" int rbd_mirror_peer_list(rados_ioctx_t p,
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
 
   std::vector<librbd::mirror_peer_t> peer_vector;
-  int r = librbd::mirror_peer_list(io_ctx, &peer_vector);
+  int r = librbd::api::Mirror<>::peer_list(io_ctx, &peer_vector);
   if (r < 0) {
     return r;
   }
@@ -1753,14 +1758,14 @@ extern "C" int rbd_mirror_peer_set_client(rados_ioctx_t p, const char *uuid,
                                           const char *client_name) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::mirror_peer_set_client(io_ctx, uuid, client_name);
+  return librbd::api::Mirror<>::peer_set_client(io_ctx, uuid, client_name);
 }
 
 extern "C" int rbd_mirror_peer_set_cluster(rados_ioctx_t p, const char *uuid,
                                            const char *cluster_name) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::mirror_peer_set_cluster(io_ctx, uuid, cluster_name);
+  return librbd::api::Mirror<>::peer_set_cluster(io_ctx, uuid, cluster_name);
 }
 
 extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p,
@@ -1770,7 +1775,8 @@ extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p,
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   std::map<std::string, librbd::mirror_image_status_t> cpp_images;
 
-  int r = librbd::mirror_image_status_list(io_ctx, start_id, max, &cpp_images);
+  int r = librbd::api::Mirror<>::image_status_list(io_ctx, start_id, max,
+                                                   &cpp_images);
   if (r < 0) {
     return r;
   }
@@ -1804,7 +1810,7 @@ extern "C" int rbd_mirror_image_status_summary(rados_ioctx_t p,
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
 
   std::map<librbd::mirror_image_status_state_t, int> states_;
-  int r = librbd::mirror_image_status_summary(io_ctx, &states_);
+  int r = librbd::api::Mirror<>::image_status_summary(io_ctx, &states_);
   if (r < 0) {
     return r;
   }
@@ -3268,31 +3274,31 @@ extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t 
 extern "C" int rbd_mirror_image_enable(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::mirror_image_enable(ictx, false);
+  return librbd::api::Mirror<>::image_enable(ictx, false);
 }
 
 extern "C" int rbd_mirror_image_disable(rbd_image_t image, bool force)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::mirror_image_disable(ictx, force);
+  return librbd::api::Mirror<>::image_disable(ictx, force);
 }
 
 extern "C" int rbd_mirror_image_promote(rbd_image_t image, bool force)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::mirror_image_promote(ictx, force);
+  return librbd::api::Mirror<>::image_promote(ictx, force);
 }
 
 extern "C" int rbd_mirror_image_demote(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::mirror_image_demote(ictx);
+  return librbd::api::Mirror<>::image_demote(ictx);
 }
 
 extern "C" int rbd_mirror_image_resync(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::mirror_image_resync(ictx);
+  return librbd::api::Mirror<>::image_resync(ictx);
 }
 
 extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
@@ -3302,8 +3308,8 @@ extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
 
   librbd::mirror_image_info_t cpp_mirror_image;
-  int r = librbd::mirror_image_get_info(ictx, &cpp_mirror_image,
-                                        sizeof(cpp_mirror_image));
+  int r = librbd::api::Mirror<>::image_get_info(ictx, &cpp_mirror_image,
+                                                sizeof(cpp_mirror_image));
   if (r < 0) {
     return r;
   }
@@ -3319,8 +3325,8 @@ extern "C" int rbd_mirror_image_get_status(rbd_image_t image,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
 
   librbd::mirror_image_status_t cpp_status;
-  int r = librbd::mirror_image_get_status(ictx, &cpp_status,
-					  sizeof(cpp_status));
+  int r = librbd::api::Mirror<>::image_get_status(ictx, &cpp_status,
+					          sizeof(cpp_status));
   if (r < 0) {
     return r;
   }

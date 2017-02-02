@@ -95,13 +95,9 @@ namespace librbd {
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
 
-  int list_images_v2(librados::IoCtx& io_ctx,
-      std::map<std::string, std::string>& images);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
-  int list_children_info(ImageCtx *ictx, const ParentSpec &parent_spec,
-             std::map<std::pair<int64_t, std::string >, std::set<std::string> >& image_info);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -201,32 +197,6 @@ namespace librbd {
   int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
-
-  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
-  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
-  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
-                      const std::string &cluster_name,
-                      const std::string &client_name);
-  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid);
-  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
-  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
-                             const std::string &client_name);
-  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
-                              const std::string &cluster_name);
-  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
-      size_t max, std::map<std::string, mirror_image_status_t> *images);
-  int mirror_image_status_summary(IoCtx& io_ctx,
-      std::map<mirror_image_status_state_t, int> *states);
-
-  int mirror_image_enable(ImageCtx *ictx, bool relax_same_pool_parent_check);
-  int mirror_image_disable(ImageCtx *ictx, bool force);
-  int mirror_image_promote(ImageCtx *ictx, bool force);
-  int mirror_image_demote(ImageCtx *ictx);
-  int mirror_image_resync(ImageCtx *ictx);
-  int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
-                            size_t info_size);
-  int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
-			      size_t status_size);
 
 }
 

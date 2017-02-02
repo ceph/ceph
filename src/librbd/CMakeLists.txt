@@ -22,9 +22,11 @@ set(librbd_internal_srcs
   ObjectMap.cc
   Operations.cc
   Utils.cc
+  Watcher.cc
+  api/Image.cc
+  api/Mirror.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
-  Watcher.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
@@ -72,7 +74,6 @@ set(librbd_internal_srcs
   object_map/SnapshotRollbackRequest.cc
   object_map/UnlockRequest.cc
   object_map/UpdateRequest.cc
-  watcher/Notifier.cc
   operation/DisableFeaturesRequest.cc
   operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
@@ -91,6 +92,7 @@ set(librbd_internal_srcs
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
   operation/TrimRequest.cc
+  watcher/Notifier.cc
   watcher/RewatchRequest.cc
   watcher/Types.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)

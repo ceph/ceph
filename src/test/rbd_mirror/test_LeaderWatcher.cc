@@ -4,6 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Mirror.h"
 #include "test/librbd/test_support.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
@@ -89,7 +90,8 @@ public:
 
   void SetUp() override {
     TestFixture::SetUp();
-    EXPECT_EQ(0, librbd::mirror_mode_set(m_local_io_ctx, RBD_MIRROR_MODE_POOL));
+    EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_io_ctx,
+                                                 RBD_MIRROR_MODE_POOL));
 
     if (is_librados_test_stub()) {
       // speed testing up a little
