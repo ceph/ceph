@@ -164,7 +164,7 @@ function setup_paddles() {
 }
 
 function populate_paddles() {
-    local subnet=$1
+    local subnets="$1"
     local labdomain=$2
 
     local paddles_dir=$(dirname $0)/../../../paddles
@@ -183,8 +183,10 @@ function populate_paddles() {
 
         (
             echo "begin transaction;"
-            subnet_names_and_ips $subnet | while read name ip ; do
-                echo "insert into nodes (name,machine_type,is_vm,locked,up) values ('${name}.${labdomain}', 'openstack', TRUE, FALSE, TRUE);"
+            for subnet in $subnets ; do
+                subnet_names_and_ips $subnet | while read name ip ; do
+                    echo "insert into nodes (name,machine_type,is_vm,locked,up) values ('${name}.${labdomain}', 'openstack', TRUE, FALSE, TRUE);"
+                done
             done
             echo "commit transaction;"
         ) | psql --quiet $url
@@ -396,12 +398,14 @@ function subnet_names_and_ips() {
 }
 
 function define_dnsmasq() {
-    local subnet=$1
+    local subnets="$1"
     local labdomain=$2
     local host_records=/etc/dnsmasq.d/teuthology
     if ! test -f $host_records ; then
-        subnet_names_and_ips $subnet | while read name ip ; do
-            echo host-record=$name.$labdomain,$ip
+        for subnet in $subnets ; do
+            subnet_names_and_ips $subnet | while read name ip ; do
+                echo host-record=$name.$labdomain,$ip
+            done
         done | sudo tee $host_records > /tmp/dnsmasq
         head -2 /tmp/dnsmasq
         echo 'etc.'
@@ -425,14 +429,16 @@ function undefine_dnsmasq() {
 }
 
 function setup_ansible() {
-    local subnet=$1
+    local subnets="$1"
     local labdomain=$2
     local dir=/etc/ansible/hosts
     if ! test -f $dir/teuthology ; then
         sudo mkdir -p $dir/group_vars
         echo '[testnodes]' | sudo tee $dir/teuthology
-        subnet_names_and_ips $subnet | while read name ip ; do
-            echo $name.$labdomain
+        for subnet in $subnets ; do
+            subnet_names_and_ips $subnet | while read name ip ; do
+                echo $name.$labdomain
+            done
         done | sudo tee -a $dir/teuthology > /tmp/ansible
         head -2 /tmp/ansible
         echo 'etc.'
@@ -494,7 +500,7 @@ function verify_openstack() {
 
 function main() {
     local network
-    local subnet
+    local subnets
     local nameserver
     local labdomain=teuthology
     local nworkers=2
@@ -527,9 +533,9 @@ function main() {
                 shift
                 nameserver=$1
                 ;;
-            --subnet)
+            --subnets)
                 shift
-                subnet=$1
+                subnets=$1
                 ;;
             --labdomain)
                 shift
@@ -609,11 +615,13 @@ function main() {
     #
     # assume the first available IPv4 subnet is going to be used to assign IP to the instance
     #
-    eval local default_subnet=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr' | head -1)
-    if test -z "$default_subnet" ; then
-        default_subnet=$(nova tenant-network-list | grep / | cut -f6 -d' ' | head -1)
+    local default_subnets=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr')
+    if test -z "$default_subnets" ; then
+        for subnet in $default_subnets ; do
+            eval subnet=$subnet # get rid of surrounding ""
+            subnets="$subnets $subnet"
+        done
     fi
-    : ${subnet:=$default_subnet}
 
     case $provider in
         entercloudsuite|cloudlab)
@@ -631,8 +639,8 @@ function main() {
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
-        create_config "$network" "$subnet" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" || return 1
-        setup_ansible $subnet $labdomain || return 1
+        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" || return 1
+        setup_ansible "$subnets" $labdomain || return 1
         setup_ssh_config || return 1
         setup_authorized_keys || return 1
         setup_bashrc || return 1
@@ -654,7 +662,7 @@ function main() {
 
     if $do_setup_dnsmasq ; then
         setup_dnsmasq $provider || return 1
-        define_dnsmasq $subnet $labdomain || return 1
+        define_dnsmasq "$subnets" $labdomain || return 1
     fi
 
     if $do_setup_paddles ; then
@@ -662,7 +670,7 @@ function main() {
     fi
 
     if $do_populate_paddles ; then
-        populate_paddles $subnet $labdomain || return 1
+        populate_paddles "$subnets" $labdomain || return 1
     fi
 
     if $do_setup_pulpito ; then
