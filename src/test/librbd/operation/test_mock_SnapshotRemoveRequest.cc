@@ -63,7 +63,7 @@ public:
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
-      parent_spec &parent_spec = mock_image_ctx.snap_info.rbegin()->second.parent.spec;
+      ParentSpec &parent_spec = mock_image_ctx.snap_info.rbegin()->second.parent.spec;
       expect.WillOnce(DoAll(SetArgPointee<1>(parent_spec),
                             Return(0)));
     }

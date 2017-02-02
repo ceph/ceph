@@ -541,7 +541,7 @@ void RefreshRequest<I>::send_v2_refresh_parent() {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
-    parent_info parent_md;
+    ParentInfo parent_md;
     int r = get_parent_info(m_image_ctx.snap_id, &parent_md);
     if (!m_skip_open_parent_image && (r < 0 ||
         RefreshParentRequest<I>::is_refresh_required(m_image_ctx, parent_md))) {
@@ -1044,7 +1044,7 @@ void RefreshRequest<I>::apply() {
       uint8_t protection_status = m_image_ctx.old_format ?
         static_cast<uint8_t>(RBD_PROTECTION_STATUS_UNPROTECTED) :
         m_snap_protection[i];
-      parent_info parent;
+      ParentInfo parent;
       if (!m_image_ctx.old_format) {
         parent = m_snap_parents[i];
       }
@@ -1105,7 +1105,7 @@ void RefreshRequest<I>::apply() {
 
 template <typename I>
 int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
-                                       parent_info *parent_md) {
+                                       ParentInfo *parent_md) {
   if (snap_id == CEPH_NOSNAP) {
     *parent_md = m_parent_md;
     return 0;

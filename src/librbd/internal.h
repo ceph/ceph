@@ -13,9 +13,9 @@
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
-#include "librbd/parent_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/WorkQueue.h"
+#include "librbd/Types.h"
 
 enum {
   l_librbd_first = 26000,
@@ -100,7 +100,7 @@ namespace librbd {
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
-  int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
+  int list_children_info(ImageCtx *ictx, const ParentSpec &parent_spec,
              std::map<std::pair<int64_t, std::string >, std::set<std::string> >& image_info);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);

@@ -24,7 +24,7 @@ using util::create_context_callback;
 
 template <typename I>
 RefreshParentRequest<I>::RefreshParentRequest(I &child_image_ctx,
-                                              const parent_info &parent_md,
+                                              const ParentInfo &parent_md,
                                               Context *on_finish)
   : m_child_image_ctx(child_image_ctx), m_parent_md(parent_md),
     m_on_finish(on_finish), m_parent_image_ctx(nullptr),
@@ -33,7 +33,7 @@ RefreshParentRequest<I>::RefreshParentRequest(I &child_image_ctx,
 
 template <typename I>
 bool RefreshParentRequest<I>::is_refresh_required(I &child_image_ctx,
-                                                  const parent_info &parent_md) {
+                                                  const ParentInfo &parent_md) {
   assert(child_image_ctx.snap_lock.is_locked());
   assert(child_image_ctx.parent_lock.is_locked());
   return (is_open_required(child_image_ctx, parent_md) ||
@@ -42,14 +42,14 @@ bool RefreshParentRequest<I>::is_refresh_required(I &child_image_ctx,
 
 template <typename I>
 bool RefreshParentRequest<I>::is_close_required(I &child_image_ctx,
-                                                const parent_info &parent_md) {
+                                                const ParentInfo &parent_md) {
   return (child_image_ctx.parent != nullptr &&
           (parent_md.spec.pool_id == -1 || parent_md.overlap == 0));
 }
 
 template <typename I>
 bool RefreshParentRequest<I>::is_open_required(I &child_image_ctx,
-                                               const parent_info &parent_md) {
+                                               const ParentInfo &parent_md) {
   return (parent_md.spec.pool_id > -1 && parent_md.overlap > 0 &&
           (child_image_ctx.parent == nullptr ||
            child_image_ctx.parent->md_ctx.get_id() != parent_md.spec.pool_id ||

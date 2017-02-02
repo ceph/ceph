@@ -5,8 +5,8 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
+#include "include/rbd_types.h"
 #include "common/Formatter.h"
-#include "librbd/parent_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 
 /// information about our parent image, if any

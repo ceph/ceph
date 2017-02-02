@@ -10,7 +10,7 @@
 #include "common/snap_types.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 
 #include <string>
 #include <vector>
@@ -35,7 +35,7 @@ namespace librbd {
                                     std::map<rados::cls::lock::locker_id_t,
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
-				    ::SnapContext *snapc, parent_info *parent);
+				    ::SnapContext *snapc, ParentInfo *parent);
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     bool read_only, uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
@@ -44,7 +44,7 @@ namespace librbd {
 			     bool *exclusive_lock,
 			     std::string *lock_tag,
 			     ::SnapContext *snapc,
-			     parent_info *parent);
+			     ParentInfo *parent);
 
     // low-level interface (mainly for testing)
     void create_image(librados::ObjectWriteOperation *op, uint64_t size,
@@ -71,12 +71,12 @@ namespace librbd {
 		 uint64_t size);
     void set_size(librados::ObjectWriteOperation *op, uint64_t size);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   snapid_t snap_id, parent_spec *pspec,
+		   snapid_t snap_id, ParentSpec *pspec,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   parent_spec pspec, uint64_t parent_overlap);
+		   const ParentSpec &pspec, uint64_t parent_overlap);
     void set_parent(librados::ObjectWriteOperation *op,
-                    parent_spec pspec, uint64_t parent_overlap);
+                    const ParentSpec &pspec, uint64_t parent_overlap);
     void get_flags_start(librados::ObjectReadOperation *op,
                          const std::vector<snapid_t> &snap_ids);
     int get_flags_finish(bufferlist::iterator *it, uint64_t *flags,
@@ -90,17 +90,17 @@ namespace librbd {
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     void remove_parent(librados::ObjectWriteOperation *op);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
-		  parent_spec pspec, const std::string &c_imageid);
+		  const ParentSpec &pspec, const std::string &c_imageid);
     void remove_child(librados::ObjectWriteOperation *op,
-		      parent_spec pspec, const std::string &c_imageid);
+		      const ParentSpec &pspec, const std::string &c_imageid);
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
-		     parent_spec pspec, const std::string &c_imageid);
+		     const ParentSpec &pspec, const std::string &c_imageid);
     void get_children_start(librados::ObjectReadOperation *op,
-                            const parent_spec &pspec);
+                            const ParentSpec &pspec);
     int get_children_finish(bufferlist::iterator *it,
                             std::set<string> *children);
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
-                      parent_spec pspec, set<string>& children);
+                      const ParentSpec &pspec, set<string>& children);
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
 		      const std::string &snap_name,
 		      const cls::rbd::SnapshotNamespace &snap_namespace);
@@ -117,7 +117,7 @@ namespace librbd {
                              const std::vector<snapid_t> &ids,
                              std::vector<string> *names,
                              std::vector<uint64_t> *sizes,
-                             std::vector<parent_info> *parents,
+                             std::vector<ParentInfo> *parents,
                              std::vector<uint8_t> *protection_statuses);
     void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
                                        const std::vector<snapid_t> &ids);
@@ -134,7 +134,7 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<parent_info> *parents,
+		      std::vector<ParentInfo> *parents,
 		      std::vector<uint8_t> *protection_statuses);
 
     void snapshot_namespace_list_start(librados::ObjectReadOperation *op,

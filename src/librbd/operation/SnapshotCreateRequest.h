@@ -5,8 +5,8 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H
 
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/Types.h"
 #include "librbd/operation/Request.h"
-#include "librbd/parent_types.h"
 #include <string>
 
 class Context;
@@ -86,7 +86,7 @@ private:
 
   uint64_t m_snap_id;
   uint64_t m_size;
-  parent_info m_parent_info;
+  ParentInfo m_parent_info;
 
   void send_suspend_requests();
   Context *handle_suspend_requests(int *result);
