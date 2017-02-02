@@ -663,7 +663,6 @@ public:
 
     struct Shard {
       bluestore_onode_t::shard_info *shard_info = nullptr;
-      uint32_t offset = 0;   ///< starting logical offset
       unsigned extents = 0;  ///< count extents in this shard
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
@@ -737,9 +736,9 @@ public:
 
       while (left < right) {
         mid = left + (right - left) / 2;
-        if (offset >= shards[mid].offset) {
+        if (offset >= shards[mid].shard_info->offset) {
           size_t next = mid + 1;
-          if (next >= end || offset < shards[next].offset)
+          if (next >= end || offset < shards[next].shard_info->offset)
             return mid;
           //continue to search forwards
           left = next;
@@ -762,7 +761,7 @@ public:
       if (s == (int)shards.size() - 1) {
 	return false; // last shard
       }
-      if (offset + length <= shards[s+1].offset) {
+      if (offset + length <= shards[s+1].shard_info->offset) {
 	return false;
       }
       return true;
