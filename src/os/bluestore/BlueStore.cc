@@ -5590,9 +5590,8 @@ int BlueStore::_do_read(
       }
     } else {
       for (auto& reg : b2r_it->second) {
-	r = _verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
-			 reg.logical_offset);
-	if (r < 0) {
+	if (_verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
+			 reg.logical_offset) < 0) {
 	  return -EIO;
 	}
 	if (buffered) {
@@ -5652,14 +5651,13 @@ int BlueStore::_verify_csum(OnodeRef& o,
   if (r < 0) {
     if (r == -1) {
       PExtentVector pex;
-      int r = blob->map(
+      blob->map(
 	bad,
 	blob->get_csum_chunk_size(),
 	[&](uint64_t offset, uint64_t length) {
 	  pex.emplace_back(bluestore_pextent_t(offset, length));
           return 0;
 	});
-      assert(r == 0);
       derr << __func__ << " bad "
 	   << Checksummer::get_csum_type_string(blob->csum_type)
 	   << "/0x" << std::hex << blob->get_csum_chunk_size()
@@ -5667,10 +5665,10 @@ int BlueStore::_verify_csum(OnodeRef& o,
 	   << ", got 0x" << bad_csum << ", expected 0x"
 	   << blob->get_csum_item(bad / blob->get_csum_chunk_size()) << std::dec
 	   << ", device location " << pex
-	   << ", object " << o->oid
 	   << ", logical extent 0x" << std::hex
 	   << (logical_offset + bad - blob_xoffset) << "~"
 	   << blob->get_csum_chunk_size() << std::dec
+	   << ", object " << o->oid
 	   << dendl;
     } else {
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
