@@ -8680,11 +8680,10 @@ void MDCache::handle_open_ino_reply(MMDSOpenInoReply *m)
 
   inodeno_t ino = m->ino;
   mds_rank_t from = mds_rank_t(m->get_source().num());
-  if (opening_inodes.count(ino)) {
-    open_ino_info_t& info = opening_inodes[ino];
-
-    if (info.checking == from)
-	info.checking = MDS_RANK_NONE;
+  auto it = opening_inodes.find(ino);
+  if (it != opening_inodes.end() && it->second.checking == from) {
+    open_ino_info_t& info = it->second;
+    info.checking = MDS_RANK_NONE;
     info.checked.insert(from);
 
     CInode *in = get_inode(ino);
