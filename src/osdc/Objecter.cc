@@ -857,7 +857,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target);
+  _calc_target(&info->target, nullptr);
 
   // Create LingerOp<->OSDSession relation
   int r = _get_session(info->target.osd, &s, sul);
@@ -1069,7 +1069,8 @@ void Objecter::_scan_requests(OSDSession *s,
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
-    int r = _calc_target(&op->target);
+    int r = _calc_target(&op->target,
+			 op->session ? op->session->con.get() : nullptr);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!force_resend &&
@@ -1297,7 +1298,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (!op->session) {
-      _calc_target(&op->target);
+      _calc_target(&op->target, nullptr);
       OSDSession *s = NULL;
       int const r = _get_session(op->target.osd, &s, sul);
       assert(r == 0);
@@ -2292,7 +2293,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool check_for_latest_map = _calc_target(&op->target)
+  bool check_for_latest_map = _calc_target(&op->target, nullptr)
     == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
@@ -2309,7 +2310,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
       // map changed; recalculate mapping
       ldout(cct, 10) << __func__ << " relock raced with osdmap, recalc target"
 		     << dendl;
-      check_for_latest_map = _calc_target(&op->target)
+      check_for_latest_map = _calc_target(&op->target, nullptr)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
@@ -2655,7 +2656,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::_calc_target(op_target_t *t, bool any_change)
+int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 {
   // rwlock is locked
 
@@ -2731,6 +2732,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 			       &acting, &acting_primary);
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
+  pg_t prev_pgid(prev_seed, pgid.pool());
   if (any_change && pg_interval_t::is_new_interval(
 	t->acting_primary,
 	acting_primary,
@@ -2748,7 +2750,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	pg_num,
 	t->sort_bitwise,
 	sort_bitwise,
-	pg_t(prev_seed, pgid.pool(), pgid.preferred()))) {
+	prev_pgid)) {
     force_resend = true;
   }
 
@@ -2759,11 +2761,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->paused = false;
     need_resend = true;
   }
-
   if (t->pgid != pgid ||
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
 	t->used_replica || any_change) ||
+      (con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) &&
+       prev_pgid.is_split(t->pg_num, pg_num, nullptr)) ||
       force_resend) {
     t->pgid = pgid;
     t->acting = acting;
@@ -2830,7 +2833,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   shunique_lock& sul)
 {
-  _calc_target(target);
+  _calc_target(target, nullptr);
   return _get_session(target->osd, s, sul);
 }
 
@@ -2939,8 +2942,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
 {
   // rwlock is locked unique
 
-  int r = _calc_target(&linger_op->target,
-		       true);
+  int r = _calc_target(&linger_op->target, nullptr, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
@@ -4802,7 +4804,7 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     }
     c->target.osd = c->target_osd;
   } else {
-    int ret = _calc_target(&(c->target), true);
+    int ret = _calc_target(&(c->target), nullptr, true);
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";

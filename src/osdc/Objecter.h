@@ -1892,7 +1892,7 @@ public:
   bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t,
+  int _calc_target(op_target_t *t, Connection *con,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   shunique_lock& lc);
