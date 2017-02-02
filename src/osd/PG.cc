@@ -843,11 +843,11 @@ PastIntervals::PriorSet PG::build_prior()
 
   PastIntervals::PriorSet prior = past_intervals.get_prior_set(
     pool.info.ec_pool(),
+    info.history.last_epoch_started,
     get_pgbackend()->get_is_recoverable_predicate(),
     *get_osdmap(),
     up,
     acting,
-    info,
     this);
 				 
   if (prior.pg_down) {

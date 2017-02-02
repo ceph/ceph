@@ -3510,11 +3510,11 @@ bool PastIntervals::check_new_interval(
 PastIntervals::PriorSet::PriorSet(
   const PastIntervals &past_intervals,
   bool ec_pool,
+  epoch_t last_epoch_started,
   IsPGRecoverablePredicate *c,
   const OSDMap &osdmap,
   const vector<int> &up,
   const vector<int> &acting,
-  const pg_info_t &info,
   const DoutPrefixProvider *dpp)
   : ec_pool(ec_pool), pg_down(false), pcontdec(c)
 {
@@ -3578,7 +3578,7 @@ PastIntervals::PriorSet::PriorSet(
 
   past_intervals.iterate_mayberw_back_to(
     ec_pool,
-    info.history.last_epoch_started,
+    last_epoch_started,
     [&](epoch_t start, const set<pg_shard_t> &acting) {
       ldpp_dout(dpp, 10) << "build_prior maybe_rw interval:" << start
 			 << ", acting: " << acting << dendl;
