@@ -841,11 +841,29 @@ PastIntervals::PriorSet PG::build_prior()
     }
   }
 
+  const OSDMap &osdmap = *get_osdmap();
   PastIntervals::PriorSet prior = past_intervals.get_prior_set(
     pool.info.ec_pool(),
     info.history.last_epoch_started,
     get_pgbackend()->get_is_recoverable_predicate(),
-    *get_osdmap(),
+    [&](epoch_t start, int osd, epoch_t *lost_at) {
+      const osd_info_t *pinfo = 0;
+      if (osdmap.exists(osd)) {
+	pinfo = &osdmap.get_info(osd);
+	if (lost_at)
+	  *lost_at = pinfo->lost_at;
+      }
+
+      if (osdmap.is_up(osd)) {
+	return PastIntervals::UP;
+      } else if (!pinfo) {
+	return PastIntervals::DNE;
+      } else if (pinfo->lost_at > start) {
+	return PastIntervals::LOST;
+      } else {
+	return PastIntervals::DOWN;
+      }
+    },
     up,
     acting,
     this);

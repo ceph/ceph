@@ -2529,8 +2529,7 @@ public:
     virtual bool empty() const = 0;
     virtual void clear() = 0;
     virtual pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const = 0;
-    virtual set<pg_shard_t> get_might_have_unfound(
-      pg_shard_t pg_whoami,
+    virtual set<pg_shard_t> get_all_participants(
       bool ec_pool) const = 0;
     virtual void add_interval(bool ec_pool, const pg_interval_t &interval) = 0;
     virtual unique_ptr<interval_rep> clone() const = 0;
@@ -2562,6 +2561,11 @@ private:
   PastIntervals(interval_rep *rep) : past_intervals(rep) {}
 
 public:
+  void add_interval(bool ec_pool, const pg_interval_t &interval) {
+    assert(past_intervals);
+    return past_intervals->add_interval(ec_pool, interval);
+  }
+
   bool is_classic() const {
     assert(past_intervals);
     return past_intervals->is_classic();
@@ -2686,14 +2690,25 @@ public:
   }
 
   /**
-   * Return all osds which have been in the acting set back to the
-   * latest epoch to which we have trimmed
+   * Return all shards which have been in the acting set back to the
+   * latest epoch to which we have trimmed except for pg_whoami
    */
   set<pg_shard_t> get_might_have_unfound(
     pg_shard_t pg_whoami,
     bool ec_pool) const {
     assert(past_intervals);
-    return past_intervals->get_might_have_unfound(pg_whoami, ec_pool);
+    auto ret = past_intervals->get_all_participants(ec_pool);
+    ret.erase(pg_whoami);
+    return ret;
+  }
+
+  /**
+   * Return all shards which we might want to talk to for peering
+   */
+  set<pg_shard_t> get_all_probe(
+    bool ec_pool) const {
+    assert(past_intervals);
+    return past_intervals->get_all_participants(ec_pool);
   }
 
   /* Return the set of epochs
@@ -2707,6 +2722,12 @@ public:
     return past_intervals->get_bounds();
   }
 
+  enum osd_state_t {
+    UP,
+    DOWN,
+    DNE,
+    LOST
+  };
   struct PriorSet {
     bool ec_pool = false;
     set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
@@ -2723,17 +2744,37 @@ public:
     PriorSet &operator=(const PriorSet &) = delete;
     PriorSet(const PriorSet &) = delete;
 
+    bool operator==(const PriorSet &rhs) const {
+      return (ec_pool == rhs.ec_pool) &&
+	(probe == rhs.probe) &&
+	(down == rhs.down) &&
+	(blocked_by == rhs.blocked_by) &&
+	(pg_down == rhs.pg_down);
+    }
+
     bool affected_by_map(
       const OSDMap &osdmap,
       const DoutPrefixProvider *dpp) const;
 
+    // For verifying tests
+    PriorSet(
+      bool ec_pool,
+      set<pg_shard_t> probe,
+      set<int> down,
+      map<int, epoch_t> blocked_by,
+      bool pg_down,
+      IsPGRecoverablePredicate *pcontdec)
+      : ec_pool(ec_pool), probe(probe), down(down), blocked_by(blocked_by),
+	pg_down(pg_down), pcontdec(pcontdec) {}
+
   private:
+    template <typename F>
     PriorSet(
       const PastIntervals &past_intervals,
       bool ec_pool,
       epoch_t last_epoch_started,
       IsPGRecoverablePredicate *c,
-      const OSDMap &osdmap,
+      F f,
       const vector<int> &up,
       const vector<int> &acting,
       const DoutPrefixProvider *dpp);
@@ -2753,6 +2794,160 @@ WRITE_CLASS_ENCODER(PastIntervals)
 
 ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i);
 ostream& operator<<(ostream& out, const PastIntervals &i);
+ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i);
+
+template <typename F>
+PastIntervals::PriorSet::PriorSet(
+  const PastIntervals &past_intervals,
+  bool ec_pool,
+  epoch_t last_epoch_started,
+  IsPGRecoverablePredicate *c,
+  F f,
+  const vector<int> &up,
+  const vector<int> &acting,
+  const DoutPrefixProvider *dpp)
+  : ec_pool(ec_pool), pg_down(false), pcontdec(c)
+{
+  /*
+   * We have to be careful to gracefully deal with situations like
+   * so. Say we have a power outage or something that takes out both
+   * OSDs, but the monitor doesn't mark them down in the same epoch.
+   * The history may look like
+   *
+   *  1: A B
+   *  2:   B
+   *  3:       let's say B dies for good, too (say, from the power spike)
+   *  4: A
+   *
+   * which makes it look like B may have applied updates to the PG
+   * that we need in order to proceed.  This sucks...
+   *
+   * To minimize the risk of this happening, we CANNOT go active if
+   * _any_ OSDs in the prior set are down until we send an MOSDAlive
+   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
+   * Then, we have something like
+   *
+   *  1: A B
+   *  2:   B   up_thru[B]=0
+   *  3:
+   *  4: A
+   *
+   * -> we can ignore B, bc it couldn't have gone active (alive_thru
+   *    still 0).
+   *
+   * or,
+   *
+   *  1: A B
+   *  2:   B   up_thru[B]=0
+   *  3:   B   up_thru[B]=2
+   *  4:
+   *  5: A
+   *
+   * -> we must wait for B, bc it was alive through 2, and could have
+   *    written to the pg.
+   *
+   * If B is really dead, then an administrator will need to manually
+   * intervene by marking the OSD as "lost."
+   */
+
+  // Include current acting and up nodes... not because they may
+  // contain old data (this interval hasn't gone active, obviously),
+  // but because we want their pg_info to inform choose_acting(), and
+  // so that we know what they do/do not have explicitly before
+  // sending them any new info/logs/whatever.
+  for (unsigned i = 0; i < acting.size(); i++) {
+    if (acting[i] != 0x7fffffff /* CRUSH_ITEM_NONE, can't import crush.h here */)
+      probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+  }
+  // It may be possible to exclude the up nodes, but let's keep them in
+  // there for now.
+  for (unsigned i = 0; i < up.size(); i++) {
+    if (up[i] != 0x7fffffff /* CRUSH_ITEM_NONE, can't import crush.h here */)
+      probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+  }
+
+  set<pg_shard_t> all_probe = past_intervals.get_all_probe(ec_pool);
+  for (auto &&i: all_probe) {
+    switch (f(0, i.osd, nullptr)) {
+    case UP: {
+      probe.insert(i);
+      break;
+    }
+    case DNE:
+    case LOST:
+    case DOWN: {
+      down.insert(i.osd);
+      break;
+    }
+    }
+  }
+
+  past_intervals.iterate_mayberw_back_to(
+    ec_pool,
+    last_epoch_started,
+    [&](epoch_t start, const set<pg_shard_t> &acting) {
+      ldpp_dout(dpp, 10) << "build_prior maybe_rw interval:" << start
+			 << ", acting: " << acting << dendl;
+
+      // look at candidate osds during this interval.  each falls into
+      // one of three categories: up, down (but potentially
+      // interesting), or lost (down, but we won't wait for it).
+      set<pg_shard_t> up_now;
+      map<int, epoch_t> candidate_blocked_by;
+      // any candidates down now (that might have useful data)
+      bool any_down_now = false;
+
+      // consider ACTING osds
+      for (auto &&so: acting) {
+	epoch_t lost_at = 0;
+	switch (f(start, so.osd, &lost_at)) {
+	case UP: {
+	  // include past acting osds if they are up.
+	  up_now.insert(so);
+	  break;
+	}
+	case DNE: {
+	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
+			     << " no longer exists" << dendl;
+	  break;
+	}
+	case LOST: {
+	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
+			     << " is down, but lost_at " << lost_at << dendl;
+	  up_now.insert(so);
+	  break;
+	}
+	case DOWN: {
+	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
+			     << " is down" << dendl;
+	  candidate_blocked_by[so.osd] = lost_at;
+	  any_down_now = true;
+	  break;
+	}
+	}
+      }
+
+      // if not enough osds survived this interval, and we may have gone rw,
+      // then we need to wait for one of those osds to recover to
+      // ensure that we haven't lost any information.
+      if (!(*pcontdec)(up_now) && any_down_now) {
+	// fixme: how do we identify a "clean" shutdown anyway?
+	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw, insufficient up;"
+			   << " including down osds" << dendl;
+	assert(!candidate_blocked_by.empty());
+	pg_down = true;
+	blocked_by.insert(
+	  candidate_blocked_by.begin(),
+	  candidate_blocked_by.end());
+      }
+    });
+
+  ldpp_dout(dpp, 10) << "build_prior final: probe " << probe
+	   << " down " << down
+	   << " blocked_by " << blocked_by
+	   << (pg_down ? " pg_down":"")
+	   << dendl;
+}
 
 /** 
  * pg_query_t - used to ask a peer for information about a pg.

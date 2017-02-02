@@ -2891,10 +2891,9 @@ public:
       return make_pair(make_pair(0, 0), 0);
     }
   }
-  set<pg_shard_t> get_might_have_unfound(
-    pg_shard_t pg_whoami,
+  set<pg_shard_t> get_all_participants(
     bool ec_pool) const override {
-    set<pg_shard_t> might_have_unfound;
+    set<pg_shard_t> all_participants;
 
     // We need to decide who might have unfound objects that we need
     auto p = interval_map.rbegin();
@@ -2910,11 +2909,11 @@ public:
       std::vector<int>::const_iterator a_end = interval.acting.end();
       for (; a != a_end; ++a, ++i) {
 	pg_shard_t shard(*a, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
-	if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
-	  might_have_unfound.insert(shard);
+	if (*a != CRUSH_ITEM_NONE)
+	  all_participants.insert(shard);
       }
     }
-    return might_have_unfound;
+    return all_participants;
   }
   void add_interval(
     bool ec_pool,
@@ -2955,26 +2954,25 @@ public:
       new pi_simple_rep(
 	true, ivallst
 	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
 	}));
     o.push_back(
       new pi_simple_rep(
 	false, ivallst
 	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
 	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
 	}));
     o.push_back(
       new pi_simple_rep(
 	true, ivallst
 	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
-	, ival{{   0, 2}, {   0, 2}, 20, 30,  true, 0, 0}
-	, ival{{   0, 2}, {      0}, 30, 35,  false, 2, 2}
-	, ival{{   0, 2}, {2,    0}, 30, 35,  true, 2, 2}
-	, ival{{   0, 2}, {   0, 2}, 35, 50,  true, 0, 0}
+	, ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0}
+	, ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2}
+	, ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}
 	}));
     return;
   }
@@ -2983,6 +2981,8 @@ public:
     epoch_t les,
     std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const override {
     for (auto i = interval_map.rbegin(); i != interval_map.rend(); ++i) {
+      if (!i->second.maybe_went_rw)
+	continue;
       if (i->second.last < les)
 	break;
       set<pg_shard_t> actingset;
@@ -3073,7 +3073,7 @@ WRITE_CLASS_ENCODER(compact_interval_t)
 class pi_compact_rep : public PastIntervals::interval_rep {
   epoch_t start = 0;
   epoch_t end = 0; // inclusive
-  set<pg_shard_t> might_have_unfound;
+  set<pg_shard_t> all_participants;
 
   list<compact_interval_t> intervals;
   pi_compact_rep(
@@ -3097,10 +3097,9 @@ public:
   pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const override {
     return make_pair(make_pair(start, start), end);
   }
-  set<pg_shard_t> get_might_have_unfound(
-    pg_shard_t pg_whoami,
+  set<pg_shard_t> get_all_participants(
     bool ec_pool) const override {
-    return might_have_unfound;
+    return all_participants;
   }
   void add_interval(
     bool ec_pool, const PastIntervals::pg_interval_t &interval) override {
@@ -3117,7 +3116,7 @@ public:
 	  interval.acting[i],
 	  ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
-    might_have_unfound.insert(acting.begin(), acting.end());
+    all_participants.insert(acting.begin(), acting.end());
     if (!interval.maybe_went_rw)
       return;
     intervals.push_back(
@@ -3172,26 +3171,25 @@ public:
       new pi_compact_rep(
 	true, ivallst
 	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
 	}));
     o.push_back(
       new pi_compact_rep(
 	false, ivallst
 	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 30, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 35, 50,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
 	}));
     o.push_back(
       new pi_compact_rep(
 	true, ivallst
 	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
-	, ival{{   0, 2}, {   0, 2}, 20, 30,  true, 0, 0}
-	, ival{{   0, 2}, {      0}, 30, 35,  false, 2, 2}
-	, ival{{   0, 2}, {2,    0}, 30, 35,  true, 2, 2}
-	, ival{{   0, 2}, {   0, 2}, 35, 50,  true, 0, 0}
+	, ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0}
+	, ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2}
+	, ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}
 	}));
   }
   void iterate_mayberw_back_to(
@@ -3224,6 +3222,17 @@ ostream& operator<<(ostream& out, const PastIntervals &i)
 {
   assert(i.past_intervals);
   return i.past_intervals->print(out);
+}
+
+ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i)
+{
+  return out << "PriorSet("
+	     << "ec_pool: " << i.ec_pool
+	     << ", probe: " << i.probe
+	     << ", down: " << i.down
+	     << ", blocked_by: " << i.blocked_by
+	     << ", pg_down: " << i.pg_down
+	     << ")";
 }
 
 void PastIntervals::decode(bufferlist::iterator &bl)
@@ -3507,142 +3516,6 @@ bool PastIntervals::check_new_interval(
   }
 }
 
-PastIntervals::PriorSet::PriorSet(
-  const PastIntervals &past_intervals,
-  bool ec_pool,
-  epoch_t last_epoch_started,
-  IsPGRecoverablePredicate *c,
-  const OSDMap &osdmap,
-  const vector<int> &up,
-  const vector<int> &acting,
-  const DoutPrefixProvider *dpp)
-  : ec_pool(ec_pool), pg_down(false), pcontdec(c)
-{
-  /*
-   * We have to be careful to gracefully deal with situations like
-   * so. Say we have a power outage or something that takes out both
-   * OSDs, but the monitor doesn't mark them down in the same epoch.
-   * The history may look like
-   *
-   *  1: A B
-   *  2:   B
-   *  3:       let's say B dies for good, too (say, from the power spike)
-   *  4: A
-   *
-   * which makes it look like B may have applied updates to the PG
-   * that we need in order to proceed.  This sucks...
-   *
-   * To minimize the risk of this happening, we CANNOT go active if
-   * _any_ OSDs in the prior set are down until we send an MOSDAlive
-   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
-   * Then, we have something like
-   *
-   *  1: A B
-   *  2:   B   up_thru[B]=0
-   *  3:
-   *  4: A
-   *
-   * -> we can ignore B, bc it couldn't have gone active (alive_thru
-   *    still 0).
-   *
-   * or,
-   *
-   *  1: A B
-   *  2:   B   up_thru[B]=0
-   *  3:   B   up_thru[B]=2
-   *  4:
-   *  5: A
-   *
-   * -> we must wait for B, bc it was alive through 2, and could have
-   *    written to the pg.
-   *
-   * If B is really dead, then an administrator will need to manually
-   * intervene by marking the OSD as "lost."
-   */
-
-  // Include current acting and up nodes... not because they may
-  // contain old data (this interval hasn't gone active, obviously),
-  // but because we want their pg_info to inform choose_acting(), and
-  // so that we know what they do/do not have explicitly before
-  // sending them any new info/logs/whatever.
-  for (unsigned i = 0; i < acting.size(); i++) {
-    if (acting[i] != CRUSH_ITEM_NONE)
-      probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
-  }
-  // It may be possible to exclude the up nodes, but let's keep them in
-  // there for now.
-  for (unsigned i = 0; i < up.size(); i++) {
-    if (up[i] != CRUSH_ITEM_NONE)
-      probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
-  }
-
-  past_intervals.iterate_mayberw_back_to(
-    ec_pool,
-    last_epoch_started,
-    [&](epoch_t start, const set<pg_shard_t> &acting) {
-      ldpp_dout(dpp, 10) << "build_prior maybe_rw interval:" << start
-			 << ", acting: " << acting << dendl;
-
-      // look at candidate osds during this interval.  each falls into
-      // one of three categories: up, down (but potentially
-      // interesting), or lost (down, but we won't wait for it).
-      set<pg_shard_t> up_now;
-      // any candidates down now (that might have useful data)
-      bool any_down_now = false;
-
-      // consider ACTING osds
-      for (auto &&so: acting) {
-	const osd_info_t *pinfo = 0;
-	if (osdmap.exists(so.osd))
-	  pinfo = &osdmap.get_info(so.osd);
-
-	if (osdmap.is_up(so.osd)) {
-	  // include past acting osds if they are up.
-	  probe.insert(so);
-	  up_now.insert(so);
-	} else if (!pinfo) {
-	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
-			     << " no longer exists" << dendl;
-	  down.insert(so.osd);
-	} else if (pinfo->lost_at > start) {
-	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
-			     << " is down, but lost_at " << pinfo->lost_at << dendl;
-	  up_now.insert(so);
-	  down.insert(so.osd);
-	} else {
-	  ldpp_dout(dpp, 10) << "build_prior  prior osd." << so.osd
-			     << " is down" << dendl;
-	  down.insert(so.osd);
-	  any_down_now = true;
-	}
-      }
-
-      // if not enough osds survived this interval, and we may have gone rw,
-      // then we need to wait for one of those osds to recover to
-      // ensure that we haven't lost any information.
-      if (!(*pcontdec)(up_now) && any_down_now) {
-	// fixme: how do we identify a "clean" shutdown anyway?
-	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw, insufficient up;"
-			   << " including down osds" << dendl;
-	for (auto &&so: acting) {
-	  if (osdmap.exists(so.osd) &&   // if it doesn't exist, we already consider it lost.
-	      osdmap.is_down(so.osd)) {
-	    pg_down = true;
-
-	    // make note of when any down osd in the cur set was lost, so that
-	    // we can notice changes in prior_set_affected.
-	    blocked_by[so.osd] = osdmap.get_info(so.osd).lost_at;
-	  }
-	}
-      }
-    });
-
-  ldpp_dout(dpp, 10) << "build_prior final: probe " << probe
-	   << " down " << down
-	   << " blocked_by " << blocked_by
-	   << (pg_down ? " pg_down":"")
-	   << dendl;
-}
 
 // true if the given map affects the prior set
 bool PastIntervals::PriorSet::affected_by_map(
@@ -3701,16 +3574,6 @@ bool PastIntervals::PriorSet::affected_by_map(
   }
 
   return false;
-}
-
-std::ostream& operator<<(
-  std::ostream& oss,
-  const PastIntervals::PriorSet &prior)
-{
-  oss << "PriorSet[probe=" << prior.probe << " "
-      << "down=" << prior.down << " "
-      << "blocked_by=" << prior.blocked_by << "]";
-  return oss;
 }
 
 ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
