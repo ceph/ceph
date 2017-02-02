@@ -285,7 +285,7 @@ int RGWRadosGetOmapKeysCR::send_request() {
   set_status() << "send request";
 
   librados::ObjectReadOperation op;
-  op.omap_get_vals(marker, max_entries, entries, &rval);
+  op.omap_get_vals2(marker, max_entries, entries, nullptr, &rval);
 
   cn = stack->create_completion_notifier();
   return ioctx.aio_operate(oid, cn->completion(), &op, NULL);
