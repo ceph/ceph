@@ -4,7 +4,6 @@
 
 POOL=rbd
 IMAGE=testrbdnbd$$
-TOO_LARGE_IMAGE=${IMAGE}_large
 SIZE=64
 DATA=
 DEV=
@@ -50,7 +49,6 @@ setup()
     DATA=${TEMPDIR}/data
     dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
     rbd --dest-pool ${POOL} --no-progress import ${DATA} ${IMAGE}
-    rbd -p ${POOL} create ${TOO_LARGE_IMAGE} --size 3T
 }
 
 function cleanup()
@@ -68,7 +66,6 @@ function cleanup()
 	done
 	rbd -p ${POOL} remove ${IMAGE}
     fi
-    rbd -p ${POOL} remove ${TOO_LARGE_IMAGE}
 }
 
 function expect_false()
@@ -91,7 +88,6 @@ then
 fi
 expect_false _sudo rbd-nbd map INVALIDIMAGE
 expect_false _sudo rbd-nbd --device INVALIDDEV map ${IMAGE}
-expect_false _sudo rbd-nbd map ${TOO_LARGE_IMAGE}
 
 # map test using the first unused device
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
