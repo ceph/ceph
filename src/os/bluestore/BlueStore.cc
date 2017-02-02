@@ -680,6 +680,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
         break;
       } else {
         p--;
+        num--;
         continue;
       }
     }
@@ -946,10 +947,11 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
         break;
       } else {
         p--;
+        num--;
         continue;
       }
     }
-    dout(30) << __func__ << "  trim " << o->oid << dendl;
+    dout(30) << __func__ << " " << o->oid << " num=" << num <<" lru size="<<onode_lru.size()<< dendl;
     if (p != onode_lru.begin()) {
       onode_lru.erase(p--);
     } else {
