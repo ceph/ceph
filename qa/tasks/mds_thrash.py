@@ -8,6 +8,7 @@ import itertools
 import random
 import time
 
+from gevent import sleep
 from gevent.greenlet import Greenlet
 from gevent.event import Event
 from teuthology import misc as teuthology
@@ -203,7 +204,7 @@ class MDSThrasher(Greenlet):
                  raise RuntimeError('timeout waiting for cluster to stabilize')
             elif itercount % 5 == 0:
                 self.log('mds map: {status}'.format(status=self.fs.status()))
-            time.sleep(2)
+            sleep(2)
 
     def do_thrash(self):
         """
@@ -293,7 +294,7 @@ class MDSThrasher(Greenlet):
                     itercount = itercount + 1
                     if itercount > 10:
                         self.log('mds map: {status}'.format(status=status))
-                    time.sleep(2)
+                    sleep(2)
 
                 if last_laggy_since:
                     self.log(
@@ -312,7 +313,7 @@ class MDSThrasher(Greenlet):
 
                 self.log('waiting for {delay} secs before reviving {label}'.format(
                     delay=delay, label=label))
-                time.sleep(delay)
+                sleep(delay)
 
                 self.log('reviving {label}'.format(label=label))
                 self.revive_mds(name)
@@ -327,7 +328,7 @@ class MDSThrasher(Greenlet):
                         break
                     self.log(
                         'waiting till mds map indicates {label} is in active, standby or standby-replay'.format(label=label))
-                    time.sleep(2)
+                    sleep(2)
 
         for stat in stats:
             self.log("stat['{key}'] = {value}".format(key = stat, value = stats[stat]))
@@ -339,7 +340,7 @@ class MDSThrasher(Greenlet):
 #                    delay = self.max_replay_thrash_delay
 #                    if self.randomize:
 #                        delay = random.randrange(0.0, self.max_replay_thrash_delay)
-#                time.sleep(delay)
+#                sleep(delay)
 #                self.log('kill replaying mds.{id}'.format(id=self.to_kill))
 #                self.kill_mds(self.to_kill)
 #
@@ -349,7 +350,7 @@ class MDSThrasher(Greenlet):
 #
 #                self.log('waiting for {delay} secs before reviving mds.{id}'.format(
 #                    delay=delay, id=self.to_kill))
-#                time.sleep(delay)
+#                sleep(delay)
 #
 #                self.log('revive mds.{id}'.format(id=self.to_kill))
 #                self.revive_mds(self.to_kill)
@@ -400,7 +401,7 @@ def task(ctx, config):
                 break
         if steady:
             break
-        time.sleep(2)
+        sleep(2)
         status = mds_cluster.status()
     log.info('Ready to start thrashing')
 
