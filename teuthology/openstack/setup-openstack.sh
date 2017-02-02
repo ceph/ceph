@@ -277,6 +277,8 @@ function setup_pulpito() {
         sed -e "s|paddles_address.*|paddles_address = 'http://localhost:8080'|" < config.py.in > prod.py
         virtualenv ./virtualenv
         source ./virtualenv/bin/activate
+        pip install --upgrade pip
+        pip install 'setuptools==18.2.0'
         pip install -r requirements.txt
         python run.py &
     )
