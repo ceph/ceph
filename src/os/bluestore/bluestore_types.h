@@ -217,7 +217,7 @@ struct bluestore_extent_ref_map_t {
   bool intersects(uint64_t offset, uint32_t len) const;
 
   void bound_encode(size_t& p) const {
-    denc((uint32_t)0, p);
+    denc_varint((uint32_t)0, p);
     size_t elem_size = 0;
     denc_varint_lowz((uint32_t)0, p);
     ((const record_t*)nullptr)->bound_encode(elem_size);
@@ -275,6 +275,159 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
   return !(l == r);
 }
 
+/// blob_use_tracker: a set of per-alloc unit ref counters to track blob usage
+struct bluestore_blob_use_tracker_t {
+  // N.B.: There is no need to minimize au_size/num_au
+  //   as much as possible (e.g. have just a single byte for au_size) since:
+  //   1) Struct isn't packed hence it's padded. And even if it's packed see 2)
+  //   2) Mem manager has its own granularity, most probably >= 8 bytes
+  //
+  uint32_t au_size; // Allocation (=tracking) unit size,
+                    // == 0 if uninitialized
+  uint32_t num_au;  // Amount of allocation units tracked
+                    // == 0 if single unit or the whole blob is tracked
+                       
+  union {
+    uint32_t* bytes_per_au;
+    uint32_t total_bytes;
+  };
+  
+  bluestore_blob_use_tracker_t()
+    : au_size(0), num_au(0), bytes_per_au(nullptr) {
+  }
+  ~bluestore_blob_use_tracker_t() {
+    clear();
+  }
+
+  void clear() {
+    if (num_au != 0) {
+      delete[] bytes_per_au;
+    }
+    bytes_per_au = 0;
+    au_size = 0;
+    num_au = 0;
+  }
+
+  uint32_t get_referenced_bytes() const {
+    uint32_t total = 0;
+    if (!num_au) {
+      total = total_bytes;
+    } else {
+      for (size_t i = 0; i < num_au; ++i) {
+	total += bytes_per_au[i];
+      }
+    }
+    return total;
+  }
+  bool is_not_empty() const {
+    if (!num_au) {
+      return total_bytes != 0;
+    } else {
+      for (size_t i = 0; i < num_au; ++i) {
+	if (bytes_per_au[i]) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
+  bool is_empty() const {
+    return !is_not_empty();
+  }
+  void prune_tail(uint32_t new_len) {
+    if (num_au) {
+      new_len = ROUND_UP_TO(new_len, au_size);
+      uint32_t _num_au = new_len / au_size;
+      assert(_num_au <= num_au);
+      if (_num_au) {
+        num_au = _num_au; // bytes_per_au array is left unmodified
+      } else {
+        clear();
+      }
+    }
+  }
+  
+  void init(
+    uint32_t full_length,
+    uint32_t _au_size);
+
+  void get(
+    uint32_t offset,
+    uint32_t len);
+
+  /// put: return true if the blob has no references any more after the call,
+  /// no release_units is filled for the sake of performance.
+  /// return false if there are some references to the blob,
+  /// in this case release_units contains pextents
+  /// (identified by their offsets relative to the blob start)
+  //  that are not used any more and can be safely deallocated. 
+  bool put(
+    uint32_t offset,
+    uint32_t len,
+    PExtentVector *release);
+
+  bool can_split() const;
+  bool can_split_at(uint32_t blob_offset) const;
+  void split(
+    uint32_t blob_offset,
+    bluestore_blob_use_tracker_t* r);
+
+  bool equal(
+    const bluestore_blob_use_tracker_t& other) const;
+    
+  void bound_encode(size_t& p) const {
+    denc_varint(au_size, p);
+    if (au_size) {
+      denc_varint(num_au, p);
+      if (!num_au) {
+        denc_varint(total_bytes, p);
+      } else {
+        size_t elem_size = 0;
+        denc_varint((uint32_t)0, elem_size);
+        p += elem_size * num_au;
+      }
+    }
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    denc_varint(au_size, p);
+    if (au_size) {
+      denc_varint(num_au, p);
+      if (!num_au) {
+        denc_varint(total_bytes, p);
+      } else {
+        size_t elem_size = 0;
+        denc_varint((uint32_t)0, elem_size);
+        for (size_t i = 0; i < num_au; ++i) {
+          denc_varint(bytes_per_au[i], p);
+        }
+      }
+    }
+  }
+  void decode(bufferptr::iterator& p) {
+    clear();
+    denc_varint(au_size, p);
+    if (au_size) {
+      denc_varint(num_au, p);
+      if (!num_au) {
+        denc_varint(total_bytes, p);
+      } else {
+        allocate();
+        for (size_t i = 0; i < num_au; ++i) {
+	  denc_varint(bytes_per_au[i], p);
+        }
+      }
+    }
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<bluestore_blob_use_tracker_t*>& o);
+private:
+  void allocate();
+  void fall_back_to_per_au(uint32_t _num_au, uint32_t _au_size);
+};
+WRITE_CLASS_DENC(bluestore_blob_use_tracker_t)
+ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& rm);
+
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
   enum {
@@ -303,7 +456,7 @@ struct bluestore_blob_t {
 
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
-    assert(struct_v == 1);
+    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     denc_varint_lowz(compressed_length_orig, p);
@@ -316,7 +469,7 @@ struct bluestore_blob_t {
   }
 
   void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
-    assert(struct_v == 1);
+    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
@@ -336,7 +489,7 @@ struct bluestore_blob_t {
   }
 
   void decode(bufferptr::iterator& p, uint64_t struct_v) {
-    assert(struct_v == 1);
+    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
@@ -633,6 +786,16 @@ struct bluestore_blob_t {
 			    get_csum_value_size());
     }
   }
+  uint32_t get_release_size(uint32_t min_alloc_size) const {
+    if (is_compressed()) {
+      return get_logical_length();
+    }
+    uint32_t res = get_csum_chunk_size();
+    if (!has_csum() || res < min_alloc_size) {
+      res = min_alloc_size;
+    }
+    return res;
+  }
 };
 WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
@@ -641,13 +804,17 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
 /// shared blob state
 struct bluestore_shared_blob_t {
+  uint64_t sbid;                       ///> shared blob id
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
+
+  bluestore_shared_blob_t(uint64_t _sbid) : sbid(_sbid) {}
 
   DENC(bluestore_shared_blob_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.ref_map, p);
     DENC_FINISH(p);
   }
+
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_shared_blob_t*>& ls);
