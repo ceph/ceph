@@ -677,7 +677,7 @@ TEST_F(TestInternal, ResizeCopyup)
   {
     // hide the parent from the snapshot
     RWLock::WLocker snap_locker(ictx2->snap_lock);
-    ictx2->snap_info.begin()->second.parent = librbd::parent_info();
+    ictx2->snap_info.begin()->second.parent = librbd::ParentInfo();
   }
 
   librbd::io::ReadResult read_result{&read_bl};
@@ -739,7 +739,7 @@ TEST_F(TestInternal, DiscardCopyup)
   {
     // hide the parent from the snapshot
     RWLock::WLocker snap_locker(ictx2->snap_lock);
-    ictx2->snap_info.begin()->second.parent = librbd::parent_info();
+    ictx2->snap_info.begin()->second.parent = librbd::ParentInfo();
   }
 
   librbd::io::ReadResult read_result{&read_bl};

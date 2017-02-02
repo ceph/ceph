@@ -9,7 +9,7 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include <list>
 #include <set>
@@ -56,7 +56,7 @@ template <typename I>
 class C_ScanPoolChildren : public C_AsyncObjectThrottle<I> {
 public:
   C_ScanPoolChildren(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-                     const parent_spec &pspec, const Pools &pools,
+                     const ParentSpec &pspec, const Pools &pools,
                      size_t pool_idx)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_pspec(pspec),
       m_pool(pools[pool_idx]) {
@@ -139,7 +139,7 @@ protected:
   }
 
 private:
-  parent_spec m_pspec;
+  ParentSpec m_pspec;
   Pool m_pool;
 
   IoCtx m_pool_ioctx;
@@ -255,7 +255,7 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
   std::list<Pool> pool_list;
   rados.pool_list2(pool_list);
 
-  parent_spec pspec(image_ctx.md_ctx.get_id(), image_ctx.id, m_snap_id);
+  ParentSpec pspec(image_ctx.md_ctx.get_id(), image_ctx.id, m_snap_id);
   Pools pools(pool_list.begin(), pool_list.end());
 
   Context *ctx = this->create_callback_context();

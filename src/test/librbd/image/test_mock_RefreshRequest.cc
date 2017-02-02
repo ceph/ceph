@@ -37,14 +37,14 @@ template <>
 struct RefreshParentRequest<MockRefreshImageCtx> {
   static RefreshParentRequest* s_instance;
   static RefreshParentRequest* create(MockRefreshImageCtx &mock_image_ctx,
-                                      const parent_info& parent_md,
+                                      const ParentInfo& parent_md,
                                       Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
   static bool is_refresh_required(MockRefreshImageCtx &mock_image_ctx,
-                                  const parent_info& parent_md) {
+                                  const ParentInfo& parent_md) {
     assert(s_instance != nullptr);
     return s_instance->is_refresh_required();
   }

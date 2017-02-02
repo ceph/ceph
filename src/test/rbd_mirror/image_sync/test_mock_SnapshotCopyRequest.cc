@@ -47,7 +47,7 @@ struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
                                        const std::string &snap_name,
                                        const cls::rbd::SnapshotNamespace &snap_namespace,
                                        uint64_t size,
-                                       const librbd::parent_spec &parent_spec,
+                                       const librbd::ParentSpec &parent_spec,
                                        uint64_t parent_overlap,
                                        Context *on_finish) {
     assert(s_instance != nullptr);

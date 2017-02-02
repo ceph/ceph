@@ -132,7 +132,7 @@ void SnapshotRemoveRequest<I>::send_remove_child() {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
-    parent_spec our_pspec;
+    ParentSpec our_pspec;
     int r = image_ctx.get_parent_spec(m_snap_id, &our_pspec);
     if (r < 0) {
       if (r == -ENOENT) {
@@ -218,7 +218,7 @@ void SnapshotRemoveRequest<I>::remove_snap_context() {
 }
 
 template <typename I>
-int SnapshotRemoveRequest<I>::scan_for_parents(parent_spec &pspec) {
+int SnapshotRemoveRequest<I>::scan_for_parents(ParentSpec &pspec) {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.snap_lock.is_locked());
   assert(image_ctx.parent_lock.is_locked());

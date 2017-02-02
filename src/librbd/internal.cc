@@ -30,7 +30,7 @@
 #include "librbd/MirroringWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
@@ -644,7 +644,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     RWLock::RLocker l(ictx->snap_lock);
     snap_t snap_id = ictx->get_snap_id(snap_name);
-    parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
+    ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
     int r = list_children_info(ictx, parent_spec, image_info);
@@ -689,7 +689,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
 	    !imctx->snaps.empty()) {
 	  imctx->parent_lock.get_read();
-	  parent_info parent_info = imctx->parent_md;
+	  ParentInfo parent_info = imctx->parent_md;
 	  imctx->parent_lock.put_read();
 
 	  r = cls_client::remove_child(&imctx->md_ctx, RBD_CHILDREN,
@@ -720,7 +720,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     ldout(cct, 20) << "children list " << ictx->name << dendl;
 
     RWLock::RLocker l(ictx->snap_lock);
-    parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
+    ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
     int r = list_children_info(ictx, parent_spec, image_info);
@@ -753,7 +753,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
-  int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
+  int list_children_info(ImageCtx *ictx, const ParentSpec &parent_spec,
                    map< pair<int64_t, string >, set<string> >& image_info)
   {
     CephContext *cct = ictx->cct;
@@ -1120,7 +1120,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
     map<string, bufferlist> pairs;
-    parent_spec pspec(p_imctx->md_ctx.get_id(), p_imctx->id, p_imctx->snap_id);
+    ParentSpec pspec(p_imctx->md_ctx.get_id(), p_imctx->id, p_imctx->snap_id);
 
     if (p_imctx->old_format) {
       lderr(cct) << "parent image must be in new format" << dendl;
@@ -1365,7 +1365,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -ENOENT;
     }
 
-    parent_spec parent_spec;
+    ParentSpec parent_spec;
 
     if (ictx->snap_id == CEPH_NOSNAP) {
       parent_spec = ictx->parent_md.spec;
@@ -2419,7 +2419,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         RWLock::RLocker l(ictx->snap_lock);
         map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
         for (auto &info : snap_info) {
-          librbd::parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
+          ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
           map< pair<int64_t, string>, set<string> > image_info;
 
           r = list_children_info(ictx, parent_spec, image_info);
