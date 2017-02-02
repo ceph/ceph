@@ -7929,6 +7929,8 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 		  << " expected_object_size " << o->onode.expected_object_size
 		  << " expected_write_size " << o->onode.expected_write_size
 		  << " in " << o->onode.extent_map_shards.size() << " shards"
+		  << ", " << o->extent_map.spanning_blob_map.size()
+		  << " spanning blobs"
 		  << dendl;
   for (auto p = o->onode.attrs.begin();
        p != o->onode.attrs.end();
