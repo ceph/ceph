@@ -143,7 +143,8 @@ int main(int argc, const char **argv)
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
 
-  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
