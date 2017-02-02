@@ -1792,11 +1792,12 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	if (n == shards.end()) {
 	  endoff = OBJECT_MAX_SIZE;
 	} else {
-	  endoff = n->offset;
+	  endoff = n->shard_info->offset;
 	}
 	encoded_shards.emplace_back(dirty_shard_t(&(*p)));
         bufferlist& bl = encoded_shards.back().bl;
-	if (encode_some(p->offset, endoff - p->offset, bl, &p->extents)) {
+	if (encode_some(p->shard_info->offset, endoff - p->shard_info->offset,
+			bl, &p->extents)) {
 	  if (force) {
 	    derr << __func__ << "  encode_some needs reshard" << dendl;
 	    assert(!force);
@@ -1805,14 +1806,14 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
         size_t len = bl.length();
 
 	dout(20) << __func__ << "  shard 0x" << std::hex
-		 << p->offset << std::dec << " is " << len
+		 << p->shard_info->offset << std::dec << " is " << len
 		 << " bytes (was " << p->shard_info->bytes << ") from "
 		 << p->extents << " extents" << dendl;
 
         if (!force) {
 	  if (len > cct->_conf->bluestore_extent_map_shard_max_size) {
 	    // we are big; reshard ourselves
-	    request_reshard(p->offset, endoff);
+	    request_reshard(p->shard_info->offset, endoff);
 	  }
 	  // avoid resharding the trailing shard, even if it is small
 	  else if (n != shards.end() &&
@@ -1824,22 +1825,21 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	      return;
 	    } else if (p == shards.begin()) {
 	      // combine with next shard
-	      request_reshard(p->offset, endoff + 1);
+	      request_reshard(p->shard_info->offset, endoff + 1);
 	    } else if (endoff == OBJECT_MAX_SIZE) {
 	      // combine with previous shard
-	      request_reshard(prev_p->offset, endoff);
+	      request_reshard(prev_p->shard_info->offset, endoff);
 	      return;
 	    } else {
 	      // combine with the smaller of the two
 	      if (prev_p->shard_info->bytes > n->shard_info->bytes) {
-		request_reshard(p->offset, endoff + 1);
+		request_reshard(p->shard_info->offset, endoff + 1);
 	      } else {
-		request_reshard(prev_p->offset, endoff);
+		request_reshard(prev_p->shard_info->offset, endoff);
 	      }
 	    }
 	  }
         }
-	assert(p->shard_info->offset == p->offset);
       }
       prev_p = p;
       p = n;
@@ -1854,7 +1854,10 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     for (auto& it : encoded_shards) {
       it.shard->dirty = false;
       it.shard->shard_info->bytes = it.bl.length();
-      generate_extent_shard_key_and_apply(onode->key, it.shard->offset, &key,
+      generate_extent_shard_key_and_apply(
+	onode->key,
+	it.shard->shard_info->offset,
+	&key,
         [&](const string& final_key) {
           t->set(PREFIX_OBJ, final_key, it.bl);
         }
@@ -1881,13 +1884,13 @@ void BlueStore::ExtentMap::reshard(
   unsigned si_begin = 0, si_end = 0;
   if (!shards.empty()) {
     while (si_begin + 1 < shards.size() &&
-	   shards[si_begin + 1].offset <= needs_reshard_begin) {
+	   shards[si_begin + 1].shard_info->offset <= needs_reshard_begin) {
       ++si_begin;
     }
-    needs_reshard_begin = shards[si_begin].offset;
+    needs_reshard_begin = shards[si_begin].shard_info->offset;
     for (si_end = si_begin; si_end < shards.size(); ++si_end) {
-      if (shards[si_end].offset >= needs_reshard_end) {
-	needs_reshard_end = shards[si_end].offset;
+      if (shards[si_end].shard_info->offset >= needs_reshard_end) {
+	needs_reshard_end = shards[si_end].shard_info->offset;
 	break;
       }
     }
@@ -1911,7 +1914,7 @@ void BlueStore::ExtentMap::reshard(
   string key;
   for (unsigned i = si_begin; i < si_end; ++i) {
     generate_extent_shard_key_and_apply(
-      onode->key, shards[i].offset, &key,
+      onode->key, shards[i].shard_info->offset, &key,
       [&](const string& final_key) {
 	t->rmkey(PREFIX_OBJ, final_key);
       }
@@ -2011,13 +2014,11 @@ void BlueStore::ExtentMap::reshard(
     unsigned n = sv.size();
     si_end = si_begin + new_shard_info.size();
     for (unsigned i = si_begin; i < si_end; ++i) {
-      shards[i].offset = sv[i].offset;
       shards[i].shard_info = &sv[i];
       shards[i].loaded = true;
       shards[i].dirty = true;
     }
     for (unsigned i = si_end; i < n; ++i) {
-      assert(shards[i].offset == sv[i].offset);
       shards[i].shard_info = &sv[i];
     }
   }
@@ -2091,13 +2092,14 @@ void BlueStore::ExtentMap::reshard(
 	    uint32_t bstart = e->blob_start();
 	    uint32_t bend = e->blob_end();
 	    for (const auto& sh : shards) {
-	      if (bstart < sh.offset && bend > sh.offset) {
-		uint32_t blob_offset = sh.offset - bstart;
+	      if (bstart < sh.shard_info->offset &&
+		  bend > sh.shard_info->offset) {
+		uint32_t blob_offset = sh.shard_info->offset - bstart;
 		if (b->can_split_at(blob_offset)) {
 		  dout(20) << __func__ << "    splitting blob, bstart 0x"
 			   << std::hex << bstart << " blob_offset 0x"
 			   << blob_offset << std::dec << " " << *b << dendl;
-		  b = split_blob(b, blob_offset, sh.offset);
+		  b = split_blob(b, blob_offset, sh.shard_info->offset);
 		  // switch b to the new right-hand side, in case it
 		  // *also* has to get split.
 		  bstart += blob_offset;
@@ -2374,7 +2376,6 @@ void BlueStore::ExtentMap::init_shards(bool loaded, bool dirty)
   shards.resize(onode->onode.extent_map_shards.size());
   unsigned i = 0;
   for (auto &s : onode->onode.extent_map_shards) {
-    shards[i].offset = s.offset;
     shards[i].shard_info = &s;
     shards[i].loaded = loaded;
     shards[i].dirty = dirty;
@@ -2402,23 +2403,26 @@ void BlueStore::ExtentMap::fault_range(
     assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
-      dout(30) << __func__ << " opening shard 0x" << std::hex << p->offset
-	       << std::dec << dendl;
+      dout(30) << __func__ << " opening shard 0x" << std::hex
+	       << p->shard_info->offset << std::dec << dendl;
       bufferlist v;
-      generate_extent_shard_key_and_apply(onode->key, p->offset, &key,
+      generate_extent_shard_key_and_apply(
+	onode->key, p->shard_info->offset, &key,
         [&](const string& final_key) {
           int r = db->get(PREFIX_OBJ, final_key, &v);
           if (r < 0) {
-	    derr << __func__ << " missing shard 0x" << std::hex << p->offset
-	         << std::dec << " for " << onode->oid << dendl;
+	    derr << __func__ << " missing shard 0x" << std::hex
+		 << p->shard_info->offset << std::dec << " for " << onode->oid
+		 << dendl;
 	    assert(r >= 0);
           }
         }
       );
       p->extents = decode_some(v);
       p->loaded = true;
-      dout(20) << __func__ << " open shard 0x" << std::hex << p->offset
-	       << std::dec << " (" << v.length() << " bytes)" << dendl;
+      dout(20) << __func__ << " open shard 0x" << std::hex
+	       << p->shard_info->offset << std::dec
+	       << " (" << v.length() << " bytes)" << dendl;
       assert(p->dirty == false);
       assert(v.length() == p->shard_info->bytes);
     }
@@ -2449,13 +2453,13 @@ void BlueStore::ExtentMap::dirty_range(
     assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
-      dout(20) << __func__ << " shard 0x" << std::hex << p->offset << std::dec
-	       << " is not loaded, can't mark dirty" << dendl;
+      dout(20) << __func__ << " shard 0x" << std::hex << p->shard_info->offset
+	       << std::dec << " is not loaded, can't mark dirty" << dendl;
       assert(0 == "can't mark unloaded shard dirty");
     }
     if (!p->dirty) {
-      dout(20) << __func__ << " mark shard 0x" << std::hex << p->offset
-	       << std::dec << " dirty" << dendl;
+      dout(20) << __func__ << " mark shard 0x" << std::hex
+	       << p->shard_info->offset << std::dec << " dirty" << dendl;
       p->dirty = true;
     }
     ++start;
@@ -2519,12 +2523,12 @@ int BlueStore::ExtentMap::compress_extent_map(
   // identify the *next* shard
   auto pshard = shards.begin();
   while (pshard != shards.end() &&
-	 p->logical_offset >= pshard->offset) {
+	 p->logical_offset >= pshard->shard_info->offset) {
     ++pshard;
   }
   uint64_t shard_end;
   if (pshard != shards.end()) {
-    shard_end = pshard->offset;
+    shard_end = pshard->shard_info->offset;
   } else {
     shard_end = OBJECT_MAX_SIZE;
   }
@@ -2553,7 +2557,7 @@ int BlueStore::ExtentMap::compress_extent_map(
       assert(pshard != shards.end());
       ++pshard;
       if (pshard != shards.end()) {
-	shard_end = pshard->offset;
+	shard_end = pshard->shard_info->offset;
       } else {
 	shard_end = OBJECT_MAX_SIZE;
       }
@@ -4890,10 +4894,11 @@ int BlueStore::fsck(bool deep)
       for (auto& s : o->extent_map.shards) {
 	dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
 	expecting_shards.push_back(string());
-	get_extent_shard_key(o->key, s.offset, &expecting_shards.back());
-	if (s.offset >= o->onode.size) {
+	get_extent_shard_key(o->key, s.shard_info->offset,
+			     &expecting_shards.back());
+	if (s.shard_info->offset >= o->onode.size) {
 	  derr << __func__ << " " << oid << " shard 0x" << std::hex
-	       << s.offset << " past EOF at 0x" << o->onode.size
+	       << s.shard_info->offset << " past EOF at 0x" << o->onode.size
 	       << std::dec << dendl;
 	  ++errors;
 	}
@@ -8986,18 +8991,20 @@ int BlueStore::_do_remove(
     _do_omap_clear(txc, o->onode.nid);
   }
   o->exists = false;
-  o->onode = bluestore_onode_t();
-  txc->removed(o);
   string key;
   for (auto &s : o->extent_map.shards) {
-    generate_extent_shard_key_and_apply(o->key, s.offset, &key,
+    dout(20) << __func__ << "  removing shard 0x" << std::hex
+	     << s.shard_info->offset << std::dec << dendl;
+    generate_extent_shard_key_and_apply(o->key, s.shard_info->offset, &key,
       [&](const string& final_key) {
         txc->t->rmkey(PREFIX_OBJ, final_key);
       }
     );
   }
   txc->t->rmkey(PREFIX_OBJ, o->key.c_str(), o->key.size());
+  txc->removed(o);
   o->extent_map.clear();
+  o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
   return 0;
 }
@@ -9539,7 +9546,7 @@ int BlueStore::_rename(TransContext *txc,
     get_object_key(cct, new_oid, &new_okey);
     string key;
     for (auto &s : oldo->extent_map.shards) {
-      generate_extent_shard_key_and_apply(oldo->key, s.offset, &key,
+      generate_extent_shard_key_and_apply(oldo->key, s.shard_info->offset, &key,
         [&](const string& final_key) {
           txc->t->rmkey(PREFIX_OBJ, final_key);
         }
