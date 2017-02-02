@@ -260,7 +260,10 @@ start_mirror()
 	--pid-file=$(daemon_pid_file "${cluster}:${instance}") \
 	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log \
 	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.\$cluster.asok \
+	--rbd-mirror-delete-retry-interval=5 \
+	--rbd-mirror-image-state-check-interval=5 \
 	--rbd-mirror-journal-poll-age=1 \
+	--rbd-mirror-pool-replayers-refresh-interval=5 \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true \
