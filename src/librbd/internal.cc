@@ -21,7 +21,6 @@
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
 
-#include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -2013,37 +2012,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ictx->perfcounter->inc(l_librbd_rd);
     ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);
     return total_read;
-  }
-
-  int diff_iterate(ImageCtx *ictx, const char *fromsnapname, uint64_t off,
-                   uint64_t len, bool include_parent, bool whole_object,
-		   int (*cb)(uint64_t, size_t, int, void *), void *arg)
-  {
-    ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
-			 << " len = " << len << dendl;
-
-    // ensure previous writes are visible to listsnaps
-    {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      ictx->flush();
-    }
-
-    int r = ictx->state->refresh_if_required();
-    if (r < 0) {
-      return r;
-    }
-
-    ictx->snap_lock.get_read();
-    r = clip_io(ictx, off, &len);
-    ictx->snap_lock.put_read();
-    if (r < 0) {
-      return r;
-    }
-
-    DiffIterate command(*ictx, fromsnapname, off, len, include_parent,
-                        whole_object, cb, arg);
-    r = command.execute();
-    return r;
   }
 
   // validate extent against image size; clip to image size if necessary

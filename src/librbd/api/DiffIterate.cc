@@ -1,10 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/DiffIterate.h"
+#include "librbd/api/DiffIterate.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/internal.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
@@ -20,6 +22,7 @@
 #define dout_prefix *_dout << "librbd::DiffIterate: "
 
 namespace librbd {
+namespace api {
 
 namespace {
 
@@ -30,7 +33,7 @@ enum ObjectDiffState {
 };
 
 struct DiffContext {
-  DiffIterate::Callback callback;
+  DiffIterate<>::Callback callback;
   void *callback_arg;
   bool whole_object;
   uint64_t from_snap_id;
@@ -38,7 +41,8 @@ struct DiffContext {
   interval_set<uint64_t> parent_diff;
   OrderedThrottle throttle;
 
-  DiffContext(ImageCtx &image_ctx, DiffIterate::Callback callback,
+  template <typename I>
+  DiffContext(I &image_ctx, DiffIterate<>::Callback callback,
               void *callback_arg, bool _whole_object, uint64_t _from_snap_id,
               uint64_t _end_snap_id)
     : callback(callback), callback_arg(callback_arg),
@@ -50,10 +54,11 @@ struct DiffContext {
 
 class C_DiffObject : public Context {
 public:
-  C_DiffObject(ImageCtx &image_ctx, librados::IoCtx &head_ctx,
+  template <typename I>
+  C_DiffObject(I &image_ctx, librados::IoCtx &head_ctx,
                DiffContext &diff_context, const std::string &oid,
                uint64_t offset, const std::vector<ObjectExtent> &object_extents)
-    : m_image_ctx(image_ctx), m_head_ctx(head_ctx),
+    : m_cct(image_ctx.cct), m_head_ctx(head_ctx),
       m_diff_context(diff_context), m_oid(oid), m_offset(offset),
       m_object_extents(object_extents), m_snap_ret(0) {
   }
@@ -76,7 +81,7 @@ protected:
   typedef std::list<Diff> Diffs;
 
   void finish(int r) override {
-    CephContext *cct = m_image_ctx.cct;
+    CephContext *cct = m_cct;
     if (r == 0 && m_snap_ret < 0) {
       r = m_snap_ret;
     }
@@ -108,7 +113,7 @@ protected:
   }
 
 private:
-  ImageCtx &m_image_ctx;
+  CephContext *m_cct;
   librados::IoCtx &m_head_ctx;
   DiffContext &m_diff_context;
   std::string m_oid;
@@ -119,7 +124,7 @@ private:
   int m_snap_ret;
 
   void compute_diffs(Diffs *diffs) {
-    CephContext *cct = m_image_ctx.cct;
+    CephContext *cct = m_cct;
 
     // calc diff from from_snap_id -> to_snap_id
     interval_set<uint64_t> diff;
@@ -158,9 +163,9 @@ private:
         interval_set<uint64_t> overlap;  // object extents
         overlap.insert(opos, r->second);
         overlap.intersection_of(diff);
-        ldout(m_image_ctx.cct, 20) << " opos " << opos
-    			             << " buf " << r->first << "~" << r->second
-    			             << " overlap " << overlap << dendl;
+        ldout(cct, 20) << " opos " << opos
+                       << " buf " << r->first << "~" << r->second
+                       << " overlap " << overlap << dendl;
         for (interval_set<uint64_t>::iterator s = overlap.begin();
     	       s != overlap.end(); ++s) {
           uint64_t su_off = s.get_start() - opos;
@@ -189,8 +194,7 @@ private:
           interval_set<uint64_t> o;
           o.insert(m_offset + r->first, r->second);
           o.intersection_of(m_diff_context.parent_diff);
-          ldout(m_image_ctx.cct, 20) << " reporting parent overlap " << o
-                                     << dendl;
+          ldout(m_cct, 20) << " reporting parent overlap " << o << dendl;
           for (interval_set<uint64_t>::iterator s = o.begin(); s != o.end();
                ++s) {
             diffs->push_back(boost::make_tuple(s.get_start(), s.get_len(),
@@ -202,9 +206,53 @@ private:
   }
 };
 
+int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
+  // it's possible for a discard to create a hole in the parent image -- ignore
+  if (exists) {
+    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+    diff->insert(off, len);
+  }
+  return 0;
+}
+
 } // anonymous namespace
 
-int DiffIterate::execute() {
+template <typename I>
+int DiffIterate<I>::diff_iterate(I *ictx, const char *fromsnapname,
+                                 uint64_t off, uint64_t len,
+                                 bool include_parent, bool whole_object,
+                                 int (*cb)(uint64_t, size_t, int, void *),
+                                 void *arg)
+{
+  ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
+      		 << " len = " << len << dendl;
+
+  // ensure previous writes are visible to listsnaps
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ictx->flush();
+  }
+
+  int r = ictx->state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  ictx->snap_lock.get_read();
+  r = clip_io(ictx, off, &len);
+  ictx->snap_lock.put_read();
+  if (r < 0) {
+    return r;
+  }
+
+  DiffIterate command(*ictx, fromsnapname, off, len, include_parent,
+                      whole_object, cb, arg);
+  r = command.execute();
+  return r;
+}
+
+template <typename I>
+int DiffIterate<I>::execute() {
   CephContext* cct = m_image_ctx.cct;
 
   librados::IoCtx head_ctx;
@@ -271,7 +319,7 @@ int DiffIterate::execute() {
       ldout(cct, 10) << " first getting parent diff" << dendl;
       DiffIterate diff_parent(*m_image_ctx.parent, NULL, 0, overlap,
                               m_include_parent, m_whole_object,
-                              &DiffIterate::simple_diff_cb,
+                              &simple_diff_cb,
                               &diff_context.parent_diff);
       r = diff_parent.execute();
     }
@@ -338,8 +386,9 @@ int DiffIterate::execute() {
   return 0;
 }
 
-int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
-                                 BitVector<2>* object_diff_state) {
+template <typename I>
+int DiffIterate<I>::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
+                                    BitVector<2>* object_diff_state) {
   assert(m_image_ctx.snap_lock.is_locked());
   CephContext* cct = m_image_ctx.cct;
 
@@ -448,14 +497,7 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
   return 0;
 }
 
-int DiffIterate::simple_diff_cb(uint64_t off, size_t len, int exists,
-                                void *arg) {
-  // it's possible for a discard to create a hole in the parent image -- ignore
-  if (exists) {
-    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
-    diff->insert(off, len);
-  }
-  return 0;
-}
-
+} // namespace api
 } // namespace librbd
+
+template class librbd::api::DiffIterate<librbd::ImageCtx>;

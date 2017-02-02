@@ -23,11 +23,12 @@
 
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "librbd/Group.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/DiffIterate.h"
+#include "librbd/api/Group.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -477,7 +478,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, group_create_enter, io_ctx.get_pool_name().c_str(),
 	       io_ctx.get_id(), group_name);
-    int r = librbd::group_create(io_ctx, group_name);
+    int r = librbd::api::Group<>::create(io_ctx, group_name);
     tracepoint(librbd, group_create_exit, r);
     return r;
   }
@@ -487,7 +488,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, group_remove_enter, io_ctx.get_pool_name().c_str(),
 	       io_ctx.get_id(), group_name);
-    int r = librbd::group_remove(io_ctx, group_name);
+    int r = librbd::api::Group<>::remove(io_ctx, group_name);
     tracepoint(librbd, group_remove_exit, r);
     return r;
   }
@@ -498,7 +499,7 @@ namespace librbd {
     tracepoint(librbd, group_list_enter, io_ctx.get_pool_name().c_str(),
 	       io_ctx.get_id());
 
-    int r = librbd::group_list(io_ctx, names);
+    int r = librbd::api::Group<>::list(io_ctx, names);
     if (r >= 0) {
       for (auto itr : *names) {
 	tracepoint(librbd, group_list_entry, itr.c_str());
@@ -515,7 +516,8 @@ namespace librbd {
     tracepoint(librbd, group_image_add_enter, group_ioctx.get_pool_name().c_str(),
 	       group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
 	       image_ioctx.get_id(), image_name);
-    int r = librbd::group_image_add(group_ioctx, group_name, image_ioctx, image_name);
+    int r = librbd::api::Group<>::image_add(group_ioctx, group_name,
+                                            image_ioctx, image_name);
     tracepoint(librbd, group_image_add_exit, r);
     return r;
   }
@@ -527,7 +529,8 @@ namespace librbd {
     tracepoint(librbd, group_image_remove_enter, group_ioctx.get_pool_name().c_str(),
 	       group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
 	       image_ioctx.get_id(), image_name);
-    int r = librbd::group_image_remove(group_ioctx, group_name, image_ioctx, image_name);
+    int r = librbd::api::Group<>::image_remove(group_ioctx, group_name,
+                                               image_ioctx, image_name);
     tracepoint(librbd, group_image_remove_exit, r);
     return r;
   }
@@ -538,7 +541,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
     tracepoint(librbd, group_image_list_enter, group_ioctx.get_pool_name().c_str(),
 	       group_ioctx.get_id(), group_name);
-    int r = librbd::group_image_list(group_ioctx, group_name, images);
+    int r = librbd::api::Group<>::image_list(group_ioctx, group_name, images);
     tracepoint(librbd, group_image_list_exit, r);
     return r;
   }
@@ -743,7 +746,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, image_get_group_enter, ictx->name.c_str());
-    int r = librbd::image_get_group(ictx, group_spec);
+    int r = librbd::api::Group<>::image_get_group(ictx, group_spec);
     tracepoint(librbd, image_get_group_exit, r);
     return r;
   }
@@ -1277,8 +1280,8 @@ namespace librbd {
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
                ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
                true, false);
-    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
-                                 arg);
+    int r = librbd::api::DiffIterate<>::diff_iterate(ictx, fromsnapname, ofs,
+                                                     len, true, false, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
   }
@@ -1291,8 +1294,9 @@ namespace librbd {
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
               ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
               include_parent, whole_object);
-    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, include_parent,
-                                whole_object, cb, arg);
+    int r = librbd::api::DiffIterate<>::diff_iterate(ictx, fromsnapname, ofs,
+                                                     len, include_parent,
+                                                     whole_object, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
   }
@@ -2890,8 +2894,8 @@ extern "C" int rbd_diff_iterate(rbd_image_t image,
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
              true, false);
-  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
-                               arg);
+  int r = librbd::api::DiffIterate<>::diff_iterate(ictx, fromsnapname, ofs, len,
+                                                   true, false, cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
 }
@@ -2906,8 +2910,9 @@ extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
             ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
             include_parent != 0, whole_object != 0);
-  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, include_parent,
-                              whole_object, cb, arg);
+  int r = librbd::api::DiffIterate<>::diff_iterate(ictx, fromsnapname, ofs, len,
+                                                   include_parent, whole_object,
+                                                   cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
 }
@@ -3395,7 +3400,7 @@ extern "C" int rbd_group_create(rados_ioctx_t p, const char *name)
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, group_create_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), name);
-  int r = librbd::group_create(io_ctx, name);
+  int r = librbd::api::Group<>::create(io_ctx, name);
   tracepoint(librbd, group_create_exit, r);
   return r;
 }
@@ -3407,7 +3412,7 @@ extern "C" int rbd_group_remove(rados_ioctx_t p, const char *name)
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, group_remove_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), name);
-  int r = librbd::group_remove(io_ctx, name);
+  int r = librbd::api::Group<>::remove(io_ctx, name);
   tracepoint(librbd, group_remove_exit, r);
   return r;
 }
@@ -3475,7 +3480,8 @@ extern "C" int rbd_group_image_add(
 	     group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
 	     image_ioctx.get_id(), image_name);
 
-  int r = librbd::group_image_add(group_ioctx, group_name, image_ioctx, image_name);
+  int r = librbd::api::Group<>::image_add(group_ioctx, group_name, image_ioctx,
+                                          image_name);
 
   tracepoint(librbd, group_image_add_exit, r);
   return r;
@@ -3496,7 +3502,8 @@ extern "C" int rbd_group_image_remove(
 	     group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
 	     image_ioctx.get_id(), image_name);
 
-  int r = librbd::group_image_remove(group_ioctx, group_name, image_ioctx, image_name);
+  int r = librbd::api::Group<>::image_remove(group_ioctx, group_name,
+                                             image_ioctx, image_name);
 
   tracepoint(librbd, group_image_remove_exit, r);
   return r;
@@ -3515,7 +3522,8 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
 	     group_ioctx.get_id(), group_name);
 
   std::vector<librbd::group_image_status_t> cpp_images;
-  int r = librbd::group_image_list(group_ioctx, group_name, &cpp_images);
+  int r = librbd::api::Group<>::image_list(group_ioctx, group_name,
+                                           &cpp_images);
 
   if (r == -ENOENT) {
     tracepoint(librbd, group_image_list_exit, 0);
@@ -3556,7 +3564,7 @@ extern "C" int rbd_image_get_group(rados_ioctx_t image_p,
 
   tracepoint(librbd, image_get_group_enter, ictx->name.c_str());
   librbd::group_spec_t group_spec;
-  r = librbd::image_get_group(ictx, &group_spec);
+  r = librbd::api::Group<>::image_get_group(ictx, &group_spec);
   group_spec_cpp_to_c(group_spec, c_group_spec);
   tracepoint(librbd, image_get_group_exit, r);
   ictx->state->close();
