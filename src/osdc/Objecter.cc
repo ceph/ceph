@@ -2539,6 +2539,17 @@ bool Objecter::is_pg_changed(
   return false;      // same primary (tho replicas may have changed)
 }
 
+bool Objecter::is_pg_split(
+  pg_t pgid,
+  unsigned old_pg_num,
+  unsigned new_pg_num)
+{
+  // starting with luminous, we resend requests on pg split.
+  return
+    osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+    pgid.is_split(old_pg_num, new_pg_num, nullptr);
+}
+
 bool Objecter::target_should_be_paused(op_target_t *t)
 {
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
@@ -2718,6 +2729,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 			       &acting, &acting_primary);
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
+  pg_t prev_pgid(prev_seed, pgid.pool());
   if (any_change && pg_interval_t::is_new_interval(
 	t->acting_primary,
 	acting_primary,
@@ -2735,7 +2747,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	pg_num,
 	t->sort_bitwise,
 	sort_bitwise,
-	pg_t(prev_seed, pgid.pool(), pgid.preferred()))) {
+	prev_pgid)) {
     force_resend = true;
   }
 
@@ -2747,11 +2759,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     need_resend = true;
   }
 
-  if (t->pgid != pgid ||
+  if (force_resend ||
+      t->pgid != pgid ||
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
 	t->used_replica || any_change) ||
-      force_resend) {
+      is_pg_split(prev_pgid, t->pg_num, pg_num)) {
     t->pgid = pgid;
     t->acting = acting;
     t->acting_primary = acting_primary;
