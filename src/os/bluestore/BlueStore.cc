@@ -1770,26 +1770,16 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     }
     // will persist in the onode key.
   } else {
-
+    // pending shard update
     struct dirty_shard_t {
-      Shard *shard = nullptr;
+      Shard *shard;
       bufferlist bl;
-      boost::intrusive::list_member_hook<> dirty_list_item;
+      dirty_shard_t(Shard *s) : shard(s) {}
     };
-
-    typedef boost::intrusive::list<
-      dirty_shard_t,
-      boost::intrusive::member_hook<
-        dirty_shard_t,
-        boost::intrusive::list_member_hook<>,
-        &dirty_shard_t::dirty_list_item> > dirty_shard_list_t;
-
     vector<dirty_shard_t> encoded_shards;
     // allocate slots for all shards in a single call instead of
     // doing multiple allocations - one per each dirty shard
-    encoded_shards.resize(shards.size()); 
-
-    dirty_shard_list_t dirty_shards;
+    encoded_shards.reserve(shards.size());
 
     auto p = shards.begin();
     unsigned pos = 0;
@@ -1804,7 +1794,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	} else {
 	  endoff = n->offset;
 	}
-        bufferlist& bl = encoded_shards[pos].bl;
+	encoded_shards.emplace_back(dirty_shard_t(&(*p)));
+        bufferlist& bl = encoded_shards.back().bl;
 	if (encode_some(p->offset, endoff - p->offset, bl, &p->extents)) {
 	  if (force) {
 	    derr << __func__ << "  encode_some needs reshard" << dendl;
@@ -1849,9 +1840,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	  }
         }
 	assert(p->shard_info->offset == p->offset);
-        
-	encoded_shards[pos].shard = &(*p);
-        dirty_shards.push_back(encoded_shards[pos]);
       }
       prev_p = p;
       p = n;
@@ -1862,17 +1850,15 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     }
 
     // schedule DB update for dirty shards
-    auto it = dirty_shards.begin();
     string key;
-    while (it != dirty_shards.end()) {
-      it->shard->dirty = false;
-      it->shard->shard_info->bytes = it->bl.length();
-      generate_extent_shard_key_and_apply(onode->key, it->shard->offset, &key,
+    for (auto& it : encoded_shards) {
+      it.shard->dirty = false;
+      it.shard->shard_info->bytes = it.bl.length();
+      generate_extent_shard_key_and_apply(onode->key, it.shard->offset, &key,
         [&](const string& final_key) {
-          t->set(PREFIX_OBJ, final_key, it->bl);
+          t->set(PREFIX_OBJ, final_key, it.bl);
         }
       );
-      ++it;
     }
   }
 }
