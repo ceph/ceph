@@ -30,6 +30,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/api/Mirror.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -100,7 +101,8 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.ioctx_create(m_remote_pool_name.c_str(),
 					       m_remote_ioctx));
-    EXPECT_EQ(0, librbd::mirror_mode_set(m_remote_ioctx, RBD_MIRROR_MODE_POOL));
+    EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
+                                                 RBD_MIRROR_MODE_POOL));
 
     m_image_name = get_temp_image_name();
     uint64_t features = librbd::util::get_rbd_default_features(g_ceph_context);
@@ -415,10 +417,11 @@ TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
 TEST_F(TestImageReplayer, BootstrapErrorMirrorDisabled)
 {
   // disable remote image mirroring
-  ASSERT_EQ(0, librbd::mirror_mode_set(m_remote_ioctx, RBD_MIRROR_MODE_IMAGE));
+  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
+                                               RBD_MIRROR_MODE_IMAGE));
   librbd::ImageCtx *ictx;
   open_remote_image(&ictx);
-  ASSERT_EQ(0, librbd::mirror_image_disable(ictx, true));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_disable(ictx, true));
   close_image(ictx);
 
   create_replayer<>();
@@ -430,10 +433,11 @@ TEST_F(TestImageReplayer, BootstrapErrorMirrorDisabled)
 TEST_F(TestImageReplayer, BootstrapMirrorDisabling)
 {
   // set remote image mirroring state to DISABLING
-  ASSERT_EQ(0, librbd::mirror_mode_set(m_remote_ioctx, RBD_MIRROR_MODE_IMAGE));
+  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
+                                               RBD_MIRROR_MODE_IMAGE));
   librbd::ImageCtx *ictx;
   open_remote_image(&ictx);
-  ASSERT_EQ(0, librbd::mirror_image_enable(ictx, false));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(ictx, false));
   cls::rbd::MirrorImage mirror_image;
   ASSERT_EQ(0, librbd::cls_client::mirror_image_get(&m_remote_ioctx, ictx->id,
                                                     &mirror_image));
@@ -454,7 +458,7 @@ TEST_F(TestImageReplayer, BootstrapDemoted)
   // demote remote image
   librbd::ImageCtx *ictx;
   open_remote_image(&ictx);
-  ASSERT_EQ(0, librbd::mirror_image_demote(ictx));
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_demote(ictx));
   close_image(ictx);
 
   create_replayer<>();
