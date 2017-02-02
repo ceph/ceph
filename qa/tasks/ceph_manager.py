@@ -143,15 +143,8 @@ class Thrasher:
         except Exception:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
-        self.thread = gevent.spawn(self.do_thrash)
-        if self.sighup_delay:
-            self.sighup_thread = gevent.spawn(self.do_sighup)
-        if self.optrack_toggle_delay:
-            self.optrack_toggle_thread = gevent.spawn(self.do_optrack_toggle)
-        if self.dump_ops_enable == "true":
-            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
-        if self.noscrub_toggle_delay:
-            self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+        # initialize ceph_objectstore_tool property - must be done before
+        # do_thrash is spawned - http://tracker.ceph.com/issues/18799
         if (self.config.get('powercycle') or
             not self.cmd_exists_on_osds("ceph-objectstore-tool") or
             self.config.get('disable_objectstore_tool_tests', False)):
@@ -168,6 +161,16 @@ class Thrasher:
                 self.config.get('ceph_objectstore_tool', True)
             self.test_rm_past_intervals = \
                 self.config.get('test_rm_past_intervals', True)
+        # spawn do_thrash
+        self.thread = gevent.spawn(self.do_thrash)
+        if self.sighup_delay:
+            self.sighup_thread = gevent.spawn(self.do_sighup)
+        if self.optrack_toggle_delay:
+            self.optrack_toggle_thread = gevent.spawn(self.do_optrack_toggle)
+        if self.dump_ops_enable == "true":
+            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
+        if self.noscrub_toggle_delay:
+            self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
