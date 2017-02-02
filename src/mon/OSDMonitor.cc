@@ -1965,6 +1965,15 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     }
   }
 
+  // make sure upgrades stop at luminous
+  if ((m->osd_features & CEPH_FEATURE_SERVER_M) &&
+      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    mon->clog->info() << "disallowing boot of post-luminous OSD "
+		      << m->get_orig_source_inst()
+		      << " because require_luminous_osds is not set\n";
+    goto ignore;
+  }
+
   // make sure upgrades stop at jewel
   if ((m->osd_features & CEPH_FEATURE_SERVER_KRAKEN) &&
       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
