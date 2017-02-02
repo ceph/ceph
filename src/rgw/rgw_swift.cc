@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <array>
+#include <boost/utility/string_ref.hpp>
 
 #include "common/ceph_json.h"
 #include "rgw_common.h"
@@ -669,9 +671,10 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
    * and old versions of RadosGW. The second item will have the prefix
    * of Swift API entry point removed. */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  const vector<string> allowed_paths = {
-    s->info.request_uri,
-    s->info.request_uri.substr(pos + 1)
+  boost::string_ref ref_uri = s->decoded_uri;
+  const std::array<boost::string_ref, 2> allowed_paths = {
+     ref_uri,
+     ref_uri.substr(pos + 1)
   };
 
   vector<string> allowed_methods;
