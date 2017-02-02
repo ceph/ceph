@@ -306,7 +306,7 @@ void PurgeQueue::_execute_item(
                << " pool " << oloc.pool << " snapc " << item.snapc << dendl;
       objecter->remove(oid, oloc, item.snapc,
                             ceph::real_clock::now(), 0,
-                            NULL, gather.new_sub());
+                            gather.new_sub());
     }
 
     // remove old backtrace objects
@@ -316,7 +316,7 @@ void PurgeQueue::_execute_item(
                << " old pool " << p << " snapc " << item.snapc << dendl;
       objecter->remove(oid, oloc, item.snapc,
                             ceph::real_clock::now(), 0,
-                            NULL, gather.new_sub());
+                            gather.new_sub());
     }
   } else if (item.action == PurgeItem::PURGE_DIR) {
     object_locator_t oloc(metadata_pool);
@@ -329,7 +329,7 @@ void PurgeQueue::_execute_item(
       dout(10) << " remove dirfrag " << oid << dendl;
       objecter->remove(oid, oloc, nullsnapc,
                        ceph::real_clock::now(),
-                       0, NULL, gather.new_sub());
+                       0, gather.new_sub());
     }
   } else if (item.action == PurgeItem::TRUNCATE_FILE) {
     const uint64_t num = Striper::get_num_objects(item.layout, item.size);
@@ -345,7 +345,7 @@ void PurgeQueue::_execute_item(
     filer.zero(item.ino, &item.layout, item.snapc,
 	       0, item.layout.object_size,
 	       ceph::real_clock::now(),
-	       0, true, NULL, gather.new_sub());
+	       0, true, gather.new_sub());
   } else {
     derr << "Invalid item (action=" << item.action << ") in purge queue, "
             "dropping it" << dendl;
