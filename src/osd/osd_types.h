@@ -2731,11 +2731,11 @@ public:
     PriorSet(
       const PastIntervals &past_intervals,
       bool ec_pool,
+      epoch_t last_epoch_started,
       IsPGRecoverablePredicate *c,
       const OSDMap &osdmap,
       const vector<int> &up,
       const vector<int> &acting,
-      const pg_info_t &info,
       const DoutPrefixProvider *dpp);
 
     friend class PastIntervals;
