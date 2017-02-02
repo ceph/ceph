@@ -198,6 +198,8 @@ void bluestore_extent_ref_map_t::put(
   uint64_t offset, uint32_t length,
   PExtentVector *release)
 {
+  //NB: existing entries in 'release' container must be preserved!
+
   auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
@@ -328,6 +330,215 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
 	<< "=" << p->second.refs;
   }
   out << ")";
+  return out;
+}
+
+// bluestore_blob_use_tracker_t
+
+void bluestore_blob_use_tracker_t::allocate()
+{
+  assert(num_au != 0);
+  bytes_per_au = new uint32_t[num_au];
+  for (uint32_t i = 0; i < num_au; ++i) {
+    bytes_per_au[i] = 0;
+  }
+}
+
+void bluestore_blob_use_tracker_t::init(
+  uint32_t full_length, uint32_t _au_size) {
+  assert(!au_size || is_empty()); 
+  assert(_au_size > 0);
+  assert(full_length > 0);
+  clear();  
+  uint32_t _num_au = ROUND_UP_TO(full_length, _au_size) / _au_size;
+  au_size = _au_size;
+  if( _num_au > 1 ) {
+    num_au = _num_au;
+    allocate();
+  }
+}
+
+void bluestore_blob_use_tracker_t::get(
+  uint32_t offset, uint32_t length)
+{
+  assert(au_size);
+  if (!num_au) {
+    total_bytes += length;
+  }else {
+    auto end = offset + length;
+
+    while (offset < end) {
+      auto phase = offset % au_size;
+      bytes_per_au[offset / au_size] += 
+	MIN(au_size - phase, end - offset);
+      offset += (phase ? au_size - phase : au_size);
+    }
+  }
+}
+
+bool bluestore_blob_use_tracker_t::put(
+  uint32_t offset, uint32_t length,
+  PExtentVector *release_units)
+{
+  assert(au_size);
+  if (release_units) {
+    release_units->clear();
+  }
+  bool maybe_empty = true;
+  if (!num_au) {
+    assert(total_bytes >= length);
+    total_bytes -= length;
+  } else {
+    auto end = offset + length;
+    uint64_t next_offs = 0;
+    while (offset < end) {
+      auto phase = offset % au_size;
+      size_t pos = offset / au_size;
+      auto diff = MIN(au_size - phase, end - offset);
+      assert(diff <= bytes_per_au[pos]);
+      bytes_per_au[pos] -= diff;
+      offset += (phase ? au_size - phase : au_size);
+      if (bytes_per_au[pos] == 0) {
+	if (release_units) {
+          if (release_units->empty() || next_offs != pos * au_size) {
+  	    release_units->emplace_back(pos * au_size, au_size);
+          } else {
+            release_units->back().length += au_size;
+          }
+          next_offs += au_size;
+	}
+      } else {
+	maybe_empty = false; // micro optimization detecting we aren't empty 
+	                     // even in the affected extent
+      }
+    }
+  }
+  bool empty = maybe_empty ? !is_not_empty() : false;
+  if (empty && release_units) {
+    release_units->clear();
+  }
+  return empty;
+}
+
+bool bluestore_blob_use_tracker_t::can_split() const
+{
+  return num_au > 0;
+}
+
+bool bluestore_blob_use_tracker_t::can_split_at(uint32_t blob_offset) const
+{
+  assert(au_size);
+  return (blob_offset % au_size) == 0 &&
+         blob_offset < num_au * au_size;
+}
+
+void bluestore_blob_use_tracker_t::split(
+  uint32_t blob_offset,
+  bluestore_blob_use_tracker_t* r)
+{
+  assert(au_size);
+  assert(can_split());
+  assert(can_split_at(blob_offset));
+  assert(r->is_empty());
+  
+  uint32_t new_num_au = blob_offset / au_size;
+  r->init( (num_au - new_num_au) * au_size, au_size);
+
+  for (auto i = new_num_au; i < num_au; i++) {
+    r->get((i - new_num_au) * au_size, bytes_per_au[i]);
+    bytes_per_au[i] = 0;
+  }
+  if (new_num_au == 0) {
+    clear();
+  } else if (new_num_au == 1) {
+    uint32_t tmp = bytes_per_au[0];
+    uint32_t _au_size = au_size;
+    clear();
+    au_size = _au_size;
+    total_bytes = tmp;
+  } else {
+    num_au = new_num_au;
+  }
+}
+
+bool bluestore_blob_use_tracker_t::equal(
+  const bluestore_blob_use_tracker_t& other) const
+{
+  if (!num_au && !other.num_au) {
+    return total_bytes == other.total_bytes && au_size == other.au_size;
+  } else if (num_au && other.num_au) {
+    if (num_au != other.num_au || au_size != other.au_size) {
+      return false;
+    }
+    for (size_t i = 0; i < num_au; i++) {
+      if (bytes_per_au[i] != other.bytes_per_au[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  uint32_t n = num_au ? num_au : other.num_au;
+  uint32_t referenced = 
+    num_au ? other.get_referenced_bytes() : get_referenced_bytes();
+   auto bytes_per_au_tmp = num_au ? bytes_per_au : other.bytes_per_au;
+  uint32_t my_referenced = 0;
+  for (size_t i = 0; i < n; i++) {
+    my_referenced += bytes_per_au_tmp[i];
+    if (my_referenced > referenced) {
+      return false;
+    }
+  }
+  return my_referenced == referenced;
+}
+
+void bluestore_blob_use_tracker_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("num_au", num_au);
+  f->dump_unsigned("au_size", au_size);
+  if (!num_au) {
+    f->dump_unsigned("total_bytes", total_bytes);
+  } else {
+    f->open_array_section("bytes_per_au");
+    for (size_t i = 0; i < num_au; ++i) {
+      f->dump_unsigned("", bytes_per_au[i]);
+    }
+    f->close_section();
+  }
+}
+
+void bluestore_blob_use_tracker_t::generate_test_instances(
+  list<bluestore_blob_use_tracker_t*>& o)
+{
+  o.push_back(new bluestore_blob_use_tracker_t());
+  o.back()->init(16, 16);
+  o.back()->get(10, 10);
+  o.back()->get(10, 5);
+  o.push_back(new bluestore_blob_use_tracker_t());
+  o.back()->init(60, 16);
+  o.back()->get(18, 22);
+  o.back()->get(20, 20);
+  o.back()->get(15, 20);
+}
+
+ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& m)
+{
+  out << "use_tracker(" << std::hex;
+  if (!m.num_au) {
+    out << "0x" << m.au_size 
+        << " :"
+        << "0x" << m.total_bytes;
+  } else {
+    out << "0x" << m.num_au 
+        << "*0x" << m.au_size 
+	<< " :";
+    for (size_t i = 0; i < m.num_au; ++i) {
+      if (i != 0)
+	out << ",";
+      out << "0x" << m.bytes_per_au[i];
+    }
+  }
+  out << std::dec << ")";
   return out;
 }
 
@@ -521,18 +732,20 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
+  f->dump_int("sbid", sbid);
   f->dump_object("ref_map", ref_map);
 }
 
 void bluestore_shared_blob_t::generate_test_instances(
   list<bluestore_shared_blob_t*>& ls)
 {
-  ls.push_back(new bluestore_shared_blob_t);
+  ls.push_back(new bluestore_shared_blob_t(1));
 }
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)
 {
-  out << "shared_blob(" << sb.ref_map << ")";
+  out << " sbid 0x" << std::hex << sb.sbid << std::dec;
+  out << " ref_map(" << sb.ref_map << ")";
   return out;
 }
 
