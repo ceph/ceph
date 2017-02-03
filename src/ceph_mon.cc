@@ -663,7 +663,6 @@ int main(int argc, const char **argv)
   uint64_t supported =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
-    DEPRECATED_CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH;
   msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
