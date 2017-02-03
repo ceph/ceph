@@ -617,7 +617,7 @@ function main() {
     # assume the first available IPv4 subnet is going to be used to assign IP to the instance
     #
     local default_subnets=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr')
-    if test -z "$default_subnets" ; then
+    if test -n "$default_subnets" ; then
         for subnet in $default_subnets ; do
             eval subnet=$subnet # get rid of surrounding ""
             subnets="$subnets $subnet"
