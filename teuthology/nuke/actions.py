@@ -135,14 +135,16 @@ def remove_osd_tmpfs(ctx):
 def stale_kernel_mount(remote):
     proc = remote.run(
         args=[
-            'grep', '-q', ' ceph ', '/etc/mtab',
-            run.Raw('||'),
-            'grep', '-q', '^/dev/rbd', '/etc/mtab',
+            'sudo', 'find',
+            '/sys/kernel/debug/ceph',
+            '-mindepth', '1',
+            '-type', 'd',
+            run.Raw('|'),
+            'read'
         ],
         check_status=False
     )
-    # grep exists with 1 if no lines were selected
-    return proc.exitstatus != 1
+    return proc.exitstatus == 0
 
 
 def reboot(ctx, remotes):
