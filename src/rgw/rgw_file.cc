@@ -571,6 +571,10 @@ namespace rgw {
     buffer::list ux_key, ux_attrs;
     string obj_name{rgw_fh->relative_object_name()};
 
+    if (rgw_fh->is_dir()) {
+      obj_name += "/";
+    }
+
     RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->create_stat(st, mask);
