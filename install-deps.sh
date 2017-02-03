@@ -47,6 +47,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         textproc/libxml2 \
         textproc/xmlstarlet \
 	textproc/jq \
+	textproc/sphinx \
         emulators/fuse \
         java/junit \
         lang/python27 \
