@@ -2777,9 +2777,14 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->min_size = min_size;
     t->pg_num = pg_num;
     t->pg_num_mask = pi->get_pg_num_mask();
+    osdmap->get_primary_shard(
+      pg_t(ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask), pgid.pool()),
+      &t->actual_pgid);
     t->sort_bitwise = sort_bitwise;
     ldout(cct, 10) << __func__ << " "
-		   << " pgid " << pgid << " acting " << acting << dendl;
+		   << " pgid " << pgid << " -> " << t->actual_pgid
+		   << " acting " << acting
+		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
     if (acting_primary == -1) {
       t->osd = -1;
@@ -3035,9 +3040,9 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   op->target.paused = false;
   op->stamp = ceph::mono_clock::now();
 
+  hobject_t hobj = op->target.get_hobj();
   MOSDOp *m = new MOSDOp(client_inc.read(), op->tid,
-			 op->target.target_oid, op->target.target_oloc,
-			 op->target.pgid,
+			 hobj, op->target.actual_pgid,
 			 osdmap->get_epoch(),
 			 flags, op->features);
 
@@ -3094,7 +3099,16 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
     m = _prepare_osd_op(op);
   }
 
-  ldout(cct, 15) << "_send_op " << op->tid << " to osd." << op->session->osd
+  if (op->target.actual_pgid != m->get_spg()) {
+    ldout(cct, 10) << __func__ << " " << op->tid << " pgid change from "
+		   << m->get_spg() << " to " << op->target.actual_pgid
+		   << ", updating and reencoding" << dendl;
+    m->set_spg(op->target.actual_pgid);
+    m->clear_payload();  // reencode
+  }
+
+  ldout(cct, 15) << "_send_op " << op->tid << " to "
+		 << op->target.actual_pgid << " on osd." << op->session->osd
 		 << dendl;
 
   ConnectionRef con = op->session->con;

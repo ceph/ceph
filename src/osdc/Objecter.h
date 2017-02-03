@@ -1193,7 +1193,8 @@ public:
     ///< explcit pg target, if any
     pg_t base_pgid;
 
-    pg_t pgid; ///< last pg we mapped to
+    pg_t pgid; ///< last (raw) pg we mapped to
+    spg_t actual_pgid; ///< last (actual) spg_t we mapped to
     unsigned pg_num = 0; ///< last pg_num we mapped to
     unsigned pg_num_mask = 0; ///< last pg_num_mask we mapped to
     vector<int> up; ///< set of up osds for last pg we mapped to
