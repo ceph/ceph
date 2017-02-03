@@ -26,6 +26,13 @@
 #define DEFINE_CEPH_FEATURE_RETIRED(bit, inc, name, unused, unadvertised)
 
 
+// test for a feature.  this test is safer than a typical mask against
+// the bit because it ensures that we have the bit AND the marker for the
+// bit's incarnation.  this must be used in any case where the features
+// bits may include an old meaning of the bit.
+#define HAVE_FEATURE(x, name)				\
+	(((x) & (CEPH_FEATUREMASK_##name)) == (CEPH_FEATUREMASK_##name))
+
 
 /*
  * Notes on deprecation:
