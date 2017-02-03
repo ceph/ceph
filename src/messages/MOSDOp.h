@@ -34,7 +34,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -77,6 +77,9 @@ public:
   void set_reqid(const osd_reqid_t rid) {
     reqid = rid;
   }
+  void set_pg(pg_t p) {
+    pgid = p;
+  }
 
   // Fields decoded in partial decoding
   pg_t get_pg() const {
@@ -85,7 +88,7 @@ public:
   }
   pg_t get_raw_pg() const {
     assert(!partial_decode_needed);
-    return pg_t(hobj.get_hash(), hobj.pool);
+    return pg_t(hobj.get_hash(), pgid.pool());
   }
   epoch_t get_map_epoch() const {
     assert(!partial_decode_needed);
@@ -294,7 +297,7 @@ struct ceph_osd_request_head {
       ::encode(client_inc, payload);
 
       __u32 su = 0;
-      ::encode(pgid, payload);
+      ::encode(get_raw_pg(), payload);
       ::encode(su, payload);
 
       ::encode(osdmap_epoch, payload);
@@ -325,7 +328,7 @@ struct ceph_osd_request_head {
       ::encode(mtime, payload);
       ::encode(eversion_t(), payload); // reassert_version
       ::encode(get_object_locator(), payload);
-      ::encode(pgid, payload);
+      ::encode(get_raw_pg(), payload);
 
       ::encode(hobj.oid, payload);
 
@@ -347,13 +350,38 @@ struct ceph_osd_request_head {
 	// encoding or else we'll confuse older peers.
 	::encode(osd_reqid_t(), payload);
       }
-    } else {
-      // new, reordered, v7 message encoding
-      header.version = HEAD_VERSION;
-      ::encode(pgid, payload);
+    } else if (!HAVE_FEATURE(features, RESEND_ON_SPLIT)) {
+      // reordered, v7 message encoding
+      header.version = 7;
+      ::encode(get_raw_pg(), payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(eversion_t(), payload); // reassert_version
+      ::encode(reqid, payload);
+      ::encode(client_inc, payload);
+      ::encode(mtime, payload);
+      ::encode(get_object_locator(), payload);
+      ::encode(hobj.oid, payload);
+
+      __u16 num_ops = ops.size();
+      ::encode(num_ops, payload);
+      for (unsigned i = 0; i < ops.size(); i++)
+	::encode(ops[i].op, payload);
+
+      ::encode(hobj.snap, payload);
+      ::encode(snap_seq, payload);
+      ::encode(snaps, payload);
+
+      ::encode(retry_attempt, payload);
+      ::encode(features, payload);
+    } else {
+      // latest v8 encoding with hobject_t hash separate from pgid, no
+      // reassert version
+      header.version = HEAD_VERSION;
+      ::encode(pgid, payload);
+      ::encode(hobj.get_hash(), payload);
+      ::encode(osdmap_epoch, payload);
+      ::encode(flags, payload);
       ::encode(reqid, payload);
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
@@ -380,7 +408,16 @@ struct ceph_osd_request_head {
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {
-      ::decode(pgid, p);
+      ::decode(pgid, p);      // actual pgid
+      uint32_t hash;
+      ::decode(hash, p); // raw hash value
+      hobj.set_hash(hash);
+      ::decode(osdmap_epoch, p);
+      ::decode(flags, p);
+      ::decode(reqid, p);
+    } else if (header.version == 7) {
+      ::decode(pgid, p);      // raw pgid
+      hobj.set_hash(pgid.ps());
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       eversion_t reassert_version;
@@ -531,7 +568,6 @@ struct ceph_osd_request_head {
     hobj.pool = pgid.pool();
     hobj.set_key(oloc.key);
     hobj.nspace = oloc.nspace;
-    hobj.set_hash(pgid.ps());
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
 
@@ -557,7 +593,7 @@ struct ceph_osd_request_head {
 	if (is_retry_attempt())
 	  out << " RETRY=" << get_retry_attempt();
       } else {
-	out << " (undecoded)";
+	out << " " << get_raw_pg() << " (undecoded)";
       }
       out << " " << ceph_osd_flag_string(get_flags());
       out << " e" << osdmap_epoch;
