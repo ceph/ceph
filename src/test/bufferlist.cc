@@ -670,18 +670,18 @@ TEST_F(TestRawPipe, no_files_left_on_extraction) {
 }
 
 TEST_F(TestRawPipe, crc32c) {
-  buffer::raw* zero_copy = buffer::create_zero_copy(1000000, fd, 0);
+  buffer::raw* zero_copy = buffer::create_zero_copy(10000000, fd, 0);
   bufferlist zero_bl;
   zero_bl.append(bufferptr(zero_copy));
 
-  buffer::raw* zero_copy_tmp = buffer::create_zero_copy(1000000, fd, 0);
+  buffer::raw* zero_copy_tmp = buffer::create_zero_copy(10000000, fd, 0);
   bufferptr zero_bl_tmp = bufferptr(zero_copy_tmp);
   bufferlist memory_bl;
-  memory_bl.append(buffer::copy(zero_bl_tmp.c_str(), 1000000));
+  memory_bl.append(buffer::copy(zero_bl_tmp.c_str(), 10000000));
 
-  for (size_t pos = 10; pos < 500000 ; pos = pos * 15/14 + 1 )
+  for (size_t pos = 10; pos < 5000000 ; pos = pos * 15/14 + 1 )
   {
-    size_t size = 1000000 - pos * 2;
+    size_t size = 10000000 - pos * 2;
     uint32_t crc_m = 0;
     uint32_t crc_z = 0;
     bufferlist::iterator zero_it(&zero_bl, pos);
@@ -938,14 +938,14 @@ TEST_F(TestRawPipePerformance, input_full_multithread) {
 };
 
 TEST_F(TestRawPipePerformance, crc32c) {
-  buffer::raw* zero_copy = buffer::create_zero_copy(1000000, fd, 0);
+  buffer::raw* zero_copy = buffer::create_zero_copy(10000000, fd, 0);
   bufferlist zero_bl;
   zero_bl.append(bufferptr(zero_copy));
 
-  buffer::raw* zero_copy_tmp = buffer::create_zero_copy(1000000, fd, 0);
+  buffer::raw* zero_copy_tmp = buffer::create_zero_copy(10000000, fd, 0);
   bufferptr zero_bl_tmp = bufferptr(zero_copy_tmp);
   bufferlist memory_bl;
-  memory_bl.append(buffer::copy(zero_bl_tmp.c_str(), 1000000));
+  memory_bl.append(buffer::copy(zero_bl_tmp.c_str(), 10000000));
 
   utime_t start;
   utime_t end;
@@ -953,9 +953,9 @@ TEST_F(TestRawPipePerformance, crc32c) {
 
   start = ceph_clock_now();
   total = 0;
-  for (size_t pos = 10; pos < 500000 ; pos = pos * 15/14 + 1 )
+  for (size_t pos = 10; pos < 5000000 ; pos = pos * 15/14 + 1 )
   {
-    size_t size = 1000000 - pos * 2;
+    size_t size = 10000000 - pos * 2;
     bufferlist::iterator memory_it(&memory_bl, pos);
     memory_it.crc32c(size, 0);
     total += size;
@@ -965,9 +965,9 @@ TEST_F(TestRawPipePerformance, crc32c) {
 
   start = ceph_clock_now();
   total = 0;
-  for (size_t pos = 10; pos < 500000 ; pos = pos * 15/14 + 1 )
+  for (size_t pos = 10; pos < 5000000 ; pos = pos * 15/14 + 1 )
   {
-    size_t size = 1000000 - pos * 2;
+    size_t size = 10000000 - pos * 2;
     uint32_t crc_z = 0;
     bufferlist::iterator zero_it(&zero_bl, pos);
     crc_z = zero_it.crc32c(size, crc_z);
