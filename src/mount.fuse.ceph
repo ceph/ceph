@@ -1,41 +1,79 @@
-#!/bin/sh
-#
-# Helper to mount ceph-fuse from /etc/fstab.  To use, add an entry
-# like:
-#
-# # DEVICE                           PATH         TYPE        OPTIONS
-# id=admin                           /mnt/ceph    fuse.ceph   defaults   0 0
-# id=myuser,conf=/etc/ceph/foo.conf  /mnt/ceph2   fuse.ceph   defaults   0 0
-#
-# where the device field is a comma-separated list of options to pass on
-# the command line.  The examples above, for example, specify that
-# ceph-fuse will authenticated as client.admin and client.myuser
-# (respectively), and the second example also sets the 'conf' option to
-# '/etc/ceph/foo.conf' via the ceph-fuse command line.  Any valid
-# ceph-fuse can be passed in this way.
+#!/usr/bin/env python
+'''
+Helper to mount ceph-fuse from /etc/fstab.  To use, add an entry
+like:
 
-set -e
+DEVICE  PATH       TYPE        OPTIONS
+none    /mnt/ceph  fuse.ceph   ceph.id=admin,_netdev,defaults  0 0
+none    /mnt/ceph  fuse.ceph   ceph.name=client.admin,_netdev,defaults  0 0
+none    /mnt/ceph  fuse.ceph   ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netdev,defaults  0 0
 
-# convert device string to options
-cephargs='--'`echo $1 | sed 's/,/ --/g'`
+ceph-fuse options are specified in the fs_mntops(4) column and must begin
+with 'ceph.' prefix. This way ceph related fs options will be passed to
+ceph-fuse and others will be ignored by ceph-fuse.
+First two examples above, for example, speficy that ceph-fuse will authenticate
+as client.admin. Third example specify, that ceph-fuse will authenticate as
+client.myuser and also sets 'conf' option to '/etc/ceph/foo.conf' via ceph-fuse
+command line.
+Any valid ceph-fuse options can be passed this way.
 
-# get mount point
-mountpoint=$2
+NOTE:
+Old format is also supported
 
-shift 2
+DEVICE                             PATH        TYPE        OPTIONS
+id=admin                           /mnt/ceph   fuse.ceph   defaults   0 0
+id=myuser,conf=/etc/ceph/foo.conf  /mnt/ceph   fuse.ceph   defaults   0 0
+'''
 
-while [ "$1" != "-o" ]
-do
-        shift
-done
+import sys
+import argparse
+from subprocess import Popen
 
-opts=$2
+def ceph_options(mntops):
+    ceph_opts = [o for o in mntops if o.startswith('ceph.')]
+    return ceph_opts
 
-# strip out 'noauto' option; libfuse doesn't like it
-opts=`echo $opts | sed 's/,noauto//' | sed 's/noauto,//'`
+def ceph_options_compat(device):
+    return [ 'ceph.' + opt for opt in device.split(',') ]
 
-# strip out '_netdev' option; libfuse doesn't like it
-opts=`echo $opts | sed 's/,_netdev//' | sed 's/_netdev,//'`
+def fs_options(opts, ceph_opts):
+    # strip out noauto and _netdev options; libfuse doesn't like it
+    strip_opts = ['defaults', 'noauto', '_netdev']
+    return ','.join(list(set(opts) - set(ceph_opts) - set(strip_opts)))
 
-# go
-exec ceph-fuse $cephargs $mountpoint -o $opts
+def main(arguments):
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('device', type=str, nargs='+',
+                        help='Device')
+    parser.add_argument('mountpoint', type=str, nargs='+',
+                        help='Mount point')
+    parser.add_argument('-o', dest='options', type=str, nargs='+',
+                        help='Filesystem options')
+    args = parser.parse_known_args(arguments)[0]
+
+    device = args.device[0]
+    mountpoint = args.mountpoint[0]
+    options = ''.join(args.options).split(',')
+
+    if '=' in device:
+        ceph_opts = ceph_options_compat(device)
+    else:
+        ceph_opts = ceph_options(options)
+
+    fs_opts = fs_options(options, ceph_opts)
+    ceph_opts = ' '.join(['--' + o.replace('ceph.', '', 1) for o in ceph_opts])
+
+    command = 'ceph-fuse %s %s' % (ceph_opts, mountpoint)
+
+    if fs_opts:
+        command += ' -o %s' % (fs_opts)
+
+    mount_cmd = Popen(command, shell=True)
+    mount_cmd.communicate()
+
+    if (mount_cmd.returncode != 0):
+        print("Mount failed with status code: {}".format(mount_cmd.returncode))
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
