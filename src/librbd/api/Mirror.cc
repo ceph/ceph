@@ -11,8 +11,10 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/api/Image.h"
+#include "librbd/mirror/DemoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
+#include "librbd/mirror/PromoteRequest.h"
 #include "librbd/MirroringWatcher.h"
 #include <boost/scope_exit.hpp>
 
@@ -263,39 +265,16 @@ int Mirror<I>::image_promote(I *ictx, bool force) {
   ldout(cct, 20) << "ictx=" << ictx << ", "
                  << "force=" << force << dendl;
 
-  int r = ictx->state->refresh_if_required();
+  C_SaferCond ctx;
+  auto req = mirror::PromoteRequest<>::create(*ictx, force, &ctx);
+  req->send();
+
+  int r = ctx.wait();
   if (r < 0) {
+    lderr(cct) << "failed to promote image" << dendl;
     return r;
   }
 
-  r = validate_mirroring_enabled(ictx);
-  if (r < 0) {
-    return r;
-  }
-
-  std::string mirror_uuid;
-  r = Journal<I>::get_tag_owner(ictx, &mirror_uuid);
-  if (r < 0) {
-    lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  } else if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
-    lderr(cct) << "image is already primary" << dendl;
-    return -EINVAL;
-  } else if (mirror_uuid != Journal<>::ORPHAN_MIRROR_UUID && !force) {
-    lderr(cct) << "image is still primary within a remote cluster" << dendl;
-    return -EBUSY;
-  }
-
-  // TODO: need interlock with local rbd-mirror daemon to ensure it has stopped
-  //       replay
-
-  r = Journal<I>::promote(ictx);
-  if (r < 0) {
-    lderr(cct) << "failed to promote image: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
   return 0;
 }
 
@@ -304,82 +283,16 @@ int Mirror<I>::image_demote(I *ictx) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  int r = ictx->state->refresh_if_required();
+  C_SaferCond ctx;
+  auto req = mirror::DemoteRequest<>::create(*ictx, &ctx);
+  req->send();
+
+  int r = ctx.wait();
   if (r < 0) {
+    lderr(cct) << "failed to demote image" << dendl;
     return r;
   }
 
-  r = validate_mirroring_enabled(ictx);
-  if (r < 0) {
-    return r;
-  }
-
-  bool is_primary;
-  r = Journal<I>::is_tag_owner(ictx, &is_primary);
-  if (r < 0) {
-    lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
-
-  if (!is_primary) {
-    lderr(cct) << "image is not currently the primary" << dendl;
-    return -EINVAL;
-  }
-
-  RWLock::RLocker owner_lock(ictx->owner_lock);
-  if (ictx->exclusive_lock == nullptr) {
-    lderr(cct) << "exclusive lock is not active" << dendl;
-    return -EINVAL;
-  }
-
-  // avoid accepting new requests from peers while we demote
-  // the image
-  ictx->exclusive_lock->block_requests(0);
-  BOOST_SCOPE_EXIT_ALL( (ictx) ) {
-    if (ictx->exclusive_lock != nullptr) {
-      ictx->exclusive_lock->unblock_requests();
-    }
-  };
-
-  C_SaferCond lock_ctx;
-  ictx->exclusive_lock->acquire_lock(&lock_ctx);
-
-  // don't block holding lock since refresh might be required
-  ictx->owner_lock.put_read();
-  r = lock_ctx.wait();
-  ictx->owner_lock.get_read();
-
-  if (r < 0) {
-    lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
-    return r;
-  } else if (ictx->exclusive_lock == nullptr ||
-             !ictx->exclusive_lock->is_lock_owner()) {
-    lderr(cct) << "failed to acquire exclusive lock" << dendl;
-    return -EROFS;
-  }
-
-  BOOST_SCOPE_EXIT_ALL( (ictx) ) {
-    C_SaferCond lock_ctx;
-    ictx->exclusive_lock->release_lock(&lock_ctx);
-    lock_ctx.wait();
-  };
-
-  RWLock::RLocker snap_locker(ictx->snap_lock);
-  if (ictx->journal == nullptr) {
-    lderr(cct) << "journal is not active" << dendl;
-    return -EINVAL;
-  } else if (!ictx->journal->is_tag_owner()) {
-    lderr(cct) << "image is not currently the primary" << dendl;
-    return -EINVAL;
-  }
-
-  r = Journal<I>::demote(ictx);
-  if (r < 0) {
-    lderr(cct) << "failed to demote image: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
   return 0;
 }
 

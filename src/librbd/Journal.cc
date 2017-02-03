@@ -97,6 +97,30 @@ struct C_IsTagOwner : public Context {
   }
 };
 
+struct C_GetTagOwner : public Context {
+  std::string *mirror_uuid;
+  Context *on_finish;
+
+  Journaler journaler;
+  cls::journal::Client client;
+  journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
+  journal::TagData tag_data;
+
+  C_GetTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
+                std::string *mirror_uuid, Context *on_finish)
+    : mirror_uuid(mirror_uuid), on_finish(on_finish),
+      journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID, {}) {
+  }
+
+  virtual void finish(int r) {
+    if (r >= 0) {
+      *mirror_uuid = tag_data.mirror_uuid;
+    }
+    on_finish->complete(r);
+  }
+};
+
 template <typename J>
 struct GetTagsRequest {
   CephContext *cct;
@@ -433,28 +457,28 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
 
 template <typename I>
 int Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner) {
-  return Journal<>::is_tag_owner(image_ctx->md_ctx, image_ctx->id,
-                                 is_tag_owner);
+  return Journal<I>::is_tag_owner(image_ctx->md_ctx, image_ctx->id,
+                                  is_tag_owner, image_ctx->op_work_queue);
 }
 
 template <typename I>
-int Journal<I>::is_tag_owner(IoCtx& io_ctx, std::string& image_id,
-                             bool *is_tag_owner) {
-  std::string mirror_uuid;
-  int r = get_tag_owner(io_ctx, image_id, &mirror_uuid);
+int Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+                             bool *is_tag_owner, ContextWQ *op_work_queue) {
+  C_SaferCond ctx;
+  Journal<I>::is_tag_owner(io_ctx, image_id, is_tag_owner, op_work_queue, &ctx);
+
+  int r = ctx.wait();
   if (r < 0) {
     return r;
   }
-
-  *is_tag_owner = (mirror_uuid == LOCAL_MIRROR_UUID);
-  return 0;
+  return r;
 }
 
 template <typename I>
 void Journal<I>::is_tag_owner(I *image_ctx, bool *owner,
                               Context *on_finish) {
-  is_tag_owner(image_ctx->md_ctx, image_ctx->id, owner,
-               image_ctx->op_work_queue, on_finish);
+  Journal<I>::is_tag_owner(image_ctx->md_ctx, image_ctx->id, owner,
+                           image_ctx->op_work_queue, on_finish);
 }
 
 template <typename I>
@@ -473,32 +497,27 @@ void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
 
 template <typename I>
 int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
-  return get_tag_owner(image_ctx->md_ctx, image_ctx->id, mirror_uuid);
-}
-
-template <typename I>
-int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
-                              std::string *mirror_uuid) {
-  CephContext *cct = (CephContext *)io_ctx.cct();
-  ldout(cct, 20) << __func__ << dendl;
-
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
-
-  cls::journal::Client client;
-  journal::ImageClientMeta client_meta;
-  uint64_t tag_tid;
-  journal::TagData tag_data;
   C_SaferCond get_tags_ctx;
-  get_tags(cct, &journaler, &client, &client_meta, &tag_tid,
-	   &tag_data, &get_tags_ctx);
+  get_tag_owner(image_ctx->md_ctx, image_ctx->id, mirror_uuid,
+                image_ctx->op_work_queue, &get_tags_ctx);
 
   int r = get_tags_ctx.wait();
   if (r < 0) {
     return r;
   }
-
-  *mirror_uuid = tag_data.mirror_uuid;
   return 0;
+}
+
+template <typename I>
+void Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
+                               std::string *mirror_uuid,
+                               ContextWQ *op_work_queue, Context *on_finish) {
+  CephContext *cct = (CephContext *)io_ctx.cct();
+  ldout(cct, 20) << __func__ << dendl;
+
+  auto ctx = new C_GetTagOwner(io_ctx, image_id, mirror_uuid, on_finish);
+  get_tags(cct, &ctx->journaler, &ctx->client, &ctx->client_meta, &ctx->tag_tid,
+           &ctx->tag_data, create_async_context_callback(op_work_queue, ctx));
 }
 
 template <typename I>
@@ -547,27 +566,22 @@ int Journal<I>::request_resync(I *image_ctx) {
 }
 
 template <typename I>
-int Journal<I>::promote(I *image_ctx) {
+void Journal<I>::promote(I *image_ctx, Context *on_finish) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  C_SaferCond ctx;
-  auto promote_req = journal::PromoteRequest<I>::create(image_ctx, false, &ctx);
+  auto promote_req = journal::PromoteRequest<I>::create(image_ctx, false,
+                                                        on_finish);
   promote_req->send();
-
-  return ctx.wait();
 }
 
 template <typename I>
-int Journal<I>::demote(I *image_ctx) {
+void Journal<I>::demote(I *image_ctx, Context *on_finish) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  C_SaferCond ctx;
-  auto req = journal::DemoteRequest<I>::create(*image_ctx, &ctx);
+  auto req = journal::DemoteRequest<I>::create(*image_ctx, on_finish);
   req->send();
-
-  return ctx.wait();
 }
 
 template <typename I>
