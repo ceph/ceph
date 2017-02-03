@@ -587,13 +587,22 @@ public:
 
 
   /****   mapping facilities   ****/
-  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const;
-  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) const {
+  int map_to_pg(
+    int64_t pool,
+    const string& name,
+    const string& key,
+    const string& nspace,
+    pg_t *pg) const;
+  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc,
+			   pg_t &pg) const;
+  pg_t object_locator_to_pg(const object_t& oid,
+			    const object_locator_t& loc) const {
     pg_t pg;
     int ret = object_locator_to_pg(oid, loc, pg);
     assert(ret == 0);
     return pg;
   }
+
 
   static object_locator_t file_to_object_locator(const file_layout_t& layout) {
     return object_locator_t(layout.pool_id, layout.pool_ns);
