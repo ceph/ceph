@@ -20,6 +20,7 @@ class CephContext;
 namespace librbd {
 namespace io {
 
+
 /**
  * AioCompletion is the overall completion for a single
  * rbd I/O request. It may be composed of many AioObjectRequests,

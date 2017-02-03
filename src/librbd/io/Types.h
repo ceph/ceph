@@ -13,6 +13,7 @@ namespace io {
 
 typedef enum {
   AIO_TYPE_NONE = 0,
+  AIO_TYPE_GENERIC,
   AIO_TYPE_OPEN,
   AIO_TYPE_CLOSE,
   AIO_TYPE_READ,

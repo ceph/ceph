@@ -59,6 +59,7 @@ void AioCompletion::complete() {
   utime_t elapsed;
   elapsed = ceph_clock_now() - start_time;
   switch (aio_type) {
+  case AIO_TYPE_GENERIC:
   case AIO_TYPE_OPEN:
   case AIO_TYPE_CLOSE:
     break;

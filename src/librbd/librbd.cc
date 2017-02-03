@@ -77,28 +77,48 @@ librbd::io::AioCompletion* get_aio_completion(librbd::RBD::AioCompletion *comp) 
   return reinterpret_cast<librbd::io::AioCompletion *>(comp->pc);
 }
 
-struct C_OpenComplete : public Context {
+struct C_AioCompletion : public Context {
+  CephContext *cct;
+  librbd::io::aio_type_t aio_type;
+  librbd::io::AioCompletion* aio_comp;
+
+  C_AioCompletion(librbd::ImageCtx *ictx, librbd::io::aio_type_t aio_type,
+                  librbd::io::AioCompletion* aio_comp)
+    : cct(ictx->cct), aio_type(aio_type), aio_comp(aio_comp) {
+    aio_comp->init_time(ictx, aio_type);
+    aio_comp->get();
+  }
+
+  void finish(int r) override {
+    ldout(cct, 20) << "C_AioComplete::finish: r=" << r << dendl;
+    if (r < 0) {
+      aio_comp->fail(r);
+    } else {
+      aio_comp->lock.Lock();
+      aio_comp->complete();
+      aio_comp->put_unlock();
+    }
+  }
+};
+
+struct C_OpenComplete : public C_AioCompletion {
   librbd::ImageCtx *ictx;
-  librbd::io::AioCompletion* comp;
   void **ictxp;
   bool reopen;
   C_OpenComplete(librbd::ImageCtx *ictx, librbd::io::AioCompletion* comp,
 		 void **ictxp)
-    : ictx(ictx), comp(comp), ictxp(ictxp) {
-    comp->init_time(ictx, librbd::io::AIO_TYPE_OPEN);
-    comp->get();
+    : C_AioCompletion(ictx, librbd::io::AIO_TYPE_OPEN, comp),
+      ictx(ictx), ictxp(ictxp) {
   }
   void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenComplete::finish: r=" << r << dendl;
     if (r < 0) {
       *ictxp = nullptr;
-      comp->fail(r);
     } else {
       *ictxp = ictx;
-      comp->lock.Lock();
-      comp->complete();
-      comp->put_unlock();
     }
+
+    C_AioCompletion::finish(r);
   }
 };
 
@@ -118,26 +138,6 @@ struct C_OpenAfterCloseComplete : public Context {
     *ictxp = nullptr;
 
     ictx->state->open(false, new C_OpenComplete(ictx, comp, ictxp));
-  }
-};
-
-struct C_CloseComplete : public Context {
-  CephContext *cct;
-  librbd::io::AioCompletion* comp;
-  C_CloseComplete(librbd::ImageCtx *ictx, librbd::io::AioCompletion* comp)
-    : cct(ictx->cct), comp(comp) {
-    comp->init_time(ictx, librbd::io::AIO_TYPE_CLOSE);
-    comp->get();
-  }
-  void finish(int r) override {
-    ldout(cct, 20) << "C_CloseComplete::finish: r=" << r << dendl;
-    if (r < 0) {
-      comp->fail(r);
-    } else {
-      comp->lock.Lock();
-      comp->complete();
-      comp->put_unlock();
-    }
   }
 };
 
@@ -183,6 +183,50 @@ void mirror_image_status_cpp_to_c(const librbd::mirror_image_status_t &cpp_statu
   c_status->last_update = cpp_status.last_update;
   c_status->up = cpp_status.up;
 }
+
+struct C_MirrorImageGetInfo : public Context {
+    rbd_mirror_image_info_t *mirror_image_info;
+  Context *on_finish;
+
+  librbd::mirror_image_info_t cpp_mirror_image_info;
+
+  C_MirrorImageGetInfo(rbd_mirror_image_info_t *mirror_image_info,
+                         Context *on_finish)
+    : mirror_image_info(mirror_image_info), on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    mirror_image_info_cpp_to_c(cpp_mirror_image_info, mirror_image_info);
+    on_finish->complete(0);
+  }
+};
+
+struct C_MirrorImageGetStatus : public Context {
+  rbd_mirror_image_status_t *mirror_image_status;
+  Context *on_finish;
+
+  librbd::mirror_image_status_t cpp_mirror_image_status;
+
+  C_MirrorImageGetStatus(rbd_mirror_image_status_t *mirror_image_status,
+                         Context *on_finish)
+    : mirror_image_status(mirror_image_status), on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    mirror_image_status_cpp_to_c(cpp_mirror_image_status, mirror_image_status);
+    on_finish->complete(0);
+  }
+};
 
 } // anonymous namespace
 
@@ -680,7 +724,8 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), c->pc);
 
-    ictx->state->close(new C_CloseComplete(ictx, get_aio_completion(c)));
+    ictx->state->close(new C_AioCompletion(ictx, librbd::io::AIO_TYPE_CLOSE,
+                                           get_aio_completion(c)));
     ctx = NULL;
 
     tracepoint(librbd, aio_close_image_exit, 0);
@@ -1582,6 +1627,44 @@ namespace librbd {
 					           status_size);
   }
 
+  int Image::aio_mirror_image_promote(bool force, RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    librbd::api::Mirror<>::image_promote(
+      ictx, force, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                       get_aio_completion(c)));
+    return 0;
+  }
+
+  int Image::aio_mirror_image_demote(RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    librbd::api::Mirror<>::image_demote(
+      ictx, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                get_aio_completion(c)));
+    return 0;
+  }
+
+  int Image::aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                                       size_t info_size,
+                                       RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    librbd::api::Mirror<>::image_get_info(
+      ictx, mirror_image_info, info_size,
+      new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                          get_aio_completion(c)));
+    return 0;
+  }
+
+  int Image::aio_mirror_image_get_status(mirror_image_status_t *status,
+                                         size_t status_size,
+                                         RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    librbd::api::Mirror<>::image_get_status(
+      ictx, status, status_size,
+      new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                          get_aio_completion(c)));
+    return 0;
+  }
+
   int Image::update_watch(UpdateWatchCtx *wctx, uint64_t *handle) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, update_watch_enter, ictx, wctx);
@@ -2198,7 +2281,8 @@ extern "C" int rbd_aio_close(rbd_image_t image, rbd_completion_t c)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), comp->pc);
-  ictx->state->close(new C_CloseComplete(ictx, get_aio_completion(comp)));
+  ictx->state->close(new C_AioCompletion(ictx, librbd::io::AIO_TYPE_CLOSE,
+                                         get_aio_completion(comp)));
   tracepoint(librbd, aio_close_image_exit, 0);
   return 0;
 }
@@ -3337,6 +3421,65 @@ extern "C" int rbd_mirror_image_get_status(rbd_image_t image,
   }
 
   mirror_image_status_cpp_to_c(cpp_status, status);
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_image_promote(rbd_image_t image, bool force,
+                                            rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  librbd::api::Mirror<>::image_promote(
+    ictx, force, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                     get_aio_completion(comp)));
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_image_demote(rbd_image_t image,
+                                           rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  librbd::api::Mirror<>::image_demote(
+    ictx, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                              get_aio_completion(comp)));
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_image_get_info(rbd_image_t image,
+                                             rbd_mirror_image_info_t *info,
+                                             size_t info_size,
+                                             rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  if (sizeof(rbd_mirror_image_info_t) > info_size) {
+    return -ERANGE;
+  }
+
+  auto ctx = new C_MirrorImageGetInfo(
+    info, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                              get_aio_completion(comp)));
+  librbd::api::Mirror<>::image_get_info(
+    ictx, &ctx->cpp_mirror_image_info, sizeof(ctx->cpp_mirror_image_info), ctx);
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_image_get_status(rbd_image_t image,
+                                               rbd_mirror_image_status_t *status,
+                                               size_t status_size,
+                                               rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  if (sizeof(rbd_mirror_image_status_t) > status_size) {
+    return -ERANGE;
+  }
+
+  auto ctx = new C_MirrorImageGetStatus(
+    status, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                get_aio_completion(comp)));
+  librbd::api::Mirror<>::image_get_status(
+    ictx, &ctx->cpp_mirror_image_status, sizeof(ctx->cpp_mirror_image_status),
+    ctx);
   return 0;
 }
 
