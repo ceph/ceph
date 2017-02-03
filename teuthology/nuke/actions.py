@@ -152,9 +152,16 @@ def reboot(ctx, remotes):
         if stale_kernel_mount(remote):
             log.warn('Stale kernel mount on %s!', remote.name)
             log.info('force/no-sync rebooting %s', remote.name)
-            args = ['sync', run.Raw('&'),
-                    'sleep', '5', run.Raw(';'),
-                    'sudo', 'reboot', '-f', '-n']
+            # -n is ignored in systemd versions through v229, which means this
+            # only works on trusty -- on 7.3 (v219) and xenial (v229) reboot -n
+            # still calls sync().
+            # args = ['sync', run.Raw('&'),
+            #         'sleep', '5', run.Raw(';'),
+            #         'sudo', 'reboot', '-f', '-n']
+            args = ['for', 'sysrq', 'in', 's', 'u', 'b', run.Raw(';'),
+                    'do', 'echo', run.Raw('$sysrq'), run.Raw('|'),
+                    'sudo', 'tee', '/proc/sysrq-trigger', run.Raw(';'),
+                    'done']
         else:
             log.info('rebooting %s', remote.name)
             args = ['sudo', 'reboot']
