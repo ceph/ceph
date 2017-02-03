@@ -1535,10 +1535,10 @@ class RGWDefaultDataSyncModule : public RGWDataSyncModule {
 public:
   RGWDefaultDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch) override;
-  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch) override;
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
-                                     rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch) override;
+                                     rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
 };
 
 class RGWDefaultSyncModuleInstance : public RGWSyncModuleInstance {
@@ -1556,27 +1556,27 @@ int RGWDefaultSyncModule::create_instance(CephContext *cct, map<string, string>&
   return 0;
 }
 
-RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch)
+RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, bucket_info,
                                  key, versioned_epoch,
-                                 true);
+                                 true, zones_trace);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
-                                                      real_time& mtime, bool versioned, uint64_t versioned_epoch)
+                                                      real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
                             bucket_info, key, versioned, versioned_epoch,
-                            NULL, NULL, false, &mtime);
+                            NULL, NULL, false, &mtime, zones_trace);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
-                                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch)
+                                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
                             bucket_info, key, versioned, versioned_epoch,
-                            &owner.id, &owner.display_name, true, &mtime);
+                            &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
 class RGWDataSyncControlCR : public RGWBackoffControlCR
@@ -2179,6 +2179,8 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   bool error_injection;
 
   RGWDataSyncModule *data_sync_module;
+  
+  rgw_zone_set zones_trace;
 
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
@@ -2188,7 +2190,7 @@ public:
                              real_time& _timestamp,
                              const rgw_bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
-		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker) : RGWCoroutine(_sync_env->cct),
+		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker, rgw_zone_set& _zones_trace) : RGWCoroutine(_sync_env->cct),
 						      sync_env(_sync_env),
                                                       bucket_info(_bucket_info), bs(bs),
                                                       key(_key), versioned(_versioned), versioned_epoch(_versioned_epoch),
@@ -2197,7 +2199,7 @@ public:
                                                       op_state(_op_state),
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
-                                                      sync_status(0) {
+                                                      sync_status(0){
     stringstream ss;
     ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch << "]";
     set_description() << "bucket sync single entry (source_zone=" << sync_env->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
@@ -2209,6 +2211,9 @@ public:
     error_injection = (sync_env->cct->_conf->rgw_sync_data_inject_err_probability > 0);
 
     data_sync_module = sync_env->sync_module->get_data_handler();
+    
+    zones_trace = _zones_trace;
+    zones_trace.insert(sync_env->store->get_zone().id);
   }
 
   int operate() override {
@@ -2241,19 +2246,19 @@ public:
             set_status("syncing obj");
             ldout(sync_env->cct, 5) << "bucket sync: sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
             logger.log("fetch");
-            call(data_sync_module->sync_object(sync_env, *bucket_info, key, versioned_epoch));
+            call(data_sync_module->sync_object(sync_env, *bucket_info, key, versioned_epoch, &zones_trace));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
             if (op == CLS_RGW_OP_UNLINK_INSTANCE) {
               versioned = true;
             }
             logger.log("remove");
-            call(data_sync_module->remove_object(sync_env, *bucket_info, key, timestamp, versioned, versioned_epoch));
+            call(data_sync_module->remove_object(sync_env, *bucket_info, key, timestamp, versioned, versioned_epoch, &zones_trace));
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             logger.log("creating delete marker");
             set_status("creating delete marker");
             ldout(sync_env->cct, 10) << "creating delete marker: obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
-            call(data_sync_module->create_delete_marker(sync_env, *bucket_info, key, timestamp, owner, versioned, versioned_epoch));
+            call(data_sync_module->create_delete_marker(sync_env, *bucket_info, key, timestamp, owner, versioned, versioned_epoch, &zones_trace));
           }
         }
       } while (marker_tracker->need_retry(key));
@@ -2315,6 +2320,7 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   const string& status_oid;
 
   RGWDataSyncDebugLogger logger;
+  rgw_zone_set zones_trace;
 public:
   RGWBucketShardFullSyncCR(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs,
                            RGWBucketInfo *_bucket_info,
@@ -2326,6 +2332,7 @@ public:
       marker_tracker(sync_env, status_oid, full_marker),
       status_oid(status_oid) {
     logger.init(sync_env, "BucketFull", bs.get_key());
+    zones_trace.insert(sync_env->source_zone);
   }
 
   int operate() override;
@@ -2367,13 +2374,12 @@ int RGWBucketShardFullSyncCR::operate()
           ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << entry->key << ". Duplicate entry?" << dendl;
         } else {
           op = (entry->key.instance.empty() || entry->key.instance == "null" ? CLS_RGW_OP_ADD : CLS_RGW_OP_LINK_OLH);
-
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
           yield spawn(new SyncCR(sync_env, bucket_info, bs, entry->key,
                                  false, /* versioned, only matters for object removal */
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, op, CLS_RGW_STATE_COMPLETE,
-                                 entry->key, &marker_tracker),
+                                 entry->key, &marker_tracker, zones_trace),
                       false);
         }
         while (num_spawned() > BUCKET_SYNC_SPAWN_WINDOW) {
@@ -2449,6 +2455,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWBucketIncSyncShardMarkerTrack marker_tracker;
   bool updated_status{false};
   const string& status_oid;
+  const string& zone_id;
 
   string cur_id;
 
@@ -2465,7 +2472,7 @@ public:
                                   rgw_bucket_shard_inc_sync_marker& _inc_marker)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
       bucket_info(_bucket_info), lease_cr(lease_cr), inc_marker(_inc_marker),
-      marker_tracker(sync_env, status_oid, inc_marker), status_oid(status_oid) {
+      marker_tracker(sync_env, status_oid, inc_marker), status_oid(status_oid) , zone_id(_sync_env->store->get_zone().id){
     set_description() << "bucket shard incremental sync bucket="
         << bucket_shard_str{bs};
     set_status("init");
@@ -2496,6 +2503,9 @@ int RGWBucketShardIncrementalSyncCR::operate()
       squash_map.clear();
       for (auto& e : list_result) {
         if (e.state != CLS_RGW_STATE_COMPLETE) {
+          continue;
+        }
+        if (e.zones_trace.find(zone_id) != e.zones_trace.end()) {
           continue;
         }
         auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
@@ -2551,6 +2561,13 @@ int RGWBucketShardIncrementalSyncCR::operate()
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
+        if (entry->zones_trace.find(zone_id) != entry->zones_trace.end()) {
+          set_status() << "redundant operation, skipping";
+          ldout(sync_env->cct, 20) << "[inc sync] skipping object: "
+              <<bucket_shard_str{bs} <<"/"<<key<<": redundant operation" << dendl;
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
+          continue;
+        }
         if (make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
           set_status() << "squashed operation, skipping";
           ldout(sync_env->cct, 20) << "[inc sync] skipping object: "
@@ -2599,7 +2616,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             spawn(new SyncCR(sync_env, bucket_info, bs, key,
                              entry->is_versioned(), versioned_epoch,
                              entry->timestamp, owner, entry->op, entry->state,
-                             cur_id, &marker_tracker),
+                             cur_id, &marker_tracker, entry->zones_trace),
                   false);
           }
         // }

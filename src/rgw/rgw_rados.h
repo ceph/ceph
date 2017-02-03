@@ -2742,10 +2742,11 @@ public:
         ceph::real_time delete_at;
         bool canceled;
         const string *user_data;
+        rgw_zone_set *zones_trace;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -2774,8 +2775,9 @@ public:
         ceph::real_time unmod_since;
         ceph::real_time mtime; /* for setting delete marker mtime */
         bool high_precision_time;
+        rgw_zone_set *zones_trace;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr) {}
       } params;
 
       struct DeleteResult {
@@ -2850,6 +2852,7 @@ public:
       bool bs_initialized{false};
       bool blind;
       bool prepared{false};
+      rgw_zone_set *zones_trace{nullptr};
     public:
 
       UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
@@ -2871,6 +2874,10 @@ public:
 
       void set_bilog_flags(uint16_t flags) {
         bilog_flags = flags;
+      }
+      
+      void set_zones_trace(rgw_zone_set *_zones_trace) {
+        zones_trace = _zones_trace;
       }
 
       int prepare(RGWModifyOp, const string *write_tag);
@@ -3025,7 +3032,8 @@ public:
                        ceph::buffer::list *petag,
                        struct rgw_err *err,
                        void (*progress_cb)(off_t, void *),
-                       void *progress_data);
+                       void *progress_data,
+                       rgw_zone_set *zones_trace= nullptr);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
@@ -3119,7 +3127,8 @@ public:
                          const rgw_obj& src_obj,
                          int versioning_status,
                          uint16_t bilog_flags = 0,
-                         const ceph::real_time& expiration_time = ceph::real_time());
+                         const ceph::real_time& expiration_time = ceph::real_time(),
+                         rgw_zone_set *zones_trace = nullptr);
 
   /** Delete a raw object.*/
   int delete_raw_obj(const rgw_raw_obj& obj);
@@ -3220,20 +3229,20 @@ public:
                             const rgw_obj& obj_instance, bool delete_marker,
                             const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
-                            ceph::real_time unmod_since, bool high_precision_time);
-  int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch);
+                            ceph::real_time unmod_since, bool high_precision_time, rgw_zone_set *zones_trace = nullptr);
+  int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
   int bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
   int bucket_index_clear_olh(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
   int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
-                    uint64_t *plast_ver);
-  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
+                    uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
+  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
   int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
-              uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time);
+              uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, rgw_zone_set *zones_trace = nullptr);
   int unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
-                          uint64_t olh_epoch);
+                          uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
 
   void check_pending_olh_entries(map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs);
@@ -3310,14 +3319,14 @@ public:
                                      map<string, bufferlist> *pattrs, bool create_entry_point);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
-  int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags);
+  int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
+                          rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_add(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
-                           RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
+                           RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_del(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
-                           ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
-  int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags);
+                           ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
   int cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_index_key& start, const string& prefix,
                       uint32_t num_entries, bool list_versions, map<string, rgw_bucket_dir_entry>& m,
@@ -3658,7 +3667,8 @@ protected:
   virtual int do_complete(size_t accounted_size, const string& etag,
                           ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match, const char *if_nomatch, const string *user_data) = 0;
+                          const char *if_match, const char *if_nomatch, const string *user_data,
+                          rgw_zone_set* zones_trace = nullptr) = 0;
 
 public:
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
@@ -3675,7 +3685,8 @@ public:
   int complete(size_t accounted_size, const string& etag, 
                ceph::real_time *mtime, ceph::real_time set_mtime,
                map<string, bufferlist>& attrs, ceph::real_time delete_at,
-               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr);
+               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr,
+               rgw_zone_set *zones_trace = nullptr);
 
   CephContext *ctx();
 
@@ -3753,7 +3764,7 @@ protected:
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data) override;
+                  const char *if_match, const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace) override;
 
   int prepare_next_part(off_t ofs);
   int complete_parts();
@@ -3868,7 +3879,8 @@ protected:
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data) override;
+                  const char *if_match, const char *if_nomatch, const string *user_data,
+                  rgw_zone_set *zones_trace) override;
 public:
   bool immutable_head() { return true; }
   RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
