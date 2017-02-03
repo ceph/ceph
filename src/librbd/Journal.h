@@ -104,18 +104,19 @@ public:
 
   static int is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner);
   static int is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                          bool *is_tag_owner);
+                          bool *is_tag_owner, ContextWQ *op_work_queue);
   static void is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner,
                            Context *on_finish);
   static void is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
                            bool *is_tag_owner, ContextWQ *op_work_queue,
                            Context *on_finish);
   static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
-  static int get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                           std::string *mirror_uuid);
+  static void get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+                            std::string *mirror_uuid,
+                            ContextWQ *op_work_queue, Context *on_finish);
   static int request_resync(ImageCtxT *image_ctx);
-  static int promote(ImageCtxT *image_ctx);
-  static int demote(ImageCtxT *image_ctx);
+  static void promote(ImageCtxT *image_ctx, Context *on_finish);
+  static void demote(ImageCtxT *image_ctx, Context *on_finish);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
