@@ -42,7 +42,6 @@ private:
   __u32 osdmap_epoch;
   __u32 flags;
   utime_t mtime;
-  eversion_t reassert_version;
   int32_t retry_attempt;   // 0 is first attempt.  -1 if we don't know.
 
   hobject_t hobj;
@@ -91,10 +90,6 @@ public:
   int get_flags() const {
     assert(!partial_decode_needed);
     return flags;
-  }
-  const eversion_t& get_version() const {
-    assert(!partial_decode_needed);
-    return reassert_version;
   }
   osd_reqid_t get_reqid() const {
     assert(!partial_decode_needed);
@@ -204,7 +199,6 @@ private:
   ~MOSDOp() {}
 
 public:
-  void set_version(eversion_t v) { reassert_version = v; }
   void set_mtime(utime_t mt) { mtime = mt; }
   void set_mtime(ceph::real_time mt) {
     mtime = ceph::real_clock::to_timespec(mt);
@@ -302,7 +296,7 @@ struct ceph_osd_request_head {
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(mtime, payload);
-      ::encode(reassert_version, payload);
+      ::encode(eversion_t(), payload);  // reassert_version
 
       __u32 oid_len = hobj.oid.name.length();
       ::encode(oid_len, payload);
@@ -325,7 +319,7 @@ struct ceph_osd_request_head {
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(mtime, payload);
-      ::encode(reassert_version, payload);
+      ::encode(eversion_t(), payload); // reassert_version
       ::encode(get_object_locator(), payload);
       ::encode(pgid, payload);
 
@@ -355,7 +349,7 @@ struct ceph_osd_request_head {
       ::encode(pgid, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
-      ::encode(reassert_version, payload);
+      ::encode(eversion_t(), payload); // reassert_version
       ::encode(reqid, payload);
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
@@ -385,6 +379,7 @@ struct ceph_osd_request_head {
       ::decode(pgid, p);
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
+      eversion_t reassert_version;
       ::decode(reassert_version, p);
       ::decode(reqid, p);
     } else if (header.version < 2) {
@@ -401,6 +396,7 @@ struct ceph_osd_request_head {
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       ::decode(mtime, p);
+      eversion_t reassert_version;
       ::decode(reassert_version, p);
 
       __u32 oid_len;
@@ -442,6 +438,7 @@ struct ceph_osd_request_head {
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       ::decode(mtime, p);
+      eversion_t reassert_version;
       ::decode(reassert_version, p);
 
       object_locator_t oloc;
@@ -559,8 +556,6 @@ struct ceph_osd_request_head {
 	out << " (undecoded)";
       }
       out << " " << ceph_osd_flag_string(get_flags());
-      if (reassert_version != eversion_t())
-	out << " reassert_version=" << reassert_version;
       out << " e" << osdmap_epoch;
     }
     out << ")";
