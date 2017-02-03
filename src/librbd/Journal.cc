@@ -2,25 +2,26 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/Journal.h"
-#include "librbd/ExclusiveLock.h"
-#include "librbd/ImageCtx.h"
+#include "include/rados/librados.hpp"
+#include "common/errno.h"
+#include "common/Timer.h"
+#include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
 #include "journal/Policy.h"
 #include "journal/ReplayEntry.h"
 #include "journal/Settings.h"
 #include "journal/Utils.h"
-#include "common/errno.h"
-#include "common/Timer.h"
-#include "common/WorkQueue.h"
-#include "include/rados/librados.hpp"
+#include "librbd/ExclusiveLock.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/journal/CreateRequest.h"
+#include "librbd/journal/DemoteRequest.h"
 #include "librbd/journal/OpenRequest.h"
-#include "librbd/journal/PromoteRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/PromoteRequest.h"
 
 #include <boost/scope_exit.hpp>
 #include <utility>
@@ -558,6 +559,18 @@ int Journal<I>::promote(I *image_ctx) {
 }
 
 template <typename I>
+int Journal<I>::demote(I *image_ctx) {
+  CephContext *cct = image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  C_SaferCond ctx;
+  auto req = journal::DemoteRequest<I>::create(*image_ctx, &ctx);
+  req->send();
+
+  return ctx.wait();
+}
+
+template <typename I>
 bool Journal<I>::is_journal_ready() const {
   Mutex::Locker locker(m_lock);
   return (m_state == STATE_READY);
@@ -670,87 +683,6 @@ template <typename I>
 journal::TagData Journal<I>::get_tag_data() const {
   Mutex::Locker locker(m_lock);
   return m_tag_data;
-}
-
-template <typename I>
-int Journal<I>::demote() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << dendl;
-
-  int r;
-  C_SaferCond ctx;
-  Future future;
-  C_SaferCond flush_ctx;
-
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_journaler != nullptr && is_tag_owner(m_lock));
-
-    cls::journal::Client client;
-    r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to retrieve client: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
-    journal::TagPredecessor predecessor;
-    predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
-    if (!client.commit_position.object_positions.empty()) {
-      auto position = client.commit_position.object_positions.front();
-      predecessor.commit_valid = true;
-      predecessor.tag_tid = position.tag_tid;
-      predecessor.entry_tid = position.entry_tid;
-    }
-
-    cls::journal::Tag new_tag;
-    r = allocate_journaler_tag(cct, m_journaler, m_tag_class, predecessor,
-                               ORPHAN_MIRROR_UUID, &new_tag);
-    if (r < 0) {
-      return r;
-    }
-
-    bufferlist::iterator tag_data_bl_it = new_tag.data.begin();
-    r = C_DecodeTag::decode(&tag_data_bl_it, &m_tag_data);
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to decode newly allocated tag" << dendl;
-      return r;
-    }
-
-    journal::EventEntry event_entry{journal::DemoteEvent{}, ceph_clock_now()};
-    bufferlist event_entry_bl;
-    ::encode(event_entry, event_entry_bl);
-
-    m_tag_tid = new_tag.tid;
-    future = m_journaler->append(m_tag_tid, event_entry_bl);
-    future.flush(&ctx);
-  }
-
-  r = ctx.wait();
-  if (r < 0) {
-    lderr(cct) << this << " " << __func__ << ": "
-               << "failed to append demotion journal event: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
-
-  {
-    Mutex::Locker l(m_lock);
-    m_journaler->committed(future);
-    m_journaler->flush_commit_position(&flush_ctx);
-  }
-
-  r = flush_ctx.wait();
-  if (r < 0) {
-    lderr(cct) << this << " " << __func__ << ": "
-               << "failed to flush demotion commit position: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  return 0;
 }
 
 template <typename I>

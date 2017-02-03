@@ -115,6 +115,7 @@ public:
                            std::string *mirror_uuid);
   static int request_resync(ImageCtxT *image_ctx);
   static int promote(ImageCtxT *image_ctx);
+  static int demote(ImageCtxT *image_ctx);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
@@ -128,7 +129,6 @@ public:
   bool is_tag_owner() const;
   uint64_t get_tag_tid() const;
   journal::TagData get_tag_data() const;
-  int demote();
 
   void allocate_local_tag(Context *on_finish);
   void allocate_tag(const std::string &mirror_uuid,
