@@ -1268,7 +1268,6 @@ public:
     uint64_t ontimeout;
 
     ceph_tid_t tid;
-    eversion_t replay_version; // for op replay
     int attempts;
 
     version_t *objver;
