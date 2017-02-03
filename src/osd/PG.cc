@@ -1862,18 +1862,18 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   OSDCap& caps = session->caps;
   session->put();
 
-  const string &key = req->get_object_locator().key.empty() ?
-                      req->get_oid().name :
-                      req->get_object_locator().key;
+  const string &key = req->get_hobj().get_key().empty() ?
+    req->get_oid().name :
+    req->get_hobj().get_key();
 
-  bool cap = caps.is_capable(pool.name, req->get_object_locator().nspace,
+  bool cap = caps.is_capable(pool.name, req->get_hobj().nspace,
                              pool.auid, key,
 			     op->need_read_cap(),
 			     op->need_write_cap(),
 			     op->classes());
 
   dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
-		   << " " << req->get_object_locator().nspace
+		   << " " << req->get_hobj().nspace
 	   << ") owner=" << pool.auid
 	   << " need_read_cap=" << op->need_read_cap()
 	   << " need_write_cap=" << op->need_write_cap()
