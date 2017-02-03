@@ -161,31 +161,8 @@ DEFINE_CEPH_FEATURE(59, 1, MSG_ADDR2) // overlap
 
 DEFINE_CEPH_FEATURE(61, 1, RESERVED2)          // unused, but slow down!
 DEFINE_CEPH_FEATURE(62, 1, RESERVED)           // do not use; used as a sentinal
-DEFINE_CEPH_FEATURE(63, 1, RESERVED_BROKEN)    // do not use; see below
+DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facing
 
-/*
- * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
- * vector to evaluate to 64 bit ~0.  To cope, we designate 1ULL << 63
- * to mean 33 bit ~0, and introduce a helper below to do the
- * translation.
- *
- * This was introduced by commit
- *   9ea02b84104045c2ffd7e7f4e7af512953855ecd v0.58-657-g9ea02b8
- * and fixed by commit
- *   4255b5c2fb54ae40c53284b3ab700fdfc7e61748 v0.65-263-g4255b5c
- *
- * TODO: can we remove this workaround?  (does it appear in any kernel?)
- */
-#define CEPH_FEATURE_RESERVED_BROKEN (1ULL<<63)
-
-static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
-	if (f & CEPH_FEATURE_RESERVED_BROKEN) {
-		/* everything through OSD_SNAPMAPPER */
-		return 0x1ffffffffull;
-	} else {
-		return f;
-	}
-}
 
 /*
  * Features supported.  Should be everything above.
@@ -277,7 +254,7 @@ static inline void ____build_time_check_for_reserved_bits(void) {
 	CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL &
 			    (CEPH_FEATURE_RESERVED |
 			     CEPH_FEATURE_RESERVED2 |
-			     CEPH_FEATURE_RESERVED_BROKEN)) == 0);
+			     DEPRECATED_CEPH_FEATURE_RESERVED_BROKEN)) == 0);
 }
 
 #endif
