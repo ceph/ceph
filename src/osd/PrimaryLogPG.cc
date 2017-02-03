@@ -354,7 +354,8 @@ void PrimaryLogPG::on_local_recover(
       recovery_info.oi.prior_version = recovery_info.oi.version;
       recovery_info.oi.version = latest->version;
       bufferlist bl;
-      ::encode(recovery_info.oi, bl, get_osdmap()->get_up_osd_features());
+      ::encode(recovery_info.oi, bl,
+	       get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       assert(!pool.info.require_rollback());
       t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
       if (obc)
@@ -3542,7 +3543,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
     bl.clear();
-    ::encode(coi, bl, get_osdmap()->get_up_osd_features());
+    ::encode(coi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     t->setattr(coid, OI_ATTR, bl);
 
     ctx->log.push_back(
@@ -3611,7 +3612,8 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
     attrs[SS_ATTR].claim(bl);
 
     bl.clear();
-    ::encode(ctx->snapset_obc->obs.oi, bl, get_osdmap()->get_up_osd_features());
+    ::encode(ctx->snapset_obc->obs.oi, bl,
+	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR].claim(bl);
     t->setattrs(snapoid, attrs);
   }
@@ -6231,7 +6233,7 @@ void PrimaryLogPG::_make_clone(
   object_info_t *poi)
 {
   bufferlist bv;
-  ::encode(*poi, bv, get_osdmap()->get_up_osd_features());
+  ::encode(*poi, bv, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
   t->clone(coid, head);
   setattr_maybe_cache(obc, ctx, t, OI_ATTR, bv);
@@ -6684,7 +6686,8 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
       map<string, bufferlist> attrs;
       bufferlist bv(sizeof(ctx->new_obs.oi));
-      ::encode(ctx->snapset_obc->obs.oi, bv, get_osdmap()->get_up_osd_features());
+      ::encode(ctx->snapset_obc->obs.oi, bv,
+	       get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       ctx->op_t->create(snapoid);
       attrs[OI_ATTR].claim(bv);
       attrs[SS_ATTR].claim(bss);
@@ -6722,7 +6725,8 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
     map <string, bufferlist> attrs;
     bufferlist bv(sizeof(ctx->new_obs.oi));
-    ::encode(ctx->new_obs.oi, bv, get_osdmap()->get_up_osd_features());
+    ::encode(ctx->new_obs.oi, bv,
+	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR].claim(bv);
 
     if (soid.snap == CEPH_NOSNAP) {
@@ -8824,7 +8828,7 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
   oi.prior_version = obc->obs.oi.version;
   oi.version = ctx->at_version;
   bufferlist bl;
-  ::encode(oi, bl, get_osdmap()->get_up_osd_features());
+  ::encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   t->setattr(obc->obs.oi.soid, OI_ATTR, bl);
 
   // apply new object state.
@@ -10473,7 +10477,9 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ObjectStore::Transaction t;
 	      bufferlist b2;
-	      obc->obs.oi.encode(b2, get_osdmap()->get_up_osd_features());
+	      obc->obs.oi.encode(
+		b2,
+		get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 	      assert(!pool.info.require_rollback());
 	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
@@ -11637,7 +11643,8 @@ void PrimaryLogPG::hit_set_persist()
   bufferlist bss;
   ::encode(ctx->new_snapset, bss);
   bufferlist boi(sizeof(ctx->new_obs.oi));
-  ::encode(ctx->new_obs.oi, boi, get_osdmap()->get_up_osd_features());
+  ::encode(ctx->new_obs.oi, boi,
+	   get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
   ctx->op_t->create(oid);
   if (bl.length()) {
