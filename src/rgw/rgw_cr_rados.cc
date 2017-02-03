@@ -543,7 +543,8 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* string *petag, */
                        NULL, /* struct rgw_err *err, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
-                       NULL); /* void *progress_data*); */
+                       NULL, /* void *progress_data*); */
+                       zones_trace); 
 
   if (r < 0) {
     ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
@@ -646,6 +647,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.obj_owner.set_name(owner_display_name);
   del_op.params.mtime = timestamp;
   del_op.params.high_precision_time = true;
+  del_op.params.zones_trace = zones_trace;
 
   ret = del_op.delete_obj();
   if (ret < 0) {
