@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+struct Context;
+
 namespace librbd {
 
 struct ImageCtx;
@@ -43,13 +45,20 @@ struct Mirror {
   static int image_enable(ImageCtxT *ictx, bool relax_same_pool_parent_check);
   static int image_disable(ImageCtxT *ictx, bool force);
   static int image_promote(ImageCtxT *ictx, bool force);
+  static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
   static int image_demote(ImageCtxT *ictx);
+  static void image_demote(ImageCtxT *ictx, Context *on_finish);
   static int image_resync(ImageCtxT *ictx);
   static int image_get_info(ImageCtxT *ictx,
                             mirror_image_info_t *mirror_image_info,
                             size_t info_size);
+  static void image_get_info(ImageCtxT *ictx,
+                             mirror_image_info_t *mirror_image_info,
+                             size_t info_size, Context *on_finish);
   static int image_get_status(ImageCtxT *ictx, mirror_image_status_t *status,
                               size_t status_size);
+  static void image_get_status(ImageCtxT *ictx, mirror_image_status_t *status,
+                               size_t status_size, Context *on_finish);
 
 };
 

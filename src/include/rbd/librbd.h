@@ -735,6 +735,18 @@ CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
 CEPH_RBD_API int rbd_mirror_image_get_status(rbd_image_t image,
                                              rbd_mirror_image_status_t *mirror_image_status,
                                              size_t status_size);
+CEPH_RBD_API int rbd_aio_mirror_image_promote(rbd_image_t image, bool force,
+                                              rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_mirror_image_demote(rbd_image_t image,
+                                             rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_mirror_image_get_info(rbd_image_t image,
+                                               rbd_mirror_image_info_t *mirror_image_info,
+                                               size_t info_size,
+                                               rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_mirror_image_get_status(rbd_image_t image,
+                                                 rbd_mirror_image_status_t *mirror_image_status,
+                                                 size_t status_size,
+                                                 rbd_completion_t c);
 
 // RBD consistency groups support functions
 CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);

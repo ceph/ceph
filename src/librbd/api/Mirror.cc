@@ -10,11 +10,15 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
+#include "librbd/Utils.h"
 #include "librbd/api/Image.h"
 #include "librbd/mirror/DemoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
+#include "librbd/mirror/GetInfoRequest.h"
+#include "librbd/mirror/GetStatusRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
+#include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include <boost/scope_exit.hpp>
 
@@ -72,6 +76,62 @@ int list_mirror_images(librados::IoCtx& io_ctx,
 
   return 0;
 }
+
+struct C_ImageGetInfo : public Context {
+  mirror_image_info_t *mirror_image_info;
+  Context *on_finish;
+
+  cls::rbd::MirrorImage mirror_image;
+  mirror::PromotionState promotion_state;
+
+  C_ImageGetInfo(mirror_image_info_t *mirror_image_info, Context *on_finish)
+    : mirror_image_info(mirror_image_info), on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    mirror_image_info->global_id = mirror_image.global_image_id;
+    mirror_image_info->state = static_cast<rbd_mirror_image_state_t>(
+      mirror_image.state);
+    mirror_image_info->primary = (
+      promotion_state == mirror::PROMOTION_STATE_PRIMARY);
+    on_finish->complete(0);
+  }
+};
+
+struct C_ImageGetStatus : public C_ImageGetInfo {
+  std::string image_name;
+  mirror_image_status_t *mirror_image_status;
+
+  cls::rbd::MirrorImageStatus mirror_image_status_internal;
+
+  C_ImageGetStatus(const std::string &image_name,
+                   mirror_image_status_t *mirror_image_status,
+                   Context *on_finish)
+    : C_ImageGetInfo(&mirror_image_status->info, on_finish),
+      image_name(image_name), mirror_image_status(mirror_image_status) {
+  }
+
+  void finish(int r) override {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    mirror_image_status->name = image_name;
+    mirror_image_status->state = static_cast<mirror_image_status_state_t>(
+      mirror_image_status_internal.state);
+    mirror_image_status->description = mirror_image_status_internal.description;
+    mirror_image_status->last_update =
+      mirror_image_status_internal.last_update.sec();
+    mirror_image_status->up = mirror_image_status_internal.up;
+    C_ImageGetInfo::finish(0);
+  }
+};
 
 } // anonymous namespace
 
@@ -262,13 +322,9 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
 template <typename I>
 int Mirror<I>::image_promote(I *ictx, bool force) {
   CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "ictx=" << ictx << ", "
-                 << "force=" << force << dendl;
 
   C_SaferCond ctx;
-  auto req = mirror::PromoteRequest<>::create(*ictx, force, &ctx);
-  req->send();
-
+  Mirror<I>::image_promote(ictx, force, &ctx);
   int r = ctx.wait();
   if (r < 0) {
     lderr(cct) << "failed to promote image" << dendl;
@@ -279,14 +335,21 @@ int Mirror<I>::image_promote(I *ictx, bool force) {
 }
 
 template <typename I>
+void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << ", "
+                 << "force=" << force << dendl;
+
+  auto req = mirror::PromoteRequest<>::create(*ictx, force, on_finish);
+  req->send();
+}
+
+template <typename I>
 int Mirror<I>::image_demote(I *ictx) {
   CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "ictx=" << ictx << dendl;
 
   C_SaferCond ctx;
-  auto req = mirror::DemoteRequest<>::create(*ictx, &ctx);
-  req->send();
-
+  Mirror<I>::image_demote(ictx, &ctx);
   int r = ctx.wait();
   if (r < 0) {
     lderr(cct) << "failed to demote image" << dendl;
@@ -294,6 +357,15 @@ int Mirror<I>::image_demote(I *ictx) {
   }
 
   return 0;
+}
+
+template <typename I>
+void Mirror<I>::image_demote(I *ictx, Context *on_finish) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+
+  auto req = mirror::DemoteRequest<>::create(*ictx, on_finish);
+  req->send();
 }
 
 template <typename I>
@@ -333,87 +405,62 @@ int Mirror<I>::image_resync(I *ictx) {
 }
 
 template <typename I>
-int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
-                              size_t info_size) {
+void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
+                               size_t info_size, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
   if (info_size < sizeof(mirror_image_info_t)) {
-    return -ERANGE;
+    on_finish->complete(-ERANGE);
+    return;
   }
 
-  int r = ictx->state->refresh_if_required();
+  auto ctx = new C_ImageGetInfo(mirror_image_info, on_finish);
+  auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
+                                               &ctx->promotion_state,
+                                               ctx);
+  req->send();
+}
+
+template <typename I>
+int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
+                              size_t info_size) {
+  C_SaferCond ctx;
+  image_get_info(ictx, mirror_image_info, info_size, &ctx);
+
+  int r = ctx.wait();
   if (r < 0) {
     return r;
   }
-
-  cls::rbd::MirrorImage mirror_image_internal;
-  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-                                   &mirror_image_internal);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
-
-  mirror_image_info->global_id = mirror_image_internal.global_image_id;
-  if (r == -ENOENT) {
-    mirror_image_info->state = RBD_MIRROR_IMAGE_DISABLED;
-  } else {
-    mirror_image_info->state =
-      static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
-  }
-
-  if (mirror_image_info->state == RBD_MIRROR_IMAGE_ENABLED) {
-    r = Journal<I>::is_tag_owner(ictx, &mirror_image_info->primary);
-    if (r < 0) {
-      lderr(cct) << "failed to check tag ownership: "
-                 << cpp_strerror(r) << dendl;
-      return r;
-    }
-  } else {
-    mirror_image_info->primary = false;
-  }
-
   return 0;
+}
+
+template <typename I>
+void Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
+                                 size_t status_size, Context *on_finish) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+  if (status_size < sizeof(mirror_image_status_t)) {
+    on_finish->complete(-ERANGE);
+    return;
+  }
+
+  auto ctx = new C_ImageGetStatus(ictx->name, status, on_finish);
+  auto req = mirror::GetStatusRequest<I>::create(
+    *ictx, &ctx->mirror_image_status_internal, &ctx->mirror_image,
+    &ctx->promotion_state, ctx);
+  req->send();
 }
 
 template <typename I>
 int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
       		                size_t status_size) {
-  CephContext *cct = ictx->cct;
-  ldout(cct, 20) << "ictx=" << ictx << dendl;
-  if (status_size < sizeof(mirror_image_status_t)) {
-    return -ERANGE;
-  }
+  C_SaferCond ctx;
+  image_get_status(ictx, status, status_size, &ctx);
 
-  int r = ictx->state->refresh_if_required();
+  int r = ctx.wait();
   if (r < 0) {
     return r;
   }
-
-  mirror_image_info_t info;
-  r = image_get_info(ictx, &info, sizeof(info));
-  if (r < 0) {
-    return r;
-  }
-
-  cls::rbd::MirrorImageStatus
-    s(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
-
-  r = cls_client::mirror_image_status_get(&ictx->md_ctx, info.global_id, &s);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to retrieve image mirror status: "
-      	 << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  *status = mirror_image_status_t{
-    ictx->name,
-    info,
-    static_cast<mirror_image_status_state_t>(s.state),
-    s.description,
-    s.last_update.sec(),
-    s.up};
   return 0;
 }
 
