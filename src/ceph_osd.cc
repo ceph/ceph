@@ -440,29 +440,31 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->ms_type : g_conf->ms_cluster_type;
+  Messenger *ms_public = Messenger::create(g_ceph_context, public_msgr_type,
 					   entity_name_t::OSD(whoami), "client",
 					   getpid(),
 					   Messenger::HAS_HEAVY_TRAFFIC |
 					   Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msgr_type,
 					    entity_name_t::OSD(whoami), "cluster",
 					    getpid(),
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, cluster_msgr_type,
 					     entity_name_t::OSD(whoami), "hb_back_client",
 					     getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, public_msgr_type,
 					     entity_name_t::OSD(whoami), "hb_front_client",
 					     getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, cluster_msgr_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
 						   getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, public_msgr_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_objecter = Messenger::create(g_ceph_context, public_msgr_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid(), 0);
   if (!ms_public || !ms_cluster || !ms_hb_front_client || !ms_hb_back_client || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
