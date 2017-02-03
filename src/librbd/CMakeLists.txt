@@ -47,10 +47,11 @@ set(librbd_internal_srcs
   io/ImageRequestWQ.cc
   io/ObjectRequest.cc
   io/ReadResult.cc
-  journal/RemoveRequest.cc
   journal/CreateRequest.cc
+  journal/DemoteRequest.cc
   journal/OpenRequest.cc
   journal/PromoteRequest.cc
+  journal/RemoveRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   journal/Utils.cc

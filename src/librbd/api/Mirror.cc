@@ -374,7 +374,7 @@ int Mirror<I>::image_demote(I *ictx) {
     return -EINVAL;
   }
 
-  r = ictx->journal->demote();
+  r = Journal<I>::demote(ictx);
   if (r < 0) {
     lderr(cct) << "failed to demote image: " << cpp_strerror(r)
                << dendl;
