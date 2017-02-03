@@ -1422,7 +1422,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	      << m->get_map_epoch() << ", dropping" << dendl;
       return;
     }
-    pg_t _pgid = m->get_pg();
+    pg_t _pgid = m->get_raw_pg();
     spg_t pgid;
     if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
       _pgid = opmap->raw_pg_to_pg(_pgid);
@@ -1436,7 +1436,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
   clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-	       << " pg " << m->get_pg()
+	       << " pg " << m->get_raw_pg()
 	       << " to osd." << whoami
 	       << " not " << pg->acting
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
@@ -8788,7 +8788,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   }
 
   // calc actual pgid
-  pg_t _pgid = m->get_pg();
+  pg_t _pgid = m->get_raw_pg();
   int64_t pool = _pgid.pool();
 
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
@@ -8826,7 +8826,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->have_pg_pool(pgid.pool())) {
     dout(7) << "dropping request; pool did not exist" << dendl;
     clog->warn() << m->get_source_inst() << " invalid " << m->get_reqid()
-		      << " pg " << m->get_pg()
+		      << " pg " << m->get_raw_pg()
 		      << " to osd." << whoami
 		      << " in e" << osdmap->get_epoch()
 		      << ", client e" << m->get_map_epoch()
@@ -8837,7 +8837,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-		 << " pg " << m->get_pg()
+		 << " pg " << m->get_raw_pg()
 		 << " to osd." << whoami
 		 << " in e" << osdmap->get_epoch()
 		 << ", client e" << m->get_map_epoch()
