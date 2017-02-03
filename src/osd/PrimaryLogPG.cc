@@ -1210,8 +1210,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    continue;
 
 	  // skip wrong namespace
-	  if (m->get_object_locator().nspace != librados::all_nspaces &&
-               candidate.get_namespace() != m->get_object_locator().nspace)
+	  if (m->get_hobj().nspace != librados::all_nspaces &&
+               candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
@@ -1381,7 +1381,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  }
 
 	  // skip wrong namespace
-	  if (candidate.get_namespace() != m->get_object_locator().nspace)
+	  if (candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
@@ -1769,9 +1769,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   dout(20) << __func__ << ": op " << *m << dendl;
 
-  hobject_t head(m->get_oid(), m->get_object_locator().key,
-		 CEPH_NOSNAP, m->get_pg().ps(),
-		 info.pgid.pool(), m->get_object_locator().nspace);
+  hobject_t head = m->get_hobj();
+  head.snap = CEPH_NOSNAP;
 
   bool can_backoff =
     m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF);
@@ -1845,16 +1844,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
-  if (m->get_object_locator().key.size() >
-      cct->_conf->osd_max_object_name_len) {
+  if (m->get_hobj().get_key().size() > cct->_conf->osd_max_object_name_len) {
     dout(4) << "do_op locator is longer than "
 	    << cct->_conf->osd_max_object_name_len
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
-  if (m->get_object_locator().nspace.size() >
-      cct->_conf->osd_max_object_namespace_len) {
+  if (m->get_hobj().nspace.size() > cct->_conf->osd_max_object_namespace_len) {
     dout(4) << "do_op namespace is longer than "
 	    << cct->_conf->osd_max_object_namespace_len
 	    << " bytes" << dendl;
@@ -2038,12 +2035,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   ObjectContextRef obc;
   bool can_create = op->may_write() || op->may_cache();
   hobject_t missing_oid;
-  hobject_t oid(m->get_oid(),
-		m->get_object_locator().key,
-		m->get_snapid(),
-		m->get_pg().ps(),
-		m->get_object_locator().get_pool(),
-		m->get_object_locator().nspace);
+  const hobject_t& oid = m->get_hobj();
 
   // io blocked on obc?
   if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
@@ -2370,7 +2362,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
   }
 
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  const object_locator_t& oloc = m->get_object_locator();
+  const object_locator_t oloc = m->get_object_locator();
 
   if (op->need_skip_handle_cache()) {
     return cache_result_t::NOOP;
@@ -2628,12 +2620,7 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op)
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
 
-  hobject_t soid(m->get_oid(),
-		 m->get_object_locator().key,
-		 m->get_snapid(),
-		 m->get_pg().ps(),
-		 m->get_object_locator().get_pool(),
-		 m->get_object_locator().nspace);
+  const hobject_t& soid = m->get_hobj();
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
 
   // pass through some original flags that make sense.
@@ -2823,12 +2810,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
   oloc.pool = pool.info.tier_of;
   SnapContext snapc(m->get_snap_seq(), m->get_snaps());
 
-  hobject_t soid(m->get_oid(),
-		 m->get_object_locator().key,
-		 missing_oid.snap,
-		 m->get_pg().ps(),
-		 m->get_object_locator().get_pool(),
-		 m->get_object_locator().nspace);
+  const hobject_t& soid = m->get_hobj();
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
