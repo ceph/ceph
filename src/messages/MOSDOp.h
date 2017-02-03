@@ -79,9 +79,13 @@ public:
   }
 
   // Fields decoded in partial decoding
-  const pg_t& get_pg() const {
+  pg_t get_pg() const {
     assert(!partial_decode_needed);
     return pgid;
+  }
+  pg_t get_raw_pg() const {
+    assert(!partial_decode_needed);
+    return pg_t(hobj.get_hash(), hobj.pool);
   }
   epoch_t get_map_epoch() const {
     assert(!partial_decode_needed);
