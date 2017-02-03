@@ -2512,12 +2512,12 @@ ESubtreeMap *MDCache::create_subtree_map()
   ESubtreeMap *le = new ESubtreeMap();
   mds->mdlog->_start_entry(le);
   
-  CDir *mydir = 0;
-  if (myin) {
-    mydir = myin->get_dirfrag(frag_t());
-  }
+  map<dirfrag_t, CDir*> dirs_to_add;
 
-  list<CDir*> maybe;
+  if (myin) {
+    CDir* mydir = myin->get_dirfrag(frag_t());
+    dirs_to_add[mydir->dirfrag()] = mydir;
+  }
 
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
@@ -2544,21 +2544,9 @@ ESubtreeMap *MDCache::create_subtree_map()
       dout(15) << " subtree " << *dir << dendl;
     }
 
+    dirs_to_add[dir->dirfrag()] = dir;
     le->subtrees[dir->dirfrag()].clear();
 
-    if (dir->get_dir_auth().second != CDIR_AUTH_UNKNOWN &&
-	le->ambiguous_subtrees.count(dir->dirfrag()) == 0 &&
-	p->second.empty()) {
-      dout(10) << " maybe journal " << *dir << dendl;
-      maybe.push_back(dir);
-      continue;
-    }
-
-    le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
-    le->metablob.add_dir(dir, false);
-
-    if (mydir == dir)
-      mydir = NULL;
 
     // bounds
     for (set<CDir*>::iterator q = p->second.begin();
@@ -2566,9 +2554,8 @@ ESubtreeMap *MDCache::create_subtree_map()
 	 ++q) {
       CDir *bound = *q;
       dout(15) << " subtree bound " << *bound << dendl;
+      dirs_to_add[bound->dirfrag()] = bound;
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
-      le->metablob.add_dir_context(bound, EMetaBlob::TO_ROOT);
-      le->metablob.add_dir(bound, false);
     }
   }
 
@@ -2598,11 +2585,10 @@ ESubtreeMap *MDCache::create_subtree_map()
 	  continue;
 	}
 
-	bool journal_dir = false;
 	if (dir->is_subtree_root()) {
 	  if (le->subtrees.count(newparent->dirfrag()) &&
 	      oldparent->get_dir_auth() != newparent->get_dir_auth())
-	    journal_dir = true;
+	    dirs_to_add[dir->dirfrag()] = dir;
 	  // children are fine.  change parent.
 	  _move_subtree_map_bound(dir->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				  le->subtrees);
@@ -2613,13 +2599,13 @@ ESubtreeMap *MDCache::create_subtree_map()
 	    dout(10) << " creating subtree for " << dir->dirfrag() << dendl;
 	    // if oldparent is auth, subtree is mine; include it.
 	    if (le->subtrees.count(oldparent->dirfrag())) {
+	      dirs_to_add[dir->dirfrag()] = dir;
 	      le->subtrees[dir->dirfrag()].clear();
-	      journal_dir = true;
 	    }
 	    // if newparent is auth, subtree is a new bound
 	    if (le->subtrees.count(newparent->dirfrag())) {
+	      dirs_to_add[dir->dirfrag()] = dir;
 	      le->subtrees[newparent->dirfrag()].push_back(dir->dirfrag());  // newparent is auth; new bound
-	      journal_dir = true;
 	    }
 	    newparent = dir;
 	  }
@@ -2633,10 +2619,6 @@ ESubtreeMap *MDCache::create_subtree_map()
 	      _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				      le->subtrees);
 	  }
-	}
-	if (journal_dir) {
-	  le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
-	  le->metablob.add_dir(dir, false);
 	}
       }
     }
@@ -2658,6 +2640,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 	dout(10) << "simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
 	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
 	  p->second.push_back(*r);
+	dirs_to_add.erase(b);
 	le->subtrees.erase(b);
 	p->second.erase(p->second.begin() + i);
       } else {
@@ -2666,25 +2649,14 @@ ESubtreeMap *MDCache::create_subtree_map()
     }
   }
 
-  for (list<CDir*>::iterator p = maybe.begin(); p != maybe.end(); ++p) {
-    CDir *dir = *p;
-    if (le->subtrees.count(dir->dirfrag())) {
-      // not swallowed by above code
-      le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
-      le->metablob.add_dir(dir, false);
-    } else {
-      dout(10) << "simplify: not journal " << *dir << dendl;
-    }
+  for (auto p : dirs_to_add) {
+    CDir *dir = p.second;
+    le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir(dir, false);
   }
 
   dout(15) << " subtrees " << le->subtrees << dendl;
   dout(15) << " ambiguous_subtrees " << le->ambiguous_subtrees << dendl;
-
-  if (mydir) {
-    // include my dir
-    le->metablob.add_dir_context(mydir, EMetaBlob::TO_ROOT);
-    le->metablob.add_dir(mydir, false);
-  }
 
   //le->metablob.print(cout);
   le->expire_pos = mds->mdlog->journaler->get_expire_pos();
