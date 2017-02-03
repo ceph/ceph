@@ -441,8 +441,19 @@ In this case, we can learn from the output:
       ``0xffffffff``, which is calculated from the shard read from OSD.2
     * ``size_mismatch_oi``: the size stored in the object-info is different
       from the one read from OSD.2. The latter is 0.
+  * ``selected_object_info``: the information of the authoritiative copy(s)
+    choosen by OSD. It is the string representation of the object info of this
+    copy. In the example above:
 
-You can repair the inconsistent placement group by executing:: 
+    * ``s 968``: Size is ``968`` bytes
+    * ``dd e978e67f``: Data Digest is ``e978e67f``
+    * ``od ffffffff``: Omap Digest is ``ffffffff``
+
+If ``read_error`` is listed in the ``errors`` attribute of a shard, the
+inconsistency is likely due to disk errors. You might want to check your disk
+used by that OSD.
+
+You could repair the inconsistent placement group by executing::
 
 	ceph pg repair {placement-group-ID}
 
@@ -452,9 +463,28 @@ some predefined criteria. But this does not always work. For example, the stored
 data digest could be missing, and the calculated digest will be ignored when
 choosing the authoritative copies. So, please use the above command with caution.
 
-If ``read_error`` is listed in the ``errors`` attribute of a shard, the
-inconsistency is likely due to disk errors. You might want to check your disk
-used by that OSD.
+If you are able to identify the `good` copy by inspecting it, it is advisable to
+use the ``rados`` command or the RADOS APIs to fix the inconsistencies manually
+instead. In the above example, if the ``selected_object_info`` is hard to decipher
+or does not make sense at all, you will need to download the payload of the shards
+and inspect them manually::
+
+  rados -p rbd --force repair-get foo 0 14 foo.osd-0
+
+This command fetches the replica of ``foo`` to the local file ``foo.osd.0``
+from osd.0 at epoch 14. If you are happy with this replica after looking at
+it, you might want to overwrite bad replicas with good ones::
+
+  rados -p rbd repair-copy foo 2 14 1
+
+This command overwrites the replica on osd.2 with the good ones. Any replica not
+listed in the command line will be considered as good copy, and can be used to
+overwrite the corrupted ones. Please note, this command will refuse to rewrite
+the object if its version is not identical to the specified version, or the PG
+interval is expired. In this case, if ``foo`` object is updated after the scrub,
+and hence has greater version than "1", this command will fail. If the OSDs
+serving the PG holding this object peers after the deep scrub, this command
+will fail also. In that case, you need to re-schedule a scrub to this PG.
 
 If you receive ``active + clean + inconsistent`` states periodically due to 
 clock skew, you may consider configuring your `NTP`_ daemons on your 
