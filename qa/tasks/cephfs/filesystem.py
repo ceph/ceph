@@ -37,7 +37,7 @@ class FSStatus(object):
     """
     def __init__(self, mon_manager):
         self.mon = mon_manager
-        self.map = json.loads(self.mon.raw_cluster_cmd("fs", "dump", "--format=json-pretty"))
+        self.map = json.loads(self.mon.raw_cluster_cmd("fs", "dump", "--format=json"))
 
     def __str__(self):
         return json.dumps(self.map, indent = 2, sort_keys = True)
