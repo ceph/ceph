@@ -50,7 +50,6 @@ MgrStandby::~MgrStandby()
   delete objecter;
   delete monc;
   delete client_messenger;
-  delete active_mgr;
 }
 
 
@@ -159,9 +158,9 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   dout(4) << "active in map: " << active_in_map
           << " active is " << map.active_gid << dendl;
   if (active_in_map) {
-    if (active_mgr == nullptr) {
+    if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr = new Mgr(monc, client_messenger, objecter);
+      active_mgr.reset(new Mgr(monc, client_messenger, objecter));
       active_mgr->background_init();
       dout(1) << "I am now active" << dendl;
     } else {
@@ -171,8 +170,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
     if (active_mgr != nullptr) {
       derr << "I was active but no longer am" << dendl;
       active_mgr->shutdown();
-      delete active_mgr;
-      active_mgr = nullptr;
+      active_mgr.reset();
     }
   }
 }
