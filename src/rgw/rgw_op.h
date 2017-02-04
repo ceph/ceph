@@ -45,7 +45,42 @@ using namespace std;
 using ceph::crypto::SHA1;
 
 struct req_state;
-class RGWHandler;
+class RGWOp;
+
+class RGWHandler {
+protected:
+  RGWRados* store;
+  struct req_state* s;
+
+  int do_init_permissions();
+  int do_read_permissions(RGWOp* op, bool only_bucket);
+
+public:
+  RGWHandler()
+    : store(nullptr),
+      s(nullptr) {
+  }
+  virtual ~RGWHandler();
+
+  virtual int init(RGWRados* store,
+                   struct req_state* _s,
+                   rgw::io::BasicClient* cio);
+
+  virtual int init_permissions(RGWOp*) {
+    return 0;
+  }
+
+  virtual int retarget(RGWOp* op, RGWOp** new_op) {
+    *new_op = op;
+    return 0;
+  }
+
+  virtual int read_permissions(RGWOp* op) = 0;
+  virtual int authorize() = 0;
+  virtual int postauth_init() = 0;
+  virtual int error_handler(int err_no, std::string* error_content);
+};
+
 
 /**
  * Provide the base class for all ops.
@@ -65,10 +100,15 @@ protected:
 
   virtual int init_quota();
 public:
-RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
-    cors_exist(false), op_ret(0) {}
+  RGWOp()
+    : s(nullptr),
+      dialect_handler(nullptr),
+      store(nullptr),
+      cors_exist(false),
+      op_ret(0) {
+  }
 
-  virtual ~RGWOp() {}
+  virtual ~RGWOp() = default;
 
   int get_ret() const { return op_ret; }
 
@@ -90,6 +130,20 @@ RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
 
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
+
+  /* Authenticate requester -- verify its identity.
+   *
+   * NOTE: typically the procedure is common across all operations of the same
+   * dialect (S3, Swift API). However, there are significant exceptions in
+   * both APIs: browser uploads, /info and OPTIONS handlers. All of them use
+   * different, specific authentication schema driving the need for per-op
+   * authentication. The alternative is to duplicate parts of the method-
+   * dispatch logic in RGWHandler::authorize() and pollute it with a lot
+   * of special cases. */
+  virtual int verify_requester() {
+    /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
+    return dialect_handler->authorize();
+  }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();
   virtual void pre_exec() {}
@@ -1562,35 +1616,6 @@ public:
   const string name() override { return "get info"; }
   RGWOpType get_type() override { return RGW_OP_GET_INFO; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-};
-
-class RGWHandler {
-protected:
-  RGWRados *store;
-  struct req_state *s;
-
-  int do_init_permissions();
-  int do_read_permissions(RGWOp *op, bool only_bucket);
-
-public:
-  RGWHandler() : store(NULL), s(NULL) {}
-  virtual ~RGWHandler();
-
-  virtual int init(RGWRados* store, struct req_state* _s, rgw::io::BasicClient* cio);
-
-  virtual int init_permissions(RGWOp *op) {
-    return 0;
-  }
-
-  virtual int retarget(RGWOp *op, RGWOp **new_op) {
-    *new_op = op;
-    return 0;
-  }
-
-  virtual int read_permissions(RGWOp *op) = 0;
-  virtual int authorize() = 0;
-  virtual int postauth_init() = 0;
-  virtual int error_handler(int err_no, string *error_content);
 };
 
 extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);

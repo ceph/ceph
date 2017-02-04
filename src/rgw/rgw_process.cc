@@ -168,8 +168,8 @@ int process_request(RGWRados* const store,
 
   s->op_type = op->get_type();
 
-  req->log(s, "authorizing");
-  ret = handler->authorize();
+  req->log(s, "verifying requester");
+  ret = op->verify_requester();
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
     abort_early(s, NULL, ret, handler);
