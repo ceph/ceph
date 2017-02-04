@@ -126,12 +126,15 @@ int rgw_read_user_buckets(RGWRados * store,
   }
 
   do {
-    ret = store->cls_user_list_buckets(obj, m, end_marker, max - total, entries, &m, &truncated);
-    if (ret == -ENOENT)
+    ret = store->cls_user_list_buckets(obj, user_id.tenant, m, end_marker,
+                                       max - total, entries, &m, &truncated);
+    if (ret == -ENOENT) {
       ret = 0;
+    }
 
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
+    }
 
     for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
       RGWBucketEnt e(*q);

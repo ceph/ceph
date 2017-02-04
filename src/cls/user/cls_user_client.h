@@ -4,6 +4,9 @@
 #ifndef CEPH_CLS_USER_CLIENT_H
 #define CEPH_CLS_USER_CLIENT_H
 
+#include <list>
+#include <string>
+
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 #include "cls_user_types.h"
@@ -23,11 +26,12 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
 void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op);
 void cls_user_remove_bucket(librados::ObjectWriteOperation& op,  const cls_user_bucket& bucket);
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
-                       const string& in_marker,
-                       const string& end_marker,
+                       const std::string& tenant,
+                       const std::string& in_marker,
+                       const std::string& end_marker,
                        int max_entries,
-                       list<cls_user_bucket_entry>& entries,
-                       string *out_marker,
+                       std::list<cls_user_bucket_entry>& entries,
+                       std::string *out_marker,
                        bool *truncated,
                        int *pret);
 void cls_user_get_header(librados::ObjectReadOperation& op, cls_user_header *header, int *pret);

@@ -12405,11 +12405,12 @@ int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket
 }
 
 int RGWRados::cls_user_list_buckets(rgw_obj& obj,
-                                    const string& in_marker,
-                                    const string& end_marker,
+                                    const std::string& tenant,
+                                    const std::string& in_marker,
+                                    const std::string& end_marker,
                                     const int max_entries,
-                                    list<cls_user_bucket_entry>& entries,
-                                    string * const out_marker,
+                                    std::list<cls_user_bucket_entry>& entries,
+                                    std::string * const out_marker,
                                     bool * const truncated)
 {
   rgw_rados_ref ref;
@@ -12422,7 +12423,8 @@ int RGWRados::cls_user_list_buckets(rgw_obj& obj,
   librados::ObjectReadOperation op;
   int rc;
 
-  cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
+  cls_user_bucket_list(op, tenant, in_marker, end_marker, max_entries,
+                       entries, out_marker, truncated, &rc);
   bufferlist ibl;
   r = ref.ioctx.operate(ref.oid, &op, &ibl);
   if (r < 0)
