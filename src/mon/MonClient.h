@@ -439,14 +439,14 @@ private:
   void handle_mon_command_ack(MMonCommandAck *ack);
 
 public:
-  int start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
+  void start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(int mon_rank,
+  void start_mon_command(int mon_rank,
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
+  void start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);

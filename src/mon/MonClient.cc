@@ -1028,7 +1028,7 @@ void MonClient::_finish_command(MonCommand *r, int ret, string rs)
   delete r;
 }
 
-int MonClient::start_mon_command(const vector<string>& cmd,
+void MonClient::start_mon_command(const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
@@ -1056,11 +1056,9 @@ int MonClient::start_mon_command(const vector<string>& cmd,
   }
   mon_commands[r->tid] = r;
   _send_command(r);
-  // can't fail
-  return 0;
 }
 
-int MonClient::start_mon_command(const string &mon_name,
+void MonClient::start_mon_command(const string &mon_name,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
@@ -1076,11 +1074,9 @@ int MonClient::start_mon_command(const string &mon_name,
   r->onfinish = onfinish;
   mon_commands[r->tid] = r;
   _send_command(r);
-  // can't fail
-  return 0;
 }
 
-int MonClient::start_mon_command(int rank,
+void MonClient::start_mon_command(int rank,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
@@ -1096,7 +1092,6 @@ int MonClient::start_mon_command(int rank,
   r->onfinish = onfinish;
   mon_commands[r->tid] = r;
   _send_command(r);
-  return 0;
 }
 
 // ---------
