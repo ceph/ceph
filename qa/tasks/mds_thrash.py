@@ -47,7 +47,7 @@ class MDSThrasher(Greenlet):
     thrash_in_replay: [default: 0.0] likelihood that the MDS will be thrashed
       during replay.  Value should be between 0.0 and 1.0.
 
-    thrash_max_mds: [default: 0.25] likelihood that the max_mds of the mds
+    thrash_max_mds: [default: 0.0] likelihood that the max_mds of the mds
       cluster will be modified to a value [1, current) or (current, starting
       max_mds]. When reduced, randomly selected MDSs other than rank 0 will be
       deactivated to reach the new max_mds.  Value should be between 0.0 and 1.0.
@@ -112,7 +112,7 @@ class MDSThrasher(Greenlet):
         self.stopping = Event()
 
         self.randomize = bool(self.config.get('randomize', True))
-        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.25))
+        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.0))
         self.max_thrash = int(self.config.get('max_thrash', 1))
         self.max_thrash_delay = float(self.config.get('thrash_delay', 120.0))
         self.thrash_in_replay = float(self.config.get('thrash_in_replay', False))
@@ -231,7 +231,7 @@ class MDSThrasher(Greenlet):
 
             status = self.fs.status()
 
-            if random.randrange(0.0, 1.0) <= self.thrash_max_mds:
+            if random.random() <= self.thrash_max_mds:
                 max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
                 options = range(1, max_mds)+range(max_mds+1, self.max_mds+1)
                 if len(options) > 0:
@@ -242,6 +242,7 @@ class MDSThrasher(Greenlet):
                     stats['max_mds'] += 1
 
                     # Now randomly deactivate mds if we shrank
+                    # TODO: it's desirable to deactivate in order. Make config to do random.
                     targets = filter(lambda r: r['rank'] > 0, status.get_ranks(self.fs.id)) # can't deactivate 0
                     for target in random.sample(targets, max(0, max_mds-new_max_mds)):
                         self.log("deactivating rank %d" % target['rank'])
