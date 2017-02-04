@@ -7,9 +7,9 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "cls/lock/cls_lock_ops.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/Types.h"
+#include "librbd/managed_lock/Utils.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
@@ -89,7 +89,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, SuccessExclusive) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", ManagedLock<>::WATCHER_LOCK_TAG,
+                       "auto 123", util::get_watcher_lock_tag(),
                        LOCK_EXCLUSIVE);
 
   C_SaferCond ctx;
@@ -116,7 +116,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, SuccessShared) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", ManagedLock<>::WATCHER_LOCK_TAG,
+                       "auto 123", util::get_watcher_lock_tag(),
                        LOCK_SHARED);
 
   C_SaferCond ctx;
@@ -206,7 +206,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoIncompatibleShared) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", ManagedLock<>::WATCHER_LOCK_TAG,
+                       "auto 123", util::get_watcher_lock_tag(),
                        LOCK_SHARED);
 
   C_SaferCond ctx;
@@ -228,7 +228,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoIncompatibleExclusive) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", ManagedLock<>::WATCHER_LOCK_TAG,
+                       "auto 123", util::get_watcher_lock_tag(),
                        LOCK_EXCLUSIVE);
 
   C_SaferCond ctx;
@@ -250,7 +250,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoExternalCookie) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "external cookie", ManagedLock<>::WATCHER_LOCK_TAG,
+                       "external cookie", util::get_watcher_lock_tag(),
                        LOCK_EXCLUSIVE);
 
   C_SaferCond ctx;

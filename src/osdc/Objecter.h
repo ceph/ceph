@@ -119,15 +119,6 @@ struct ObjectOperation {
     osd_op.op.writesame.data_length = bl.length();
     osd_op.indata.claim_append(bl);
   }
-  void add_clone_range(int op, uint64_t off, uint64_t len,
-		       const object_t& srcoid, uint64_t srcoff,
-		       snapid_t srcsnapid) {
-    OSDOp& osd_op = add_op(op);
-    osd_op.op.clonerange.offset = off;
-    osd_op.op.clonerange.length = len;
-    osd_op.op.clonerange.src_offset = srcoff;
-    osd_op.soid = sobject_t(srcoid, srcsnapid);
-  }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.xattr.name_len = (name ? strlen(name) : 0);
@@ -376,12 +367,6 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
-  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len,
-		   uint64_t dst_offset) {
-    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_oid,
-		    src_offset, CEPH_NOSNAP);
-  }
-
   // object attrs
   void getxattr(const char *name, bufferlist *pbl, int *prval) {
     bufferlist bl;
@@ -391,17 +376,39 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   struct C_ObjectOperation_decodevals : public Context {
+    uint64_t max_entries;
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
+    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodevals(std::map<std::string,bufferlist> *pa, int *pr)
-      : pattrs(pa), prval(pr) {}
+    C_ObjectOperation_decodevals(uint64_t m, std::map<std::string,bufferlist> *pa,
+				 bool *pt, int *pr)
+      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
+      if (ptruncated) {
+	*ptruncated = false;
+      }
+    }
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
+	  if (ptruncated) {
+	    std::map<std::string,bufferlist> ignore;
+	    if (!pattrs) {
+	      ::decode(ignore, p);
+	      pattrs = &ignore;
+	    }
+	    if (!p.end()) {
+	      ::decode(*ptruncated, p);
+	    } else {
+	      // the OSD did not provide this.  since old OSDs do not
+	      // enfoce omap result limits either, we can infer it from
+	      // the size of the result
+	      *ptruncated = (pattrs->size() == max_entries);
+	    }
+	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -411,17 +418,39 @@ struct ObjectOperation {
     }
   };
   struct C_ObjectOperation_decodekeys : public Context {
+    uint64_t max_entries;
     bufferlist bl;
     std::set<std::string> *pattrs;
+    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodekeys(std::set<std::string> *pa, int *pr)
-      : pattrs(pa), prval(pr) {}
+    C_ObjectOperation_decodekeys(uint64_t m, std::set<std::string> *pa, bool *pt,
+				 int *pr)
+      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
+      if (ptruncated) {
+	*ptruncated = false;
+      }
+    }
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
+	  if (ptruncated) {
+	    std::set<std::string> ignore;
+	    if (!pattrs) {
+	      ::decode(ignore, p);
+	      pattrs = &ignore;
+	    }
+	    if (!p.end()) {
+	      ::decode(*ptruncated, p);
+	    } else {
+	      // the OSD did not provide this.  since old OSDs do not
+	      // enfoce omap result limits either, we can infer it from
+	      // the size of the result
+	      *ptruncated = (pattrs->size() == max_entries);
+	    }
+	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -505,7 +534,7 @@ struct ObjectOperation {
     if (pattrs || prval) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h
-	= new C_ObjectOperation_decodevals(pattrs, prval);
+	= new C_ObjectOperation_decodevals(0, pattrs, nullptr, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -564,6 +593,7 @@ struct ObjectOperation {
   void omap_get_keys(const string &start_after,
 		     uint64_t max_to_get,
 		     std::set<std::string> *out_set,
+		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     bufferlist bl;
@@ -572,10 +602,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set) {
+    if (prval || ptruncated || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodekeys *h =
-	new C_ObjectOperation_decodekeys(out_set, prval);
+	new C_ObjectOperation_decodekeys(max_to_get, out_set, ptruncated, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -586,6 +616,7 @@ struct ObjectOperation {
 		     const string &filter_prefix,
 		     uint64_t max_to_get,
 		     std::map<std::string, bufferlist> *out_set,
+		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     bufferlist bl;
@@ -595,10 +626,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set) {
+    if (prval || out_set || ptruncated) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(out_set, prval);
+	new C_ObjectOperation_decodevals(max_to_get, out_set, ptruncated, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -617,7 +648,7 @@ struct ObjectOperation {
     if (prval || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(out_set, prval);
+	new C_ObjectOperation_decodevals(0, out_set, nullptr, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -978,26 +1009,11 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_VER);
     osd_op.op.assert_ver.ver = ver;
   }
-  void assert_src_version(const object_t& srcoid, snapid_t srcsnapid,
-			  uint64_t ver) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_SRC_VERSION);
-    osd_op.op.assert_ver.ver = ver;
-    ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
-  }
 
   void cmpxattr(const char *name, const bufferlist& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
     OSDOp& o = *ops.rbegin();
-    o.op.xattr.cmp_op = op;
-    o.op.xattr.cmp_mode = mode;
-  }
-  void src_cmpxattr(const object_t& srcoid, snapid_t srcsnapid,
-		    const char *name, const bufferlist& val,
-		    int op, int mode) {
-    add_xattr(CEPH_OSD_OP_SRC_CMPXATTR, name, val);
-    OSDOp& o = *ops.rbegin();
-    o.soid = sobject_t(srcoid, srcsnapid);
     o.op.xattr.cmp_op = op;
     o.op.xattr.cmp_mode = mode;
   }

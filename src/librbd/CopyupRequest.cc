@@ -181,6 +181,18 @@ bool CopyupRequest::send_copyup() {
   return false;
 }
 
+bool CopyupRequest::is_copyup_required() {
+  bool noop = true;
+  for (const AioObjectRequest<> *req : m_pending_requests) {
+    if (!req->is_op_payload_empty()) {
+      noop = false;
+      break;
+    }
+  }
+
+  return (m_copyup_data.is_zero() && noop);
+}
+
 void CopyupRequest::send()
 {
   m_state = STATE_READ_FROM_PARENT;
@@ -217,9 +229,19 @@ bool CopyupRequest::should_complete(int r)
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
     remove_from_list();
     if (r >= 0 || r == -ENOENT) {
-      return send_object_map();
+      if (is_copyup_required()) {
+        ldout(cct, 20) << __func__ << " " << this << " nop, skipping" << dendl;
+        return true;
+      }
+
+      return send_object_map_head();
     }
     break;
+
+  case STATE_OBJECT_MAP_HEAD:
+    ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
+    assert(r == 0);
+    return send_object_map();
 
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
@@ -259,26 +281,65 @@ void CopyupRequest::remove_from_list()
   m_ictx->copyup_list.erase(it);
 }
 
-bool CopyupRequest::send_object_map() {
+bool CopyupRequest::send_object_map_head() {
+  CephContext *cct = m_ictx->cct;
+  ldout(cct, 20) << __func__ << " " << this << dendl;
+
+  m_state = STATE_OBJECT_MAP_HEAD;
+
   {
+    RWLock::RLocker owner_locker(m_ictx->owner_lock);
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     if (m_ictx->object_map != nullptr) {
       bool copy_on_read = m_pending_requests.empty();
       assert(m_ictx->exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-      if (copy_on_read &&
-          (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
-        // CoW already updates the HEAD object map
-        m_snap_ids.push_back(CEPH_NOSNAP);
-      }
       if (!m_ictx->snaps.empty()) {
         m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
                           m_ictx->snaps.end());
       }
+      if (copy_on_read &&
+          (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
+        m_snap_ids.insert(m_snap_ids.begin(), CEPH_NOSNAP);
+        object_map_locker.unlock();
+        snap_locker.unlock();
+        owner_locker.unlock();
+        return send_object_map();
+      }
+
+      bool may_update = false;
+      uint8_t new_state, current_state;
+
+      vector<AioObjectRequest<> *>::reverse_iterator r_it = m_pending_requests.rbegin();
+      for (; r_it != m_pending_requests.rend(); ++r_it) {
+        AioObjectRequest<> *req = *r_it;
+        if (!req->pre_object_map_update(&new_state)) {
+          continue;
+        }
+
+        current_state = (*m_ictx->object_map)[m_object_no];
+        ldout(cct, 20) << __func__ << " " << req->get_op_type() << " object no "
+                       << m_object_no << " current state "
+                       << stringify(static_cast<uint32_t>(current_state))
+                       << " new state " << stringify(static_cast<uint32_t>(new_state))
+                       << dendl;
+        may_update = true;
+        break;
+      }
+
+      if (may_update && (new_state != current_state) &&
+          m_ictx->object_map->aio_update<CopyupRequest>(
+            CEPH_NOSNAP, m_object_no, new_state, current_state, this)) {
+        return false;
+      }
     }
   }
 
+  return send_object_map();
+}
+
+bool CopyupRequest::send_object_map() {
   // avoid possible recursive lock attempts
   if (m_snap_ids.empty()) {
     // no object map update required
@@ -286,8 +347,7 @@ bool CopyupRequest::send_object_map() {
   } else {
     // update object maps for HEAD and all existing snapshots
     ldout(m_ictx->cct, 20) << __func__ << " " << this
-    	                   << ": oid " << m_oid
-                           << dendl;
+                           << ": oid " << m_oid << dendl;
     m_state = STATE_OBJECT_MAP;
 
     RWLock::RLocker owner_locker(m_ictx->owner_lock);

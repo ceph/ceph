@@ -179,19 +179,22 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   assert(alloc[id]);
   int r = alloc[id]->reserve(want);
   assert(r == 0); // caller shouldn't ask for more than they can get
-  int count = 0;
-  uint64_t got = 0;
-  r = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
-                          extents, &count, &got);
+  int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
+				    extents);
+  if (got < (int64_t)want) {
+    alloc[id]->unreserve(want - MAX(0, got));
+  }
+  if (got <= 0) {
+    derr << __func__ << " failed to allocate space to return to bluestore"
+	 << dendl;
+    alloc[id]->dump();
+    return got;
+  }
 
-  assert(r >= 0);
-  if (got < want)
-    alloc[id]->unreserve(want - got);
-
-  for (int i = 0; i < count; i++) {
-    block_all[id].erase((*extents)[i].offset, (*extents)[i].length);
-    block_total[id] -= (*extents)[i].length;
-    log_t.op_alloc_rm(id, (*extents)[i].offset, (*extents)[i].length);
+  for (auto& p : *extents) {
+    block_all[id].erase(p.offset, p.length);
+    block_total[id] -= p.length;
+    log_t.op_alloc_rm(id, p.offset, p.length);
   }
 
   r = _flush_and_sync_log(l);
@@ -227,6 +230,14 @@ uint64_t BlueFS::get_free(unsigned id)
   assert(id < alloc.size());
   return alloc[id]->get_free();
 }
+
+void BlueFS::dump_perf_counters(Formatter *f)
+{
+  f->open_object_section("bluefs_perf_counters");
+  logger->dump_formatted(f,0);
+  f->close_section();
+}
+
 
 void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
 {
@@ -1569,10 +1580,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	// we are using the page_aligned_appender, and can safely use
 	// the tail of the raw buffer.
 	const bufferptr &last = t.back();
-	if (last.unused_tail_length() != zlen) {
+	if (last.unused_tail_length() < zlen) {
 	  derr << " wtf, last is " << last << " from " << t << dendl;
+	  assert(last.unused_tail_length() >= zlen);
 	}
-	assert(last.unused_tail_length() == zlen);
 	bufferptr z = last;
 	z.set_offset(last.offset() + last.length());
 	z.set_length(zlen);
@@ -1767,22 +1778,20 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     hint = ev->back().end();
   }
 
-  int count = 0;
-  uint64_t alloc_len = 0;
-  AllocExtentVector extents = AllocExtentVector(left / min_alloc_size);
-
-  r = alloc[id]->allocate(left, min_alloc_size, hint,
-                          &extents, &count, &alloc_len);
-  if (r < 0 || alloc_len < left) {
+  AllocExtentVector extents;
+  extents.reserve(4);  // 4 should be (more than) enough for most allocations
+  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
+                          &extents);
+  if (alloc_len < (int64_t)left) {
     derr << __func__ << " allocate failed on 0x" << std::hex << left
 	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
     alloc[id]->dump();
     assert(0 == "allocate failed... wtf");
-    return r;
+    return -ENOSPC;
   }
 
-  for (int i = 0; i < count; i++) {
-    bluefs_extent_t e = bluefs_extent_t(id, extents[i].offset, extents[i].length);
+  for (auto& p : extents) {
+    bluefs_extent_t e = bluefs_extent_t(id, p.offset, p.length);
     if (!ev->empty() &&
 	ev->back().bdev == e.bdev &&
 	ev->back().end() == (uint64_t) e.offset) {

@@ -883,6 +883,7 @@ ssize_t AsyncConnection::_process_connection()
 
         SocketOptions opts;
         opts.priority = async_msgr->get_socket_priority();
+        opts.connect_bind_addr = msgr->get_myaddr();
         r = worker->connect(get_peer_addr(), opts, &cs);
         if (r < 0)
           goto fail;
@@ -1860,7 +1861,7 @@ void AsyncConnection::_connect()
 void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 {
   ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd() << dendl;
-  assert(socket.fd() > 0);
+  assert(socket.fd() >= 0);
 
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);

@@ -400,6 +400,10 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
       dout(10) << "drop split on " << frag << " because not in cache" << dendl;
       return;
     }
+    if (!split_dir->is_auth()) {
+      dout(10) << "drop split on " << frag << " because non-auth" << dendl;
+      return;
+    }
 
     // Pass on to MDCache: note that the split might still not
     // happen if the checks in MDCache::can_fragment fail.

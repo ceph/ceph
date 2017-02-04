@@ -2115,7 +2115,7 @@ int RGWHandler_REST_SWIFT::authorize()
     }
 
     /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
-    if (s->user->system) {
+    if (s->user->system && s->auth_identity->is_owner_of(s->user->user_id)) {
       s->system_request = true;
       ldout(s->cct, 20) << "system request over Swift API" << dendl;
 

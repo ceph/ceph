@@ -376,7 +376,8 @@ COMMAND_WITH_FLAG("mds newfs " \
 COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \
-	"name=data,type=CephString ", \
+	"name=data,type=CephString " \
+	"name=force,type=CephChoices,strings=--force,req=false", \
 	"make new filesystem using named pools <metadata> and <data>", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs rm " \

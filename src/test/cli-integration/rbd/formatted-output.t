@@ -780,14 +780,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </id*> (glob)
   </locks>
   $ rbd snap list foo
-  SNAPID NAME    SIZE 
+  SNAPID NAME    SIZE TIMESTAMP 
       *snap*1024*MB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
-          "size": 1073741824
+          "size": 1073741824, 
+          "timestamp": ""
       }
   ]
   $ rbd snap list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
@@ -796,10 +797,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>1073741824</size>
+      <timestamp></timestamp>
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID NAME     SIZE 
+  SNAPID NAME     SIZE TIMESTAMP                
       *snap*512*MB* (glob)
       *snap2*1024*MB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
@@ -807,12 +809,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       {
           "id": *,  (glob)
           "name": "snap", 
-          "size": 536870912
+          "size": 536870912, 
+          "timestamp": * (glob)
       }, 
       {
           "id": *,  (glob)
           "name": "snap2", 
-          "size": 1073741824
+          "size": 1073741824, 
+          "timestamp": * (glob)
       }
   ]
   $ rbd snap list bar --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
@@ -821,11 +825,13 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <timestamp>*</timestamp> (glob)
     </snapshot>
     <snapshot>
       <id>*</id> (glob)
       <name>snap2</name>
       <size>1073741824</size>
+      <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
   $ rbd snap list baz
@@ -834,14 +840,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
-  SNAPID NAME   SIZE 
+  SNAPID NAME   SIZE TIMESTAMP                
       *snap*512*MB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
-          "size": 536870912
+          "size": 536870912, 
+          "timestamp": * (glob)
       }
   ]
   $ rbd snap list rbd_other/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
@@ -850,15 +857,16 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
-  $ rbd disk-usage --pool rbd_other
+  $ rbd disk-usage --pool rbd_other 2>/dev/null
   NAME                    PROVISIONED  USED 
-  child@snap                     512M  512M 
-  child                          512M  512M 
-  deep-flatten-child@snap        512M  512M 
-  deep-flatten-child             512M  512M 
-  <TOTAL>                       1024M 2048M 
+  child@snap                     512M     0 
+  child                          512M 4096k 
+  deep-flatten-child@snap        512M     0 
+  deep-flatten-child             512M     0 
+  <TOTAL>                       1024M 4096k 
   $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "images": [
@@ -866,27 +874,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
               "name": "child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
-              "used_size": 536870912
+              "used_size": 0
           }, 
           {
               "name": "child", 
               "provisioned_size": 536870912, 
-              "used_size": 536870912
+              "used_size": 4194304
           }, 
           {
               "name": "deep-flatten-child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
-              "used_size": 536870912
+              "used_size": 0
           }, 
           {
               "name": "deep-flatten-child", 
               "provisioned_size": 536870912, 
-              "used_size": 536870912
+              "used_size": 0
           }
       ], 
       "total_provisioned_size": 1073741824, 
-      "total_used_size": 2147483648
+      "total_used_size": 4194304
   }
   $ rbd disk-usage --pool rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <stats>
@@ -895,27 +903,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
         <name>child</name>
         <snapshot>snap</snapshot>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>0</used_size>
       </image>
       <image>
         <name>child</name>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>4194304</used_size>
       </image>
       <image>
         <name>deep-flatten-child</name>
         <snapshot>snap</snapshot>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>0</used_size>
       </image>
       <image>
         <name>deep-flatten-child</name>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>0</used_size>
       </image>
     </images>
     <total_provisioned_size>1073741824</total_provisioned_size>
-    <total_used_size>2147483648</total_used_size>
+    <total_used_size>4194304</total_used_size>
   </stats>
 
 # cleanup

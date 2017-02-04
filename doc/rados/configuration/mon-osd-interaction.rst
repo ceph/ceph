@@ -31,8 +31,9 @@ or by setting the value at runtime. If a neighboring Ceph OSD Daemon doesn't
 show a heartbeat within a 20 second grace period, the Ceph OSD Daemon may
 consider the neighboring Ceph OSD Daemon ``down`` and report it back to a Ceph
 Monitor, which will update the Ceph Cluster Map. You may change this grace
-period by adding an ``osd heartbeat grace`` setting under the ``[osd]`` section
-of your Ceph configuration file, or by setting the value at runtime.
+period by adding an ``osd heartbeat grace`` setting under the ``[mon]``
+and ``[osd]`` or ``[global]`` section of your Ceph configuration file,
+or by setting the value at runtime.
 
 
 .. ditaa:: +---------+          +---------+
@@ -348,6 +349,8 @@ OSD Settings
 
 :Description: The elapsed time when a Ceph OSD Daemon hasn't shown a heartbeat
               that the Ceph Storage Cluster considers it ``down``.
+              This setting has to be set in both the [mon] and [osd] or [global]
+              section so that it is read by both the MON and OSD daemons.
  
 :Type: 32-bit Integer
 :Default: ``20``

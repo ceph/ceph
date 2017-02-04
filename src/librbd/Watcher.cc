@@ -67,16 +67,14 @@ struct C_UnwatchAndFlush : public Context {
 
 Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
                           const string& oid)
-  : m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
+  : m_ioctx(ioctx), m_work_queue(work_queue), m_oid(oid),
+    m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_watch_lock(util::unique_lock_name("librbd::Watcher::m_watch_lock", this)),
     m_watch_handle(0), m_notifier(work_queue, ioctx, oid),
-    m_watch_state(WATCH_STATE_UNREGISTERED), m_ioctx(ioctx),
-    m_work_queue(work_queue), m_oid(oid), m_watch_ctx(*this)
-{
+    m_watch_state(WATCH_STATE_UNREGISTERED), m_watch_ctx(*this) {
 }
 
-Watcher::~Watcher()
-{
+Watcher::~Watcher() {
   RWLock::RLocker l(m_watch_lock);
   assert(m_watch_state != WATCH_STATE_REGISTERED);
 }
@@ -219,7 +217,7 @@ void Watcher::WatchCtx::handle_notify(uint64_t notify_id,
                                                uint64_t handle,
                                                uint64_t notifier_id,
                                                bufferlist& bl) {
-  watcher.handle_notify(notify_id, handle, bl);
+  watcher.handle_notify(notify_id, handle, notifier_id, bl);
 }
 
 void Watcher::WatchCtx::handle_error(uint64_t handle, int err) {

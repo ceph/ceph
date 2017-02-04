@@ -190,13 +190,6 @@ int main(int argc, const char **argv)
   r = io_ctx.read(oid, bl, 0, 1);
   assert(r == -EOVERFLOW);
 
-  // test assert_src_version
-  r = io_ctx.read(oid, bl, 0, 1);
-  assert(r >= 0);
-  v = io_ctx.get_last_version();
-  cout << oid << " version is " << v << std::endl;
-  io_ctx.set_assert_src_version(oid, v);
-  
   r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2);
   cout << "exec returned " << r << std::endl;
   const unsigned char *sha1 = (const unsigned char *)bl2.c_str();
@@ -267,28 +260,7 @@ int main(int argc, const char **argv)
     assert(r == -ECANCELED);
   }
 
-  cout << "src_cmpxattr" << std::endl;
-  const char *oidb = "bar-clone";
-  {
-    ObjectWriteOperation o;
-    o.src_cmpxattr(oid, "foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
-    io_ctx.locator_set_key(oid);
-    o.write_full(val);
-    r = io_ctx.operate(oidb, &o);
-    cout << " got " << r << " wanted " << -ECANCELED << " (-ECANCELED)" << std::endl;
-    assert(r == -ECANCELED);
-  }
-  {
-    ObjectWriteOperation o;
-    o.src_cmpxattr(oid, "foo", CEPH_OSD_CMPXATTR_OP_NE, val);
-    io_ctx.locator_set_key(oid);
-    o.write_full(val);
-    r = io_ctx.operate(oidb, &o);
-    cout << " got " << r << " wanted >= 0" << std::endl;
-    assert(r >= 0);
-  }
   io_ctx.locator_set_key(string());
-
 
   cout << "iterating over objects..." << std::endl;
   int num_objs = 0;

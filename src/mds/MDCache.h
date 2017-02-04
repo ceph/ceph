@@ -31,6 +31,7 @@
 #include "StrayManager.h"
 #include "MDSContext.h"
 #include "MDSMap.h"
+#include "Mutation.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
@@ -67,10 +68,6 @@ struct MClientSnap;
 class MMDSFragmentNotify;
 
 class ESubtreeMap;
-
-struct MDRequestImpl;
-typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
-struct MDSlaveUpdate;
 
 enum {
   l_mdc_first = 3000,
@@ -146,6 +143,10 @@ public:
     stray_index = (stray_index+1)%NUM_STRAY;
   }
 
+  void activate_stray_manager() {
+    stray_manager.activate();
+  }
+
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -216,10 +217,21 @@ public:
     frag_t frag;
     snapid_t snap;
     filepath want_path;
+    MDSCacheObject *base;
     bool want_base_dir;
     bool want_xlocked;
 
-    discover_info_t() : tid(0), mds(-1), snap(CEPH_NOSNAP), want_base_dir(false), want_xlocked(false) {}
+    discover_info_t() :
+      tid(0), mds(-1), snap(CEPH_NOSNAP), base(NULL),
+      want_base_dir(false), want_xlocked(false) {}
+    ~discover_info_t() {
+      if (base)
+	base->put(MDSCacheObject::PIN_DISCOVERBASE);
+    }
+    void pin_base(MDSCacheObject *b) {
+      base = b;
+      base->get(MDSCacheObject::PIN_DISCOVERBASE);
+    }
   };
 
   map<ceph_tid_t, discover_info_t> discovers;
@@ -350,7 +362,7 @@ public:
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
 				   int linkunlink, SnapRealm *prealm);
   void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
-				    CDir *parent, int linkunlink=0);
+				    CDir *parent, int linkunlink, bool update_inode);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
@@ -368,6 +380,9 @@ public:
   }
   void wait_for_uncommitted_master(metareqid_t reqid, MDSInternalContextBase *c) {
     uncommitted_masters[reqid].waiters.push_back(c);
+  }
+  bool have_uncommitted_master(metareqid_t reqid) {
+    return uncommitted_masters.count(reqid);
   }
   void log_master_commit(metareqid_t reqid);
   void logged_master_update(metareqid_t reqid);

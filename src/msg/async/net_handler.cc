@@ -150,7 +150,7 @@ void NetHandler::set_priority(int sd, int prio)
   }
 }
 
-int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
+int NetHandler::generic_connect(const entity_addr_t& addr, const entity_addr_t &bind_addr, bool nonblock)
 {
   int ret;
   int s = create_socket(addr.get_family());
@@ -167,6 +167,18 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
   set_socket_options(s, cct->_conf->ms_tcp_nodelay, cct->_conf->ms_tcp_rcvbuf);
 
+  {
+    entity_addr_t addr = bind_addr;
+    if (cct->_conf->ms_bind_before_connect && (!addr.is_blank_ip())) {
+      addr.set_port(0);
+      ret = ::bind(s, addr.get_sockaddr(), addr.get_sockaddr_len());
+      if (ret < 0) {
+        ret = -errno;
+        ldout(cct, 2) << __func__ << " client bind error " << ", " << cpp_strerror(ret) << dendl;
+        return ret;
+      }
+    }
+  }
 
   ret = ::connect(s, addr.get_sockaddr(), addr.get_sockaddr_len());
   if (ret < 0) {
@@ -195,14 +207,14 @@ int NetHandler::reconnect(const entity_addr_t &addr, int sd)
   return 0;
 }
 
-int NetHandler::connect(const entity_addr_t &addr)
+int NetHandler::connect(const entity_addr_t &addr, const entity_addr_t& bind_addr)
 {
-  return generic_connect(addr, false);
+  return generic_connect(addr, bind_addr, false);
 }
 
-int NetHandler::nonblock_connect(const entity_addr_t &addr)
+int NetHandler::nonblock_connect(const entity_addr_t &addr, const entity_addr_t& bind_addr)
 {
-  return generic_connect(addr, true);
+  return generic_connect(addr, bind_addr, true);
 }
 
 

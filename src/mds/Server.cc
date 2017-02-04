@@ -1022,7 +1022,7 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestR
   if (mdr) {
     string event_str("submit entry: ");
     event_str += event;
-    mdr->mark_event(event_str);
+    mdr->mark_event_string(event_str);
   } 
   mdlog->submit_entry(le, fin);
 }
@@ -1385,7 +1385,7 @@ void Server::handle_client_request(MClientRequest *req)
 	}
 	req->get_connection()->send_message(reply);
 
-	if (req->is_replay())
+	if (mds->is_clientreplay())
 	  mds->queue_one_replay();
 
 	req->put();
@@ -1737,6 +1737,12 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
   mds_rank_t from = mds_rank_t(m->get_source().num());
   
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    metareqid_t r = m->get_reqid();
+    if (!mdcache->have_uncommitted_master(r)) {
+      dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << r << dendl;
+      m->put();
+      return;
+    }
     dout(3) << "not clientreplay|active yet, waiting" << dendl;
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -1750,11 +1756,6 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
   }
 
   MDRequestRef mdr = mdcache->request_get(m->get_reqid());
-  if (!mdr.get()) {
-    dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << m->get_reqid() << dendl;
-    m->put();
-    return;
-  }
   if (m->get_attempt() != mdr->attempt) {
     dout(10) << "handle_slave_request_reply " << *mdr << " ignoring reply from other attempt "
 	     << m->get_attempt() << dendl;
@@ -2289,7 +2290,8 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 
   CDir *straydir = mdcache->get_stray_dir(in);
 
-  if (!check_fragment_space(mdr, straydir))
+  if (!mdr->client_request->is_replay() &&
+      !check_fragment_space(mdr, straydir))
     return NULL;
 
   straydn = mdcache->get_or_create_stray_dentry(in);
@@ -5365,7 +5367,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
   assert(mdr || mds->is_resolve());
 
-  auto mut(std::make_shared<MutationImpl>(rollback.reqid));
+  MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CInode *in = mdcache->get_inode(rollback.ino);
@@ -5581,14 +5583,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
     set<mds_rank_t> witnesses;
-
-    list<CDir*> dfls;
-    in->get_subtree_dirfrags(dfls);
-    for (auto p : dfls) {
-      if (mds->get_nodeid() != p->get_dir_auth().first)
-	witnesses.insert(p->get_dir_auth().first);
-    }
-
+    in->list_replicas(witnesses);
     dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
     for (set<mds_rank_t>::iterator p = witnesses.begin();
@@ -5818,6 +5813,12 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   dout(10) << " src " << srcpath << dendl;
   CInode *in;
   int r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &trace, &in, MDS_TRAVERSE_DISCOVERXLOCK);
+  if (r > 0) return;
+  if (r == -ESTALE) {
+    mdcache->find_ino_peers(srcpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
+	mdr->slave_to_mds);
+    return;
+  }
   assert(r == 0);
   CDentry *dn = trace[trace.size()-1];
   dout(10) << " dn " << *dn << dendl;
@@ -6098,7 +6099,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
 {
   dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
-  assert(in->filelock.can_read(-1));
+  assert(in->filelock.can_read(mdr->get_client()));
 
   frag_info_t dirstat;
   version_t dirstat_version = in->get_projected_inode()->dirstat.version;
@@ -6646,9 +6647,7 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
   prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
 
   list<ScatterLock*> updated_scatterlocks;
-  mdcache->migrator->decode_import_inode(srcdn, blp, 
-					 srcdn->authority().first,
-					 mdr->ls, 0,
+  mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
 					 mdr->more()->cap_imports, updated_scatterlocks);
 
   // hack: force back to !auth and clean, temporarily
@@ -7618,7 +7617,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
   // need to finish this update before sending resolve to claim the subtree
   mdcache->add_rollback(rollback.reqid, master);
 
-  auto mut(std::make_shared<MutationImpl>(rollback.reqid));
+  MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CDentry *srcdn = NULL;
@@ -7723,7 +7722,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
   if (srcdn && srcdn->authority().first == whoami) {
     nest_info_t blah;
     _rollback_repair_dir(mut, srcdir, rollback.orig_src, rollback.ctime,
-			 in ? in->is_dir() : false, 1, pi ? pi->rstat : blah);
+			 in ? in->is_dir() : false, 1, pi ? pi->accounted_rstat : blah);
   }
 
   // repair dest

@@ -302,6 +302,8 @@ static void data_buf_reset_sgl(void *cb_arg, uint32_t sgl_offset)
 
 static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 {
+  uint32_t size;
+  void *addr;
   Task *t = static_cast<Task*>(cb_arg);
   if (t->io_request.cur_seg_idx >= t->io_request.nseg) {
     *length = 0;
@@ -309,27 +311,25 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
     return 0;
   }
 
-  void *addr = t->io_request.extra_segs ? t->io_request.extra_segs[t->io_request.cur_seg_idx] : t->io_request.inline_segs[t->io_request.cur_seg_idx];
+  addr = t->io_request.extra_segs ? t->io_request.extra_segs[t->io_request.cur_seg_idx] : t->io_request.inline_segs[t->io_request.cur_seg_idx];
 
-  if (t->io_request.cur_seg_left) {
-    *length = t->io_request.cur_seg_left;
-    *address = (void *)((uint64_t)addr + data_buffer_size - t->io_request.cur_seg_left);
-    if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
+  size = data_buffer_size;
+  if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
       if (tail) {
-        *address = (void *)((uint64_t)addr + tail - t->io_request.cur_seg_left);
+        size = (uint32_t) tail;
       }
-    }
+  }
+ 
+  if (t->io_request.cur_seg_left) {
+    *address = (void *)((uint64_t)addr + size - t->io_request.cur_seg_left);
+    *length = t->io_request.cur_seg_left;
     t->io_request.cur_seg_left = 0;
   } else {
     *address = addr;
-    *length = data_buffer_size;
-    if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
-      uint64_t tail = t->len % data_buffer_size;
-      if (tail)
-        *length = tail;
-    }
+    *length = size;
   }
+  
   t->io_request.cur_seg_idx++;
   return 0;
 }
@@ -417,6 +417,7 @@ void SharedDriverData::_aio_thread()
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
+            t->release_segs();
             delete t;
             derr << __func__ << " failed to do write command" << dendl;
             ceph_abort();
@@ -798,10 +799,12 @@ int NVMEDevice::open(const string& p)
     derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
     return r;
   }
-  while (r > 0 && !isalpha(buf[r-1])) {
-    --r;
+  /* scan buf from the beginning with isxdigit. */
+  int i = 0;
+  while (i < r && isxdigit(buf[i])) {
+    i++;
   }
-  serial_number = string(buf, r);
+  serial_number = string(buf, i);
   r = manager.try_get(serial_number, &driver);
   if (r < 0) {
     derr << __func__ << " failed to get nvme device with sn " << serial_number << dendl;
@@ -931,17 +934,51 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     while (t->return_code > 0)
       ioc->cond.wait(l);
   }
-  pbl->clear();
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
-  if (ioc->num_waiting.load()) {
-    dout(20) << __func__ << " waking waiter" << dendl;
-    std::unique_lock<std::mutex> l(ioc->lock);
-    ioc->cond.notify_all();
-  }
+  ioc->aio_wake();
   return r;
 }
+
+int NVMEDevice::aio_read(
+    uint64_t off,
+    uint64_t len,
+    bufferlist *pbl,
+    IOContext *ioc)
+{
+  uint64_t len = bl.length();
+  dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
+  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
+
+  bufferptr p = buffer::create_page_aligned(len);
+  pbl->append(p);
+  int r = 0;
+  t->ctx = ioc;
+  char *buf = p.c_str();
+  t->fill_cb = [buf, t]() {
+    t->copy_to_buf(buf, 0, t->len);
+  };
+
+  Task *first = static_cast<Task*>(ioc->nvme_task_first);
+  Task *last = static_cast<Task*>(ioc->nvme_task_last);
+  if (last)
+    last->next = t;
+  if (!first)
+    ioc->nvme_task_first = t;
+  ioc->nvme_task_last = t;
+  ++ioc->num_pending;
+
+  return 0;
+}
+
+
 
 int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
@@ -970,7 +1007,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   }
   r = t->return_code;
   delete t;
-
+  ioc.aio_wake();
   return r;
 }
 

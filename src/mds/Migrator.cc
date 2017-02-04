@@ -358,7 +358,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 
     // drop locks
     if (state == EXPORT_LOCKING || state == EXPORT_DISCOVERING) {
-      MDRequestRef mdr = ceph::static_pointer_cast<MDRequestImpl, MutationImpl>(mut);
+      MDRequestRef mdr = static_cast<MDRequestImpl*>(mut.get());
       assert(mdr);
       if (mdr->more()->waiting_on_slave.empty())
 	mds->mdcache->request_finish(mdr);
@@ -495,15 +495,10 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	  cache->adjust_subtree_auth(dir, q->second.peer);
 	  cache->try_subtree_merge(dir);
 
-	  // bystanders?
-	  if (q->second.bystanders.empty()) {
-	    import_reverse_unfreeze(dir);
-	  } else {
-	    // notify them; wait in aborting state
-	    import_notify_abort(dir, bounds);
-	    import_state[df].state = IMPORT_ABORTING;
-	    assert(g_conf->mds_kill_import_at != 10);
-	  }
+	  // notify bystanders ; wait in aborting state
+	  import_state[df].state = IMPORT_ABORTING;
+	  import_notify_abort(dir, bounds);
+	  assert(g_conf->mds_kill_import_at != 10);
 	}
 	break;
 
@@ -876,8 +871,7 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
   } else {
     assert(it->second.state == EXPORT_DISCOVERING);
     // release locks to avoid deadlock
-    MDRequestRef mdr = ceph::static_pointer_cast<MDRequestImpl,
-						 MutationImpl>(it->second.mut);
+    MDRequestRef mdr = static_cast<MDRequestImpl*>(it->second.mut.get());
     assert(mdr);
     mds->mdcache->request_finish(mdr);
     it->second.mut.reset();
@@ -958,7 +952,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     return;
   }
 
-  it->second.mut = std::make_shared<MutationImpl>();
+  it->second.mut = new MutationImpl();
   if (diri->is_auth())
     it->second.mut->auth_pin(diri);
   mds->locker->rdlock_take_set(rdlocks, it->second.mut);
@@ -2192,7 +2186,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   if (!mds->mdcache->is_readonly() &&
       dir->get_inode()->filelock.can_wrlock(-1) &&
       dir->get_inode()->nestlock.can_wrlock(-1)) {
-    it->second.mut = std::make_shared<MutationImpl>();
+    it->second.mut = new MutationImpl();
     // force some locks.  hacky.
     mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
     mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
@@ -2380,6 +2374,7 @@ void Migrator::import_reverse(CDir *dir)
   dout(7) << "import_reverse " << *dir << dendl;
 
   import_state_t& stat = import_state[dir->dirfrag()];
+  stat.state = IMPORT_ABORTING;
 
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
@@ -2497,17 +2492,8 @@ void Migrator::import_reverse(CDir *dir)
 
   cache->trim(-1, num_dentries); // try trimming dentries
 
-  // bystanders?
-  if (stat.bystanders.empty()) {
-    dout(7) << "no bystanders, finishing reverse now" << dendl;
-    import_reverse_unfreeze(dir);
-  } else {
-    // notify them; wait in aborting state
-    dout(7) << "notifying bystanders of abort" << dendl;
-    import_notify_abort(dir, bounds);
-    stat.state = IMPORT_ABORTING;
-    assert (g_conf->mds_kill_import_at != 10);
-  }
+  // notify bystanders; wait in aborting state
+  import_notify_abort(dir, bounds);
 }
 
 void Migrator::import_notify_finish(CDir *dir, set<CDir*>& bounds)
@@ -2534,8 +2520,12 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
   
   import_state_t& stat = import_state[dir->dirfrag()];
   for (set<mds_rank_t>::iterator p = stat.bystanders.begin();
-       p != stat.bystanders.end();
-       ++p) {
+       p != stat.bystanders.end(); ) {
+    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)) {
+      // this can happen if both exporter and bystander fail in the same mdsmap epoch
+      stat.bystanders.erase(p++);
+      continue;
+    }
     MExportDirNotify *notify =
       new MExportDirNotify(dir->dirfrag(), stat.tid, true,
 			   mds_authority_t(stat.peer, mds->get_nodeid()),
@@ -2543,6 +2533,13 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
     for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); ++i)
       notify->get_bounds().push_back((*i)->dirfrag());
     mds->send_message_mds(notify, *p);
+    ++p;
+  }
+  if (stat.bystanders.empty()) {
+    dout(7) << "no bystanders, finishing reverse now" << dendl;
+    import_reverse_unfreeze(dir);
+  } else {
+    assert (g_conf->mds_kill_import_at != 10);
   }
 }
 
@@ -2750,8 +2747,8 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 }
 
 
-void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, mds_rank_t oldauth,
-				   LogSegment *ls, uint64_t log_offset,
+void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+				   mds_rank_t oldauth, LogSegment *ls,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
 				   list<ScatterLock*>& updated_scatterlocks)
 {  
@@ -2773,9 +2770,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, mds_r
 
   // state after link  -- or not!  -sage
   in->decode_import(blp, ls);  // cap imports are noted for later action
-
-  // note that we are journaled at this log offset
-  in->last_journaled = log_offset;
 
   // caps
   decode_import_inode_caps(in, true, blp, peer_exports);
@@ -2974,8 +2968,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     else if (icode == 'I') {
       // inode
       assert(le);
-      decode_import_inode(dn, blp, oldauth, ls, le->get_metablob()->event_seq,
-          peer_exports, updated_scatterlocks);
+      decode_import_inode(dn, blp, oldauth, ls,
+			  peer_exports, updated_scatterlocks);
     }
     
     // add dentry to journal entry
@@ -3001,6 +2995,11 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 /* This function DOES put the passed message before returning*/
 void Migrator::handle_export_notify(MExportDirNotify *m)
 {
+  if (!(mds->is_clientreplay() || mds->is_active() || mds->is_stopping())) {
+    m->put();
+    return;
+  }
+
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
 
   mds_rank_t from = mds_rank_t(m->get_source().num());

@@ -513,7 +513,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, MDSIn
   SnapRealm *realm = dir->get_inode()->find_snaprealm();
   dn->first = in->first = realm->get_newest_seq() + 1;
 
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut(new MutationImpl());
 
   // force some locks.  hacky.
   mds->locker->wrlock_force(&dir->inode->filelock, mut);
@@ -1770,8 +1770,18 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
       return;
   }
 
-  if (cur->last >= floor)
-    _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
+  if (cur->last >= floor) {
+    bool update = true;
+    if (cur->state_test(CInode::STATE_AMBIGUOUSAUTH) && cur->is_auth()) {
+      // rename src inode is not projected in the slave rename prep case. so we should
+      // avoid updateing the inode.
+      assert(linkunlink < 0);
+      assert(cur->is_frozen_inode());
+      update = false;
+    }
+    _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent,
+				 linkunlink, update);
+  }
 
   if (g_conf->mds_snap_rstat) {
     for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
@@ -1783,7 +1793,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
       if (q == snaps.end() || *q > *p)
 	continue;
       if (*p >= floor)
-	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
+	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0, false);
     }
   }
   cur->dirty_old_rstats.clear();
@@ -1791,7 +1801,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 
 
 void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
-					  CDir *parent, int linkunlink)
+					  CDir *parent, int linkunlink, bool update_inode)
 {
   dout(10) << "_project_rstat_inode_to_frag [" << ofirst << "," << last << "]" << dendl;
   dout(20) << "  inode           rstat " << inode.rstat << dendl;
@@ -1807,7 +1817,8 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
   }
   dout(20) << "                  delta " << delta << dendl;
 
-  inode.accounted_rstat = inode.rstat;
+  if (update_inode)
+    inode.accounted_rstat = inode.rstat;
 
   while (last >= ofirst) {
     /*
@@ -1900,7 +1911,8 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
     dout(20) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
     assert(last >= first);
     prstat->add(delta);
-    inode.accounted_rstat = inode.rstat;
+    if (update_inode)
+      inode.accounted_rstat = inode.rstat;
     dout(20) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
 
     last = first-1;
@@ -2213,8 +2225,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     }
 
     // can cast only because i'm passing nowait=true in the sole user
-    MDRequestRef mdmut =
-      ceph::static_pointer_cast<MDRequestImpl,MutationImpl>(mut);
+    MDRequestRef mdmut = static_cast<MDRequestImpl*>(mut.get());
     if (!stop &&
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
@@ -2506,6 +2517,8 @@ ESubtreeMap *MDCache::create_subtree_map()
     mydir = myin->get_dirfrag(frag_t());
   }
 
+  list<CDir*> maybe;
+
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -2532,6 +2545,15 @@ ESubtreeMap *MDCache::create_subtree_map()
     }
 
     le->subtrees[dir->dirfrag()].clear();
+
+    if (dir->get_dir_auth().second != CDIR_AUTH_UNKNOWN &&
+	le->ambiguous_subtrees.count(dir->dirfrag()) == 0 &&
+	p->second.empty()) {
+      dout(10) << " maybe journal " << *dir << dendl;
+      maybe.push_back(dir);
+      continue;
+    }
+
     le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
     le->metablob.add_dir(dir, false);
 
@@ -2643,6 +2665,18 @@ ESubtreeMap *MDCache::create_subtree_map()
       }
     }
   }
+
+  for (list<CDir*>::iterator p = maybe.begin(); p != maybe.end(); ++p) {
+    CDir *dir = *p;
+    if (le->subtrees.count(dir->dirfrag())) {
+      // not swallowed by above code
+      le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
+      le->metablob.add_dir(dir, false);
+    } else {
+      dout(10) << "simplify: not journal " << *dir << dendl;
+    }
+  }
+
   dout(15) << " subtrees " << le->subtrees << dendl;
   dout(15) << " ambiguous_subtrees " << le->ambiguous_subtrees << dendl;
 
@@ -2850,9 +2884,6 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 {
   dout(7) << "handle_mds_failure mds." << who << dendl;
   
-  // make note of recovery set
-  mds->mdsmap->get_recovery_mds_set(recovery_set);
-  recovery_set.erase(mds->get_nodeid());
   dout(1) << "handle_mds_failure mds." << who << " : recovery peers are " << recovery_set << dendl;
 
   resolve_gather.insert(who);
@@ -3210,6 +3241,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	    claimed_by_sender = true;
 	}
 
+	my_ambiguous_imports.erase(p);  // no longer ambiguous.
 	if (claimed_by_sender) {
 	  dout(7) << "ambiguous import failed on " << *dir << dendl;
 	  migrator->import_reverse(dir);
@@ -3217,7 +3249,6 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	  dout(7) << "ambiguous import succeeded on " << *dir << dendl;
 	  migrator->import_finish(dir, true);
 	}
-	my_ambiguous_imports.erase(p);  // no longer ambiguous.
       }
       p = next;
     }
@@ -3510,11 +3541,13 @@ void MDCache::disambiguate_imports()
     map<dirfrag_t, vector<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
 
     CDir *dir = get_dirfrag(q->first);
-    if (!dir) continue;
+    assert(dir);
     
     if (dir->authority() != me_ambig) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
       cancel_ambiguous_import(dir);
+
+      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
 
       // subtree may have been swallowed by another node claiming dir
       // as their own.
@@ -3523,8 +3556,6 @@ void MDCache::disambiguate_imports()
 	dout(10) << "  subtree root is " << *root << dendl;
       assert(root->dir_auth.first != mds->get_nodeid());  // no us!
       try_trim_non_auth_subtree(root);
-
-      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
     } else {
       dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
       finish_ambiguous_import(q->first);
@@ -4267,9 +4298,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
 	Capability *cap = rejoin_import_cap(in, q->first, q->second, from);
 	Capability::Import& im = imported_caps[p->first][q->first];
-	im.cap_id = cap->get_cap_id();
-	im.issue_seq = cap->get_last_seq();
-	im.mseq = cap->get_mseq();
+	if (cap) {
+	  im.cap_id = cap->get_cap_id();
+	  im.issue_seq = cap->get_last_seq();
+	  im.mseq = cap->get_mseq();
+	} else {
+	  // all are zero
+	}
       }
       mds->locker->eval(in, CEPH_CAP_LOCKS, true);
     }
@@ -5046,7 +5081,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
 				       cap_exports[p->first][q->first].capinfo.cap_id, 0,
                                        mds->get_osd_epoch_barrier());
-      m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, from, 0);
+      m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq,
+		      (q->second.cap_id > 0 ? from : -1), 0);
       mds->send_message_client_counted(m, session);
 
       cap_exports[p->first].erase(q->first);
@@ -5552,7 +5588,10 @@ Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_re
   dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
   Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
-  assert(session);
+  if (!session) {
+    dout(10) << " no session for client." << client << dendl;
+    return NULL;
+  }
 
   Capability *cap = in->reconnect_cap(client, icr, session);
 
@@ -6256,7 +6295,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi->truncate_from = 0;
   pi->truncate_pending--;
 
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
   mut->add_projected_inode(in);
 
@@ -9198,7 +9237,7 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
     return;
   }
 
-  auto mut(std::make_shared<MutationImpl>());
+  MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
   mds->mdlog->start_entry(le);
@@ -9525,6 +9564,7 @@ void MDCache::discover_dir_frag(CInode *base,
 
   if (!base->is_waiting_for_dir(approx_fg) || !onfinish) {
     discover_info_t& d = _create_discover(from);
+    d.pin_base(base);
     d.ino = base->ino();
     d.frag = approx_fg;
     d.want_base_dir = true;
@@ -9579,6 +9619,7 @@ void MDCache::discover_path(CInode *base,
       !base->is_waiting_for_dir(fg) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
+    d.pin_base(base);
     d.frag = fg;
     d.snap = snap;
     d.want_path = want_path;
@@ -9632,6 +9673,7 @@ void MDCache::discover_path(CDir *base,
       !base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
+    d.pin_base(base);
     d.frag = base->get_frag();
     d.snap = snap;
     d.want_path = want_path;

@@ -15,6 +15,13 @@ struct Locker {
   std::string cookie;
   std::string address;
   uint64_t handle;
+
+  inline bool operator==(const Locker &rhs) const {
+    return (entity == rhs.entity &&
+            cookie == rhs.cookie &&
+            address == rhs.address &&
+            handle == rhs.handle);
+  }
 };
 
 enum Mode {
