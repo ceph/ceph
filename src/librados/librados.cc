@@ -4735,6 +4735,7 @@ extern "C" int rados_aio_getxattr(rados_ioctx_t io, const char *o,
   return ret;
 }
 
+namespace {
 struct AioGetxattrsData {
   AioGetxattrsData(rados_completion_t c, rados_xattrs_iter_t *_iter) :
     iter(_iter), user_completion((librados::AioCompletionImpl*)c) {
@@ -4747,6 +4748,7 @@ struct AioGetxattrsData {
   rados_xattrs_iter_t *iter;
   struct librados::C_AioCompleteAndSafe user_completion;
 };
+}
 
 static void rados_aio_getxattrs_complete(rados_completion_t c, void *arg) {
   AioGetxattrsData *cdata = reinterpret_cast<AioGetxattrsData*>(arg);
