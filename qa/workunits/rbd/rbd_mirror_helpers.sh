@@ -439,7 +439,11 @@ wait_for_image_replay_started()
     local pool=$2
     local image=$3
 
-    wait_for_image_replay_state "${cluster}" "${pool}" "${image}" started
+    if [ -z "${RBD_MIRROR_REMOTE}" ]; then
+	wait_for_image_replay_state "${cluster}" "${pool}" "${image}" started
+    else
+	wait_for_status_in_pool_dir ${cluster} ${pool} ${image} 'up+replaying'
+    fi
 }
 
 wait_for_image_replay_stopped()
@@ -448,7 +452,12 @@ wait_for_image_replay_stopped()
     local pool=$2
     local image=$3
 
-    wait_for_image_replay_state "${cluster}" "${pool}" "${image}" stopped
+    if [ -z "${RBD_MIRROR_REMOTE}" ]; then
+	wait_for_image_replay_state "${cluster}" "${pool}" "${image}" stopped
+    else
+	wait_for_status_in_pool_dir ${cluster} ${pool} ${image} \
+				    'up+stopped\|up+error'
+    fi
 }
 
 get_position()
