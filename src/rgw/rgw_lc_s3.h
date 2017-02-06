@@ -48,6 +48,16 @@ public:
   string& to_str() { return data; }
 };
 
+class LCNoncurDays_S3 : public XMLObj
+{
+public:
+  LCNoncurDays_S3() {}
+  ~LCNoncurDays_S3() {}
+  string& to_str() {
+    return data;
+  }
+};
+
 class LCExpiration_S3 : public LCExpiration, public XMLObj
 {
 public:
@@ -65,6 +75,23 @@ public:
   }
 };
 
+class LCNoncurExpiration_S3 : public LCExpiration, public XMLObj
+{
+public:
+  LCNoncurExpiration_S3() {}
+  ~LCNoncurExpiration_S3() {}
+  
+  bool xml_end(const char *el);
+  void to_xml(ostream& out) {
+    out << "<NoncurrentVersionExpiration>" << "<NoncurrentDays>" << days << "</NoncurrentDays>"<< "</NoncurrentVersionExpiration>";
+  }
+  void dump_xml(Formatter *f) const {
+    f->open_object_section("NoncurrentVersionExpiration");
+    encode_xml("NoncurrentDays", days, f);
+    f->close_section(); 
+  }
+};
+
 class LCRule_S3 : public LCRule, public XMLObj
 {
 public:
@@ -75,14 +102,19 @@ public:
   bool xml_end(const char *el);
   bool xml_start(const char *el, const char **attr);
   void dump_xml(Formatter *f) const {
-	  const LCExpiration_S3& expir = static_cast<const LCExpiration_S3&>(expiration);
-
-	  f->open_object_section("Rule");
-	  encode_xml("ID", id, f);
-	  encode_xml("Prefix", prefix, f);
-	  encode_xml("Status", status, f);
-	  expir.dump_xml(f);
-	  f->close_section(); // Rule
+    f->open_object_section("Rule");
+    encode_xml("ID", id, f);
+    encode_xml("Prefix", prefix, f);
+    encode_xml("Status", status, f);
+    if (!expiration.empty()) {
+      const LCExpiration_S3& expir = static_cast<const LCExpiration_S3&>(expiration);
+      expir.dump_xml(f);
+    }
+    if (!noncur_expiration.empty()) {
+      const LCNoncurExpiration_S3& noncur_expir = static_cast<const LCNoncurExpiration_S3&>(noncur_expiration);
+      noncur_expir.dump_xml(f);
+    }
+    f->close_section(); // Rule
   }
 };
 
