@@ -125,7 +125,7 @@ Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_
   }
 }
 
-void Device::binding_port(CephContext *cct, uint8_t port_num) {
+void Device::binding_port(CephContext *cct, int port_num) {
   port_cnt = device_attr->phys_port_cnt;
   for (uint8_t i = 0; i < port_cnt; ++i) {
     Port *port = new Port(cct, ctxt, i+1);
