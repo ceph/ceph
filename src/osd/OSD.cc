@@ -5001,10 +5001,6 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     dout(1) << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
 	    << dendl;
-  } else if (osdmap->get_num_up_osds() &&
-	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
-    dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
-	    << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
