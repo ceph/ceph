@@ -29,9 +29,20 @@ directory while creating key for a client following the undermentioned syntax. :
 
 ./ceph auth get-or-create client.*client_name* mon 'allow r' mds 'allow r, allow rw path=/*specified_directory*' osd 'allow rw pool=data'
 
-for example, to restrict client ``foo`` to ``bar`` directory, we will use. ::
+for example, to restrict client ``foo`` to writing only in the ``bar`` directory,
+we will use: ::
 
 ./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/bar' osd 'allow rw pool=data'
+
+To completely restrict the client to the ``bar`` directory, omit the
+unqualified "allow r" clause: ::
+
+./ceph auth get-or-create client.foo mon 'allow r' mds 'allow rw path=/bar' osd 'allow rw pool=data'
+
+Note that if a client's read access is restricted to a path, they will only
+be able to mount the filesystem when specifying a readable path in the
+mount command (see below).
+
 
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
