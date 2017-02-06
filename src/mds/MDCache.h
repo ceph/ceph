@@ -381,8 +381,9 @@ public:
   void wait_for_uncommitted_master(metareqid_t reqid, MDSInternalContextBase *c) {
     uncommitted_masters[reqid].waiters.push_back(c);
   }
-  bool have_uncommitted_master(metareqid_t reqid) {
-    return uncommitted_masters.count(reqid);
+  bool have_uncommitted_master(metareqid_t reqid, mds_rank_t from) {
+    auto p = uncommitted_masters.find(reqid);
+    return p != uncommitted_masters.end() && p->second.slaves.count(from) > 0;
   }
   void log_master_commit(metareqid_t reqid);
   void logged_master_update(metareqid_t reqid);
