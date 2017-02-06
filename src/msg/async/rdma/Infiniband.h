@@ -77,7 +77,6 @@ class Infiniband {
       bool full();
       bool over();
       void clear();
-      void post_srq(Infiniband *ib);
 
      public:
       ibv_mr* mr;
@@ -142,8 +141,6 @@ class Infiniband {
   };
 
  private:
-  uint8_t  ib_physical_port;
-  Device *device;
   DeviceList *device_list;
   RDMADispatcher *dispatcher = nullptr;
 
@@ -151,7 +148,7 @@ class Infiniband {
   void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
 
  public:
-  explicit Infiniband(CephContext *c, const std::string &device_name, uint8_t p);
+  explicit Infiniband(CephContext *c);
   ~Infiniband();
 
   void set_dispatcher(RDMADispatcher *d);
@@ -271,24 +268,21 @@ class Infiniband {
   };
 
  public:
-  typedef MemoryManager::Cluster Cluster;
-  typedef MemoryManager::Chunk Chunk;
-  uint8_t get_ib_physical_port() { return ib_physical_port; }
   int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
   int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
-  Device* get_device() { return device; }
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);
 
   void handle_pre_fork();
-  void handle_post_fork();
+
+  Device* get_device(const char* device_name);
 
   int poll_tx(int n, Device **d, ibv_wc *wc);
   int poll_rx(int n, Device **d, ibv_wc *wc);
   int poll_blocking(bool &done);
   void rearm_notify();
   void handle_async_event();
-  void process_async_event(ibv_async_event &async_event);
+  RDMADispatcher *get_dispatcher() { return dispatcher; }
 };
 
 #endif
