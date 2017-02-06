@@ -117,6 +117,12 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m) = 0;
+
+  int send_message(boost::intrusive_ptr<Message> m)
+  {
+    return send_message(m.detach()); /* send_message(Message *m) consumes a reference */
+  }
+
   /**
    * Send a "keepalive" ping along the given Connection, if it's working.
    * If the underlying connection has broken, this function does nothing.

@@ -56,7 +56,6 @@
 #include "messages/MCommandReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MClientQuota.h"
-#include "messages/MClientCapRelease.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -2689,10 +2688,7 @@ void Client::send_reconnect(MetaSession *session)
 
   session->readonly = false;
 
-  if (session->release) {
-    session->release->put();
-    session->release = NULL;
-  }
+  session->release.reset();
 
   // reset my cap seq number
   session->seq = 0;
@@ -5961,11 +5957,10 @@ void Client::flush_cap_releases()
           p->first)) {
       if (cct->_conf->client_inject_release_failure) {
         ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
-        p->second->release->put();
       } else {
         p->second->con->send_message(p->second->release);
       }
-      p->second->release = 0;
+      p->second->release.reset();
     }
   }
 }
