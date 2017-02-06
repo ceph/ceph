@@ -23,6 +23,18 @@ class FuseMount(CephFSMount):
         self._fuse_conn = None
 
     def mount(self, mount_path=None, mount_fs_name=None):
+        try:
+            return self._mount(mount_path, mount_fs_name)
+        except RuntimeError:
+            # Catch exceptions by the mount() logic (i.e. not remote command
+            # failures) and ensure the mount is not left half-up.
+            # Otherwise we might leave a zombie mount point that causes
+            # anyone traversing cephtest/ to get hung up on.
+            log.warn("Trying to clean up after failed mount")
+            self.umount_wait(force=True)
+            raise
+
+    def _mount(self, mount_path, mount_fs_name):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
 
         daemon_signal = 'kill'
