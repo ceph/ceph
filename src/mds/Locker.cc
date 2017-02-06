@@ -471,7 +471,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     // hose any stray locks
-    if (*existing == *p) {
+    if (existing != mdr->locks.end() && *existing == *p) {
       assert(need_wrlock || need_remote_wrlock);
       SimpleLock *lock = *existing;
       if (mdr->wrlocks.count(lock)) {
