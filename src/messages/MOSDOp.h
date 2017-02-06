@@ -45,7 +45,7 @@ private:
   int32_t retry_attempt;   // 0 is first attempt.  -1 if we don't know.
 
   hobject_t hobj;
-  pg_t pgid;
+  spg_t pgid;
   bufferlist::iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   // Transition from true -> false without locks being held
@@ -77,18 +77,22 @@ public:
   void set_reqid(const osd_reqid_t rid) {
     reqid = rid;
   }
-  void set_pg(pg_t p) {
+  void set_spg(spg_t p) {
     pgid = p;
   }
 
   // Fields decoded in partial decoding
   pg_t get_pg() const {
     assert(!partial_decode_needed);
+    return pgid.pgid;
+  }
+  spg_t get_spg() const {
+    assert(!partial_decode_needed);
     return pgid;
   }
   pg_t get_raw_pg() const {
     assert(!partial_decode_needed);
-    return pg_t(hobj.get_hash(), pgid.pool());
+    return pg_t(hobj.get_hash(), pgid.pgid.pool());
   }
   epoch_t get_map_epoch() const {
     assert(!partial_decode_needed);
@@ -167,25 +171,7 @@ public:
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
       final_decode_needed(true) { }
-  MOSDOp(int inc, long tid,
-         object_t& _oid, object_locator_t& _oloc, pg_t& _pgid,
-	 epoch_t _osdmap_epoch,
-	 int _flags, uint64_t feat)
-    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
-      client_inc(inc),
-      osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      hobj(_oid, _oloc.key, CEPH_NOSNAP, _pgid.ps(), _pgid.pool(), _oloc.nspace),
-      pgid(_pgid),
-      partial_decode_needed(false),
-      final_decode_needed(false),
-      features(feat) {
-    set_tid(tid);
-
-    // also put the client_inc in reqid.inc, so that get_reqid() can
-    // be used before the full message is decoded.
-    reqid.inc = inc;
-  }
-  MOSDOp(int inc, long tid, const hobject_t& ho, pg_t& _pgid,
+  MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
@@ -416,8 +402,8 @@ struct ceph_osd_request_head {
       ::decode(flags, p);
       ::decode(reqid, p);
     } else if (header.version == 7) {
-      ::decode(pgid, p);      // raw pgid
-      hobj.set_hash(pgid.ps());
+      ::decode(pgid.pgid, p);      // raw pgid
+      hobj.set_hash(pgid.pgid.ps());
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       eversion_t reassert_version;
@@ -429,7 +415,7 @@ struct ceph_osd_request_head {
 
       old_pg_t opgid;
       ::decode_raw(opgid, p);
-      pgid = opgid;
+      pgid.pgid = opgid;
 
       __u32 su;
       ::decode(su, p);
@@ -458,11 +444,11 @@ struct ceph_osd_request_head {
       decode_nohead(num_snaps, snaps, p);
 
       // recalculate pgid hash value
-      pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
-				hobj.oid.name.c_str(),
-				hobj.oid.name.length()));
-      hobj.pool = pgid.pool();
-      hobj.set_hash(pgid.ps());
+      pgid.pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
+				     hobj.oid.name.c_str(),
+				     hobj.oid.name.length()));
+      hobj.pool = pgid.pgid.pool();
+      hobj.set_hash(pgid.pgid.ps());
 
       retry_attempt = -1;
       features = 0;
@@ -488,7 +474,7 @@ struct ceph_osd_request_head {
       if (header.version < 3) {
 	old_pg_t opgid;
 	::decode_raw(opgid, p);
-	pgid = opgid;
+	pgid.pgid = opgid;
       } else {
 	::decode(pgid, p);
       }
@@ -521,10 +507,10 @@ struct ceph_osd_request_head {
       else
 	reqid = osd_reqid_t();
 
-      hobj.pool = pgid.pool();
+      hobj.pool = pgid.pgid.pool();
       hobj.set_key(oloc.key);
       hobj.nspace = oloc.nspace;
-      hobj.set_hash(pgid.ps());
+      hobj.set_hash(pgid.pgid.ps());
 
       OSDOp::split_osd_op_vector_in_data(ops, data);
 
@@ -565,7 +551,7 @@ struct ceph_osd_request_head {
 
     ::decode(features, p);
 
-    hobj.pool = pgid.pool();
+    hobj.pool = pgid.pgid.pool();
     hobj.set_key(oloc.key);
     hobj.nspace = oloc.nspace;
 
