@@ -8781,14 +8781,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     client_session->put();
   }
 
-  if (cct->_conf->osd_debug_drop_op_probability > 0 &&
-      !m->get_source().is_mds()) {
-    if ((double)rand() / (double)RAND_MAX < cct->_conf->osd_debug_drop_op_probability) {
-      dout(0) << "handle_op DEBUG artificially dropping op " << *m << dendl;
-      return;
-    }
-  }
-
   // calc actual pgid
   pg_t _pgid = m->get_raw_pg();
   int64_t pool = _pgid.pool();

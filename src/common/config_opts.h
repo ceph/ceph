@@ -847,7 +847,6 @@ OPTION(osd_recovery_aggressive_backoff, OPT_BOOL, false) // issue aggressive cli
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL, false) // crash osd if client ignores a backoff; useful for debugging
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
-OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
 OPTION(osd_debug_verify_missing_on_start, OPT_BOOL, false)
 OPTION(osd_debug_scrub_chance_rewrite_digest, OPT_U64, 0)
