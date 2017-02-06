@@ -62,7 +62,6 @@ class MClientRequest;
 class MClientRequestForward;
 struct MClientLease;
 class MClientCaps;
-class MClientCapRelease;
 
 struct DirStat;
 struct LeaseStat;
