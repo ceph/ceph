@@ -3611,6 +3611,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(replica_map, p);
   if (!replica_map.empty())
     get(PIN_REPLICATED);
+  replica_nonce = 0;
 
   // decode fragstat info on bounding cdirs
   bufferlist bounding;
