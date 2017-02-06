@@ -47,7 +47,7 @@ class CephContext;
 
 class Port {
   struct ibv_context* ctxt;
-  uint8_t port_num;
+  int port_num;
   struct ibv_port_attr* port_attr;
   uint16_t lid;
   int gid_idx;
@@ -57,7 +57,7 @@ class Port {
   explicit Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn);
   uint16_t get_lid() { return lid; }
   ibv_gid  get_gid() { return gid; }
-  uint8_t get_port_num() { return port_num; }
+  int get_port_num() { return port_num; }
   ibv_port_attr* get_port_attr() { return port_attr; }
   int get_gid_idx() { return gid_idx; }
 };
@@ -79,7 +79,7 @@ class Device {
   uint16_t get_lid() { return active_port->get_lid(); }
   ibv_gid get_gid() { return active_port->get_gid(); }
   int get_gid_idx() { return active_port->get_gid_idx(); }
-  void binding_port(CephContext *c, uint8_t port_num);
+  void binding_port(CephContext *c, int port_num);
   struct ibv_context *ctxt;
   ibv_device_attr *device_attr;
   Port* active_port;
