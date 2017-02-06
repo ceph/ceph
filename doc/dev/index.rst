@@ -1149,12 +1149,11 @@ Prepare tenant
 If you have not tried to use ``ceph-workbench`` with this tenant before,
 proceed to the next step.
 
-To start with a clean slate, login to your tenant via the Horizon dashboard and
-delete all of the following:
+To start with a clean slate, login to your tenant via the Horizon dashboard and:
 
-* ``teuthology`` and ``packages-repository`` instances, if any
-* ``teuthology`` security group
-* ``teuthology`` and ``teuthology-myself`` key pairs
+* terminate the ``teuthology`` and ``packages-repository`` instances, if any
+* delete the ``teuthology`` security group
+* delete the ``teuthology`` and ``teuthology-myself`` key pairs
 
 Also do the above if you ever get key-related errors ("invalid key", etc.) when
 trying to schedule suites.
