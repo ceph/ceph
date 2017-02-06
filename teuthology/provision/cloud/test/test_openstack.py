@@ -25,6 +25,34 @@ test_config = dict(
 )
 
 
+@patch('time.sleep')
+def test_retry(m_sleep):
+    orig_exceptions = cloud.openstack.RETRY_EXCEPTIONS
+    new_exceptions = orig_exceptions + (RuntimeError, )
+
+    class test_cls(object):
+        def __init__(self, min_val):
+            self.min_val = min_val
+            self.cur_val = 0
+
+        def func(self):
+            self.cur_val += 1
+            if self.cur_val < self.min_val:
+                raise RuntimeError
+            return self.cur_val
+
+    with patch.object(
+        cloud.openstack,
+        'RETRY_EXCEPTIONS',
+        new=new_exceptions,
+    ):
+        test_obj = test_cls(min_val=5)
+        assert cloud.openstack.retry(test_obj.func) == 5
+        test_obj = test_cls(min_val=1000)
+        with raises(MaxWhileTries):
+            cloud.openstack.retry(test_obj.func)
+
+
 def get_fake_obj(mock_args=None, attributes=None):
     if mock_args is None:
         mock_args = dict()

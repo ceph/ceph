@@ -6,6 +6,7 @@ import urllib
 import yaml
 
 from copy import deepcopy
+from libcloud.common.exceptions import RateLimitReachedError
 
 from paramiko import AuthenticationException
 from paramiko.ssh_exception import NoValidConnectionsError
@@ -21,26 +22,51 @@ from teuthology.provision.cloud.base import Provider
 log = logging.getLogger(__name__)
 
 
+RETRY_EXCEPTIONS = (RateLimitReachedError, )
+
+
+def retry(function, *args, **kwargs):
+    """
+    Call a function (returning its results), retrying if any of the exceptions
+    in RETRY_EXCEPTIONS are raised
+    """
+    with safe_while(sleep=1, tries=24, increment=1) as proceed:
+        tries = 0
+        while proceed():
+            tries += 1
+            try:
+                result = function(*args, **kwargs)
+                if tries > 1:
+                    log.debug(
+                        "'%s' succeeded after %s tries",
+                        function.__name__,
+                        tries,
+                    )
+                return result
+            except RETRY_EXCEPTIONS:
+                pass
+
+
 class OpenStackProvider(Provider):
     _driver_posargs = ['username', 'password']
 
     @property
     def images(self):
         if not hasattr(self, '_images'):
-            self._images = self.driver.list_images()
+            self._images = retry(self.driver.list_images)
         return self._images
 
     @property
     def sizes(self):
         if not hasattr(self, '_sizes'):
-            self._sizes = self.driver.list_sizes()
+            self._sizes = retry(self.driver.list_sizes)
         return self._sizes
 
     @property
     def networks(self):
         if not hasattr(self, '_networks'):
             try:
-                self._networks = self.driver.ex_list_networks()
+                self._networks = retry(self.driver.ex_list_networks)
             except AttributeError:
                 log.warn("Unable to list networks for %s", self.driver)
                 self._networks = list()
@@ -50,7 +76,9 @@ class OpenStackProvider(Provider):
     def security_groups(self):
         if not hasattr(self, '_security_groups'):
             try:
-                self._security_groups = self.driver.ex_list_security_groups()
+                self._security_groups = retry(
+                    self.driver.ex_list_security_groups
+                )
             except AttributeError:
                 log.warn("Unable to list security groups for %s", self.driver)
                 self._security_groups = list()
@@ -134,11 +162,13 @@ class OpenStackProvisioner(base.Provisioner):
         security_groups = self.security_groups
         if security_groups:
             create_args['ex_security_groups'] = security_groups
-        self._node = self.provider.driver.create_node(
+        self._node = retry(
+            self.provider.driver.create_node,
             **create_args
         )
         log.debug("Created node: %s", self.node)
-        results = self.provider.driver.wait_until_running(
+        results = retry(
+            self.provider.driver.wait_until_running,
             nodes=[self.node],
         )
         self._node, self.ips = results[0]
@@ -159,12 +189,14 @@ class OpenStackProvisioner(base.Provisioner):
                      for i in range(vol_count)]
         try:
             for name in vol_names:
-                volume = self.provider.driver.create_volume(
+                volume = retry(
+                    self.provider.driver.create_volume,
                     vol_size,
                     name,
                 )
                 log.info("Created volume %s", volume)
-                self.provider.driver.attach_volume(
+                retry(
+                    self.provider.driver.attach_volume,
                     self.node,
                     volume,
                     device=None,
@@ -176,16 +208,16 @@ class OpenStackProvisioner(base.Provisioner):
         return True
 
     def _destroy_volumes(self):
-        all_volumes = self.provider.driver.list_volumes()
+        all_volumes = retry(self.provider.driver.list_volumes)
         our_volumes = [vol for vol in all_volumes
                        if vol.name.startswith("%s_" % self.name)]
         for vol in our_volumes:
             try:
-                self.provider.driver.detach_volume(vol)
+                retry(self.provider.driver.detach_volume, vol)
             except Exception:
                 log.exception("Could not detach volume %s", vol)
             try:
-                self.provider.driver.destroy_volume(vol)
+                retry(self.provider.driver.destroy_volume, vol)
             except Exception:
                 log.exception("Could not destroy volume %s", vol)
 
@@ -306,7 +338,7 @@ class OpenStackProvisioner(base.Provisioner):
     @property
     def node(self):
         if not hasattr(self, '_node'):
-            nodes = self.provider.driver.list_nodes()
+            nodes = retry(self.provider.driver.list_nodes)
             for node in nodes:
                 matches = [node for node in nodes if node.name == self.name]
                 msg = "Unknown error locating %s"
