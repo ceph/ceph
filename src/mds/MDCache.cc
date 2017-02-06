@@ -2890,6 +2890,9 @@ void MDCache::handle_mds_failure(mds_rank_t who)
     if (mdr->slave_to_mds == who) {
       if (mdr->slave_did_prepare()) {
 	dout(10) << " slave request " << *mdr << " uncommitted, will resolve shortly" << dendl;
+	if (is_ambiguous_slave_update(p->first, mdr->slave_to_mds))
+	  remove_ambiguous_slave_update(p->first, mdr->slave_to_mds);
+
 	if (!mdr->more()->waiting_on_slave.empty()) {
 	  assert(mdr->more()->srcdn_auth_mds == mds->get_nodeid());
 	  // will rollback, no need to wait
