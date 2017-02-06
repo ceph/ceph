@@ -2708,7 +2708,9 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   uint64_t blob_offset, uint64_t length, BlobRef b,
   extent_map_t *old_extents)
 {
-  punch_hole(logical_offset, length, old_extents);
+  if (old_extents) {
+    punch_hole(logical_offset, length, old_extents);
+  }
 
   // We need to have completely initialized Blob to increment its ref counters.
   // But that's not true for newly created blob and we defer the increment until
