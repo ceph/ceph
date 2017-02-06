@@ -15,11 +15,10 @@
 #ifndef MOSDECSUBOPWRITEREPLY_H
 #define MOSDECSUBOPWRITEREPLY_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpWriteReply : public Message {
+class MOSDECSubOpWriteReply : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
@@ -31,9 +30,15 @@ public:
   int get_cost() const {
     return 0;
   }
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
-  MOSDECSubOpWriteReply() :
-    Message(MSG_OSD_EC_WRITE_REPLY, HEAD_VERSION, COMPAT_VERSION)
+  MOSDECSubOpWriteReply()
+    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE_REPLY, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   virtual void decode_payload() {
