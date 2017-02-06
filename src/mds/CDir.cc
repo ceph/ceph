@@ -2363,7 +2363,8 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
   unsigned s;
   ::decode(s, blp);
   state &= MASK_STATE_IMPORT_KEPT;
-  state |= (s & MASK_STATE_EXPORTED);
+  state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
+
   if (is_dirty()) {
     get(PIN_DIRTY);
     _mark_dirty(ls);

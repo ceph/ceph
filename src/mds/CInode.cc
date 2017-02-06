@@ -3595,7 +3595,8 @@ void CInode::decode_import(bufferlist::iterator& p,
 
   unsigned s;
   ::decode(s, p);
-  state |= (s & MASK_STATE_EXPORTED);
+  state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
+
   if (is_dirty()) {
     get(PIN_DIRTY);
     _mark_dirty(ls);
