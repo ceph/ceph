@@ -15,6 +15,7 @@ void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i)
   bucket->index_pool = string(".index.pool") + buf;
   bucket->marker = string("mark") + buf;
   bucket->bucket_id = string("bucket.id") + buf;
+  bucket->tenant = string("tenant") + buf;
 }
 
 void cls_user_bucket::dump(Formatter *f) const
@@ -25,6 +26,7 @@ void cls_user_bucket::dump(Formatter *f) const
   encode_json("index_pool", index_pool,f);
   encode_json("marker", marker,f);
   encode_json("bucket_id", bucket_id,f);
+  encode_json("tenant", tenant, f);
 }
 
 void cls_user_bucket::generate_test_instances(list<cls_user_bucket*>& ls)
