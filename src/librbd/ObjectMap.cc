@@ -49,6 +49,12 @@ int ObjectMap<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
 }
 
 template <typename I>
+int ObjectMap<I>::aio_remove(librados::IoCtx &io_ctx, const std::string &image_id,
+			     librados::AioCompletion *c) {
+  return io_ctx.aio_remove(object_map_name(image_id, CEPH_NOSNAP), c);
+}
+
+template <typename I>
 std::string ObjectMap<I>::object_map_name(const std::string &image_id,
 				          uint64_t snap_id) {
   std::string oid(RBD_OBJECT_MAP_PREFIX + image_id);
