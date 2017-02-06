@@ -1738,8 +1738,9 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
   
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     metareqid_t r = m->get_reqid();
-    if (!mdcache->have_uncommitted_master(r)) {
-      dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << r << dendl;
+    if (!mdcache->have_uncommitted_master(r, from)) {
+      dout(10) << "handle_slave_request_reply ignoring slave reply from mds."
+	       << from << " reqid " << r << dendl;
       m->put();
       return;
     }

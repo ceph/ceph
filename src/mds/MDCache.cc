@@ -2720,7 +2720,7 @@ void MDCache::send_slave_resolves()
 	   q != p->second.end();
 	   ++q) {
 	dout(10) << " including uncommitted " << q->first << dendl;
-	resolves[p->first]->add_slave_request(q->first);
+	resolves[p->first]->add_slave_request(q->first, false);
       }
     }
   } else {
@@ -2730,14 +2730,18 @@ void MDCache::send_slave_resolves()
 	 p != active_requests.end();
 	 ++p) {
       MDRequestRef& mdr = p->second;
-      if (!mdr->is_slave() || !mdr->slave_did_prepare())
+      if (!mdr->is_slave())
 	continue;
+      if (!mdr->slave_did_prepare() && !mdr->committing) {
+	continue;
+      }
       mds_rank_t master = mdr->slave_to_mds;
       if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
 	dout(10) << " including uncommitted " << *mdr << dendl;
 	if (!resolves.count(master))
 	  resolves[master] = new MMDSResolve;
-	if (mdr->has_more() && mdr->more()->is_inode_exporter) {
+	if (!mdr->committing &&
+	    mdr->has_more() && mdr->more()->is_inode_exporter) {
 	  // re-send cap exports
 	  CInode *in = mdr->more()->rename_inode;
 	  map<client_t, Capability::Export> cap_map;
@@ -2747,7 +2751,7 @@ void MDCache::send_slave_resolves()
 	  ::encode(cap_map, bl);
 	  resolves[master]->add_slave_request(p->first, bl);
 	} else {
-	  resolves[master]->add_slave_request(p->first);
+	  resolves[master]->add_slave_request(p->first, mdr->committing);
 	}
       }
     }
@@ -3105,36 +3109,41 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
-    for (map<metareqid_t, bufferlist>::iterator p = m->slave_requests.begin();
-	 p != m->slave_requests.end();
-	 ++p) {
-      if (uncommitted_masters.count(p->first) && !uncommitted_masters[p->first].safe)
-	pending_masters.insert(p->first);
-    }
+    if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
+      for (auto p = m->slave_requests.begin(); p != m->slave_requests.end(); ++p) {
+	if (uncommitted_masters.count(p->first) && !uncommitted_masters[p->first].safe) {
+	  assert(!p->second.committing);
+	  pending_masters.insert(p->first);
+	}
+      }
 
-    if (!pending_masters.empty()) {
-      dout(10) << " still have pending updates, delay processing slave resolve" << dendl;
-      delayed_resolve[from] = m;
-      return;
+      if (!pending_masters.empty()) {
+	dout(10) << " still have pending updates, delay processing slave resolve" << dendl;
+	delayed_resolve[from] = m;
+	return;
+      }
     }
 
     MMDSResolveAck *ack = new MMDSResolveAck;
-    for (map<metareqid_t, bufferlist>::iterator p = m->slave_requests.begin();
-	 p != m->slave_requests.end();
-	 ++p) {
+    for (auto p = m->slave_requests.begin(); p != m->slave_requests.end(); ++p) {
       if (uncommitted_masters.count(p->first)) {  //mds->sessionmap.have_completed_request(p->first)) {
 	// COMMIT
-	dout(10) << " ambiguous slave request " << *p << " will COMMIT" << dendl;
-	ack->add_commit(p->first);
+	if (p->second.committing) {
+	  // already committing, waiting for the OP_COMMITTED slave reply
+	  dout(10) << " already committing slave request " << *p << " noop "<< dendl;
+	} else {
+	  dout(10) << " ambiguous slave request " << *p << " will COMMIT" << dendl;
+	  ack->add_commit(p->first);
+	}
 	uncommitted_masters[p->first].slaves.insert(from);   // wait for slave OP_COMMITTED before we log ECommitted
 
-	if (p->second.length() > 0) {
+	if (p->second.inode_caps.length() > 0) {
 	  // slave wants to export caps (rename)
 	  assert(mds->is_resolve());
 
 	  inodeno_t ino;
 	  map<client_t,Capability::Export> cap_exports;
-	  bufferlist::iterator q = p->second.begin();
+	  bufferlist::iterator q = p->second.inode_caps.begin();
 	  ::decode(ino, q);
 	  ::decode(cap_exports, q);
 
@@ -3159,6 +3168,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
       } else {
 	// ABORT
 	dout(10) << " ambiguous slave request " << *p << " will ABORT" << dendl;
+	assert(!p->second.committing);
 	ack->add_abort(p->first);
       }
     }
