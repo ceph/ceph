@@ -2764,8 +2764,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
   if (!in) {
     in = new CInode(mds->mdcache, true, 1, last);
     added = true;
-  } else {
-    in->state_set(CInode::STATE_AUTH);
   }
 
   // state after link  -- or not!  -sage
@@ -2884,10 +2882,6 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 
   // assimilate state
   dir->decode_import(blp, now, ls);
-
-  // mark  (may already be marked from get_or_open_dir() above)
-  if (!dir->is_auth())
-    dir->state_set(CDir::STATE_AUTH);
 
   // adjust replica list
   //assert(!dir->is_replica(oldauth));    // not true on failed export
