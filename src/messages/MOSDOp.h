@@ -16,8 +16,7 @@
 #ifndef CEPH_MOSDOP_H
 #define CEPH_MOSDOP_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "common/hobject.h"
 #include <atomic>
@@ -32,7 +31,7 @@
 
 class OSD;
 
-class MOSDOp : public Message {
+class MOSDOp : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
@@ -86,7 +85,7 @@ public:
     assert(!partial_decode_needed);
     return pgid.pgid;
   }
-  spg_t get_spg() const {
+  spg_t get_spg() const override {
     assert(!partial_decode_needed);
     return pgid;
   }
@@ -94,7 +93,7 @@ public:
     assert(!partial_decode_needed);
     return pg_t(hobj.get_hash(), pgid.pgid.pool());
   }
-  epoch_t get_map_epoch() const {
+  epoch_t get_map_epoch() const override {
     assert(!partial_decode_needed);
     return osdmap_epoch;
   }
@@ -168,13 +167,13 @@ public:
   }
 
   MOSDOp()
-    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
       final_decode_needed(true) { }
   MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
-    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
       hobj(ho),
