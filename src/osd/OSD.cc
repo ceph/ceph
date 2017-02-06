@@ -5001,6 +5001,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     dout(1) << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
 	    << dendl;
+  } else if (!monc->monmap.get_required_features().contains_all(
+	       ceph::features::mon::FEATURE_LUMINOUS)) {
+    dout(1) << "monmap REQUIRE_LUMINOUS is NOT set; upgrade mons first" << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
