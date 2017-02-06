@@ -315,6 +315,7 @@ public:
       _mark_dirty(ls);
     if (!replica_map.empty())
       get(PIN_REPLICATED);
+    replica_nonce = 0;
   }
 
   // -- locking --

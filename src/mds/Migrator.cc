@@ -2410,6 +2410,7 @@ void Migrator::import_reverse(CDir *dir)
     cur->state_clear(CDir::STATE_AUTH);
     cur->remove_bloom();
     cur->clear_replica_map();
+    cur->set_replica_nonce(CDir::EXPORT_NONCE);
     if (cur->is_dirty())
       cur->mark_clean();
 
@@ -2420,6 +2421,7 @@ void Migrator::import_reverse(CDir *dir)
       // dentry
       dn->state_clear(CDentry::STATE_AUTH);
       dn->clear_replica_map();
+      dn->set_replica_nonce(CDentry::EXPORT_NONCE);
       if (dn->is_dirty()) 
 	dn->mark_clean();
 
@@ -2428,6 +2430,7 @@ void Migrator::import_reverse(CDir *dir)
 	CInode *in = dn->get_linkage()->get_inode();
 	in->state_clear(CDentry::STATE_AUTH);
 	in->clear_replica_map();
+	in->set_replica_nonce(CInode::EXPORT_NONCE);
 	if (in->is_dirty()) 
 	  in->mark_clean();
 	in->clear_dirty_rstat();
