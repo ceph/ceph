@@ -468,6 +468,20 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``5``
 
+
+``osd enxio on misdirected op``
+
+:Description: reply with ENXIO if a client sent an op to the wrong OSD.
+	      The rationale here is that the client or OSD is clearly buggy
+              and one wants to surface the error as clearly as possible.
+              The downside is that a VM using librbd will get an EIO and
+              go read-only. Therefore misdirected operations are ignored
+              by default, so a VM using librbd will either resend the op
+              to another OSD (and everything will be fine) or will see
+              a blocked/hung IO in a worst case.
+:Type: Boolean
+:Default: ``false``
+
 .. index:: OSD; backfilling
 
 Backfilling
