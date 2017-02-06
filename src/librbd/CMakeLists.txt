@@ -35,6 +35,7 @@ set(librbd_internal_srcs
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
+  image/RemoveRequest.cc
   image/SetFlagsRequest.cc
   image/SetSnapRequest.cc
   image_watcher/NotifyLockOwner.cc
