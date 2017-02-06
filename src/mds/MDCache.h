@@ -452,17 +452,19 @@ public:
   void remove_inode_recursive(CInode *in);
 
   bool is_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    return ambiguous_slave_updates.count(master) &&
-	   ambiguous_slave_updates[master].count(reqid);
+    auto p = ambiguous_slave_updates.find(master);
+    return p != ambiguous_slave_updates.end() && p->second.count(reqid);
   }
   void add_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     ambiguous_slave_updates[master].insert(reqid);
   }
   void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    assert(ambiguous_slave_updates[master].count(reqid));
-    ambiguous_slave_updates[master].erase(reqid);
-    if (ambiguous_slave_updates[master].empty())
-      ambiguous_slave_updates.erase(master);
+    auto p = ambiguous_slave_updates.find(master);
+    auto q = p->second.find(reqid);
+    assert(q != p->second.end());
+    p->second.erase(q);
+    if (p->second.empty())
+      ambiguous_slave_updates.erase(p);
   }
 
   void add_rollback(metareqid_t reqid, mds_rank_t master) {
