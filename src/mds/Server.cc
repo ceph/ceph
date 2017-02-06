@@ -5324,7 +5324,8 @@ void Server::_commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti)
     // write a commit to the journal
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_commit", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_COMMIT, ESlaveUpdate::LINK);
-    mdlog->start_submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    mdlog->start_entry(le);
+    submit_mdlog_entry(le, new C_MDS_CommittedSlave(this, mdr), mdr, __func__);
     mdlog->flush();
   } else {
     do_link_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
@@ -7901,8 +7902,10 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
       mdr->more()->is_ambiguous_auth = false;
     }
     mds->queue_waiters(finished);
-    if (finish_mdr)
+    if (finish_mdr || mdr->aborted)
       mdcache->request_finish(mdr);
+    else
+      mdr->more()->slave_rolling_back = false;
   }
 
   mdcache->finish_rollback(mut->reqid);

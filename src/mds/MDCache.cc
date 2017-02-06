@@ -2895,9 +2895,9 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	  }
 	  mdr->more()->waiting_on_slave.clear();
 	}
-      } else {
+      } else if (!mdr->committing) {
 	dout(10) << " slave request " << *mdr << " has no prepare, finishing up" << dendl;
-	if (mdr->slave_request)
+	if (mdr->slave_request || mdr->slave_rolling_back())
 	  mdr->aborted = true;
 	else
 	  finish.push_back(mdr);
@@ -8986,8 +8986,15 @@ void MDCache::request_finish(MDRequestRef& mdr)
   if (mdr->has_more() && mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
-    int ret = mdr->aborted ? -1 : 0;
-    mdr->aborted = false;
+    int ret;
+    if (mdr->aborted) {
+      mdr->aborted = false;
+      ret = -1;
+      mdr->more()->slave_rolling_back = true;
+    } else {
+      ret = 0;
+      mdr->committing = true;
+    }
     fin->complete(ret);   // this must re-call request_finish.
     return; 
   }
