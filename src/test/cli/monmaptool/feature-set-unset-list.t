@@ -11,21 +11,21 @@
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1)]
-      persistent: [kraken(1)]
+      supported:  [kraken(1),luminous(2)]
+      persistent: [kraken(1),luminous(2)]
   MONMAP FEATURES:
       persistent: [none]
       optional:   [none]
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1)]
-      persistent: [kraken(1)]
+      supported:  [kraken(1),luminous(2)]
+      persistent: [kraken(1),luminous(2)]
   monmap:persistent:[none]
   monmap:optional:[none]
   monmap:required:[none]
-  available:supported:[kraken(1)]
-  available:persistent:[kraken(1)]
+  available:supported:[kraken(1),luminous(2)]
+  available:persistent:[kraken(1),luminous(2)]
 
   $ monmaptool --feature-set foo /tmp/test.monmap.1234
   unknown features name 'foo' or unable to parse value: Expected option value to be integer, got 'foo'
@@ -49,8 +49,8 @@
       required:   [kraken(1),unknown(16),unknown(32)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1)]
-      persistent: [kraken(1)]
+      supported:  [kraken(1),luminous(2)]
+      persistent: [kraken(1),luminous(2)]
 
   $ monmaptool --feature-unset 32 --optional --feature-list /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
@@ -60,8 +60,8 @@
       required:   [kraken(1),unknown(16),unknown(32)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1)]
-      persistent: [kraken(1)]
+      supported:  [kraken(1),luminous(2)]
+      persistent: [kraken(1),luminous(2)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-unset 32 --persistent --feature-unset 16 --optional --feature-list /tmp/test.monmap.1234
@@ -72,8 +72,8 @@
       required:   [kraken(1)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1)]
-      persistent: [kraken(1)]
+      supported:  [kraken(1),luminous(2)]
+      persistent: [kraken(1),luminous(2)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-unset kraken --feature-list /tmp/test.monmap.1234
@@ -84,8 +84,8 @@
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1)]
-      persistent: [kraken(1)]
+      supported:  [kraken(1),luminous(2)]
+      persistent: [kraken(1),luminous(2)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ rm /tmp/test.monmap.1234
