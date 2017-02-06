@@ -312,6 +312,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
   lock.Lock();
   if (did_bind) {
     assert(my_inst.addr == bind_addr);
+    lock.Unlock();
     return 0;
   }
   if (started) {
