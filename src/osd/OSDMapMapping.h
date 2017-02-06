@@ -167,10 +167,16 @@ public:
 
 /// a precalculated mapping of every PG for a given OSDMap
 class OSDMapMapping {
+public:
+  MEMPOOL_CLASS_HELPERS();
+private:
+
   struct PoolMapping {
+    MEMPOOL_CLASS_HELPERS();
+
     unsigned size = 0;
     unsigned pg_num = 0;
-    std::vector<int32_t> table;
+    mempool::osdmap_mapping::vector<int32_t> table;
 
     size_t row_size() const {
       return
@@ -233,9 +239,10 @@ class OSDMapMapping {
     }
   };
 
-  std::map<int64_t,PoolMapping> pools;
-  std::vector<std::vector<pg_t>> acting_rmap;  // osd -> pg
-  //unused: std::vector<std::vector<pg_t>> up_rmap;  // osd -> pg
+  mempool::osdmap_mapping::map<int64_t,PoolMapping> pools;
+  mempool::osdmap_mapping::vector<
+    mempool::osdmap_mapping::vector<pg_t>> acting_rmap;  // osd -> pg
+  //unused: mempool::osdmap_mapping::vector<std::vector<pg_t>> up_rmap;  // osd -> pg
   epoch_t epoch;
   uint64_t num_pgs = 0;
 
@@ -281,7 +288,7 @@ public:
     p->second.get(pgid.ps(), up, up_primary, acting, acting_primary);
   }
 
-  const std::vector<pg_t>& get_osd_acting_pgs(unsigned osd) {
+  const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) {
     assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }
