@@ -8,6 +8,9 @@
 
 #include "common/debug.h"
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMapMapping, osdmapmapping,
+			      osdmap_mapping);
+
 // ensure that we have a PoolMappings for each pool and that
 // the dimensions (pg_num and size) match up.
 void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
