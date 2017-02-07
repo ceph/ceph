@@ -43,7 +43,7 @@ def prune_archive(
     Walk through the archive_dir, calling the cleanup functions to process
     directories that might be old enough
     """
-    max_days = max(pass_days, remotes_days)
+    max_days = min(pass_days, remotes_days)
     log.debug("Archive {archive} has {count} children".format(
         archive=archive_dir, count=len(os.listdir(archive_dir))))
     # Use full paths
