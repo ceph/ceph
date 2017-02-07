@@ -1950,7 +1950,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN) &&
-      !(m->osd_features & CEPH_FEATURE_SERVER_KRAKEN)) {
+      !HAVE_FEATURE(m->osd_features, SERVER_KRAKEN)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
 		      << " because the osdmap requires"
@@ -1991,7 +1991,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   // make sure upgrades stop at jewel
-  if ((m->osd_features & CEPH_FEATURE_SERVER_KRAKEN) &&
+  if (HAVE_FEATURE(m->osd_features, SERVER_KRAKEN) &&
       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     mon->clog->info() << "disallowing boot of post-jewel OSD "
 		      << m->get_orig_source_inst()
@@ -3045,7 +3045,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
-    } else if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) &&
+    } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN) &&
 	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
       string msg = "all OSDs are running kraken or later but the"
 	" 'require_kraken_osds' osdmap flag is not set";
@@ -3053,7 +3053,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
-    } else if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) &&
+    } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL) &&
 	       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
       string msg = "all OSDs are running jewel or later but the"
 	" 'require_jewel_osds' osdmap flag is not set";
@@ -6494,7 +6494,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_jewel_osds";
 	err = -EPERM;
-      } else if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) {
+      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)) {
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
@@ -6504,7 +6504,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_kraken_osds";
 	err = -EPERM;
-      } else if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
+      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)) {
 	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
 	// ensure JEWEL is also set
 	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
