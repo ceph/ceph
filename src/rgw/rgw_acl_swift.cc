@@ -72,7 +72,8 @@ static bool uid_is_public(const string& uid)
 }
 
 static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
-                                                   const uint32_t perm)
+                                                   const uint32_t perm,
+                                                   bool *is_public)
 {
   /* This function takes url_spec as non-ref std::string because of the trim
    * operation that is essential to preserve compliance with Swift. It can't
@@ -94,6 +95,9 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
      * and thus we can have a small portion of compatibility here. */
     if (url_spec == "*") {
       grant.set_group(ACL_GROUP_ALL_USERS, is_negative ? 0 : perm);
+      if (!is_negative) {
+        *is_public = true;
+      }
     } else {
       if ('*' == url_spec[0]) {
         url_spec = url_spec.substr(1);
@@ -160,7 +164,14 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados* const store,
         grant = user_to_grant(cct, store, uid, perm);
       } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
         /* HTTP referrer-based ACLs aren't acceptable for writes. */
-        grant = referrer_to_grant(designatee, perm);
+        bool is_public = false;
+        grant = referrer_to_grant(designatee, perm, &is_public);
+        /* .r:-* is treated as none, so only .r:* needs to be considered */
+        if (is_public) {
+          ACLGrant grant_referer;
+          grant_referer.set_referer("*", perm);
+          acl.add_grant(&grant_referer);
+        }
       }
     }
 
