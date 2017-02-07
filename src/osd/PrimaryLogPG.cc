@@ -7200,13 +7200,6 @@ void PrimaryLogPG::start_repair_copy(OpContext *ctx, uint32_t what,
   // this op, so just pass 0 as the version.
   auto cb = new CopyFromCallback(ctx);
   ctx->copy_cb = cb;
-  uint32_t to_copy = 0;
-  if (what & librados::repair_copy_t::DATA)
-    to_copy |= CopyOp::COPY_DATA;
-  if (what & librados::repair_copy_t::ATTR)
-    to_copy |= CopyOp::COPY_ATTR;
-  if (what & librados::repair_copy_t::OMAP)
-    to_copy |= CopyOp::COPY_OMAP;
   const auto m = static_cast<MOSDOp*>(ctx->op->get_req());
   unsigned flags = (CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 		    CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
@@ -7221,7 +7214,7 @@ void PrimaryLogPG::start_repair_copy(OpContext *ctx, uint32_t what,
 				    flags, false,
 				    src_flags, 0));
   cop->src_osd = pg_whoami.osd;
-  cop->what = to_copy;
+  cop->what = what;
   copy_ops[dest] = cop;
   ctx->obc->start_block();
   _copy_some(ctx->obc, cop);
@@ -7267,10 +7260,10 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
-	      cop->what & CopyOp::COPY_ATTR ? &cop->attrs : nullptr,
-	      cop->what & CopyOp::COPY_DATA ? &cop->data : nullptr,
-	      cop->what & CopyOp::COPY_OMAP ? &cop->omap_header : nullptr,
-	      cop->what & CopyOp::COPY_OMAP ? &cop->omap_data : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_ATTR ? &cop->attrs : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_DATA ? &cop->data : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_OMAP ? &cop->omap_header : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_OMAP ? &cop->omap_data : nullptr,
 	      &cop->results.snaps, &cop->results.snap_seq,
 	      &cop->results.flags,
 	      &cop->results.source_data_digest,

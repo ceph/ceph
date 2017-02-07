@@ -124,13 +124,9 @@ public:
     bool mirror_snapset;
 
     uint32_t src_osd;		// used only in the repair case
-    enum {
-      COPY_DATA = 1 << 0,
-      COPY_ATTR = 1 << 1,
-      COPY_OMAP = 1 << 2,
-      COPY_ALL = COPY_DATA | COPY_ATTR | COPY_OMAP,
-    };
-    unsigned what = COPY_ALL;
+    unsigned what = (CEPH_REPAIR_COPY_DATA |
+		     CEPH_REPAIR_COPY_OMAP |
+		     CEPH_REPAIR_COPY_ATTR);
 
     CopyResults results;
 

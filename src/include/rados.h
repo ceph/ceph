@@ -590,5 +590,10 @@ struct ceph_osd_reply_head {
 	struct ceph_osd_op ops[0];  /* ops[], object */
 } __attribute__ ((packed));
 
+enum {
+  CEPH_REPAIR_COPY_DATA = (1 << 0),
+  CEPH_REPAIR_COPY_OMAP = (1 << 1),
+  CEPH_REPAIR_COPY_ATTR = (1 << 2),
+};
 
 #endif
