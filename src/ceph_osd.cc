@@ -355,13 +355,15 @@ int main(int argc, const char **argv)
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf->osd_journal
 	   << " for object store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
-      exit(1);
+      goto flushjournal_out;
     }
     store->umount();
     derr << "flushed journal " << g_conf->osd_journal
 	 << " for object store " << g_conf->osd_data
 	 << dendl;
-    exit(0);
+flushjournal_out:
+    delete store;
+    exit(err < 0 ? 1 : 0);
   }
   if (dump_journal) {
     common_init_finish(g_ceph_context);
