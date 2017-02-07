@@ -30,7 +30,7 @@
  * @see user_prefix
  * @see sys_prefix
  *
- * - GHOBJECT_TO_SEQ: Contains leaf mapping from ghobject_t->hobj.seq and
+ * - HOBJECT_TO_SEQ: Contains leaf mapping from ghobject_t->header.seq and
  *                   corresponding omap header
  * - SYS_PREFIX: GLOBAL_STATE_KEY - contains next seq number
  *                                  @see State
@@ -217,7 +217,7 @@ public:
   /// Ensure that all previous operations are durable
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0);
 
-  /// Util, list all objects, there must be no other concurrent access
+  /// Util, get all objects, there must be no other concurrent access
   int list_objects(vector<ghobject_t> *objs ///< [out] objects
     );
 
@@ -275,28 +275,29 @@ public:
     uint64_t parent;
     uint64_t num_children;
 
-    coll_t c;
     ghobject_t oid;
 
     SequencerPosition spos;
 
     void encode(bufferlist &bl) const {
+      coll_t unused;
       ENCODE_START(2, 1, bl);
       ::encode(seq, bl);
       ::encode(parent, bl);
       ::encode(num_children, bl);
-      ::encode(c, bl);
+      ::encode(unused, bl);
       ::encode(oid, bl);
       ::encode(spos, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
+      coll_t unused;
       DECODE_START(2, bl);
       ::decode(seq, bl);
       ::decode(parent, bl);
       ::decode(num_children, bl);
-      ::decode(c, bl);
+      ::decode(unused, bl);
       ::decode(oid, bl);
       if (struct_v >= 2)
 	::decode(spos, bl);
@@ -307,7 +308,6 @@ public:
       f->dump_unsigned("seq", seq);
       f->dump_unsigned("parent", parent);
       f->dump_unsigned("num_children", num_children);
-      f->dump_stream("coll") << c;
       f->dump_stream("oid") << oid;
     }
 
