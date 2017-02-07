@@ -662,8 +662,8 @@ public:
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
-      bluestore_onode_t::shard_info *shard_info;
-      uint32_t offset = 0;   ///< starting logical offset
+      bluestore_onode_t::shard_info *shard_info = nullptr;
+      unsigned extents = 0;  ///< count extents in this shard
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
@@ -671,7 +671,23 @@ public:
 
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
-    bool needs_reshard = false;   ///< true if we must reshard
+    uint32_t needs_reshard_begin = 0;
+    uint32_t needs_reshard_end = 0;
+
+    bool needs_reshard() const {
+      return needs_reshard_end > needs_reshard_begin;
+    }
+    void clear_needs_reshard() {
+      needs_reshard_begin = needs_reshard_end = 0;
+    }
+    void request_reshard(uint32_t begin, uint32_t end) {
+      if (begin < needs_reshard_begin) {
+	needs_reshard_begin = begin;
+      }
+      if (end > needs_reshard_end) {
+	needs_reshard_end = end;
+      }
+    }
 
     struct DeleteDisposer {
       void operator()(Extent *e) { delete e; }
@@ -686,12 +702,12 @@ public:
       extent_map.clear_and_dispose(DeleteDisposer());
       shards.clear();
       inline_bl.clear();
-      needs_reshard = false;
+      clear_needs_reshard();
     }
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
-    void decode_some(bufferlist& bl);
+    unsigned decode_some(bufferlist& bl);
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(bufferlist::contiguous_appender& p);
@@ -703,8 +719,10 @@ public:
       return p->second;
     }
 
-    bool update(KeyValueDB::Transaction t, bool force);
-    void reshard();
+    void update(KeyValueDB::Transaction t, bool force);
+    void reshard(
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
@@ -718,9 +736,9 @@ public:
 
       while (left < right) {
         mid = left + (right - left) / 2;
-        if (offset >= shards[mid].offset) {
+        if (offset >= shards[mid].shard_info->offset) {
           size_t next = mid + 1;
-          if (next >= end || offset < shards[next].offset)
+          if (next >= end || offset < shards[next].shard_info->offset)
             return mid;
           //continue to search forwards
           left = next;
@@ -743,7 +761,7 @@ public:
       if (s == (int)shards.size() - 1) {
 	return false; // last shard
       }
-      if (offset + length <= shards[s+1].offset) {
+      if (offset + length <= shards[s+1].shard_info->offset) {
 	return false;
       }
       return true;

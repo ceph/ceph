@@ -255,6 +255,10 @@ public:
   int mount() override;
   int umount() override;
 
+  int fsck(bool deep) override {
+    return 0;
+  }
+
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
   }
