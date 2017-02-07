@@ -12,6 +12,7 @@ RemainAfterExit=yes
 ExecStart=/usr/bin/rbdmap map
 ExecReload=/usr/bin/rbdmap map
 ExecStop=/usr/bin/rbdmap unmap
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=multi-user.target

@@ -13,6 +13,7 @@ TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=ceph-fuse.target
