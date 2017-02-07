@@ -309,9 +309,9 @@ void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
     user_info.type = info.acct_type;
   }
 
-  /* Administrator may enforce creating new accounts within their own tenants.
-   * The config parameter name is kept due to legacy. */
-  if (new_acct_user.tenant.empty() && g_conf->rgw_keystone_implicit_tenants) {
+  /* An upper layer may enforce creating new accounts within their own
+   * tenants. */
+  if (new_acct_user.tenant.empty() && implicit_tenants) {
     new_acct_user.tenant = new_acct_user.id;
   }
 

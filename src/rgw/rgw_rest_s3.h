@@ -787,7 +787,8 @@ public:
                              const rgw::auth::RemoteApplier::AuthInfo info
                             ) const override {
     return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
+      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
+                                   false /* no implicit tenants */));
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
