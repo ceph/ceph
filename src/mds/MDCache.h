@@ -442,7 +442,8 @@ protected:
   void process_delayed_resolve();
   void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
-  void disambiguate_imports();
+  void disambiguate_my_imports();
+  void disambiguate_other_imports();
   void trim_unlinked_inodes();
   void add_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master, MDSlaveUpdate*);
   void finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);

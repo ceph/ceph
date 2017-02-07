@@ -3300,7 +3300,7 @@ void MDCache::maybe_resolve_finish()
   }
 
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
-  disambiguate_imports();
+  disambiguate_my_imports();
   finish_committed_masters();
 
   if (resolve_done) {
@@ -3488,11 +3488,11 @@ void MDCache::finish_rollback(metareqid_t reqid) {
   }
 }
 
-void MDCache::disambiguate_imports()
+void MDCache::disambiguate_other_imports()
 {
-  dout(10) << "disambiguate_imports" << dendl;
+  dout(10) << "disambiguate_other_imports" << dendl;
 
-  bool is_resolve = mds->is_resolve();
+  bool recovering = !(mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
   // other nodes' ambiguous imports
   for (map<mds_rank_t, map<dirfrag_t, vector<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
        p != other_ambiguous_imports.end();
@@ -3505,9 +3505,9 @@ void MDCache::disambiguate_imports()
 	 ++q) {
       dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
       // an ambiguous import will not race with a refragmentation; it's appropriate to force here.
-      CDir *dir = get_force_dirfrag(q->first, is_resolve);
+      CDir *dir = get_force_dirfrag(q->first, recovering);
       if (!dir) continue;
-      
+
       if (dir->is_ambiguous_auth() ||	// works for me_ambig or if i am a surviving bystander
 	  dir->authority() == CDIR_AUTH_UNDEF) { // resolving
 	dout(10) << "  mds." << who << " did import " << *dir << dendl;
@@ -3519,6 +3519,18 @@ void MDCache::disambiguate_imports()
     }
   }
   other_ambiguous_imports.clear();
+}
+
+void MDCache::disambiguate_my_imports()
+{
+  dout(10) << "disambiguate_my_imports" << dendl;
+
+  if (!mds->is_resolve()) {
+    assert(my_ambiguous_imports.empty());
+    return;
+  }
+
+  disambiguate_other_imports();
 
   // my ambiguous imports
   mds_authority_t me_ambig(mds->get_nodeid(), mds->get_nodeid());
@@ -3550,18 +3562,15 @@ void MDCache::disambiguate_imports()
   assert(my_ambiguous_imports.empty());
   mds->mdlog->flush();
 
-  if (is_resolve) {
-    // verify all my subtrees are unambiguous!
-    for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-	 p != subtrees.end();
-	 ++p) {
-      CDir *dir = p->first;
-      if (dir->is_ambiguous_dir_auth()) {
-	dout(0) << "disambiguate_imports uh oh, dir_auth is still ambiguous for " << *dir << dendl;
-	show_subtrees();
-      }
-      assert(!dir->is_ambiguous_dir_auth());
+  // verify all my subtrees are unambiguous!
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p) {
+    CDir *dir = p->first;
+    if (dir->is_ambiguous_dir_auth()) {
+      dout(0) << "disambiguate_imports uh oh, dir_auth is still ambiguous for " << *dir << dendl;
     }
+    assert(!dir->is_ambiguous_dir_auth());
   }
 
   show_subtrees();
@@ -3925,6 +3934,13 @@ void MDCache::rejoin_send_rejoins()
     return;
   }
 
+  assert(!migrator->is_importing());
+  assert(!migrator->is_exporting());
+
+  if (!mds->is_rejoin()) {
+    disambiguate_other_imports();
+  }
+
   map<mds_rank_t, MMDSCacheRejoin*> rejoins;
 
 
@@ -3961,8 +3977,6 @@ void MDCache::rejoin_send_rejoins()
     }
   }
   
-  assert(!migrator->is_importing());
-  assert(!migrator->is_exporting());
   
   // check all subtrees
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
