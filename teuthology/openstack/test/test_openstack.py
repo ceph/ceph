@@ -38,7 +38,27 @@ from teuthology.openstack import NoFlavorException
 import scripts.openstack
 
 
-class TestOpenStackInstance(object):
+class TestOpenStackBase(object):
+
+    def setup(self):
+        OpenStack.token = None
+        OpenStack.token_expires = None
+        self.environ = {}
+        for k in os.environ.keys():
+            if k.startswith('OS_'):
+                self.environ[k] = os.environ[k]
+
+    def teardown(self):
+        OpenStack.token = None
+        OpenStack.token_expires = None
+        for k in os.environ.keys():
+            if k.startswith('OS_'):
+                if k in self.environ:
+                    os.environ[k] = self.environ[k]
+                else:
+                    del os.environ[k]
+
+class TestOpenStackInstance(TestOpenStackBase):
 
     teuthology_instance = """
 {
@@ -212,7 +232,7 @@ class TestOpenStackInstance(object):
                 { 'id': instance_id },
             ).get_ip_neutron()
 
-class TestOpenStack(object):
+class TestOpenStack(TestOpenStackBase):
 
     flavors = """[
           {
@@ -635,8 +655,6 @@ class TestOpenStack(object):
                 assert ("//" + type) in o.get_os_url(cmd + " ")
         for type in type2cmd.keys():
             assert ("//" + type) in o.get_os_url("whatever ", type=type)
-        del os.environ['OS_REGION_NAME']
-        del os.environ['OS_TENANT_ID']
 
     @patch('teuthology.misc.sh')
     def test_cache_token(self, m_sh):
@@ -669,8 +687,6 @@ class TestOpenStack(object):
         assert True == o.cache_token()
         assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
         assert time.time() < OpenStack.token_expires
-        del os.environ['OS_TOKEN_VALUE']
-        del os.environ['OS_TOKEN_EXPIRES']
 
     @patch('teuthology.misc.sh')
     def test_cache_token_from_environment(self, m_sh):
@@ -685,8 +701,6 @@ class TestOpenStack(object):
         assert token == OpenStack.token
         assert token_expires == OpenStack.token_expires
         m_sh.assert_not_called()
-        del os.environ['OS_TOKEN_VALUE']
-        del os.environ['OS_TOKEN_EXPIRES']
         
     @patch('teuthology.misc.sh')
     def test_cache_token_expired_environment(self, m_sh):
@@ -704,10 +718,8 @@ class TestOpenStack(object):
         assert token == OpenStack.token
         assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
         assert time.time() < OpenStack.token_expires
-        del os.environ['OS_TOKEN_VALUE']
-        del os.environ['OS_TOKEN_EXPIRES']
 
-class TestTeuthologyOpenStack(object):
+class TestTeuthologyOpenStack(TestOpenStackBase):
 
     @classmethod
     def setup_class(self):
@@ -726,6 +738,7 @@ class TestTeuthologyOpenStack(object):
             self.can_create_floating_ips = False
 
     def setup(self):
+        super(TestTeuthologyOpenStack, self).setup()
         self.key_filename = tempfile.mktemp()
         self.key_name = 'teuthology-test'
         self.name = 'teuthology-test'
@@ -741,6 +754,7 @@ chmod 600 {key_filename}
                         '--verbose']
 
     def teardown(self):
+        super(TestTeuthologyOpenStack, self).teardown()
         self.clobber()
         os.unlink(self.key_filename)
 
