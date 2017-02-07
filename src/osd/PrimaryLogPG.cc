@@ -7250,7 +7250,9 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
 
   ObjectOperation op;
-
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_REPAIR) {
+    op.assert_interval(info.history.same_interval_since);
+  }
   if (cop->results.user_version) {
     op.assert_version(cop->results.user_version);
   } else {
@@ -7284,13 +7286,14 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // we are holding the write lock of the object being repaired, so, to read from
     // it, we need to SKIPRWLOCKS here. and since we are the very one holding the
     // write lock, it's safe to skip the rwlock.
-    auto objecter_op = osd->objecter->prepare_read_op(cop->src.oid, cop->oloc, op,
-			      cop->src.snap, nullptr,
-			      (CEPH_OSD_FLAG_REPAIR_READS |
-			       CEPH_OSD_FLAG_IGNORE_OVERLAY |
-			       CEPH_OSD_FLAG_SKIPRWLOCKS),
-			      gather.new_sub(),
-			      nullptr);
+    auto objecter_op =
+      osd->objecter->prepare_read_op(cop->src.oid, cop->oloc,
+				     op, cop->src.snap, nullptr,
+				     (CEPH_OSD_FLAG_REPAIR_READS |
+				      CEPH_OSD_FLAG_IGNORE_OVERLAY |
+				      CEPH_OSD_FLAG_SKIPRWLOCKS),
+				     gather.new_sub(),
+				     nullptr);
     vector<int> up, acting;
     int up_primary, acting_primary;
     get_osdmap()->pg_to_up_acting_osds(info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
