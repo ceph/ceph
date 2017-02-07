@@ -356,7 +356,9 @@ static int do_repair_get(IoCtx& io_ctx, const char *objname,
     ret = io_ctx.repair_read(oid, outdata, op_size, offset, flags, osdid, epoch);
     if (ret <= 0) {
       if (ret == -EINVAL || ret == -ERANGE)
-	cerr << "Specified epoch does not match scrub interval" << std::endl;
+	cerr << "Specified epoch does not match scrub interval, "
+	     << "or the specified OSD is not in the acting set of given PG."
+	     << std::endl;
       break;
     }
     ret = outdata.write_fd(fd);
