@@ -62,8 +62,6 @@ bool DBObjectMap::check(std::ostream &out)
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     _Header header;
-    assert(header.num_children == 1);
-    header.num_children = 0; // Hack for leaf node
     bufferlist bl = iter->value();
     while (true) {
       bufferlist::iterator bliter = bl.begin();
@@ -1150,9 +1148,9 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
   }
 
   Header header = Header(new _Header(), RemoveOnDelete(this));
-  header->seq = input->parent;
   bufferlist::iterator iter = out.begin()->second.begin();
   header->decode(iter);
+  assert(header->seq == input->parent);
   dout(20) << "lookup_parent: parent seq is " << header->seq << " with parent "
        << header->parent << dendl;
   in_use.insert(header->seq);
