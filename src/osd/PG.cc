@@ -5115,9 +5115,6 @@ void PG::on_new_interval()
   }
 
   do_sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
-  if (do_sort_bitwise) {
-    assert(get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT);
-  }
 
   _on_new_interval();
 }
