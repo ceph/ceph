@@ -82,10 +82,10 @@ class PhysicalConsole():
 
     def _console_command(self, readonly=True):
         if self.has_conserver:
-            return 'console -M {master} -p {port} {ro}{host}'.format(
+            return 'console -M {master} -p {port} {mode} {host}'.format(
                 master=self.conserver_master,
                 port=self.conserver_port,
-                ro='-s ' if readonly else '',
+                mode='-s' if readonly else '-f',
                 host=self.shortname,
             )
         else:
