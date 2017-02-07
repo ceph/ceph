@@ -85,7 +85,6 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
-#include "messages/MOSDPGMissing.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDECSubOpWrite.h"
@@ -6384,11 +6383,6 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_PG_TRIM:
     handle_pg_trim(op);
     break;
-  case MSG_OSD_PG_MISSING:
-    assert(0 ==
-	   "received MOSDPGMissing; this message is supposed to be unused!?!");
-    break;
-
   case MSG_OSD_BACKFILL_RESERVE:
     handle_pg_backfill_reserve(op);
     break;
