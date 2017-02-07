@@ -369,6 +369,7 @@ protected:
   const acl_strategy_t extra_acl_strategy;
 
   const AuthInfo info;
+  const bool implicit_tenants;
 
   virtual void create_account(const rgw_user& acct_user,
                               RGWUserInfo& user_info) const;          /* out */
@@ -377,11 +378,13 @@ public:
   RemoteApplier(CephContext* const cct,
                 RGWRados* const store,
                 acl_strategy_t&& extra_acl_strategy,
-                const AuthInfo& info)
+                const AuthInfo& info,
+                const bool implicit_tenants)
     : cct(cct),
       store(store),
       extra_acl_strategy(std::move(extra_acl_strategy)),
-      info(info) {
+      info(info),
+      implicit_tenants(implicit_tenants) {
   }
 
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;

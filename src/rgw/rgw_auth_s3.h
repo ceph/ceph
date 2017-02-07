@@ -37,7 +37,8 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              const rgw::auth::RemoteApplier::AuthInfo info
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
+                               false /* no implicit tenants */));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
