@@ -4512,7 +4512,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
   if (gift) {
     // round up to alloc size
-    gift = P2ROUNDUP(gift, min_alloc_size);
+    gift = P2ROUNDUP(gift, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
     gift = MIN(gift, 1ull<<31);
