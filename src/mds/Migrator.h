@@ -58,16 +58,18 @@ private:
 public:
   // export stages.  used to clean up intelligently if there's a failure.
   const static int EXPORT_CANCELLED	= 0;  // cancelled
-  const static int EXPORT_LOCKING	= 1;  // acquiring locks
-  const static int EXPORT_DISCOVERING	= 2;  // dest is disovering export dir
-  const static int EXPORT_FREEZING	= 3;  // we're freezing the dir tree
-  const static int EXPORT_PREPPING	= 4;  // sending dest spanning tree to export bounds
-  const static int EXPORT_WARNING	= 5;  // warning bystanders of dir_auth_pending
-  const static int EXPORT_EXPORTING	= 6;  // sent actual export, waiting for ack
-  const static int EXPORT_LOGGINGFINISH	= 7;  // logging EExportFinish
-  const static int EXPORT_NOTIFYING	= 8;  // waiting for notifyacks
+  const static int EXPORT_CANCELLING	= 1;  // waiting for cancel notifyacks
+  const static int EXPORT_LOCKING	= 2;  // acquiring locks
+  const static int EXPORT_DISCOVERING	= 3;  // dest is disovering export dir
+  const static int EXPORT_FREEZING	= 4;  // we're freezing the dir tree
+  const static int EXPORT_PREPPING	= 5;  // sending dest spanning tree to export bounds
+  const static int EXPORT_WARNING	= 6;  // warning bystanders of dir_auth_pending
+  const static int EXPORT_EXPORTING	= 7;  // sent actual export, waiting for ack
+  const static int EXPORT_LOGGINGFINISH	= 8;  // logging EExportFinish
+  const static int EXPORT_NOTIFYING	= 9;  // waiting for notifyacks
   static const char *get_export_statename(int s) {
     switch (s) {
+    case EXPORT_CANCELLING: return "cancelling";
     case EXPORT_LOCKING: return "locking";
     case EXPORT_DISCOVERING: return "discovering";
     case EXPORT_FREEZING: return "freezing";
@@ -274,6 +276,7 @@ public:
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
+  void export_cancel_finish(CDir *dir);
   void export_reverse(CDir *dir);
   void export_notify_abort(CDir *dir, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
