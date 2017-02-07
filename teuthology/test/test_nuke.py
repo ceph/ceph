@@ -1,5 +1,7 @@
-import json
 import datetime
+import json
+import os
+import pytest
 import subprocess
 
 from mock import patch, Mock, DEFAULT
@@ -11,6 +13,8 @@ from teuthology.config import config
 
 class TestNuke(object):
 
+    #@pytest.mark.skipif('OS_AUTH_URL' not in os.environ,
+    #                    reason="no OS_AUTH_URL environment variable")
     def test_stale_openstack_volumes(self):
         ctx = Mock()
         ctx.teuthology_config = config
@@ -138,6 +142,8 @@ class TestNuke(object):
             m['unlock_one'].assert_not_called()
 
     def test_stale_openstack_instances(self):
+        if 'OS_AUTH_URL' not in os.environ:
+            pytest.skip('no OS_AUTH_URL environment variable')
         ctx = Mock()
         ctx.teuthology_config = config
         ctx.dry_run = False
