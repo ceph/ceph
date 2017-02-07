@@ -1102,12 +1102,12 @@ function test_mon_osd()
   ceph osd deep-scrub 0
   ceph osd repair 0
 
-  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full sortbitwise
+  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full
   do
     ceph osd set $f
     ceph osd unset $f
   done
-  ceph osd set sortbitwise  # new backends cant handle nibblewise
+  expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
   ceph osd set require_jewel_osds
