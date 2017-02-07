@@ -213,7 +213,6 @@ class ObjectStore;
 class FuseStore;
 class OSDMap;
 class MLog;
-class MOSDPGMissing;
 class Objecter;
 
 class Watch;
