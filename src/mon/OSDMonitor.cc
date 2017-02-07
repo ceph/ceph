@@ -7894,6 +7894,14 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << m->fsid
+            << " != " << mon->monmap->fsid << " for " << *m << dendl;
+    _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+    return true;
+  }
+
   if (m->op == POOL_OP_CREATE)
     return preprocess_pool_op_create(op);
 
