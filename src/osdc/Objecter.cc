@@ -2282,6 +2282,18 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   bool check_for_latest_map = _calc_target(&op->target)
     == RECALC_OP_TARGET_POOL_DNE;
 
+  // cancel the op not yet sent
+  if (op->target.forced_osd >= 0 &&
+      find(op->target.acting.begin(),
+	   op->target.acting.end(),
+	   op->target.forced_osd) == op->target.acting.end()) {
+    if (op->onfinish) {
+      op->onfinish->complete(-EINVAL);
+      op->onfinish = NULL;
+      return;
+    }
+  }
+
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
@@ -2810,11 +2822,11 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       int osd;
       bool read = is_read && !is_write;
       if (t->forced_osd != -1) {
-	assert(read);
-	osd = osdmap->is_up(t->forced_osd) ? t->forced_osd : -1;
-	// We may be using a replica, but don't need to set used_replica
-	// because this operation never switches back to the primary.
+        assert(read);
+        osd = t->forced_osd;
       } else if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+        // We may be using a replica, but don't need to set used_replica
+        // because this operation never switches back to the primary.
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;
