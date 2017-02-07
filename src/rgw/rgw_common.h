@@ -1334,10 +1334,16 @@ struct req_state;
 
 class RGWEnv;
 
+/* Namespaced forward declarations. */
 namespace rgw {
-namespace io {
-class BasicClient;
-}
+  namespace auth {
+    namespace s3 {
+      class RGWGetPolicyV2Extractor;
+    }
+  }
+  namespace io {
+    class BasicClient;
+  }
 }
 
 struct req_info {
@@ -1735,6 +1741,21 @@ struct req_state {
     std::unique_ptr<rgw::auth::Identity> identity;
 
     std::unique_ptr<rgw::auth::Completer> completer;
+
+    /* A container for credentials of the S3's browser upload. It's necessary
+     * because: 1) the ::authenticate() method of auth engines and strategies
+     * take req_state only; 2) auth strategies live much longer than RGWOps -
+     * there is no way to pass additional data dependencies through ctors. */
+    class {
+      /* Writer. */
+      friend class RGWPostObj_ObjStore_S3;
+      /* Reader. */
+      friend class rgw::auth::s3::RGWGetPolicyV2Extractor;
+
+      std::string access_key;
+      std::string signature;
+      ceph::bufferlist encoded_policy;
+    } s3_postobj_creds;
   } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;

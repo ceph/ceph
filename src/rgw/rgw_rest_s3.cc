@@ -1798,39 +1798,28 @@ int RGWPostObj_ObjStore_S3::get_params()
   return 0;
 }
 
-static std::string to_string(ceph::bufferlist& bl)
-{
-  return std::string(bl.c_str(),
-                     static_cast<std::string::size_type>(bl.length()));
-}
-
 int RGWPostObj_ObjStore_S3::get_policy()
 {
-  bufferlist encoded_policy;
-
-  if (part_bl("policy", &encoded_policy)) {
+  if (part_bl("policy", &s->auth.s3_postobj_creds.encoded_policy)) {
 
     // check that the signature matches the encoded policy
-    string s3_access_key;
-    if (!part_str("AWSAccessKeyId", &s3_access_key)) {
+    if (! part_str("AWSAccessKeyId", &s->auth.s3_postobj_creds.access_key)) {
       ldout(s->cct, 0) << "No S3 access key found!" << dendl;
       err_msg = "Missing access key";
       return -EINVAL;
     }
     string received_signature_str;
-    if (!part_str("signature", &received_signature_str)) {
+    if (! part_str("signature", &s->auth.s3_postobj_creds.signature)) {
       ldout(s->cct, 0) << "No signature found!" << dendl;
       err_msg = "Missing signature";
       return -EINVAL;
     }
 
-    rgw::auth::s3::RGWGetPolicyV2Extractor extr(s3_access_key,
-                                                received_signature_str,
-                                                to_string(encoded_policy));
-    /* FIXME: this is a makeshift solution. The browser upload authenication will be
+    /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
-     * method. Thus creating a strategy per request won't be necessary. */
-    const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store, &extr);
+     * method. */
+    static const rgw::auth::s3::AWSv2AuthStrategy<
+                   rgw::auth::s3::RGWGetPolicyV2Extractor> strategy(g_ceph_context, store);
     try {
       auto result = strategy.authenticate(s);
       if (result.get_status() != decltype(result)::Status::GRANTED) {
@@ -1859,7 +1848,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     ceph::bufferlist decoded_policy;
     try {
-      decoded_policy.decode_base64(encoded_policy);
+      decoded_policy.decode_base64(s->auth.s3_postobj_creds.encoded_policy);
     } catch (buffer::error& err) {
       ldout(s->cct, 0) << "failed to decode_base64 policy" << dendl;
       err_msg = "Could not decode policy";
@@ -3896,7 +3885,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 {
   /* TODO(rzarzynski): this will be moved to the S3 handlers -- in exactly
    * way like we currently have in the case of Swift API. */
-  static const rgw::auth::s3::AWSv2AuthStrategy strategy(g_ceph_context, store);
+  static const rgw::auth::s3::AWSv2AuthStrategy<rgw::auth::s3::RGWS3V2Extractor> strategy(g_ceph_context, store);
   try {
     auto result = strategy.authenticate(s);
     if (result.get_status() != decltype(result)::Status::GRANTED) {
