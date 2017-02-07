@@ -1,0 +1,12 @@
+#cloud-config
+bootcmd:
+ - echo 'APT::Get::AllowUnauthenticated "true";' | tee /etc/apt/apt.conf.d/99disablesigs
+ - echo nameserver 8.8.8.8 | tee -a /etc/resolv.conf # last resort, in case the DHCP server does not provide a resolver
+manage_etc_hosts: true
+preserve_hostname: true
+system_info:
+  default_user:
+    name: ubuntu
+runcmd:
+ - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+final_message: "READYTORUN"
