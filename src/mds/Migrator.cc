@@ -345,9 +345,6 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 
   // finish clean-up?
   if (it->second.state == EXPORT_CANCELLED) {
-    // wake up any waiters
-    mds->queue_waiters(it->second.waiting_for_finish);
-
     MutationRef mut = it->second.mut;
 
     export_state.erase(it);
@@ -944,7 +941,6 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     // .. unwind ..
     dir->unfreeze_tree();
     dir->state_clear(CDir::STATE_EXPORTING);
-    mds->queue_waiters(it->second.waiting_for_finish);
 
     mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
 
@@ -1859,9 +1855,6 @@ void Migrator::export_finish(CDir *dir)
 
   // discard delayed expires
   cache->discard_delayed_expire(dir);
-
-  // queue finishers
-  mds->queue_waiters(it->second.waiting_for_finish);
 
   MutationRef mut = it->second.mut;
   // remove from exporting list, clean up state

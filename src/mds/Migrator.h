@@ -89,7 +89,6 @@ protected:
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
-    list<MDSInternalContextBase*> waiting_for_finish;
     MutationRef mut;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
@@ -263,11 +262,6 @@ public:
 			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
 			 list<MDSInternalContextBase*>& finished, int *num_dentries);
 
-  void add_export_finish_waiter(CDir *dir, MDSInternalContextBase *c) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
-    assert(it != export_state.end());
-    it->second.waiting_for_finish.push_back(c);
-  }
   void clear_export_proxy_pins(CDir *dir);
 
   void export_caps(CInode *in);
