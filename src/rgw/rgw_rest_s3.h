@@ -616,10 +616,12 @@ public:
     using access_key_id_t = std::string;
     using signature_t = std::string;
     using string_to_sign_t = std::string;
+    using session_token_t = std::string;
 
     virtual std::tuple<access_key_id_t,
                        signature_t,
-                       string_to_sign_t>
+                       string_to_sign_t,
+                       session_token_t>
     get_auth_data(const req_state* s) const = 0;
   };
 
@@ -637,6 +639,7 @@ protected:
   virtual result_t authenticate(const std::string& access_key_id,
                                 const std::string& signature,
                                 const std::string& string_to_sign,
+                                const std::string& session_token,
                                 const req_state* s) const = 0;
 
 public:
@@ -644,15 +647,16 @@ public:
     std::string access_key_id;
     std::string signature;
     std::string string_to_sign;
+    std::string session_token;
 
     /* Small reminder: an extractor is allowed to throw! */
-    std::tie(access_key_id, signature, string_to_sign) = \
+    std::tie(access_key_id, signature, string_to_sign, session_token) = \
       extractor.get_auth_data(s);
 
     if (access_key_id.empty() || signature.empty()) {
       return result_t::deny(-EINVAL);
     } else {
-      return authenticate(access_key_id, signature, string_to_sign, s);
+      return authenticate(access_key_id, signature, string_to_sign, session_token, s);
     }
   }
 };
@@ -670,7 +674,8 @@ public:
 
   std::tuple<access_key_id_t,
              signature_t,
-             string_to_sign_t>
+             string_to_sign_t,
+             session_token_t>
   get_auth_data(const req_state* s) const override;
 };
 
@@ -692,9 +697,10 @@ public:
 
   std::tuple<access_key_id_t,
              signature_t,
-             string_to_sign_t>
+             string_to_sign_t,
+             session_token_t>
   get_auth_data(const req_state* s) const override {
-    return std::make_tuple(access_key_id, signature, string_to_sign);
+    return std::make_tuple(access_key_id, signature, string_to_sign, "");
   }
 };
 
@@ -719,6 +725,7 @@ protected:
   result_t authenticate(const std::string& access_key_id,
                         const std::string& signature,
                         const std::string& string_to_sign,
+                        const std::string& session_token,
                         const req_state* s) const override;
 public:
   LDAPEngine(CephContext* const cct,
@@ -746,6 +753,7 @@ class LocalVersion2ndEngine : public Version2ndEngine {
   result_t authenticate(const std::string& access_key_id,
                         const std::string& signature,
                         const std::string& string_to_sign,
+                        const std::string& session_token,
                         const req_state* s) const override;
 public:
   LocalVersion2ndEngine(CephContext* const cct,
@@ -764,9 +772,36 @@ public:
   }
 };
 
+class STSVersion2ndEngine : public Version2ndEngine {
+  RGWRados* const store;
+  const rgw::auth::STSApplier::Factory* const apl_factory;
+
+  result_t authenticate(const std::string& access_key_id,
+                        const std::string& signature,
+                        const std::string& string_to_sign,
+                        const std::string& session_token,
+                        const req_state* s) const override;
+public:
+  STSVersion2ndEngine(CephContext* const cct,
+                      RGWRados* const store,
+                      const Extractor& extractor,
+                      const rgw::auth::STSApplier::Factory* const apl_factory)
+    : Version2ndEngine(cct, extractor),
+      store(store),
+      apl_factory(apl_factory) {
+  }
+
+  using Version2ndEngine::authenticate;
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::s3::STSVersion2ndEngine";
+  }
+};
+
 
 class S3AuthFactory : public rgw::auth::RemoteApplier::Factory,
-                      public rgw::auth::LocalApplier::Factory {
+                      public rgw::auth::LocalApplier::Factory,
+                      public rgw::auth::STSApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
   RGWRados* const store;
 
@@ -790,6 +825,13 @@ public:
                             const std::string& subuser) const override {
       return aplptr_t(
         new rgw::auth::LocalApplier(cct, user_info, subuser));
+  }
+
+  aplptr_t create_apl_sts(CephContext* const cct,
+                            const req_state* const s,
+                            const std::map<std::string, std::string>& decoded_tokens_map) const override {
+      return aplptr_t(
+        new rgw::auth::STSApplier(cct, store, decoded_tokens_map));
   }
 };
 

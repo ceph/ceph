@@ -12,6 +12,7 @@
 #include "common/safe_io.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/tokenizer.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -4159,11 +4160,13 @@ bool rgw::auth::s3::RGWS3V2Extractor::is_time_skew_ok(const utime_t& header_time
 
 std::tuple<Version2ndEngine::Extractor::access_key_id_t,
            Version2ndEngine::Extractor::signature_t,
-           Version2ndEngine::Extractor::string_to_sign_t>
+           Version2ndEngine::Extractor::string_to_sign_t,
+           Version2ndEngine::Extractor::session_token_t>
 rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
 {
   std::string access_key_id;
   std::string signature;
+  std::string session_token;
   bool qsr = false;
 
   if (! s->http_auth || s->http_auth[0] == '\0') {
@@ -4171,6 +4174,7 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
      * the "Expires" parameter now. */
     access_key_id = s->info.args.get("AWSAccessKeyId");
     signature = s->info.args.get("Signature");
+    session_token = s->info.args.get("x-amz-security-token");
     qsr = true;
 
     std::string expires = s->info.args.get("Expires");
@@ -4190,6 +4194,9 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
     if (pos != std::string::npos) {
       access_key_id = auth_str.substr(0, pos);
       signature = auth_str.substr(pos + 1);
+    }
+    if (s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+      session_token = s->info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
     }
   }
 
@@ -4211,7 +4218,8 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
 
   return std::make_tuple(std::move(access_key_id),
                          std::move(signature),
-                         std::move(string_to_sign));
+                         std::move(string_to_sign),
+                         std::move(session_token));
 }
 
 } /* namespace s3 */
@@ -4269,6 +4277,7 @@ rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
                                         const std::string& signature,
                                         const std::string& string_to_sign,
+                                        const std::string& session_token,
                                         const req_state* const s) const
 {
   /* boost filters and/or string_ref may throw on invalid input */
@@ -4310,6 +4319,7 @@ rgw::auth::Engine::result_t
 rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key_id,
                                                    const std::string& signature,
                                                    const std::string& string_to_sign,
+                                                   const std::string& session_token,
                                                    const req_state* const s) const
 {
   /* get the user info */
@@ -4351,5 +4361,67 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
+  return result_t::grant(std::move(apl));
+}
+
+/* STSVersion2ndEngine */
+rgw::auth::Engine::result_t
+rgw::auth::s3::STSVersion2ndEngine::authenticate(const std::string& access_key_id,
+                                                  const std::string& signature,
+                                                  const std::string& string_to_sign,
+                                                  const std::string& session_token,
+                                                  const req_state* const s) const
+{
+  //Decode the session token
+  std::string decoded_str = rgw::from_base64(session_token);
+  std::map<std::string, std::string> decoded_token_map;
+
+  //Extract useful info (like expiration time, secret key) from the token
+  boost::char_separator<char> sep("&");
+  boost::tokenizer<boost::char_separator<char>> tokens(decoded_str, sep);
+  for (const auto& t : tokens) {
+    auto pos = t.find("=");
+    if (pos != string::npos) {
+      std::string key = t.substr(0, pos);
+      std::string value = t.substr(pos + 1, t.size() - 1);
+      decoded_token_map[key] = value;
+    }
+  }
+
+  //Check if the token has expired
+  if (decoded_token_map.find("expiration") != decoded_token_map.end()) {
+    std::string expiration = decoded_token_map["expiration"];
+    if (! expiration.empty()) {
+      const time_t exp = atoll(expiration.c_str());
+      time_t now;
+      time(&now);
+
+      if (now >= exp) {
+        return result_t::deny(-EPERM);
+      }
+    }
+  }
+
+  std::string secret_key;
+  if (decoded_token_map.find("secret_access_key") != decoded_token_map.end()) {
+    secret_key = decoded_token_map["secret_access_key"];
+  }
+
+  std::string digest;
+  int ret = rgw_get_s3_header_digest(string_to_sign, secret_key, digest);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
+  }
+
+  ldout(cct, 15) << "string_to_sign=" << string_to_sign << dendl;
+  ldout(cct, 15) << "calculated digest=" << digest << dendl;
+  ldout(cct, 15) << "auth signature=" << signature << dendl;
+  ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;
+
+  if (signature != digest) {
+    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
+  }
+
+  auto apl = apl_factory->create_apl_sts(cct, s, decoded_token_map);
   return result_t::grant(std::move(apl));
 }

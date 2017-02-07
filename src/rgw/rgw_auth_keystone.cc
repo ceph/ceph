@@ -399,6 +399,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
 rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_key_id,
                                                     const std::string& signature,
                                                     const std::string& string_to_sign,
+                                                    const std::string& session_token,
                                                     /* Passthorugh only! */
                                                     const req_state* s) const
 {

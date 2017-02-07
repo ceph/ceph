@@ -86,6 +86,7 @@ class EC2Engine : public rgw::auth::s3::Version2ndEngine {
   result_t authenticate(const std::string& access_key_id,
                         const std::string& signature,
                         const std::string& string_to_sign,
+                        const std::string& session_token,
                         const req_state* s) const override;
 public:
   EC2Engine(CephContext* const cct,

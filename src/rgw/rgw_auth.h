@@ -440,6 +440,40 @@ public:
     };
 };
 
+class STSApplier : public IdentityApplier {
+protected:
+  CephContext * const cct;
+
+  /* Read-write is intensional here due to RGWUserInfo creation process. */
+  RGWRados* const store;
+
+  const std::map<std::string, std::string> decoded_tokens_map;
+
+public:
+  STSApplier(CephContext* const cct,
+              RGWRados* const store,
+              const std::map<std::string, std::string>& decoded_tokens_map)
+    : cct(cct),
+      store(store),
+      decoded_tokens_map(decoded_tokens_map) {}
+
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {return 0;}
+  bool is_admin_of(const rgw_user& uid) const override { return true; }
+  bool is_owner_of(const rgw_user& uid) const override { return true; }
+  uint32_t get_perm_mask() const override { return 0; }
+  void to_str(std::ostream& out) const override {}
+  void load_acct_info(RGWUserInfo& user_info) const override {}
+
+  struct Factory {
+    virtual ~Factory() {}
+
+    virtual aplptr_t create_apl_sts(CephContext* cct,
+                                    const req_state* s,
+                                    const std::map<std::string, std::string>& decoded_tokens_map) const = 0;
+  };
+};
+
+
 
 /* The anonymous abstract engine. */
 class AnonymousEngine : public Engine {

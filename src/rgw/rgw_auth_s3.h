@@ -20,7 +20,8 @@ namespace auth {
 namespace s3 {
 
 class ExternalAuthStrategy : public rgw::auth::Strategy,
-                             public rgw::auth::RemoteApplier::Factory {
+                             public rgw::auth::RemoteApplier::Factory,
+                             public rgw::auth::STSApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
   RGWRados* const store;
 
@@ -30,6 +31,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 
   EC2Engine keystone_engine;
   LDAPEngine ldap_engine;
+  STSVersion2ndEngine sts_engine;
 
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
@@ -39,6 +41,15 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info));
     /* TODO(rzarzynski): replace with static_ptr. */
+    return aplptr_t(new decltype(apl)(std::move(apl)));
+  }
+
+  aplptr_t create_apl_sts(CephContext* cct,
+                          const req_state* s,
+                          const std::map<std::string, std::string>& decoded_tokens_map
+                         ) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::STSApplier(cct, store, decoded_tokens_map));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -52,7 +63,9 @@ public:
                       keystone_config_t::get_instance(),
                       keystone_cache_t::get_instance<keystone_config_t>()),
       ldap_engine(cct, store, *extractor,
-                  static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
+                  static_cast<rgw::auth::RemoteApplier::Factory*>(this)),
+      sts_engine(cct, store, *extractor,
+                  static_cast<rgw::auth::STSApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
         ! cct->_conf->rgw_keystone_url.empty()) {
@@ -62,6 +75,11 @@ public:
     if (cct->_conf->rgw_s3_auth_use_ldap &&
         ! cct->_conf->rgw_ldap_uri.empty()) {
       add_engine(Control::SUFFICIENT, ldap_engine);
+    }
+
+    if (cct->_conf->rgw_s3_auth_use_sts &&
+        ! cct->_conf->rgw_s3_auth_sts_key.empty()) {
+      add_engine(Control::SUFFICIENT, sts_engine);
     }
   }
 
