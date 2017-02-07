@@ -20,6 +20,7 @@
 
 #include "common/hobject.h"
 #include "osd/osd_types.h"
+#include "osd/osd_internal_types.h"
 #include "common/interval_map.h"
 #include "common/inline_variant.h"
 
