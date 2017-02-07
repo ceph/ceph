@@ -369,6 +369,7 @@ function delete_keypair() {
 
 function setup_dnsmasq() {
     local provider=$1
+    local dev=$2
 
     if ! test -f /etc/dnsmasq.d/resolv ; then
         resolver=$(grep nameserver /etc/resolv.conf | head -1 | perl -ne 'print $1 if(/\s*nameserver\s+([\d\.]+)/)')
@@ -383,7 +384,7 @@ function setup_dnsmasq() {
         sudo resolvconf -u
         if test $provider = cloudlab ; then
             sudo perl -pi -e 's/.*(prepend domain-name-servers 127.0.0.1;)/\1/' /etc/dhcp/dhclient.conf
-            sudo bash -c 'ifdown eth0 ; ifup eth0'
+            sudo bash -c "ifdown $dev ; ifup $dev"
         fi
         echo "INSTALLED dnsmasq and configured to be a resolver"
     else
@@ -640,7 +641,11 @@ function main() {
             ;;
     esac
 
-    local ip=$(ip a show dev eth0 | sed -n "s:.*inet \(.*\)/.*:\1:p")
+    local ip
+    for dev in eth0 ens3 ; do
+        ip=$(ip a show dev $dev 2>/dev/null | sed -n "s:.*inet \(.*\)/.*:\1:p")
+        test "$ip" && break
+    done
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
@@ -666,7 +671,7 @@ function main() {
     fi
 
     if $do_setup_dnsmasq ; then
-        setup_dnsmasq $provider || return 1
+        setup_dnsmasq $provider $dev || return 1
         define_dnsmasq "$subnets" $labdomain || return 1
     fi
 
