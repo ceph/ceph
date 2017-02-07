@@ -27,12 +27,13 @@ using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
-  string store_path, cmd, out_path;
+  string store_path, cmd, out_path, oid;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
      "path to mon directory, mandatory (current/omap usually)")
     ("paranoid", "use paranoid checking")
+    ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
      "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check], mandatory")
     ;
@@ -123,6 +124,8 @@ int main(int argc, char **argv) {
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+        continue;
       std::cout << *i << std::endl;
     }
     r = 0;
@@ -136,6 +139,8 @@ int main(int argc, char **argv) {
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+        continue;
       std::cout << "Object: " << *i << std::endl;
       ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj));
       for (j->seek_to_first(); j->valid(); j->next()) {
