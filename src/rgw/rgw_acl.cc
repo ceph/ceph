@@ -98,6 +98,9 @@ uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identi
                                           const uint32_t perm_mask,
                                           const char * const http_referer)
 {
+  ldout(cct, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
+                 << dendl;
+
   uint32_t perm = acl.get_perm(auth_identity, perm_mask);
 
   if (auth_identity.is_owner_of(owner.get_id())) {
@@ -123,9 +126,9 @@ uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identi
     perm |= acl.get_referer_perm(http_referer, perm_mask);
   }
 
-  ldout(cct, 5) << "Getting permissions identity=" << auth_identity
-                << " owner=" << owner.get_id()
-                << " perm=" << perm << dendl;
+  ldout(cct, 5) << "-- Getting permissions done for identity=" << auth_identity
+                << ", owner=" << owner.get_id()
+                << ", perm=" << perm << dendl;
 
   return perm;
 }
