@@ -1046,7 +1046,7 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
         arch = self.get_default_arch()
         self.run(
             "server create " +
-            " --image '" + self.image('ubuntu', '14.04', arch) + "' " +
+            " --image '" + self.image('ubuntu', '16.04', arch) + "' " +
             " --flavor '" + self.flavor(arch) + "' " +
             " " + self.net() +
             " --key-name " + self.args.key_name +
