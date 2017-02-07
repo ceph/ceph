@@ -3882,7 +3882,8 @@ public:
     while (in_flight)
       cond.Wait(lock);
     store->umount();
-    store->fsck(deep);
+    int r = store->fsck(deep);
+    assert(r == 0);
     store->mount();
   }
 
