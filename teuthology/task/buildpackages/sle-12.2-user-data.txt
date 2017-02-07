@@ -1,0 +1,15 @@
+#cloud-config
+bootcmd:
+ - echo nameserver 8.8.8.8 | tee -a /etc/resolv.conf # last resort, in case the DHCP server does not provide a resolver
+ - SUSEConnect -p sle-sdk/12.2/x86_64
+manage_etc_hosts: true
+preserve_hostname: true
+users:
+  - name: ubuntu
+    gecos: User
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    groups: users
+runcmd:
+ - ( MYHOME=/home/ubuntu ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /root/.ssh/authorized_keys $MYHOME/.ssh ; chown -R ubuntu.users $MYHOME/.ssh )
+ - zypper --non-interactive install --no-recommends python wget git ntp rsyslog lsb-release
+final_message: "READYTORUN"
