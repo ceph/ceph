@@ -187,6 +187,8 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
     const rgw::auth::Engine& engine = kv.first;
     const auto& policy = kv.second;
 
+    dout(20) << get_name() << ": trying " << engine.get_name() << dendl;
+
     result_t engine_result = result_t::deny();
     try {
       engine_result = engine.authenticate(s);
@@ -196,23 +198,35 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
 
     bool try_next = true;
     switch (engine_result.get_status()) {
-      case result_t::Status::REJECTED:
+      case result_t::Status::REJECTED: {
+        dout(20) << engine.get_name() << " rejected with reason="
+                 << engine_result.get_reason() << dendl;
+
         std::tie(try_next, strategy_result) = \
           strategy_handle_rejected(std::move(engine_result), policy,
                                    std::move(strategy_result));
-          break;
-      case result_t::Status::DENIED:
+        break;
+      }
+      case result_t::Status::DENIED: {
+        dout(20) << engine.get_name() << " denied with reason="
+                 << engine_result.get_reason() << dendl;
+
         std::tie(try_next, strategy_result) = \
           strategy_handle_denied(std::move(engine_result), policy,
                                  std::move(strategy_result));
-          break;
-      case result_t::Status::GRANTED:
+        break;
+      }
+      case result_t::Status::GRANTED: {
+        dout(20) << engine.get_name() << " granted access" << dendl;
+
         std::tie(try_next, strategy_result) = \
           strategy_handle_granted(std::move(engine_result), policy,
                                   std::move(strategy_result));
-          break;
-      default:
+        break;
+      }
+      default: {
         abort();
+      }
     }
 
     if (! try_next) {
