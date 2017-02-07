@@ -1374,7 +1374,9 @@ OPTION(rbd_mirror_leader_max_acquire_attempts_before_break, OPT_INT, 3) // numbe
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 
-OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
+OPTION(rgw_max_chunk_size, OPT_INT, 4 * 1024 * 1024)
+OPTION(rgw_put_obj_min_window_size, OPT_INT, 16 * 1024 * 1024)
+OPTION(rgw_put_obj_max_window_size, OPT_INT, 64 * 1024 * 1024)
 OPTION(rgw_max_put_size, OPT_U64, 5ULL*1024*1024*1024)
 
 /**
