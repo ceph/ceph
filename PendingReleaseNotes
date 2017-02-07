@@ -38,3 +38,10 @@
   is enabled (it's off by default).  This means that a VM using librbd that
   previously would have gotten an EIO and gone read-only will now see a
   blocked/hung IO instead.
+
+*  When configuring ceph-fuse mounts in /etc/fstab, a new syntax is
+   available that uses "ceph.<arg>=<val>" in the options column, instead
+   of putting configuration in the device column.  The old style syntax
+   still works.  See the documentation page "Mount CephFS in your
+   file systems table" for details.
+
