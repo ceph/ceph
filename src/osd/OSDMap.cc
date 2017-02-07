@@ -1101,7 +1101,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     }
     mask |= jewel_features;
 
-    const uint64_t kraken_features = CEPH_FEATURE_SERVER_KRAKEN
+    const uint64_t kraken_features = CEPH_FEATUREMASK_SERVER_KRAKEN
       | CEPH_FEATURE_MSG_ADDR2;
     if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
       features |= kraken_features;
