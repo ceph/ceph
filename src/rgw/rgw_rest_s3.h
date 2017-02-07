@@ -685,25 +685,22 @@ public:
 
 
 class RGWGetPolicyV2Extractor : public Version2ndEngine::Extractor {
-private:
-  std::string access_key_id;
-  std::string signature;
-  std::string string_to_sign;
+  static std::string to_string(ceph::bufferlist bl) {
+    return std::string(bl.c_str(),
+                       static_cast<std::string::size_type>(bl.length()));
+  }
 
 public:
-  RGWGetPolicyV2Extractor(std::string access_key_id,
-                          std::string signature,
-                          std::string string_to_sign)
-    : access_key_id(std::move(access_key_id)),
-      signature(std::move(signature)),
-      string_to_sign(std::move(string_to_sign)) {
+  RGWGetPolicyV2Extractor(CephContext*) {
   }
 
   std::tuple<access_key_id_t,
              signature_t,
              string_to_sign_t>
   get_auth_data(const req_state* s) const override {
-    return std::make_tuple(access_key_id, signature, string_to_sign);
+    return std::make_tuple(s->auth.s3_postobj_creds.access_key,
+                           s->auth.s3_postobj_creds.signature,
+                           to_string(s->auth.s3_postobj_creds.encoded_policy));
   }
 };
 
