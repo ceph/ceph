@@ -4941,7 +4941,6 @@ void PG::merge_new_log_entries(
   for (auto &&i: entries) {
     missing_loc.rebuild(
       i.soid,
-      get_sort_bitwise(),
       pg_whoami,
       actingbackfill,
       info,
