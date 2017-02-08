@@ -226,13 +226,19 @@ void MDSRankDispatcher::tick()
   if (is_stopping()) {
     mdlog->trim();
     if (mdcache->shutdown_pass()) {
-      if (!purge_queue.is_idle()) {
+      uint64_t pq_progress = 0 ;
+      uint64_t pq_total = 0;
+      size_t pq_in_flight = 0;
+      if (!purge_queue.drain(&pq_progress, &pq_total, &pq_in_flight)) {
         dout(7) << "shutdown_pass=true, but still waiting for purge queue"
                 << dendl;
         // This takes unbounded time, so we must indicate progress
-        // to the administrator
-        // TODO include progress in message
-        clog->info() << "MDS rank " << whoami << " waiting for purge queue";
+        // to the administrator: we do it in a slightly imperfect way
+        // by sending periodic (tick frequency) clog messages while
+        // in this state.
+        clog->info() << "MDS rank " << whoami << " waiting for purge queue ("
+          << std::dec << pq_progress << "/" << pq_total << " " << pq_in_flight
+          << " files purging" << ")";
       } else {
         dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to "
                    "down:stopped" << dendl;
