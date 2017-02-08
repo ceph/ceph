@@ -2213,18 +2213,12 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
     } else {
       // done!
       get_parent()->on_peer_recover(
-	peer, soid, pi->recovery_info,
-	pi->stat);
-
-      object_stat_sum_t stat;
-      stat.num_bytes_recovered = pi->recovery_info.size;
-      stat.num_keys_recovered = reply->omap_entries.size();
-      stat.num_objects_recovered = 1;
+	peer, soid, pi->recovery_info);
 
       get_parent()->release_locks(pi->lock_manager);
+      object_stat_sum_t stat = pi->stat;
       pushing[soid].erase(peer);
       pi = NULL;
-
 
       if (pushing[soid].empty()) {
 	get_parent()->on_global_recover(soid, stat);
