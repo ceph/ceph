@@ -1133,6 +1133,7 @@ int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
   return aio_operate(oid, &op, c, snapc, 0);
 }
 
+namespace {
 struct AioGetxattrsData {
   AioGetxattrsData(librados::AioCompletionImpl *c, map<string, bufferlist>* attrset,
 		   librados::RadosClient *_client) :
@@ -1142,6 +1143,7 @@ struct AioGetxattrsData {
   map<std::string, bufferlist>* user_attrset;
   librados::RadosClient *client;
 };
+}
 
 static void aio_getxattrs_complete(rados_completion_t c, void *arg) {
   AioGetxattrsData *cdata = reinterpret_cast<AioGetxattrsData*>(arg);
