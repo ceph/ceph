@@ -140,7 +140,7 @@ endif (WITH_RADOSGW_ASIO_FRONTEND)
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a rgw_a)
+target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
@@ -148,7 +148,7 @@ target_link_libraries(radosgw radosgw_a librados
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES}
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 # radosgw depends on cls libraries at runtime, but not as link dependencies
 add_dependencies(radosgw cls_rgw cls_lock cls_refcount
