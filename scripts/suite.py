@@ -6,8 +6,8 @@ from teuthology.config import config
 
 doc = """
 usage: teuthology-suite --help
-       teuthology-suite [-v | -vv ] --suite <suite> [options] [<config_yaml>...]
-       teuthology-suite [-v | -vv ] --rerun <name>  [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --ceph <ceph> --suite <suite> [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --ceph <ceph> --rerun <name>  [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
@@ -31,7 +31,6 @@ Standard arguments:
                               The suite to schedule
   --wait                      Block until the suite is finished
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
-                              [default: master]
   -S <sha1>, --sha1 <sha1>    The ceph sha1 to run against (overrides -c)
                               If both -S and -c are supplied, -S wins, and
                               there is no validation that sha1 is contained
