@@ -81,8 +81,11 @@
 /// base backfill priority for MBackfillReserve (inactive PG)
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
 
-/// max recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 255
+/// max manually/automatically set recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 254
+
+/// max recovery priority for MBackfillReserve, only when forced manually
+#define OSD_RECOVERY_PRIORITY_FORCED 255
 
 
 typedef hobject_t collection_list_handle_t;
@@ -983,6 +986,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
 #define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
 #define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
+#define PG_STATE_FORCED_RECOVERY (1<<30) // force recovery of this pg before any other
+#define PG_STATE_FORCED_BACKFILL (1<<31) // force backfill of this pg before any other
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
