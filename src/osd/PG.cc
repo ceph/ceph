@@ -1655,7 +1655,7 @@ void PG::activate(ObjectStore::Transaction& t,
        */
       bool force_restart_backfill =
 	!pi.last_backfill.is_max() &&
-	pi.last_backfill_bitwise != get_sort_bitwise();
+	!pi.last_backfill_bitwise;
 
       if (pi.last_update == info.last_update && !force_restart_backfill) {
         // empty log
@@ -5436,9 +5436,6 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
     out << " MUST_SCRUB";
-
-  if (!pg.get_sort_bitwise())
-    out << " NIBBLEWISE";
 
   //out << " (" << pg.pg_log.get_tail() << "," << pg.pg_log.get_head() << "]";
   if (pg.pg_log.get_missing().num_missing()) {

@@ -1108,8 +1108,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	hobject_t pg_end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
         dout(10) << " pgnls lower_bound " << lower_bound
 		 << " pg_end " << pg_end << dendl;
-	if (get_sort_bitwise() &&
-	    ((!lower_bound.is_max() && lower_bound >= pg_end) ||
+	if (((!lower_bound.is_max() && lower_bound >= pg_end) ||
 	     (lower_bound != hobject_t() && lower_bound < pg_start))) {
 	  // this should only happen with a buggy client.
 	  dout(10) << "outside of PG bounds " << pg_start << " .. "
@@ -10871,7 +10870,6 @@ uint64_t PrimaryLogPG::recover_backfill(
   dout(10) << "recover_backfill (" << max << ")"
            << " bft=" << backfill_targets
 	   << " last_backfill_started " << last_backfill_started
-	   << " sort " << (get_sort_bitwise() ? "bitwise" : "nibblewise")
 	   << (new_backfill ? " new_backfill":"")
 	   << dendl;
   assert(!backfill_targets.empty());
