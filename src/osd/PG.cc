@@ -1701,7 +1701,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
 	pi.last_update = info.last_update;
 	pi.last_complete = info.last_update;
-	pi.set_last_backfill(hobject_t(), get_sort_bitwise());
+	pi.set_last_backfill(hobject_t());
 	pi.last_epoch_started = info.last_epoch_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
@@ -2262,15 +2262,14 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   child->info.purged_snaps = info.purged_snaps;
 
   if (info.last_backfill.is_max()) {
-    child->info.set_last_backfill(hobject_t::get_max(),
-				  info.last_backfill_bitwise);
+    child->info.set_last_backfill(hobject_t::get_max());
   } else {
     // restart backfill on parent and child to be safe.  we could
     // probably do better in the bitwise sort case, but it's more
     // fragile (there may be special work to do on backfill completion
     // in the future).
-    info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
-    child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
+    info.set_last_backfill(hobject_t());
+    child->info.set_last_backfill(hobject_t());
   }
 
   child->info.stats = info.stats;
@@ -2921,7 +2920,7 @@ void PG::init(
 
   if (backfill) {
     dout(10) << __func__ << ": Setting backfill" << dendl;
-    info.set_last_backfill(hobject_t(), get_sort_bitwise());
+    info.set_last_backfill(hobject_t());
     info.last_complete = info.last_update;
     pg_log.mark_log_for_rewrite();
   }

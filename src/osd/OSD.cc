@@ -8415,7 +8415,7 @@ void OSD::handle_pg_query(OpRequestRef op)
      * before the pg is recreated, we'll just start it off backfilling
      * instead of just empty */
     if (service.deleting_pgs.lookup(pgid))
-      empty.set_last_backfill(hobject_t(), true);
+      empty.set_last_backfill(hobject_t());
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());

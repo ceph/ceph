@@ -3467,7 +3467,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
     {
       assert(cct->_conf->osd_kill_backfill_at != 2);
 
-      info.set_last_backfill(m->last_backfill, get_sort_bitwise());
+      info.set_last_backfill(m->last_backfill);
       if (m->compat_stat_sum) {
 	info.stats.stats = m->stats.stats; // Previously, we only sent sum
       } else {
@@ -9986,7 +9986,7 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
   dout(10) << "on_removal" << dendl;
 
   // adjust info to backfill
-  info.set_last_backfill(hobject_t(), true);
+  info.set_last_backfill(hobject_t());
   pg_log.reset_backfill();
   dirty_info = true;
 
@@ -11216,7 +11216,7 @@ uint64_t PrimaryLogPG::recover_backfill(
     pg_info_t& pinfo = peer_info[bt];
 
     if (new_last_backfill > pinfo.last_backfill) {
-      pinfo.set_last_backfill(new_last_backfill, get_sort_bitwise());
+      pinfo.set_last_backfill(new_last_backfill);
       epoch_t e = get_osdmap()->get_epoch();
       MOSDPGBackfill *m = NULL;
       if (pinfo.last_backfill.is_max()) {
