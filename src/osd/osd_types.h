@@ -4735,14 +4735,9 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  bool bitwise; // ephemeral, not encoded
   map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
-
-  ScrubMap() : bitwise(true) {}
-  ScrubMap(bool bitwise)
-    : bitwise(bitwise) {}
 
   void merge_incr(const ScrubMap &l);
   void insert(const ScrubMap &r) {
@@ -4757,15 +4752,6 @@ struct ScrubMap {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl, int64_t pool=-1);
   void dump(Formatter *f) const;
-  void reset_bitwise(bool new_bitwise) {
-    if (bitwise == new_bitwise)
-      return;
-    map<hobject_t, object> new_objects(
-      objects.begin(),
-      objects.end());
-    ::swap(new_objects, objects);
-    bitwise = new_bitwise;
-  }
   static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
