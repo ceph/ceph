@@ -234,6 +234,7 @@ protected:
   bi::list_member_hook<> dispatch_q;
 
 public:
+  void *libosd_context;
   class CompletionHook : public Context {
   protected:
     Message *m;
@@ -269,10 +270,12 @@ protected:
 
 public:
   Message() {
+    libosd_context = nullptr;
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   }
   Message(int t, int version=1, int compat_version=0) {
+    libosd_context = nullptr;
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = version;

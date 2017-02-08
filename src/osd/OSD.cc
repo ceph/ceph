@@ -1386,6 +1386,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags,
 				       true);
   reply->set_reply_versions(v, uv);
+  reply->libosd_context = m->libosd_context;
   m->get_connection()->send_message(reply);
 }
 
@@ -2707,6 +2708,8 @@ int OSD::shutdown()
   cct->_conf->set_val("debug_filestore", "100");
   cct->_conf->set_val("debug_ms", "100");
   cct->_conf->apply_changes(NULL);
+
+  notify_state_observers(state, osdmap->get_epoch());
 
   service.start_shutdown();
 
@@ -4408,6 +4411,7 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
+    notify_state_observers(state, osdmap->get_epoch());
   }
 
   do_waiters();
@@ -5021,6 +5025,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 void OSD::start_waiting_for_healthy()
 {
   dout(1) << "start_waiting_for_healthy" << dendl;
+  notify_state_observers(state, osdmap->get_epoch());
   set_state(STATE_WAITING_FOR_HEALTHY);
   last_heartbeat_resample = utime_t();
 }
@@ -7479,6 +7484,8 @@ void OSD::consume_map()
   service.pre_publish_map(osdmap);
   service.await_reserved_maps();
   service.publish_map(osdmap);
+
+  notify_state_observers(state, osdmap->get_epoch());
 
   dispatch_sessions_waiting_on_map();
 

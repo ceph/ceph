@@ -2210,6 +2210,7 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 	reply = new MOSDOpReply(m, r, pg->get_osdmap()->get_epoch(),
 				flags, true);
       }
+      reply->libosd_context = m->libosd_context;
       ldpp_dout(pg, 10) << " sending commit on " << *m << " " << reply << dendl;
       pg->osd->send_message_osd_client(reply, m->get_connection());
     }
@@ -3125,6 +3126,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending reply on " << *m << " " << reply << dendl;
+	reply->libosd_context = m->libosd_context;
 	osd->send_message_osd_client(reply, m->get_connection());
 	ctx->sent_reply = true;
 	ctx->op->mark_commit_sent();
@@ -6840,6 +6842,7 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   reply->set_result(result);
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+  reply->libosd_context = m->libosd_context;
   osd->send_message_osd_client(reply, m->get_connection());
   close_op_ctx(ctx);
 }
