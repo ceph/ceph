@@ -542,7 +542,7 @@ public:
 
   virtual void TearDown() {
     std::cerr << "Checking..." << std::endl;
-    assert(db->check(std::cerr) == 0);
+    ASSERT_EQ(0, db->check(std::cerr));
   }
 };
 
