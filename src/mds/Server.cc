@@ -6486,7 +6486,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     // are involved in the rename operation.
     if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
       dout(10) << " preparing ambiguous auth for srci" << dendl;
-      mdr->set_ambiguous_auth(srci);
+      assert(mdr->more()->is_remote_frozen_authpin);
+      assert(mdr->more()->rename_inode == srci);
       _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
       return;
     }
@@ -7924,6 +7925,11 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
 
   // note slave
   mdr->more()->slaves.insert(from);
+  if (mdr->more()->srcdn_auth_mds == from &&
+      mdr->more()->is_remote_frozen_authpin &&
+      !mdr->more()->is_ambiguous_auth) {
+    mdr->set_ambiguous_auth(mdr->more()->rename_inode);
+  }
 
   // witnessed?  or add extra witnesses?
   assert(mdr->more()->witnessed.count(from) == 0);
