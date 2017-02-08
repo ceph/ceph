@@ -222,6 +222,11 @@ public:
   int list_objects(vector<ghobject_t> *objs ///< [out] objects
     );
 
+  struct _Header;
+  // Util, get all object headers, there must be no other concurrent access
+  int list_object_headers(vector<_Header> *out ///< [out] headers
+    );
+
   ObjectMapIterator get_iterator(const ghobject_t &oid) override;
 
   static const string USER_PREFIX;
@@ -532,5 +537,7 @@ private:
 };
 WRITE_CLASS_ENCODER(DBObjectMap::_Header)
 WRITE_CLASS_ENCODER(DBObjectMap::State)
+
+ostream& operator<<(ostream& out, const DBObjectMap::_Header& h);
 
 #endif
