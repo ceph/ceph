@@ -318,7 +318,6 @@ public:
   };
 
   struct SharedBlobSet;
-  struct Collection;
 
   /// in-memory shared blob state (incl cached buffers)
   struct SharedBlob {

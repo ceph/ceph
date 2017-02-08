@@ -208,7 +208,10 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
 
 
+#ifndef VOIDPTR_RADOS_T
+#define VOIDPTR_RADOS_T
 typedef void *rados_t;
+#endif // VOIDPTR_RADOS_T
 
 /**
  * Create a mount handle from a rados_t, for using libcephfs in the

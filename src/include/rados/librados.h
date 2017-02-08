@@ -166,7 +166,10 @@ enum {
  * -- or to the same cluster with different users -- requires
  * different cluster handles.
  */
+#ifndef VOIDPTR_RADOS_T
+#define VOIDPTR_RADOS_T
 typedef void *rados_t;
+#endif //VOIDPTR_RADOS_T
 
 /**
  * @typedef rados_config_t
