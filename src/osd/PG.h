@@ -974,6 +974,8 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
+  /// clip calculated priority to reasonable range
+  inline int clamp_recovery_priority(int priority);
   /// get log recovery reservation priority
   unsigned get_recovery_priority();
   /// get backfill reservation priority
