@@ -330,8 +330,16 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
     dout(10) << " must authpin " << *object << dendl;
 
-    if (mdr->is_auth_pinned(object)) 
-      continue;
+    if (mdr->is_auth_pinned(object)) {
+      if (object != (MDSCacheObject*)auth_pin_freeze)
+	continue;
+      if (mdr->more()->is_remote_frozen_authpin) {
+	if (mdr->more()->rename_inode == auth_pin_freeze)
+	  continue;
+	// unfreeze auth pin for the wrong inode
+	mustpin_remote[mdr->more()->rename_inode->authority().first].size();
+      }
+    }
     
     if (!object->is_auth()) {
       if (!mdr->locks.empty())
