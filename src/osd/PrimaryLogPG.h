@@ -821,9 +821,7 @@ protected:
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
-	if (scrubber.write_blocked_by_scrub(
-	      p.first.get_head(),
-	      get_sort_bitwise())) {
+	if (scrubber.write_blocked_by_scrub(p.first.get_head())) {
 	  waiting_for_scrub.splice(
 	    waiting_for_scrub.begin(),
 	    p.second,

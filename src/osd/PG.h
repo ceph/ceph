@@ -1197,12 +1197,8 @@ public:
 
     // classic (non chunk) scrubs block all writes
     // chunky scrubs only block writes to a range
-    bool write_blocked_by_scrub(const hobject_t &soid, bool sort_bitwise) {
-      if (soid >= start &&
-	  soid < end)
-	return true;
-
-      return false;
+    bool write_blocked_by_scrub(const hobject_t &soid) {
+      return (soid >= start && soid < end);
     }
 
     // clear all state

@@ -1964,7 +1964,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (write_ordered &&
-      scrubber.write_blocked_by_scrub(head, get_sort_bitwise())) {
+      scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_scrub.push_back(op);
     op->mark_delayed("waiting for scrub");
@@ -2972,7 +2972,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
 {
   hobject_t hoid = obc ? obc->obs.oi.soid : missing_oid;
   assert(hoid != hobject_t());
-  if (scrubber.write_blocked_by_scrub(hoid, get_sort_bitwise())) {
+  if (scrubber.write_blocked_by_scrub(hoid)) {
     dout(10) << __func__ << " " << hoid
 	     << " blocked by scrub" << dendl;
     if (op) {
@@ -8174,7 +8174,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   }
 
   if (!fop->blocking &&
-      scrubber.write_blocked_by_scrub(oid, get_sort_bitwise())) {
+      scrubber.write_blocked_by_scrub(oid)) {
     if (fop->op) {
       dout(10) << __func__ << " blocked by scrub" << dendl;
       requeue_op(fop->op);
@@ -8889,7 +8889,7 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
     return;
   }
 
-  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid, get_sort_bitwise())) {
+  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
     dout(10) << "handle_watch_timeout waiting for scrub on obj "
 	     << obc->obs.oi.soid
 	     << dendl;
@@ -11529,7 +11529,7 @@ void PrimaryLogPG::hit_set_remove_all()
     // Once we hit a degraded object just skip
     if (is_degraded_or_backfilling_object(aoid))
       return;
-    if (scrubber.write_blocked_by_scrub(aoid, get_sort_bitwise()))
+    if (scrubber.write_blocked_by_scrub(aoid))
       return;
   }
 
@@ -11648,7 +11648,7 @@ void PrimaryLogPG::hit_set_persist()
     // Once we hit a degraded object just skip further trim
     if (is_degraded_or_backfilling_object(aoid))
       return;
-    if (scrubber.write_blocked_by_scrub(aoid, get_sort_bitwise()))
+    if (scrubber.write_blocked_by_scrub(aoid))
       return;
   }
 
@@ -11682,7 +11682,7 @@ void PrimaryLogPG::hit_set_persist()
     new_hset.using_gmt);
 
   // If the current object is degraded we skip this persist request
-  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
+  if (scrubber.write_blocked_by_scrub(oid))
     return;
 
   hit_set->seal();
@@ -11926,7 +11926,7 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
-    if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid, get_sort_bitwise())) {
+    if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
       dout(20) << __func__ << " skip (scrubbing) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
