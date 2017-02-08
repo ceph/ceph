@@ -208,6 +208,13 @@ class Ptype(object):
 DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
+if platform.system() == 'FreeBSD':
+    FREEBSD = True
+    PROCDIR = '/compat/linux/proc'
+else:
+    FREEBSD = False
+    PROCDIR = '/proc'
+
 """
 OSD STATUS Definition
 """
@@ -224,6 +231,7 @@ MOUNT_OPTIONS = dict(
     # that user_xattr helped
     ext4='noatime,user_xattr',
     xfs='noatime,inode64',
+    zfs='atime=off',
 )
 
 MKFS_ARGS = dict(
@@ -248,6 +256,7 @@ INIT_SYSTEMS = [
     'sysvinit',
     'systemd',
     'openrc',
+    'bsdrc',
     'auto',
     'none',
 ]
@@ -366,7 +375,7 @@ def is_systemd():
     """
     Detect whether systemd is running
     """
-    with open('/proc/1/comm', 'r') as f:
+    with open(PROCDIR + '/1/comm', 'r') as f:
         return 'systemd' in f.read()
 
 
@@ -506,25 +515,33 @@ def platform_distro():
 
 
 def platform_information():
-    distro, release, codename = platform.linux_distribution()
-    # this could be an empty string in Debian
-    if not codename and 'debian' in distro.lower():
-        debian_codenames = {
-            '8': 'jessie',
-            '7': 'wheezy',
-            '6': 'squeeze',
-        }
-        major_version = release.split('.')[0]
-        codename = debian_codenames.get(major_version, '')
+    if FREEBSD:
+        distro = platform.system()
+        release = platform.version().split()[1]
+        codename = platform.version().split()[3]
+        version = platform.version().split('-')[0]
+        major_version = version.split('.')[0]
+        major, minor = release.split('.')
+    else:
+        distro, release, codename = platform.linux_distribution()
+        # this could be an empty string in Debian
+        if not codename and 'debian' in distro.lower():
+            debian_codenames = {
+                '8': 'jessie',
+                '7': 'wheezy',
+                '6': 'squeeze',
+            }
+            major_version = release.split('.')[0]
+            codename = debian_codenames.get(major_version, '')
 
-        # In order to support newer jessie/sid or wheezy/sid strings we test
-        # this if sid is buried in the minor, we should use sid anyway.
-        if not codename and '/' in release:
-            major, minor = release.split('/')
-            if minor == 'sid':
-                codename = minor
-            else:
-                codename = major
+            # In order to support newer jessie/sid,  wheezy/sid strings we test
+            # this if sid is buried in the minor, we should use sid anyway.
+            if not codename and '/' in release:
+                major, minor = release.split('/')
+                if minor == 'sid':
+                    codename = minor
+                else:
+                    codename = major
 
     return (
         str(distro).strip(),
@@ -562,6 +579,8 @@ def platform_information():
 
 
 def block_path(dev):
+    if FREEBSD:
+        return dev
     path = os.path.realpath(dev)
     rdev = os.stat(path).st_rdev
     (M, m) = (os.major(rdev), os.minor(rdev))
@@ -582,6 +601,8 @@ def is_mpath(dev):
     """
     True if the path is managed by multipath
     """
+    if FREEBSD:
+        return True
     uuid = get_dm_uuid(dev)
     return (uuid and
             (re.match('part\d+-mpath-', uuid) or
@@ -800,7 +821,7 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with open('/proc/mounts', 'rb') as proc_mounts:
+    with open(PROCDIR + '/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
@@ -3110,9 +3131,21 @@ def start_daemon(
                     'start',
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'bsdrc')):
+            base_script = '/usr/local/etc/rc.d/ceph'
+            osd_script = '{base} start osd.{osd_id}'.format(
+                base=base_script,
+                osd_id=osd_id
+            )
+            command_check_call(
+                [
+                    osd_script,
+                ],
+            )
         else:
-            raise Error('{cluster} osd.{osd_id} is not tagged '
-                        'with an init system'.format(
+            raise Error('{cluster} osd.{osd_id} '
+                        'is not tagged with an init system'
+                        .format(
                             cluster=cluster,
                             osd_id=osd_id,
                         ))
@@ -3175,9 +3208,18 @@ def stop_daemon(
                     'stop',
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'bsdrc')):
+            command_check_call(
+                [
+                    '/usr/local/etc/rc.d/ceph stop osd.{osd_id}'
+                    .format(osd_id=osd_id),
+                    'stop',
+                ],
+            )
         else:
-            raise Error('{cluster} osd.{osd_id} is not tagged with an init '
-                        ' system'.format(cluster=cluster, osd_id=osd_id))
+            raise Error('{cluster} osd.{osd_id} '
+                        'is not tagged with an init system'
+                        .format(cluster=cluster, osd_id=osd_id))
     except subprocess.CalledProcessError as e:
         raise Error('ceph osd stop failed', e)
 
@@ -4029,7 +4071,7 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with open('/proc/swaps', 'rb') as proc_swaps:
+    with open(PROCDIR + '/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:
