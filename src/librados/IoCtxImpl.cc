@@ -595,6 +595,21 @@ uint32_t librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
   return objecter->list_nobjects_seek(context, pos);
 }
 
+uint32_t librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
+                                    const rados_object_list_cursor& cursor)
+{
+  context->list.clear();
+  return objecter->list_nobjects_seek(context, *(const hobject_t *)cursor);
+}
+
+rados_object_list_cursor librados::IoCtxImpl::nlist_get_cursor(Objecter::NListContext *context)
+{
+  hobject_t *c = new hobject_t;
+
+  objecter->list_nobjects_get_cursor(context, c);
+  return (rados_object_list_cursor)c;
+}
+
 int librados::IoCtxImpl::create(const object_t& oid, bool exclusive)
 {
   ::ObjectOperation op;

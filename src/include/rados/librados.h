@@ -1000,6 +1000,28 @@ CEPH_RADOS_API uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx,
                                                  uint32_t pos);
 
 /**
+ * Reposition object iterator to a different position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor position to move to
+ * @returns rounded position we moved to
+ */
+CEPH_RADOS_API uint32_t rados_nobjects_list_seek_cursor(rados_list_ctx_t ctx,
+                                                        rados_object_list_cursor cursor);
+
+/**
+ * Reposition object iterator to a different position
+ *
+ * The returned handle must be released with rados_object_list_cursor_free().
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor where to store cursor
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_nobjects_list_get_cursor(rados_list_ctx_t ctx,
+                                                  rados_object_list_cursor *cursor);
+
+/**
  * Get the next object name and locator in the pool
  *
  * *entry and *key are valid until next call to rados_nobjects_list_*
