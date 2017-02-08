@@ -762,7 +762,7 @@ if (NOT WITH_SYSTEM_ROCKSDB)
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb
     CMAKE_ARGS ${ROCKSDB_CMAKE_ARGS}
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/rocksdb
-    BUILD_COMMAND $(MAKE) rocksdblib
+    BUILD_COMMAND $(MAKE) rocksdb
     INSTALL_COMMAND "true")
 
   # force rocksdb make to be called on each time
@@ -776,7 +776,7 @@ if (NOT WITH_SYSTEM_ROCKSDB)
 
   add_library(rocksdb STATIC IMPORTED)
   add_dependencies(rocksdb rocksdb_ext)
-  set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdblib.a")
+  set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdb.a")
   set(ROCKSDB_LIBRARIES rocksdb)
 
 endif(NOT WITH_SYSTEM_ROCKSDB)
