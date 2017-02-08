@@ -231,6 +231,7 @@ function setup_pulpito() {
 
     sudo apt-get -qq install -y --force-yes nginx
     local nginx_conf=/etc/nginx/sites-available/default
+    sudo perl -pi -e 's|root /var/www/html|root /usr/share/nginx/html|' $nginx_conf
     if ! grep -qq 'autoindex on' $nginx_conf ; then
         sudo perl -pi -e 's|location / {|location / { autoindex on;|' $nginx_conf
         sudo /etc/init.d/nginx restart
