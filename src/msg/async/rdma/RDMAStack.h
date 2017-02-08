@@ -67,7 +67,6 @@ class RDMADispatcher : public CephContext::ForkWatcher {
 
   std::thread t;
   CephContext *cct;
-  EventCallbackRef async_handler;
   bool done = false;
   std::atomic<uint64_t> num_dead_queue_pair = {0};
   std::atomic<uint64_t> num_qp_conn = {0};
@@ -100,23 +99,13 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   std::list<RDMAWorker*> pending_workers;
   RDMAStack* stack;
 
-  class C_handle_cq_async : public EventCallback {
-    RDMADispatcher *dispatcher;
-   public:
-    C_handle_cq_async(RDMADispatcher *w): dispatcher(w) {}
-    void do_request(int fd) {
-      // worker->handle_tx_event();
-      dispatcher->handle_async_event();
-    }
-  };
-
  public:
   PerfCounters *perf_logger;
 
   explicit RDMADispatcher(CephContext* c, RDMAStack* s);
   virtual ~RDMADispatcher();
 
-  void handle_async_event();
+  void process_async_event(ibv_async_event &async_event);
 
   void polling_start();
   void polling_stop();
