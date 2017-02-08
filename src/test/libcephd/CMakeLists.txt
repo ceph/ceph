@@ -16,7 +16,7 @@ add_executable(ceph_test_cephd_api_misc
 set_target_properties(ceph_test_cephd_api_misc PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_cephd_api_misc
-  cephd global ${UNITTEST_LIBS} cephdtest z snappy)
+  cephd global ${UNITTEST_LIBS} cephdtest z snappy ceph_zstd)
 
 install(TARGETS
   ceph_test_cephd_api_misc
