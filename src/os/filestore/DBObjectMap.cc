@@ -1260,3 +1260,41 @@ int DBObjectMap::list_objects(vector<ghobject_t> *out)
   }
   return 0;
 }
+
+int DBObjectMap::list_object_headers(vector<_Header> *out)
+{
+  int error = 0;
+  KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
+    bufferlist bl = iter->value();
+    bufferlist::iterator bliter = bl.begin();
+    _Header header;
+    header.decode(bliter);
+    out->push_back(header);
+    while (header.parent) {
+      set<string> to_get;
+      map<string, bufferlist> got;
+      to_get.insert(HEADER_KEY);
+      db->get(sys_parent_prefix(header), to_get, &got);
+      if (got.empty()) {
+	dout(0) << "Missing: seq " << header.parent << dendl;
+	error = -ENOENT;
+	break;
+      } else {
+	bl = got.begin()->second;
+        bufferlist::iterator bliter = bl.begin();
+        header.decode(bliter);
+        out->push_back(header);
+      }
+    }
+  }
+  return error;
+}
+
+ostream& operator<<(ostream& out, const DBObjectMap::_Header& h)
+{
+  out << "seq=" << h.seq << " parent=" << h.parent 
+      << " num_children=" << h.num_children
+      << " ghobject=" << h.oid;
+  return out;
+}
