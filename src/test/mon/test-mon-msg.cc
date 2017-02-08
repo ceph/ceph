@@ -79,7 +79,8 @@ public:
   int init_messenger() {
     dout(1) << __func__ << dendl;
 
-    msg = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0, 0);
     assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0,0));

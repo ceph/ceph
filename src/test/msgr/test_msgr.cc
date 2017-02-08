@@ -1498,7 +1498,7 @@ INSTANTIATE_TEST_CASE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async",
+    "async+posix",
     "simple"
   )
 );
