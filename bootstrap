@@ -78,7 +78,7 @@ Linux)
             fi
 	fi
 	;;
-    "openSUSE project"|"SUSE LINUX")
+    "openSUSE project"|"SUSE LINUX"|"openSUSE")
         for package in python-pip python-devel python-virtualenv libev-devel libvirt-devel libmysqlclient-devel libffi-devel; do
             if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
                 if [ "$(rpm -q --whatprovides $package)" == "no package provides $package" ]; then
