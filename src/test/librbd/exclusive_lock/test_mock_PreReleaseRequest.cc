@@ -18,8 +18,6 @@ template class librbd::exclusive_lock::PreReleaseRequest<librbd::MockImageCtx>;
 
 namespace librbd {
 
-using librbd::ManagedLock;
-
 namespace exclusive_lock {
 
 namespace {
@@ -147,13 +145,11 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
   mock_image_ctx.object_map = mock_object_map;
   expect_close_object_map(mock_image_ctx, *mock_object_map);
 
-  MockContext mock_releasing_ctx;
-  expect_complete_context(mock_releasing_ctx, 0);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, &mock_releasing_ctx, &ctx, false);
+    mock_image_ctx, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -181,12 +177,10 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessJournalDisabled) {
 
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
-  C_SaferCond release_ctx;
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, &release_ctx, &ctx, false);
+    mock_image_ctx, false, &ctx);
   req->send();
-  ASSERT_EQ(0, release_ctx.wait());
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -209,9 +203,8 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessObjectMapDisabled) {
   C_SaferCond release_ctx;
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, &release_ctx, &ctx, true);
+    mock_image_ctx, true, &ctx);
   req->send();
-  ASSERT_EQ(0, release_ctx.wait());
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -242,13 +235,11 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Blacklisted) {
   mock_image_ctx.object_map = mock_object_map;
   expect_close_object_map(mock_image_ctx, *mock_object_map);
 
-  MockContext mock_releasing_ctx;
-  expect_complete_context(mock_releasing_ctx, 0);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, &mock_releasing_ctx, &ctx, false);
+    mock_image_ctx, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -270,7 +261,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, BlockWritesError) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, nullptr, &ctx, true);
+    mock_image_ctx, true, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -293,7 +284,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, UnlockError) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, nullptr, &ctx, true);
+    mock_image_ctx, true, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }

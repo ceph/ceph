@@ -144,7 +144,10 @@ class TestRados(object):
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         for mon in json.loads(buf.decode('utf8'))['mons']:
             while True:
-                buf = json.loads(self.rados.ping_monitor(mon['name']))
+                output = self.rados.ping_monitor(mon['name'])
+                if output is None:
+                    continue
+                buf = json.loads(output)
                 if buf.get('health'):
                     break
 

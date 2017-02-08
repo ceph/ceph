@@ -1240,7 +1240,7 @@ protected:
   void tick_without_osd_lock();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
-  bool dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap);
+  bool dispatch_op_fast(OpRequestRef op, OSDMapRef& osdmap);
 
   void check_osdmap_features(ObjectStore *store);
 
@@ -1407,13 +1407,26 @@ public:
   }
 
   static void split_list(
+    boost::intrusive::list<OpRequest> *from,
+    boost::intrusive::list<OpRequest> *to,
+    unsigned match,
+    unsigned bits) {
+    for (auto i = from->begin(); i != from->end(); ) {
+      if (split_request(&(*i), match, bits)) {
+	OpRequest& o = *i;
+	i = from->erase(i);
+	to->push_back(o);
+      } else {
+	++i;
+      }
+    }
+  }
+  static void split_list(
     list<OpRequestRef> *from,
     list<OpRequestRef> *to,
     unsigned match,
     unsigned bits) {
-    for (list<OpRequestRef>::iterator i = from->begin();
-	 i != from->end();
-      ) {
+    for (auto i = from->begin(); i != from->end(); ) {
       if (split_request(*i, match, bits)) {
 	to->push_back(*i);
 	from->erase(i++);
@@ -1431,10 +1444,10 @@ public:
     WatchConState wstate;
 
     Mutex session_dispatch_lock;
-    list<OpRequestRef> waiting_on_map;
+    boost::intrusive::list<OpRequest> waiting_on_map;
 
     OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
-    map<spg_t, list<OpRequestRef> > waiting_for_pg;
+    map<spg_t, boost::intrusive::list<OpRequest> > waiting_for_pg;
 
     Spinlock sent_epoch_lock;
     epoch_t last_sent_epoch;
@@ -1538,8 +1551,7 @@ private:
     Mutex::Locker l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
 
-    for (map<spg_t, list<OpRequestRef> >::const_iterator i =
-	   session->waiting_for_pg.cbegin();
+    for (auto i = session->waiting_for_pg.cbegin();
 	 i != session->waiting_for_pg.cend();
 	 ++i) {
       clear_session_waiting_on_pg(session, i->first);
@@ -1550,7 +1562,10 @@ private:
      * cycles which result.
      * Bug #12338
      */
-    session->waiting_on_map.clear();
+    session->waiting_on_map.clear_and_dispose(TrackedOp::Putter());
+    for (auto& i : session->waiting_for_pg) {
+      i.second.clear_and_dispose(TrackedOp::Putter());
+    }
     session->waiting_for_pg.clear();
     session->osdmap.reset();
   }
@@ -1649,7 +1664,8 @@ private:
   std::atomic_bool heartbeat_need_update;   
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbclient_messenger;
+  Messenger *hb_front_client_messenger;
+  Messenger *hb_back_client_messenger;
   Messenger *hb_front_server_messenger;
   Messenger *hb_back_server_messenger;
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
@@ -2442,7 +2458,8 @@ protected:
       int id,
       Messenger *internal,
       Messenger *external,
-      Messenger *hb_client,
+      Messenger *hb_front_client,
+      Messenger *hb_back_client,
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,

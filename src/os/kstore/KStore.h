@@ -435,6 +435,11 @@ public:
   int mkjournal() {
     return 0;
   }
+  void dump_perf_counters(Formatter *f) override {
+    f->open_object_section("perf_counters");
+    logger->dump_formatted(f, false);
+    f->close_section();
+  }
 
   int statfs(struct store_statfs_t *buf) override;
 

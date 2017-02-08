@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 
+#include "include/mempool.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
@@ -45,6 +46,7 @@ static const unsigned char bit_mask[bits_per_char] = {
   0x80   //10000000
 };
 
+MEMPOOL_DECLARE_FACTORY(unsigned char, byte, bloom_filter);
 
 class bloom_filter
 {
@@ -103,7 +105,7 @@ public:
   void init() {
     generate_unique_salt();
     if (table_size_) {
-      bit_table_ = new cell_type[table_size_];
+      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
       std::fill_n(bit_table_, table_size_, 0x00);
     } else {
       bit_table_ = NULL;
@@ -119,13 +121,15 @@ public:
   bloom_filter& operator = (const bloom_filter& filter)
   {
     if (this != &filter) {
+      if (bit_table_) {
+	mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
+      }
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
       insert_count_ = filter.insert_count_;
       target_element_count_ = filter.target_element_count_;
       random_seed_ = filter.random_seed_;
-      delete[] bit_table_;
-      bit_table_ = new cell_type[table_size_];
+      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
       std::copy(filter.bit_table_, filter.bit_table_ + table_size_, bit_table_);
       salt_ = filter.salt_;
     }
@@ -134,7 +138,7 @@ public:
 
   virtual ~bloom_filter()
   {
-    delete[] bit_table_;
+    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
   }
 
   inline bool operator!() const
@@ -576,7 +580,7 @@ public:
       return false;
     }
 
-    cell_type* tmp = new cell_type[new_table_size];
+    cell_type* tmp = mempool::bloom_filter::alloc_byte.allocate(new_table_size);
     std::copy(bit_table_, bit_table_ + (new_table_size), tmp);
     cell_type* itr = bit_table_ + (new_table_size);
     cell_type* end = bit_table_ + (original_table_size);
@@ -589,7 +593,7 @@ public:
 	itr_tmp = tmp;
     }
 
-    delete[] bit_table_;
+    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
     bit_table_ = tmp;
     size_list.push_back(new_table_size);
     table_size_ = new_table_size;

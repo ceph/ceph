@@ -7,7 +7,6 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "cls/lock/cls_lock_ops.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -71,6 +70,11 @@ public:
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("break_lock"), _, _, _))
                   .WillOnce(Return(r));
+  }
+
+  void expect_get_instance_id(MockTestImageCtx &mock_image_ctx, uint64_t id) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx), get_instance_id())
+      .WillOnce(Return(id));
   }
 };
 
@@ -182,6 +186,28 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistDisabled) {
       locker, false, 0, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockManagedLockBreakRequest, BlacklistSelf) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_list_watchers(mock_image_ctx, 0, "dead client", 456);
+  expect_get_instance_id(mock_image_ctx, 456);
+
+  C_SaferCond ctx;
+  Locker locker{entity_name_t::CLIENT(456), "auto 123", "1.2.3.4:0/0", 123};
+  MockBreakRequest *req = MockBreakRequest::create(
+      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      locker, true, 0, false, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 TEST_F(TestMockManagedLockBreakRequest, BlacklistError) {

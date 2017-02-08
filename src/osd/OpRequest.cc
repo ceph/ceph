@@ -40,10 +40,10 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_REPOP) {
     reqid = static_cast<MOSDRepOp*>(req)->reqid;
   }
-  tracker->mark_event(this, "header_read", request->get_recv_stamp());
-  tracker->mark_event(this, "throttled", request->get_throttle_stamp());
-  tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
-  tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
+  mark_event("header_read", request->get_recv_stamp());
+  mark_event("throttled", request->get_throttle_stamp());
+  mark_event("all_read", request->get_recv_complete_stamp());
+  mark_event("dispatched", request->get_dispatch_stamp());
 }
 
 void OpRequest::_dump(Formatter *f) const
@@ -63,13 +63,8 @@ void OpRequest::_dump(Formatter *f) const
   {
     f->open_array_section("events");
     Mutex::Locker l(lock);
-    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
-	 i != events.end();
-	 ++i) {
-      f->open_object_section("event");
-      f->dump_stream("time") << i->first;
-      f->dump_string("event", i->second);
-      f->close_section();
+    for (auto& i : events) {
+      f->dump_object("event", i);
     }
     f->close_section();
   }
@@ -143,12 +138,23 @@ void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_H
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
 void OpRequest::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
 
-void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
+void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
   mark_event(s);
-  current = s;
+  hit_flag_points |= flag;
+  latest_flag_point = flag;
+  tracepoint(oprequest, mark_flag_point, reqid.name._type,
+	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     flag, s, old_flags, hit_flag_points);
+}
+
+void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
+#ifdef WITH_LTTNG
+  uint8_t old_flags = hit_flag_points;
+#endif
+  mark_event_string(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,

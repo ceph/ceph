@@ -370,6 +370,15 @@ function test_tiering()
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
 
+  # make sure we can't create snapshot on tier
+  ceph osd pool create basex 2
+  ceph osd pool create cachex 2
+  ceph osd tier add basex cachex
+  expect_false ceph osd pool mksnap cache snapname
+  ceph osd tier remove basex cachex
+  ceph osd pool delete basex basex --yes-i-really-really-mean-it
+  ceph osd pool delete cachex cachex --yes-i-really-really-mean-it
+
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
   ceph osd pool create repbase 2
@@ -909,7 +918,7 @@ function test_mon_mds()
   ceph fs rm $FS_NAME --yes-i-really-mean-it
 
   set +e
-  ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   check_response 'erasure-code' $? 22
   ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
   check_response 'erasure-code' $? 22
@@ -926,13 +935,13 @@ function test_mon_mds()
   # Use of a readonly tier should be forbidden
   ceph osd tier cache-mode mds-tier readonly --yes-i-really-mean-it
   set +e
-  ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   check_response 'has a write tier (mds-tier) that is configured to forward' $? 22
   set -e
 
   # Use of a writeback tier should enable FS creation
   ceph osd tier cache-mode mds-tier writeback
-  ceph fs new $FS_NAME fs_metadata mds-ec-pool
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force
 
   # While a FS exists using the tiered pools, I should not be allowed
   # to remove the tier
@@ -948,7 +957,7 @@ function test_mon_mds()
 
   # ... but we should be forbidden from using the cache pool in the FS directly.
   set +e
-  ceph fs new $FS_NAME fs_metadata mds-tier 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-tier --force 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
   ceph fs new $FS_NAME mds-tier fs_data 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
@@ -961,7 +970,7 @@ function test_mon_mds()
   ceph osd tier remove mds-ec-pool mds-tier
 
   # Create a FS using the 'cache' pool now that it's no longer a tier
-  ceph fs new $FS_NAME fs_metadata mds-tier
+  ceph fs new $FS_NAME fs_metadata mds-tier --force
 
   # We should be forbidden from using this pool as a tier now that
   # it's in use for CephFS
@@ -975,7 +984,7 @@ function test_mon_mds()
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   # Create a FS and check that we can subsequently add a cache tier to it
-  ceph fs new $FS_NAME fs_metadata fs_data
+  ceph fs new $FS_NAME fs_metadata fs_data --force
 
   # Adding overlay to FS pool should be permitted, RADOS clients handle this.
   ceph osd tier add fs_metadata mds-tier

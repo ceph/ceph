@@ -345,6 +345,8 @@ public:
   bool try_lock_for_read(
     const hobject_t &hoid,
     ObcLockManager &manager) override {
+    if (is_missing_object(hoid))
+      return false;
     auto obc = get_object_context(hoid, false, nullptr);
     if (!obc)
       return false;
@@ -518,7 +520,6 @@ public:
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
@@ -823,8 +824,8 @@ protected:
 	if (scrubber.write_blocked_by_scrub(
 	      p.first.get_head(),
 	      get_sort_bitwise())) {
-	  waiting_for_active.splice(
-	    waiting_for_active.begin(),
+	  waiting_for_scrub.splice(
+	    waiting_for_scrub.begin(),
 	    p.second,
 	    p.second.begin(),
 	    p.second.end());

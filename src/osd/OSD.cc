@@ -837,9 +837,9 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     release_map(next_map);
     return ret;
   }
-  ret.first = osd->hbclient_messenger->get_connection(next_map->get_hb_back_inst(peer));
+  ret.first = osd->hb_back_client_messenger->get_connection(next_map->get_hb_back_inst(peer));
   if (next_map->get_hb_front_addr(peer) != entity_addr_t())
-    ret.second = osd->hbclient_messenger->get_connection(next_map->get_hb_front_inst(peer));
+    ret.second = osd->hb_front_client_messenger->get_connection(next_map->get_hb_front_inst(peer));
   release_map(next_map);
   return ret;
 }
@@ -1434,11 +1434,14 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
   clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-	      << " pg " << m->get_pg()
-	      << " to osd." << whoami
-	      << " not " << pg->acting
-	      << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch() << "\n";
-  reply_op_error(op, -ENXIO);
+	       << " pg " << m->get_pg()
+	       << " to osd." << whoami
+	       << " not " << pg->acting
+	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
+	       << "\n";
+  if (g_conf->osd_enxio_on_misdirected_op) {
+    reply_op_error(op, -ENXIO);
+  }
 }
 
 
@@ -1638,7 +1641,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	 int id,
 	 Messenger *internal_messenger,
 	 Messenger *external_messenger,
-	 Messenger *hb_clientm,
+	 Messenger *hb_client_front,
+	 Messenger *hb_client_back,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
 	 Messenger *osdc_messenger,
@@ -1680,7 +1684,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false),
   heartbeat_need_update(true),
-  hbclient_messenger(hb_clientm),
+  hb_front_client_messenger(hb_client_front),
+  hb_back_client_messenger(hb_client_back),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
   daily_loadavg(0.0),
@@ -1941,6 +1946,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     store->get_db_statistics(f);
   } else if (command == "dump_scrubs") {
     service.dumps_scrub(f);
+  } else if (command == "calc_objectstore_db_histogram") {
+    store->generate_db_histogram(f);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2189,7 +2196,8 @@ int OSD::init()
   client_messenger->add_dispatcher_head(this);
   cluster_messenger->add_dispatcher_head(this);
 
-  hbclient_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_front_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
@@ -2409,6 +2417,10 @@ void OSD::final_init()
 				     "dump_scrubs",
 				     asok_hook,
 				     "print scheduled scrubs");
+  assert(r == 0);
+
+  r = admin_socket->register_command("calc_objectstore_db_histogram", "calc_objectstore_db_histogram", asok_hook,
+					 "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
@@ -2736,6 +2748,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
+  cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -2860,7 +2873,8 @@ int OSD::shutdown()
   class_handler->shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
-  hbclient_messenger->shutdown();
+  hb_front_client_messenger->shutdown();
+  hb_back_client_messenger->shutdown();
   objecter_messenger->shutdown();
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
@@ -3262,14 +3276,14 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op,
   if (i == pg_map.end())
     session->waiting_for_pg[pgid];
 
-  map<spg_t, list<OpRequestRef> >::iterator wlistiter =
-    session->waiting_for_pg.find(pgid);
+  auto wlistiter = session->waiting_for_pg.find(pgid);
 
   PG *out = NULL;
   if (wlistiter == session->waiting_for_pg.end()) {
     out = i->second;
   } else {
-    wlistiter->second.push_back(op);
+    op->get();
+    wlistiter->second.push_back(*op);
     register_session_waiting_on_pg(session, pgid);
   }
   return PGRef(out);
@@ -5115,7 +5129,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
 
   // backend
-  (*pm)["osd_objectstore"] = cct->_conf->osd_objectstore;
+  (*pm)["osd_objectstore"] = store->get_type();
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
@@ -5992,9 +6006,17 @@ void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
 {
   assert(session->session_dispatch_lock.is_locked());
   assert(session->osdmap == osdmap);
-  for (list<OpRequestRef>::iterator i = session->waiting_on_map.begin();
-       i != session->waiting_on_map.end() && dispatch_op_fast(*i, osdmap);
-       session->waiting_on_map.erase(i++));
+
+  auto i = session->waiting_on_map.begin();
+  while (i != session->waiting_on_map.end()) {
+    OpRequest *op = &(*i);
+    session->waiting_on_map.erase(i++);
+    if (!dispatch_op_fast(op, osdmap)) {
+      session->waiting_on_map.push_front(*op);
+      break;
+    }
+    op->put();
+  }
 
   if (session->waiting_on_map.empty()) {
     clear_session_waiting_on_map(session);
@@ -6018,16 +6040,14 @@ void OSD::update_waiting_for_pg(Session *session, OSDMapRef newmap)
 
   assert(newmap->get_epoch() > session->osdmap->get_epoch());
 
-  map<spg_t, list<OpRequestRef> > from;
+  map<spg_t, boost::intrusive::list<OpRequest> > from;
   from.swap(session->waiting_for_pg);
 
-  for (map<spg_t, list<OpRequestRef> >::iterator i = from.begin();
-       i != from.end();
-       from.erase(i++)) {
+  for (auto i = from.begin(); i != from.end(); from.erase(i++)) {
     set<spg_t> children;
     if (!newmap->have_pg_pool(i->first.pool())) {
       // drop this wait list on the ground
-      i->second.clear();
+      i->second.clear_and_dispose(TrackedOp::Putter());
     } else {
       assert(session->osdmap->have_pg_pool(i->first.pool()));
       if (i->first.is_split(
@@ -6039,7 +6059,7 @@ void OSD::update_waiting_for_pg(Session *session, OSDMapRef newmap)
 	     ++child) {
 	  unsigned split_bits = child->get_split_bits(
 	    newmap->get_pg_num(child->pool()));
-	  list<OpRequestRef> child_ops;
+	  boost::intrusive::list<OpRequest> child_ops;
 	  OSD::split_list(&i->second, &child_ops, child->ps(), split_bits);
 	  if (!child_ops.empty()) {
 	    session->waiting_for_pg[*child].swap(child_ops);
@@ -6063,12 +6083,12 @@ void OSD::session_notify_pg_create(
 {
   assert(session->session_dispatch_lock.is_locked());
   update_waiting_for_pg(session, osdmap);
-  map<spg_t, list<OpRequestRef> >::iterator i =
-    session->waiting_for_pg.find(pgid);
+  auto i = session->waiting_for_pg.find(pgid);
   if (i != session->waiting_for_pg.end()) {
     session->waiting_on_map.splice(
       session->waiting_on_map.begin(),
       i->second);
+    assert(i->second.empty());
     session->waiting_for_pg.erase(i);
   }
   clear_session_waiting_on_pg(session, pgid);
@@ -6079,7 +6099,11 @@ void OSD::session_notify_pg_cleared(
 {
   assert(session->session_dispatch_lock.is_locked());
   update_waiting_for_pg(session, osdmap);
-  session->waiting_for_pg.erase(pgid);
+  auto i = session->waiting_for_pg.find(pgid);
+  if (i != session->waiting_for_pg.end()) {
+    i->second.clear_and_dispose(TrackedOp::Putter());
+    session->waiting_for_pg.erase(i);
+  }
   session->maybe_reset_osdmap();
   clear_session_waiting_on_pg(session, pgid);
 }
@@ -6105,7 +6129,8 @@ void OSD::ms_fast_dispatch(Message *m)
     {
       Mutex::Locker l(session->session_dispatch_lock);
       update_waiting_for_pg(session, nextmap);
-      session->waiting_on_map.push_back(op);
+      op->get();
+      session->waiting_on_map.push_back(*op);
       dispatch_session_waiting(session, nextmap);
     }
     session->put();
@@ -6334,7 +6359,7 @@ void OSD::dispatch_op(OpRequestRef op)
   }
 }
 
-bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
+bool OSD::dispatch_op_fast(OpRequestRef op, OSDMapRef& osdmap)
 {
   if (is_stopping()) {
     // we're shutting down, so drop the op
@@ -7219,7 +7244,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
                   << " rebind hb_front_server_messenger failed" << dendl;
         }
 
-	hbclient_messenger->mark_down_all();
+	hb_front_client_messenger->mark_down_all();
+	hb_back_client_messenger->mark_down_all();
 
 	reset_heartbeat_peers();
       }
@@ -8762,14 +8788,16 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-		      << " pg " << m->get_pg()
-		      << " to osd." << whoami
-		      << " in e" << osdmap->get_epoch()
-		      << ", client e" << m->get_map_epoch()
-		      << " pg " << pgid
-		      << " features " << m->get_connection()->get_features()
-		      << "\n";
-    service.reply_op_error(op, -ENXIO);
+		 << " pg " << m->get_pg()
+		 << " to osd." << whoami
+		 << " in e" << osdmap->get_epoch()
+		 << ", client e" << m->get_map_epoch()
+		 << " pg " << pgid
+		 << " features " << m->get_connection()->get_features()
+		 << "\n";
+    if (g_conf->osd_enxio_on_misdirected_op) {
+      service.reply_op_error(op, -ENXIO);
+    }
     return;
   }
 
@@ -9153,6 +9181,8 @@ const char** OSD::get_tracked_conf_keys() const
     "host",
     "fsid",
     "osd_recovery_delay_start",
+    "osd_client_message_size_cap",
+    "osd_client_message_cap",
     NULL
   };
   return KEYS;
@@ -9214,6 +9244,21 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("osd_recovery_delay_start")) {
     service.defer_recovery(cct->_conf->osd_recovery_delay_start);
     service.kick_recovery_queue();
+  }
+
+  if (changed.count("osd_client_message_cap")) {
+    uint64_t newval = cct->_conf->osd_client_message_cap;
+    Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
+    if (pol.throttler_messages && newval > 0) {
+      pol.throttler_messages->reset_max(newval);
+    }
+  }
+  if (changed.count("osd_client_message_size_cap")) {
+    uint64_t newval = cct->_conf->osd_client_message_size_cap;
+    Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
+    if (pol.throttler_bytes && newval > 0) {
+      pol.throttler_bytes->reset_max(newval);
+    }
   }
 
   check_config();
@@ -9346,11 +9391,9 @@ int OSD::init_op_flags(OpRequestRef& op)
             (iter->op.op != CEPH_OSD_OP_GETXATTR) &&
             (iter->op.op != CEPH_OSD_OP_GETXATTRS) &&
             (iter->op.op != CEPH_OSD_OP_CMPXATTR) &&
-            (iter->op.op != CEPH_OSD_OP_SRC_CMPXATTR) &&
             (iter->op.op != CEPH_OSD_OP_ASSERT_VER) &&
             (iter->op.op != CEPH_OSD_OP_LIST_WATCHERS) &&
             (iter->op.op != CEPH_OSD_OP_LIST_SNAPS) &&
-            (iter->op.op != CEPH_OSD_OP_ASSERT_SRC_VERSION) &&
             (iter->op.op != CEPH_OSD_OP_SETALLOCHINT) &&
             (iter->op.op != CEPH_OSD_OP_WRITEFULL) &&
             (iter->op.op != CEPH_OSD_OP_ROLLBACK) &&

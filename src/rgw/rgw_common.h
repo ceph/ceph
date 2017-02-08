@@ -201,6 +201,10 @@ using ceph::crypto::MD5;
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
 #define ERR_SERVICE_UNAVAILABLE  2202
+#define ERR_ROLE_EXISTS          2203
+#define ERR_MALFORMED_DOC        2204
+#define ERR_NO_ROLE_FOUND        2205
+#define ERR_DELETE_CONFLICT      2206
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -444,6 +448,15 @@ enum RGWOpType {
   RGW_OP_GET_CROSS_DOMAIN_POLICY,
   RGW_OP_GET_HEALTH_CHECK,
   RGW_OP_GET_INFO,
+  RGW_OP_CREATE_ROLE,
+  RGW_OP_DELETE_ROLE,
+  RGW_OP_GET_ROLE,
+  RGW_OP_MODIFY_ROLE,
+  RGW_OP_LIST_ROLES,
+  RGW_OP_PUT_ROLE_POLICY,
+  RGW_OP_GET_ROLE_POLICY,
+  RGW_OP_LIST_ROLE_POLICIES,
+  RGW_OP_DELETE_ROLE_POLICY,
 
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA
@@ -1974,4 +1987,5 @@ extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
+int match(const string& pattern, const string& input, int flag);
 #endif

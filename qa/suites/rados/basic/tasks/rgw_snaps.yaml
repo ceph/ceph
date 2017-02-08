@@ -4,6 +4,8 @@ overrides:
       client:
         debug rgw: 20
         debug ms: 1
+      osd:
+        osd_max_omap_entries_per_request: 10
 tasks:
 - install:
 - ceph:

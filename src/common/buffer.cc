@@ -27,6 +27,7 @@
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/inline_memory.h"
+#include "include/scope_guard.h"
 #if defined(HAVE_XIO)
 #include "msg/xio/XioMsg.h"
 #endif
@@ -514,7 +515,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return 0;
     }
 
-    void close_pipe(int *fds) {
+    static void close_pipe(const int *fds) {
       if (fds[0] >= 0)
 	VOID_TEMP_FAILURE_RETRY(::close(fds[0]));
       if (fds[1] >= 0)
@@ -536,6 +537,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	      << bendl;
 	throw error_code(r);
       }
+      auto sg = make_scope_guard([=] { close_pipe(tmpfd); });	  
       r = set_nonblocking(tmpfd);
       if (r < 0) {
 	bdout << "raw_pipe: error setting nonblocking flag on temp pipe: "
@@ -552,12 +554,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	r = errno;
 	bdout << "raw_pipe: error tee'ing into temp pipe: " << cpp_strerror(r)
 	      << bendl;
-	close_pipe(tmpfd);
 	throw error_code(r);
       }
       data = (char *)malloc(len);
       if (!data) {
-	close_pipe(tmpfd);
 	throw bad_alloc();
       }
       r = safe_read(tmpfd[0], data, len);
@@ -566,10 +566,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	      << bendl;
 	free(data);
 	data = NULL;
-	close_pipe(tmpfd);
 	throw error_code(r);
       }
-      close_pipe(tmpfd);
       return data;
     }
     bool source_consumed;

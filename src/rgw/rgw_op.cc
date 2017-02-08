@@ -33,6 +33,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
+#include "rgw_role.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -1748,8 +1749,8 @@ void RGWSetBucketVersioning::execute()
     op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
     }
-    return;
   }
 
   if (enable_versioning) {

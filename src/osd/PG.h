@@ -436,12 +436,6 @@ public:
       ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       );
 
-    /// Returns version needed
-    eversion_t get_version_needed(const hobject_t &hoid) const {
-      assert(needs_recovery_map.count(hoid));
-      return needs_recovery_map.at(hoid).need;
-    }
-
     /// Uses osdmap to update structures for now down sources
     void check_recovery_sources(const OSDMapRef& osdmap);
 
@@ -837,6 +831,7 @@ protected:
 
   // ops waiting on active (require peered as well)
   list<OpRequestRef>            waiting_for_active;
+  list<OpRequestRef>            waiting_for_scrub;
 
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;

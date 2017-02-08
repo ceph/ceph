@@ -175,7 +175,9 @@ OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
-OPTION(ms_type, OPT_STR, "async")   // messenger backend
+OPTION(ms_type, OPT_STR, "async+posix")   // messenger backend
+OPTION(ms_public_type, OPT_STR, "")   // messenger backend
+OPTION(ms_cluster_type, OPT_STR, "")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
 OPTION(ms_tcp_rcvbuf, OPT_INT, 0)
 OPTION(ms_tcp_prefetch_max_size, OPT_INT, 4096) // max prefetch size, we limit this to avoid extra memcpy
@@ -199,6 +201,7 @@ OPTION(ms_bind_retry_delay, OPT_INT, 5) // Delay between attemps to bind
 OPTION(ms_bind_retry_count, OPT_INT, 6) // If binding fails, how many times do we retry to bind
 OPTION(ms_bind_retry_delay, OPT_INT, 6) // Delay between attemps to bind
 #endif
+OPTION(ms_bind_before_connect, OPT_BOOL, true)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
@@ -211,7 +214,6 @@ OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
 OPTION(ms_dump_on_send, OPT_BOOL, false)           // hexdump msg to log on send
 OPTION(ms_dump_corrupt_message_level, OPT_INT, 1)  // debug level to hexdump undecodeable messages at
-OPTION(ms_async_transport_type, OPT_STR, "posix")
 OPTION(ms_async_op_threads, OPT_U64, 3)            // number of worker processing threads for async messenger created on init
 OPTION(ms_async_max_op_threads, OPT_U64, 5)        // max number of worker processing threads for async messenger
 OPTION(ms_async_set_affinity, OPT_BOOL, true)
@@ -225,8 +227,8 @@ OPTION(ms_async_send_inline, OPT_BOOL, false)
 OPTION(ms_async_rdma_device_name, OPT_STR, "")
 OPTION(ms_async_rdma_enable_hugepage, OPT_BOOL, false)
 OPTION(ms_async_rdma_buffer_size, OPT_INT, 8192)
-OPTION(ms_async_rdma_send_buffers, OPT_U32, 10240)
-OPTION(ms_async_rdma_receive_buffers, OPT_U32, 10240)
+OPTION(ms_async_rdma_send_buffers, OPT_U32, 1024)
+OPTION(ms_async_rdma_receive_buffers, OPT_U32, 1024)
 OPTION(ms_async_rdma_port_num, OPT_U32, 1)
 OPTION(ms_async_rdma_polling_us, OPT_U32, 1000)
 OPTION(ms_async_rdma_local_gid, OPT_STR, "")       // GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
@@ -763,7 +765,10 @@ OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
 OPTION(osd_command_thread_suicide_timeout, OPT_INT, 15*60)
 OPTION(osd_heartbeat_addr, OPT_ADDR, entity_addr_t())
 OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping peers
-OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
+
+// (seconds) how long before we decide a peer has failed
+// This setting is read by the MONs and OSDs and has to be set to a equal value in both settings of the configuration
+OPTION(osd_heartbeat_grace, OPT_INT, 20)
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbeat tcp socket and set dscp as CS6 on it if true
 
@@ -849,6 +854,7 @@ OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_randomize_hobject_sort_order, OPT_BOOL, false)
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
+OPTION(osd_enxio_on_misdirected_op, OPT_BOOL, false)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
@@ -988,7 +994,7 @@ OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
 OPTION(bluefs_max_log_runway, OPT_U64, 4194304)  // alloc this much at a time
 OPTION(bluefs_log_compact_min_ratio, OPT_FLOAT, 5.0)      // before we consider
 OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
-OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this big
+OPTION(bluefs_min_flush_size, OPT_U64, 524288)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
 OPTION(bluefs_allocator, OPT_STR, "bitmap")     // stupid | bitmap
@@ -1106,8 +1112,6 @@ OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 OPTION(filestore_omap_backend_path, OPT_STR, "")
-
-OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 
 /// filestore wb throttle limits
 OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
@@ -1363,6 +1367,9 @@ OPTION(rbd_mirror_pool_replayers_refresh_interval, OPT_INT, 30) // interval to r
 OPTION(rbd_mirror_delete_retry_interval, OPT_DOUBLE, 30) // interval to check and retry the failed requests in deleter
 OPTION(rbd_mirror_image_directory_refresh_interval, OPT_INT, 30) // interval to refresh images in pool watcher
 OPTION(rbd_mirror_image_state_check_interval, OPT_INT, 30) // interval to get images from pool watcher and set sources in replayer
+OPTION(rbd_mirror_leader_heartbeat_interval, OPT_INT, 5) // interval (in seconds) between mirror leader heartbeats
+OPTION(rbd_mirror_leader_max_missed_heartbeats, OPT_INT, 2) // number of missed heartbeats for non-lock owner to attempt to acquire lock
+OPTION(rbd_mirror_leader_max_acquire_attempts_before_break, OPT_INT, 3) // number of failed attempts to acquire lock after missing heartbeats before breaking lock
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
@@ -1479,6 +1486,9 @@ OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
 OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
 OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
 OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+OPTION(rgw_nfs_namespace_expire_secs, OPT_INT, 300) /* namespace invalidate
+						     * timer */
+OPTION(rgw_nfs_max_gc, OPT_INT, 300) /* max gc events per cycle */
 OPTION(rgw_nfs_write_completion_interval_s, OPT_INT, 10) /* stateless (V3)
 							  * commit
 							  * delay */

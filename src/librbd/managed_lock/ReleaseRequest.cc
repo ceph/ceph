@@ -13,7 +13,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::managed_lock::ReleaseRequest: "
+#define dout_prefix *_dout << "librbd::managed_lock::ReleaseRequest: " \
+                            << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace managed_lock {
@@ -54,7 +55,7 @@ void ReleaseRequest<I>::send() {
 template <typename I>
 void ReleaseRequest<I>::send_unlock() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << "cookie=" << m_cookie << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);
@@ -70,7 +71,7 @@ void ReleaseRequest<I>::send_unlock() {
 template <typename I>
 void ReleaseRequest<I>::handle_unlock(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to unlock: " << cpp_strerror(r) << dendl;

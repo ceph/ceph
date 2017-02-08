@@ -827,6 +827,12 @@ int64_t BitMapAreaIN::get_used_blocks()
   return m_used_blocks;
 }
 
+int64_t BitMapAreaIN::get_used_blocks_adj()
+{
+  std::lock_guard<std::mutex> l(m_blocks_lock);
+  return m_used_blocks - m_reserved_blocks;
+}
+
 bool BitMapAreaIN::reserve_blocks(int64_t num)
 {
   bool res = false;

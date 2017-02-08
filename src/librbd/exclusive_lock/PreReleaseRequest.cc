@@ -6,7 +6,6 @@
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/ManagedLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
@@ -15,7 +14,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::exclusive_lock::PreReleaseRequest: "
+#define dout_prefix *_dout << "librbd::exclusive_lock::PreReleaseRequest: " \
+                           << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace exclusive_lock {
@@ -25,17 +25,15 @@ using util::create_context_callback;
 
 template <typename I>
 PreReleaseRequest<I>* PreReleaseRequest<I>::create(I &image_ctx,
-                                                   Context *on_releasing,
-                                                   Context *on_finish,
-                                                   bool shutting_down) {
-  return new PreReleaseRequest(image_ctx, on_releasing, on_finish,
-                               shutting_down);
+                                                   bool shutting_down,
+                                                   Context *on_finish) {
+  return new PreReleaseRequest(image_ctx, shutting_down, on_finish);
 }
 
 template <typename I>
-PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx, Context *on_releasing,
-                                        Context *on_finish, bool shutting_down)
-  : m_image_ctx(image_ctx), m_on_releasing(on_releasing),
+PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx, bool shutting_down,
+                                        Context *on_finish)
+  : m_image_ctx(image_ctx),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_shutting_down(shutting_down), m_error_result(0), m_object_map(nullptr),
     m_journal(nullptr) {
@@ -46,7 +44,6 @@ PreReleaseRequest<I>::~PreReleaseRequest() {
   if (!m_shutting_down) {
     m_image_ctx.state->handle_prepare_lock_complete();
   }
-  delete m_on_releasing;
 }
 
 template <typename I>
@@ -62,7 +59,7 @@ void PreReleaseRequest<I>::send_prepare_lock() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   // release the lock if the image is not busy performing other actions
   Context *ctx = create_context_callback<
@@ -73,7 +70,7 @@ void PreReleaseRequest<I>::send_prepare_lock() {
 template <typename I>
 void PreReleaseRequest<I>::handle_prepare_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   send_cancel_op_requests();
 }
@@ -81,7 +78,7 @@ void PreReleaseRequest<I>::handle_prepare_lock(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_cancel_op_requests() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PreReleaseRequest<I>;
   Context *ctx = create_context_callback<
@@ -92,7 +89,7 @@ void PreReleaseRequest<I>::send_cancel_op_requests() {
 template <typename I>
 void PreReleaseRequest<I>::handle_cancel_op_requests(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   assert(r == 0);
 
@@ -102,7 +99,7 @@ void PreReleaseRequest<I>::handle_cancel_op_requests(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_block_writes() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PreReleaseRequest<I>;
   Context *ctx = create_context_callback<
@@ -120,7 +117,7 @@ void PreReleaseRequest<I>::send_block_writes() {
 template <typename I>
 void PreReleaseRequest<I>::handle_block_writes(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   if (r == -EBLACKLISTED) {
     // allow clean shut down if blacklisted
@@ -145,7 +142,7 @@ void PreReleaseRequest<I>::send_invalidate_cache(bool purge_on_error) {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": purge_on_error=" << purge_on_error << dendl;
+  ldout(cct, 10) << "purge_on_error=" << purge_on_error << dendl;
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   Context *ctx = create_async_context_callback(
@@ -158,7 +155,7 @@ void PreReleaseRequest<I>::send_invalidate_cache(bool purge_on_error) {
 template <typename I>
 void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   if (r == -EBLACKLISTED) {
     lderr(cct) << "failed to invalidate cache because client is blacklisted"
@@ -183,7 +180,7 @@ void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_flush_notifies() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PreReleaseRequest<I>;
   Context *ctx =
@@ -194,7 +191,7 @@ void PreReleaseRequest<I>::send_flush_notifies() {
 template <typename I>
 void PreReleaseRequest<I>::handle_flush_notifies(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   assert(r == 0);
   send_close_journal();
@@ -213,7 +210,7 @@ void PreReleaseRequest<I>::send_close_journal() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PreReleaseRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_close_journal>(
@@ -224,7 +221,7 @@ void PreReleaseRequest<I>::send_close_journal() {
 template <typename I>
 void PreReleaseRequest<I>::handle_close_journal(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     // error implies some journal events were not flushed -- continue
@@ -249,7 +246,7 @@ void PreReleaseRequest<I>::send_close_object_map() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = PreReleaseRequest<I>;
   Context *ctx = create_context_callback<
@@ -260,7 +257,7 @@ void PreReleaseRequest<I>::send_close_object_map() {
 template <typename I>
 void PreReleaseRequest<I>::handle_close_object_map(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << "r=" << r << dendl;
 
   // object map shouldn't return errors
   assert(r == 0);
@@ -272,13 +269,7 @@ void PreReleaseRequest<I>::handle_close_object_map(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_unlock() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
-
-  if (m_on_releasing != nullptr) {
-    // alert caller that we no longer own the exclusive lock
-    m_on_releasing->complete(0);
-    m_on_releasing = nullptr;
-  }
+  ldout(cct, 10) << dendl;
 
   finish();
 }

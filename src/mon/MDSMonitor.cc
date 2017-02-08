@@ -19,6 +19,7 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 #include "OSDMonitor.h"
+#include "PGMonitor.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
@@ -1581,6 +1582,15 @@ int MDSMonitor::management_command(
       return -ENOENT;
     }
 
+    string force;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
+    if (force != "--force" && metadata_num_objects > 0) {
+      ss << "pool '" << metadata_name
+	 << "' already contains some objects. Use an empty pool instead.";
+      return -EINVAL;
+    }
+
     string data_name;
     cmd_getval(g_ceph_context, cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
@@ -2608,11 +2618,11 @@ void MDSMonitor::check_sub(Subscription *sub)
       mds_map = &(fsmap.filesystems.at(fscid)->mds_map);
     }
 
+    assert(mds_map != nullptr);
     dout(10) << __func__ << " selected MDS map epoch " <<
       mds_map->epoch << " for namespace " << fscid << " for subscriber "
       << sub->session->inst.name << " who wants epoch " << sub->next << dendl;
 
-    assert(mds_map != nullptr);
     if (sub->next > mds_map->epoch) {
       return;
     }

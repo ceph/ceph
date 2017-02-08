@@ -1464,6 +1464,7 @@ int get_zones_pool_names_set(CephContext* cct,
       pool_names.insert(zone.user_email_pool.name);
       pool_names.insert(zone.user_swift_pool.name);
       pool_names.insert(zone.user_uid_pool.name);
+      pool_names.insert(zone.roles_pool.name);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
@@ -1531,6 +1532,7 @@ int RGWZoneParams::fix_pool_names()
   user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
   user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
   user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
+  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.roles", roles_pool.name);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
@@ -3680,10 +3682,23 @@ int RGWRados::init_zg_from_period(bool *initialized)
   if (iter != current_period.get_map().zonegroups.end()) {
     ldout(cct, 20) << "using current period zonegroup " << zonegroup.get_name() << dendl;
     zonegroup = iter->second;
+    ret = zonegroup.init(cct, this, false);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed init zonegroup: " << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
     ret = zone_params.init(cct, this);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
+    } if (ret ==-ENOENT && zonegroup.get_name() == default_zonegroup_name) {
+      ldout(cct, 10) << " Using default name "<< default_zone_name << dendl;
+      zone_params.set_name(default_zone_name);
+      ret = zone_params.init(cct, this);
+      if (ret < 0 && ret != -ENOENT) {
+       ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
+       return ret;
+      }
     }
   }
   for (iter = current_period.get_map().zonegroups.begin();
@@ -3699,7 +3714,11 @@ int RGWRados::init_zg_from_period(bool *initialized)
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	if (zonegroup.get_id() == zg.get_id()) {
 	  zonegroup.master_zone = master->second.id;
-	  zonegroup.update();
+	  ret = zonegroup.update();
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error updating zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
 	} else {
 	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
 	  ret = fixed_zg.init(cct, this);
@@ -3708,7 +3727,11 @@ int RGWRados::init_zg_from_period(bool *initialized)
 	    return ret;
 	  }
 	  fixed_zg.master_zone = master->second.id;
-	  fixed_zg.update();
+	  ret = fixed_zg.update();
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
 	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for master_zone=" <<
@@ -3762,7 +3785,11 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
 	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing master_zone, setting zone " <<
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	zonegroup.master_zone = master->second.id;
-	zonegroup.update();
+	ret = zonegroup.update();
+	if (ret < 0) {
+	  ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
           "master_zone=" << zonegroup.master_zone << dendl;
@@ -5097,21 +5124,20 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
 
   result->clear();
 
-  rgw_obj marker_obj, end_marker_obj, prefix_obj;
-  marker_obj.set_instance(params.marker.instance);
-  marker_obj.set_ns(params.ns);
-  marker_obj.set_obj(params.marker.name);
+  rgw_bucket b;
+  rgw_obj marker_obj(b, params.marker);
+  rgw_obj end_marker_obj(b, params.end_marker);
+  rgw_obj prefix_obj;
+  rgw_obj_key cur_end_marker;
+  if (!params.ns.empty()) {
+    marker_obj.set_ns(params.ns);
+    end_marker_obj.set_ns(params.ns);
+    end_marker_obj.get_index_key(&cur_end_marker);
+  }
   rgw_obj_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  end_marker_obj.set_instance(params.end_marker.instance);
-  end_marker_obj.set_ns(params.ns);
-  end_marker_obj.set_obj(params.end_marker.name);
-  rgw_obj_key cur_end_marker;
-  if (params.ns.empty()) { /* no support for end marker for namespaced objects */
-    end_marker_obj.get_index_key(&cur_end_marker);
-  }
-  const bool cur_end_marker_valid = !cur_end_marker.empty();
+  const bool cur_end_marker_valid = !params.end_marker.empty();
 
   prefix_obj.set_ns(params.ns);
   prefix_obj.set_obj(params.prefix);
@@ -5187,8 +5213,8 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       }
 
       if (count < max) {
-        params.marker = obj;
-        next_marker = obj;
+        params.marker = key;
+        next_marker = key;
       }
 
       if (params.filter && !params.filter->filter(obj.name, key.name))
@@ -13007,3 +13033,4 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
     return 0;
   }
 }
+

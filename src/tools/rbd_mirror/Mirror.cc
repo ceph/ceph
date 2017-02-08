@@ -104,6 +104,19 @@ private:
   Mirror *mirror;
 };
 
+class LeaderReleaseCommand : public MirrorAdminSocketCommand {
+public:
+  explicit LeaderReleaseCommand(Mirror *mirror) : mirror(mirror) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    mirror->release_leader();
+    return true;
+  }
+
+private:
+  Mirror *mirror;
+};
+
 } // anonymous namespace
 
 class MirrorAdminSocketHook : public AdminSocketHook {
@@ -146,6 +159,13 @@ public:
 				       "flush rbd mirror");
     if (r == 0) {
       commands[command] = new FlushCommand(mirror);
+    }
+
+    command = "rbd mirror leader release";
+    r = admin_socket->register_command(command, command, this,
+				       "release rbd mirror leader");
+    if (r == 0) {
+      commands[command] = new LeaderReleaseCommand(mirror);
     }
   }
 
@@ -353,6 +373,21 @@ void Mirror::flush()
   for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
     auto &replayer = it->second;
     replayer->flush();
+  }
+}
+
+void Mirror::release_leader()
+{
+  dout(20) << "enter" << dendl;
+  Mutex::Locker l(m_lock);
+
+  if (m_stopping.read()) {
+    return;
+  }
+
+  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
+    auto &replayer = it->second;
+    replayer->release_leader();
   }
 }
 

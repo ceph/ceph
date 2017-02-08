@@ -461,6 +461,7 @@ set(libcommon_files
   osd/OSDMap.cc
   common/histogram.cc
   osd/osd_types.cc
+  osd/OpRequest.cc
   common/blkdev.cc
   common/common_init.cc
   common/pipe.c
@@ -544,16 +545,15 @@ else()
 endif()
 
 add_library(common-objs OBJECT ${libcommon_files})
-add_library(ceph-common SHARED
+set(ceph_common_objs
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:global_common_objs>)
-set_target_properties(ceph-common PROPERTIES
-  INSTALL_RPATH "")
-target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
+set(ceph_common_deps
+  json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_THREAD_LIBRARY}
   ${Boost_SYSTEM_LIBRARY}
   ${Boost_REGEX_LIBRARY}
@@ -563,17 +563,11 @@ target_link_libraries(ceph-common json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_IOSTREAMS_LIBRARY}
   ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
-if(NOT WITH_SYSTEM_BOOST)
-  target_link_libraries(ceph-common ${ZLIB_LIBRARIES})
+if(HAVE_RDMA)
+  list(APPEND ceph_common_deps ${RDMA_LIBRARY})
 endif()
-install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
-if(WITH_EMBEDDED)
-  add_library(cephd_common STATIC
-    $<TARGET_OBJECTS:common_buffer_obj>
-    $<TARGET_OBJECTS:common_texttable_obj>
-    $<TARGET_OBJECTS:compressor_objs>
-    $<TARGET_OBJECTS:common-objs>
-    $<TARGET_OBJECTS:common_mountcephfs_objs>)
+if(NOT WITH_SYSTEM_BOOST)
+  list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
@@ -584,13 +578,25 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
 include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
-  target_link_libraries(ceph-common common_crc_aarch64)
+  list(APPEND ceph_common_deps common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
+
+add_library(common STATIC ${ceph_common_objs})
+target_link_libraries(common ${ceph_common_deps})
+
+add_library(ceph-common SHARED ${ceph_common_objs})
+target_link_libraries(ceph-common ${ceph_common_deps})
+# appease dpkg-shlibdeps
+set_target_properties(ceph-common PROPERTIES
+  SOVERSION 0
+  INSTALL_RPATH "")
+install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
+  add_dependencies(common-objs oprequest-tp)
 endif(${WITH_LTTNG})
 
 add_subdirectory(global)
@@ -625,8 +631,10 @@ if (WITH_MGR)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr mds osdc global
+  target_link_libraries(ceph-mgr mds osdc global-static common
       ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  set_target_properties(ceph-mgr PROPERTIES
+    INSTALL_RPATH "")
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -672,6 +680,7 @@ if(WITH_RBD)
   set(DENCODER_EXTRALIBS
     ${DENCODER_EXTRALIBS}
     cls_rbd_client
+    rbd_mirror_types
     rbd_types
     rbd_replay_types)
   if(WITH_KRBD)
@@ -715,8 +724,11 @@ set(ceph_mon_srcs
 add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
-      target_link_libraries(ceph-mon mon ceph-common os global ${EXTRALIBS}
+target_link_libraries(ceph-mon mon common os global-static common
+  ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
+set_target_properties(ceph-mon PROPERTIES
+  INSTALL_RPATH "")
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -750,7 +762,7 @@ if (NOT WITH_SYSTEM_ROCKSDB)
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb
     CMAKE_ARGS ${ROCKSDB_CMAKE_ARGS}
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/rocksdb
-    BUILD_COMMAND $(MAKE) rocksdblib
+    BUILD_COMMAND $(MAKE) rocksdb
     INSTALL_COMMAND "true")
 
   # force rocksdb make to be called on each time
@@ -764,7 +776,7 @@ if (NOT WITH_SYSTEM_ROCKSDB)
 
   add_library(rocksdb STATIC IMPORTED)
   add_dependencies(rocksdb rocksdb_ext)
-  set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdblib.a")
+  set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/rocksdb/librocksdb.a")
   set(ROCKSDB_LIBRARIES rocksdb)
 
 endif(NOT WITH_SYSTEM_ROCKSDB)
@@ -781,7 +793,10 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
+target_link_libraries(ceph-osd osd os global-static common
+  ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
+set_target_properties(ceph-osd PROPERTIES
+  INSTALL_RPATH "")
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
@@ -792,8 +807,10 @@ set(ceph_mds_srcs
   ceph_mds.cc)
 add_executable(ceph-mds ${ceph_mds_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
+target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
   ${Boost_THREAD_LIBRARY})
+set_target_properties(ceph-mds PROPERTIES
+  INSTALL_RPATH "")
 install(TARGETS ceph-mds DESTINATION bin)
 
 add_subdirectory(erasure-code)
@@ -896,7 +913,9 @@ if(WITH_LIBCEPHFS)
     ceph_syn.cc
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
-  target_link_libraries(ceph-syn client global)
+  target_link_libraries(ceph-syn client global-static)
+  set_target_properties(ceph-syn PROPERTIES
+    INSTALL_RPATH "")
 
   set(mount_ceph_srcs
     mount/mount.ceph.c)
@@ -915,8 +934,11 @@ if(WITH_LIBCEPHFS)
       ceph_fuse.cc
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES} client global)
-    set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
+    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
+      client global-static)
+    set_target_properties(ceph-fuse PROPERTIES
+      COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
+      INSTALL_RPATH "")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
   endif(WITH_FUSE)

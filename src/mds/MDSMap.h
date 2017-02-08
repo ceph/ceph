@@ -414,11 +414,11 @@ public:
   }
   void get_recovery_mds_set(std::set<mds_rank_t>& s) const {
     s = failed;
-    for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
-	 p != mds_info.end();
-	 ++p)
-      if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
-	s.insert(p->second.rank);
+    for (const auto& p : damaged)
+      s.insert(p);
+    for (const auto& p : mds_info)
+      if (p.second.state >= STATE_REPLAY && p.second.state <= STATE_STOPPING)
+	s.insert(p.second.rank);
   }
 
   void
@@ -556,7 +556,7 @@ public:
     return
       get_num_mds(STATE_RESOLVE) > 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
-      failed.empty();
+      failed.empty() && damaged.empty();
   }
   bool is_rejoining() const {
     // nodes are rejoining cache state

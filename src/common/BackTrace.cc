@@ -27,8 +27,13 @@ void BackTrace::print(std::ostream& out) const
     char *begin = 0, *end = 0;
     
     // find the parentheses and address offset surrounding the mangled name
+#ifdef __FreeBSD__
+    static constexpr char OPEN = '<';
+#else
+    static constexpr char OPEN = '(';
+#endif
     for (char *j = strings[i]; *j; ++j) {
-      if (*j == '(')
+      if (*j == OPEN)
 	begin = j+1;
       else if (*j == '+')
 	end = j;
@@ -44,7 +49,10 @@ void BackTrace::print(std::ostream& out) const
       foo[len] = 0;
 
       int status;
-      char *ret = abi::__cxa_demangle(foo, function, &sz, &status);
+      char *ret = nullptr;
+      // only demangle a C++ mangled name
+      if (foo[0] == '_' && foo[1] == 'Z')
+	ret = abi::__cxa_demangle(foo, function, &sz, &status);
       if (ret) {
 	// return value may be a realloc() of the input
 	function = ret;
@@ -55,7 +63,7 @@ void BackTrace::print(std::ostream& out) const
 	strncat(function, "()", sz);
 	function[sz-1] = 0;
       }
-      out << " " << (i-skip+1) << ": (" << function << end << std::endl;
+      out << " " << (i-skip+1) << ": " << OPEN << function << end << std::endl;
       //fprintf(out, "    %s:%s\n", stack.strings[i], function);
       free(foo);
     } else {

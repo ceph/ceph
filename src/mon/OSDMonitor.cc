@@ -1776,13 +1776,12 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
-  // calculate failure time
-  utime_t now = ceph_clock_now();
-  utime_t failed_since =
-    m->get_recv_stamp() -
-    utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
-
   if (m->if_osd_failed()) {
+    // calculate failure time
+    utime_t now = ceph_clock_now();
+    utime_t failed_since =
+      m->get_recv_stamp() - utime_t(m->failed_for, 0);
+
     // add a report
     if (m->is_immediate()) {
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
@@ -1806,13 +1805,9 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 		       << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
-      list<MonOpRequestRef> ls;
-      fi.take_report_messages(ls);
-      fi.cancel_report(reporter);
-      while (!ls.empty()) {
-        if (ls.front())
-          mon->no_reply(ls.front());
-	ls.pop_front();
+      MonOpRequestRef report_op = fi.cancel_report(reporter);
+      if (report_op) {
+        mon->no_reply(report_op);
       }
       if (fi.reporters.empty()) {
 	dout(10) << " removing last failure_info for osd." << target_osd
@@ -5827,7 +5822,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       int id = newcrush.get_item_id(name);
 
       if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
-	err = newcrush.move_bucket(g_ceph_context, id, loc);
+	if (id >= 0) {
+	  err = newcrush.create_or_move_item(g_ceph_context, id, 0, name, loc);
+	} else {
+	  err = newcrush.move_bucket(g_ceph_context, id, loc);
+	}
 	if (err >= 0) {
 	  ss << "moved item id " << id << " name '" << name << "' to location " << loc << " in crush map";
 	  pending_inc.crush.clear();
@@ -6986,6 +6985,10 @@ done:
       ss << "pool " << poolstr << " snap " << snapname << " already exists";
       err = 0;
       goto reply;
+    } else if (p->is_tier()) {
+      ss << "pool " << poolstr << " is a cache tier";
+      err = -EINVAL;
+      goto reply;
     }
     pg_pool_t *pp = 0;
     if (pending_inc.new_pools.count(pool))
@@ -7892,7 +7895,7 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
 
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
-    if (p->is_unmanaged_snaps_mode()) {
+    if (p->is_unmanaged_snaps_mode() || p->is_tier()) {
       _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
       return true;
     }
@@ -7992,6 +7995,11 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   switch (m->op) {
     case POOL_OP_CREATE_SNAP:
+      if (pool->is_tier()) {
+        ret = -EINVAL;
+        _pool_op_reply(op, ret, osdmap.get_epoch());
+        return false;
+      }  // else, fall through
     case POOL_OP_DELETE_SNAP:
       if (!pool->is_unmanaged_snaps_mode()) {
         bool snap_exists = pool->snap_exists(m->name.c_str());

@@ -503,6 +503,7 @@ protected:
   }
   RGWOp *op_get();
   RGWOp *op_head();
+  RGWOp *op_post();
 public:
   RGWHandler_REST_Service_S3() {}
   virtual ~RGWHandler_REST_Service_S3() {}
