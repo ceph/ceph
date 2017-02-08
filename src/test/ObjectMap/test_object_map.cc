@@ -542,7 +542,7 @@ public:
 
   void TearDown() override {
     std::cerr << "Checking..." << std::endl;
-    assert(db->check(std::cerr));
+    assert(db->check(std::cerr) == 0);
   }
 };
 

@@ -150,8 +150,8 @@ int main(int argc, char **argv) {
     }
   } else if (cmd == "check") {
     r = omap.check(std::cout);
-    if (!r) {
-      std::cerr << "check got: " << cpp_strerror(r) << std::endl;
+    if (r > 0) {
+      std::cerr << "check got " << r << " error(s)" << std::endl;
       goto done;
     }
     std::cout << "check succeeded" << std::endl;
