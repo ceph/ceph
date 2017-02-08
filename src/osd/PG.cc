@@ -259,7 +259,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
-  do_sort_bitwise(false),
   last_epoch(0)
 {
 #ifdef PG_DEBUG_REFS
@@ -5325,7 +5324,7 @@ void PG::on_new_interval()
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
-  do_sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+  assert(osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE));
 
   _on_new_interval();
 }
