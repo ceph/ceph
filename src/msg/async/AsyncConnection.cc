@@ -328,7 +328,7 @@ void AsyncConnection::process()
 {
   ssize_t r = 0;
   int prev_state = state;
-#ifdef WITH_LTTNG
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   utime_t ltt_recv_stamp = ceph_clock_now();
 #endif
   bool need_dispatch_writer = false;
@@ -432,7 +432,7 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_HEADER:
         {
-#ifdef WITH_LTTNG
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
           ltt_recv_stamp = ceph_clock_now();
 #endif
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
