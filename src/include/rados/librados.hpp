@@ -72,6 +72,32 @@ namespace librados
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
 
+  class CEPH_RADOS_API NObjectIterator;
+
+  class CEPH_RADOS_API ObjectCursor
+  {
+    public:
+    ObjectCursor();
+    ObjectCursor(const ObjectCursor &rhs);
+    explicit ObjectCursor(rados_object_list_cursor c);
+    ~ObjectCursor();
+    ObjectCursor& operator=(const ObjectCursor& rhs);
+    bool operator<(const ObjectCursor &rhs) const;
+    bool operator==(const ObjectCursor &rhs) const;
+    void set(rados_object_list_cursor c);
+
+    friend class IoCtx;
+    friend class NObjectIteratorImpl;
+    friend std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
+
+    std::string to_str() const;
+    bool from_str(const std::string& s);
+
+    protected:
+    rados_object_list_cursor c_cursor;
+  };
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
+
   class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
   public:
     static const NObjectIterator __EndObjectIterator;
@@ -105,21 +131,6 @@ namespace librados
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
     NObjectIteratorImpl *impl;
-  };
-
-  class CEPH_RADOS_API ObjectCursor
-  {
-    public:
-    ObjectCursor();
-    ObjectCursor(const ObjectCursor &rhs);
-    ~ObjectCursor();
-    bool operator<(const ObjectCursor &rhs);
-    void set(rados_object_list_cursor c);
-
-    friend class IoCtx;
-
-    protected:
-    rados_object_list_cursor c_cursor;
   };
 
   class CEPH_RADOS_API ObjectItem
