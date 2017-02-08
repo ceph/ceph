@@ -2210,9 +2210,9 @@ struct pg_info_t {
       last_backfill_bitwise(false)
   { }
   
-  void set_last_backfill(hobject_t pos, bool sort) {
+  void set_last_backfill(hobject_t pos) {
     last_backfill = pos;
-    last_backfill_bitwise = sort;
+    last_backfill_bitwise = true;
   }
 
   bool is_empty() const { return last_update.version == 0; }
