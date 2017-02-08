@@ -345,7 +345,6 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   }
 
   if (sd < 0) {
-    ::close(sd);
     return -errno;
   }
 
