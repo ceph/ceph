@@ -1857,6 +1857,10 @@ public:
     int newprimary,
     const vector<int>& newacting,
     bool any_change=false);
+  bool is_pg_split(
+    pg_t pgid,
+    unsigned old_pg_num,
+    unsigned new_pg_num);
   enum recalc_op_target_result {
     RECALC_OP_TARGET_NO_ACTION = 0,
     RECALC_OP_TARGET_NEED_RESEND,
