@@ -1235,15 +1235,9 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    ls_iter == sentries.end()) {
 	  result = 1;
 
-	  if (get_osdmap()->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	    // Set response.handle to the start of the next PG
-	    // according to the object sort order.  Only do this if
-	    // the cluster is in bitwise mode; with legacy nibblewise
-	    // sort PGs don't always cover contiguous ranges of the
-	    // hash order.
-	    response.handle = info.pgid.pgid.get_hobj_end(
-	      pool.info.get_pg_num());
-	  }
+	  // Set response.handle to the start of the next PG according
+	  // to the object sort order.
+	  response.handle = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
 	} else {
           response.handle = next;
         }
