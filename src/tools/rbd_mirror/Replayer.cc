@@ -16,7 +16,7 @@
 #include "librbd/Utils.h"
 #include "librbd/Watcher.h"
 #include "librbd/internal.h"
-#include "LeaderWatcher.h"
+#include "InstanceWatcher.h"
 #include "Replayer.h"
 #include "Threads.h"
 
@@ -236,6 +236,9 @@ Replayer::~Replayer()
   if (m_leader_watcher) {
     m_leader_watcher->shut_down();
   }
+  if (m_instance_watcher) {
+    m_instance_watcher->shut_down();
+  }
 }
 
 bool Replayer::is_blacklisted() const {
@@ -289,6 +292,14 @@ int Replayer::init()
   r = m_leader_watcher->init();
   if (r < 0) {
     derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
+                                                     m_threads->work_queue));
+  r = m_instance_watcher->init();
+  if (r < 0) {
+    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
     return r;
   }
 

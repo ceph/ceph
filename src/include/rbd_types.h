@@ -65,12 +65,12 @@
  */
 #define RBD_MIRRORING       "rbd_mirroring"
 
-
 /**
- * rbd_mirror_leader object is used for pool-level coordination
- * between rbd-mirror daemons.
+ * rbd_mirror_leader and rbd_mirror_instance.<instance id> objects are used
+ * for pool-level coordination between rbd-mirror daemons.
  */
-#define RBD_MIRROR_LEADER	"rbd_mirror_leader"
+#define RBD_MIRROR_LEADER               "rbd_mirror_leader"
+#define RBD_MIRROR_INSTANCE_PREFIX      "rbd_mirror_instance."
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
