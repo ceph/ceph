@@ -2076,10 +2076,9 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
     MDSCacheObjectInfo info;
     (*p)->set_object_info(info);
     reply->get_authpins().push_back(info);
+    if (*p == (MDSCacheObject*)auth_pin_freeze)
+      auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
   }
-
-  if (auth_pin_freeze)
-    auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
 
   if (wouldblock)
     reply->mark_error_wouldblock();
@@ -2113,6 +2112,16 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
     if (*p == ack->get_authpin_freeze())
       mdr->set_remote_frozen_auth_pin(static_cast<CInode *>(object));
     pinned.insert(object);
+  }
+
+  // removed frozen auth pin ?
+  if (mdr->more()->is_remote_frozen_authpin &&
+      ack->get_authpin_freeze() == MDSCacheObjectInfo()) {
+    auto p = mdr->remote_auth_pins.find(mdr->more()->rename_inode);
+    assert(p != mdr->remote_auth_pins.end());
+    if (p->second == from) {
+      mdr->more()->is_remote_frozen_authpin = false;
+    }
   }
 
   // removed auth pins?
