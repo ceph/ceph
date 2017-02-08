@@ -1074,7 +1074,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         connect_reply = *((ceph_msg_connect_reply*)state_buffer);
-        connect_reply.features = ceph_sanitize_features(connect_reply.features);
+        connect_reply.features = connect_reply.features;
 
         ldout(async_msgr->cct, 20) << __func__ << " connect got reply tag " << (int)connect_reply.tag
                              << " connect_seq " << connect_reply.connect_seq << " global_seq "
@@ -1287,7 +1287,7 @@ ssize_t AsyncConnection::_process_connection()
 
         connect_msg = *((ceph_msg_connect*)state_buffer);
         // sanitize features
-        connect_msg.features = ceph_sanitize_features(connect_msg.features);
+        connect_msg.features = connect_msg.features;
         state = STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH;
         break;
       }
