@@ -157,12 +157,11 @@ int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
 				      const ghobject_t &end,
-				      bool sort_bitwise,
 				      int max_count,
 				      vector<ghobject_t> *ls,
 				      ghobject_t *next)
 {
-  return _collection_list_partial(start, end, sort_bitwise, max_count, ls, next);
+  return _collection_list_partial(start, end, max_count, ls, next);
 }
 
 /* Derived class utility methods */

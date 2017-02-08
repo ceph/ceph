@@ -4617,7 +4617,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
   vector<ghobject_t> objects;
   ghobject_t max;
   while (!max.is_max()) {
-    r = collection_list(cid, max, ghobject_t::get_max(), true,
+    r = collection_list(cid, max, ghobject_t::get_max(),
 			300, &objects, &max);
     if (r < 0)
       return r;
@@ -4748,7 +4748,7 @@ int FileStore::collection_empty(const coll_t& c, bool *empty)
   RWLock::RLocker l((index.index)->access_lock);
 
   vector<ghobject_t> ls;
-  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
+  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(),
 				     1, &ls, NULL);
   if (r < 0) {
     derr << __func__ << " collection_list_partial returned: "
@@ -4763,7 +4763,7 @@ int FileStore::collection_empty(const coll_t& c, bool *empty)
 int FileStore::collection_list(const coll_t& c,
 			       const ghobject_t& orig_start,
 			       const ghobject_t& end,
-			       bool sort_bitwise, int max,
+			       int max,
 			       vector<ghobject_t> *ls, ghobject_t *next)
 {
   ghobject_t start = orig_start;
@@ -4804,7 +4804,7 @@ int FileStore::collection_list(const coll_t& c,
     if (cmp_bitwise(start, sep) < 0) { // bitwise vs nibble doesn't matter here
       dout(10) << __func__ << " first checking temp pool" << dendl;
       coll_t temp = c.get_temp();
-      int r = collection_list(temp, start, end, sort_bitwise, max, ls, next);
+      int r = collection_list(temp, start, end, max, ls, next);
       if (r < 0)
 	return r;
       if (*next != ghobject_t::get_max())
@@ -4825,7 +4825,7 @@ int FileStore::collection_list(const coll_t& c,
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
 
-  r = index->collection_list_partial(start, end, sort_bitwise, max, ls, next);
+  r = index->collection_list_partial(start, end, max, ls, next);
 
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
@@ -5459,7 +5459,6 @@ int FileStore::_split_collection(const coll_t& cid,
       collection_list(
 	cid,
 	next, ghobject_t::get_max(),
-	true,
 	get_ideal_list_max(),
 	&objects,
 	&next);
@@ -5479,7 +5478,6 @@ int FileStore::_split_collection(const coll_t& cid,
       collection_list(
 	dest,
 	next, ghobject_t::get_max(),
-	true,
 	get_ideal_list_max(),
 	&objects,
 	&next);

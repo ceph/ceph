@@ -86,12 +86,12 @@ int apply_transaction(
 }
 
 
-bool sorted(const vector<ghobject_t> &in, bool bitwise) {
+bool sorted(const vector<ghobject_t> &in) {
   ghobject_t start;
   for (vector<ghobject_t>::const_iterator i = in.begin();
        i != in.end();
        ++i) {
-    if (cmp(start, *i, bitwise) > 0) {
+    if (cmp(start, *i, true) > 0) {
       cout << start << " should follow " << *i << std::endl;
       return false;
     }
@@ -2234,20 +2234,16 @@ TEST_P(StoreTest, SimpleListTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  for (int bitwise=0; bitwise<2; ++bitwise) {
+  {
     set<ghobject_t, ghobject_t::BitwiseComparator> saw;
     vector<ghobject_t> objects;
     ghobject_t next, current;
     while (!next.is_max()) {
       int r = store->collection_list(cid, current, ghobject_t::get_max(),
-				     (bool)bitwise, 50,
+				     50,
 				     &objects, &next);
-      if (r == -EOPNOTSUPP) {
-	++bitwise; // skip nibblewise test
-	continue;
-      }
       ASSERT_EQ(r, 0);
-      ASSERT_TRUE(sorted(objects, (bool)bitwise));
+      ASSERT_TRUE(sorted(objects));
       cout << " got " << objects.size() << " next " << next << std::endl;
       for (vector<ghobject_t>::iterator p = objects.begin(); p != objects.end();
 	   ++p) {
@@ -2308,8 +2304,7 @@ TEST_P(StoreTest, ListEndTest) {
     end.hobj.pool = 1;
     vector<ghobject_t> objects;
     ghobject_t next;
-    int r = store->collection_list(cid, ghobject_t(), end,
-				   true, 500,
+    int r = store->collection_list(cid, ghobject_t(), end, 500,
 				   &objects, &next);
     ASSERT_EQ(r, 0);
     for (auto &p : objects) {
@@ -2389,8 +2384,7 @@ TEST_P(StoreTest, MultipoolListTest) {
     vector<ghobject_t> objects;
     ghobject_t next, current;
     while (!next.is_max()) {
-      int r = store->collection_list(cid, current, ghobject_t::get_max(),
-				     true, 50,
+      int r = store->collection_list(cid, current, ghobject_t::get_max(), 50,
 				     &objects, &next);
       ASSERT_EQ(r, 0);
       cout << " got " << objects.size() << " next " << next << std::endl;
@@ -3049,7 +3043,7 @@ TEST_P(StoreTest, ManyObjectTest) {
 
   set<ghobject_t, ghobject_t::BitwiseComparator> listed, listed2;
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, INT_MAX, &objects, 0);
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
 
   cerr << "objects.size() is " << objects.size() << std::endl;
@@ -3067,7 +3061,6 @@ TEST_P(StoreTest, ManyObjectTest) {
     cid,
     ghobject_t::get_max(),
     ghobject_t::get_max(),
-    true,
     50,
     &objects,
     &next
@@ -3079,28 +3072,11 @@ TEST_P(StoreTest, ManyObjectTest) {
   listed.clear();
   ghobject_t start2, next2;
   while (1) {
-    // nibblewise
-    r = store->collection_list(cid, start2, ghobject_t::get_max(), false,
-			       50,
-			       &objects,
-			       &next2);
-    if (r != -EOPNOTSUPP) {
-      ASSERT_TRUE(sorted(objects, false));
-      ASSERT_EQ(r, 0);
-      listed2.insert(objects.begin(), objects.end());
-      if (objects.size() < 50) {
-	ASSERT_TRUE(next2.is_max());
-      }
-      objects.clear();
-      start2 = next2;
-    }
-
-    // bitwise
-    r = store->collection_list(cid, start, ghobject_t::get_max(), true,
+    r = store->collection_list(cid, start, ghobject_t::get_max(),
 			       50,
 			       &objects,
 			       &next);
-    ASSERT_TRUE(sorted(objects, true));
+    ASSERT_TRUE(sorted(objects));
     ASSERT_EQ(r, 0);
     listed.insert(objects.begin(), objects.end());
     if (objects.size() < 50) {
@@ -3323,7 +3299,7 @@ public:
     while (1) {
       vector<ghobject_t> objects;
       int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
-				     true, 10, &objects, 0);
+				     10, &objects, 0);
       assert(r >= 0);
       if (objects.empty())
 	break;
@@ -3897,11 +3873,10 @@ public:
     ghobject_t next, current;
     while (1) {
       //cerr << "scanning..." << std::endl;
-      int r = store->collection_list(cid, current, ghobject_t::get_max(),
-				     true, 100,
+      int r = store->collection_list(cid, current, ghobject_t::get_max(), 100,
 				     &objects, &next);
       ASSERT_EQ(r, 0);
-      ASSERT_TRUE(sorted(objects, true));
+      ASSERT_TRUE(sorted(objects));
       objects_set.insert(objects.begin(), objects.end());
       objects.clear();
       if (next.is_max()) break;
@@ -3932,7 +3907,8 @@ public:
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
     }
 
-    int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, INT_MAX, &objects, 0);
+    int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
+				   INT_MAX, &objects, 0);
     ASSERT_EQ(r, 0);
     objects_set2.insert(objects.begin(), objects.end());
     ASSERT_EQ(objects_set2.size(), available_objects.size());
@@ -4413,7 +4389,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   }
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, INT_MAX, &objects, 0);
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   set<ghobject_t, ghobject_t::BitwiseComparator> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
@@ -4422,10 +4398,10 @@ TEST_P(StoreTest, HashCollisionTest) {
   listed.clear();
   ghobject_t current, next;
   while (1) {
-    r = store->collection_list(cid, current, ghobject_t::get_max(), true, 60,
+    r = store->collection_list(cid, current, ghobject_t::get_max(), 60,
 			       &objects, &next);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(sorted(objects, true));
+    ASSERT_TRUE(sorted(objects));
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
@@ -4511,7 +4487,7 @@ TEST_P(StoreTest, ScrubTest) {
   }
 
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true,
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   set<ghobject_t, ghobject_t::BitwiseComparator> listed(objects.begin(), objects.end());
@@ -4521,10 +4497,10 @@ TEST_P(StoreTest, ScrubTest) {
   listed.clear();
   ghobject_t current, next;
   while (1) {
-    r = store->collection_list(cid, current, ghobject_t::get_max(), true, 60,
+    r = store->collection_list(cid, current, ghobject_t::get_max(), 60,
 			       &objects, &next);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(sorted(objects, true));
+    ASSERT_TRUE(sorted(objects));
     for (vector<ghobject_t>::iterator i = objects.begin();
          i != objects.end(); ++i) {
       if (listed.count(*i))
@@ -4975,7 +4951,7 @@ void colsplittest(
 
   ObjectStore::Transaction t;
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true,
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
@@ -4994,7 +4970,7 @@ void colsplittest(
   }
 
   objects.clear();
-  r = store->collection_list(tid, ghobject_t(), ghobject_t::get_max(), true,
+  r = store->collection_list(tid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
@@ -5272,7 +5248,7 @@ TEST_P(StoreTest, BigRGWObjectName) {
 
   {
     vector<ghobject_t> objects;
-    r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true,
+    r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			       INT_MAX, &objects, 0);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(objects.size(), 1u);
