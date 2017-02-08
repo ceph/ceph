@@ -3515,6 +3515,33 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
   return pos;
 }
 
+uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
+				      const hobject_t& cursor)
+{
+  shared_lock rl(rwlock);
+  ldout(cct, 10) << "list_nobjects_seek " << list_context << dendl;
+  list_context->pos = cursor;
+  list_context->at_end_of_pool = false;
+  pg_t actual = osdmap->raw_pg_to_pg(pg_t(cursor.get_hash(), list_context->pool_id));
+  list_context->current_pg = actual.ps();
+  list_context->sort_bitwise = true;
+  return list_context->current_pg;
+}
+
+void Objecter::list_nobjects_get_cursor(NListContext *list_context,
+                                        hobject_t *cursor)
+{
+  shared_lock rl(rwlock);
+  if (list_context->list.empty()) {
+    *cursor = list_context->pos;
+  } else {
+    const librados::ListObjectImpl& entry = list_context->list.front();
+    const string *key = (entry.locator.empty() ? &entry.oid : &entry.locator);
+    uint32_t h = osdmap->get_pg_pool(list_context->pool_id)->hash_key(*key, entry.nspace);
+    *cursor = hobject_t(entry.oid, entry.locator, list_context->pool_snap_seq, h, list_context->pool_id, entry.nspace);
+  }
+}
+
 void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
 {
   ldout(cct, 10) << __func__ << " pool_id " << list_context->pool_id
