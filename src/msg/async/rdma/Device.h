@@ -29,6 +29,7 @@
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 #include "common/Mutex.h"
+#include "msg/async/Event.h"
 
 typedef Infiniband::QueuePair QueuePair;
 typedef Infiniband::CompletionChannel CompletionChannel;
@@ -57,6 +58,15 @@ class Port {
 
 
 class Device {
+  class C_handle_cq_async : public EventCallback {
+    Device *device;
+  public:
+    C_handle_cq_async(Device *d): device(d) {}
+    void do_request(int fd) {
+      device->handle_async_event();
+    }
+  };
+
   CephContext *cct;
   ibv_device *device;
   const char *name;
@@ -68,13 +78,17 @@ class Device {
 
   Mutex lock; // Protects from concurrent intialization of the device
   bool initialized = false;
+  EventCallbackRef async_handler;
+  Infiniband *infiniband;
 
  public:
-  explicit Device(CephContext *c, ibv_device* d);
+  explicit Device(CephContext *c, Infiniband *ib, ibv_device* d);
   ~Device();
 
   void init();
   void uninit();
+
+  void handle_async_event();
 
   const char* get_name() const { return name;}
   uint16_t get_lid() { return active_port->get_lid(); }
@@ -127,7 +141,7 @@ class DeviceList {
   struct pollfd *poll_fds;
 
  public:
-  DeviceList(CephContext *cct);
+  DeviceList(CephContext *cct, Infiniband *ib);
   ~DeviceList();
 
   Device* get_device(const char* device_name);
@@ -136,6 +150,8 @@ class DeviceList {
   int poll_tx(int n, Device **d, ibv_wc *wc);
   int poll_rx(int n, Device **d, ibv_wc *wc);
   int poll_blocking(bool &done);
+
+  void handle_async_event();
 };
 
 #endif
