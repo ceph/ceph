@@ -189,6 +189,7 @@ class OpenStack(object):
     # https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-22-20150521.x86_64.qcow2
     # http://fedora.mirrors.ovh.net/linux/releases/21/Cloud/Images/x86_64/Fedora-Cloud-Base-20141203-21.x86_64.qcow2
     # http://fedora.mirrors.ovh.net/linux/releases/20/Images/x86_64/Fedora-x86_64-20-20131211.1-sda.qcow2
+    # http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.2/images/openSUSE-Leap-42.2-OpenStack-rootfs.x86_64.tbz
     image2url = {
         'centos-6.5-x86_64': 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud-1508.qcow2',
         'centos-7.0-x86_64': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
