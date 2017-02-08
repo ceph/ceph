@@ -3626,7 +3626,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 		 << ", tentative new pos " << list_context->pos << dendl;
   list_context->extra_info.append(extra_info);
   if (response_size) {
-    list_context->list.merge(response.entries);
+    list_context->list.splice(list_context->list.end(), response.entries);
   }
 
   if (list_context->list.size() >= list_context->max_entries) {
