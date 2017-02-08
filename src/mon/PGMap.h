@@ -418,6 +418,13 @@ public:
       bool new_pool,
       PGMap *pg_map,
       PGMap::Incremental *pending_inc);
+
+  static void check_down_pgs(
+      const OSDMap &osd_map,
+      const PGMap *pg_map,
+      bool check_all,
+      const set<int>& need_check_down_pg_osds,
+      PGMap::Incremental *pending_inc);
 };
 
 #endif
