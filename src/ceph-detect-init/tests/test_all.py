@@ -34,6 +34,7 @@ from ceph_detect_init import rhel
 from ceph_detect_init import suse
 from ceph_detect_init import gentoo
 from ceph_detect_init import freebsd
+from ceph_detect_init import docker
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.DEBUG)
@@ -49,6 +50,9 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_freebsd(self):
         self.assertEqual('bsdrc', freebsd.choose_init())
+
+    def test_docker(self):
+        self.assertEqual('none', docker.choose_init())
 
     def test_centos(self):
         with mock.patch('ceph_detect_init.centos.release',
@@ -261,6 +265,39 @@ class TestCephDetectInit(testtools.TestCase):
                         lambda **kwargs: (('debian', 'sid/jessie', ''))):
             self.assertEqual(('debian', 'sid/jessie', 'sid'),
                              ceph_detect_init.platform_information())
+
+    @mock.patch('platform.linux_distribution')
+    def test_platform_information_container(self, mock_linux_dist):
+        import sys
+        if sys.version_info >= (3, 0):
+            mocked_fn = 'builtins.open'
+        else:
+            mocked_fn = '__builtin__.open'
+
+        with mock.patch(mocked_fn,
+                        mock.mock_open(read_data="""1:name=systemd:/system.slice \
+                                                 /docker-39cc1fb.scope"""),
+                        create=True) as m:
+            self.assertEqual(('docker',
+                              'docker',
+                              'docker'),
+                             ceph_detect_init.platform_information(),)
+            m.assert_called_once_with('/proc/self/cgroup', 'r')
+
+        with mock.patch(mocked_fn, mock.mock_open(), create=True) as m:
+            m.side_effect = IOError()
+            mock_linux_dist.return_value = ('Red Hat Enterprise Linux Server',
+                                            '7.3', 'Maipo')
+            # Just run the code to validate the code won't raise IOError
+            ceph_detect_init.platform_information()
+
+        with mock.patch('os.path.isfile', mock.MagicMock()) as m:
+            m.return_value = True
+            self.assertEqual(('docker',
+                              'docker',
+                              'docker'),
+                             ceph_detect_init.platform_information(),)
+            m.assert_called_once_with('/.dockerenv')
 
     @mock.patch('platform.system', lambda: 'FreeBSD')
     def test_platform_information_freebsd(self):
