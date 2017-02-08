@@ -448,7 +448,6 @@ public:
     /// Call to update structures for hoid after a change
     void rebuild(
       const hobject_t &hoid,
-      bool sort_bitwise,
       pg_shard_t self,
       const set<pg_shard_t> to_recover,
       const pg_info_t &info,
