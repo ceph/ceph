@@ -54,9 +54,6 @@ void PurgeItem::decode(bufferlist::iterator &p)
   DECODE_FINISH(p);
 }
 
-// TODO: when we're deactivating, lift all limits on
-// how many OSD ops we're allowed to emit at a time to
-// race through the queue as fast as we can.
 // TODO: if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging (keep accepting pushes though)
 PurgeQueue::PurgeQueue(
@@ -77,7 +74,9 @@ PurgeQueue::PurgeQueue(
       CEPH_FS_ONDISK_MAGIC, objecter_, nullptr, 0, &timer,
       &finisher),
     ops_in_flight(0),
-    max_purge_ops(0)
+    max_purge_ops(0),
+    drain_initial(0),
+    draining(false)
 {
 }
 
@@ -445,9 +444,41 @@ void PurgeQueue::handle_conf_change(const struct md_config_t *conf,
   }
 }
 
-bool PurgeQueue::is_idle() const
+bool PurgeQueue::drain(
+    uint64_t *progress,
+    uint64_t *progress_total,
+    size_t *in_flight_count
+    )
 {
-  return in_flight.empty() && (
+  assert(progress != nullptr);
+  assert(progress_total != nullptr);
+  assert(in_flight_count != nullptr);
+
+  const bool done = in_flight.empty() && (
       journaler.get_read_pos() == journaler.get_write_pos());
+  if (done) {
+    return true;
+  }
+
+  const uint64_t bytes_remaining = journaler.get_write_pos()
+                                   - journaler.get_read_pos();
+
+  if (!draining) {
+    // Start of draining: remember how much there was outstanding at
+    // this point so that we can give a progress percentage later
+    draining = true;
+
+    // Life the op throttle as this daemon now has nothing to do but
+    // drain the purge queue, so do it as fast as we can.
+    max_purge_ops = 0xffff;
+  }
+
+  drain_initial = max(bytes_remaining, drain_initial);
+
+  *progress = drain_initial - bytes_remaining;
+  *progress_total = drain_initial;
+  *in_flight_count = in_flight.size();
+
+  return false;
 }
 

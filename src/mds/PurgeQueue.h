@@ -103,6 +103,13 @@ protected:
 
   bool can_consume();
 
+  // How many bytes were remaining when drain() was first called,
+  // used for indicating progress.
+  uint64_t drain_initial;
+
+  // Has drain() ever been called on this instance?
+  bool draining;
+
   void _consume();
 
   void _execute_item(
@@ -130,6 +137,22 @@ public:
   // If the on-disk queue is empty and we are not currently processing
   // anything.
   bool is_idle() const;
+
+  /**
+   * Signal to the PurgeQueue that you would like it to hurry up and
+   * finish consuming everything in the queue.  Provides progress
+   * feedback.
+   *
+   * @param progress: bytes consumed since we started draining
+   * @param progress_total: max bytes that were outstanding during purge
+   * @param in_flight_count: number of file purges currently in flight
+   *
+   * @returns true if drain is complete
+   */
+  bool drain(
+    uint64_t *progress,
+    uint64_t *progress_total,
+    size_t *in_flight_count);
 
   void update_op_limit(const MDSMap &mds_map);
 
