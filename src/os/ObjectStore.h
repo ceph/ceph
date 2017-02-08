@@ -1833,7 +1833,6 @@ public:
    * @param c collection
    * @param start list object that sort >= this value
    * @param end list objects that sort < this value
-   * @param sort_bitwise sort bitwise (instead of legacy nibblewise)
    * @param max return no more than this many results
    * @param seq return no objects with snap < seq
    * @param ls [out] result
@@ -1842,13 +1841,13 @@ public:
    */
   virtual int collection_list(const coll_t& c,
 			      const ghobject_t& start, const ghobject_t& end,
-			      bool sort_bitwise, int max,
+			      int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
   virtual int collection_list(CollectionHandle &c,
 			      const ghobject_t& start, const ghobject_t& end,
-			      bool sort_bitwise, int max,
+			      int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) {
-    return collection_list(c->get_cid(), start, end, sort_bitwise, max, ls, next);
+    return collection_list(c->get_cid(), start, end, max, ls, next);
   }
 
 
