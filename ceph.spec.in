@@ -101,6 +101,7 @@ BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
+BuildRequires:	bc
 BuildRequires:	boost-devel
 %if ! 0%{?suse_version}
 BuildRequires:	boost-python
