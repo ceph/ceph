@@ -2210,27 +2210,6 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   }
 }
 
-void PG::split_ops(PG *child, unsigned split_bits) {
-  unsigned match = child->info.pgid.ps();
-  assert(waiting_for_all_missing.empty());
-  assert(waiting_for_cache_not_full.empty());
-  assert(waiting_for_unreadable_object.empty());
-  assert(waiting_for_degraded_object.empty());
-  assert(waiting_for_ondisk.empty());
-  assert(waiting_for_active.empty());
-  assert(waiting_for_scrub.empty());
-
-  osd->dequeue_pg(this, &waiting_for_peered);
-
-  OSD::split_list(
-    &waiting_for_peered, &(child->waiting_for_peered), match, split_bits);
-  {
-    Mutex::Locker l(map_lock); // to avoid a race with the osd dispatch
-    OSD::split_list(
-      &waiting_for_map, &(child->waiting_for_map), match, split_bits);
-  }
-}
-
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
   child->update_snap_mapper_bits(split_bits);
@@ -2304,7 +2283,6 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   // History
   child->past_intervals = past_intervals;
 
-  split_ops(child, split_bits);
   _split_into(child_pgid, child, split_bits);
 
   // release all backoffs so that Objecter doesn't need to handle unblock
