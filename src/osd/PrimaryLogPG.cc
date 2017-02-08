@@ -466,10 +466,8 @@ void PrimaryLogPG::on_global_recover(
 void PrimaryLogPG::on_peer_recover(
   pg_shard_t peer,
   const hobject_t &soid,
-  const ObjectRecoveryInfo &recovery_info,
-  const object_stat_sum_t &stat)
+  const ObjectRecoveryInfo &recovery_info)
 {
-  info.stats.stats.sum.add(stat);
   publish_stats_to_osd();
   // done!
   peer_missing[peer].got(soid, recovery_info.version);

@@ -635,8 +635,7 @@ void ECBackend::continue_recovery_op(
 	      get_parent()->on_peer_recover(
 		*i,
 		op.hoid,
-		op.recovery_info,
-		object_stat_sum_t());
+		op.recovery_info);
 	    }
 	  }
 	  object_stat_sum_t stat;
