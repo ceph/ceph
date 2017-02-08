@@ -5829,7 +5829,7 @@ CEPH_RADOS_API void rados_object_list_slice(
 
 librados::ObjectCursor::ObjectCursor()
 {
-  c_cursor = new hobject_t();
+  c_cursor = (rados_object_list_cursor)new hobject_t();
 }
 
 librados::ObjectCursor::~ObjectCursor()
@@ -5838,14 +5838,16 @@ librados::ObjectCursor::~ObjectCursor()
   delete h;
 }
 
-bool librados::ObjectCursor::operator<(const librados::ObjectCursor &rhs)
+librados::ObjectCursor::ObjectCursor(rados_object_list_cursor c)
 {
-  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
-  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
-  return lhs_hobj < rhs_hobj;
+  if (!c) {
+    c_cursor = nullptr;
+  } else {
+    c_cursor = (rados_object_list_cursor)new hobject_t(*(hobject_t *)c);
+  }
 }
 
-librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
+librados::ObjectCursor& librados::ObjectCursor::operator=(const librados::ObjectCursor& rhs)
 {
   if (rhs.c_cursor != nullptr) {
     hobject_t *h = (hobject_t*)rhs.c_cursor;
@@ -5853,6 +5855,25 @@ librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
   } else {
     c_cursor = nullptr;
   }
+  return *this;
+}
+
+bool librados::ObjectCursor::operator<(const librados::ObjectCursor &rhs) const
+{
+  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
+  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
+  return lhs_hobj < rhs_hobj;
+}
+
+bool librados::ObjectCursor::operator==(const librados::ObjectCursor &rhs) const
+{
+  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
+  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
+  return cmp(lhs_hobj, rhs_hobj) == 0;
+}
+librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
+{
+  *this = rhs;
 }
 
 librados::ObjectCursor librados::IoCtx::object_list_begin()
@@ -5877,6 +5898,32 @@ void librados::ObjectCursor::set(rados_object_list_cursor c)
 {
   delete (hobject_t*)c_cursor;
   c_cursor = c;
+}
+
+string librados::ObjectCursor::to_str() const
+{
+  stringstream ss;
+  ss << *(hobject_t *)c_cursor;
+  return ss.str();
+}
+
+bool librados::ObjectCursor::from_str(const string& s)
+{
+  if (s.empty()) {
+    *(hobject_t *)c_cursor = hobject_t();
+    return true;
+  }
+  return ((hobject_t *)c_cursor)->parse(s);
+}
+
+CEPH_RADOS_API std::ostream& librados::operator<<(std::ostream& os, const librados::ObjectCursor& oc)
+{
+  if (oc.c_cursor) {
+    os << *(hobject_t *)oc.c_cursor;
+  } else {
+    os << hobject_t();
+  }
+  return os;
 }
 
 bool librados::IoCtx::object_list_is_end(const ObjectCursor &oc)
