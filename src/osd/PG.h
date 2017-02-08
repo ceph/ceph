@@ -726,17 +726,12 @@ public:
     // info about a backfill interval on a peer
     eversion_t version; /// version at which the scan occurred
     map<hobject_t,eversion_t> objects;
-    bool sort_bitwise;
     hobject_t begin;
     hobject_t end;
 
-    explicit BackfillInterval(bool bitwise=true)
-      : sort_bitwise(bitwise)
-    {}
-    
     /// clear content
-    void clear(bool bitwise=true) {
-      *this = BackfillInterval(bitwise);
+    void clear() {
+      *this = BackfillInterval();
     }
 
     /// clear objects list only
@@ -745,8 +740,8 @@ public:
     }
 
     /// reinstantiate with a new start+end position and sort order
-    void reset(hobject_t start, bool bitwise) {
-      clear(bitwise);
+    void reset(hobject_t start) {
+      clear();
       begin = end = start;
     }
 
