@@ -2082,7 +2082,6 @@ public:
   uint64_t acting_features;
   uint64_t upacting_features;
 
-  bool do_sort_bitwise;
   epoch_t last_epoch;
 
  public:
@@ -2096,11 +2095,6 @@ public:
 
   uint64_t get_min_acting_features() const { return acting_features; }
   uint64_t get_min_upacting_features() const { return upacting_features; }
-
-  /// true if we will sort hobjects bitwise for this pg interval
-  bool get_sort_bitwise() const {
-    return do_sort_bitwise;
-  }
 
   void init_primary_up_acting(
     const vector<int> &newup,

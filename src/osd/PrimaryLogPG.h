@@ -433,9 +433,6 @@ public:
   uint64_t min_peer_features() const override {
     return get_min_peer_features();
   }
-  bool sort_bitwise() const override {
-    return get_sort_bitwise();
-  }
 
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override;
