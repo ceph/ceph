@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     ("paranoid", "use paranoid checking")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
-     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check], mandatory")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers], mandatory")
     ;
   po::positional_options_description p;
   p.add("command", 1);
@@ -155,6 +155,16 @@ int main(int argc, char **argv) {
       goto done;
     }
     std::cout << "check succeeded" << std::endl;
+  } else if (cmd == "dump-headers") {
+    vector<DBObjectMap::_Header> headers;
+    r = omap.list_object_headers(&headers);
+    if (r < 0) {
+      std::cerr << "list_object_headers got: " << cpp_strerror(r) << std::endl;
+      r = 1;
+      goto done;
+    }
+    for (auto i : headers)
+      std::cout << i << std::endl;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
     goto done;
