@@ -54,9 +54,9 @@ static void append_escaped(const string &in, string *out)
   }
 }
 
-bool DBObjectMap::check(std::ostream &out)
+int DBObjectMap::check(std::ostream &out)
 {
-  bool retval = true;
+  int errors = 0;
   map<uint64_t, uint64_t> parent_to_num_children;
   map<uint64_t, uint64_t> parent_to_actual_num_children;
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
@@ -68,6 +68,20 @@ bool DBObjectMap::check(std::ostream &out)
       header.decode(bliter);
       if (header.seq != 0)
 	parent_to_actual_num_children[header.seq] = header.num_children;
+
+      // Check complete table
+      boost::optional<string> prev;
+      KeyValueDB::Iterator complete_iter = db->get_iterator(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
+      for (complete_iter->seek_to_first(); complete_iter->valid();
+           complete_iter->next()) {
+         if (prev && prev >= complete_iter->key()) {
+             out << "Bad complete for " << header.oid << std::endl;
+             errors++;
+             break;
+         }
+         prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
+      }
+
       if (header.parent == 0)
 	break;
 
@@ -83,7 +97,7 @@ bool DBObjectMap::check(std::ostream &out)
       db->get(sys_parent_prefix(header), to_get, &got);
       if (got.empty()) {
 	out << "Missing: seq " << header.parent << std::endl;
-	retval = false;
+	errors++;
 	break;
       } else {
 	bl = got.begin()->second;
@@ -100,11 +114,11 @@ bool DBObjectMap::check(std::ostream &out)
       out << "Invalid: seq " << i->first << " recorded children: "
 	  << parent_to_actual_num_children[i->first] << " found: "
 	  << i->second << std::endl;
-      retval = false;
+      errors++;
     }
     parent_to_actual_num_children.erase(i->first);
   }
-  return retval;
+  return errors;
 }
 
 string DBObjectMap::ghobject_key(const ghobject_t &oid)
