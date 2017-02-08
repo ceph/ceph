@@ -43,11 +43,10 @@ class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
 
-  bool need_check_down_pgs;
-  set<int> need_check_down_pg_osds;
-
 private:
   PGMap::Incremental pending_inc;
+
+  bool check_all_pgs = false;
 
   const char *pgmap_meta_prefix;
   const char *pgmap_pg_prefix;
@@ -95,18 +94,6 @@ private:
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
-   * check pgs for down primary osds
-   *
-   * clears need_check_down_pgs
-   * clears need_check_down_pg_osds
-   *
-   */
-  void check_down_pgs();
-  void _try_mark_pg_stale(const OSDMap *osdmap, pg_t pgid,
-			  const pg_stat_t& cur_stat);
-
-
-  /**
    * Dump stats from pgs stuck in specified states.
    *
    * @return 0 on success, negative error code on failure
@@ -118,7 +105,6 @@ private:
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
-      need_check_down_pgs(false),
       pgmap_meta_prefix("pgmap_meta"),
       pgmap_pg_prefix("pgmap_pg"),
       pgmap_osd_prefix("pgmap_osd")
