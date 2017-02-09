@@ -621,7 +621,7 @@ static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
 }
 
 static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
-                        size_t imgblklen, utils::ProgressContext &pc
+                        size_t imgblklen, utils::ProgressContext &pc,
 			size_t sparse_size)
 {
   int r = 0;

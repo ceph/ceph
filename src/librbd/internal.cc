@@ -1443,7 +1443,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   };
 
   int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
-	   ImageOptions& opts, ProgressContext &prog_ctx)
+	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
     ldout(cct, 20) << "copy " << src->name
@@ -1493,7 +1493,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    r = copy(src, dest, prog_ctx);
+    r = copy(src, dest, prog_ctx, sparse_size);
+
     int close_r = dest->state->close();
     if (r == 0 && close_r < 0) {
       r = close_r;
@@ -1503,22 +1504,23 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   class C_CopyWrite : public Context {
   public:
-    C_CopyWrite(SimpleThrottle *throttle, bufferlist *bl)
-      : m_throttle(throttle), m_bl(bl) {}
+    C_CopyWrite(bufferlist *bl, Context* ctx)
+      : m_bl(bl), m_ctx(ctx) {}
     void finish(int r) override {
       delete m_bl;
-      m_throttle->end_op(r);
+      m_ctx->complete(r);
     }
   private:
-    SimpleThrottle *m_throttle;
     bufferlist *m_bl;
+    Context *m_ctx;
   };
 
   class C_CopyRead : public Context {
   public:
     C_CopyRead(SimpleThrottle *throttle, ImageCtx *dest, uint64_t offset,
-	       bufferlist *bl)
-      : m_throttle(throttle), m_dest(dest), m_offset(offset), m_bl(bl) {
+	       bufferlist *bl, size_t sparse_size)
+      : m_throttle(throttle), m_dest(dest), m_offset(offset), m_bl(bl),
+      m_sparse_size(sparse_size) {
       m_throttle->start_op();
     }
     void finish(int r) override {
@@ -1537,13 +1539,47 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	return;
       }
 
-      Context *ctx = new C_CopyWrite(m_throttle, m_bl);
-      auto comp = io::AioCompletion::create(ctx);
+      if (!m_sparse_size) {
+	m_sparse_size = (1 << m_dest->order);
+      }
 
-      // coordinate through AIO WQ to ensure lock is acquired if needed
-      m_dest->io_work_queue->aio_write(comp, m_offset, m_bl->length(),
-                                       std::move(*m_bl),
-                                       LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+      auto *throttle = m_throttle;
+      auto *end_op_ctx = new FunctionContext([throttle](int r) {
+	throttle->end_op(r);
+      });
+      auto gather_ctx = new C_Gather(m_dest->cct, end_op_ctx);
+
+      bufferptr m_ptr(m_bl->length());
+      m_bl->rebuild(m_ptr);
+      size_t write_offset = 0;
+      size_t write_length = 0;
+      size_t offset = 0;
+      size_t length = m_bl->length();
+      while (offset < length) {
+	if (util::calc_sparse_extent(m_ptr,
+				     m_sparse_size,
+				     length,
+				     &write_offset,
+				     &write_length,
+				     &offset)) {
+	  bufferptr write_ptr(m_ptr, write_offset, write_length);
+	  bufferlist *write_bl = new bufferlist();
+	  write_bl->push_back(write_ptr);
+	  Context *ctx = new C_CopyWrite(write_bl, gather_ctx->new_sub());
+	  auto comp = io::AioCompletion::create(ctx);
+
+	  // coordinate through AIO WQ to ensure lock is acquired if needed
+	  m_dest->io_work_queue->aio_write(comp, m_offset + write_offset,
+					   write_length,
+					   std::move(*write_bl),
+					   LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+	  write_offset = offset;
+	  write_length = 0;
+	}
+      }
+      delete m_bl;
+      assert(gather_ctx->get_sub_created_count() > 0);
+      gather_ctx->activate();
     }
 
   private:
@@ -1551,9 +1587,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ImageCtx *m_dest;
     uint64_t m_offset;
     bufferlist *m_bl;
+    size_t m_sparse_size;
   };
 
-  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
+  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx, size_t sparse_size)
   {
     src->snap_lock.get_read();
     uint64_t src_size = src->get_image_size(src->snap_id);
@@ -1595,7 +1632,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
-      Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
+      Context *ctx = new C_CopyRead(&throttle, dest, offset, bl, sparse_size);
       auto comp = io::AioCompletion::create_and_start(ctx, src,
                                                       io::AIO_TYPE_READ);
       io::ImageRequest<>::aio_read(src, comp, {{offset, len}},
