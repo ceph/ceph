@@ -2273,7 +2273,8 @@ int librados::IoCtx::aio_repair_copy(const std::string& oid, AioCompletion *c,
   for (const auto& bad_shard : bad_shards) {
     shards.emplace_back(bad_shard.osd, shard_id_t(bad_shard.shard));
   }
-  return io_ctx_impl->aio_repair_copy(object_t(oid), c->pc, version, what,
+  return io_ctx_impl->aio_repair_copy(object_t(oid), c->pc, version,
+				      translate_repair_copy(what),
 				      shards, epoch);
 }
 
