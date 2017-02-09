@@ -7817,12 +7817,22 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     le->commit.add_primary_dentry(target->get_projected_parent_dn(), target, true);
   }
 
-  if (force_journal_dest) {
-    dout(10) << " noting rename target ino " << target->ino() << " in metablob" << dendl;
-    le->commit.renamed_dirino = target->ino();
-  } else if (force_journal_src || (in && in->is_dir() && srcdn->authority().first == whoami)) {
+  if (in && in->is_dir() && (srcdn->authority().first == whoami || force_journal_src)) {
     dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
     le->commit.renamed_dirino = in->ino();
+    if (srcdn->authority().first == whoami) {
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	CDir *dir = *p;
+	if (!dir->is_auth())
+	  le->commit.renamed_dir_frags.push_back(dir->get_frag());
+      }
+      dout(10) << " noting renamed dir open frags " << le->commit.renamed_dir_frags << dendl;
+    }
+  } else if (force_journal_dest) {
+    dout(10) << " noting rename target ino " << target->ino() << " in metablob" << dendl;
+    le->commit.renamed_dirino = target->ino();
   }
   
   if (target && target->is_dir()) {
