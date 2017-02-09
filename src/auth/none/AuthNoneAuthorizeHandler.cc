@@ -25,7 +25,7 @@ uint64_t *auid)
   bufferlist::iterator iter = authorizer_data.begin();
 
   try {
-    __u8 struct_v = 1;
+    __u8 struct_v;
     ::decode(struct_v, iter);
     ::decode(entity_name, iter);
     ::decode(global_id, iter);

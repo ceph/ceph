@@ -15,6 +15,7 @@
 #include "AuthAuthorizeHandler.h"
 #include "cephx/CephxAuthorizeHandler.h"
 #include "none/AuthNoneAuthorizeHandler.h"
+#include "unknown/AuthUnknownAuthorizeHandler.h"
 #include "common/Mutex.h"
 
 AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
@@ -35,6 +36,10 @@ AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
     
   case CEPH_AUTH_CEPHX:
     m_authorizers[protocol] = new CephxAuthorizeHandler();
+    return m_authorizers[protocol];
+
+  case CEPH_AUTH_UNKNOWN:
+    m_authorizers[protocol] = new AuthUnknownAuthorizeHandler();
     return m_authorizers[protocol];
   }
   return NULL;

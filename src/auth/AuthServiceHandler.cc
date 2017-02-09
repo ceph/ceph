@@ -15,6 +15,7 @@
 #include "AuthServiceHandler.h"
 #include "cephx/CephxServiceHandler.h"
 #include "none/AuthNoneServiceHandler.h"
+#include "unknown/AuthUnknownServiceHandler.h"
 
 #define dout_subsys ceph_subsys_auth
 
@@ -26,6 +27,8 @@ AuthServiceHandler *get_auth_service_handler(int type, CephContext *cct, KeyServ
     return new CephxServiceHandler(cct, ks);
   case CEPH_AUTH_NONE:
     return new AuthNoneServiceHandler(cct);
+  case CEPH_AUTH_UNKNOWN:
+    return new AuthUnknownServiceHandler(cct);
   }
   return NULL;
 }
