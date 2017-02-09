@@ -6582,7 +6582,8 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 bool OSD::scrub_random_backoff()
 {
-  bool coin_flip = (rand() % 3) == whoami % 3;
+  bool coin_flip = (rand() / (double)RAND_MAX >=
+		    cct->_conf->osd_scrub_backoff_ratio);
   if (!coin_flip) {
     dout(20) << "scrub_random_backoff lost coin flip, randomly backing off" << dendl;
     return true;
