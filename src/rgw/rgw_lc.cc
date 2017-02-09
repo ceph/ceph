@@ -274,7 +274,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     }
 
   map<string, int>& prefix_map = config.get_prefix_map();
-  for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
+  for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
     if (prefix_iter->first.empty()) {
       default_config = true;
       default_days = prefix_iter->second;
@@ -298,12 +298,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
       vector<RGWObjEnt>::iterator obj_iter;
       int pos = 0;
       utime_t now = ceph_clock_now();
-      for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
+      for (obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
         bool prefix_match = false;
         int match_days = 0;
         map<string, int>& prefix_map = config.get_prefix_map();
 
-        for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
+        for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
           if (prefix_iter->first.empty()) {
             continue;
           }
@@ -343,7 +343,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
       }
     } while (is_truncated);
   } else {
-    for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
+    for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
       if (prefix_iter->first.empty()) {
         continue;
       }
@@ -366,7 +366,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
         int days = prefix_iter->second;
         utime_t now = ceph_clock_now();
 
-        for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
+        for (obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
           if (obj_has_expired(now - ceph::real_clock::to_time_t((*obj_iter).mtime), days)) {
             RGWObjectCtx rctx(store);
             rgw_obj obj(bucket_info.bucket, (*obj_iter).key.name);

@@ -117,7 +117,7 @@ int Mantle::balance(const string &script,
     /* push values into this mds's table; setfield assigns key/pops val */
     for (map<string, double>::const_iterator it = metrics[i].begin();
          it != metrics[i].end();
-         it++) {
+         ++it) {
       lua_pushnumber(L, it->second);
       lua_setfield(L, -2, it->first.c_str());
     }
