@@ -234,7 +234,7 @@ def get_initial_tasks(lock, config, machine_type):
             {'pcp': None},
             {'selinux': None},
             {'ansible.cephlab': None},
-            {'clock.check': None}
+            {'clock': None}
         ])
 
     return init_tasks
