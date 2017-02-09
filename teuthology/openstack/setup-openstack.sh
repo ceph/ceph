@@ -374,11 +374,11 @@ function setup_dnsmasq() {
     local dev=$2
 
     if ! test -f /etc/dnsmasq.d/resolv ; then
+        resolver=$(grep nameserver /etc/resolv.conf | head -1 | perl -ne 'print $1 if(/\s*nameserver\s+([\d\.]+)/)')
+        sudo apt-get -qq install -y --force-yes dnsmasq resolvconf
         # FIXME: this opens up dnsmasq to DNS reflection/amplification attacks, and can be reverted
         # FIXME: once we figure out how to configure dnsmasq to accept DNS queries from all subnets
         sudo perl -pi -e 's/--local-service//' /etc/init.d/dnsmasq
-        resolver=$(grep nameserver /etc/resolv.conf | head -1 | perl -ne 'print $1 if(/\s*nameserver\s+([\d\.]+)/)')
-        sudo apt-get -qq install -y --force-yes dnsmasq resolvconf
         echo resolv-file=/etc/dnsmasq-resolv.conf | sudo tee /etc/dnsmasq.d/resolv
         echo nameserver $resolver | sudo tee /etc/dnsmasq-resolv.conf
         # restart is not always picking up changes
