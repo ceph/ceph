@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2017 OVH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -2515,6 +2516,25 @@ void OSD::create_logger()
 
   PerfCountersBuilder osd_plb(cct, "osd", l_osd_first, l_osd_last);
 
+  // Latency axis configuration for op histograms, values are in nanoseconds
+  PerfHistogramCommon::axis_config_d op_hist_x_axis_config{
+    "Latency (usec)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Latency in logarithmic scale
+    0,                               ///< Start at 0
+    100000,                          ///< Quantization unit is 100usec
+    32,                              ///< Enough to cover much longer than slow requests
+  };
+
+  // Op size axis configuration for op histograms, values are in bytes
+  PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
+    "Request size (bytes)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
+    0,                               ///< Start at 0
+    512,                             ///< Quantization unit is 512 bytes
+    32,                              ///< Enough to cover requests larger than GB
+  };
+
+
   osd_plb.add_u64(l_osd_op_wip, "op_wip",
       "Replication operations currently being processed (primary)");   // rep ops currently being processed (primary)
   osd_plb.add_u64_counter(l_osd_op,       "op",
@@ -2536,6 +2556,9 @@ void OSD::create_logger()
       "Client data read");   // client read out bytes
   osd_plb.add_time_avg(l_osd_op_r_lat,  "op_r_latency",
       "Latency of read operation (including queue time)");    // client read latency
+  osd_plb.add_histogram(l_osd_op_r_lat_outb_hist,  "op_r_latency_out_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of operation latency (including queue time) + data read");
   osd_plb.add_time_avg(l_osd_op_r_process_lat, "op_r_process_latency",
       "Latency of read operation (excluding queue time)");   // client read process latency
   osd_plb.add_time_avg(l_osd_op_r_prepare_lat, "op_r_prepare_latency",
@@ -2546,6 +2569,9 @@ void OSD::create_logger()
       "Client data written");    // client write in bytes
   osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency",
       "Latency of write operation (including queue time)");    // client write latency
+  osd_plb.add_histogram(l_osd_op_w_lat_inb_hist,  "op_w_latency_in_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of operation latency (including queue time) + data written");
   osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency",
       "Latency of write operation (excluding queue time)");   // client write process latency
   osd_plb.add_time_avg(l_osd_op_w_prepare_lat, "op_w_prepare_latency",
@@ -2558,6 +2584,12 @@ void OSD::create_logger()
       "Client read-modify-write operations read out ");  // client rmw out bytes
   osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency",
       "Latency of read-modify-write operation (including queue time)");   // client rmw latency
+  osd_plb.add_histogram(l_osd_op_rw_lat_inb_hist, "op_rw_latency_in_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of rw operation latency (including queue time) + data written");
+  osd_plb.add_histogram(l_osd_op_rw_lat_outb_hist, "op_rw_latency_out_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of rw operation latency (including queue time) + data read");
   osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency",
       "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
   osd_plb.add_time_avg(l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
