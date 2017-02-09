@@ -29,10 +29,12 @@ static const uint32_t CQ_DEPTH = 30000;
 
 Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn), port_attr(new ibv_port_attr)
 {
+#ifdef HAVE_IBV_EXP
   union ibv_gid cgid;
   struct ibv_exp_gid_attr gid_attr;
   bool malformed = false;
 
+  ldout(cct,1) << __func__ << " using experimental verbs for gid" << dendl;
   int r = ibv_query_port(ctxt, port_num, port_attr);
   if (r == -1) {
     lderr(cct) << __func__  << " query port failed  " << cpp_strerror(errno) << dendl;
@@ -87,6 +89,20 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
     lderr(cct) << __func__ << " Requested local GID was not found in GID table" << dendl;
     ceph_abort();
   }
+#else
+  int r = ibv_query_port(ctxt, port_num, port_attr);
+  if (r == -1) {
+    lderr(cct) << __func__  << " query port failed  " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
+
+  lid = port_attr->lid;
+  r = ibv_query_gid(ctxt, port_num, 0, &gid);
+  if (r) {
+    lderr(cct) << __func__  << " query gid failed  " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
+#endif
 }
 
 
