@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2011 New Dream Network
+ * Copyright (C) 2017 OVH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,6 +18,7 @@
 #define CEPH_COMMON_PERF_COUNTERS_H
 
 #include "common/config_obs.h"
+#include "common/perf_histogram.h"
 #include "common/Mutex.h"
 #include "include/utime.h"
 
@@ -27,6 +29,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <memory>
 
 class CephContext;
 class PerfCountersBuilder;
@@ -38,7 +41,9 @@ enum perfcounter_type_d : uint8_t
   PERFCOUNTER_U64 = 0x2,
   PERFCOUNTER_LONGRUNAVG = 0x4,
   PERFCOUNTER_COUNTER = 0x8,
+  PERFCOUNTER_HISTOGRAM = 0x10,
 };
+
 
 /*
  * A PerfCounters object is usually associated with a single subsystem.
@@ -49,11 +54,12 @@ enum perfcounter_type_d : uint8_t
  * 1) integer values & counters
  * 2) floating-point values & counters
  * 3) floating-point averages
+ * 4) 2D histograms of quantized value pairs
  *
- * The difference between values and counters is in how they are initialized
+ * The difference between values, counters and histograms is in how they are initialized
  * and accessed. For a counter, use the inc(counter, amount) function (note
  * that amount defaults to 1 if you don't set it). For a value, use the
- * set(index, value) function.
+ * set(index, value) function. For histogram use the hinc(value1, value2) function.
  * (For time, use the tinc and tset variants.)
  *
  * If for some reason you would like to reset your counters, you can do so using
@@ -88,6 +94,9 @@ public:
       u64.set(a.first);
       avgcount.set(a.second);
       avgcount2.set(a.second);
+      if (other.histogram) {
+        histogram.reset(new PerfHistogram<>(*other.histogram));
+      }
     }
 
     const char *name;
@@ -97,6 +106,7 @@ public:
     atomic64_t u64;
     atomic64_t avgcount;
     atomic64_t avgcount2;
+    std::unique_ptr<PerfHistogram<>> histogram;
 
     void reset()
     {
@@ -105,18 +115,9 @@ public:
 	avgcount.set(0);
 	avgcount2.set(0);
       }
-    }
-
-    perf_counter_data_any_d& operator=(const perf_counter_data_any_d& other) {
-      name = other.name;
-      description = other.description;
-      nick = other.nick;
-      type = other.type;
-      pair<uint64_t,uint64_t> a = other.read_avg();
-      u64.set(a.first);
-      avgcount.set(a.second);
-      avgcount2.set(a.second);
-      return *this;
+      if (histogram) {
+        histogram->reset();
+      }
     }
 
     /// read <sum, count> safely
@@ -160,9 +161,17 @@ public:
   void tinc(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
 
+  void hinc(int idx, int64_t x, int64_t y);
+
   void reset();
   void dump_formatted(ceph::Formatter *f, bool schema,
-      const std::string &counter = "");
+                      const std::string &counter = "") {
+    dump_formatted_generic(f, schema, false, counter);
+  }
+  void dump_formatted_histograms(ceph::Formatter *f, bool schema,
+                                 const std::string &counter = "") {
+    dump_formatted_generic(f, schema, true, counter);
+  }
   pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
 
   const std::string& get_name() const;
@@ -175,6 +184,8 @@ private:
 	     int lower_bound, int upper_bound);
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
+  void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+                              const std::string &counter = "");
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
@@ -214,11 +225,18 @@ public:
   void remove(class PerfCounters *l);
   void clear();
   bool reset(const std::string &name);
-  void dump_formatted(
-      ceph::Formatter *f,
-      bool schema,
-      const std::string &logger = "",
-      const std::string &counter = "");
+
+  void dump_formatted(ceph::Formatter *f, bool schema,
+                      const std::string &logger = "",
+                      const std::string &counter = "") {
+    dump_formatted_generic(f, schema, false, logger, counter);
+  }
+
+  void dump_formatted_histograms(ceph::Formatter *f, bool schema,
+                                 const std::string &logger = "",
+                                 const std::string &counter = "") {
+    dump_formatted_generic(f, schema, true, logger, counter);
+  }
 
   typedef std::map<std::string,
           PerfCounters::perf_counter_data_any_d *> CounterMap;
@@ -226,6 +244,10 @@ public:
   void with_counters(std::function<void(const CounterMap &)>) const;
 
 private:
+  void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+                              const std::string &logger = "",
+                              const std::string &counter = "");
+
   CephContext *m_cct;
 
   /** Protects m_loggers */
@@ -262,12 +284,17 @@ public:
       const char *description=NULL, const char *nick = NULL);
   void add_time_avg(int key, const char *name,
       const char *description=NULL, const char *nick = NULL);
+  void add_histogram(int key, const char* name,
+      PerfHistogramCommon::axis_config_d x_axis_config,
+      PerfHistogramCommon::axis_config_d y_axis_config,
+      const char *description=NULL, const char* nick = NULL);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
-                const char *description, const char *nick, int ty);
+                const char *description, const char *nick, int ty,
+                unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
 };
