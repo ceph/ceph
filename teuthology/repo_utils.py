@@ -1,4 +1,3 @@
-import fcntl
 import logging
 import os
 import re
@@ -6,8 +5,9 @@ import shutil
 import subprocess
 import time
 
+from teuthology.util.flock import FileLock
 from .config import config
-from .contextutil import safe_while, MaxWhileTries
+from .contextutil import MaxWhileTries, safe_while
 from .exceptions import BootstrapError, BranchNotFoundError, GitError
 
 log = logging.getLogger(__name__)
@@ -349,24 +349,3 @@ def bootstrap_teuthology(dest_path):
             shutil.rmtree(venv_path, ignore_errors=True)
             raise BootstrapError("Bootstrap failed!")
         touch_file(sentinel)
-
-
-class FileLock(object):
-    def __init__(self, filename, noop=False):
-        self.filename = filename
-        self.file = None
-        self.noop = noop
-
-    def __enter__(self):
-        if not self.noop:
-            assert self.file is None
-            self.file = file(self.filename, 'w')
-            fcntl.lockf(self.file, fcntl.LOCK_EX)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if not self.noop:
-            assert self.file is not None
-            fcntl.lockf(self.file, fcntl.LOCK_UN)
-            self.file.close()
-            self.file = None
