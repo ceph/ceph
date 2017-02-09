@@ -786,6 +786,9 @@ public:
       return false;
     return acting[shard] == osd;
   }
+  bool is_acting_osd_shard(spg_t pgid, int osd) const {
+    return is_acting_osd_shard(pgid.pgid, osd, pgid.shard);
+  }
 
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
