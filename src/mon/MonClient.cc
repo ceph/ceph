@@ -487,11 +487,10 @@ void MonClient::handle_auth(MAuthReply *m)
       }
       // do not request MGR key unless the mon has the SERVER_KRAKEN
       // feature.  otherwise it will give us an auth error.  note that
-      // we have to check for both the kraken and jewel key because
-      // pre-jewel the kraken feature bit was used for something else.
+      // we have to use the FEATUREMASK because pre-jewel the kraken
+      // feature bit was used for something else.
       if ((want_keys & CEPH_ENTITY_TYPE_MGR) &&
-	  !(m->get_connection()->has_feature(CEPH_FEATURE_SERVER_KRAKEN) &&
-	    m->get_connection()->has_feature(CEPH_FEATURE_SERVER_JEWEL))) {
+	  !(m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_KRAKEN))) {
 	ldout(cct, 1) << __func__
 		      << " not requesting MGR keys from pre-kraken monitor"
 		      << dendl;
