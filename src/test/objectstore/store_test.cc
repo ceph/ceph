@@ -3883,7 +3883,7 @@ public:
       cond.Wait(lock);
     store->umount();
     int r = store->fsck(deep);
-    assert(r == 0);
+    assert(r == 0 || r == -EOPNOTSUPP);
     store->mount();
   }
 
