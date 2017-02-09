@@ -782,21 +782,20 @@ class GitbuilderProject(object):
     def _install_rpm_repo(self):
         dist_release = self.dist_release
         project = self.project
-        if dist_release in ['opensuse', 'sle']:
-            proj_release = '{proj}-release-{release}.noarch'.format(
-                proj=project, release=self.rpm_release)
-        else:
-            proj_release = \
-                '{proj}-release-{release}.{dist_release}.noarch'.format(
-                    proj=project, release=self.rpm_release,
-                    dist_release=dist_release
-                )
+        proj_release = \
+            '{proj}-release-{release}.{dist_release}.noarch'.format(
+                proj=project, release=self.rpm_release,
+                dist_release=dist_release
+            )
         rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
         url = "{base_url}/noarch/{rpm_name}".format(
             base_url=self.base_url, rpm_name=rpm_name)
         if dist_release in ['opensuse', 'sle']:
+            # no point in pretending ceph-release RPM is used in SUSE
+            url = "{base_url}/{arch}".format(
+                base_url=self.base_url, arch=self.arch)
             self.remote.run(args=[
-                'sudo', 'zypper', '-n', 'install', '--capability', rpm_name
+                'sudo', 'zypper', '-n', 'addrepo', url, 'ceph-rpm'
             ])
         else:
             self.remote.run(args=['sudo', 'yum', '-y', 'install', url])
