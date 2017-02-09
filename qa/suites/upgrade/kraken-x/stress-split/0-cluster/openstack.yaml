@@ -1,0 +1,6 @@
+openstack:
+  - machine:
+      disk: 100 # GB
+  - volumes: # attached to each instance
+      count: 3
+      size: 30 # GB
