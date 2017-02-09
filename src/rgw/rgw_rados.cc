@@ -2847,10 +2847,13 @@ protected:
 
   atomic_t down_flag;
 
+  string thread_name;
+
   virtual uint64_t interval_msec() = 0;
   virtual void stop_process() {}
 public:
-  RGWRadosThread(RGWRados *_store) : worker(NULL), cct(_store->ctx()), store(_store) {}
+  RGWRadosThread(RGWRados *_store, const string& thread_name = "radosgw") 
+    : worker(NULL), cct(_store->ctx()), store(_store), thread_name(thread_name) {}
   virtual ~RGWRadosThread() {
     stop();
   }
@@ -2866,7 +2869,7 @@ public:
 void RGWRadosThread::start()
 {
   worker = new Worker(cct, this);
-  worker->create("radosgw");
+  worker->create(thread_name.c_str());
 }
 
 void RGWRadosThread::stop()
@@ -2933,7 +2936,7 @@ class RGWMetaNotifier : public RGWRadosThread {
   }
 public:
   RGWMetaNotifier(RGWRados *_store, RGWMetadataLog* log)
-    : RGWRadosThread(_store), notify_mgr(_store), log(log) {}
+    : RGWRadosThread(_store, "meta-notifier"), notify_mgr(_store), log(log) {}
 
   int process() override;
 };
@@ -2964,7 +2967,7 @@ class RGWDataNotifier : public RGWRadosThread {
     return cct->_conf->rgw_md_notify_interval_msec;
   }
 public:
-  RGWDataNotifier(RGWRados *_store) : RGWRadosThread(_store), notify_mgr(_store) {}
+  RGWDataNotifier(RGWRados *_store) : RGWRadosThread(_store, "data-notifier"), notify_mgr(_store) {}
 
   int process() override;
 };
@@ -2994,6 +2997,7 @@ int RGWDataNotifier::process()
 
 class RGWSyncProcessorThread : public RGWRadosThread {
 public:
+  RGWSyncProcessorThread(RGWRados *_store, const string& thread_name = "radosgw") : RGWRadosThread(_store, thread_name) {}
   RGWSyncProcessorThread(RGWRados *_store) : RGWRadosThread(_store) {}
   ~RGWSyncProcessorThread() {}
   int init() override = 0 ;
@@ -3012,7 +3016,7 @@ class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
   }
 public:
   RGWMetaSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
-    : RGWSyncProcessorThread(_store), sync(_store, async_rados) {}
+    : RGWSyncProcessorThread(_store, "meta-sync"), sync(_store, async_rados) {}
 
   void wakeup_sync_shards(set<int>& shard_ids) {
     for (set<int>::iterator iter = shard_ids.begin(); iter != shard_ids.end(); ++iter) {
@@ -3055,7 +3059,7 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
 public:
   RGWDataSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
                              const string& _source_zone)
-    : RGWSyncProcessorThread(_store), sync(_store, async_rados, _source_zone),
+    : RGWSyncProcessorThread(_store, "data-sync"), sync(_store, async_rados, _source_zone),
       initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
@@ -3098,7 +3102,7 @@ class RGWSyncLogTrimThread : public RGWSyncProcessorThread
   void stop_process() override { crs.stop(); }
 public:
   RGWSyncLogTrimThread(RGWRados *store, int interval)
-    : RGWSyncProcessorThread(store),
+    : RGWSyncProcessorThread(store, "sync-log-trim"),
       crs(store->ctx(), store->get_cr_registry()), store(store),
       http(store->ctx(), crs.get_completion_mgr()),
       trim_interval(interval, 0)
