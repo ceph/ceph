@@ -548,17 +548,15 @@ parent_r %d stable %d\n",
 					} else {
 						/* we already have a leaf! */
 						out2[outpos] = item;
-		}
+		                        }
 				}
 
-				if (!reject) {
+				if (!reject && !collide) {
 					/* out? */
 					if (itemtype == 0)
 						reject = is_out(map, weight,
 								weight_max,
 								item, x);
-					else
-						reject = 0;
 				}
 
 reject:
