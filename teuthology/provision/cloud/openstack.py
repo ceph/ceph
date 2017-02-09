@@ -173,7 +173,9 @@ class OpenStackProvisioner(base.Provisioner):
         )
         self._node, self.ips = results[0]
         log.debug("Node started: %s", self.node)
-        self._create_volumes()
+        if not self._create_volumes():
+            self._destroy_volumes()
+            return False
         self._update_dns()
         # Give cloud-init a few seconds to bring up the network, start sshd,
         # and install the public key
@@ -203,7 +205,6 @@ class OpenStackProvisioner(base.Provisioner):
                 )
         except Exception:
             log.exception("Failed to create or attach volume!")
-            self._destroy_volumes()
             return False
         return True
 

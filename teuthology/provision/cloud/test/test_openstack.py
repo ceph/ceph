@@ -496,6 +496,16 @@ class TestOpenStackProvisioner(TestOpenStackBase):
         with p_wait_for_ready:
             res = obj.create()
         assert res is obj.node
+        # Test once again to ensure that if volume creation/attachment fails,
+        # we destroy any remaining volumes and consider the node creation to
+        # have failed as well.
+        del obj._node
+        with p_wait_for_ready:
+            obj.conf['volumes']['count'] = 1
+            obj.provider.driver.create_volume.side_effect = Exception
+            with patch.object(obj, '_destroy_volumes'):
+                assert obj.create() is False
+                assert obj._destroy_volumes.called_once_with()
 
     def test_update_dns(self):
         config.nsupdate_url = 'nsupdate_url'
@@ -542,22 +552,19 @@ class TestOpenStackProvisioner(TestOpenStackBase):
         if not should_succeed:
             obj.provider.driver.create_volume.side_effect = Exception
         obj._node = node
-        with patch.object(obj, '_destroy_volumes'):
-            result = obj._create_volumes()
-            assert result is should_succeed
-            if should_succeed:
-                create_calls = obj.provider.driver.create_volume.call_args_list
-                attach_calls = obj.provider.driver.attach_volume.call_args_list
-                assert len(create_calls) == count
-                assert len(attach_calls) == count
-                for i in range(count):
-                    vol_size, vol_name = create_calls[i][0]
-                    assert vol_size == size
-                    assert vol_name == '%s_%s' % (obj.name, i)
-                    assert attach_calls[i][0][0] is obj._node
-                    assert attach_calls[i][1]['device'] is None
-            else:
-                assert obj._destroy_volumes.called_once_with()
+        result = obj._create_volumes()
+        assert result is should_succeed
+        if should_succeed:
+            create_calls = obj.provider.driver.create_volume.call_args_list
+            attach_calls = obj.provider.driver.attach_volume.call_args_list
+            assert len(create_calls) == count
+            assert len(attach_calls) == count
+            for i in range(count):
+                vol_size, vol_name = create_calls[i][0]
+                assert vol_size == size
+                assert vol_name == '%s_%s' % (obj.name, i)
+                assert attach_calls[i][0][0] is obj._node
+                assert attach_calls[i][1]['device'] is None
 
     @mark.parametrize(*_volume_matrix)
     def test_destroy_volumes(self, count, size, should_succeed):
