@@ -28,11 +28,13 @@ using namespace std;
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
   string store_path, cmd, out_path, oid;
+  bool debug = false;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
      "path to mon directory, mandatory (current/omap usually)")
     ("paranoid", "use paranoid checking")
+    ("debug", "Additional debug output from DBObjectMap")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
      "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers], mandatory")
@@ -65,12 +67,19 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
+  if (vm.count("debug")) debug = true;
+
   auto cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY, 0);
+    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;
+  if (debug) {
+    g_conf->set_val_or_die("log_to_stderr", "true");
+    g_conf->set_val_or_die("err_to_stderr", "true");
+  }
+  g_conf->apply_changes(NULL);
 
   if (vm.count("help")) {
     std::cerr << desc << std::endl;
