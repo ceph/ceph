@@ -428,7 +428,7 @@ int Pipe::accept()
     }
 
     // sanitize features
-    connect.features = ceph_sanitize_features(connect.features);
+    connect.features = connect.features;
 
     authorizer.clear();
     if (connect.authorizer_len) {
@@ -1149,7 +1149,7 @@ int Pipe::connect()
     }
 
     // sanitize features
-    reply.features = ceph_sanitize_features(reply.features);
+    reply.features = reply.features;
 
     ldout(msgr->cct,20) << "connect got reply tag " << (int)reply.tag
 			<< " connect_seq " << reply.connect_seq

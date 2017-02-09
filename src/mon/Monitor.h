@@ -577,7 +577,7 @@ public:
   }
   void apply_quorum_to_compatset_features();
   void apply_monmap_to_compatset_features();
-  void apply_compatset_features_to_quorum_requirements();
+  void calc_quorum_requirements();
 
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election

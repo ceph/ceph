@@ -547,7 +547,7 @@ void Monitor::read_features()
   read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
 
-  apply_compatset_features_to_quorum_requirements();
+  calc_quorum_requirements();
   dout(10) << "required_features " << required_features << dendl;
 }
 
@@ -2146,7 +2146,7 @@ void Monitor::_apply_compatset_features(CompatSet &new_features)
     write_features(t);
     store->apply_transaction(t);
 
-    apply_compatset_features_to_quorum_requirements();
+    calc_quorum_requirements();
   }
 }
 
@@ -2188,16 +2188,19 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(ceph::features::mon::get_persistent().contains_all(
            ceph::features::mon::FEATURE_KRAKEN));
     // this feature should only ever be set if the quorum supports it.
-    assert(quorum_con_features & CEPH_FEATURE_SERVER_KRAKEN);
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_KRAKEN));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
 }
 
-void Monitor::apply_compatset_features_to_quorum_requirements()
+void Monitor::calc_quorum_requirements()
 {
   required_features = 0;
+
+  // compatset
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
     required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
   }
@@ -2211,7 +2214,17 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
     required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
-    required_features |= CEPH_FEATURE_SERVER_KRAKEN;
+    required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+
+  // monmap
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_KRAKEN)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
