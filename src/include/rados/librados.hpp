@@ -757,6 +757,21 @@ namespace librados
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    int repair_read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off, int flags, int32_t osdid, uint32_t epoch);
+    /**
+     * Rewrite the object with the replica hosted by specified osd
+     *
+     * @param bad_shards a list of <osd_id, shard_id> pairs. it is a black list
+     *                   of if the object shards/replicas, we will avoid using
+     *                   shards/replicas from them. if the object specified by @c
+     *                   oid is located in a replicated pool, the shard_id will
+     *                   be ignored.
+     * @param version the version of rewritten object
+     * @param what the flags indicating what we will copy
+     */
+    int repair_copy(const std::string& oid, uint64_t version, uint32_t what,
+                    const std::vector<osd_shard_t>& bad_shards,
+                    uint32_t epoch);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
@@ -967,6 +982,34 @@ namespace librados
 			std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 			size_t len, uint64_t off);
     /**
+     * Asynchronously read a replica hosted by the specified osd
+     *
+     * @param oid the name of the object to read from
+     * @param bl where to store the read chunk
+     * @param len the number of bytes to read
+     * @param off the offset to start reading from in the object
+     * @param snapid the snapid of the replica to read
+     * @param flags the flags applied to the underlying read op. Only
+     *        @c CEPH_OSD_OP_FLAG_FAILOK or 0 is allowed. Any flags
+     *        other than @c CEPH_OSD_OP_FLAG_FAILOK will be ignored.
+     *        If @c CEPH_OSD_OP_FLAG_FAILOK is specified, the read payload
+     *        will be returned despite of CRC mismatch or size mismatch.
+     *        Otherwise, @c -EIO will be returned instead.
+     * @param osdid from which osd the replica is read
+     * @param interval the PG interval when the inconsistency was reported
+     * @returns 0 on success, negative error code on failure
+     * @note Please make sure that the @c interval should be the one returned
+     *       by @c get_inconsistent_objects() or @c get_inconsistent_snapsets()
+     *       call. If the PG interval expires when the request is served by OSD,
+     *       @c -ERANGE will be returned.
+     */
+    int aio_repair_read(const std::string& oid, AioCompletion *c,
+                        bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid, int flags,
+                        int32_t osdid, uint32_t interval);
+    int aio_repair_copy(const std::string& oid, AioCompletion *c,
+         uint64_t version, uint32_t what,
+         const std::vector<osd_shard_t>& bad_osd_shards, uint32_t epoch);
+    /**
      * Asynchronously read existing extents from an object at a
      * particular snapshot
      *
@@ -1058,6 +1101,9 @@ namespace librados
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
+    int aio_operate_repair_read(const std::string& oid, AioCompletion *c,
+                                ObjectReadOperation *op,
+                                uint32_t osdid, int32_t interval);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**

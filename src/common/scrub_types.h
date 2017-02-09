@@ -185,4 +185,13 @@ struct scrub_ls_result_t {
 
 WRITE_CLASS_ENCODER(scrub_ls_result_t);
 
+struct repair_copy_arg_t {
+  uint32_t what;
+  std::vector<pg_shard_t> bad_shards;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bp);
+};
+
+WRITE_CLASS_ENCODER(repair_copy_arg_t);
+
 #endif

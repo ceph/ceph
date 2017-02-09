@@ -54,6 +54,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
   case CEPH_OSD_FLAG_FULL_TRY: return "full_try";
   case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
+  case CEPH_OSD_FLAG_REPAIR_READS: return "repair_reads";
   default: return "???";
   }
 }
@@ -5371,6 +5372,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 	    << (int64_t)op.op.extent.truncate_size << "]";
       if (op.op.flags)
 	out << " [" << ceph_osd_op_flag_string(op.op.flags) << "]";
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      out << " e" << op.op.assert_interval.epoch;
+      break;
     default:
       // don't show any arg info
       break;

@@ -123,6 +123,11 @@ public:
     unsigned flags;
     bool mirror_snapset;
 
+    uint32_t src_osd;		// used only in the repair case
+    unsigned what = (CEPH_REPAIR_COPY_DATA |
+		     CEPH_REPAIR_COPY_OMAP |
+		     CEPH_REPAIR_COPY_ATTR);
+
     CopyResults results;
 
     ceph_tid_t objecter_tid;
@@ -1257,6 +1262,8 @@ protected:
 		  object_locator_t oloc, version_t version, unsigned flags,
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
 		  unsigned dest_obj_fadvise_flags);
+  void start_repair_copy(OpContext *ctx, uint32_t what,
+			 const vector<pg_shard_t>& bad_shards);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
@@ -1383,6 +1390,7 @@ public:
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
   int do_scrub_ls(MOSDOp *op, OSDOp *osd_op);
+  int do_repair_copy(OpContext *ctx, const OSDOp& osd_op, bufferlist::iterator& bp);
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
 

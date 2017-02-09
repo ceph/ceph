@@ -287,3 +287,19 @@ void scrub_ls_result_t::decode(bufferlist::iterator& bp)
   ::decode(vals, bp);
   DECODE_FINISH(bp);
 }
+
+void repair_copy_arg_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(what, bl);
+  ::encode(bad_shards, bl);
+  ENCODE_FINISH(bl);
+}
+
+void repair_copy_arg_t::decode(bufferlist::iterator& bp)
+{
+  DECODE_START(1, bp);
+  ::decode(what, bp);
+  ::decode(bad_shards, bp);
+  DECODE_FINISH(bp);
+}

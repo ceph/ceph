@@ -1511,7 +1511,7 @@ int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
   }
   int r = 0;
   scrub_ls_result_t result = {.interval = info.history.same_interval_since};
-  if (arg.interval != 0 && arg.interval != info.history.same_interval_since) {
+  if (arg.interval != 0 && arg.interval != result.interval) {
     r = -EAGAIN;
   } else if (!scrubber.store) {
     r = -ENOENT;
@@ -1528,6 +1528,47 @@ int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
   }
   ::encode(result, osd_op->outdata);
   return r;
+}
+
+// it is pretty much the same as CEPH_OSD_OP_COPY_FROM, but it requires user to
+// specify the src osd, and uses repair_read() to read the object payload, also
+// the src oid is always identical to the dest oid (the one in OpContext)
+int PrimaryLogPG::do_repair_copy(OpContext *ctx, const OSDOp& osd_op, bufferlist::iterator& bp)
+{
+  repair_copy_arg_t arg;
+
+  vector<pg_shard_t> bad_shards;
+  try {
+    arg.decode(bp);
+  } catch (buffer::error&) {
+    dout(10) << "corrupted " << __func__ << " arg" << dendl;
+    return -EINVAL;
+  }
+  const auto& oi = ctx->obs->oi;
+  tracepoint(osd, do_osd_op_pre_repair_copy,
+	     oi.soid.oid.name.c_str(),
+	     oi.soid.snap.val,
+	     arg.what);
+
+  if (arg.bad_shards.empty() || !arg.what) {
+    return 0;
+  }
+  if (!ctx->copy_cb) {
+    // mark the bad shard missing so they are not chosen when repairing
+    for (const auto& bad_shard : arg.bad_shards) {
+      peer_missing[bad_shard].add(oi.soid, oi.version, eversion_t());
+    }
+    start_repair_copy(ctx, arg.what, arg.bad_shards);
+    return -EINPROGRESS;
+  } else {
+    // finish
+    for (const auto& bad_shard: arg.bad_shards) {
+      peer_missing[bad_shard].got(oi.soid, oi.version);
+    }
+    assert(ctx->copy_cb->get_result() >= 0);
+    finish_copyfrom(ctx);
+    return 0;
+  }
 }
 
 void PrimaryLogPG::calc_trim_to()
@@ -1729,7 +1770,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+			 CEPH_OSD_FLAG_LOCALIZE_READS |
+			 CEPH_OSD_FLAG_REPAIR_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
@@ -1867,7 +1909,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // missing object?
-  if (is_unreadable_object(head)) {
+  if (is_unreadable_object(head) && !m->has_flag(CEPH_OSD_FLAG_REPAIR_READS)) {
     wait_for_unreadable_object(head, op);
     return;
   }
@@ -1961,6 +2003,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // io blocked on obc?
   if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
+      !m->has_flag(CEPH_OSD_FLAG_REPAIR_READS) &&
+      !m->has_flag(CEPH_OSD_FLAG_REPAIR_WRITES) &&
       maybe_await_blocked_snapset(oid, op)) {
     return;
   }
@@ -2065,7 +2109,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // io blocked on obc?
   if (obc->is_blocked() &&
-      !m->has_flag(CEPH_OSD_FLAG_FLUSH)) {
+      !m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
+      !m->has_flag(CEPH_OSD_FLAG_REPAIR_READS)) {
     wait_for_blocked_object(obc->obs.oi.soid, op);
     return;
   }
@@ -2238,7 +2283,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
       op->get_req() &&
       op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
       (static_cast<MOSDOp *>(op->get_req())->get_flags() &
-       CEPH_OSD_FLAG_IGNORE_CACHE)) {
+       (CEPH_OSD_FLAG_IGNORE_CACHE|CEPH_OSD_FLAG_REPAIR_READS))) {
     dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
     return cache_result_t::NOOP;
   }
@@ -5954,6 +5999,24 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_REPAIR_COPY:
+      ++ctx->num_write;
+      result = do_repair_copy(ctx, osd_op, bp);
+      break;
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      ++ctx->num_read;
+      {
+	epoch_t epoch = op.assert_interval.epoch;
+	epoch_t pg_epoch = info.history.same_interval_since;
+	tracepoint(osd, do_osd_op_pre_assert_interval, soid.oid.name.c_str(), soid.snap.val, epoch);
+	dout(5) << "Check interval " << soid << " epoch " << epoch << " pg epoch " << pg_epoch << dendl;
+	if (epoch != pg_epoch) {
+	  result = -ERANGE;
+	  break;
+	}
+      }
+      break;
+
     default:
       tracepoint(osd, do_osd_op_pre_unknown, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op));
       dout(1) << "unrecognized osd op " << op.op
@@ -6992,7 +7055,17 @@ int PrimaryLogPG::fill_in_copy_get(
       cursor.data_complete = true;
       dout(20) << " got data" << dendl;
     }
-    assert(cursor.data_offset <= oi.size);
+    if (cursor.data_offset > oi.size) {
+      dout(5) << __func__ << " read after oi.size: "
+	      << cursor.data_offset << "/"
+	      << oi.size << dendl;
+      assert(osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK);
+      dout(5) << __func__ << " truncated" << dendl;
+      bufferlist truncated;
+      truncated.substr_of(bl, 0, oi.size);
+      swap(bl, truncated);
+      cursor.data_complete = true;
+    }
   }
 
   // omap
@@ -7086,7 +7159,8 @@ void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
 
 void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			      hobject_t src, object_locator_t oloc,
-			      version_t version, unsigned flags,
+			      version_t version,
+			      unsigned flags,
 			      bool mirror_snapset,
 			      unsigned src_obj_fadvise_flags,
 			      unsigned dest_obj_fadvise_flags)
@@ -7116,6 +7190,38 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   obc->start_block();
 
   _copy_some(obc, cop);
+}
+
+void PrimaryLogPG::start_repair_copy(OpContext *ctx, uint32_t what,
+				     const vector<pg_shard_t>& bad_shards)
+{
+  const auto& dest = ctx->obs->oi.soid;
+  auto found = copy_ops.find(dest);
+  if (found != copy_ops.end()) {
+    cancel_copy(found->second, false);
+  }
+  // we expect the client side to prepend an assert_version() call before
+  // this op, so just pass 0 as the version.
+  auto cb = new CopyFromCallback(ctx);
+  ctx->copy_cb = cb;
+  const auto m = static_cast<MOSDOp*>(ctx->op->get_req());
+  unsigned flags = (CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
+		    CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+		    CEPH_OSD_COPY_FROM_FLAG_REPAIR);
+  unsigned src_flags = (CEPH_OSD_OP_FLAG_FAILOK |
+			CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+			CEPH_OSD_OP_FLAG_FADVISE_NOCACHE |
+			CEPH_OSD_FLAG_REPAIR_READS);
+  auto cop(std::make_shared<CopyOp>(cb, ctx->obc,
+				    dest,
+				    m->get_object_locator(), 0,
+				    flags, false,
+				    src_flags, 0));
+  cop->src_osd = pg_whoami.osd;
+  cop->what = what;
+  copy_ops[dest] = cop;
+  ctx->obc->start_block();
+  _copy_some(ctx->obc, cop);
 }
 
 void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
@@ -7148,6 +7254,9 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
 
   ObjectOperation op;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_REPAIR) {
+    op.assert_interval(info.history.same_interval_since);
+  }
   if (cop->results.user_version) {
     op.assert_version(cop->results.user_version);
   } else {
@@ -7157,7 +7266,10 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
-	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
+	      cop->what & CEPH_REPAIR_COPY_ATTR ? &cop->attrs : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_DATA ? &cop->data : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_OMAP ? &cop->omap_header : nullptr,
+	      cop->what & CEPH_REPAIR_COPY_OMAP ? &cop->omap_data : nullptr,
 	      &cop->results.snaps, &cop->results.snap_seq,
 	      &cop->results.flags,
 	      &cop->results.source_data_digest,
@@ -7173,12 +7285,32 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   gather.set_finisher(new C_OnFinisher(fin,
 				       &osd->objecter_finisher));
 
-  ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
-				  cop->src.snap, NULL,
-				  flags,
-				  gather.new_sub(),
-				  // discover the object version if we don't know it yet
-				  cop->results.user_version ? NULL : &cop->results.user_version);
+  ceph_tid_t tid;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_REPAIR) {
+    // we are holding the write lock of the object being repaired, so, to read from
+    // it, we need to SKIPRWLOCKS here. and since we are the very one holding the
+    // write lock, it's safe to skip the rwlock.
+    auto objecter_op =
+      osd->objecter->prepare_read_op(cop->src.oid, cop->oloc,
+				     op, cop->src.snap, nullptr,
+				     (CEPH_OSD_FLAG_REPAIR_READS |
+				      CEPH_OSD_FLAG_IGNORE_OVERLAY |
+				      CEPH_OSD_FLAG_SKIPRWLOCKS),
+				     gather.new_sub(),
+				     nullptr);
+    vector<int> up, acting;
+    int up_primary, acting_primary;
+    get_osdmap()->pg_to_up_acting_osds(info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+    objecter_op->target.forced_osd = cop->src_osd;
+    osd->objecter->op_submit(objecter_op, &tid);
+  } else {
+    tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
+			      cop->src.snap, NULL,
+			      flags,
+			      gather.new_sub(),
+			      // discover the object version if we don't know it yet
+			      cop->results.user_version ? NULL : &cop->results.user_version);
+  }
   fin->tid = tid;
   cop->objecter_tid = tid;
   gather.activate();

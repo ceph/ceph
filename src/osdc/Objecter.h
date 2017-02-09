@@ -1005,6 +1005,11 @@ struct ObjectOperation {
     }
   }
 
+  void assert_interval(epoch_t e) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_INTERVAL);
+    osd_op.op.assert_interval.epoch = e;
+  }
+
   void assert_version(uint64_t ver) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_VER);
     osd_op.op.assert_ver.ver = ver;
@@ -1048,6 +1053,11 @@ struct ObjectOperation {
   void cache_flush() {
     add_op(CEPH_OSD_OP_CACHE_FLUSH);
   }
+
+  /**
+   * overwrite the object content OSDs with the one from the src_osd
+   */
+  void repair_copy(uint32_t what, const std::vector<pg_shard_t>& bad_shards);
 
   /**
    * writeback content to backing tier
@@ -1206,7 +1216,7 @@ public:
 
     bool used_replica = false;
     bool paused = false;
-
+    int forced_osd = -1; ///< the osd designated by user, -1 if not specified
     int osd = -1;      ///< the final target osd, or -1
 
     epoch_t last_force_resend = 0;
@@ -1966,23 +1976,7 @@ private:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
 	   Finisher *fin,
 	   double mon_timeout,
-	   double osd_timeout) :
-    Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
-    osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
-    max_linger_id(0), num_in_flight(0), global_op_flags(0),
-    keep_balanced_budget(false), honor_osdmap_full(true),
-    last_seen_osdmap_version(0), last_seen_pgmap_version(0),
-    logger(NULL), tick_event(0), m_request_state_hook(NULL),
-    num_homeless_ops(0),
-    homeless_session(new OSDSession(cct, -1)),
-    mon_timeout(ceph::make_timespan(mon_timeout)),
-    osd_timeout(ceph::make_timespan(osd_timeout)),
-    op_throttle_bytes(cct, "objecter_bytes",
-		      cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
-    epoch_barrier(0),
-    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  { }
+	   double osd_timeout);
   ~Objecter();
 
   void init();
@@ -2328,6 +2322,13 @@ public:
     return i;
   }
 
+  /**
+   * get a random osd not listed in blacklist
+   * @note the primary osd will be returned even it is listed in the blacklist
+   *       if the target pool is a erasure pool.
+   */
+  int32_t pick_random_osd(const op_target_t& t,
+			  const vector<pg_shard_t>& blacklist) const;
 
   // high-level helpers
   Op *prepare_stat_op(

@@ -88,6 +88,30 @@ Global commands
 :command:`list-inconsistent-snapset` *pgid*
   List inconsistent snapsets in given PG.
 
+:command:`repair-get` [ --force ] *obj-name* *osdid* *epoch* [ *outfile* ]
+  Fetch a particular shard/replica of an object. `--force` ignores EIO
+  and returns whatever data it can.
+
+:command:`repair-copy` *obj-name* < *shards* | *osds* > *epoch* *version* [< data | omap | xattr >,...]
+  Overwrite an object by specifying a set of bad shard/replica as a
+  comma-separated string. If the object being fixed is stored in an
+  erasure pool, the bad shards should be specified, like::
+
+    osd_id1/shard_id1,osd_id2/shard_id2
+
+  In the case of replicated pool, the bad replicas are specified
+  as a list of OSDs, like::
+
+    osd_id1,osd_id2
+
+  By default, all properties of the given object including the payload, omap
+  and xattr are copied fix the inconsistency. One can pass a comma-separated
+  string to specify what we need to copy. To copy the data and xattr only,
+  use::
+
+    data,xattr
+
+
 Pool specific commands
 ======================
 
@@ -194,6 +218,10 @@ To read a previously snapshotted version of an object::
 To list inconsistent objects in PG 0.6::
 
        rados list-inconsistent-obj 0.6 --format=json-pretty
+
+To overwrite the corrupted data of an inconsistent objects in OSD.3::
+
+       rados repair-copy myobject 3 145 13 data
 
 
 Availability

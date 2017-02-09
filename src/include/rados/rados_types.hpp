@@ -243,6 +243,14 @@ struct inconsistent_snapset_t {
   }
 };
 
+struct repair_copy_t {
+  enum {
+    DATA = 1 << 0,
+    OMAP = 1 << 1,
+    ATTR = 1 << 2,
+  };
+};
+
 /**
  * @var all_nspaces
  * Pass as nspace argument to IoCtx::set_namespace()

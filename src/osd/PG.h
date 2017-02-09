@@ -692,7 +692,8 @@ protected:
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
   map<pg_shard_t, pg_info_t>    peer_info;   // info from peers (stray or prior)
   set<pg_shard_t> peer_purged; // peers purged
-  map<pg_shard_t, pg_missing_t> peer_missing;
+  map<pg_shard_t, pg_missing_t> peer_missing; // also used by read op issued by
+                                              // repair-copy
   set<pg_shard_t> peer_log_requested;  // logs i've requested (and start stamps)
   set<pg_shard_t> peer_missing_requested;
 

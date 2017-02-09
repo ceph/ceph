@@ -33,6 +33,7 @@ using namespace libradosstriper;
 #include "auth/Crypto.h"
 #include <iostream>
 #include <fstream>
+#include <boost/algorithm/string.hpp>
 
 #include <stdlib.h>
 #include <time.h>
@@ -151,6 +152,12 @@ void usage(ostream& out)
 "   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
 "   list-inconsistent-obj <pgid>     list inconsistent objects in given pg\n"
 "   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given pg\n"
+"   repair-get [--force] <obj-name> <osdid> <epoch> [outfile]\n"
+"                                    fetch a particular shard/replica of an object\n"
+"                                    --force ignores EIO and returns whatever data it can\n"
+"   repair-copy <obj-name> <shards|osds> <epoch> <version> [<data|omap|xattr>,...]\n"
+"                                    overwrite an object by specifying a set of\n"
+"                                    bad shard/replica.\n"
 "\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
@@ -319,6 +326,106 @@ static int do_get(IoCtx& io_ctx, RadosStriper& striper,
  out:
   if (fd != 1)
     VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+static int do_repair_get(IoCtx& io_ctx, const char *objname,
+	const char *outfile, unsigned op_size, int32_t osdid, epoch_t epoch,
+	bool force)
+{
+  string oid(objname);
+
+  int fd;
+  if (strcmp(outfile, "-") == 0) {
+    fd = STDOUT_FILENO;
+  } else {
+    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    if (fd < 0) {
+      int err = errno;
+      cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
+      return -err;
+    }
+  }
+
+  uint64_t offset = 0;
+  int ret = 0;
+  while (true) {
+    bufferlist outdata;
+    int flags = 0;
+    if (force) flags |= LIBRADOS_OP_FLAG_FAILOK;
+    ret = io_ctx.repair_read(oid, outdata, op_size, offset, flags, osdid, epoch);
+    if (ret <= 0) {
+      if (ret == -EINVAL || ret == -ERANGE)
+	cerr << "Specified epoch does not match scrub interval, "
+	     << "or the specified OSD is not in the acting set of given PG."
+	     << std::endl;
+      break;
+    }
+    ret = outdata.write_fd(fd);
+    if (ret < 0) {
+      cerr << "error writing to file: " << cpp_strerror(ret) << std::endl;
+      break;
+    }
+    if (outdata.length() < op_size)
+      break;
+    offset += outdata.length();
+  }
+
+  if (fd != STDOUT_FILENO)
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+static int do_repair_copy(IoCtx& io_ctx, const string& oid, const string& bad_shards_str,
+			  const char* epoch_str, const char* version_str, const string& what_str)
+{
+  vector<string> strs;
+  boost::split(strs, bad_shards_str, boost::is_any_of(","));
+  vector<librados::osd_shard_t> bad_shards;
+
+  for (const auto& s : strs) {
+    try {
+      auto delim = s.find('/');
+      osd_shard_t bad_shard;
+      if (delim == s.npos) {
+	bad_shard.osd = stoi(s);
+	bad_shard.shard = -1;
+      } else {
+	bad_shard.osd = stoi(s.substr(0, delim));
+	bad_shard.shard = stoi(s.substr(delim + 1));
+      }
+      bad_shards.push_back(bad_shard);
+    } catch (const exception& e) {
+      cerr << "Unable to parse the shards specified: " << strs
+	   << ". " << e.what() << std::endl;
+      return -EINVAL;
+    }
+  }
+  epoch_t epoch = atoi(epoch_str);
+  uint64_t version = atoi(version_str);
+  uint32_t what = 0;
+  strs.clear();
+  boost::split(strs, what_str, boost::is_any_of(","));
+  for (const auto& s : strs) {
+    if (s.compare("data") == 0) {
+      what |= librados::repair_copy_t::DATA;
+    } else if (s.compare("omap") == 0) {
+      what |= librados::repair_copy_t::OMAP;
+    } else if (s.compare("xattr") == 0) {
+      what |= librados::repair_copy_t::ATTR;
+    } else {
+      cerr << "Unknown property to copy: " << s << std::endl;
+      return -EINVAL;
+    }
+  }
+  if (!what) {
+    cout << "Nothing to copy." << std::endl;
+    return 0;
+  }
+  int ret = io_ctx.repair_copy(oid, version, what, bad_shards, epoch);
+  if (ret == -EINVAL || ret == -ERANGE) {
+    cerr << "Specified epoch or version does not match" << std::endl;
+  }
   return ret;
 }
 
@@ -1547,12 +1654,15 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
   }
   uint32_t interval = 0, first_interval = 0;
   const unsigned max_item_num = 32;
-  bool opened = false;
   for (librados::object_id_t start;;) {
     std::vector<T> items;
     auto completion = librados::Rados::aio_create_completion();
     ret = do_get_inconsistent(rados, pg, start, max_item_num, completion,
 			      &items, &interval);
+    if (ret < 0) {
+      cerr << "cannot open pool of pg: " << pg << std::endl;
+      break;
+    }
     completion->wait_for_safe();
     ret = completion->get_return_value();
     completion->release();
@@ -1573,7 +1683,6 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
       formatter.open_object_section("info");
       formatter.dump_int("epoch", interval);
       formatter.open_array_section("inconsistents");
-      opened = true;
     }
     for (auto& inc : items) {
       formatter.open_object_section("inconsistent");
@@ -1582,16 +1691,14 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     if (items.size() < max_item_num) {
       formatter.close_section();
+      formatter.close_section();
+      formatter.flush(cout);
       break;
     }
     if (!items.empty()) {
       start = items.back().object;
     }
     items.clear();
-  }
-  if (opened) {
-    formatter.close_section();
-    formatter.flush(cout);
   }
   return ret;
 }
@@ -1640,6 +1747,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::string run_name;
   std::string prefix;
   bool forcefull = false;
+  bool force = false;
   Formatter *formatter = NULL;
   bool pretty_format = false;
   const char *output = NULL;
@@ -1689,6 +1797,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("force-full");
   if (i != opts.end()) {
     forcefull = true;
+  }
+  i = opts.find("force");
+  if (i != opts.end()) {
+    force = true;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
@@ -2251,6 +2363,38 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = do_get(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
     if (ret < 0) {
       cerr << "error getting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "repair-get") == 0) {
+    if (!pool_name || nargs.size() < 5)
+      usage_exit();
+    if (use_striper) {
+      cerr << "Specifing striper not allowed for repair-get operation" << std::endl;
+      goto out;
+    }
+    int32_t osdid = atoi(nargs[2]);
+    epoch_t e = atoi(nargs[3]);
+    ret = do_repair_get(io_ctx, nargs[1], nargs[4], op_size, osdid, e, force);
+    if (ret < 0) {
+      cerr << "error getting shard from osd " << osdid << " of " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "repair-copy") == 0)  {
+    if (!pool_name || nargs.size() < 5 || nargs.size() > 7)
+      usage_exit();
+    // oid, bad_osds, epoch, ver, what
+    const string oid{nargs[1]};
+    const string bad_shards{nargs[2]};
+    const string epoch{nargs[3]};
+    const string version{nargs[4]};
+    // copy all if not specified
+    const string what{nargs.size() == 6 ? nargs[5] : "data,omap,xattr"};
+    ret = do_repair_copy(io_ctx, nargs[1], nargs[2], nargs[3], nargs[4], what);
+    if (ret < 0) {
+      cerr << "error copying " << pool_name << "/" << nargs[1] << "@" << nargs[4]
+	   << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
   }

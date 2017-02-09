@@ -2282,6 +2282,18 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   bool check_for_latest_map = _calc_target(&op->target)
     == RECALC_OP_TARGET_POOL_DNE;
 
+  // cancel the op not yet sent
+  if (op->target.forced_osd >= 0 &&
+      find(op->target.acting.begin(),
+	   op->target.acting.end(),
+	   op->target.forced_osd) == op->target.acting.end()) {
+    if (op->onfinish) {
+      op->onfinish->complete(-EINVAL);
+      op->onfinish = NULL;
+      return;
+    }
+  }
+
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
@@ -2642,6 +2654,45 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
+int32_t Objecter::pick_random_osd(const op_target_t& t,
+				  const vector<pg_shard_t>& blacklist) const
+{
+  shared_lock rl(rwlock);
+  const pg_pool_t *pi = osdmap->get_pg_pool(t.base_oloc.pool);
+  if (!pi) {
+    return -1;
+  }
+  pg_t pgid;
+  if (!osdmap->object_locator_to_pg(t.target_oid, t.target_oloc, pgid)) {
+    return -1;
+  }
+  vector<int> acting;
+  int acting_primary;
+  osdmap->pg_to_up_acting_osds(pgid, nullptr, nullptr,
+			       &acting, &acting_primary);
+  if (acting_primary == -1) {
+    return -1;
+  }
+  if (pi->is_erasure()) {
+    // erasure pool will submit sub reads for retrieving the non-missing shards
+    // anyway, and there is chance that both good and bad shards are co-located
+    // in the same osd, so for simplicity, we just return the primary here.
+    return acting_primary;
+  } else {
+    for (auto& shard : blacklist) {
+      auto found = find(acting.begin(), acting.end(), shard.osd);
+      if (found != acting.end()) {
+	acting.erase(found);
+      }
+    }
+    if (acting.empty()) {
+      return -1;
+    }
+    int p = random() % acting.size();
+    return acting[p];
+  }
+}
+
 int Objecter::_calc_target(op_target_t *t, bool any_change)
 {
   // rwlock is locked
@@ -2770,7 +2821,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     } else {
       int osd;
       bool read = is_read && !is_write;
-      if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+      if (t->forced_osd != -1) {
+        assert(read);
+        osd = t->forced_osd;
+      } else if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+        // We may be using a replica, but don't need to set used_replica
+        // because this operation never switches back to the primary.
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;
@@ -3239,6 +3295,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   int rc = m->get_result();
 
   if (m->is_redirect_reply()) {
+    assert(!(op->target.flags & CEPH_OSD_FLAG_REPAIR_READS));
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     if (op->onfinish)
       num_in_flight.dec();
@@ -4807,6 +4864,30 @@ Objecter::OSDSession::~OSDSession()
   assert(command_ops.empty());
 }
 
+Objecter::Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
+		   Finisher *fin,
+		   double mon_timeout,
+		   double osd_timeout)
+  : Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
+    osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
+    max_linger_id(0), num_in_flight(0), global_op_flags(0),
+    keep_balanced_budget(false), honor_osdmap_full(true),
+    last_seen_osdmap_version(0), last_seen_pgmap_version(0),
+    logger(NULL), tick_event(0), m_request_state_hook(NULL),
+    num_homeless_ops(0),
+    homeless_session(new OSDSession(cct, -1)),
+    mon_timeout(ceph::make_timespan(mon_timeout)),
+    osd_timeout(ceph::make_timespan(osd_timeout)),
+    op_throttle_bytes(cct, "objecter_bytes",
+		      cct->_conf->objecter_inflight_op_bytes),
+    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
+    epoch_barrier(0),
+    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
+{
+  // for Objecter::pick_random_osd()
+  srandom(std::time(nullptr));
+}
+
 Objecter::~Objecter()
 {
   delete osdmap;
@@ -5138,4 +5219,11 @@ void ::ObjectOperation::scrub_ls(const librados::object_id_t& start_after,
 {
   scrub_ls_arg_t arg = {*interval, 1, start_after, max_to_get};
   do_scrub_ls(this, arg, snapsets, interval, rval);
+}
+
+void ::ObjectOperation::repair_copy(uint32_t what, const std::vector<pg_shard_t>& bad_shards)
+{
+  OSDOp& osd_op = add_op(CEPH_OSD_OP_REPAIR_COPY);
+  repair_copy_arg_t arg = {what, bad_shards};
+  arg.encode(osd_op.indata);
 }
