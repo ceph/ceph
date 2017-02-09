@@ -1292,6 +1292,27 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             self.assertRaises(Exception, main._deallocate_osd_id,
                               cluster, osd_id)
 
+    def test_main_fix(self):
+        args = main.parse_args(['fix', '--all', '--selinux', '--permissions'])
+        commands = []
+
+        def _command(x):
+            commands.append(" ".join(x))
+            return ("", "", None)
+
+        with patch.multiple(
+            main,
+            command=_command,
+            command_init=lambda x: commands.append(x),
+            command_wait=lambda x: None,
+        ):
+            main.main_fix(args)
+            commands = " ".join(commands)
+            assert '/var/lib/ceph' in commands
+            assert 'restorecon' in commands
+            assert 'chown' in commands
+            assert 'find' in commands
+
 
 def raise_command_error(*args):
     e = subprocess.CalledProcessError('aaa', 'bbb', 'ccc')
