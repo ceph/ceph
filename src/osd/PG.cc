@@ -5115,16 +5115,6 @@ void PG::on_new_interval()
   }
 
   do_sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
-  if (do_sort_bitwise) {
-    assert(get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT);
-    if (cct->_conf->osd_debug_randomize_hobject_sort_order) {
-      // randomly use a nibblewise sort (when we otherwise might have
-      // done bitwise) based on some *deterministic* function such that
-      // all peers/osds will agree.
-      do_sort_bitwise =
-	(info.history.same_interval_since + info.pgid.ps()) & 1;
-    }
-  }
 
   _on_new_interval();
 }
