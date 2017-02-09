@@ -70,6 +70,7 @@ int DBObjectMap::check(std::ostream &out)
 	parent_to_actual_num_children[header.seq] = header.num_children;
 
       // Check complete table
+      bool complete_error = false;
       boost::optional<string> prev;
       KeyValueDB::Iterator complete_iter = db->get_iterator(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
       for (complete_iter->seek_to_first(); complete_iter->valid();
@@ -77,9 +78,17 @@ int DBObjectMap::check(std::ostream &out)
          if (prev && prev >= complete_iter->key()) {
              out << "Bad complete for " << header.oid << std::endl;
              errors++;
+             complete_error = true;
              break;
          }
          prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
+      }
+      if (complete_error) {
+        out << "Complete mapping:" << std::endl;
+        for (complete_iter->seek_to_first(); complete_iter->valid();
+             complete_iter->next()) {
+          out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
+        }
       }
 
       if (header.parent == 0)
