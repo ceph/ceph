@@ -385,6 +385,195 @@ TEST_F(LibRadosListPP, ListObjectsStartPP) {
   }
 }
 
+TEST_F(LibRadosListPP, ListObjectsCursorNSPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const int max_objs = 16;
+
+  map<string, string> oid_to_ns;
+
+  for (int i=0; i<max_objs; ++i) {
+    stringstream ss;
+    ss << "ns" << i / 4;
+    ioctx.set_namespace(ss.str());
+    string oid = stringify(i);
+    ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
+
+    oid_to_ns[oid] = ss.str();
+  }
+
+  ioctx.set_namespace(all_nspaces);
+
+  librados::NObjectIterator it = ioctx.nobjects_begin();
+  std::map<string, string> cursor_to_obj;
+
+  int count = 0;
+
+  string seek_cursor;
+
+  map<string, list<string> > ns_to_cursors;
+
+  vector<string> objs_order;
+
+  for (; it != ioctx.nobjects_end(); ++it, ++count) {
+    string cursor = it.get_cursor();
+    string oid = it->get_oid();
+    std::cout << oid << " " << it.get_pg_hash_position() << std::endl;
+    cout << ": oid=" << oid << " cursor=" << it.get_cursor() << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    ASSERT_EQ(oid_to_ns[oid], it->get_nspace());
+
+    ASSERT_EQ(it.seek(cursor), 0);
+    cout << ": seek to " << cursor << std::endl;
+    ASSERT_EQ(oid, it->get_oid());
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    ns_to_cursors[it->get_nspace()].push_back(cursor);
+
+    if (count == max_objs/2) {
+      seek_cursor = cursor;
+    }
+    objs_order.push_back(it->get_oid());
+  }
+
+  /* check that reading past seek also works */
+  it.seek(seek_cursor);
+  for (count = max_objs/2; count < max_objs; ++count, ++it) {
+    ASSERT_EQ(objs_order[count], it->get_oid());
+  }
+
+  /* seek to all cursors, check that we get expected obj */
+  for (auto& niter : ns_to_cursors) {
+    const string& ns = niter.first;
+    list<string>& cursors = niter.second;
+
+    for (auto& cursor : cursors) {
+      cout << ": seek to " << cursor << std::endl;
+      int r = it.seek(cursor);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(cursor, it.get_cursor());
+      string& expected_oid = cursor_to_obj[cursor];
+      cout << ": it->get_cursor()=" << it.get_cursor() << " expected=" << cursor << std::endl;
+      cout << ": it->get_oid()=" << it->get_oid() << " expected=" << expected_oid << std::endl;
+      cout << ": it->get_nspace()=" << it->get_oid() << " expected=" << ns << std::endl;
+      ASSERT_EQ(expected_oid, it->get_oid());
+      ASSERT_EQ(it->get_nspace(), ns);
+    }
+  }
+}
+
+TEST_F(LibRadosListPP, ListObjectsCursorPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const int max_objs = 16;
+
+  for (int i=0; i<max_objs; ++i) {
+    stringstream ss;
+    ss << "ns" << i / 4;
+    ioctx.set_namespace(ss.str());
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
+  }
+
+  ioctx.set_namespace(all_nspaces);
+
+  librados::NObjectIterator it = ioctx.nobjects_begin();
+  std::map<string, string> cursor_to_obj;
+
+  int count = 0;
+
+  for (; it != ioctx.nobjects_end(); ++it, ++count) {
+    string cursor = it.get_cursor();
+    string oid = it->get_oid();
+    std::cout << oid << " " << it.get_pg_hash_position() << std::endl;
+    cout << ": oid=" << oid << " cursor=" << it.get_cursor() << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    ASSERT_EQ(it.seek(cursor), 0);
+    cout << ": seek to " << cursor << std::endl;
+    ASSERT_EQ(oid, it->get_oid());
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+  }
+
+  auto p = cursor_to_obj.rbegin();
+  it = ioctx.nobjects_begin();
+  while (p != cursor_to_obj.rend()) {
+    cout << ": seek to " << p->first << std::endl;
+    int r = it.seek(p->first);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(p->first, it.get_cursor());
+    cout << ": it->get_cursor()=" << it.get_cursor() << " expected=" << p->first << std::endl;
+    cout << ": it->get_oid()=" << it->get_oid() << " expected=" << p->second << std::endl;
+    ASSERT_EQ(p->second, it->get_oid());
+
+    librados::NObjectIterator it2 = ioctx.nobjects_begin(it.get_cursor());
+    ASSERT_EQ(it2->get_oid(), it->get_oid());
+
+    ++p;
+  }
+}
+
+TEST_F(LibRadosList, ListObjectsCursor) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+
+  const int max_objs = 16;
+
+  for (int i=0; i<max_objs; ++i) {
+    string n = stringify(i);
+    ASSERT_EQ(0, rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
+  }
+
+  rados_list_ctx_t ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+
+  std::map<string, string> cursor_to_obj;
+  int count = 0;
+
+  ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, NULL, 0), -ERANGE);
+
+  const char *entry;
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
+    char cursor[128];
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, cursor, sizeof(cursor)), 0);
+    string oid = entry;
+    std::cout << oid << " " << rados_objects_list_get_pg_hash_position(ctx) << std::endl;
+    cout << ": oid=" << oid << " cursor=" << cursor << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    ASSERT_EQ(rados_nobjects_list_seek_cursor(ctx, cursor, NULL), 0);
+    cout << ": seek to " << cursor << std::endl;
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    ASSERT_EQ(string(entry), oid);
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    ++count;
+  }
+
+  auto p = cursor_to_obj.rbegin();
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  while (p != cursor_to_obj.rend()) {
+    cout << ": seek to " << p->first << std::endl;
+    char cursor[128];
+    string oid(p->first);
+    ASSERT_EQ(rados_nobjects_list_seek_cursor(ctx, oid.c_str(), NULL), 0);
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, cursor, sizeof(cursor)), 0);
+    ASSERT_EQ(oid, string(cursor));
+    cout << ": cursor()=" << cursor << " expected=" << oid << std::endl;
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    cout << ": entry=" << entry << " expected=" << p->second << std::endl;
+    ASSERT_EQ(p->second, string(entry));
+
+    ++p;
+  }
+}
+
 TEST_F(LibRadosListEC, ListObjects) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));

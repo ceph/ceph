@@ -2572,6 +2572,12 @@ bool Objecter::osdmap_pool_full(const int64_t pool_id) const
   return _osdmap_pool_full(pool_id);
 }
 
+bool Objecter::osdmap_sort_bitwise() const
+{
+  shared_lock rl(rwlock);
+  return osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+}
+
 bool Objecter::_osdmap_pool_full(const int64_t pool_id) const
 {
   const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
@@ -3357,13 +3363,51 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   put_session(s);
 }
 
+string Objecter::ListCursor::to_str() const
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d:", starting_pg_num);
+  stringstream ss;
+  ss << buf << obj;
+  return ss.str();
+}
+
+int Objecter::ListCursor::from_str(const string& s)
+{
+  if (s.empty()) {
+    *this = ListCursor();
+    return 0;
+  }
+  size_t pos = s.find(':');
+  if (pos == string::npos) {
+    return -EINVAL;
+  }
+
+  string spg = s.substr(0, pos);
+
+  string err;
+  long long llpg = strict_strtoll(spg.c_str(), 10, &err);
+  if (llpg > (uint32_t)-1) {
+    return -EINVAL;
+  }
+  starting_pg_num = (uint32_t)llpg;
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  if (!obj.parse(s.substr(pos + 1))) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
 
 uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
 				      uint32_t pos)
 {
   shared_lock rl(rwlock);
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
-  ldout(cct, 10) << "list_objects_seek " << list_context
+  ldout(cct, 10) << "list_nobjects_seek " << list_context
 		 << " pos " << pos << " -> " << actual << dendl;
   list_context->current_pg = actual.ps();
   list_context->cookie = collection_list_handle_t();
@@ -3371,6 +3415,47 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
   list_context->at_end_of_pool = false;
   list_context->current_pg_epoch = 0;
   return list_context->current_pg;
+}
+
+int Objecter::list_nobjects_seek_end(NListContext *list_context)
+{
+  shared_lock rl(rwlock);
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (!pool) { // pool is gone
+    rl.unlock();
+    return -ENOENT;
+  }
+  int pg_num = pool->get_pg_num();
+  list_context->current_pg = pg_num;
+  list_context->at_end_of_pg = false;
+  list_context->at_end_of_pool = true;
+  list_context->current_pg_epoch = 0;
+  return 0;
+}
+
+uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
+				      const ListCursor& pos)
+{
+  shared_lock rl(rwlock);
+  ldout(cct, 10) << "list_nobjects_seek " << list_context
+		 << " pos.starting_pg_num " << pos.starting_pg_num << dendl;
+  list_context->seek(pos);
+  return list_context->current_pg;
+}
+
+void Objecter::list_nobjects_get_cursor(NListContext *list_context,
+                                        ListCursor *pos)
+{
+  shared_lock rl(rwlock);
+  pos->starting_pg_num = list_context->starting_pg_num;
+  if (list_context->list.empty()) {
+    pos->obj = list_context->cookie;
+  } else {
+    const librados::ListObjectImpl& entry = list_context->list.front();
+    const string *key = (entry.locator.empty() ? &entry.oid : &entry.locator);
+    uint32_t h = osdmap->get_pg_pool(list_context->pool_id)->hash_key(*key, entry.nspace);
+    pos->obj = hobject_t(entry.oid, entry.locator, list_context->pool_snap_seq, h, list_context->pool_id, entry.nspace);
+  }
 }
 
 void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
@@ -3527,6 +3612,49 @@ uint32_t Objecter::list_objects_seek(ListContext *list_context,
   list_context->at_end_of_pool = false;
   list_context->current_pg_epoch = 0;
   return list_context->current_pg;
+}
+
+uint32_t Objecter::list_objects_seek(ListContext *list_context,
+                                     const ListCursor& pos)
+{
+  shared_lock rl(rwlock);
+  ldout(cct, 10) << "list_objects_seek " << list_context
+		 << " pos.starting_pg_num " << pos.starting_pg_num << dendl;
+  list_context->seek(pos);
+  return list_context->current_pg;
+}
+
+int Objecter::list_objects_seek_end(ListContext *list_context)
+{
+  shared_lock rl(rwlock);
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (!pool) { // pool is gone
+    rl.unlock();
+    return -ENOENT;
+  }
+  int pg_num = pool->get_pg_num();
+  list_context->current_pg = pg_num;
+  list_context->at_end_of_pg = false;
+  list_context->at_end_of_pool = true;
+  list_context->current_pg_epoch = 0;
+  return 0;
+}
+
+void Objecter::list_objects_get_cursor(ListContext *list_context,
+                                       ListCursor *pos)
+{
+  shared_lock rl(rwlock);
+  pos->starting_pg_num = list_context->starting_pg_num;
+  if (list_context->list.empty()) {
+    pos->obj = list_context->cookie;
+  } else {
+    pair<object_t, string>& front = list_context->list.front();
+    object_t& obj = front.first;
+    string& loc = front.second;
+    const string *key = (loc.empty() ? &obj.name : &loc);
+    uint32_t h = osdmap->get_pg_pool(list_context->pool_id)->hash_key(*key, string());
+    pos->obj = hobject_t(obj, loc, list_context->pool_snap_seq, h, list_context->pool_id, string());
+  }
 }
 
 void Objecter::list_objects(ListContext *list_context, Context *onfinish)

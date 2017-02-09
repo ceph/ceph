@@ -228,7 +228,7 @@ struct C_aio_selfmanaged_snap_create_Complete : public C_aio_selfmanaged_snap_op
 } // namespace librados
 
 librados::IoCtxImpl::IoCtxImpl() :
-  ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
+  ref_cnt(0), client(NULL), poolid(0), sort_bitwise(false), assert_ver(0), last_objver(0),
   notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
   aio_write_seq(0), objecter(NULL)
 {
@@ -242,6 +242,7 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
     oloc(poolid), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
     aio_write_seq(0), objecter(objecter)
 {
+  sort_bitwise = objecter->osdmap_sort_bitwise();
 }
 
 void librados::IoCtxImpl::set_snap_read(snapid_t s)
@@ -595,6 +596,32 @@ uint32_t librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
   return objecter->list_nobjects_seek(context, pos);
 }
 
+int librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
+                                    const string& cursor, uint32_t *current_pg)
+{
+  context->list.clear();
+  Objecter::ListCursor c;
+  int ret = c.from_str(cursor);
+  if (ret < 0) {
+    objecter->list_nobjects_seek_end(context);
+    return ret;
+  }
+  uint32_t cur_pg = objecter->list_nobjects_seek(context, c);
+  if (current_pg) {
+    *current_pg = cur_pg;
+  }
+
+  return 0;
+}
+
+string librados::IoCtxImpl::nlist_get_cursor(Objecter::NListContext *context)
+{
+  Objecter::ListCursor c;
+
+  objecter->list_nobjects_get_cursor(context, &c);
+  return c.to_str();
+}
+
 int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
 {
   Cond cond;
@@ -623,6 +650,32 @@ uint32_t librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
 {
   context->list.clear();
   return objecter->list_objects_seek(context, pos);
+}
+
+int librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
+                                   const string& cursor, uint32_t *current_pg)
+{
+  context->list.clear();
+  Objecter::ListCursor c;
+  int ret = c.from_str(cursor);
+  if (ret < 0) {
+    objecter->list_objects_seek_end(context);
+    return ret;
+  }
+  uint32_t cur_pg = objecter->list_objects_seek(context, c);
+  if (current_pg) {
+    *current_pg = cur_pg;
+  }
+
+  return 0;
+}
+
+string librados::IoCtxImpl::list_get_cursor(Objecter::ListContext *context)
+{
+  Objecter::ListCursor c;
+
+  objecter->list_objects_get_cursor(context, &c);
+  return c.to_str();
 }
 
 int librados::IoCtxImpl::create(const object_t& oid, bool exclusive)

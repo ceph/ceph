@@ -366,6 +366,65 @@ TEST_F(LibRadosListPP, ListObjectsStartPP) {
   }
 }
 
+TEST_F(LibRadosListPP, ListObjectsCursorPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const int max_objs = 16;
+
+  for (int i=0; i<max_objs; ++i) {
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
+  }
+
+  librados::ObjectIterator it = ioctx.objects_begin();
+  std::map<string, string> cursor_to_obj;
+
+  string seek_cursor;
+
+  int count = 0;
+
+  vector<string> objs_order;
+
+  for (; it != ioctx.objects_end(); ++it, ++count) {
+    string cursor = it.get_cursor();
+    string oid = it->first;
+    std::cout << oid << " " << it.get_pg_hash_position() << std::endl;
+    cout << ": oid=" << oid << " cursor=" << it.get_cursor() << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    ASSERT_EQ(it.seek(cursor), 0);
+    cout << ": seek to " << cursor << std::endl;
+    ASSERT_EQ(oid, it->first);
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    if (count == max_objs/2) {
+      seek_cursor = cursor;
+    }
+    objs_order.push_back(oid);
+  }
+
+  /* check that reading past seek also works */
+  it.seek(seek_cursor);
+  for (count = max_objs/2; count < max_objs; ++count, ++it) {
+    ASSERT_EQ(objs_order[count], it->first);
+  }
+
+  auto p = cursor_to_obj.rbegin();
+  it = ioctx.objects_begin();
+  while (p != cursor_to_obj.rend()) {
+    cout << ": seek to " << p->first << std::endl;
+    int r = it.seek(p->first);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(p->first, it.get_cursor());
+    cout << ": it->get_cursor()=" << it.get_cursor() << " expected=" << p->first << std::endl;
+    cout << ": it->oid" << it->first << " expected=" << p->second << std::endl;
+    ASSERT_EQ(p->second, it->first);
+    ++p;
+  }
+}
+
 TEST_F(LibRadosListEC, ListObjects) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));

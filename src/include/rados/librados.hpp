@@ -95,6 +95,12 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /// move the iterator to a given cursor position
+    int seek(const std::string& cursor);
+
+    /// get current cursor position
+    std::string get_cursor();
+
     /**
      * Configure PGLS filter to be applied OSD-side (requires caller
      * to know/understand the format expected by the OSD)
@@ -130,6 +136,12 @@ namespace librados
 
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
+
+    /// move the iterator to a given cursor position
+    int seek(const std::string& cursor);
+
+    /// get current cursor position
+    std::string get_cursor();
 
   private:
     void get_next();
@@ -891,6 +903,10 @@ namespace librados
     /// Start enumerating objects for a pool starting from a hash position
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
+                                   const bufferlist &filter);
+    /// Start enumerating objects for a pool starting from cursor
+    NObjectIterator nobjects_begin(const std::string& cursor);
+    NObjectIterator nobjects_begin(const std::string& cursor,
                                    const bufferlist &filter);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;

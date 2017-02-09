@@ -34,6 +34,7 @@ struct librados::IoCtxImpl {
   int64_t poolid;
   snapid_t snap_seq;
   ::SnapContext snapc;
+  bool sort_bitwise;
   uint64_t assert_ver;
   version_t last_objver;
   uint32_t notify_timeout;
@@ -57,6 +58,7 @@ struct librados::IoCtxImpl {
     poolid = rhs.poolid;
     snap_seq = rhs.snap_seq;
     snapc = rhs.snapc;
+    sort_bitwise = rhs.sort_bitwise;
     assert_ver = rhs.assert_ver;
     last_objver = rhs.last_objver;
     notify_timeout = rhs.notify_timeout;
@@ -110,8 +112,15 @@ struct librados::IoCtxImpl {
   // io
   int nlist(Objecter::NListContext *context, int max_entries);
   uint32_t nlist_seek(Objecter::NListContext *context, uint32_t pos);
+  int nlist_seek(Objecter::NListContext *context, const string& cursor,
+                 uint32_t *current_pg);
+  string nlist_get_cursor(Objecter::NListContext *context);
   int list(Objecter::ListContext *context, int max_entries);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
+  int list_seek(Objecter::ListContext *context, const string& cursor,
+                uint32_t *current_pg);
+  string list_get_cursor(Objecter::ListContext *context);
+
   void object_list_slice(
     const hobject_t start,
     const hobject_t finish,

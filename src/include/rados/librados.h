@@ -1000,6 +1000,30 @@ CEPH_RADOS_API uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx,
                                                  uint32_t pos);
 
 /**
+ * Reposition object iterator to a different position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor position to move to
+ * @param cur_pg where to store new current pg (set to NULL to ignore)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_nobjects_list_seek_cursor(rados_list_ctx_t ctx,
+                                                   const char *cursor,
+                                                   uint32_t *cur_pg);
+
+/**
+ * Reposition object iterator to a different position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor where to store cursor
+ * @param max_len max buffer size for storing cursor (including null termination)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_nobjects_list_get_cursor(rados_list_ctx_t ctx,
+                                                  char *cursor,
+                                                  size_t max_len);
+
+/**
  * Get the next object name and locator in the pool
  *
  * *entry and *key are valid until next call to rados_objects_list_*
@@ -1100,6 +1124,30 @@ CEPH_RADOS_API uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t
  */
 CEPH_RADOS_API uint32_t rados_objects_list_seek(rados_list_ctx_t ctx,
                                                 uint32_t pos);
+
+/**
+ * Reposition object iterator to a different position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor position to move to
+ * @param cur_pg where to store new current pg (set to NULL to ignore)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_objects_list_seek_cursor(rados_list_ctx_t ctx,
+                                                  const char *cursor,
+                                                  uint32_t *cur_pg);
+
+/**
+ * Reposition object iterator to a different position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor where to store cursor
+ * @param max_len max buffer size for storing cursor (including null termination)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_objects_list_get_cursor(rados_list_ctx_t ctx,
+                                                 char *cursor,
+                                                 size_t max_len);
 
 /**
  * @warning Deprecated: Use rados_nobjects_list_next() instead

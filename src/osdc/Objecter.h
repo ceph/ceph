@@ -1383,6 +1383,14 @@ public:
     }
   };
 
+  struct ListCursor {
+    hobject_t obj;
+    int starting_pg_num{0};
+
+    string to_str() const;
+    int from_str(const string& s);
+  };
+
 
   // Pools and statistics
   struct NListContext {
@@ -1434,6 +1442,19 @@ public:
 
     uint32_t get_pg_hash_position() const {
       return current_pg;
+    }
+
+    void seek(const Objecter::ListCursor& cursor) {
+      starting_pg_num = cursor.starting_pg_num;
+      if (starting_pg_num) {
+        current_pg = cursor.obj.get_hash() % starting_pg_num;
+      } else {
+        current_pg = 0;
+      }
+      cookie = cursor.obj;
+      at_end_of_pg = false;
+      at_end_of_pool = false;
+      current_pg_epoch = 0;
     }
   };
 
@@ -1501,6 +1522,19 @@ public:
 
     uint32_t get_pg_hash_position() const {
       return current_pg;
+    }
+
+    void seek(const Objecter::ListCursor& cursor) {
+      starting_pg_num = cursor.starting_pg_num;
+      if (starting_pg_num) {
+        current_pg = cursor.obj.get_hash() % starting_pg_num;
+      } else {
+        current_pg = 0;
+      }
+      cookie = cursor.obj;
+      at_end_of_pg = false;
+      at_end_of_pool = false;
+      current_pg_epoch = 0;
     }
   };
 
@@ -1810,6 +1844,7 @@ public:
 
   bool osdmap_full_flag() const;
   bool osdmap_pool_full(const int64_t pool_id) const;
+  bool osdmap_sort_bitwise() const;
 
  private:
 
@@ -2788,8 +2823,14 @@ public:
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
+  uint32_t list_nobjects_seek(NListContext *list_context, const ListCursor& pos);
+  int list_nobjects_seek_end(NListContext *list_context);
+  void list_nobjects_get_cursor(NListContext *list_context, ListCursor *pos);
   void list_objects(ListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
+  uint32_t list_objects_seek(ListContext *list_context, const ListCursor& pos);
+  int list_objects_seek_end(ListContext *list_context);
+  void list_objects_get_cursor(ListContext *list_context, ListCursor *pos);
 
   hobject_t enumerate_objects_begin();
   hobject_t enumerate_objects_end();
