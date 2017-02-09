@@ -1,4 +1,10 @@
+import datetime
+import dateutil.tz
+import dateutil.parser
+import json
 import os
+
+from teuthology.util.flock import FileLock
 
 
 def get_user_ssh_pubkey(path='~/.ssh/id_rsa.pub'):
@@ -53,3 +59,59 @@ def selective_update(a, b, func):
             selective_update(a[key], value, func)
         if func(value, a[key]):
             a[key] = value
+
+
+class AuthToken(object):
+    time_format = '%Y-%m-%d %H:%M:%S%z'
+
+    def __init__(self, name, directory=os.path.expanduser('~/.cache/')):
+        self.name = name
+        self.directory = directory
+        self.path = os.path.join(directory, name)
+        self.lock_path = "%s.lock" % self.path
+        self.expires = None
+        self.value = None
+        self.endpoint = None
+
+    def read(self):
+        if not os.path.exists(self.path):
+            self.value = None
+            self.expires = None
+            self.endpoint = None
+            return
+        with open(self.path, 'r') as obj:
+            string = obj.read()
+        obj = json.loads(string)
+        self.expires = dateutil.parser.parse(obj['expires'])
+        if self.expired:
+            self.value = None
+            self.endpoint = None
+        else:
+            self.value = obj['value']
+            self.endpoint = obj['endpoint']
+
+    def write(self, value, expires, endpoint):
+        obj = dict(
+            value=value,
+            expires=datetime.datetime.strftime(expires, self.time_format),
+            endpoint=endpoint,
+        )
+        string = json.dumps(obj)
+        with open(self.path, 'w') as obj:
+            obj.write(string)
+
+    @property
+    def expired(self):
+        if self.expires is None:
+            return True
+        utcnow = datetime.datetime.now(dateutil.tz.tzutc())
+        offset = datetime.timedelta(minutes=30)
+        return self.expires < (utcnow + offset)
+
+    def __enter__(self):
+        with FileLock(self.lock_path):
+            self.read()
+            return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
