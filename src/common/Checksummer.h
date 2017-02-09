@@ -223,6 +223,7 @@ public:
 	if (bad_csum) {
 	  *bad_csum = v;
 	}
+	Alg::fini(&state);
 	return pos;
       }
       ++pv;

@@ -107,7 +107,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       tmp_out.copy(0, q_len, out_bl);
     else
       out_bl.append(tmp_out);
-    first_block++;
+    ++first_block;
   }
 
   if (first_data && partial_content && out_bl.length() != 0)
