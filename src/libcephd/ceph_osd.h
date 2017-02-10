@@ -74,7 +74,7 @@ struct libosd {
   /** Write to an object.
    * @see libosd_write()
    */
-  virtual int write(const char *object, const uint8_t volume[16],
+  virtual int write(const char *object, uint8_t volume[16],
 		    uint64_t offset, uint64_t length, char *data,
 		    int flags, libosd_io_completion_fn cb, void *user) = 0;
 

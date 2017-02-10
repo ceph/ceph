@@ -34,9 +34,10 @@ class Objecter {
   int read(const char *object, const uint8_t volume[16],
 	   uint64_t offset, uint64_t length, char *data,
 	   int flags, libosd_io_completion_fn cb, void *user);
-  int write(const char *object, const uint8_t volume[16],
+  int write(const char *object,  uint8_t volume[16],
 	    uint64_t offset, uint64_t length, char *data,
-	    int flags, libosd_io_completion_fn cb, void *user);
+	    int flags, libosd_io_completion_fn cb,
+	    void *user, OSDMapRef& omap, int64_t pool_id);
   int truncate(const char *object, int64_t pool_id, OSDMapRef &omap, uint64_t offset,
 	       int flags, libosd_io_completion_fn cb, void *user);
 };

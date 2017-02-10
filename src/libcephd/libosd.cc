@@ -109,11 +109,14 @@ public:
     return Objecter::read(object, volume, offset, length,
 			  data, flags, cb, user);
   }
-  int write(const char *object, const uint8_t volume[16],
+  int write(const char *object, uint8_t volume[16],
 	    uint64_t offset, uint64_t length, char *data,
 	    int flags, libosd_io_completion_fn cb, void *user) {
+    char *id= (char *)volume; // FIXME
+    int64_t pool_id = get_volume(id,volume);
+    OSDMapRef osdmap = osd->service.get_osdmap();
     return Objecter::write(object, volume, offset, length,
-			   data, flags, cb, user);
+			   data, flags, cb, user, osdmap, pool_id);
   }
   int truncate(const char *object, uint8_t volume[16], uint64_t offset,
 	       int flags, libosd_io_completion_fn cb, void *user) {
@@ -482,7 +485,7 @@ int libosd_read(struct libosd *osd, const char *object,
   }
 }
 
-int libosd_write(struct libosd *osd, const char *object, const uint8_t volume[16],
+int libosd_write(struct libosd *osd, const char *object,  uint8_t volume[16],
 		 uint64_t offset, uint64_t length, char *data, int flags,
 		 libosd_io_completion_fn cb, void *user)
 {

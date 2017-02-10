@@ -7,11 +7,6 @@
 #include "msg/Messenger.h"
 #include "include/msgr.h"
 
-#ifdef HAVE_XIO
-#include "msg/XioMessenger.h"
-#include "msg/QueueStrategy.h"
-#endif
-
 #include "osd/OSD.h"
 #include "common/pick_address.h"
 #include "common/debug.h"
@@ -33,7 +28,6 @@ using namespace ceph::osd;
 Messengers::Messengers()
   : cluster(NULL),
     client(NULL),
-    client_xio(NULL),
     client_hb(NULL),
     front_hb(NULL),
     back_hb(NULL),
@@ -45,9 +39,7 @@ Messengers::Messengers()
 Messengers::~Messengers()
 {
   delete cluster;
-  if (client != client_xio)
-    delete client;
-  delete client_xio;
+  delete client;
   delete client_hb;
   delete front_hb;
   delete back_hb;
@@ -65,45 +57,15 @@ Messenger* create_messenger(CephContext *cct, const string &type,
   return ms;
 }
 
-#ifdef HAVE_XIO
-Messenger* create_messenger_xio(CephContext *cct, const entity_name_t &me,
-				const char *name, pid_t pid)
-{
-  const int nportals = 2;
-  XioMessenger *ms = new XioMessenger(cct, me, name, pid, nportals,
-				      new QueueStrategy(nportals));
-  ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  ms->set_port_shift(111);
-  return ms;
-}
-#endif
-
 int Messengers::create(CephContext *cct, md_config_t *conf,
 		       const entity_name_t &name, pid_t pid)
 {
   // create messengers
-#ifdef HAVE_XIO
-  if (conf->cluster_rdma) {
-    cluster = create_messenger_xio(cct, name, "cluster", pid);
-    client_xio = create_messenger_xio(cct, name, "xio client", pid);
-    client_hb = create_messenger_xio(cct, name, "hbclient", pid);
-    front_hb = create_messenger_xio(cct, name, "hb_front", pid);
-    back_hb = create_messenger_xio(cct, name, "hb_back", pid);
-  } else {
-    cluster = create_messenger(cct, name, "cluster", pid);
-    client = create_messenger(cct, name, "client", pid);
-    client_xio = create_messenger_xio(cct, name, "xio client", pid);
-    client_hb = create_messenger(cct, name, "hbclient", pid);
-    front_hb = create_messenger(cct, name, "hb_front", pid);
-    back_hb = create_messenger(cct, name, "hb_back", pid);
-  }
-#else // !HAVE_XIO
   cluster = create_messenger(cct, "simple", name, "cluster", pid);
   client = create_messenger(cct, "simple", name, "client", pid);
   client_hb = create_messenger(cct, "simple", name, "hbclient", pid);
   front_hb = create_messenger(cct,"simple",  name, "hb_front", pid);
   back_hb = create_messenger(cct, "simple", name, "hb_back", pid);
-#endif // !HAVE_XIO
 
   // set up policies
   byte_throttler = new Throttle(cct, "direct", conf->osd_client_message_size_cap);
@@ -123,18 +85,6 @@ int Messengers::create(CephContext *cct, md_config_t *conf,
 	Messenger::Policy::lossy_client(supported,
 	  CEPH_FEATURE_UID | CEPH_FEATURE_OSDENC));
     client->set_policy(entity_name_t::TYPE_OSD,
-	Messenger::Policy::stateless_server(0,0));
-  } else {
-    client = client_xio;
-  }
-
-  if (client_xio) {
-    client_xio->set_default_policy(
-	Messenger::Policy::stateless_server(supported, 0));
-    client_xio->set_policy(entity_name_t::TYPE_MON,
-	Messenger::Policy::lossy_client(supported,
-	  CEPH_FEATURE_UID | CEPH_FEATURE_OSDENC));
-    client_xio->set_policy(entity_name_t::TYPE_OSD,
 	Messenger::Policy::stateless_server(0,0));
   }
 
@@ -179,19 +129,12 @@ int Messengers::bind(CephContext *cct, md_config_t *conf)
   dout(10) << "bound cluster: " << cluster->get_myaddr() << dendl;
 
   entity_addr_t public_addr(conf->public_addr);
-  if (client != client_xio) {
-    r = client->bind(public_addr);
-    if (r < 0)
-      return r;
-    dout(10) << "bound client: " << client->get_myaddr() << dendl;
-    public_addr = client->get_myaddr();
-  }
-  if (client_xio) {
-    r = client_xio->bind(public_addr);
-    if (r < 0)
-      return r;
-    dout(10) << "bound client_xio: " << client_xio->get_myaddr() << dendl;
-  }
+
+  r = client->bind(public_addr);
+  if (r < 0)
+    return r;
+  dout(10) << "bound client: " << client->get_myaddr() << dendl;
+  public_addr = client->get_myaddr();
 
   // hb front should bind to same ip as public_addr
   entity_addr_t hb_front_addr(conf->public_addr);
@@ -220,10 +163,7 @@ int Messengers::bind(CephContext *cct, md_config_t *conf)
 void Messengers::start()
 {
   cluster->start();
-  if (client != client_xio)
-    client->start();
-  if (client_xio)
-    client_xio->start();
+  client->start();
   client_hb->start();
   front_hb->start();
   back_hb->start();
@@ -234,10 +174,7 @@ void Messengers::wait()
   // XXX: assert(started);
   // close/wait on messengers
   cluster->wait();
-  if (client != client_xio)
-    client->wait();
-  if (client_xio)
-    client_xio->wait();
+  client->wait();
   client_hb->wait();
   front_hb->wait();
   back_hb->wait();

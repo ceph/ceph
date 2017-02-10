@@ -442,7 +442,6 @@ set(libcommon_files
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   common/RefCountedObj.cc
-  msg/QueueStrategy.cc
   msg/Messenger.cc
   msg/simple/Pipe.cc
   msg/simple/PipeConnection.cc

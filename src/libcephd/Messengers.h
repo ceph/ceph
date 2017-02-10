@@ -22,7 +22,6 @@ class Messengers {
 
   Messenger *cluster;
   Messenger *client;
-  Messenger *client_xio;
   Messenger *client_hb;
   Messenger *front_hb;
   Messenger *back_hb;

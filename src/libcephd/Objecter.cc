@@ -64,26 +64,12 @@ public:
 
 // Dispatcher callback to fire the read completion
 class OnReadReply : public Dispatcher::OnReply {
-#if COMPLETION_FREELIST
-  typedef cohort::CharArrayAlloc<OnReadReply> Alloc;
-  typedef cohort::FreeList<OnReadReply, Alloc> FreeList;
-  static Alloc alloc;
-  static FreeList freelist;
-#endif
   char *data;
   uint64_t length;
   libosd_io_completion_fn cb;
   void *user;
 
  public:
-#if COMPLETION_FREELIST
-  static void *operator new(size_t num_bytes) {
-    return freelist.alloc();
-  }
-  void operator delete(void *p) {
-    return freelist.free(static_cast<OnReadReply*>(p));
-  }
-#endif
   OnReadReply(char *data, uint64_t length,
 	      libosd_io_completion_fn cb, void *user)
     : data(data), length(length), cb(cb), user(user) {}
@@ -212,12 +198,6 @@ int Objecter::read(const char *object, const uint8_t volume[16],
 
 // Dispatcher callback to fire the write completion
 class OnWriteReply : public Dispatcher::OnReply {
-#if COMPLETION_FREELIST
-  typedef cohort::CharArrayAlloc<OnWriteReply> Alloc;
-  typedef cohort::FreeList<OnWriteReply, Alloc> FreeList;
-  static Alloc alloc;
-  static FreeList freelist;
-#endif
   libosd_io_completion_fn cb;
   int flags;
   void *user;
@@ -330,9 +310,10 @@ int Objecter::write_sync(const char *object, const uint8_t volume[16],
 
 }
 
-int Objecter::write(const char *object, const uint8_t volume[16],
+int Objecter::write(const char *object,  uint8_t volume[16],
 		    uint64_t offset, uint64_t length, char *data,
-		    int flags, libosd_io_completion_fn cb, void *user)
+		    int flags, libosd_io_completion_fn cb, void *user,
+		    OSDMapRef& omap, int64_t pool_id)
 {
   if (cb == nullptr)
     return write_sync(object, volume, offset, length, data, flags);
@@ -343,9 +324,10 @@ int Objecter::write(const char *object, const uint8_t volume[16],
   boost::uuids::uuid vol;
   epoch_t epoch = 0;
   mempcpy(&vol, volume, sizeof(vol));
-  int64_t pool_id(0);
   object_locator_t oloc(pool_id);
   pg_t pgid;
+
+  omap->object_locator_to_pg(oid, oloc, pgid);
 
   // when asynchronous, flags must specify one or more of UNSTABLE or STABLE
   if ((flags & WRITE_CB_FLAGS) == 0)
@@ -435,7 +417,7 @@ int Objecter::write(const char *object, const uint8_t volume[16],
 
   int Objecter::truncate(const char *object, const int64_t pool_id,
 			 OSDMapRef& omap, uint64_t offset, int flags,
-		       libosd_io_completion_fn cb, void *user)
+			 libosd_io_completion_fn cb, void *user)
 {
   if (cb == nullptr)
     return truncate_sync(object, pool_id, omap, offset, flags);
