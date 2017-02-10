@@ -7,3 +7,5 @@ tasks:
     osd.3:
 - ceph.restart:
     daemons: [osd.3, osd.4, osd.5]
+    wait-for-up: true
+    wait-for-healthy: false
