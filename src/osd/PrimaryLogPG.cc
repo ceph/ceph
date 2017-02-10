@@ -30,6 +30,7 @@
 #include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
+#include "messages/MOSDBackoff.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDPGTrim.h"
@@ -1596,6 +1597,26 @@ void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
   src_oloc = oloc;
   if (oloc.key.empty())
     src_oloc.key = oid.name;
+}
+
+void PrimaryLogPG::handle_backoff(OpRequestRef& op)
+{
+  MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
+  SessionRef session((Session *)m->get_connection()->get_priv());
+  if (!session)
+    return;  // drop it.
+  session->put();  // get_priv takes a ref, and so does the SessionRef
+  hobject_t begin = info.pgid.pgid.get_hobj_start();
+  hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+  if (cmp_bitwise(begin, m->begin) < 0) {
+    begin = m->begin;
+  }
+  if (cmp_bitwise(end, m->end) > 0) {
+    end = m->end;
+  }
+  dout(10) << __func__ << " backoff ack id " << m->id
+	   << " [" << begin << "," << end << ")" << dendl;
+  session->ack_backoff(cct, m->id, begin, end);
 }
 
 void PrimaryLogPG::do_request(
