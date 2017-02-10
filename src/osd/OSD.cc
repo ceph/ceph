@@ -7534,7 +7534,7 @@ void OSD::consume_map()
   for (set<spg_t>::iterator p = pgs_to_check.begin();
        p != pgs_to_check.end();
        ++p) {
-    if (!(osdmap->is_acting_osd_shard(p->pgid, whoami, p->shard))) {
+    if (!(osdmap->is_acting_osd_shard(spg_t(p->pgid, p->shard), whoami))) {
       set<Session*> concerned_sessions;
       get_sessions_possibly_interested_in_pg(*p, &concerned_sessions);
       for (set<Session*>::iterator i = concerned_sessions.begin();

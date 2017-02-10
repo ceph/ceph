@@ -1725,11 +1725,14 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _apply_primary_affinity(pps, *pool, up, primary);
 }
   
-void OSDMap::_pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
-                                   vector<int> *acting, int *acting_primary) const
+void OSDMap::_pg_to_up_acting_osds(
+  const pg_t& pg, vector<int> *up, int *up_primary,
+  vector<int> *acting, int *acting_primary,
+  bool raw_pg_to_pg) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
-  if (!pool) {
+  if (!pool ||
+      (!raw_pg_to_pg && pg.ps() >= pool->get_pg_num())) {
     if (up)
       up->clear();
     if (up_primary)
