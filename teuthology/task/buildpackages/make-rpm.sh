@@ -52,9 +52,18 @@ releasedir=$base/$distro/WORKDIR
 # a) human readable
 # b) is unique for each commit
 # c) compares higher than any previous commit
+#    WAIT, c) DOES NOT HOLD:
+#    >>> print 'v10.2.5-7-g000000' < 'v10.2.5-8-g000000'
+#    True
+#    >>> print 'v10.2.5-9-g000000' < 'v10.2.5-10-g000000'
+#    False
 # d) contains the short hash of the commit
 #
-vers=$(git describe --match "v*" | sed s/^v//)
+# Regardless, we use it for the RPM version number, but strip the leading 'v'
+# and replace the '-' before the 'g000000' with a '.' to match the output of
+# "rpm -q $PKG --qf %{VERSION}-%{RELEASE}"
+#
+vers=$(git describe --match "v*" | sed -r -e 's/^v//' -e 's/\-([[:digit:]]+)\-g/\-\1\.g/')
 ceph_dir=$(pwd)
 
 #
