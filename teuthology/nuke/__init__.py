@@ -297,7 +297,6 @@ def nuke_helper(ctx, should_unlock):
         if is_vm(shortname):
             return
     log.debug('shortname: %s' % shortname)
-    log.debug('{ctx}'.format(ctx=ctx))
     if ctx.check_locks:
         # does not check to ensure if the node is 'up'
         # we want to be able to nuke a downed node
