@@ -335,6 +335,17 @@ int DBObjectMap::DBObjectMapIteratorImpl::lower_bound(const string &to)
   return adjust();
 }
 
+int DBObjectMap::DBObjectMapIteratorImpl::lower_bound_parent(const string &to)
+{
+  int r = lower_bound(to);
+  if (r < 0)
+    return r;
+  if (valid() && !on_parent())
+    return next_parent();
+  else
+    return r;
+}
+
 int DBObjectMap::DBObjectMapIteratorImpl::upper_bound(const string &after)
 {
   init();
@@ -593,55 +604,31 @@ int DBObjectMap::_clear(Header header,
   return 0;
 }
 
-int DBObjectMap::merge_new_complete(Header header,
-				    const map<string, string> &new_complete,
-				    DBObjectMapIterator iter,
-				    KeyValueDB::Transaction t)
-{
-  KeyValueDB::Iterator complete_iter = db->get_iterator(
-    complete_prefix(header)
-    );
-  map<string, string>::const_iterator i = new_complete.begin();
-  set<string> to_remove;
-  map<string, bufferlist> to_add;
+int DBObjectMap::merge_new_complete(
+  DBObjectMapIterator &iter,
+  string *begin,
+  const string &end,
+  set<string> *complete_keys_to_remove) {
+  assert(begin);
+  assert(complete_keys_to_remove);
 
-  string begin, end;
-  while (i != new_complete.end()) {
-    string new_begin = i->first;
-    string new_end = i->second;
-    int r = iter->in_complete_region(new_begin, &begin, &end);
-    if (r < 0)
-      return r;
-    if (r) {
-      to_remove.insert(begin);
-      new_begin = begin;
-    }
-    ++i;
-    while (i != new_complete.end()) {
-      if (!new_end.size() || i->first <= new_end) {
-	if (!new_end.size() && i->second > new_end) {
-	  new_end = i->second;
-	}
-	++i;
-	continue;
-      }
+  string _begin = *begin;
+  iter->in_complete_region(_begin, begin, nullptr);
 
-      r = iter->in_complete_region(new_end, &begin, &end);
-      if (r < 0)
-	return r;
-      if (r) {
-	to_remove.insert(begin);
-	new_end = end;
-	continue;
-      }
-      break;
-    }
-    bufferlist bl;
-    bl.append(bufferptr(new_end.c_str(), new_end.size() + 1));
-    to_add.insert(make_pair(new_begin, bl));
+  // see in_complete_region post condition
+  auto &citer = iter->complete_iter;
+  while (citer->valid() && (end.empty() || (citer->key() <= end))) {
+    /* rm_keys takes end from a parent pointer, can't be the start
+     * of a complete region */
+    assert(citer->key() != end);
+    /* same as above, parent pointers can't be in a current complete region
+     */
+    assert(citer->value().length() >= 1);
+    assert(end.empty() ||
+	   string(citer->value().c_str(), citer->value().length() - 1) <= end);
+    complete_keys_to_remove->insert(citer->key());
+    citer->next();
   }
-  t->rmkeys(complete_prefix(header), to_remove);
-  t->set(complete_prefix(header), to_add);
   return 0;
 }
 
@@ -655,22 +642,6 @@ int DBObjectMap::copy_up_header(Header header,
 
   _set_header(header, bl, t);
   return 0;
-}
-
-int DBObjectMap::need_parent(DBObjectMapIterator iter)
-{
-  int r = iter->seek_to_first();
-  if (r < 0)
-    return r;
-
-  if (!iter->valid())
-    return 0;
-
-  string begin, end;
-  if (iter->in_complete_region(iter->key(), &begin, &end) && end == "") {
-    return 0;
-  }
-  return 1;
 }
 
 int DBObjectMap::rm_keys(const ghobject_t &oid,
@@ -690,51 +661,64 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
   }
 
   // Copy up keys from parent around to_clear
-  int keep_parent;
+  map<string, bufferlist> to_write;
+  map<string, bufferlist> complete_to_write;
+  set<string> complete_keys_to_remove;
+  list<pair<string, string>> new_complete;
+  bool keep_parent = true;
+  auto cleared_to = to_clear.begin();
   {
     DBObjectMapIterator iter = _get_iterator(header);
-    iter->seek_to_first();
-    map<string, string> new_complete;
-    map<string, bufferlist> to_write;
-    for(set<string>::const_iterator i = to_clear.begin();
-	i != to_clear.end();
-      ) {
-      unsigned copied = 0;
-      iter->lower_bound(*i);
-      ++i;
-      if (!iter->valid())
-	break;
-      string begin = iter->key();
-      if (!iter->on_parent())
-	iter->next_parent();
-      if (new_complete.size() && new_complete.rbegin()->second == begin) {
-	begin = new_complete.rbegin()->first;
-      }
-      while (iter->valid() && copied < 20) {
-	if (!to_clear.count(iter->key()))
-	  to_write[iter->key()].append(iter->value());
-	if (i != to_clear.end() && *i <= iter->key()) {
-	  ++i;
-	  copied = 0;
+    while (cleared_to != to_clear.end()) {
+      string begin = *cleared_to;
+      string end;
+      unsigned count = 0;
+      iter->lower_bound_parent(*cleared_to);
+      while (true) {
+	if (!iter->valid()) {
+	  cleared_to = to_clear.end();
+	  end = string();
+	  break;
 	}
 
+	if (count >= 20) {
+	  cleared_to = to_clear.lower_bound(iter->key());
+	  if (cleared_to == to_clear.end() ||
+	      *cleared_to != iter->key()) {
+	    end = iter->key();
+	    break;
+	  } else {
+	    // We don't want to create [a, c), [c, f), keep this entry going
+	  }
+	}
+
+	if (!to_clear.count(iter->key()))
+	  to_write[iter->key()] = iter->value();
+
+	++count;
 	iter->next_parent();
-	copied++;
       }
-      if (iter->valid()) {
-	new_complete[begin] = iter->key();
-      } else {
-	new_complete[begin] = "";
-	break;
-      }
+
+      merge_new_complete(iter, &begin, end, &complete_keys_to_remove);
+
+      bufferlist bl;
+      bl.append(bufferptr(end.c_str(), end.size() + 1));
+      complete_to_write.insert(make_pair(begin, bl));
     }
-    t->set(user_prefix(header), to_write);
-    merge_new_complete(header, new_complete, iter, t);
-    keep_parent = need_parent(iter);
-    if (keep_parent < 0)
-      return keep_parent;
+
+    
+    if (complete_to_write.size() == 1 &&
+	complete_to_write.begin()->second.length() == 1) {
+      iter->seek_to_first();
+      if (iter->key() >= complete_to_write.begin()->first)
+	keep_parent = false;
+    }
   }
-  if (!keep_parent) {
+  t->set(user_prefix(header), to_write);
+  if (keep_parent) {
+    t->rmkeys(complete_prefix(header), complete_keys_to_remove);
+    t->set(complete_prefix(header), complete_to_write);
+  } else {
     copy_up_header(header, t);
     Header parent = lookup_parent(header);
     if (!parent)
