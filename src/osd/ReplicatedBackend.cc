@@ -49,13 +49,13 @@ class PG_SendMessageOnConn: public Context {
 
 class PG_RecoveryQueueAsync : public Context {
   PGBackend::Listener *pg;
-  GenContext<ThreadPool::TPHandle&> *c;
+  unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
   public:
   PG_RecoveryQueueAsync(
     PGBackend::Listener *pg,
     GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
   void finish(int) {
-    pg->schedule_recovery_work(c);
+    pg->schedule_recovery_work(c.release());
   }
 };
 }
