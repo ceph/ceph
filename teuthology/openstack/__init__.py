@@ -644,14 +644,13 @@ class TeuthologyOpenStack(OpenStack):
         if self.args.upload:
             argv.extend(['--archive-upload', self.args.archive_upload,
                          '--archive-upload-url', self.args.archive_upload_url])
-        for (arg, opt) in (('ceph_repo', 'ceph_git_url'),
-                           ('suite_repo', 'ceph_qa_suite_git_url')):
-            if getattr(self.args, arg):
-                command = (
-                    "perl -pi -e 's|.*{opt}.*|{opt}: {value}|'"
-                    " ~/.teuthology.yaml"
-                ).format(opt=opt, value=getattr(self.args, arg))
-                self.ssh(command)
+        ceph_repo = getattr(self.args, 'ceph_repo')
+        if ceph_repo:
+            command = (
+                "perl -pi -e 's|.*{opt}.*|{opt}: {value}|'"
+                " ~/.teuthology.yaml"
+            ).format(opt='ceph_git_url', value=ceph_repo)
+            self.ssh(command)
         argv.append('/home/' + self.username +
                     '/teuthology/teuthology/openstack/openstack.yaml')
         command = (
