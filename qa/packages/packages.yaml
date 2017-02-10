@@ -38,8 +38,6 @@ ceph:
   - ceph
   - ceph-mgr
   - ceph-fuse
-  - cephfs-java
-  - libcephfs_jni1
   - libcephfs2
   - libcephfs-devel
   - librados2
