@@ -2511,7 +2511,7 @@ void Migrator::import_reverse(CDir *dir)
 	  ++q) {
 	Capability *cap = in->get_client_cap(q->first);
 	assert(cap);
-	if (cap->is_new())
+	if (cap->is_importing())
 	  in->remove_client_cap(q->first);
       }
       in->put(CInode::PIN_IMPORTINGCAPS);
@@ -2705,6 +2705,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 	Capability *cap = in->get_client_cap(q->first);
 	assert(cap);
 	cap->merge(q->second, true);
+	cap->clear_importing();
 	mds->mdcache->do_cap_import(session, in, cap, q->second.cap_id, q->second.seq,
 				    q->second.mseq - 1, it->second.peer, CEPH_CAP_FLAG_AUTH);
       }
@@ -2879,7 +2880,7 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
     if (!cap) {
       cap = in->add_client_cap(it->first, session);
       if (peer < 0)
-	cap->mark_new();
+	cap->mark_importing();
     }
 
     Capability::Import& im = import_map[it->first];
