@@ -636,6 +636,9 @@ namespace rgw {
 
     virtual ~RGWFileHandle();
 
+    friend std::ostream& operator<<(std::ostream &os,
+				    RGWFileHandle const &rgw_fh);
+
     class Factory : public cohort::lru::ObjectFactory
     {
     public:
