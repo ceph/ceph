@@ -2694,6 +2694,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       t->target_oloc.pool = pi->read_tier;
     if (is_write && pi->has_write_tier())
       t->target_oloc.pool = pi->write_tier;
+    pi = osdmap->get_pg_pool(t->target_oloc.pool);
+    if (!pi) {
+      t->osd = -1;
+      return RECALC_OP_TARGET_POOL_DNE;
+    }
   }
 
   pg_t pgid;
