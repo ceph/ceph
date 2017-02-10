@@ -702,6 +702,31 @@ namespace rgw {
     } while (! stop);
   } /* RGWLibFS::gc */
 
+  std::ostream& operator<<(std::ostream &os,
+			   RGWFileHandle const &rgw_fh)
+  {
+    const auto& fhk = rgw_fh.get_key();
+    const auto& fh = const_cast<RGWFileHandle&>(rgw_fh).get_fh();
+    os << "<RGWFileHandle:";
+    os << "addr=" << &rgw_fh;
+    switch (fh->fh_type) {
+    case RGW_FS_TYPE_DIRECTORY:
+	os << "type=DIRECTORY;";
+	break;
+    case RGW_FS_TYPE_FILE:
+	os << "type=FILE;";
+	break;
+    default:
+	os << "type=UNKNOWN;";
+	break;
+      };
+    os << "fid=" << fhk.fh_hk.bucket << ":" << fhk.fh_hk.object << ";";
+    os << "name=" << rgw_fh.object_name() << ";";
+    os << "refcnt=" << rgw_fh.get_refcnt() << ";";
+    os << ">";
+    return os;
+  }
+
   RGWFileHandle::~RGWFileHandle() {
     if (parent && (! parent->is_root())) {
       /* safe because if parent->unref causes its deletion,
