@@ -474,6 +474,7 @@ Context *RefreshRequest<I>::handle_v2_get_snap_timestamps(int *result) {
     send_v2_get_mutable_metadata();
     return nullptr;
   } else if (*result == -EOPNOTSUPP) {
+    m_snap_timestamps = std::vector<utime_t>(m_snap_names.size(), utime_t());
     // Ignore it means no snap timestamps are available
   } else if (*result < 0) {
     lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
