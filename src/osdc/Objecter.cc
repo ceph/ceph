@@ -2704,21 +2704,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   pg_t pgid;
   if (t->precalc_pgid) {
     assert(t->base_oid.name.empty()); // make sure this is a listing op
-    ldout(cct, 10) << __func__ << " have " << t->base_pgid << " pool "
-		   << osdmap->have_pg_pool(t->base_pgid.pool()) << dendl;
-    if (!osdmap->have_pg_pool(t->base_pgid.pool())) {
-      t->osd = -1;
-      return RECALC_OP_TARGET_POOL_DNE;
-    }
-    if (osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-      // if the SORTBITWISE flag is set, we know all OSDs are running
-      // jewel+.
-      pgid = t->base_pgid;
-    } else {
-      // legacy behavior.  pre-jewel OSDs will fail if we send a
-      // full-hash pgid value.
-      pgid = osdmap->raw_pg_to_pg(t->base_pgid);
-    }
+    assert(t->base_oloc.pool == (int64_t)t->base_pgid.pool());
+    pgid = t->base_pgid;
   } else {
     int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
 					   pgid);
