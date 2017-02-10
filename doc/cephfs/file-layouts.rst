@@ -199,7 +199,7 @@ Before you can use a pool with CephFS you have to add it to the Metadata Servers
 
 .. code-block:: bash
 
-    $ ceph mds add_data_pool cephfs_data_ssd
+    $ ceph fs add_data_pool cephfs cephfs_data_ssd
     # Pool should now show up
     $ ceph fs ls
     .... data pools: [cephfs_data cephfs_data_ssd ]
