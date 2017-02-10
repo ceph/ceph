@@ -2277,7 +2277,9 @@ public:
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
     Op *o = new Op(object_t(), oloc,
-		   op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ,
+		   op.ops,
+		   flags | global_op_flags.read() | CEPH_OSD_FLAG_READ |
+		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
 		   onack, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
