@@ -405,6 +405,11 @@ private:
     int next_parent();
 
     /// Tests whether to_test is in complete region
+    /**
+     * Tests whether to_test is in complete region
+     *
+     * postcondition: complete_iter will be max s.t. complete_iter->value > to_test
+     */
     int in_complete_region(const string &to_test, ///< [in] key to test
 			   string *begin,         ///< [out] beginning of region
 			   string *end            ///< [out] end of region
