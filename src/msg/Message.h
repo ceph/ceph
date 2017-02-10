@@ -116,6 +116,7 @@
 #define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
 
 #define MSG_OSD_PG_CREATED      116
+#define MSG_OSD_REP_SCRUBMAP    117
 
 // *** MDS ***
 
