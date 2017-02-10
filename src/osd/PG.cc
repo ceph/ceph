@@ -567,7 +567,7 @@ bool PG::MissingLoc::add_source_info(
 			 << dendl;
       continue;
     }
-    if (cmp(p->first, oinfo.last_backfill, sort_bitwise) >= 0) {
+    if (p->first >= oinfo.last_backfill) {
       // FIXME: this is _probably_ true, although it could conceivably
       // be in the undefined region!  Hmm!
       ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
@@ -1742,7 +1742,7 @@ void PG::activate(ObjectStore::Transaction& t,
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              ++p)
-	  if (cmp(p->soid, pi.last_backfill, get_sort_bitwise()) <= 0)
+	  if (p->soid <= pi.last_backfill)
 	    pm.add_next_event(*p);
       }
       
@@ -2366,11 +2366,11 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
     Mutex::Locker l(backoff_lock);
     auto p = backoffs.lower_bound(begin);
     while (p != backoffs.end()) {
-      int r = cmp_bitwise(p->first, end);
+      int r = cmp(p->first, end);
       dout(20) << __func__ << " ? " << r << " " << p->first
 	       << " " << p->second << dendl;
       // note: must still examine begin=end=p->first case
-      if (r > 0 || (r == 0 && cmp_bitwise(begin, end) < 0)) {
+      if (r > 0 || (r == 0 && begin < end)) {
 	break;
       }
       dout(20) << __func__ << " checking " << p->first
@@ -2378,9 +2378,8 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
       auto q = p->second.begin();
       while (q != p->second.end()) {
 	dout(20) << __func__ << " checking  " << *q << dendl;
-	int r = cmp_bitwise((*q)->begin, begin);
-	if (r == 0 || (r > 0 &&
-		       cmp_bitwise((*q)->end, end) < 0)) {
+	int r = cmp((*q)->begin, begin);
+	if (r == 0 || (r > 0 && (*q)->end < end)) {
 	  bv.push_back(*q);
 	  q = p->second.erase(q);
 	} else {
@@ -3264,7 +3263,7 @@ void PG::append_log(
      * here past last_backfill.  It's ok for the same reason as
      * above */
     if (transaction_applied &&
-	(cmp(p->soid, info.last_backfill, get_sort_bitwise()) > 0)) {
+	p->soid > info.last_backfill) {
       pg_log.roll_forward(&handler);
     }
   }
@@ -4431,8 +4430,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	for (auto p = projected_log.log.rbegin();
 	     p != projected_log.log.rend();
 	     ++p) {
-          if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
+          if (p->soid >= scrubber.start &&
+	      p->soid < scrubber.end) {
             scrubber.subset_last_update = p->version;
             break;
 	  }
@@ -4442,8 +4441,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 		 pg_log.get_log().log.rbegin();
 	       p != pg_log.get_log().log.rend();
 	       ++p) {
-	    if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-		cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
+	    if (p->soid >= scrubber.start &&
+		p->soid < scrubber.end) {
 	      scrubber.subset_last_update = p->version;
 	      break;
 	    }

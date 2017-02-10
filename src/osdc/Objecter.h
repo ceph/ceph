@@ -1236,8 +1236,8 @@ public:
 
     bool contained_by(const hobject_t& begin, const hobject_t& end) {
       hobject_t h = get_hobj();
-      int r = cmp_bitwise(h, begin);
-      return r == 0 || (r > 0 && cmp_bitwise(h, end) < 0);
+      int r = cmp(h, begin);
+      return r == 0 || (r > 0 && h < end);
     }
 
     void dump(Formatter *f) const;

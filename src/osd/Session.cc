@@ -47,8 +47,8 @@ void Session::ack_backoff(
   auto p = backoffs.lower_bound(begin);
   while (p != backoffs.end()) {
     // note: must still examine begin=end=p->first case
-    int r = cmp_bitwise(p->first, end);
-    if (r > 0 || (r == 0 && cmp_bitwise(begin, end) < 0)) {
+    int r = cmp(p->first, end);
+    if (r > 0 || (r == 0 && begin < end)) {
       break;
     }
     auto q = p->second.begin();

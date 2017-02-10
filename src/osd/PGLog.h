@@ -753,7 +753,7 @@ protected:
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
 		       << " entries: " << entries << dendl;
 
-    if (cmp(hoid, info.last_backfill, info.last_backfill_bitwise) > 0) {
+    if (hoid > info.last_backfill) {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " after last_backfill"
 			 << dendl;
       return;
@@ -1002,7 +1002,7 @@ public:
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
 	log->add(*p);
       }
-      if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0 &&
+      if (p->soid <= last_backfill &&
 	  !p->is_error()) {
 	missing.add_next_event(*p);
 	if (rollbacker) {
@@ -1192,7 +1192,7 @@ public:
 	     i != log.log.rend();
 	     ++i) {
 	  if (!debug_verify_stored_missing && i->version <= info.last_complete) break;
-	  if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+	  if (i->soid > info.last_backfill)
 	    continue;
 	  if (i->is_error())
 	    continue;
@@ -1240,7 +1240,7 @@ public:
 	    if (checked.count(i.first))
 	      continue;
 	    if (i.second.need > log.tail ||
-	      cmp(i.first, info.last_backfill, info.last_backfill_bitwise) > 0) {
+	      i.first > info.last_backfill) {
 	      lderr(dpp->get_cct()) << __func__ << ": invalid missing set entry found "
 				    << i.first
 				    << dendl;
@@ -1266,7 +1266,7 @@ public:
 	       i != divergent_priors.rend();
 	       ++i) {
 	    if (i->first <= info.last_complete) break;
-	    if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
+	    if (i->second > info.last_backfill)
 	      continue;
 	    if (did.count(i->second)) continue;
 	    did.insert(i->second);

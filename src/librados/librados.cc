@@ -4205,7 +4205,7 @@ extern "C" int rados_object_list_cursor_cmp(
 {
   hobject_t *lhs = (hobject_t*)lhs_cur;
   hobject_t *rhs = (hobject_t*)rhs_cur;
-  return cmp_bitwise(*lhs, *rhs);
+  return cmp(*lhs, *rhs);
 }
 
 extern "C" int rados_object_list(rados_ioctx_t io,
@@ -6073,7 +6073,7 @@ bool librados::ObjectCursor::operator<(const librados::ObjectCursor &rhs)
 {
   const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
   const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
-  return cmp_bitwise(lhs_hobj, rhs_hobj) == -1;
+  return lhs_hobj < rhs_hobj;
 }
 
 librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)

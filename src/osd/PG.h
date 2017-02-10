@@ -488,7 +488,7 @@ public:
 	auto pinfoiter = pinfo.find(i.first);
 	assert(pinfoiter != pinfo.end());
 	if (item->need <= pinfoiter->second.last_update &&
-	    cmp(hoid, pinfoiter->second.last_backfill, sort_bitwise) <= 0 &&
+	    hoid <= pinfoiter->second.last_backfill &&
 	    !i.second.is_missing(hoid))
 	  mliter->second.insert(i.first);
       }
@@ -768,7 +768,7 @@ public:
     void trim_to(const hobject_t &soid) {
       trim();
       while (!objects.empty() &&
-	     cmp(objects.begin()->first, soid, sort_bitwise) <= 0) {
+	     objects.begin()->first <= soid) {
 	pop_front();
       }
     }
@@ -1209,8 +1209,8 @@ public:
     // classic (non chunk) scrubs block all writes
     // chunky scrubs only block writes to a range
     bool write_blocked_by_scrub(const hobject_t &soid, bool sort_bitwise) {
-      if (cmp(soid, start, sort_bitwise) >= 0 &&
-	  cmp(soid, end, sort_bitwise) < 0)
+      if (soid >= start &&
+	  soid < end)
 	return true;
 
       return false;

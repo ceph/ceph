@@ -8903,7 +8903,7 @@ void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
     // advance
     pos = _pgid.get_hobj_end(osdmap->get_pg_pool(pos.pool)->get_pg_num());
     dout(20) << __func__ << "  next pg " << pos << dendl;
-  } while (cmp_bitwise(pos, m->end) < 0);
+  } while (pos < m->end);
 }
 
 template<typename T, int MSGTYPE>

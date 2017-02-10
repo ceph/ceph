@@ -395,8 +395,8 @@ public:
     assert(peer_info.count(peer));
     bool should_send =
       hoid.pool != (int64_t)info.pgid.pool() ||
-      cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
-      cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
+      hoid <= last_backfill_started ||
+      hoid <= peer_info[peer].last_backfill;
     if (!should_send)
       assert(is_backfill_targets(peer));
     return should_send;

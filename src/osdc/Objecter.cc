@@ -3075,15 +3075,15 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   auto q = op->session->backoffs.lower_bound(hoid);
   if (q != op->session->backoffs.begin()) {
     --q;
-    if (cmp_bitwise(hoid, q->second.end) >= 0) {
+    if (hoid >= q->second.end) {
       ++q;
     }
   }
   if (q != op->session->backoffs.end()) {
     ldout(cct, 20) << __func__ << " ? " << q->first << " [" << q->second.begin
 		   << "," << q->second.end << ")" << dendl;
-    int r = cmp_bitwise(hoid, q->second.begin);
-    if (r == 0 || (r > 0 && cmp_bitwise(hoid, q->second.end) < 0)) {
+    int r = cmp(hoid, q->second.begin);
+    if (r == 0 || (r > 0 && hoid < q->second.end)) {
       ldout(cct, 10) << __func__ << " backoff on " << hoid << ", queuing "
 		     << op << " tid " << op->tid << dendl;
       return;
@@ -5012,7 +5012,7 @@ void Objecter::enumerate_objects(
 {
   assert(result);
 
-  if (!end.is_max() && cmp_bitwise(start, end) > 0) {
+  if (!end.is_max() && start > end) {
     lderr(cct) << __func__ << ": start " << start << " > end " << end << dendl;
     on_finish->complete(-EINVAL);
     return;
@@ -5103,7 +5103,7 @@ void Objecter::_enumerate_reply(
   ldout(cct, 20) << __func__ << ": response.entries.size "
 		 << response.entries.size() << ", response.entries "
 		 << response.entries << dendl;
-  if (cmp_bitwise(response.handle, end) <= 0) {
+  if (response.handle <= end) {
     *next = response.handle;
   } else {
     ldout(cct, 10) << __func__ << ": adjusted next down to end " << end
@@ -5131,7 +5131,7 @@ void Objecter::_enumerate_reply(
 		     hash,
 		     pool_id,
 		     response.entries.back().nspace);
-      if (cmp_bitwise(last, end) < 0)
+      if (last < end)
 	break;
       ldout(cct, 20) << __func__ << " dropping item " << last
 		     << " >= end " << end << dendl;
