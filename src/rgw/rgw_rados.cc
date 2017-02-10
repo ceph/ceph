@@ -5158,10 +5158,11 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
-    if (real_clock::is_zero(creation_time))
-      creation_time = ceph::real_clock::now(cct);
-    else
+    if (real_clock::is_zero(creation_time)) {
+      info.creation_time = ceph::real_clock::now(cct);
+    } else {
       info.creation_time = creation_time;
+    }
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
