@@ -126,7 +126,7 @@ public:
 template <typename T>
 class PrimaryLogPG::BlessedGenContext : public GenContext<T> {
   PrimaryLogPGRef pg;
-  GenContext<T> *c;
+  unique_ptr<GenContext<T>> c;
   epoch_t e;
 public:
   BlessedGenContext(PrimaryLogPG *pg, GenContext<T> *c, epoch_t e)
@@ -134,9 +134,9 @@ public:
   void finish(T t) {
     pg->lock();
     if (pg->pg_has_reset_since(e))
-      delete c;
+      c.reset();
     else
-      c->complete(t);
+      c.release()->complete(t);
     pg->unlock();
   }
 };
@@ -149,7 +149,7 @@ GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_gencontext(
 
 class PrimaryLogPG::BlessedContext : public Context {
   PrimaryLogPGRef pg;
-  Context *c;
+  unique_ptr<Context> c;
   epoch_t e;
 public:
   BlessedContext(PrimaryLogPG *pg, Context *c, epoch_t e)
@@ -157,9 +157,9 @@ public:
   void finish(int r) {
     pg->lock();
     if (pg->pg_has_reset_since(e))
-      delete c;
+      c.reset();
     else
-      c->complete(r);
+      c.release()->complete(r);
     pg->unlock();
   }
 };
@@ -10751,8 +10751,8 @@ bool PrimaryLogPG::all_peer_done() const
  * our copy and theirs).
  *
  * All objects on a backfill_target in
- * [MIN,peer_backfill_info[backfill_target].begin) are either
- * not present or backfilled (all removed objects have been removed).
+ * [MIN,peer_backfill_info[backfill_target].begin) are valid; logically-removed
+ * objects have been actually deleted and all logically-valid objects are replicated.
  * There may be PG objects in this interval yet to be backfilled.
  *
  * All objects in PG in [MIN,backfill_info.begin) have been backfilled to all
@@ -10765,7 +10765,7 @@ bool PrimaryLogPG::all_peer_done() const
  * For a backfill target, all objects <= peer_info[target].last_backfill
  * have been backfilled to target
  *
- * There *MAY* be objects between last_backfill_started and
+ * There *MAY* be missing/outdated objects between last_backfill_started and
  * MIN(peer_backfill_info[*].begin, backfill_info.begin) in the event that client
  * io created objects since the last scan.  For this reason, we call
  * update_range() again before continuing backfill.
@@ -10954,10 +10954,10 @@ uint64_t PrimaryLogPG::recover_backfill(
        * by just not updating last_backfill_started here if head doesn't
        * exist and snapdir does.  We aren't using up a recovery count here,
        * so we're going to recover snapdir immediately anyway.  We'll only
-       * fail if we fail to get the rw lock (which I believe is why this
-       * failure mode is so rare).
+       * fail "backward" if we fail to get the rw lock and that just means
+       * we'll re-process this section of the hash space again.
        *
-       * I'm choosing a hack here because the really "correct" answer is
+       * I'm choosing this hack here because the really "correct" answer is
        * going to be to unify snapdir and head into a single object (a
        * snapdir is really just a confusing way to talk about head existing
        * as a whiteout), but doing that is going to be a somewhat larger
