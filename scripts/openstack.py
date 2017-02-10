@@ -124,6 +124,53 @@ def get_suite_parser():
         default=15,
     )
     parser.add_argument(
+        '--suite-relpath',
+        help=('Look for tasks and suite definitions in this'
+              'subdirectory of the suite repo.'),
+    )
+    parser.add_argument(
+        '-r', '--rerun',
+        help=('Attempt to reschedule a run, selecting only those'
+              'jobs whose status are mentioned by'
+              '--rerun-status.'
+              'Note that this is implemented by scheduling an'
+              'entirely new suite and including only jobs whose'
+              'descriptions match the selected ones. It does so'
+              'using the same logic as --filter.'
+              'Of all the flags that were passed when scheduling'
+              'the original run, the resulting one will only'
+              'inherit the suite value. Any others must be'
+              'passed as normal while scheduling with this'
+              'feature.'),
+    )
+    parser.add_argument(
+        '-R', '--rerun-statuses',
+        help=("A comma-separated list of statuses to be used"
+              "with --rerun. Supported statuses are: 'dead',"
+              "'fail', 'pass', 'queued', 'running', 'waiting'"),
+        default='fail,dead',
+    )
+    parser.add_argument(
+        '-D', '--distroversion', '--distro-version',
+        help='Distro version to run against',
+    )
+    parser.add_argument(
+        '-n', '--newest',
+        help=('Search for the newest revision built on all'
+              'required distro/versions, starting from'
+              'either --ceph or --sha1, backtracking'
+              'up to <newest> commits'),
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        '-S', '--sha1',
+        help=('The ceph sha1 to run against (overrides -c)'
+              'If both -S and -c are supplied, -S wins, and'
+              'there is no validation that sha1 is contained'
+              'in branch')
+    )
+    parser.add_argument(
         '--ceph-git-url',
         help=("git clone url for Ceph"),
     )
