@@ -300,14 +300,32 @@ static __u64 crush_ln(unsigned int xin)
  */
 
 static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
-				int x, int r)
+				int x, int r, int *out, int outpos)
 {
-	unsigned int i, high = 0;
+	unsigned int i, j, high = 0;
 	unsigned int u;
 	unsigned int w;
 	__s64 ln, draw, high_draw = 0;
+        bool first = true, collide = false;
+        dprintk("bucket->h.size = %u, bucket->h.id = %d\n", bucket->h.size, bucket->h.id);
 
 	for (i = 0; i < bucket->h.size; i++) {
+                dprintk("index=%d, id=%d\n", i, bucket->h.items[i]);
+                for (j = 0; j < outpos; j++){
+                        if (out[j] == bucket->h.items[i]){
+                             dprintk("collide is %d\n", collide);
+                             collide = true;
+                             break;
+                        }
+                }
+                if(true == collide) {
+                        // If collide, we should ignore this, and no need to caculate.
+                        // Reset the collide for the next check.
+                        collide = false;
+                        dprintk("reset collide to %d\n", collide);
+                        continue;
+                }
+                dprintk("After continue, collide is %d\n", collide);
 		w = bucket->item_weights[i];
 		if (w) {
 			u = crush_hash32_3(bucket->h.hash, x,
@@ -336,12 +354,14 @@ static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
 		} else {
 			draw = S64_MIN;
 		}
-
-		if (i == 0 || draw > high_draw) {
-			high = i;
-			high_draw = draw;
-		}
+                if(first == true || draw > high_draw){
+                       first = false;
+                       high = i;
+                       high_draw = draw;
+                }
+                dprintk("high is %d, high_draw is %d\n", high, high_draw);
 	}
+        dprintk("return high id is %d\n", bucket->h.items[high]);
 
 	return bucket->h.items[high];
 }
@@ -349,7 +369,7 @@ static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
 
 static int crush_bucket_choose(const struct crush_bucket *in,
 			       struct crush_work_bucket *work,
-			       int x, int r)
+			       int x, int r, int *out, int outpos)
 {
 	dprintk(" crush_bucket_choose %d x=%d r=%d\n", in->id, x, r);
 	BUG_ON(in->size == 0);
@@ -371,7 +391,7 @@ static int crush_bucket_choose(const struct crush_bucket *in,
 	case CRUSH_BUCKET_STRAW2:
 		return bucket_straw2_choose(
 			(const struct crush_bucket_straw2 *)in,
-			x, r);
+			x, r, out, outpos);
 	default:
 		dprintk("unknown bucket %d alg %d\n", in->id, in->alg);
 		return in->items[0];
@@ -485,7 +505,7 @@ parent_r %d stable %d\n",
 				else
 					item = crush_bucket_choose(
 						in, work->work[-1-in->id],
-						x, r);
+						x, r, out, outpos);
 				if (item >= map->max_devices) {
 					dprintk("   bad item %d\n", item);
 					skip_rep = 1;
@@ -693,7 +713,7 @@ static void crush_choose_indep(const struct crush_map *map,
 
 				item = crush_bucket_choose(
 					in, work->work[-1-in->id],
-					x, r);
+					x, r, out, outpos);
 				if (item >= map->max_devices) {
 					dprintk("   bad item %d\n", item);
 					out[rep] = CRUSH_ITEM_NONE;
