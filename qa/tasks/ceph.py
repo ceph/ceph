@@ -15,6 +15,7 @@ import time
 import gevent
 import socket
 
+from paramiko import SSHException
 from ceph_manager import CephManager, write_conf
 from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
@@ -132,6 +133,8 @@ def ceph_log(ctx, config):
                     # ConnectionLostError, we ignore this because nodes
                     # are allowed to get power cycled during tests.
                     log.debug("Missed logrotate, EOFError")
+                except SSHException as e:
+                    log.debug("Missed logrotate, SSHException")
                 except socket.error as e:
                     if e.errno == errno.EHOSTUNREACH:
                         log.debug("Missed logrotate, host unreachable")
