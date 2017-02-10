@@ -375,17 +375,20 @@ int DBObjectMap::DBObjectMapIteratorImpl::next(bool validate)
 
 int DBObjectMap::DBObjectMapIteratorImpl::next_parent()
 {
-  if (!parent_iter || !parent_iter->valid()) {
-    invalid = true;
-    return 0;
-  }
   r = next();
   if (r < 0)
     return r;
-  if (!valid() || on_parent() || !parent_iter->valid())
-    return 0;
+  while (parent_iter && parent_iter->valid() && !on_parent()) {
+    assert(valid());
+    r = lower_bound(parent_iter->key());
+    if (r < 0)
+      return r;
+  }
 
-  return lower_bound(parent_iter->key());
+  if (!parent_iter || !parent_iter->valid()) {
+    invalid = true;
+  }
+  return 0;
 }
 
 int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_test,
