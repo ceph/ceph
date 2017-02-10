@@ -476,7 +476,7 @@ int MemStore::collection_list(const coll_t& cid,
   map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
 	 ls->size() < (unsigned)max &&
-	 cmp_bitwise(p->first, end) < 0) {
+	 p->first < end) {
     ls->push_back(p->first);
     ++p;
   }

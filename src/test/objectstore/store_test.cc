@@ -91,7 +91,7 @@ bool sorted(const vector<ghobject_t> &in) {
   for (vector<ghobject_t>::const_iterator i = in.begin();
        i != in.end();
        ++i) {
-    if (cmp(start, *i, true) > 0) {
+    if (start > *i) {
       cout << start << " should follow " << *i << std::endl;
       return false;
     }
@@ -2329,24 +2329,24 @@ TEST_P(StoreTest, Sort) {
     ASSERT_EQ(a, b);
     b.oid.name = "b";
     ASSERT_NE(a, b);
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.pool = 1;
     b.pool = 2;
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.pool = 3;
-    ASSERT_TRUE(cmp_bitwise(a, b) > 0);
+    ASSERT_TRUE(a > b);
   }
   {
     ghobject_t a(hobject_t(sobject_t("a", CEPH_NOSNAP)));
     ghobject_t b(hobject_t(sobject_t("b", CEPH_NOSNAP)));
     a.hobj.pool = 1;
     b.hobj.pool = 1;
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.hobj.pool = -3;
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.hobj.pool = 1;
     b.hobj.pool = -3;
-    ASSERT_TRUE(cmp_bitwise(a, b) > 0);
+    ASSERT_TRUE(a > b);
   }
 }
 

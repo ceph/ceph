@@ -169,14 +169,14 @@ struct Session : public RefCountedObject {
       assert(backoff_count == (int)backoffs.size());
       auto p = backoffs.lower_bound(oid);
       if (p != backoffs.begin() &&
-	  cmp_bitwise(p->first, oid) > 0) {
+	  p->first > oid) {
 	--p;
       }
       if (p != backoffs.end()) {
-	int r = cmp_bitwise(oid, p->first);
+	int r = cmp(oid, p->first);
 	if (r == 0 || r > 0) {
 	  for (auto& q : p->second) {
-	    if (r == 0 || cmp_bitwise(oid, q->end) < 0) {
+	    if (r == 0 || oid < q->end) {
 	      return &(*q);
 	    }
 	  }

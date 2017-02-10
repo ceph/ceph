@@ -490,8 +490,9 @@ TEST_F(PGLogTest, merge_old_entry) {
     list<hobject_t> remove_snap;
 
     info.last_backfill = hobject_t();
-    info.last_backfill.set_hash(1);
+    info.last_backfill.set_hash(100);
     oe.soid.set_hash(2);
+    ASSERT_GT(oe.soid, info.last_backfill);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());

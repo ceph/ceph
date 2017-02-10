@@ -359,20 +359,6 @@ private:
     return str;
   }
 
-  struct CmpPairNibblewise {
-    bool operator()(const pair<string, ghobject_t>& l,
-		    const pair<string, ghobject_t>& r)
-    {
-      if (l.first < r.first)
-	return true;
-      if (l.first > r.first)
-	return false;
-      if (cmp_nibblewise(l.second, r.second) < 0)
-	return true;
-      return false;
-    }
-  };
-
   struct CmpPairBitwise {
     bool operator()(const pair<string, ghobject_t>& l,
 		    const pair<string, ghobject_t>& r)
@@ -381,7 +367,7 @@ private:
 	return true;
       if (l.first > r.first)
 	return false;
-      if (cmp_bitwise(l.second, r.second) < 0)
+      if (cmp(l.second, r.second) < 0)
 	return true;
       return false;
     }

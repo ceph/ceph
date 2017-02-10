@@ -903,7 +903,7 @@ int HashIndex::get_path_contents_by_hash_bitwise(
   for (map<string, ghobject_t>::iterator i = rev_objects.begin();
        i != rev_objects.end();
        ++i) {
-    if (next_object && cmp_bitwise(i->second, *next_object) < 0)
+    if (next_object && i->second < *next_object)
       continue;
     string hash_prefix = get_path_str(i->second);
     hash_prefixes->insert(hash_prefix);
@@ -1004,12 +1004,12 @@ int HashIndex::list_by_hash_bitwise(
 	    *next = j->second;
 	  return 0;
 	}
-	if (cmp_bitwise(j->second, end) >= 0) {
+	if (j->second >= end) {
 	  if (next)
 	    *next = j->second;
 	  return 0;
 	}
-	if (!next || cmp_bitwise(j->second, *next) >= 0) {
+	if (!next || j->second >= *next) {
 	  dout(20) << __func__ << " prefix " << *i << " ob " << j->second << dendl;
 	  out->push_back(j->second);
 	}
