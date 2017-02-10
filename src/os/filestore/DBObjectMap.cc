@@ -395,22 +395,37 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
 							     string *begin,
 							     string *end)
 {
+  /* This is clumsy because one cannot call prev() on end(), nor can one
+   * test for == begin().
+   */
   complete_iter->upper_bound(to_test);
-  if (complete_iter->valid())
+  if (complete_iter->valid()) {
     complete_iter->prev();
-  else
+    if (!complete_iter->valid()) {
+      complete_iter->upper_bound(to_test);
+      return false;
+    }
+  } else {
     complete_iter->seek_to_last();
+    if (!complete_iter->valid())
+      return false;
+  }
 
-  if (!complete_iter->valid())
+  assert(complete_iter->key() <= to_test);
+  assert(complete_iter->value().length() >= 1);
+  string _end(complete_iter->value().c_str(),
+	      complete_iter->value().length() - 1);
+  if (_end.empty() || _end > to_test) {
+    if (begin)
+      *begin = complete_iter->key();
+    if (end)
+      *end = _end;
+    return true;
+  } else {
+    complete_iter->next();
+    assert(!complete_iter->valid() || complete_iter->key() > to_test);
     return false;
-
-  string _end;
-  if (begin)
-    *begin = complete_iter->key();
-  _end = string(complete_iter->value().c_str());
-  if (end)
-    *end = _end;
-  return (to_test >= complete_iter->key()) && (!_end.size() || _end > to_test);
+  }
 }
 
 /**
