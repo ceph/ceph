@@ -2659,18 +2659,24 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
 int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 {
   // rwlock is locked
-
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
+  ldout(cct,20) << __func__ << " base " << t->base_oid << " " << t->base_oloc
+		<< " precalc_pgid " << (int)t->precalc_pgid
+		<< " pgid " << t->base_pgid
+		<< (is_read ? " is_read" : "")
+		<< (is_write ? " is_write" : "")
+		<< dendl;
 
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   if (!pi) {
     t->osd = -1;
     return RECALC_OP_TARGET_POOL_DNE;
   }
+  ldout(cct,30) << __func__ << "  base pi " << pi
+		<< " pg_num " << pi->get_pg_num() << dendl;
 
   bool force_resend = false;
-  bool need_check_tiering = false;
   if (osdmap->get_epoch() == pi->last_force_op_resend) {
     if (t->last_force_resend < pi->last_force_op_resend) {
       t->last_force_resend = pi->last_force_op_resend;
@@ -2679,17 +2685,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       force_resend = true;
     }
   }
-  if (t->target_oid.name.empty() || force_resend) {
-    t->target_oid = t->base_oid;
-    need_check_tiering = true;
-  }
-  if (t->target_oloc.empty() || force_resend) {
-    t->target_oloc = t->base_oloc;
-    need_check_tiering = true;
-  }
 
-  if (need_check_tiering &&
-      (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
+  // apply tiering
+  t->target_oid = t->base_oid;
+  t->target_oloc = t->base_oloc;
+  if ((t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
     if (is_read && pi->has_read_tier())
       t->target_oloc.pool = pi->read_tier;
     if (is_write && pi->has_write_tier())
@@ -2703,7 +2703,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 
   pg_t pgid;
   if (t->precalc_pgid) {
-    assert(t->base_oid.name.empty()); // make sure this is a listing op
+    assert(t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    assert(t->base_oid.name.empty()); // make sure this is a pg op
     assert(t->base_oloc.pool == (int64_t)t->base_pgid.pool());
     pgid = t->base_pgid;
   } else {
@@ -2714,6 +2715,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
+  ldout(cct,20) << __func__ << " target " << t->target_oid << " "
+		<< t->target_oloc << " -> pgid " << pgid << dendl;
+  ldout(cct,30) << __func__ << "  target pi " << pi
+		<< " pg_num " << pi->get_pg_num() << dendl;
 
   int size = pi->size;
   int min_size = pi->min_size;
@@ -2774,7 +2779,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       &t->actual_pgid);
     t->sort_bitwise = sort_bitwise;
     ldout(cct, 10) << __func__ << " "
-		   << " pgid " << pgid << " -> " << t->actual_pgid
+		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
 		   << " acting " << acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
