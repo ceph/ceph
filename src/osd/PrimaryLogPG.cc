@@ -1689,6 +1689,10 @@ void PrimaryLogPG::do_request(
     replica_scrub(op, handle);
     break;
 
+  case MSG_OSD_REP_SCRUBMAP:
+    do_replica_scrub_map(op);
+    break;
+
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     do_update_log_missing(op);
     break;

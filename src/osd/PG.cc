@@ -54,6 +54,8 @@
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
+#include "messages/MOSDRepScrubMap.h"
+
 #include "common/BackTrace.h"
 #include "common/EventTrace.h"
 
@@ -3637,8 +3639,39 @@ void PG::unreg_next_scrub()
   }
 }
 
+void PG::do_replica_scrub_map(OpRequestRef op)
+{
+  const MOSDRepScrubMap *m = static_cast<const MOSDRepScrubMap*>(op->get_req());
+  dout(7) << __func__ << " " << *m << dendl;
+  if (m->map_epoch < info.history.same_interval_since) {
+    dout(10) << __func__ << " discarding old from "
+	     << m->map_epoch << " < " << info.history.same_interval_since
+	     << dendl;
+    return;
+  }
+  if (!scrubber.is_chunky_scrub_active()) {
+    dout(10) << __func__ << " scrub isn't active" << dendl;
+    return;
+  }
+
+  op->mark_started();
+
+  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
+  scrubber.received_maps[m->from].decode(p, info.pgid.pool());
+  dout(10) << "map version is "
+	   << scrubber.received_maps[m->from].valid_through
+	   << dendl;
+
+  --scrubber.waiting_on;
+  scrubber.waiting_on_whom.erase(m->from);
+  if (scrubber.waiting_on == 0) {
+    requeue_scrub();
+  }
+}
+
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
+  // for legacy jewel compatibility only
   const MOSDSubOp *m = static_cast<const MOSDSubOp *>(op->get_req());
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
@@ -4076,24 +4109,33 @@ void PG::replica_scrub(
     map, start, end, msg->deep, msg->seed,
     handle);
 
-  vector<OSDOp> scrub(1);
-  scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
-  hobject_t poid;
-  eversion_t v;
-  osd_reqid_t reqid;
-  MOSDSubOp *subop = new MOSDSubOp(
-    reqid,
-    pg_whoami,
-    spg_t(info.pgid.pgid, get_primary().shard),
-    poid,
-    0,
-    msg->map_epoch,
-    osd->get_tid(),
-    v);
-  ::encode(map, subop->get_data());
-  subop->ops = scrub;
-
-  osd->send_message_osd_cluster(subop, msg->get_connection());
+  if (HAVE_FEATURE(acting_features, SERVER_LUMINOUS)) {
+    MOSDRepScrubMap *reply = new MOSDRepScrubMap(
+      spg_t(info.pgid.pgid, get_primary().shard),
+      msg->map_epoch,
+      pg_whoami);
+    ::encode(map, reply->get_data());
+    osd->send_message_osd_cluster(reply, msg->get_connection());
+  } else {
+    // for jewel compatibility
+    vector<OSDOp> scrub(1);
+    scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
+    hobject_t poid;
+    eversion_t v;
+    osd_reqid_t reqid;
+    MOSDSubOp *subop = new MOSDSubOp(
+      reqid,
+      pg_whoami,
+      spg_t(info.pgid.pgid, get_primary().shard),
+      poid,
+      0,
+      msg->map_epoch,
+      osd->get_tid(),
+      v);
+    ::encode(map, subop->get_data());
+    subop->ops = scrub;
+    osd->send_message_osd_cluster(subop, msg->get_connection());
+  }
 }
 
 /* Scrub:
@@ -5503,6 +5545,8 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
   case MSG_OSD_REP_SCRUB:
     return can_discard_replica_op<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op);
+  case MSG_OSD_REP_SCRUBMAP:
+    return can_discard_replica_op<MOSDRepScrubMap, MSG_OSD_REP_SCRUBMAP>(op);
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     return can_discard_replica_op<
       MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(op);
@@ -5606,6 +5650,11 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<const MOSDRepScrub*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_REP_SCRUBMAP:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<const MOSDRepScrubMap*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     return !have_same_or_newer_map(
