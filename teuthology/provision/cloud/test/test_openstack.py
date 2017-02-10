@@ -123,6 +123,17 @@ class TestOpenStackBase(object):
             'libcloud.compute.drivers.openstack'
             '.OpenStackNodeDriver.destroy_volume'
         )
+        self.patchers['m_get_service_catalog'] = patch(
+            'libcloud.common.openstack'
+            '.OpenStackBaseConnection.get_service_catalog'
+        )
+        self.patchers['m_auth_token'] = patch(
+            'teuthology.provision.cloud.util.AuthToken'
+        )
+        self.patchers['m_get_endpoint'] = patch(
+            'libcloud.common.openstack'
+            '.OpenStackBaseConnection.get_endpoint',
+        )
         self.patchers['m_sleep'] = patch(
             'time.sleep'
         )
@@ -132,6 +143,7 @@ class TestOpenStackBase(object):
         self.mocks = dict()
         for name, patcher in self.patchers.items():
             self.mocks[name] = patcher.start()
+        self.mocks['m_get_endpoint'].return_value = 'endpoint'
 
     def teardown(self):
         for patcher in self.patchers.values():
@@ -148,8 +160,12 @@ class TestOpenStackProvider(TestOpenStackBase):
         assert obj.conf == test_config['providers']['my_provider']
 
     def test_driver(self):
+        token = self.mocks['m_auth_token'].return_value
+        self.mocks['m_auth_token'].return_value.__enter__.return_value = token
+        token.value = None
         obj = cloud.get_provider('my_provider')
         assert isinstance(obj.driver, get_driver('openstack'))
+        assert obj._auth_token.value is None
 
     def test_images(self):
         obj = cloud.get_provider('my_provider')

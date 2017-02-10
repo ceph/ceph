@@ -50,6 +50,29 @@ def retry(function, *args, **kwargs):
 class OpenStackProvider(Provider):
     _driver_posargs = ['username', 'password']
 
+    def _get_driver(self):
+        self._auth_token = util.AuthToken(name='teuthology_%s' % self.name)
+        with self._auth_token as token:
+            driver = super(OpenStackProvider, self)._get_driver()
+            # We must apparently call get_service_catalog() so that
+            # get_endpoint() works.
+            driver.connection.get_service_catalog()
+            if not token.value:
+                token.write(
+                    driver.connection.auth_token,
+                    driver.connection.auth_token_expires,
+                    driver.connection.get_endpoint(),
+                )
+        return driver
+    driver = property(fget=_get_driver)
+
+    def _get_driver_args(self):
+        driver_args = super(OpenStackProvider, self)._get_driver_args()
+        if self._auth_token.value:
+            driver_args['ex_force_auth_token'] = self._auth_token.value
+            driver_args['ex_force_base_url'] = self._auth_token.endpoint
+        return driver_args
+
     @property
     def images(self):
         if not hasattr(self, '_images'):
@@ -132,7 +155,7 @@ class OpenStackProvisioner(base.Provisioner):
 
         :return: None
         """
-        driver_name = self.provider.driver.name.lower()
+        driver_name = self.provider.driver_name.lower()
         full_conf = conf or dict()
         driver_conf = full_conf.get(driver_name, dict())
         legacy_conf = getattr(config, driver_name) or dict()

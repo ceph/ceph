@@ -20,17 +20,20 @@ class Provider(object):
         self.conf = conf
         self.driver_name = self.conf['driver']
 
-    @property
-    def driver(self):
+    def _get_driver(self):
         driver_type = get_driver(
             getattr(lc_Provider, self.driver_name.upper())
         )
-        driver_args = deepcopy(self.conf['driver_args'])
+        driver_args = self._get_driver_args()
         driver = driver_type(
             *[driver_args.pop(arg_name) for arg_name in self._driver_posargs],
             **driver_args
         )
         return driver
+    driver = property(fget=_get_driver)
+
+    def _get_driver_args(self):
+        return deepcopy(self.conf['driver_args'])
 
 
 class Provisioner(object):
