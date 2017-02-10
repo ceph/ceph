@@ -1369,6 +1369,8 @@ public:
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
 
+  void handle_backoff(OpRequestRef& op);
+
   OpContextUPtr trim_object(bool first, const hobject_t &coid);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
