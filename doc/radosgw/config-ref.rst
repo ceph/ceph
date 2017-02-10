@@ -138,7 +138,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw num rados handles``
 
-:Description: The numer of the `RADOS cluster handles`_ for Ceph Object Gateway.
+:Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
               Having a configurable number of RADOS handles is resulting in
               significant performance boost for all types of workloads. Each RGW
               worker thread would now get to pick a RADOS handle for its lifetime,
