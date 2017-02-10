@@ -403,8 +403,10 @@ private:
 
     /// skips to next valid parent entry
     int next_parent();
+    
+    /// first parent() >= to
+    int lower_bound_parent(const string &to);
 
-    /// Tests whether to_test is in complete region
     /**
      * Tests whether to_test is in complete region
      *
@@ -496,18 +498,18 @@ private:
   /// Remove header and all related prefixes
   int _clear(Header header,
 	     KeyValueDB::Transaction t);
-  /// Adds to t operations necessary to add new_complete to the complete set
-  int merge_new_complete(Header header,
-			 const map<string, string> &new_complete,
-			 DBObjectMapIterator iter,
-			 KeyValueDB::Transaction t);
+
+  /* Scan complete region bumping *begin to the beginning of any
+   * containing region and adding all complete region keys between
+   * the updated begin and end to the complete_keys_to_remove set */
+  int merge_new_complete(DBObjectMapIterator &iter,
+			 string *begin,
+			 const string &end,
+			 set<string> *complete_keys_to_remove);
 
   /// Writes out State (mainly next_seq)
   int write_state(KeyValueDB::Transaction _t =
 		  KeyValueDB::Transaction());
-
-  /// 0 if the complete set now contains all of key space, < 0 on error, 1 else
-  int need_parent(DBObjectMapIterator iter);
 
   /// Copies header entry from parent @see rm_keys
   int copy_up_header(Header header,
