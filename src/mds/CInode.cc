@@ -3052,18 +3052,6 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   
   bool valid = true;
 
-  // do not issue caps if inode differs from readdir snaprealm
-  SnapRealm *realm = find_snaprealm();
-  bool no_caps = session->is_stale() ||
-		 (realm && dir_realm && realm != dir_realm) ||
-		 is_frozen() || state_test(CInode::STATE_EXPORTINGCAPS);
-  if (no_caps)
-    dout(20) << "encode_inodestat no caps"
-	     << (session->is_stale()?", session stale ":"")
-	     << ((realm && dir_realm && realm != dir_realm)?", snaprealm differs ":"")
-	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
-	     << (is_frozen()?", frozen inode":"") << dendl;
-
   // pick a version!
   inode_t *oi = &inode;
   inode_t *pi = get_projected_inode();
@@ -3102,6 +3090,23 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	      << " not match snapid " << snapid << dendl;
     }
   }
+
+  SnapRealm *realm = find_snaprealm();
+
+  bool no_caps = !valid ||
+		 session->is_stale() ||
+		 (dir_realm && realm != dir_realm) ||
+		 is_frozen() ||
+		 state_test(CInode::STATE_EXPORTINGCAPS);
+  if (no_caps)
+    dout(20) << "encode_inodestat no caps"
+	     << (!valid?", !valid":"")
+	     << (session->is_stale()?", session stale ":"")
+	     << ((dir_realm && realm != dir_realm)?", snaprealm differs ":"")
+	     << (is_frozen()?", frozen inode":"")
+	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
+	     << dendl;
+
   
   // "fake" a version that is old (stable) version, +1 if projected.
   version_t version = (oi->version * 2) + is_projected();
@@ -3224,7 +3229,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ecap.mseq = 0;
     ecap.realm = 0;
   } else {
-    if (!no_caps && valid && !cap) {
+    if (!no_caps && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, realm);
       if (is_auth()) {
@@ -3235,7 +3240,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       }
     }
 
-    if (!no_caps && valid && cap) {
+    if (!no_caps && cap) {
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(session, file_i);
       int issue = (cap->wanted() | likes) & allowed;
