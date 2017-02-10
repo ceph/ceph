@@ -171,12 +171,12 @@ def get_suite_parser():
               'in branch')
     )
     parser.add_argument(
-        '--ceph-git-url',
-        help=("git clone url for Ceph"),
+        '--ceph-repo',
+        help=("Query this repository for Ceph branch and SHA1"),
     )
     parser.add_argument(
-        '--ceph-qa-suite-git-url',
-        help=("git clone url for ceph-qa-suite"),
+        '--suite-repo',
+        help=("Use tasks and suite definition in this repository"),
     )
     return parser
 
