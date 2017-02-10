@@ -94,28 +94,28 @@ TEST(PerfHistogram, ZeroedInitially) {
   PerfHistogramAccessor<2> h{x_axis, y_axis};
   for (int x = 0; x < XS; ++x) {
     for (int y = 0; y < YS; ++y) {
-      ASSERT_EQ(0, h.read_bucket(x, y));
+      ASSERT_EQ(0UL, h.read_bucket(x, y));
     }
   }
 }
 
 TEST(PerfHistogram, SimpleValues) {
   PerfHistogramAccessor<2> h{x_axis, y_axis};
-  ASSERT_EQ(0, h.read_bucket(1, 1));
+  ASSERT_EQ(0UL, h.read_bucket(1, 1));
   h.inc(0, 0);
-  ASSERT_EQ(1, h.read_bucket(1, 1));
+  ASSERT_EQ(1UL, h.read_bucket(1, 1));
 
-  ASSERT_EQ(0, h.read_bucket(2, 2));
+  ASSERT_EQ(0UL, h.read_bucket(2, 2));
   h.inc(1, 1);
-  ASSERT_EQ(1, h.read_bucket(2, 2));
+  ASSERT_EQ(1UL, h.read_bucket(2, 2));
 
-  ASSERT_EQ(0, h.read_bucket(3, 3));
+  ASSERT_EQ(0UL, h.read_bucket(3, 3));
   h.inc(2, 2);
-  ASSERT_EQ(1, h.read_bucket(3, 3));
+  ASSERT_EQ(1UL, h.read_bucket(3, 3));
 
-  ASSERT_EQ(0, h.read_bucket(4, 3));
+  ASSERT_EQ(0UL, h.read_bucket(4, 3));
   h.inc(3, 3);
-  ASSERT_EQ(1, h.read_bucket(4, 3));
+  ASSERT_EQ(1UL, h.read_bucket(4, 3));
 }
 
 TEST(PerfHistogram, OneBucketRange) {
@@ -123,7 +123,7 @@ TEST(PerfHistogram, OneBucketRange) {
       PerfHistogramCommon::axis_config_d{"", PerfHistogramCommon::SCALE_LINEAR,
                                          0, 1, 1});
 
-  ASSERT_EQ(1, ranges.size());
+  ASSERT_EQ(1UL, ranges.size());
   ASSERT_EQ(std::numeric_limits<int64_t>::min(), ranges[0].first);
   ASSERT_EQ(std::numeric_limits<int64_t>::max(), ranges[0].second);
 }
@@ -133,7 +133,7 @@ TEST(PerfHistogram, TwoBucketRange) {
       PerfHistogramCommon::axis_config_d{"", PerfHistogramCommon::SCALE_LINEAR,
                                          0, 1, 2});
 
-  ASSERT_EQ(2, ranges.size());
+  ASSERT_EQ(2UL, ranges.size());
   ASSERT_EQ(std::numeric_limits<int64_t>::min(), ranges[0].first);
   ASSERT_EQ(-1, ranges[0].second);
   ASSERT_EQ(0, ranges[1].first);
@@ -147,9 +147,9 @@ TEST(PerfHistogram, LinearBucketRange) {
 
   for (size_t i = 0; i < ranges.size(); ++i) {
     ASSERT_EQ(
-        i, PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].first, ac));
+      static_cast<long>(i), PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].first, ac));
     ASSERT_EQ(
-        i, PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].second, ac));
+      static_cast<long>(i), PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].second, ac));
   }
 
   for (size_t i = 1; i < ranges.size(); ++i) {
@@ -164,9 +164,9 @@ TEST(PerfHistogram, LogarithmicBucketRange) {
 
   for (size_t i = 0; i < ranges.size(); ++i) {
     ASSERT_EQ(
-        i, PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].first, ac));
+      static_cast<long>(i), PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].first, ac));
     ASSERT_EQ(
-        i, PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].second, ac));
+      static_cast<long>(i), PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].second, ac));
   }
 
   for (size_t i = 1; i < ranges.size(); ++i) {
