@@ -305,7 +305,7 @@ public:
 
   std::string gen_dbg_prefix() const override { return gen_prefix(); }
   
-  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>
+  const map<hobject_t, set<pg_shard_t>>
     &get_missing_loc_shards() const override {
     return missing_loc.get_missing_locs();
   }
@@ -937,13 +937,13 @@ protected:
   bool already_ack(eversion_t v);
 
   // projected object info
-  SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
+  SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
-  map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator> snapset_contexts;
+  map<hobject_t, SnapSetContext*> snapset_contexts;
   Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
-  map<hobject_t, map<client_t, ceph_tid_t>, hobject_t::BitwiseComparator> debug_op_order;
+  map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
 
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
@@ -995,7 +995,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> recovering;
+  map<hobject_t, ObjectContextRef> recovering;
 
   /*
    * Backfill
@@ -1011,8 +1011,8 @@ protected:
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
    */
-  set<hobject_t, hobject_t::Comparator> backfills_in_flight;
-  map<hobject_t, pg_stat_t, hobject_t::Comparator> pending_backfill_updates;
+  set<hobject_t> backfills_in_flight;
+  map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const override {
     f->open_array_section("backfill_targets");
@@ -1045,7 +1045,7 @@ protected:
     }
     {
       f->open_array_section("backfills_in_flight");
-      for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = backfills_in_flight.begin();
+      for (set<hobject_t>::const_iterator i = backfills_in_flight.begin();
 	   i != backfills_in_flight.end();
 	   ++i) {
 	f->dump_stream("object") << *i;
@@ -1054,7 +1054,7 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::const_iterator i = recovering.begin();
+      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
 	f->dump_stream("object") << i->first;
@@ -1233,7 +1233,7 @@ protected:
   void recover_got(hobject_t oid, eversion_t v);
 
   // -- copyfrom --
-  map<hobject_t, CopyOpRef, hobject_t::BitwiseComparator> copy_ops;
+  map<hobject_t, CopyOpRef> copy_ops;
 
   int fill_in_copy_get(
     OpContext *ctx,
@@ -1278,7 +1278,7 @@ protected:
   friend struct C_Copyfrom;
 
   // -- flush --
-  map<hobject_t, FlushOpRef, hobject_t::BitwiseComparator> flush_ops;
+  map<hobject_t, FlushOpRef> flush_ops;
 
   /// start_flush takes ownership of on_flush iff ret == -EINPROGRESS
   int start_flush(
@@ -1300,8 +1300,7 @@ protected:
     const hobject_t &begin, const hobject_t &end) override;
   virtual void scrub_snapshot_metadata(
     ScrubMap &map,
-    const std::map<hobject_t, pair<uint32_t, uint32_t>,
-    hobject_t::BitwiseComparator> &missing_digest) override;
+    const std::map<hobject_t, pair<uint32_t, uint32_t>> &missing_digest) override;
   virtual void _scrub_clear_state() override;
   virtual void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
@@ -1319,7 +1318,7 @@ protected:
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> in_progress_proxy_ops;
+  map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
   void cancel_proxy_ops(bool requeue);
 
@@ -1456,7 +1455,7 @@ private:
   };
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     PrimaryLogPG *pg;
-    set<hobject_t, hobject_t::BitwiseComparator> in_flight;
+    set<hobject_t> in_flight;
     snapid_t snap_to_trim;
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     ~SnapTrimmer();

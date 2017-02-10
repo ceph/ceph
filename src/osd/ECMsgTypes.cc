@@ -169,8 +169,8 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     ENCODE_START(1, 1, bl);
     ::encode(from, bl);
     ::encode(tid, bl);
-    map<hobject_t, list<pair<uint64_t, uint64_t> >, hobject_t::BitwiseComparator> tmp;
-    for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::const_iterator m = to_read.begin();
+    map<hobject_t, list<pair<uint64_t, uint64_t> >> tmp;
+    for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::const_iterator m = to_read.begin();
 	  m != to_read.end(); ++m) {
       list<pair<uint64_t, uint64_t> > tlist;
       for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator l = m->second.begin();
@@ -199,9 +199,9 @@ void ECSubRead::decode(bufferlist::iterator &bl)
   ::decode(from, bl);
   ::decode(tid, bl);
   if (struct_v == 1) {
-    map<hobject_t, list<pair<uint64_t, uint64_t> >, hobject_t::BitwiseComparator>tmp;
+    map<hobject_t, list<pair<uint64_t, uint64_t> >>tmp;
     ::decode(tmp, bl);
-    for (map<hobject_t, list<pair<uint64_t, uint64_t> >, hobject_t::BitwiseComparator>::const_iterator m = tmp.begin();
+    for (map<hobject_t, list<pair<uint64_t, uint64_t> >>::const_iterator m = tmp.begin();
 	  m != tmp.end(); ++m) {
       list<boost::tuple<uint64_t, uint64_t, uint32_t> > tlist;
       for (list<pair<uint64_t, uint64_t> > ::const_iterator l = m->second.begin();
@@ -231,7 +231,7 @@ void ECSubRead::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("objects");
-  for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::const_iterator i =
+  for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::const_iterator i =
 	 to_read.begin();
        i != to_read.end();
        ++i) {
@@ -254,7 +254,7 @@ void ECSubRead::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("object_attrs_requested");
-  for (set<hobject_t,hobject_t::BitwiseComparator>::const_iterator i = attrs_to_read.begin();
+  for (set<hobject_t>::const_iterator i = attrs_to_read.begin();
        i != attrs_to_read.end();
        ++i) {
     f->open_object_section("object");
@@ -320,7 +320,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("buffers_read");
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> >, hobject_t::BitwiseComparator>::const_iterator i =
+  for (map<hobject_t, list<pair<uint64_t, bufferlist> >>::const_iterator i =
 	 buffers_read.begin();
        i != buffers_read.end();
        ++i) {
@@ -342,7 +342,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("attrs_returned");
-  for (map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator>::const_iterator i =
+  for (map<hobject_t, map<string, bufferlist>>::const_iterator i =
 	 attrs_read.begin();
        i != attrs_read.end();
        ++i) {
@@ -363,7 +363,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("errors");
-  for (map<hobject_t, int, hobject_t::BitwiseComparator>::const_iterator i = errors.begin();
+  for (map<hobject_t, int>::const_iterator i = errors.begin();
        i != errors.end();
        ++i) {
     f->open_object_section("error_pair");

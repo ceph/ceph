@@ -11,7 +11,7 @@
 
 void Session::clear_backoffs()
 {
-  map<hobject_t,set<BackoffRef>,hobject_t::BitwiseComparator> ls;
+  map<hobject_t,set<BackoffRef>> ls;
   {
     Mutex::Locker l(backoff_lock);
     ls.swap(backoffs);

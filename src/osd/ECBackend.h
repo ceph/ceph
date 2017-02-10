@@ -137,20 +137,19 @@ public:
    * check_recovery_sources.
    */
   void objects_read_and_reconstruct(
-    const hobject_t::bitwisemap<
-      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+    const map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
     > &reads,
     bool fast_read,
-    GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func);
+    GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func);
 
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
     unsigned objects_to_read;
-    GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> func;
-    hobject_t::bitwisemap<pair<int, extent_map> > results;
+    GenContextURef<map<hobject_t,pair<int, extent_map> > &&> func;
+    map<hobject_t,pair<int, extent_map> > results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
-      GenContextURef<hobject_t::bitwisemap<pair<int, extent_map> > &&> &&func)
+      GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
       : objects_to_read(objects_to_read), func(std::move(func)) {}
     void complete_object(
       const hobject_t &hoid,
@@ -178,10 +177,9 @@ public:
 
   template <typename Func>
   void objects_read_async_no_cache(
-    const hobject_t::bitwisemap<extent_set> &to_read,
+    const map<hobject_t,extent_set> &to_read,
     Func &&on_complete) {
-    hobject_t::bitwisemap<
-      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
+    map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
     for (auto &&hpair: to_read) {
       auto &l = _to_read[hpair.first];
       for (auto extent: hpair.second) {
@@ -192,7 +190,7 @@ public:
       _to_read,
       false,
       make_gen_lambda_context<
-        hobject_t::bitwisemap<pair<int, extent_map> > &&, Func>(
+      map<hobject_t,pair<int, extent_map> > &&, Func>(
 	  std::forward<Func>(on_complete)));
   }
   void kick_reads() {
@@ -294,7 +292,7 @@ private:
     RecoveryOp() : state(IDLE) {}
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
-  map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator> recovery_ops;
+  map<hobject_t, RecoveryOp> recovery_ops;
 
   void continue_recovery_op(
     RecoveryOp &op,
@@ -372,11 +370,11 @@ public:
     // of the available shards.
     bool for_recovery;
 
-    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> to_read;
-    map<hobject_t, read_result_t, hobject_t::BitwiseComparator> complete;
+    map<hobject_t, read_request_t> to_read;
+    map<hobject_t, read_result_t> complete;
 
-    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> obj_to_source;
-    map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> > source_to_obj;
+    map<hobject_t, set<pg_shard_t>> obj_to_source;
+    map<pg_shard_t, set<hobject_t> > source_to_obj;
 
     void dump(Formatter *f) const;
 
@@ -388,7 +386,7 @@ public:
       bool do_redundant_reads,
       bool for_recovery,
       OpRequestRef op,
-      map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &&_to_read)
+      map<hobject_t, read_request_t> &&_to_read)
       : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
 	for_recovery(for_recovery), to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
@@ -416,7 +414,7 @@ public:
   map<pg_shard_t, set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
     int priority,
-    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read,
+    map<hobject_t, read_request_t> &to_read,
     OpRequestRef op,
     bool do_redundant_reads, bool for_recovery);
 
@@ -453,14 +451,14 @@ public:
     eversion_t roll_forward_to; /// Soon to be generated internally
 
     /// Ancillary also provided from submit_transaction caller
-    map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> obc_map;
+    map<hobject_t, ObjectContextRef> obc_map;
 
     /// see call_write_ordered
     std::list<std::function<void(void)> > on_write;
 
     /// Generated internally
-    set<hobject_t, hobject_t::BitwiseComparator> temp_added;
-    set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
+    set<hobject_t> temp_added;
+    set<hobject_t> temp_cleared;
 
     ECTransaction::WritePlan plan;
     bool requires_rmw() const { return !plan.to_read.empty(); }
@@ -470,9 +468,9 @@ public:
     bool using_cache = false;
 
     /// In progress read state;
-    hobject_t::bitwisemap<extent_set> pending_read; // subset already being read
-    hobject_t::bitwisemap<extent_set> remote_read;  // subset we must read
-    hobject_t::bitwisemap<extent_map> remote_read_result;
+    map<hobject_t,extent_set> pending_read; // subset already being read
+    map<hobject_t,extent_set> remote_read;  // subset we must read
+    map<hobject_t,extent_map> remote_read_result;
     bool read_in_progress() const {
       return !remote_read.empty() && remote_read_result.empty();
     }
@@ -614,7 +612,7 @@ public:
 
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
-  SharedPtrRegistry<hobject_t, ECUtil::HashInfo, hobject_t::BitwiseComparator> unstable_hashinfo_registry;
+  SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
 				    const map<string,bufferptr> *attr = NULL);
 

@@ -4853,9 +4853,9 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   if (struct_v < 2) {
     if (!soid.is_max() && soid.pool == -1)
       soid.pool = pool;
-    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> tmp;
+    map<hobject_t, interval_set<uint64_t>> tmp;
     tmp.swap(clone_subset);
-    for (map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
+    for (map<hobject_t, interval_set<uint64_t>>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -5134,11 +5134,11 @@ void ScrubMap::merge_incr(const ScrubMap &l)
   assert(valid_through == l.incr_since);
   valid_through = l.valid_through;
 
-  for (map<hobject_t,object, hobject_t::BitwiseComparator>::const_iterator p = l.objects.begin();
+  for (map<hobject_t,object>::const_iterator p = l.objects.begin();
        p != l.objects.end();
        ++p){
     if (p->second.negative) {
-      map<hobject_t,object, hobject_t::BitwiseComparator>::iterator q = objects.find(p->first);
+      map<hobject_t,object>::iterator q = objects.find(p->first);
       if (q != objects.end()) {
 	objects.erase(q);
       }
@@ -5176,9 +5176,9 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 
   // handle hobject_t upgrade
   if (struct_v < 3) {
-    map<hobject_t, object, hobject_t::ComparatorWithDefault> tmp;
+    map<hobject_t, object> tmp;
     tmp.swap(objects);
-    for (map<hobject_t, object, hobject_t::ComparatorWithDefault>::iterator i = tmp.begin();
+    for (map<hobject_t, object>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -5194,7 +5194,7 @@ void ScrubMap::dump(Formatter *f) const
   f->dump_stream("valid_through") << valid_through;
   f->dump_stream("incremental_since") << incr_since;
   f->open_array_section("objects");
-  for (map<hobject_t,object, hobject_t::ComparatorWithDefault>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
+  for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
     f->open_object_section("object");
     f->dump_string("name", p->first.oid.name);
     f->dump_unsigned("hash", p->first.get_hash());

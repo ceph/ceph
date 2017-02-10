@@ -573,10 +573,6 @@ public:
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
-  void resort_missing(bool sort_bitwise) {
-    missing.resort(sort_bitwise);
-  }
-
   void revise_have(hobject_t oid, eversion_t have) {
     missing.revise_have(oid, have);
   }
@@ -712,7 +708,7 @@ public:
 protected:
   static void split_by_object(
     mempool::osd::list<pg_log_entry_t> &entries,
-    map<hobject_t, mempool::osd::list<pg_log_entry_t>, hobject_t::BitwiseComparator> *out_entries) {
+    map<hobject_t, mempool::osd::list<pg_log_entry_t>> *out_entries) {
     while (!entries.empty()) {
       mempool::osd::list<pg_log_entry_t> &out_list = (*out_entries)[entries.front().soid];
       out_list.splice(out_list.end(), entries, entries.begin());
@@ -932,9 +928,9 @@ protected:
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
-    map<hobject_t, mempool::osd::list<pg_log_entry_t>, hobject_t::BitwiseComparator > split;
+    map<hobject_t, mempool::osd::list<pg_log_entry_t> > split;
     split_by_object(entries, &split);
-    for (map<hobject_t, mempool::osd::list<pg_log_entry_t>, hobject_t::BitwiseComparator>::iterator i = split.begin();
+    for (map<hobject_t, mempool::osd::list<pg_log_entry_t>>::iterator i = split.begin();
 	 i != split.end();
 	 ++i) {
       _merge_object_divergent_entries(
@@ -1185,9 +1181,9 @@ public:
 			   << info.last_complete
 			   << "," << info.last_update << "]" << dendl;
 
-	set<hobject_t, hobject_t::BitwiseComparator> did;
-	set<hobject_t, hobject_t::BitwiseComparator> checked;
-	set<hobject_t, hobject_t::BitwiseComparator> skipped;
+	set<hobject_t> did;
+	set<hobject_t> checked;
+	set<hobject_t> skipped;
 	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	     i != log.log.rend();
 	     ++i) {
