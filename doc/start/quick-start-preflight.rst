@@ -284,11 +284,21 @@ On some distributions (e.g., RHEL), the default firewall configuration is fairly
 strict. You may need to adjust your firewall settings allow inbound requests so
 that clients in your network can communicate with daemons on your Ceph nodes.
 
-For ``firewalld`` on RHEL 7, add port ``6789`` for Ceph Monitor nodes and ports
-``6800:7300`` for Ceph OSDs to the public zone and ensure that you make the
-setting permanent so that it is enabled on reboot. For example::
+For ``firewalld`` on RHEL 7, add the ``ceph-mon`` service for Ceph Monitor
+nodes and the ``ceph`` service for Ceph OSDs and MDSs to the public zone and
+ensure that you make the settings permanent so that they are enabled on reboot.
 
-	sudo firewall-cmd --zone=public --add-port=6789/tcp --permanent
+For example, on monitors::
+
+	sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
+
+and on OSDs and MDSs::
+
+	sudo firewall-cmd --zone=public --add-service=ceph --permanent
+
+Once you have finished configuring firewalld with the ``--permanent`` flag, you can make the changes live immediately without rebooting::
+
+	sudo firewall-cmd --reload
 
 For ``iptables``, add port ``6789`` for Ceph Monitors and ports ``6800:7300``
 for Ceph OSDs. For example::
