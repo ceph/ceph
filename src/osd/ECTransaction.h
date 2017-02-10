@@ -26,10 +26,10 @@ namespace ECTransaction {
   struct WritePlan {
     PGTransactionUPtr t;
     bool invalidates_cache = false; // Yes, both are possible
-    hobject_t::bitwisemap<extent_set> to_read;
-    hobject_t::bitwisemap<extent_set> will_write; // superset of to_read
+    map<hobject_t,extent_set> to_read;
+    map<hobject_t,extent_set> will_write; // superset of to_read
 
-    hobject_t::bitwisemap<ECUtil::HashInfoRef> hash_infos;
+    map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 
   bool requires_overwrite(
@@ -182,12 +182,12 @@ namespace ECTransaction {
     pg_t pgid,
     bool legacy_log_entries,
     const ECUtil::stripe_info_t &sinfo,
-    const hobject_t::bitwisemap<extent_map> &partial_extents,
+    const map<hobject_t,extent_map> &partial_extents,
     vector<pg_log_entry_t> &entries,
-    hobject_t::bitwisemap<extent_map> *written,
+    map<hobject_t,extent_map> *written,
     map<shard_id_t, ObjectStore::Transaction> *transactions,
-    set<hobject_t, hobject_t::BitwiseComparator> *temp_added,
-    set<hobject_t, hobject_t::BitwiseComparator> *temp_removed,
+    set<hobject_t> *temp_added,
+    set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp);
 };
 

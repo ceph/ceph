@@ -1807,7 +1807,7 @@ public:
     map<ceph_tid_t,CommandOp*> command_ops;
 
     // backoffs
-    map<hobject_t,OSDBackoff,hobject_t::BitwiseComparator> backoffs;
+    map<hobject_t,OSDBackoff> backoffs;
     multimap<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;

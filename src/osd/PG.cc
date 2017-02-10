@@ -354,7 +354,7 @@ void PG::proc_replica_log(
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i =
+  for (map<hobject_t, pg_missing_item>::const_iterator i =
 	 omissing.get_items().begin();
        i != omissing.get_items().end();
        ++i) {
@@ -520,7 +520,7 @@ void PG::MissingLoc::add_batch_sources_info(
   ldout(pg->cct, 10) << __func__ << ": adding sources in batch "
 		     << sources.size() << dendl;
   unsigned loop = 0;
-  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
+  for (map<hobject_t, pg_missing_item>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
     if (handle && ++loop >= pg->cct->_conf->osd_loop_before_reset_tphandle) {
@@ -542,7 +542,7 @@ bool PG::MissingLoc::add_source_info(
   bool found_missing = false;
   unsigned loop = 0;
   // found items?
-  for (map<hobject_t,pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
+  for (map<hobject_t,pg_missing_item>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
@@ -2487,7 +2487,7 @@ void PG::split_backoffs(PG *child, unsigned split_bits)
 void PG::clear_backoffs()
 {
   dout(10) << __func__ << " " << dendl;
-  map<hobject_t,set<BackoffRef>,hobject_t::BitwiseComparator> ls;
+  map<hobject_t,set<BackoffRef>> ls;
   {
     Mutex::Locker l(backoff_lock);
     ls.swap(backoffs);
@@ -3517,9 +3517,9 @@ void PG::filter_snapc(vector<snapid_t> &snaps)
   }
 }
 
-void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>& m)
+void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m)
 {
-  for (map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator it = m.begin();
+  for (map<hobject_t, list<OpRequestRef>>::iterator it = m.begin();
        it != m.end();
        ++it)
     requeue_ops(it->second);
@@ -3938,7 +3938,7 @@ void PG::_scan_rollback_obs(
 
 void PG::_scan_snaps(ScrubMap &smap) 
 {
-  for (map<hobject_t, ScrubMap::object, hobject_t::BitwiseComparator>::iterator i = smap.objects.begin();
+  for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
        i != smap.objects.end();
        ++i) {
     const hobject_t &hoid = i->first;
@@ -4598,7 +4598,7 @@ void PG::scrub_compare_maps()
 
   // construct authoritative scrub map for type specific scrubbing
   scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
-  map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> missing_digest;
+  map<hobject_t, pair<uint32_t, uint32_t>> missing_digest;
 
   if (acting.size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
@@ -4606,7 +4606,7 @@ void PG::scrub_compare_maps()
     stringstream ss;
 
     // Map from object with errors to good peer
-    map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> authoritative;
+    map<hobject_t, list<pg_shard_t>> authoritative;
     map<pg_shard_t, ScrubMap *> maps;
 
     dout(2) << __func__ << "   osd." << acting[0] << " has "
@@ -4641,7 +4641,7 @@ void PG::scrub_compare_maps()
       osd->clog->error(ss);
     }
 
-    for (map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
       list<pair<ScrubMap::object, pg_shard_t> > good_peers;
@@ -4656,7 +4656,7 @@ void PG::scrub_compare_maps()
 	  good_peers));
     }
 
-    for (map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
       scrubber.cleaned_meta_map.objects.erase(i->first);
@@ -4717,7 +4717,7 @@ bool PG::scrub_process_inconsistent()
     osd->clog->error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
-      for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >, hobject_t::BitwiseComparator>::iterator i =
+      for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >>::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
 	   ++i) {

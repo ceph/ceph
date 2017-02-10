@@ -120,7 +120,7 @@ void MemStore::dump(Formatter *f)
     f->close_section();
 
     f->open_array_section("objects");
-    for (map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator q = p->second->object_map.begin();
+    for (map<ghobject_t,ObjectRef>::iterator q = p->second->object_map.begin();
 	 q != p->second->object_map.end();
 	 ++q) {
       f->open_object_section("object");
@@ -473,7 +473,7 @@ int MemStore::collection_list(const coll_t& cid,
 
   dout(10) << __func__ << " cid " << cid << " start " << start
 	   << " end " << end << dendl;
-  map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = c->object_map.lower_bound(start);
+  map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
 	 ls->size() < (unsigned)max &&
 	 p->first < end) {
@@ -1445,7 +1445,7 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
   RWLock::WLocker l1(MIN(&(*sc), &(*dc))->lock);
   RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
 
-  map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = sc->object_map.begin();
+  map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
     if (p->first.match(bits, match)) {
       dout(20) << " moving " << p->first << dendl;

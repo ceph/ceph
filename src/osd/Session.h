@@ -139,7 +139,7 @@ struct Session : public RefCountedObject {
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
   std::atomic_int backoff_count= {0};  ///< simple count of backoffs
-  map<hobject_t,set<BackoffRef>, hobject_t::BitwiseComparator> backoffs;
+  map<hobject_t,set<BackoffRef>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
 

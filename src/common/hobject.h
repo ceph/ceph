@@ -305,37 +305,6 @@ public:
   friend bool operator==(const hobject_t&, const hobject_t&);
   friend bool operator!=(const hobject_t&, const hobject_t&);
   friend struct ghobject_t;
-
-  struct NibblewiseComparator {
-    bool operator()(const hobject_t& l, const hobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
-
-  struct BitwiseComparator {
-    bool operator()(const hobject_t& l, const hobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
-
-  struct Comparator {
-    bool bitwise;
-    explicit Comparator(bool b) : bitwise(b) {}
-    bool operator()(const hobject_t& l, const hobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
-  struct ComparatorWithDefault {
-    bool bitwise;
-    explicit ComparatorWithDefault(bool b=true) : bitwise(b) {}
-    bool operator()(const hobject_t& l, const hobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
-  template <typename T>
-  using bitwisemap = std::map<hobject_t, T, BitwiseComparator>;
-
-  using bitwiseset = std::set<hobject_t, BitwiseComparator>;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
@@ -509,25 +478,6 @@ public:
   friend bool operator==(const ghobject_t&, const ghobject_t&);
   friend bool operator!=(const ghobject_t&, const ghobject_t&);
 
-  struct NibblewiseComparator {
-    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
-
-  struct BitwiseComparator {
-    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
-
-  struct Comparator {
-    bool bitwise;
-    explicit Comparator(bool b) : bitwise(b) {}
-    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
-      return cmp(l, r) < 0;
-    }
-  };
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 

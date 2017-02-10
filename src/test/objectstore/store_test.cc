@@ -2218,7 +2218,7 @@ TEST_P(StoreTest, SimpleListTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  set<ghobject_t, ghobject_t::BitwiseComparator> all;
+  set<ghobject_t> all;
   {
     ObjectStore::Transaction t;
     for (int i=0; i<200; ++i) {
@@ -2235,7 +2235,7 @@ TEST_P(StoreTest, SimpleListTest) {
     ASSERT_EQ(r, 0);
   }
   {
-    set<ghobject_t, ghobject_t::BitwiseComparator> saw;
+    set<ghobject_t> saw;
     vector<ghobject_t> objects;
     ghobject_t next, current;
     while (!next.is_max()) {
@@ -2262,7 +2262,7 @@ TEST_P(StoreTest, SimpleListTest) {
   }
   {
     ObjectStore::Transaction t;
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
       t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
@@ -2282,7 +2282,7 @@ TEST_P(StoreTest, ListEndTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  set<ghobject_t, ghobject_t::BitwiseComparator> all;
+  set<ghobject_t> all;
   {
     ObjectStore::Transaction t;
     for (int i=0; i<200; ++i) {
@@ -2313,7 +2313,7 @@ TEST_P(StoreTest, ListEndTest) {
   }
   {
     ObjectStore::Transaction t;
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
       t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
@@ -2362,7 +2362,7 @@ TEST_P(StoreTest, MultipoolListTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  set<ghobject_t, ghobject_t::BitwiseComparator> all, saw;
+  set<ghobject_t> all, saw;
   {
     ObjectStore::Transaction t;
     for (int i=0; i<200; ++i) {
@@ -2399,7 +2399,7 @@ TEST_P(StoreTest, MultipoolListTest) {
   }
   {
     ObjectStore::Transaction t;
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
       t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
@@ -3013,7 +3013,7 @@ TEST_P(StoreTest, ManyObjectTest) {
   coll_t cid;
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
-  set<ghobject_t, ghobject_t::BitwiseComparator> created;
+  set<ghobject_t> created;
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
@@ -3034,14 +3034,14 @@ TEST_P(StoreTest, ManyObjectTest) {
     ASSERT_EQ(r, 0);
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     struct stat buf;
     ASSERT_TRUE(!store->stat(cid, *i, &buf));
   }
 
-  set<ghobject_t, ghobject_t::BitwiseComparator> listed, listed2;
+  set<ghobject_t> listed, listed2;
   vector<ghobject_t> objects;
   r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
@@ -3091,13 +3091,13 @@ TEST_P(StoreTest, ManyObjectTest) {
   ASSERT_TRUE(listed.size() == created.size());
   if (listed2.size())
     ASSERT_EQ(listed.size(), listed2.size());
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -3160,9 +3160,9 @@ public:
   unsigned write_alignment;
   unsigned max_object_len, max_write_len;
   unsigned in_flight;
-  map<ghobject_t, Object, ghobject_t::BitwiseComparator> contents;
-  set<ghobject_t, ghobject_t::BitwiseComparator> available_objects;
-  set<ghobject_t, ghobject_t::BitwiseComparator> in_flight_objects;
+  map<ghobject_t, Object> contents;
+  set<ghobject_t> available_objects;
+  set<ghobject_t> in_flight_objects;
   ObjectGenerator *object_gen;
   gen_type *rng;
   ObjectStore *store;
@@ -3323,7 +3323,7 @@ public:
       cond.Wait(lock);
     boost::uniform_int<> choose(0, available_objects.size() - 1);
     int index = choose(*rng);
-    set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = available_objects.begin();
+    set<ghobject_t>::iterator i = available_objects.begin();
     for ( ; index > 0; --index, ++i) ;
     ghobject_t ret = *i;
     return ret;
@@ -3869,7 +3869,7 @@ public:
     while (in_flight)
       cond.Wait(lock);
     vector<ghobject_t> objects;
-    set<ghobject_t, ghobject_t::BitwiseComparator> objects_set, objects_set2;
+    set<ghobject_t> objects_set, objects_set2;
     ghobject_t next, current;
     while (1) {
       //cerr << "scanning..." << std::endl;
@@ -3901,7 +3901,7 @@ public:
     }
 
     ASSERT_EQ(objects_set.size(), available_objects.size());
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = objects_set.begin();
+    for (set<ghobject_t>::iterator i = objects_set.begin();
 	 i != objects_set.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
@@ -3912,7 +3912,7 @@ public:
     ASSERT_EQ(r, 0);
     objects_set2.insert(objects.begin(), objects.end());
     ASSERT_EQ(objects_set2.size(), available_objects.size());
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = objects_set2.begin();
+    for (set<ghobject_t>::iterator i = objects_set2.begin();
 	 i != objects_set2.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
@@ -4368,7 +4368,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
-  set<ghobject_t, ghobject_t::BitwiseComparator> created;
+  set<ghobject_t> created;
   for (int n = 0; n < 10; ++n) {
     char nbuf[100];
     sprintf(nbuf, "n%d", n);
@@ -4391,7 +4391,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   vector<ghobject_t> objects;
   r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
-  set<ghobject_t, ghobject_t::BitwiseComparator> listed(objects.begin(), objects.end());
+  set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
@@ -4418,13 +4418,13 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -4450,7 +4450,7 @@ TEST_P(StoreTest, ScrubTest) {
     ASSERT_EQ(r, 0);
   }
   string base = "aaaaa";
-  set<ghobject_t, ghobject_t::BitwiseComparator> created;
+  set<ghobject_t> created;
   for (int i = 0; i < 1000; ++i) {
     char buf[100];
     sprintf(buf, "%d", i);
@@ -4490,7 +4490,7 @@ TEST_P(StoreTest, ScrubTest) {
   r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
-  set<ghobject_t, ghobject_t::BitwiseComparator> listed(objects.begin(), objects.end());
+  set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
@@ -4516,13 +4516,13 @@ TEST_P(StoreTest, ScrubTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;

@@ -1640,8 +1640,8 @@ private:
   list<CollectionRef> removed_collections;
 
   RWLock debug_read_error_lock;
-  set<ghobject_t, ghobject_t::BitwiseComparator> debug_data_error_objects;
-  set<ghobject_t, ghobject_t::BitwiseComparator> debug_mdata_error_objects;
+  set<ghobject_t> debug_data_error_objects;
+  set<ghobject_t> debug_mdata_error_objects;
 
   std::atomic<int> csum_type;
 
