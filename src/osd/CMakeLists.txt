@@ -16,6 +16,7 @@ set(osd_srcs
   OSDCap.cc
   Watch.cc
   ClassHandler.cc
+  Session.cc
   SnapMapper.cc
   ScrubStore.cc
   osd_types.cc
