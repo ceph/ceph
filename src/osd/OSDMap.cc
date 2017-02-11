@@ -1095,6 +1095,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   mask |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
     if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
@@ -1110,6 +1111,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     mask |= kraken_features;
   }
 =======
+=======
+>>>>>>> d0c91a2dbc1a189822d35db20c5d458dea80970c
   const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
   if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     features |= jewel_features;
@@ -1122,7 +1125,10 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= kraken_features;
   }
   mask |= kraken_features;
+<<<<<<< HEAD
 >>>>>>> 1a5cc32... osd/OSDMap: reflect REQUIRE_*_OSDS flag in required features
+=======
+>>>>>>> d0c91a2dbc1a189822d35db20c5d458dea80970c
 
   if (pmask)
     *pmask = mask;
