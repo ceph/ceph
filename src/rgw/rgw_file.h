@@ -886,6 +886,11 @@ namespace rgw {
       }
       lat.lock->unlock(); /* !LATCHED */
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 1 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /* lookup_fh(const fh_key&) */
 
@@ -965,6 +970,11 @@ namespace rgw {
       lat.lock->unlock(); /* !LATCHED */
     out:
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 2 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
