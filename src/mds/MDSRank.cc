@@ -68,7 +68,19 @@ MDSRank::MDSRank(
     state(MDSMap::STATE_BOOT),
     stopping(false),
     purge_queue(g_ceph_context, whoami_,
-        mdsmap_->get_metadata_pool(), objecter),
+      mdsmap_->get_metadata_pool(), objecter,
+      new FunctionContext(
+          [this](int r){
+          // Purge Queue operates inside mds_lock when we're calling into
+          // it, and outside when in background, so must handle both cases.
+          if (mds_lock.is_locked_by_me()) {
+            damaged();
+          } else {
+            damaged_unlocked();
+          }
+        }
+      )
+    ),
     progress_thread(this), dispatch_depth(0),
     hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
     mds_slow_req_count(0),
