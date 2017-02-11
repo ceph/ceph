@@ -120,9 +120,12 @@ TEST(hobject, prefixes5)
   ASSERT_EQ(prefixes_out, prefixes_correct);
 }
 
-#if 0
 TEST(pg_interval_t, check_new_interval)
 {
+// iterate through all 4 combinations
+for (unsigned i = 0; i < 4; ++i) {
+  bool compact = i & 1;
+  bool ec_pool = i & 2;
   //
   // Create a situation where osdmaps are the same so that
   // each test case can diverge from it using minimal code.
@@ -171,7 +174,7 @@ TEST(pg_interval_t, check_new_interval)
   // being split
   //
   {
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_FALSE(PastIntervals::check_new_interval(old_primary,
@@ -200,7 +203,7 @@ TEST(pg_interval_t, check_new_interval)
     int _new_primary = osd_id + 1;
     new_acting.push_back(_new_primary);
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -219,11 +222,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals));
     old_primary = new_primary;
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -234,7 +232,7 @@ TEST(pg_interval_t, check_new_interval)
     int _new_primary = osd_id + 1;
     new_up.push_back(_new_primary);
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -252,11 +250,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -266,7 +259,7 @@ TEST(pg_interval_t, check_new_interval)
     vector<int> new_up;
     int _new_up_primary = osd_id + 1;
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -284,11 +277,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -305,7 +293,7 @@ TEST(pg_interval_t, check_new_interval)
     inc.new_pools[pool_id].set_pg_num(new_pg_num);
     osdmap->apply_incremental(inc);
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -323,11 +311,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -344,7 +327,7 @@ TEST(pg_interval_t, check_new_interval)
     inc.new_pools[pool_id].set_pg_num(pg_num);
     osdmap->apply_incremental(inc);
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -362,11 +345,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -376,7 +354,7 @@ TEST(pg_interval_t, check_new_interval)
   {
     vector<int> old_acting;
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ostringstream out;
 
@@ -397,8 +375,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("acting set is too small"));
   }
 
@@ -430,7 +406,7 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -449,8 +425,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("acting set is too small"));
   }
 
@@ -465,7 +439,7 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -484,8 +458,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_TRUE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("includes interval"));
   }
   //
@@ -510,7 +482,7 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -529,8 +501,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_TRUE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("presumed to have been rw"));
   }
 
@@ -559,7 +529,7 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    PastIntervals past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -578,12 +548,10 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("does not include interval"));
   }
+} // end for, didn't want to reindent
 }
-#endif
 
 TEST(pg_t, get_ancestor)
 {
