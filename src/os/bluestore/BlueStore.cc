@@ -4063,6 +4063,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     AllocExtentVector exts;
     int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
 					0, 0, &exts);
@@ -4083,6 +4084,11 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 =======
 					0, 0, &exts);
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+    AllocExtentVector exts;
+    int64_t alloc_len = alloc->allocate(gift, g_conf->bluefs_alloc_size,
+					0, 0, &exts);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
     if (alloc_len < (int64_t)gift) {
       derr << __func__ << " allocate failed on 0x" << std::hex << gift
@@ -4118,13 +4124,17 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 				     &extents);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> os/bluestore/BlueFS: handle failure to reclaim blocks without crashing
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
       if (r < 0) {
 	derr << __func__ << " failed to reclaim space from bluefs"
 	     << dendl;
 	break;
       }
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
       assert(r >= 0);
@@ -4132,6 +4142,8 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 >>>>>>> os/bluestore/BlueFS: fix reclaim_blocks
 =======
 >>>>>>> os/bluestore/BlueFS: handle failure to reclaim blocks without crashing
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
       for (auto e : extents) {
 	bluefs_extents.erase(e.offset, e.length);
 	bluefs_extents_reclaiming.insert(e.offset, e.length);
@@ -8572,12 +8584,17 @@ int BlueStore::_do_alloc_write(
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     AllocExtentVector extents;
 <<<<<<< HEAD
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
 =======
     extents.reserve(4);
 >>>>>>> os/bluestore: prealloc/reserve extent vector for common alloc path
+=======
+    AllocExtentVector extents;
+    extents.reserve(4);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
     int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
                             hint, &extents);
     assert(got == (int64_t)final_length);
@@ -8585,6 +8602,7 @@ int BlueStore::_do_alloc_write(
     txc->statfs_delta.allocated() += got;
     for (auto& p : extents) {
       bluestore_pextent_t e = bluestore_pextent_t(p);
+<<<<<<< HEAD
 =======
     int count = 0;
 =======
@@ -8611,6 +8629,8 @@ int BlueStore::_do_alloc_write(
     for (auto& p : extents) {
       bluestore_pextent_t e = bluestore_pextent_t(p);
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
       txc->allocated.insert(e.offset, e.length);
       dblob.extents.push_back(e);
       hint = p.end();

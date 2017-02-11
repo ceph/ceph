@@ -98,7 +98,10 @@ public:
     m_max_blocks = max_alloc_size / block_size;
 =======
     m_max_alloc_size = max_alloc_size;
+<<<<<<< HEAD
 >>>>>>> os/bluestore: manage vector from ExtentList
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
     assert(m_extents->empty());
   }
 

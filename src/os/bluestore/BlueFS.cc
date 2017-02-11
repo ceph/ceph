@@ -181,6 +181,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   assert(r == 0); // caller shouldn't ask for more than they can get
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
 				    extents);
   if (got < (int64_t)want) {
@@ -201,6 +202,8 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   int count = 0;
 =======
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   int64_t got = alloc[id]->allocate(want, g_conf->bluefs_alloc_size, 0,
 				    extents);
   if (got < (int64_t)want) {
@@ -209,6 +212,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   if (got <= 0) {
     derr << __func__ << " failed to allocate space to return to bluestore"
 	 << dendl;
+<<<<<<< HEAD
     return got;
   }
 
@@ -219,11 +223,20 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
     log_t.op_alloc_rm(id, (*extents)[i].offset, (*extents)[i].length);
 >>>>>>> os/bluestore/BlueFS: fix reclaim_blocks
 =======
+=======
+    alloc[id]->dump();
+    return got;
+  }
+
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   for (auto& p : *extents) {
     block_all[id].erase(p.offset, p.length);
     block_total[id] -= p.length;
     log_t.op_alloc_rm(id, p.offset, p.length);
+<<<<<<< HEAD
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   }
 
   r = _flush_and_sync_log(l);
@@ -1809,6 +1822,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   AllocExtentVector extents;
   extents.reserve(4);  // 4 should be (more than) enough for most allocations
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
@@ -1833,6 +1847,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                           &extents);
   if (alloc_len < (int64_t)left) {
 >>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+  AllocExtentVector extents;
+  extents.reserve(4);
+  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
+                          &extents);
+  if (alloc_len < (int64_t)left) {
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
     derr << __func__ << " allocate failed on 0x" << std::hex << left
 	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
     alloc[id]->dump();

@@ -26,6 +26,15 @@ public:
   void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
 
+<<<<<<< HEAD
+=======
+  void try_lock(Context *on_tried_lock);
+  void request_lock(Context *on_locked);
+  void release_lock(Context *on_released);
+
+  void reacquire_lock(Context *on_reacquired = nullptr);
+
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   void handle_peer_notification(int r);
 
 protected:

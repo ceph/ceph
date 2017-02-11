@@ -16,10 +16,15 @@ from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 DEFAULT_NUM_DISKS = 2
 DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
 DEFAULT_IMAGE_SIZE = 10240 # in megabytes
 DEFAULT_CPUS = 1
+=======
+DEFAULT_NUM_RBD = 1
+DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 DEFAULT_MEM = 4096 # in megabytes
 
 def create_images(ctx, config, managers):
@@ -491,6 +496,7 @@ def task(ctx, config):
         - ceph:
         - qemu:
             client.0:
+<<<<<<< HEAD
               test: http://ceph.com/qa/test.sh
               type: block
               disks:
@@ -506,6 +512,9 @@ def task(ctx, config):
             client.0:
               test: http://download.ceph.com/qa/test.sh
               cpus: 4
+=======
+              test: http://download.ceph.com/qa/test.sh
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
               memory: 512 # megabytes
 
     If you want to run a test against a cloned rbd image, set clone to true::

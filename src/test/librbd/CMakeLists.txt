@@ -31,9 +31,18 @@ set(unittest_librbd_srcs
   test_mock_Journal.cc
   test_mock_ManagedLock.cc
   test_mock_ObjectMap.cc
+<<<<<<< HEAD
   exclusive_lock/test_mock_PreAcquireRequest.cc
   exclusive_lock/test_mock_PostAcquireRequest.cc
   exclusive_lock/test_mock_PreReleaseRequest.cc
+=======
+  test_mock_ObjectWatcher.cc
+  exclusive_lock/test_mock_AcquireRequest.cc
+  exclusive_lock/test_mock_BreakRequest.cc
+  exclusive_lock/test_mock_GetLockerRequest.cc
+  exclusive_lock/test_mock_ReacquireRequest.cc
+  exclusive_lock/test_mock_ReleaseRequest.cc
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   image/test_mock_RefreshRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc

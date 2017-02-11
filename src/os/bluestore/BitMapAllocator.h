@@ -25,6 +25,7 @@ class BitMapAllocator : public Allocator {
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 =======
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents,
@@ -33,6 +34,9 @@ class BitMapAllocator : public Allocator {
 =======
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
 public:
   BitMapAllocator(CephContext* cct, int64_t device_size, int64_t block_size);
@@ -45,6 +49,7 @@ public:
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 =======
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents,
@@ -53,6 +58,9 @@ public:
 =======
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
 >>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
   int release(
     uint64_t offset, uint64_t length);

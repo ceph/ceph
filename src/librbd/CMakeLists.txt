@@ -39,9 +39,16 @@ set(librbd_internal_srcs
   managed_lock/ReacquireRequest.cc
   managed_lock/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
+<<<<<<< HEAD
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
   exclusive_lock/PreReleaseRequest.cc
+=======
+  exclusive_lock/BreakRequest.cc
+  exclusive_lock/GetLockerRequest.cc
+  exclusive_lock/ReacquireRequest.cc
+  exclusive_lock/ReleaseRequest.cc
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   exclusive_lock/StandardPolicy.cc
   image/CloseRequest.cc
   image/CreateRequest.cc

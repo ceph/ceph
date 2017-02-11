@@ -3098,6 +3098,7 @@ extern "C" void rbd_aio_release(rbd_completion_t c)
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 extern "C" int rbd_group_create(rados_ioctx_t p, const char *name)
 {
   librados::IoCtx io_ctx;
@@ -3292,3 +3293,5 @@ extern "C" void rbd_group_image_status_list_cleanup(
 }
 =======
 >>>>>>> librbd: remove consistency group rbd cli and API support
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c

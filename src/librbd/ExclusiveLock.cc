@@ -98,6 +98,7 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
 }
 
 template <typename I>
+<<<<<<< HEAD
 void ExclusiveLock<I>::handle_peer_notification(int r) {
   Mutex::Locker locker(ML<I>::m_lock);
   if (!ML<I>::is_state_waiting_for_lock()) {
@@ -106,6 +107,118 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 
   ldout(m_image_ctx.cct, 10) << dendl;
   assert(ML<I>::is_action_acquire_lock());
+=======
+void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
+  int r = 0;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+    if (is_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+      execute_action(ACTION_TRY_LOCK, on_tried_lock);
+      return;
+    }
+  }
+
+  on_tried_lock->complete(r);
+}
+
+template <typename I>
+void ExclusiveLock<I>::request_lock(Context *on_locked) {
+  int r = 0;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+    if (is_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+      execute_action(ACTION_REQUEST_LOCK, on_locked);
+      return;
+    }
+  }
+
+  if (on_locked != nullptr) {
+    on_locked->complete(r);
+  }
+}
+
+template <typename I>
+void ExclusiveLock<I>::release_lock(Context *on_released) {
+  int r = 0;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+    if (is_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+      execute_action(ACTION_RELEASE_LOCK, on_released);
+      return;
+    }
+  }
+
+  on_released->complete(r);
+}
+
+template <typename I>
+void ExclusiveLock<I>::reacquire_lock(Context *on_reacquired) {
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+
+    if (m_state == STATE_WAITING_FOR_REGISTER) {
+      // restart the acquire lock process now that watch is valid
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": "
+                                 << "woke up waiting acquire" << dendl;
+      Action active_action = get_active_action();
+      assert(active_action == ACTION_TRY_LOCK ||
+             active_action == ACTION_REQUEST_LOCK);
+      execute_next_action();
+    } else if (!is_shutdown() &&
+               (m_state == STATE_LOCKED ||
+                m_state == STATE_ACQUIRING ||
+                m_state == STATE_POST_ACQUIRING ||
+                m_state == STATE_WAITING_FOR_PEER)) {
+      // interlock the lock operation with other image state ops
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+      execute_action(ACTION_REACQUIRE_LOCK, on_reacquired);
+      return;
+    }
+  }
+
+  // ignore request if shutdown or not in a locked-related state
+  if (on_reacquired != nullptr) {
+    on_reacquired->complete(0);
+  }
+}
+
+template <typename I>
+void ExclusiveLock<I>::handle_peer_notification(int r) {
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_state != STATE_WAITING_FOR_PEER) {
+      return;
+    }
+
+    ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+    assert(get_active_action() == ACTION_REQUEST_LOCK);
+
+    if (r >= 0) {
+      execute_next_action();
+      return;
+    }
+  }
+
+  handle_acquire_lock(r);
+}
+
+template <typename I>
+std::string ExclusiveLock<I>::encode_lock_cookie() const {
+  assert(m_lock.is_locked());
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
   m_acquire_lock_peer_ret_val = r;
   ML<I>::execute_next_action();
@@ -228,8 +341,22 @@ void ExclusiveLock<I>::handle_post_acquired_lock(int r) {
 
   Context *on_finish = nullptr;
   {
+<<<<<<< HEAD
     Mutex::Locker locker(ML<I>::m_lock);
     assert(ML<I>::is_state_acquiring() || ML<I>::is_state_post_acquiring());
+=======
+    m_lock.Lock();
+    assert(m_state == STATE_ACQUIRING ||
+           m_state == STATE_POST_ACQUIRING ||
+           m_state == STATE_WAITING_FOR_PEER);
+
+    Action action = get_active_action();
+    assert(action == ACTION_TRY_LOCK || action == ACTION_REQUEST_LOCK);
+    if (action == ACTION_REQUEST_LOCK && r < 0 && r != -EBLACKLISTED &&
+        r != -EPERM && r != -EROFS) {
+      m_state = STATE_WAITING_FOR_PEER;
+      m_lock.Unlock();
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
     assert (m_pre_post_callback != nullptr);
     std::swap(m_pre_post_callback, on_finish);

@@ -23,10 +23,13 @@ void ExtentList::add_extents(int64_t start, int64_t count) {
 
   if (!m_extents->empty()) {
 <<<<<<< HEAD
+<<<<<<< HEAD
     last_extent = &(m_extents->back());
     uint64_t last_offset = last_extent->end() / m_block_size;
     uint32_t last_length = last_extent->length / m_block_size;
 =======
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
     last_extent = &((*m_extents)[m_extents->size() - 1]);
     uint64_t last_offset = (last_extent->offset + last_extent->length) / 
 			m_block_size; 

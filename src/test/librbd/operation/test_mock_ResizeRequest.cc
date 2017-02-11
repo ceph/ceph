@@ -121,7 +121,11 @@ public:
 
   void expect_invalidate_cache(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(mock_image_ctx, invalidate_cache(false, _))
+<<<<<<< HEAD
                    .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
+=======
+                  .WillOnce(WithArg<1>(CompleteContext(r, NULL)));
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
     expect_op_work_queue(mock_image_ctx);
   }
 

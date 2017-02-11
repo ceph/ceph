@@ -81,6 +81,9 @@ private:
   void send_invalidate_cache(bool purge_on_error);
   void handle_invalidate_cache(int r);
 
+  void send_invalidate_cache(bool purge_on_error);
+  Context *handle_invalidate_cache(int *ret_val);
+
   void send_flush_notifies();
   void handle_flush_notifies(int r);
 

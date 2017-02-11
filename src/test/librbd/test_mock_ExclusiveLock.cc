@@ -259,7 +259,14 @@ public:
 
   void expect_notify_request_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                                   MockExclusiveLock &mock_exclusive_lock) {
+<<<<<<< HEAD
     EXPECT_CALL(*mock_image_ctx.image_watcher, notify_request_lock());
+=======
+    EXPECT_CALL(*mock_image_ctx.image_watcher, notify_request_lock())
+                  .WillRepeatedly(Invoke([&mock_exclusive_lock]() {
+                                           mock_exclusive_lock.handle_peer_notification(0);
+                                         }));
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   }
 
   void expect_notify_acquired_lock(MockExclusiveLockImageCtx &mock_image_ctx) {
