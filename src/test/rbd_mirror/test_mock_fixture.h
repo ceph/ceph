@@ -6,6 +6,7 @@
 
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados_test_stub/LibradosTestStub.h"
+#include "common/WorkQueue.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
 
@@ -21,6 +22,11 @@ class MockImageCtx;
 
 ACTION_P(CompleteContext, r) {
   arg0->complete(r);
+}
+
+ACTION_P2(CompleteContext, wq, r) {
+  ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
+  context_wq->queue(arg0, r);
 }
 
 MATCHER_P(ContentsEqual, bl, "") {

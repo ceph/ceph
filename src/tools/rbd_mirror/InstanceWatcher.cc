@@ -118,7 +118,7 @@ int InstanceWatcher<I>::init() {
 
 template <typename I>
 void InstanceWatcher<I>::init(Context *on_finish) {
-  dout(20) << dendl;
+  dout(20) << "instance_id=" << m_instance_id << dendl;
 
   Mutex::Locker locker(m_lock);
 

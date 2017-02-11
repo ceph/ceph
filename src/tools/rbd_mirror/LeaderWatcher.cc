@@ -15,7 +15,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::LeaderWatcher: " \
                            << this << " " << __func__ << ": "
-
 namespace rbd {
 namespace mirror {
 
@@ -31,7 +30,18 @@ LeaderWatcher<I>::LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx,
   : Watcher(io_ctx, threads->work_queue, RBD_MIRROR_LEADER),
     m_threads(threads), m_listener(listener),
     m_lock("rbd::mirror::LeaderWatcher " + io_ctx.get_pool_name()),
-    m_notifier_id(librados::Rados(io_ctx).get_instance_id()) {
+    m_notifier_id(librados::Rados(io_ctx).get_instance_id()),
+    m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
+                                 m_cct->_conf->rbd_blacklist_expire_seconds)) {
+}
+
+template <typename I>
+LeaderWatcher<I>::~LeaderWatcher() {
+  assert(m_status_watcher == nullptr);
+  assert(m_instances == nullptr);
+  assert(m_timer_task == nullptr);
+
+  delete m_leader_lock;
 }
 
 template <typename I>
@@ -43,14 +53,9 @@ int LeaderWatcher<I>::init() {
 
 template <typename I>
 void LeaderWatcher<I>::init(Context *on_finish) {
-  dout(20) << dendl;
+  dout(20) << "notifier_id=" << m_notifier_id << dendl;
 
   Mutex::Locker locker(m_lock);
-
-  assert(!m_leader_lock);
-  m_leader_lock.reset(
-    new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
-                   m_cct->_conf->rbd_blacklist_expire_seconds));
 
   assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
@@ -143,22 +148,6 @@ void LeaderWatcher<I>::shut_down(Context *on_finish) {
   Mutex::Locker timer_locker(m_threads->timer_lock);
   Mutex::Locker locker(m_lock);
 
-  assert(m_leader_lock);
-
-  if (false && is_leader(m_lock)) {
-    Context *ctx = create_async_context_callback(
-      m_work_queue, new FunctionContext(
-        [this, on_finish](int r) {
-          if (r < 0) {
-            derr << "error releasing leader lock: " << cpp_strerror(r) << dendl;
-          }
-          shut_down(on_finish);
-        }));
-
-    m_leader_lock->release_lock(ctx);
-    return;
-  }
-
   assert(m_on_shut_down_finish == nullptr);
   m_on_shut_down_finish = on_finish;
   cancel_timer_task();
@@ -234,7 +223,7 @@ template <typename I>
 bool LeaderWatcher<I>::is_leader(Mutex &lock) {
   assert(m_lock.is_locked());
 
-  bool leader = m_leader_lock && m_leader_lock->is_leader();
+  bool leader = m_leader_lock->is_leader();
   dout(20) << leader << dendl;
   return leader;
 }
@@ -250,6 +239,19 @@ void LeaderWatcher<I>::release_leader() {
 
   release_leader_lock();
 }
+
+template <typename I>
+void LeaderWatcher<I>::list_instances(std::vector<std::string> *instance_ids) {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+
+  instance_ids->clear();
+  if (m_instances != nullptr) {
+    m_instances->list(instance_ids);
+  }
+}
+
 
 template <typename I>
 void LeaderWatcher<I>::cancel_timer_task() {
@@ -272,6 +274,10 @@ void LeaderWatcher<I>::schedule_timer_task(const std::string &name,
                                            void (LeaderWatcher<I>::*cb)()) {
   assert(m_threads->timer_lock.is_locked());
   assert(m_lock.is_locked());
+
+  if (m_on_shut_down_finish != nullptr) {
+    return;
+  }
 
   cancel_timer_task();
 
@@ -312,7 +318,7 @@ void LeaderWatcher<I>::handle_post_acquire_leader_lock(int r,
   Mutex::Locker locker(m_lock);
   assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
-  m_notify_error = 0;
+  m_ret_val = 0;
 
   init_status_watcher();
 }
@@ -324,7 +330,7 @@ void LeaderWatcher<I>::handle_pre_release_leader_lock(Context *on_finish) {
   Mutex::Locker locker(m_lock);
   assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
-  m_notify_error = 0;
+  m_ret_val = 0;
 
   notify_listener();
 }
@@ -484,7 +490,7 @@ void LeaderWatcher<I>::handle_acquire_leader_lock(int r) {
 
   m_acquire_attempts = 0;
 
-  if (m_notify_error) {
+  if (m_ret_val) {
     dout(5) << "releasing due to error on notify" << dendl;
     release_leader_lock();
     return;
@@ -526,9 +532,9 @@ void LeaderWatcher<I>::init_status_watcher() {
   dout(20) << dendl;
 
   assert(m_lock.is_locked());
-  assert(!m_status_watcher);
+  assert(m_status_watcher == nullptr);
 
-  m_status_watcher.reset(new MirrorStatusWatcher(m_ioctx, m_work_queue));
+  m_status_watcher = MirrorStatusWatcher<I>::create(m_ioctx, m_work_queue);
 
   Context *ctx = create_context_callback<
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_init_status_watcher>(this);
@@ -545,13 +551,14 @@ void LeaderWatcher<I>::handle_init_status_watcher(int r) {
     Mutex::Locker locker(m_lock);
 
     if (r == 0) {
-      notify_listener();
+      init_instances();
       return;
     }
 
     derr << "error initializing mirror status watcher: " << cpp_strerror(r)
-	 << dendl;
-    m_status_watcher.reset();
+         << dendl;
+    m_status_watcher->destroy();
+    m_status_watcher = nullptr;
     assert(m_on_finish != nullptr);
     std::swap(m_on_finish, on_finish);
   }
@@ -563,7 +570,7 @@ void LeaderWatcher<I>::shut_down_status_watcher() {
   dout(20) << dendl;
 
   assert(m_lock.is_locked());
-  assert(m_status_watcher);
+  assert(m_status_watcher != nullptr);
 
   Context *ctx = create_async_context_callback(
     m_work_queue, create_context_callback<LeaderWatcher<I>,
@@ -580,22 +587,87 @@ void LeaderWatcher<I>::handle_shut_down_status_watcher(int r) {
   {
     Mutex::Locker locker(m_lock);
 
+    m_status_watcher->destroy();
+    m_status_watcher = nullptr;
+
     if (r < 0) {
       derr << "error shutting mirror status watcher down: " << cpp_strerror(r)
-	   << dendl;
-      if (!is_leader(m_lock)) {
-	// ignore on releasing
-	r = 0;
-      }
+           << dendl;
     }
 
-    assert(m_status_watcher);
-    m_status_watcher.reset();
+    if (m_ret_val != 0) {
+      r = m_ret_val;
+    }
+
+    if (!is_leader(m_lock)) {
+      // ignore on releasing
+      r = 0;
+    }
 
     assert(m_on_finish != nullptr);
     std::swap(m_on_finish, on_finish);
   }
   on_finish->complete(r);
+}
+
+template <typename I>
+void LeaderWatcher<I>::init_instances() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  assert(m_instances == nullptr);
+
+  m_instances = Instances<I>::create(m_threads, m_ioctx);
+
+  Context *ctx = create_context_callback<
+    LeaderWatcher<I>, &LeaderWatcher<I>::handle_init_instances>(this);
+
+  m_instances->init(ctx);
+}
+
+template <typename I>
+void LeaderWatcher<I>::handle_init_instances(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  Mutex::Locker locker(m_lock);
+
+  if (r < 0) {
+    derr << "error initializing instances: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    m_instances->destroy();
+    m_instances = nullptr;
+    shut_down_status_watcher();
+    return;
+  }
+
+  notify_listener();
+}
+
+template <typename I>
+void LeaderWatcher<I>::shut_down_instances() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  assert(m_instances != nullptr);
+
+  Context *ctx = create_async_context_callback(
+    m_work_queue, create_context_callback<LeaderWatcher<I>,
+      &LeaderWatcher<I>::handle_shut_down_instances>(this));
+
+  m_instances->shut_down(ctx);
+}
+
+template <typename I>
+void LeaderWatcher<I>::handle_shut_down_instances(int r) {
+  dout(20) << "r=" << r << dendl;
+  assert(r == 0);
+
+  Mutex::Locker locker(m_lock);
+
+  m_instances->destroy();
+  m_instances = nullptr;
+
+  shut_down_status_watcher();
 }
 
 template <typename I>
@@ -630,13 +702,13 @@ void LeaderWatcher<I>::handle_notify_listener(int r) {
 
   if (r < 0) {
     derr << "error notifying listener: " << cpp_strerror(r) << dendl;
-    m_notify_error = r;
+    m_ret_val = r;
   }
 
   if (is_leader(m_lock)) {
     notify_lock_acquired();
   } else {
-    shut_down_status_watcher();
+    shut_down_instances();
   }
 }
 
@@ -664,8 +736,8 @@ void LeaderWatcher<I>::handle_notify_lock_acquired(int r) {
     Mutex::Locker locker(m_lock);
     if (r < 0 && r != -ETIMEDOUT) {
       derr << "error notifying leader lock acquired: " << cpp_strerror(r)
-	   << dendl;
-      m_notify_error = r;
+           << dendl;
+      m_ret_val = r;
     }
 
     assert(m_on_finish != nullptr);
@@ -724,7 +796,8 @@ void LeaderWatcher<I>::notify_heartbeat() {
   bufferlist bl;
   ::encode(NotifyMessage{HeartbeatPayload{}}, bl);
 
-  send_notify(bl, nullptr, ctx);
+  m_heartbeat_ack_bl.clear();
+  send_notify(bl, &m_heartbeat_ack_bl, ctx);
 }
 
 template <typename I>
@@ -743,6 +816,33 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
          <<  ", releasing leader" << dendl;
     release_leader_lock();
     return;
+  }
+
+  try {
+    bufferlist::iterator iter = m_heartbeat_ack_bl.begin();
+    uint32_t num_acks;
+    ::decode(num_acks, iter);
+
+    dout(20) << num_acks << " acks received" << dendl;
+
+    for (uint32_t i = 0; i < num_acks; i++) {
+      uint64_t notifier_id;
+      uint64_t cookie;
+      bufferlist reply_bl;
+
+      ::decode(notifier_id, iter);
+      ::decode(cookie, iter);
+      ::decode(reply_bl, iter);
+
+      if (notifier_id == m_notifier_id) {
+	continue;
+      }
+
+      std::string instance_id = stringify(notifier_id);
+      m_instances->notify(instance_id);
+    }
+  } catch (const buffer::error &err) {
+    derr << ": error decoding heartbeat acks: " << err.what() << dendl;
   }
 
   schedule_timer_task("heartbeat", 1, true,
