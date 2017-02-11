@@ -708,7 +708,7 @@ namespace rgw {
     const auto& fhk = rgw_fh.get_key();
     const auto& fh = const_cast<RGWFileHandle&>(rgw_fh).get_fh();
     os << "<RGWFileHandle:";
-    os << "addr=" << &rgw_fh;
+    os << "addr=" << &rgw_fh << ";";
     switch (fh->fh_type) {
     case RGW_FS_TYPE_DIRECTORY:
 	os << "type=DIRECTORY;";
@@ -761,6 +761,9 @@ namespace rgw {
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
+    lsubdout(fs->get_context(), rgw, 17)
+      << __func__ << " " << *this
+      << dendl;
     fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
     return true;
   } /* RGWFileHandle::reclaim */
@@ -1366,8 +1369,12 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  fs->unref(rgw_fh);
 
+  lsubdout(fs->get_context(), rgw, 17)
+    << __func__ << " " << *rgw_fh
+    << dendl;
+
+  fs->unref(rgw_fh);
   return 0;
 }
 
