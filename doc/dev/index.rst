@@ -1297,6 +1297,33 @@ Even if you don't providing the ``--upload`` option, however, all the logs can
 still be found on the teuthology machine in the directory
 ``/usr/share/nginx/html``.
 
+Provision VMs ad hoc
+--------------------
+
+From the teuthology VM, it is possible to provision machines on an "ad hoc"
+basis, to use however you like. The magic incantation is::
+
+    teuthology-lock --lock-many $NUMBER_OF_MACHINES \
+        --os-type $OPERATING_SYSTEM \
+        --os-version $OS_VERSION \
+        --machine-type openstack \
+        --owner $EMAIL_ADDRESS
+
+The command must be issued from the ``~/teuthology`` directory. The possible
+values for ``OPERATING_SYSTEM`` AND ``OS_VERSION`` can be found by examining
+the contents of the directory ``teuthology/openstack/``. For example::
+
+    teuthology-lock --lock-many 1 --os-type ubuntu --os-version 16.04 \
+        --machine-type openstack --owner foo@example.com
+
+When you are finished with the machine, find it in the list of machines::
+
+    openstack server list
+
+to determine the name or ID, and then terminate it with::
+
+    openstack server delete $NAME_OR_ID
+
 Deploy a cluster for manual testing
 -----------------------------------
 
