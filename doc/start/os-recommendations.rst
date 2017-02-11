@@ -13,7 +13,7 @@ Linux Kernel
 
 - **Ceph Kernel Client**
 
-  We currently recommend:
+  For RBD, we currently recommend:
 
   - 4.1.4 or later
   - 3.16.3 or later (rbd deadlock regression in 3.16.[0-2])
@@ -23,6 +23,8 @@ Linux Kernel
   These are considered pretty old, but if you must:
 
   - 3.10.*
+
+  For CephFS, see `CephFS best practices`_ for kernel version guidance.
 
   Firefly (CRUSH_TUNABLES3) tunables are supported starting with 3.15.
   See `CRUSH Tunables`_ for more details.
@@ -126,3 +128,5 @@ Testing
   pre-release, and released code.
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
+
+.. _CephFS best practices: ../../cephfs/best-practices
