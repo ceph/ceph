@@ -796,7 +796,7 @@ class GitbuilderProject(object):
             url = "{base_url}/{arch}".format(
                 base_url=self.base_url, arch=self.arch)
             self.remote.run(args=[
-                'sudo', 'zypper', '-n', 'addrepo', url, 'ceph-rpm'
+                'sudo', 'zypper', '-n', 'addrepo', url, 'ceph-rpm-under-test'
             ])
         else:
             self.remote.run(args=['sudo', 'yum', '-y', 'install', url])
@@ -828,7 +828,7 @@ class GitbuilderProject(object):
     def _remove_rpm_repo(self):
         if self.dist_release in ['opensuse', 'sle']:
             self.remote.run(args=[
-                'sudo', 'zypper', '-n', 'removerepo', 'ceph-rpm'
+                'sudo', 'zypper', '-n', 'removerepo', 'ceph-rpm-under-test'
             ])
         else:
             remove_package('%s-release' % self.project, self.remote)
