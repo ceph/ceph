@@ -9,6 +9,7 @@
 #include "OSD.h"
 #include "PrimaryLogPG.h"
 #include "Watch.h"
+#include "Session.h"
 
 #include "common/config.h"
 
@@ -368,7 +369,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
-  OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
+  Session* sessionref(static_cast<Session*>(con->get_priv()));
   if (sessionref) {
     sessionref->wstate.addWatch(self.lock());
     sessionref->put();
@@ -414,7 +415,7 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (conn) {
-    OSD::Session* sessionref(static_cast<OSD::Session*>(conn->get_priv()));
+    Session* sessionref(static_cast<Session*>(conn->get_priv()));
     if (sessionref) {
       sessionref->wstate.removeWatch(self.lock());
       sessionref->put();
