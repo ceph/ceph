@@ -27,17 +27,19 @@ if [ -z $run ] || [ -z $core_path ] || [ -z $release ] || [ -z $distro ] || [ -z
     usage
 fi
 
-prog=`file $core_path | grep -oP "from '\K[^ ]+"`
+prog=`file $core_path | grep -oP "from '\K[^']+"`
 case $prog in
     ceph_test_*)
-        pkg=ceph-test
+        pkgs="ceph-test librados2"
         ;;
     ceph-osd|ceph-mon)
-        pkg=$prog
+        pkgs=$prog
         ;;
     */python*)
-        pkg=librados2
+        pkgs=librados2
         ;;
+    rados)
+        pkgs="ceph-common librados2 libradosstriper1"
     *)
         die "unknown prog: $prog"
         ;;
@@ -47,17 +49,38 @@ flavor=default
 arch=x86_64
 
 case $distro in
-    ubuntu)
+    xenial)
+        codename=$distro
+        distro=ubuntu
+        distro_ver=16.04
+        ;;
+    trusty)
+        codename=$distro
+        distro=ubuntu
         distro_ver=14.04
-        pkg_path=pool/main/c/ceph/%s_%s-1trusty_amd64.deb
-        pkgs="$pkg $pkg-dbg"
+        ;;
+    centos7)
+        distro=centos
+        distro_ver=7
+        ;;
+    *)
+        die "unknown distro: $distro"
+        ;;
+esac
+
+case $distro in
+    ubuntu)
+        pkg_path=pool/main/c/ceph/%s_%s-1${codename}_amd64.deb
+        for p in $pkgs; do
+            t="$t $p $p-dbg"
+        done
+        pkgs="$t"
         ;;
     centos)
-        distro_ver=7
         pkg_path=${arch}/%s-%s.x86_64.rpm
         # 11.0.2-1022-g5b25cd3 => 11.0.2-1022.g5b25cd3
         release=$(echo $release | sed s/-/./2)
-        pkgs="$pkg ceph-debuginfo"
+        pkgs="$pkgs ceph-debuginfo"
         ;;
     *)
         die "unknown distro: $distro"
