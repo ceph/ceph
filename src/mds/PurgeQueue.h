@@ -90,6 +90,8 @@ protected:
 
   Journaler journaler;
 
+  Context *on_error;
+
   // Map of Journaler offset to PurgeItem
   std::map<uint64_t, PurgeItem> in_flight;
 
@@ -117,6 +119,7 @@ protected:
       uint64_t expire_to);
   void execute_item_complete(
       uint64_t expire_to);
+
 
 public:
   void init();
@@ -164,7 +167,8 @@ public:
       CephContext *cct_,
       mds_rank_t rank_,
       const int64_t metadata_pool_,
-      Objecter *objecter_);
+      Objecter *objecter_,
+      Context *on_error);
   ~PurgeQueue();
 };
 

@@ -60,7 +60,8 @@ PurgeQueue::PurgeQueue(
       CephContext *cct_,
       mds_rank_t rank_,
       const int64_t metadata_pool_,
-      Objecter *objecter_)
+      Objecter *objecter_,
+      Context *on_error_)
   :
     cct(cct_),
     rank(rank_),
@@ -73,11 +74,16 @@ PurgeQueue::PurgeQueue(
     journaler("pq", MDS_INO_PURGE_QUEUE + rank, metadata_pool,
       CEPH_FS_ONDISK_MAGIC, objecter_, nullptr, 0, &timer,
       &finisher),
+    on_error(on_error_),
     ops_in_flight(0),
     max_purge_ops(0),
     drain_initial(0),
     draining(false)
 {
+  assert(cct != nullptr);
+  assert(on_error != nullptr);
+  assert(objecter != nullptr);
+  journaler.set_write_error_handler(on_error);
 }
 
 PurgeQueue::~PurgeQueue()
@@ -264,7 +270,13 @@ void PurgeQueue::_consume()
     dout(20) << " decoding entry" << dendl;
     PurgeItem item;
     bufferlist::iterator q = bl.begin();
-    ::decode(item, q);
+    try {
+      ::decode(item, q);
+    } catch (const buffer::error &err) {
+      derr << "Decode error at read_pos=0x" << std::hex
+           << journaler.get_read_pos() << dendl;
+      on_error->complete(0);
+    }
     dout(20) << " executing item (0x" << std::hex << item.ino
              << std::dec << ")" << dendl;
     _execute_item(item, journaler.get_read_pos());
