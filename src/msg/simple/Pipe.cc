@@ -857,11 +857,24 @@ void Pipe::set_socket_options()
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
-    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-    if (r < 0) {
+
+    if (peer_addr.get_family() == AF_INET) {
+      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                         << ": " << cpp_strerror(r) << dendl;
+      if (r < 0) {
+        ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else if (peer_addr.get_family() == AF_INET6) {
+      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+      r = -errno;
+      if (r < 0) {
+        ldout(msgr->cct,0) << "couldn't set IPV6_TCLASS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else {
+      ldout(msgr->cct,0) << "couldn't set ToS of unknown family to " << iptos
+                         << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 
