@@ -5,6 +5,7 @@ set(rbd_mirror_test_srcs
   test_ImageDeleter.cc
   test_ImageSync.cc
   test_InstanceWatcher.cc
+  test_Instances.cc
   test_LeaderWatcher.cc
   test_fixture.cc
   )
