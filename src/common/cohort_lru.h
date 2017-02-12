@@ -143,6 +143,12 @@ namespace cohort {
 	    continue;
 	  // XXXX if object at LRU has refcnt==1, take it
 	  Object* o = &(lane.q.back());
+#if 0 /* XXX save for refactor */
+	  std::cout << __func__
+		    << " " << o
+		    << " refcnt: " << o->lru_refcnt
+		    << std::endl;
+#endif
 	  if (can_reclaim(o)) {
 	    ++(o->lru_refcnt);
 	    o->lru_flags |= FLAG_EVICTING;
@@ -211,6 +217,18 @@ namespace cohort {
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
 	    delete o;
+	  }
+	  lane.lock.unlock();
+	} else if (unlikely(refcnt == SENTINEL_REFCNT)) {
+	  Lane& lane = lane_of(o);
+	  lane.lock.lock();
+	  refcnt = o->lru_refcnt.load();
+	  if (likely(refcnt == SENTINEL_REFCNT)) {
+	    /* move to LRU */
+	    Object::Queue::iterator it =
+	      Object::Queue::s_iterator_to(*o);
+	    lane.q.erase(it);
+	    lane.q.push_back(*o);
 	  }
 	  lane.lock.unlock();
 	}
