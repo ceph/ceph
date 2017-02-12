@@ -28,7 +28,7 @@ class LocalGitbuilderProject(packaging.GitbuilderProject):
 
 
 def get_pkg_type(os_type):
-    if os_type in ('centos', 'fedora', 'opensuse', 'rhel', 'sles'):
+    if os_type in ('centos', 'fedora', 'opensuse', 'rhel', 'sle'):
         return 'rpm'
     else:
         return 'deb'
