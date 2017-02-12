@@ -48,7 +48,7 @@ int Resetter::reset(mds_role_t role)
   Journaler journaler("resetter", jp.front,
       pool_id,
       CEPH_FS_ONDISK_MAGIC,
-      objecter, 0, 0, &timer, &finisher);
+      objecter, 0, 0, &finisher);
 
   lock.Lock();
   journaler.recover(new C_SafeCond(&mylock, &cond, &done, &r));
@@ -130,7 +130,7 @@ int Resetter::reset_hard(mds_role_t role)
   Journaler journaler("resetter", jp.front,
     pool_id,
     CEPH_FS_ONDISK_MAGIC,
-    objecter, 0, 0, &timer, &finisher);
+    objecter, 0, 0, &finisher);
   journaler.set_writeable();
 
   file_layout_t default_log_layout = MDCache::gen_default_log_layout(
