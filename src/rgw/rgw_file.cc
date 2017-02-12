@@ -275,7 +275,8 @@ namespace rgw {
     }
 
     rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
+    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+		    RGWFileHandle::FHCache::FLAG_LOCK);
 
 #if 1 /* XXX verify clear cache */
     fh_key fhk(rgw_fh->fh.fh_hk);
@@ -804,7 +805,10 @@ namespace rgw {
     lsubdout(fs->get_context(), rgw, 17)
       << __func__ << " " << *this
       << dendl;
-    fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
+    /* if !deleted, then object still in fh_cache */
+    if (! deleted()) {
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+    }
     return true;
   } /* RGWFileHandle::reclaim */
 
