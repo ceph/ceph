@@ -159,7 +159,7 @@ void MDLog::create(MDSInternalContextBase *c)
   assert(journaler == NULL);
   journaler = new Journaler("mdlog", ino, mds->mdsmap->get_metadata_pool(),
                             CEPH_FS_ONDISK_MAGIC, mds->objecter, logger,
-                            l_mdl_jlat, &mds->timer, mds->finisher);
+                            l_mdl_jlat, mds->finisher);
   assert(journaler->is_readonly());
   journaler->set_write_error_handler(new C_MDL_WriteError(this));
   journaler->set_writeable();
@@ -954,7 +954,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     dout(1) << "Erasing journal " << jp.back << dendl;
     C_SaferCond erase_waiter;
     Journaler back("mdlog", jp.back, mds->mdsmap->get_metadata_pool(),
-        CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer,
+        CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat,
         mds->finisher);
 
     // Read all about this journal (header + extents)
@@ -994,7 +994,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   /* Read the header from the front journal */
   Journaler *front_journal = new Journaler("mdlog", jp.front,
       mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter,
-      logger, l_mdl_jlat, &mds->timer, mds->finisher);
+      logger, l_mdl_jlat, mds->finisher);
 
   // Assign to ::journaler so that we can be aborted by ::shutdown while
   // waiting for journaler recovery
@@ -1080,7 +1080,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Create the new Journaler file */
   Journaler *new_journal = new Journaler("mdlog", jp.back,
-      mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->finisher);
+      mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, mds->finisher);
   dout(4) << "Writing new journal header " << jp.back << dendl;
   file_layout_t new_layout = old_journal->get_layout();
   new_journal->set_writeable();

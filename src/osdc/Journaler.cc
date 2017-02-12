@@ -717,20 +717,7 @@ void Journaler::_flush(C_OnFinisher *onsafe)
       onsafe->complete(0);
     }
   } else {
-    // maybe buffer
-    if (write_buf.length() < cct->_conf->journaler_batch_max) {
-      // delay!  schedule an event.
-      ldout(cct, 20) << "flush delaying flush" << dendl;
-      if (delay_flush_event) {
-	timer->cancel_event(delay_flush_event);
-      }
-      delay_flush_event = new C_DelayFlush(this);
-      timer->add_event_after(cct->_conf->journaler_batch_interval,
-			     delay_flush_event);
-    } else {
-      ldout(cct, 20) << "flush not delaying flush" << dendl;
-      _do_flush();
-    }
+    _do_flush();
     _wait_for_flush(onsafe);
   }
 
