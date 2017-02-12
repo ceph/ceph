@@ -1246,7 +1246,7 @@ class CephManager:
             proc = self.admin_socket(service_type, service_id,
                                      args, check_status=False, stdout=stdout)
             if proc.exitstatus is 0:
-                break
+                return proc
             else:
                 tries += 1
                 if (tries * 5) > timeout:
@@ -1269,6 +1269,16 @@ class CephManager:
             if i['pool_name'] == pool:
                 return i
         assert False
+
+    def get_config(self, service_type, service_id, name):
+        """
+        :param node: like 'mon.a'
+        :param name: the option name
+        """
+        proc = self.wait_run_admin_socket(service_type, service_id,
+                                          ['config', 'show'])
+        j = json.loads(proc.stdout.getvalue())
+        return j[name]
 
     def set_config(self, osdnum, **argdict):
         """
