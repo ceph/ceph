@@ -5039,7 +5039,8 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	    << dendl;
   } else if (!monc->monmap.get_required_features().contains_all(
 	       ceph::features::mon::FEATURE_LUMINOUS)) {
-    dout(1) << "monmap REQUIRE_LUMINOUS is NOT set; upgrade mons first" << dendl;
+    derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
+	 << "Luminous or later before Luminous OSDs will boot" << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
