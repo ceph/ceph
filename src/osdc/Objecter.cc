@@ -3399,6 +3399,8 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   OSDSession *s = static_cast<OSDSession*>(con->get_priv());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    if (s)
+      s->put();
     m->put();
     return;
   }
