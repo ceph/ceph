@@ -114,6 +114,10 @@ function build_package() {
         make dist-bzip2
     else
         # kraken and above
+        if [ "$suse" = true ]; then
+            sed -i -e 's/^%autosetup -p1$/%autosetup -p1 -n @TARBALL_BASENAME@/' \
+                ceph.spec.in
+        fi
         ./make-dist
     fi
     # Set up build area
