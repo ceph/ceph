@@ -138,12 +138,7 @@ class Thrasher:
             self.config = dict()
         # prevent monitor from auto-marking things out while thrasher runs
         # try both old and new tell syntax, in case we are testing old code
-        try:
-            manager.raw_cluster_cmd('--', 'tell', 'mon.*', 'injectargs',
-                                    '--mon-osd-down-out-interval 0')
-        except Exception:
-            manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
-                                    '--mon-osd-down-out-interval 0')
+        self._set_config('mon', '*', 'mon-osd-down-out-interval', 0)
         # initialize ceph_objectstore_tool property - must be done before
         # do_thrash is spawned - http://tracker.ceph.com/issues/18799
         if (self.config.get('powercycle') or
@@ -172,6 +167,18 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+
+    def _set_config(self, service_type, service_id, name, value):
+        opt_arg = '--{name} {value}'.format(name=name, value=value)
+        try:
+            whom = '.'.join([service_type, service_id])
+            self.ceph_manager.raw_cluster_cmd('--', 'tell', whom,
+                                              'injectargs', opt_arg)
+        except Exception:
+            self.ceph_manager.raw_cluster_cmd('--', service_type,
+                                              'tell', service_id,
+                                              'injectargs', opt_arg)
+
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
