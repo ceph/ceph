@@ -112,6 +112,7 @@ class Thrasher:
         self.logger = logger
         self.config = config
         self.revive_timeout = self.config.get("revive_timeout", 150)
+        self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
@@ -512,18 +513,24 @@ class Thrasher:
         Increase the size of the pool
         """
         pool = self.ceph_manager.get_pool()
+        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Growing pool %s" % (pool,))
         self.ceph_manager.expand_pool(pool,
                                       self.config.get('pool_grow_by', 10),
                                       self.max_pgs)
+        if orig_pg_num < self.ceph_manager.get_pool_pg_num(pool):
+            self.pools_to_fix_pgp_num.add(pool)
 
-    def fix_pgp_num(self):
+    def fix_pgp_num(self, pool=None):
         """
         Fix number of pgs in pool.
         """
-        pool = self.ceph_manager.get_pool()
+        if pool is None:
+            pool = self.ceph_manager.get_pool()
         self.log("fixing pg num pool %s" % (pool,))
         self.ceph_manager.set_pool_pgpnum(pool)
+        if pool in self.pools_to_fix_pgp_num:
+            self.pools_to_fix_pgp_num.remove(pool)
 
     def test_pool_min_size(self):
         """
@@ -836,6 +843,10 @@ class Thrasher:
                         Scrubber(self.ceph_manager, self.config)
             self.choose_action()()
             time.sleep(delay)
+        for pool in list(self.pools_to_fix_pgp_num):
+            if self.ceph_manager.get_pool_pg_num(pool) > 0:
+                self.fix_pgp_num(pool)
+        self.pools_to_fix_pgp_num.clear()
         self.all_up()
 
 
