@@ -823,7 +823,7 @@ namespace rgw {
     void release_evict(RGWFileHandle* fh) {
       /* remove from cache, releases sentinel ref */
       fh_cache.remove(fh->fh.fh_hk.object, fh,
-		      RGWFileHandle::FHCache::FLAG_NONE);
+		      RGWFileHandle::FHCache::FLAG_LOCK);
       /* release call-path ref */
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
@@ -991,11 +991,15 @@ namespace rgw {
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
     inline void unref(RGWFileHandle* fh) {
-      (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	(void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      }
     }
 
     inline RGWFileHandle* ref(RGWFileHandle* fh) {
-      fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      }
       return fh;
     }
 
