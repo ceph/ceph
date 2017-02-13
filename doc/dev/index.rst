@@ -1337,21 +1337,21 @@ manually.
 However, there are times when the automated tests do not cover a particular
 scenario and manual testing is desired. It turns out that it is simple to
 adapt a test to stop and wait after the Ceph installation phase, and the
-engineer can then ssh into the running cluster.
+engineer can then ssh into the running cluster. Simply add the following
+snippet in the desired place within the test YAML and schedule a run with the
+test::
 
-This common use case is currently provided for by the following command::
+    - exec:
+        client.0:
+          - sleep 1000000000 # forever
 
-   ceph-workbench ceph-qa-suite --simultaneous-jobs 9 --verbose
-   --teuthology-git-url http://github.com/dachary/teuthology
-   --teuthology-branch openstack --ceph-qa-suite-git-url
-   http://github.com/dachary/ceph-qa-suite --suite-branch wip-ceph-disk
-   --ceph-git-url http://github.com/ceph/ceph --ceph jewel --suite
-   ceph-disk --filter ubuntu_14
+(Make sure you have a ``client.0`` defined in your ``roles`` stanza or adapt
+accordingly.)
 
-This builds packages from the Ceph git repository and branch specified in
-the ``--ceph-git-url`` and ``--ceph`` options, respectively, provisions VMs
-in OpenStack, installs the packages, and deploys a Ceph cluster on them.
-Then, instead of running automated tests, it stops and enters a wait loop.
+By following the test log, you can determine when the test cluster has entered
+the "sleep forever" condition. At that point, you can ssh to the teuthology
+machine and from there to one of the target VMs (OpenStack) or teuthology
+worker machines machine (Sepia) where the test cluster is running.
 
 The VMs (or "instances" in OpenStack terminology) created by
 `ceph-workbench ceph-qa-suite`_ are named as follows:
@@ -1372,15 +1372,10 @@ be found out by searching for the string ``Locked targets``::
       target149202171058.teuthology: null
       target149202171059.teuthology: null
 
-The IP addresses of the target machines can be found by running
-``openstack server list`` on the teuthology machine.
-
-The whole process, which takes some time to complete, can be monitored as
-described in `Run the dummy suite`_. Be patient.
-
-Once the target machines are up and running and the test enters its wait
-loop, the engineer can ssh into the target machines and do whatever manual
-testing is required. Use the teuthology machine as jump host.
+The IP addresses of the target machines can be found by running ``openstack
+server list`` on the teuthology machine, but the target VM hostnames (e.g.
+``target149202171058.teuthology``) are resolvable within the teuthology
+cluster.
 
 
 .. WIP
