@@ -467,6 +467,13 @@ public:
       trimming_pos = trimmed_pos = p;
   }
 
+  bool _write_head_needed();
+  bool write_head_needed() {
+    lock_guard l(lock);
+    return _write_head_needed();
+  }
+
+
   void trim();
   void trim_tail() {
     lock_guard l(lock);
