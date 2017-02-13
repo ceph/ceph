@@ -23,7 +23,7 @@
 #define dout_prefix *_dout << "Infiniband "
 
 static const uint32_t MAX_SHARED_RX_SGE_COUNT = 1;
-static const uint32_t MAX_INLINE_DATA = 128;
+static const uint32_t MAX_INLINE_DATA = 0;
 static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
