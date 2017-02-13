@@ -12,9 +12,9 @@
  *
  */
 
-#include "../isa-l_crypto_plugin/isal_crypto_accel.h"
+#include "crypto/isa-l/isal_crypto_accel.h"
 
-#include <isa-l_crypto/include/aes_cbc.h>
+#include "crypto/isa-l/isa-l_crypto/include/aes_cbc.h"
 
 bool ISALCryptoAccel::cbc_encrypt(unsigned char* out, const unsigned char* in, size_t size,
                              const unsigned char (&iv)[AES_256_IVSIZE],

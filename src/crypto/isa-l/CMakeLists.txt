@@ -1,4 +1,4 @@
-set(isal_dir ${CMAKE_SOURCE_DIR}/src/isa-l_crypto)
+set(isal_dir ${CMAKE_SOURCE_DIR}/src/crypto/isa-l/isa-l_crypto)
 
 set(isal_crypto_plugin_srcs
   isal_crypto_accel.cc 

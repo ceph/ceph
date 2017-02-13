@@ -15,8 +15,8 @@
 #ifndef ISAL_CRYPTO_PLUGIN_H
 #define ISAL_CRYPTO_PLUGIN_H
 // -----------------------------------------------------------------------------
-#include "../isa-l_crypto_plugin/crypto_plugin.h"
-#include "../isa-l_crypto_plugin/isal_crypto_accel.h"
+#include "crypto/crypto_plugin.h"
+#include "crypto/isa-l/isal_crypto_accel.h"
 // -----------------------------------------------------------------------------
 
 

@@ -20,7 +20,7 @@
 #include "common/PluginRegistry.h"
 #include "ostream"
 
-#include "../isa-l_crypto_plugin/crypto_accel.h"
+#include "crypto/crypto_accel.h"
 // -----------------------------------------------------------------------------
 
 class CryptoPlugin : public Plugin {

@@ -12,8 +12,8 @@
 #include <boost/utility/string_ref.hpp>
 #include <rgw/rgw_keystone.h>
 #include "include/str_map.h"
-#include "isa-l_crypto_plugin/crypto_accel.h"
-#include "isa-l_crypto_plugin/crypto_plugin.h"
+#include "crypto/crypto_accel.h"
+#include "crypto/crypto_plugin.h"
 #ifdef USE_NSS
 # include <nspr.h>
 # include <nss.h>
