@@ -14,8 +14,7 @@
 
 #ifndef ISAL_CRYPTO_ACCEL_H
 #define ISAL_CRYPTO_ACCEL_H
-#include "../isa-l_crypto_plugin/crypto_accel.h"
-
+#include "crypto/crypto_accel.h"
 
 class ISALCryptoAccel : public CryptoAccel {
  public:

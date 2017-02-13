@@ -14,7 +14,7 @@
 
 
 // -----------------------------------------------------------------------------
-#include "../isa-l_crypto_plugin/isal_crypto_plugin.h"
+#include "crypto/isa-l/isal_crypto_plugin.h"
 
 #include "ceph_ver.h"
 // -----------------------------------------------------------------------------

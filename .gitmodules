@@ -49,6 +49,6 @@
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
-[submodule "src/isa-l_crypto"]
-	path = src/isa-l_crypto
+[submodule "src/crypto/isa-l/isa-l_crypto"]
+	path = src/crypto/isa-l/isa-l_crypto
 	url = https://github.com/01org/isa-l_crypto
