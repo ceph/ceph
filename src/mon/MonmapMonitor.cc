@@ -129,6 +129,9 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
 
   assert(is_writeable());
   assert(features.contains_all(pending_map.persistent_features));
+  // we should never hit this because `features` should be the result
+  // of the quorum's supported features. But if it happens, die.
+  assert(ceph::features::mon::get_supported().contains_all(features));
 
   mon_feature_t new_features =
     (pending_map.persistent_features ^
@@ -137,6 +140,16 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
   if (new_features.empty()) {
     dout(10) << __func__ << " features match current pending: "
              << features << dendl;
+    return;
+  }
+
+  if (mon->get_quorum().size() < mon->monmap->size()) {
+    dout(1) << __func__ << " new features " << new_features
+      << " contains features that require a full quorum"
+      << " (quorum size is " << mon->get_quorum().size()
+      << ", requires " << mon->monmap->size() << "): "
+      << new_features
+      << " -- do not enable them!" << dendl;
     return;
   }
 
