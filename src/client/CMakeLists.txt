@@ -8,4 +8,4 @@ set(libclient_srcs
   Trace.cc
   posix_acl.cc)
 add_library(client STATIC ${libclient_srcs})
-target_link_libraries(client ceph-common osdc)
+target_link_libraries(client osdc)
