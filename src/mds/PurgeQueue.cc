@@ -72,7 +72,7 @@ PurgeQueue::PurgeQueue(
     filer(objecter_, &finisher),
     objecter(objecter_),
     journaler("pq", MDS_INO_PURGE_QUEUE + rank, metadata_pool,
-      CEPH_FS_ONDISK_MAGIC, objecter_, nullptr, 0, &timer,
+      CEPH_FS_ONDISK_MAGIC, objecter_, nullptr, 0,
       &finisher),
     on_error(on_error_),
     ops_in_flight(0),
