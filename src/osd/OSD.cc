@@ -8867,38 +8867,10 @@ void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
   }
 
   // map hobject range to PG(s)
-  bool queued = false;
-  hobject_t pos = m->begin;
-  do {
-    pg_t _pgid(pos.get_hash(), pos.pool);
-    if (osdmap->have_pg_pool(pos.pool)) {
-      _pgid = osdmap->raw_pg_to_pg(_pgid);
-    }
-    if (!osdmap->have_pg_pool(_pgid.pool())) {
-      // missing pool -- drop
-      return;
-    }
-    spg_t pgid;
-    if (osdmap->get_primary_shard(_pgid, &pgid)) {
-      dout(10) << __func__ << " pos " << pos << " pgid " << pgid << dendl;
-      PGRef pg = get_pg_or_queue_for_pg(pgid, op, s);
-      if (pg) {
-	if (!queued) {
-	  enqueue_op(pg, op);
-	  queued = true;
-	} else {
-	  // use a fresh OpRequest
-	  m->get();	// take a ref for the new OpRequest
-	  OpRequestRef newop(op_tracker.create_request<OpRequest, Message*>(m));
-	  newop->mark_event("duplicated original op for another pg");
-	  enqueue_op(pg, newop);
-	}
-      }
-    }
-    // advance
-    pos = _pgid.get_hobj_end(osdmap->get_pg_pool(pos.pool)->get_pg_num());
-    dout(20) << __func__ << "  next pg " << pos << dendl;
-  } while (pos < m->end);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op, s);
+  if (pg) {
+    enqueue_op(pg, op);
+  }
 }
 
 template<typename T, int MSGTYPE>

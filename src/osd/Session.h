@@ -67,6 +67,7 @@ struct Backoff : public RefCountedObject {
     STATE_DELETING = 3 ///< backoff deleted, but un-acked
   };
   std::atomic_int state = {STATE_NEW};
+  spg_t pgid;          ///< owning pgid
   uint64_t id = 0;     ///< unique id (within the Session)
 
   bool is_new() const {
@@ -96,10 +97,11 @@ struct Backoff : public RefCountedObject {
   SessionRef session;   ///< owning session
   hobject_t begin, end; ///< [) range to block, unless ==, then single obj
 
-  Backoff(PGRef pg, SessionRef s,
+  Backoff(spg_t pgid, PGRef pg, SessionRef s,
 	  uint64_t i,
 	  const hobject_t& b, const hobject_t& e)
     : RefCountedObject(g_ceph_context, 0),
+      pgid(pgid),
       id(i),
       lock("Backoff::lock"),
       pg(pg),
@@ -108,7 +110,7 @@ struct Backoff : public RefCountedObject {
       end(e) {}
 
   friend ostream& operator<<(ostream& out, const Backoff& b) {
-    return out << "Backoff(" << &b << " " << b.id
+    return out << "Backoff(" << &b << " " << b.pgid << " " << b.id
 	       << " " << b.get_state_name()
 	       << " [" << b.begin << "," << b.end << ") "
 	       << " session " << b.session
@@ -139,7 +141,7 @@ struct Session : public RefCountedObject {
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
   std::atomic_int backoff_count= {0};  ///< simple count of backoffs
-  map<hobject_t,set<BackoffRef>> backoffs;
+  map<spg_t,map<hobject_t,set<BackoffRef>>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
 
@@ -159,26 +161,32 @@ struct Session : public RefCountedObject {
 
   void ack_backoff(
     CephContext *cct,
+    spg_t pgid,
     uint64_t id,
     const hobject_t& start,
     const hobject_t& end);
 
-  Backoff *have_backoff(const hobject_t& oid) {
-    if (backoff_count.load()) {
-      Mutex::Locker l(backoff_lock);
-      assert(backoff_count == (int)backoffs.size());
-      auto p = backoffs.lower_bound(oid);
-      if (p != backoffs.begin() &&
-	  p->first > oid) {
-	--p;
-      }
-      if (p != backoffs.end()) {
-	int r = cmp(oid, p->first);
-	if (r == 0 || r > 0) {
-	  for (auto& q : p->second) {
-	    if (r == 0 || oid < q->end) {
-	      return &(*q);
-	    }
+  Backoff *have_backoff(spg_t pgid, const hobject_t& oid) {
+    if (!backoff_count.load()) {
+      return nullptr;
+    }
+    Mutex::Locker l(backoff_lock);
+    assert(!backoff_count == backoffs.empty());
+    auto i = backoffs.find(pgid);
+    if (i == backoffs.end()) {
+      return nullptr;
+    }
+    auto p = i->second.lower_bound(oid);
+    if (p != i->second.begin() &&
+	p->first > oid) {
+      --p;
+    }
+    if (p != i->second.end()) {
+      int r = cmp(oid, p->first);
+      if (r == 0 || r > 0) {
+	for (auto& q : p->second) {
+	  if (r == 0 || oid < q->end) {
+	    return &(*q);
 	  }
 	}
       }
@@ -186,24 +194,37 @@ struct Session : public RefCountedObject {
     return nullptr;
   }
 
+  void add_backoff(Backoff *b) {
+    Mutex::Locker l(backoff_lock);
+    assert(!backoff_count == backoffs.empty());
+    backoffs[b->pgid][b->begin].insert(b);
+    ++backoff_count;
+  }
+
   // called by PG::release_*_backoffs and PG::clear_backoffs()
   void rm_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);
     assert(b->lock.is_locked_by_me());
     assert(b->session == this);
-    auto p = backoffs.find(b->begin);
-    // may race with clear_backoffs()
-    if (p != backoffs.end()) {
-      auto q = p->second.find(b);
-      if (q != p->second.end()) {
-	p->second.erase(q);
-	if (p->second.empty()) {
-	  backoffs.erase(p);
+    auto i = backoffs.find(b->pgid);
+    if (i != backoffs.end()) {
+      // may race with clear_backoffs()
+      auto p = i->second.find(b->begin);
+      if (p != i->second.end()) {
+	auto q = p->second.find(b);
+	if (q != p->second.end()) {
+	  p->second.erase(q);
 	  --backoff_count;
+	  if (p->second.empty()) {
+	    i->second.erase(p);
+	    if (i->second.empty()) {
+	      backoffs.erase(i);
+	    }
+	  }
 	}
       }
     }
-    assert(backoff_count == (int)backoffs.size());
+    assert(!backoff_count == backoffs.empty());
   }
   void clear_backoffs();
 };
