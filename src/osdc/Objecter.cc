@@ -3073,21 +3073,25 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
 
   // backoff?
   hobject_t hoid = op->target.get_hobj();
-  auto q = op->session->backoffs.lower_bound(hoid);
-  if (q != op->session->backoffs.begin()) {
-    --q;
-    if (hoid >= q->second.end) {
-      ++q;
+  auto p = op->session->backoffs.find(op->target.actual_pgid);
+  if (p != op->session->backoffs.end()) {
+    auto q = p->second.lower_bound(hoid);
+    if (q != p->second.begin()) {
+      --q;
+      if (hoid >= q->second.end) {
+	++q;
+      }
     }
-  }
-  if (q != op->session->backoffs.end()) {
-    ldout(cct, 20) << __func__ << " ? " << q->first << " [" << q->second.begin
-		   << "," << q->second.end << ")" << dendl;
-    int r = cmp(hoid, q->second.begin);
-    if (r == 0 || (r > 0 && hoid < q->second.end)) {
-      ldout(cct, 10) << __func__ << " backoff on " << hoid << ", queuing "
-		     << op << " tid " << op->tid << dendl;
-      return;
+    if (q != p->second.end()) {
+      ldout(cct, 20) << __func__ << " ? " << q->first << " [" << q->second.begin
+		     << "," << q->second.end << ")" << dendl;
+      int r = cmp(hoid, q->second.begin);
+      if (r == 0 || (r > 0 && hoid < q->second.end)) {
+	ldout(cct, 10) << __func__ << " backoff " << op->target.actual_pgid
+		       << " id " << q->second.id << " on " << hoid
+		       << ", queuing " << op << " tid " << op->tid << dendl;
+	return;
+      }
     }
   }
 
@@ -3423,8 +3427,9 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   case CEPH_OSD_BACKOFF_OP_BLOCK:
     {
       // register
-      OSDBackoff& b = s->backoffs[m->begin];
+      OSDBackoff& b = s->backoffs[m->pgid][m->begin];
       s->backoffs_by_id.insert(make_pair(m->id, &b));
+      b.pgid = m->pgid;
       b.id = m->id;
       b.begin = m->begin;
       b.end = m->end;
@@ -3444,31 +3449,43 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   case CEPH_OSD_BACKOFF_OP_UNBLOCK:
     {
       auto p = s->backoffs_by_id.find(m->id);
-      while (p != s->backoffs_by_id.end() &&
-	     p->second->id == m->id) {
+      if (p != s->backoffs_by_id.end()) {
 	OSDBackoff *b = p->second;
 	if (b->begin != m->begin &&
 	    b->end != m->end) {
-	  lderr(cct) << __func__ << " got id " << m->id << " unblock on ["
+	  lderr(cct) << __func__ << " got " << m->pgid << " id " << m->id
+		     << " unblock on ["
 		     << m->begin << "," << m->end << ") but backoff is ["
 		     << b->begin << "," << b->end << ")" << dendl;
 	  // hrmpf, unblock it anyway.
 	}
-	ldout(cct, 10) << __func__ << " unblock backoff " << b->id
+	ldout(cct, 10) << __func__ << " unblock backoff " << b->pgid
+		       << " id " << b->id
 		       << " [" << b->begin << "," << b->end
 		       << ")" << dendl;
-	s->backoffs.erase(b->begin);
-	p = s->backoffs_by_id.erase(p);
+	auto spgp = s->backoffs.find(b->pgid);
+	assert(spgp != s->backoffs.end());
+	spgp->second.erase(b->begin);
+	if (spgp->second.empty()) {
+	  s->backoffs.erase(spgp);
+	}
+	s->backoffs_by_id.erase(p);
 
 	// check for any ops to resend
 	for (auto& q : s->ops) {
-	  int r = q.second->target.contained_by(m->begin, m->end);
-	  ldout(cct, 20) << __func__ <<  " contained_by " << r << " on "
-			 << q.second->target.get_hobj() << dendl;
-	  if (r) {
-	    _send_op(q.second);
+	  if (q.second->target.actual_pgid == m->pgid) {
+	    int r = q.second->target.contained_by(m->begin, m->end);
+	    ldout(cct, 20) << __func__ <<  " contained_by " << r << " on "
+			   << q.second->target.get_hobj() << dendl;
+	    if (r) {
+	      _send_op(q.second);
+	    }
 	  }
 	}
+      } else {
+	lderr(cct) << __func__ << " " << m->pgid << " id " << m->id
+		   << " unblock on ["
+		   << m->begin << "," << m->end << ") but backoff dne" << dendl;
       }
     }
     break;

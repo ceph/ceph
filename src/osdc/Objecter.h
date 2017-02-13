@@ -1790,6 +1790,7 @@ public:
 
   // -- osd sessions --
   struct OSDBackoff {
+    spg_t pgid;
     uint64_t id;
     hobject_t begin, end;
   };
@@ -1807,8 +1808,8 @@ public:
     map<ceph_tid_t,CommandOp*> command_ops;
 
     // backoffs
-    map<hobject_t,OSDBackoff> backoffs;
-    multimap<uint64_t,OSDBackoff*> backoffs_by_id;
+    map<spg_t,map<hobject_t,OSDBackoff>> backoffs;
+    map<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;
     int incarnation;
