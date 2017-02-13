@@ -2325,11 +2325,12 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
   }
   con->send_message(
     new MOSDBackoff(
+      info.pgid,
+      get_osdmap()->get_epoch(),
       CEPH_OSD_BACKOFF_OP_BLOCK,
       b->id,
       begin,
-      end,
-      get_osdmap()->get_epoch()));
+      end));
 }
 
 void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
@@ -2376,11 +2377,12 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
       if (con) {   // OSD::ms_handle_reset clears s->con without a lock
 	con->send_message(
 	  new MOSDBackoff(
+	    info.pgid,
+	    get_osdmap()->get_epoch(),
 	    CEPH_OSD_BACKOFF_OP_UNBLOCK,
 	    b->id,
 	    b->begin,
-	    b->end,
-	    get_osdmap()->get_epoch()));
+	    b->end));
       }
       if (b->is_new()) {
 	b->state = Backoff::STATE_DELETING;
