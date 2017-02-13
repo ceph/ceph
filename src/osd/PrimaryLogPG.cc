@@ -1621,8 +1621,8 @@ void PrimaryLogPG::do_request(
     session->put();  // get_priv takes a ref, and so does the SessionRef
 
     if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
-      Backoff *b = session->have_backoff(info.pgid,
-					 info.pgid.pgid.get_hobj_start());
+      BackoffRef b(session->have_backoff(info.pgid,
+					 info.pgid.pgid.get_hobj_start()));
       if (b) {
 	dout(10) << " have backoff " << *b << " " << *m << dendl;
 	assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);
@@ -1784,7 +1784,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
     session->put();  // get_priv() takes a ref, and so does the intrusive_ptr
 
-    Backoff *b = session->have_backoff(info.pgid, head);
+    BackoffRef b(session->have_backoff(info.pgid, head));
     if (b) {
       dout(10) << __func__ << " have backoff " << *b << " " << *m << dendl;
       assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);

@@ -166,7 +166,7 @@ struct Session : public RefCountedObject {
     const hobject_t& start,
     const hobject_t& end);
 
-  Backoff *have_backoff(spg_t pgid, const hobject_t& oid) {
+  BackoffRef have_backoff(spg_t pgid, const hobject_t& oid) {
     if (!backoff_count.load()) {
       return nullptr;
     }
@@ -194,7 +194,7 @@ struct Session : public RefCountedObject {
     return nullptr;
   }
 
-  void add_backoff(Backoff *b) {
+  void add_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);
     assert(!backoff_count == backoffs.empty());
     backoffs[b->pgid][b->begin].insert(b);
