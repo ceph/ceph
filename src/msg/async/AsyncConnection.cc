@@ -1716,6 +1716,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
             existing->delay_state->set_center(new_center);
         } else if (existing->state == STATE_CLOSED) {
           cs.close();
+          cs.reset();
           return ;
         } else {
           ceph_abort();
