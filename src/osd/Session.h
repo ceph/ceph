@@ -194,6 +194,9 @@ struct Session : public RefCountedObject {
     return nullptr;
   }
 
+  bool check_backoff(
+    CephContext *cct, spg_t pgid, const hobject_t& oid, Message *m);
+
   void add_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);
     assert(!backoff_count == backoffs.empty());
