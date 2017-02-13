@@ -371,10 +371,11 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
     "--min-x", "1",
     "--max-x", "50",
     NULL);
+  string opt_ruleset = stringify(ruleset);
   if (ruleset >= 0) {
     crushtool.add_cmd_args(
       "--ruleset",
-      stringify(ruleset).c_str(),
+      opt_ruleset.c_str(),
       NULL);
   }
   int ret = crushtool.spawn();
