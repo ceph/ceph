@@ -886,7 +886,7 @@ if(WITH_LIBCEPHFS)
   add_subdirectory(client)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
-  target_link_libraries(cephfs LINK_PRIVATE client
+  target_link_libraries(cephfs LINK_PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
     foreach(name ceph-common client osdc)
@@ -906,7 +906,7 @@ if(WITH_LIBCEPHFS)
     ceph_syn.cc
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
-  target_link_libraries(ceph-syn client global-static)
+  target_link_libraries(ceph-syn client global-static common)
 
   set(mount_ceph_srcs
     mount/mount.ceph.c)
@@ -926,7 +926,7 @@ if(WITH_LIBCEPHFS)
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
     target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
-      client global-static)
+      client common global-static)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
