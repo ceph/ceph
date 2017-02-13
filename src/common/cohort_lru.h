@@ -131,18 +131,14 @@ namespace cohort {
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
-	  /* hiwat check */
-	  /* XXX try the hiwat check unlocked, then recheck locked */
-	  if (lane.q.size() > lane_hiwat) {
-	    lane.lock.lock();
-	    if (lane.q.size() <= lane_hiwat) {
-	      lane.lock.unlock();
-	      continue;
-	    }
-	  } else
-	    continue;
-	  // XXXX if object at LRU has refcnt==1, take it
+	  /* if object at LRU has refcnt==1, it may be reclaimable */
 	  Object* o = &(lane.q.back());
+#if 0 /* XXX save for refactor */
+	  std::cout << __func__
+		    << " " << o
+		    << " refcnt: " << o->lru_refcnt
+		    << std::endl;
+#endif
 	  if (can_reclaim(o)) {
 	    ++(o->lru_refcnt);
 	    o->lru_flags |= FLAG_EVICTING;
@@ -211,6 +207,23 @@ namespace cohort {
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
 	    delete o;
+	  }
+	  lane.lock.unlock();
+	} else if (unlikely(refcnt == SENTINEL_REFCNT)) {
+	  Lane& lane = lane_of(o);
+	  lane.lock.lock();
+	  refcnt = o->lru_refcnt.load();
+	  if (likely(refcnt == SENTINEL_REFCNT)) {
+	    /* move to LRU */
+	    Object::Queue::iterator it =
+	      Object::Queue::s_iterator_to(*o);
+	    lane.q.erase(it);
+	    /* hiwat check */
+	    if (lane.q.size() > lane_hiwat) {
+	      delete o;
+	    } else {
+	      lane.q.push_back(*o);
+	    }
 	  }
 	  lane.lock.unlock();
 	}
