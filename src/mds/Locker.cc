@@ -539,7 +539,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	  goto out;
 	}
-	if (!wrlock_start(*p, mdr))
+	// nowait if we have already gotten remote wrlock
+	if (!wrlock_start(*p, mdr, need_remote_wrlock))
 	  goto out;
 	dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
       }
