@@ -45,19 +45,19 @@ public:
   }
 
   void print(ostream& out) const override {
-    out << "MRecoveryReserve ";
+    out << "MRecoveryReserve(" << pgid;
     switch (type) {
     case REQUEST:
-      out << "REQUEST ";
+      out << " REQUEST";
       break;
     case GRANT:
-      out << "GRANT ";
+      out << " GRANT";
       break;
     case RELEASE:
-      out << "RELEASE ";
+      out << " RELEASE";
       break;
     }
-    out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
+    out << " e" << query_epoch << ")";
     return;
   }
 

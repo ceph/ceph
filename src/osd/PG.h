@@ -1334,9 +1334,11 @@ public:
     ThreadPool::TPHandle &handle);
   void do_replica_scrub_map(OpRequestRef op);
   void sub_op_scrub_map(OpRequestRef op);
-  void sub_op_scrub_reserve(OpRequestRef op);
-  void sub_op_scrub_reserve_reply(OpRequestRef op);
-  void sub_op_scrub_unreserve(OpRequestRef op);
+
+  void handle_scrub_reserve_request(OpRequestRef op);
+  void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from);
+  void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from);
+  void handle_scrub_reserve_release(OpRequestRef op);
 
   void reject_reservation();
   void schedule_backfill_full_retry();
