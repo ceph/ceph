@@ -3668,8 +3668,6 @@ public:
     return 0;
   }
 
-  //virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again);
-  //virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
   int complete(size_t accounted_size, const string& etag, 
                ceph::real_time *mtime, ceph::real_time set_mtime,
                map<string, bufferlist>& attrs, ceph::real_time delete_at,
