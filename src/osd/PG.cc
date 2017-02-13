@@ -2065,7 +2065,8 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting,
     info.last_complete = info.last_update;
   }
 
-  reg_next_scrub();
+  if (is_primary())
+    reg_next_scrub();
 
   dirty_info = true;
   dirty_big_info = true;
@@ -2690,6 +2691,7 @@ bool PG::sched_scrub()
 
 void PG::reg_next_scrub()
 {
+  assert(is_primary());
   if (scrubber.must_scrub) {
     scrubber.scrub_reg_stamp = utime_t();
   } else {
@@ -4236,7 +4238,8 @@ void PG::scrub_finish()
   }
 
   // finish up
-  unreg_next_scrub();
+  if (is_primary())
+    unreg_next_scrub();
   utime_t now = ceph_clock_now(g_ceph_context);
   info.history.last_scrub = info.last_update;
   info.history.last_scrub_stamp = now;
@@ -4270,7 +4273,9 @@ void PG::scrub_finish()
   info.stats.stats.sum.num_scrub_errors = 
     info.stats.stats.sum.num_shallow_scrub_errors +
     info.stats.stats.sum.num_deep_scrub_errors;
-  reg_next_scrub();
+  
+  if (is_primary())
+    reg_next_scrub();
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -4355,9 +4360,11 @@ void PG::share_pg_log()
 
 void PG::update_history_from_master(pg_history_t new_history)
 {
-  unreg_next_scrub();
+  if (is_primary())
+    unreg_next_scrub();
   info.history.merge(new_history);
-  reg_next_scrub();
+  if (is_primary())
+    reg_next_scrub();
 }
 
 void PG::fulfill_info(int from, const pg_query_t &query, 
@@ -4584,8 +4591,17 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   else
     state_clear(PG_STATE_REMAPPED);
 
+  // it is up to primary PGs to coordinate scrubbing, so that we do
+  // unreg / reg before and after the role change as the primary role
+  // could change
+  if (is_primary()) 
+    unreg_next_scrub();
+
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
   set_role(role);
+
+  if (is_primary())
+    reg_next_scrub();
 
   // did acting, up, primary|acker change?
   if (!lastmap) {
@@ -4707,10 +4723,8 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 {
   assert(!is_primary());
 
-  unreg_next_scrub();
   if (info.history.merge(oinfo.history))
     dirty_info = true;
-  reg_next_scrub();
 
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
     // DEBUG: verify that the snaps are empty in snap_mapper
@@ -6274,9 +6288,11 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
-    pg->unreg_next_scrub();
+    if (pg->is_primary())
+      pg->unreg_next_scrub();
     pg->info = msg->info;
-    pg->reg_next_scrub();
+    if (pg->is_primary())
+      pg->reg_next_scrub();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
     pg->pg_log.claim_log(msg->log);

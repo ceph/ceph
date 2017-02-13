@@ -1794,7 +1794,8 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid, up, acting);
   int role = pg->get_osdmap()->calc_pg_role(service.whoami, acting);
   pg->set_role(role);
-  pg->reg_next_scrub();
+  if (pg->is_primary())
+    pg->reg_next_scrub();
   pg->handle_loaded(rctx);
   pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
@@ -2042,13 +2043,14 @@ void OSD::load_pgs()
 
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
 
-    pg->reg_next_scrub();
-
     // generate state for PG's current mapping
     pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
     int role = pg->get_osdmap()->calc_pg_role(whoami, pg->acting);
     pg->set_role(role);
 
+    if (pg->is_primary())
+      pg->reg_next_scrub();
+    
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
     pg->handle_loaded(&rctx);
 
