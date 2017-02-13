@@ -722,10 +722,15 @@ void Journaler::_flush(C_OnFinisher *onsafe)
   }
 
   // write head?
-  if (last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
-      < ceph::real_clock::now()) {
+  if (_write_head_needed()) {
     _write_head();
   }
+}
+
+bool Journaler::_write_head_needed()
+{
+  return last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
+      < ceph::real_clock::now();
 }
 
 
