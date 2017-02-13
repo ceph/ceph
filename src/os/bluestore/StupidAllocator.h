@@ -28,28 +28,28 @@ public:
   StupidAllocator(CephContext* cct);
   ~StupidAllocator();
 
-  int reserve(uint64_t need);
-  void unreserve(uint64_t unused);
+  int reserve(uint64_t need) override;
+  void unreserve(uint64_t unused) override;
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
 
   int64_t allocate_int(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
 
   int release(
-    uint64_t offset, uint64_t length);
+    uint64_t offset, uint64_t length) override;
 
-  uint64_t get_free();
+  uint64_t get_free() override;
 
   void dump() override;
 
-  void init_add_free(uint64_t offset, uint64_t length);
-  void init_rm_free(uint64_t offset, uint64_t length);
+  void init_add_free(uint64_t offset, uint64_t length) override;
+  void init_rm_free(uint64_t offset, uint64_t length) override;
 
-  void shutdown();
+  void shutdown() override;
 };
 
 #endif
