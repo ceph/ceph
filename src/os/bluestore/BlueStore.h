@@ -1640,8 +1640,8 @@ private:
   list<CollectionRef> removed_collections;
 
   RWLock debug_read_error_lock;
-  set<ghobject_t, ghobject_t::BitwiseComparator> debug_data_error_objects;
-  set<ghobject_t, ghobject_t::BitwiseComparator> debug_mdata_error_objects;
+  set<ghobject_t> debug_data_error_objects;
+  set<ghobject_t> debug_mdata_error_objects;
 
   std::atomic<int> csum_type;
 
@@ -1810,7 +1810,7 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -1949,12 +1949,12 @@ public:
   int collection_list(const coll_t& cid,
 		      const ghobject_t& start,
 		      const ghobject_t& end,
-		      bool sort_bitwise, int max,
+		      int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
   int collection_list(CollectionHandle &c,
 		      const ghobject_t& start,
 		      const ghobject_t& end,
-		      bool sort_bitwise, int max,
+		      int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
   int omap_get(

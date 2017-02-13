@@ -139,7 +139,7 @@ struct Session : public RefCountedObject {
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
   std::atomic_int backoff_count= {0};  ///< simple count of backoffs
-  map<hobject_t,set<BackoffRef>, hobject_t::BitwiseComparator> backoffs;
+  map<hobject_t,set<BackoffRef>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
 
@@ -169,14 +169,14 @@ struct Session : public RefCountedObject {
       assert(backoff_count == (int)backoffs.size());
       auto p = backoffs.lower_bound(oid);
       if (p != backoffs.begin() &&
-	  cmp_bitwise(p->first, oid) > 0) {
+	  p->first > oid) {
 	--p;
       }
       if (p != backoffs.end()) {
-	int r = cmp_bitwise(oid, p->first);
+	int r = cmp(oid, p->first);
 	if (r == 0 || r > 0) {
 	  for (auto& q : p->second) {
-	    if (r == 0 || cmp_bitwise(oid, q->end) < 0) {
+	    if (r == 0 || oid < q->end) {
 	      return &(*q);
 	    }
 	  }

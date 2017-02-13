@@ -6029,7 +6029,7 @@ int BlueStore::collection_empty(const coll_t& cid, bool *empty)
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
-  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 1,
+  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), 1,
 			  &ls, &next);
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
@@ -6053,19 +6053,17 @@ int BlueStore::collection_bits(const coll_t& cid)
 }
 
 int BlueStore::collection_list(
-  const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
-  bool sort_bitwise, int max,
+  const coll_t& cid, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
   CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  return collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+  return collection_list(c, start, end, max, ls, pnext);
 }
 
 int BlueStore::collection_list(
-  CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end,
-  bool sort_bitwise, int max,
+  CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
   Collection *c = static_cast<Collection *>(c_.get());
@@ -6074,7 +6072,7 @@ int BlueStore::collection_list(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    r = _collection_list(c, start, end, sort_bitwise, max, ls, pnext);
+    r = _collection_list(c, start, end, max, ls, pnext);
   }
 
   c->trim_cache();
@@ -6086,15 +6084,12 @@ int BlueStore::collection_list(
 }
 
 int BlueStore::_collection_list(
-  Collection *c, const ghobject_t& start, const ghobject_t& end,
-  bool sort_bitwise, int max,
+  Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
 
   if (!c->exists)
     return -ENOENT;
-  if (!sort_bitwise)
-    return -EOPNOTSUPP;
 
   int r = 0;
   ghobject_t static_next;
@@ -9638,7 +9633,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     // Enumerate onodes in db, up to nonexistent_count + 1
     // then check if all of them are marked as non-existent.
     // Bypass the check if returned number is greater than nonexistent_count
-    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(), true,
+    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
                          nonexistent_count + 1, &ls, &next);
     if (r >= 0) {
       bool exists = false; //ls.size() > nonexistent_count;

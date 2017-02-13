@@ -437,7 +437,7 @@ void PrimaryLogPG::on_global_recover(
   missing_loc.recovered(soid);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
-  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::iterator i = recovering.find(soid);
+  map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
   assert(i != recovering.end());
 
   // recover missing won't have had an obc, but it gets filled in
@@ -537,7 +537,7 @@ void PrimaryLogPG::maybe_kick_recovery(
   if (!missing_loc.needs_recovery(soid, &v))
     return;
 
-  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::const_iterator p = recovering.find(soid);
+  map<hobject_t, ObjectContextRef>::const_iterator p = recovering.find(soid);
   if (p != recovering.end()) {
     dout(7) << "object " << soid << " v " << v << ", already recovering." << dendl;
   } else if (missing_loc.is_unfound(soid)) {
@@ -593,8 +593,8 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     // Object is degraded if after last_backfill AND
     // we are backfilling it
     if (is_backfill_targets(peer) &&
-	cmp(peer_info[peer].last_backfill, soid, get_sort_bitwise()) <= 0 &&
-	cmp(last_backfill_started, soid, get_sort_bitwise()) >= 0 &&
+	peer_info[peer].last_backfill <= soid &&
+	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
       return true;
   }
@@ -979,9 +979,9 @@ int PrimaryLogPG::do_command(
     }
     f->dump_int("num_missing", missing.num_missing());
     f->dump_int("num_unfound", get_num_unfound());
-    const map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator> &needs_recovery_map =
+    const map<hobject_t, pg_missing_item> &needs_recovery_map =
       missing_loc.get_needs_recovery();
-    map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator p =
+    map<hobject_t, pg_missing_item>::const_iterator p =
       needs_recovery_map.upper_bound(offset);
     {
       f->open_array_section("objects");
@@ -1108,11 +1108,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	hobject_t pg_end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
         dout(10) << " pgnls lower_bound " << lower_bound
 		 << " pg_end " << pg_end << dendl;
-	if (get_sort_bitwise() &&
-	    ((!lower_bound.is_max() &&
-	      cmp_bitwise(lower_bound, pg_end) >= 0) ||
-	     (lower_bound != hobject_t() &&
-	      cmp_bitwise(lower_bound, pg_start) < 0))) {
+	if (((!lower_bound.is_max() && lower_bound >= pg_end) ||
+	     (lower_bound != hobject_t() && lower_bound < pg_start))) {
 	  // this should only happen with a buggy client.
 	  dout(10) << "outside of PG bounds " << pg_start << " .. "
 		   << pg_end << dendl;
@@ -1135,10 +1132,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().get_items().empty());
 
-	// ensure sort order is correct
-	pg_log.resort_missing(get_sort_bitwise());
-
-	map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_item>::const_iterator missing_iter =
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -1159,7 +1153,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	      ++ls_iter;
 	      ++missing_iter;
 	    }
-	  } else if (cmp(mcand, lcand, get_sort_bitwise()) < 0) {
+	  } else if (mcand < lcand) {
 	    candidate = mcand;
 	    assert(!mcand.is_max());
 	    ++missing_iter;
@@ -1172,7 +1166,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           dout(10) << " pgnls candidate 0x" << std::hex << candidate.get_hash()
             << " vs lower bound 0x" << lower_bound.get_hash() << dendl;
 
-	  if (cmp(candidate, next, get_sort_bitwise()) >= 0) {
+	  if (candidate >= next) {
 	    break;
 	  }
 
@@ -1241,15 +1235,9 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    ls_iter == sentries.end()) {
 	  result = 1;
 
-	  if (get_osdmap()->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	    // Set response.handle to the start of the next PG
-	    // according to the object sort order.  Only do this if
-	    // the cluster is in bitwise mode; with legacy nibblewise
-	    // sort PGs don't always cover contiguous ranges of the
-	    // hash order.
-	    response.handle = info.pgid.pgid.get_hobj_end(
-	      pool.info.get_pg_num());
-	  }
+	  // Set response.handle to the start of the next PG according
+	  // to the object sort order.
+	  response.handle = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
 	} else {
           response.handle = next;
         }
@@ -1322,10 +1310,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().get_items().empty());
 
-	// ensure sort order is correct
-	pg_log.resort_missing(get_sort_bitwise());
-
-	map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_item>::const_iterator missing_iter =
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -1346,7 +1331,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	      ++ls_iter;
 	      ++missing_iter;
 	    }
-	  } else if (cmp(mcand, lcand, get_sort_bitwise()) < 0) {
+	  } else if (mcand < lcand) {
 	    candidate = mcand;
 	    assert(!mcand.is_max());
 	    ++missing_iter;
@@ -1356,7 +1341,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    ++ls_iter;
 	  }
 
-	  if (cmp(candidate, next, get_sort_bitwise()) >= 0) {
+	  if (candidate >= next) {
 	    break;
 	  }
 	    
@@ -1581,8 +1566,6 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
       _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("PrimaryLogPG::snapset_contexts_lock"),
-  backfills_in_flight(hobject_t::Comparator(true)),
-  pending_backfill_updates(hobject_t::Comparator(true)),
   new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -1609,10 +1592,10 @@ void PrimaryLogPG::handle_backoff(OpRequestRef& op)
   session->put();  // get_priv takes a ref, and so does the SessionRef
   hobject_t begin = info.pgid.pgid.get_hobj_start();
   hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
-  if (cmp_bitwise(begin, m->begin) < 0) {
+  if (begin < m->begin) {
     begin = m->begin;
   }
-  if (cmp_bitwise(end, m->end) > 0) {
+  if (end > m->end) {
     end = m->end;
   }
   dout(10) << __func__ << " backoff ack id " << m->id
@@ -1763,7 +1746,7 @@ hobject_t PrimaryLogPG::earliest_backfill() const
     pg_shard_t bt = *i;
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(bt);
     assert(iter != peer_info.end());
-    if (cmp(iter->second.last_backfill, e, get_sort_bitwise()) < 0)
+    if (iter->second.last_backfill < e)
       e = iter->second.last_backfill;
   }
   return e;
@@ -1974,7 +1957,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (write_ordered &&
-      scrubber.write_blocked_by_scrub(head, get_sort_bitwise())) {
+      scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_scrub.push_back(op);
     op->mark_delayed("waiting for scrub");
@@ -2207,7 +2190,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
     // verify there is in fact a flush in progress
     // FIXME: we could make this a stronger test.
-    map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.find(obc->obs.oi.soid);
+    map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
     if (p == flush_ops.end()) {
       dout(10) << __func__ << " no flush in progress, aborting" << dendl;
       reply_ctx(ctx, -EINVAL);
@@ -2721,7 +2704,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   }
   proxyread_ops.erase(tid);
 
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator q = in_progress_proxy_ops.find(oid);
+  map<hobject_t, list<OpRequestRef>>::iterator q = in_progress_proxy_ops.find(oid);
   if (q == in_progress_proxy_ops.end()) {
     dout(10) << __func__ << " no in_progress_proxy_ops found" << dendl;
     return;
@@ -2750,7 +2733,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
 
 void PrimaryLogPG::kick_proxy_ops_blocked(hobject_t& soid)
 {
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = in_progress_proxy_ops.find(soid);
+  map<hobject_t, list<OpRequestRef>>::iterator p = in_progress_proxy_ops.find(soid);
   if (p == in_progress_proxy_ops.end())
     return;
 
@@ -2793,7 +2776,7 @@ void PrimaryLogPG::cancel_proxy_ops(bool requeue)
   }
 
   if (requeue) {
-    map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p =
+    map<hobject_t, list<OpRequestRef>>::iterator p =
       in_progress_proxy_ops.begin();
     while (p != in_progress_proxy_ops.end()) {
       list<OpRequestRef>& ls = p->second;
@@ -2982,7 +2965,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
 {
   hobject_t hoid = obc ? obc->obs.oi.soid : missing_oid;
   assert(hoid != hobject_t());
-  if (scrubber.write_blocked_by_scrub(hoid, get_sort_bitwise())) {
+  if (scrubber.write_blocked_by_scrub(hoid)) {
     dout(10) << __func__ << " " << hoid
 	     << " blocked by scrub" << dendl;
     if (op) {
@@ -3008,7 +2991,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
    * for this case we don't use DONTNEED.
    */
   unsigned src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL;
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator q = in_progress_proxy_ops.find(obc->obs.oi.soid);
+  map<hobject_t, list<OpRequestRef>>::iterator q = in_progress_proxy_ops.find(obc->obs.oi.soid);
   if (q == in_progress_proxy_ops.end()) {
     src_fadvise_flags |= LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   }
@@ -3477,7 +3460,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
     {
       assert(cct->_conf->osd_kill_backfill_at != 2);
 
-      info.set_last_backfill(m->last_backfill, get_sort_bitwise());
+      info.set_last_backfill(m->last_backfill);
       if (m->compat_stat_sum) {
 	info.stats.stats = m->stats.stats; // Previously, we only sent sum
       } else {
@@ -6896,14 +6879,14 @@ void PrimaryLogPG::apply_stats(
        ++i) {
     pg_shard_t bt = *i;
     pg_info_t& pinfo = peer_info[bt];
-    if (cmp(soid, pinfo.last_backfill, get_sort_bitwise()) <= 0)
+    if (soid <= pinfo.last_backfill)
       pinfo.stats.stats.add(delta_stats);
-    else if (cmp(soid, last_backfill_started, get_sort_bitwise()) <= 0)
+    else if (soid <= last_backfill_started)
       pending_backfill_updates[soid].stats.add(delta_stats);
   }
 
   if (is_primary() && scrubber.active) {
-    if (cmp(soid, scrubber.start, get_sort_bitwise()) < 0) {
+    if (soid < scrubber.start) {
       scrub_cstat.add(delta_stats);
     }
   }
@@ -7291,7 +7274,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
-  map<hobject_t,CopyOpRef, hobject_t::BitwiseComparator>::iterator p = copy_ops.find(oid);
+  map<hobject_t,CopyOpRef>::iterator p = copy_ops.find(oid);
   if (p == copy_ops.end()) {
     dout(10) << __func__ << " no copy_op found" << dendl;
     return;
@@ -7719,7 +7702,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     // pass error to everyone blocked on this object
     // FIXME: this is pretty sloppy, but at this point we got
     // something unexpected and don't have many other options.
-    map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator blocked_iter =
+    map<hobject_t,list<OpRequestRef>>::iterator blocked_iter =
       waiting_for_blocked_object.find(soid);
     if (blocked_iter != waiting_for_blocked_object.end()) {
       while (!blocked_iter->second.empty()) {
@@ -7844,7 +7827,7 @@ void PrimaryLogPG::cancel_copy(CopyOpRef cop, bool requeue)
 void PrimaryLogPG::cancel_copy_ops(bool requeue)
 {
   dout(10) << __func__ << dendl;
-  map<hobject_t,CopyOpRef, hobject_t::BitwiseComparator>::iterator p = copy_ops.begin();
+  map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
   while (p != copy_ops.end()) {
     // requeue this op? can I queue up all of them?
     cancel_copy((p++)->second, requeue);
@@ -7956,7 +7939,7 @@ int PrimaryLogPG::start_flush(
   if (blocking)
     obc->start_block();
 
-  map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.find(soid);
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
   if (p != flush_ops.end()) {
     FlushOpRef fop = p->second;
     if (fop->op == op) {
@@ -8108,7 +8091,7 @@ void PrimaryLogPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
-  map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.find(oid);
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
   if (p == flush_ops.end()) {
     dout(10) << __func__ << " no flush_op found" << dendl;
     return;
@@ -8184,7 +8167,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   }
 
   if (!fop->blocking &&
-      scrubber.write_blocked_by_scrub(oid, get_sort_bitwise())) {
+      scrubber.write_blocked_by_scrub(oid)) {
     if (fop->op) {
       dout(10) << __func__ << " blocked by scrub" << dendl;
       requeue_op(fop->op);
@@ -8298,7 +8281,7 @@ void PrimaryLogPG::cancel_flush(FlushOpRef fop, bool requeue)
 void PrimaryLogPG::cancel_flush_ops(bool requeue)
 {
   dout(10) << __func__ << dendl;
-  map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.begin();
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.begin();
   while (p != flush_ops.end()) {
     cancel_flush((p++)->second, requeue);
   }
@@ -8899,7 +8882,7 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
     return;
   }
 
-  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid, get_sort_bitwise())) {
+  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
     dout(10) << "handle_watch_timeout waiting for scrub on obj "
 	     << obc->obs.oi.soid
 	     << dendl;
@@ -9357,7 +9340,7 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
     return;
   }
 
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_blocked_object.find(soid);
+  map<hobject_t, list<OpRequestRef>>::iterator p = waiting_for_blocked_object.find(soid);
   if (p != waiting_for_blocked_object.end()) {
     list<OpRequestRef>& ls = p->second;
     dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
@@ -9386,7 +9369,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
 {
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
-  map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator>::iterator p = snapset_contexts.find(
+  map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
     oid.get_snapdir());
   if (p != snapset_contexts.end()) {
     if (can_create || p->second->exists) {
@@ -9805,9 +9788,9 @@ void PrimaryLogPG::mark_all_unfound_lost(
   mempool::osd::list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now();
-  map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator m =
+  map<hobject_t, pg_missing_item>::const_iterator m =
     missing_loc.get_needs_recovery().begin();
-  map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator mend =
+  map<hobject_t, pg_missing_item>::const_iterator mend =
     missing_loc.get_needs_recovery().end();
 
   ObcLockManager manager;
@@ -9996,7 +9979,7 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
   dout(10) << "on_removal" << dendl;
 
   // adjust info to backfill
-  info.set_last_backfill(hobject_t(), true);
+  info.set_last_backfill(hobject_t());
   pg_log.reset_backfill();
   dirty_info = true;
 
@@ -10096,12 +10079,6 @@ void PrimaryLogPG::on_activate()
 
 void PrimaryLogPG::_on_new_interval()
 {
-  // re-sort obc map?
-  if (object_contexts.get_comparator().bitwise != get_sort_bitwise()) {
-    dout(20) << __func__ << " resorting object_contexts" << dendl;
-    object_contexts.reset_comparator(
-      hobject_t::ComparatorWithDefault(get_sort_bitwise()));
-  }
 }
 
 void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
@@ -10138,7 +10115,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   } else {
     waiting_for_unreadable_object.clear();
   }
-  for (map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_degraded_object.begin();
+  for (map<hobject_t,list<OpRequestRef>>::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
        waiting_for_degraded_object.erase(p++)) {
     release_backoffs(p->first);
@@ -10152,7 +10129,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   // requeues waiting_for_scrub
   scrub_clear_state();
 
-  for (map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_blocked_object.begin();
+  for (auto p = waiting_for_blocked_object.begin();
        p != waiting_for_blocked_object.end();
        waiting_for_blocked_object.erase(p++)) {
     if (is_primary())
@@ -10160,8 +10137,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
     else
       p->second.clear();
   }
-  for (map<hobject_t, list<Context*>, hobject_t::BitwiseComparator>::iterator i =
-	 callbacks_for_degraded_object.begin();
+  for (auto i = callbacks_for_degraded_object.begin();
        i != callbacks_for_degraded_object.end();
     ) {
     finish_degraded_object((i++)->first);
@@ -10250,14 +10226,14 @@ void PrimaryLogPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   last_backfill_started = hobject_t();
-  set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();
+  set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
     assert(recovering.count(*i));
     backfills_in_flight.erase(i++);
   }
 
   list<OpRequestRef> blocked_ops;
-  for (map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::iterator i = recovering.begin();
+  for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
        i != recovering.end();
        recovering.erase(i++)) {
     if (i->second) {
@@ -10353,7 +10329,7 @@ void PG::MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
 		       << missing_loc_sources << dendl;
     
     // filter missing_loc
-    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::iterator p = missing_loc.begin();
+    map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
     while (p != missing_loc.end()) {
       set<pg_shard_t>::iterator q = p->second.begin();
       while (q != p->second.end())
@@ -10770,7 +10746,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
-      if (cmp(soid, pi->second.last_backfill, get_sort_bitwise()) > 0) {
+      if (soid > pi->second.last_backfill) {
 	if (!recovering.count(soid)) {
 	  derr << __func__ << ": object added to missing set for backfill, but "
 	       << "is not in recovering, error!" << dendl;
@@ -10807,7 +10783,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator r = m.get_items().find(soid);
+      map<hobject_t,pg_missing_item>::const_iterator r = m.get_items().find(soid);
       started += prep_object_replica_pushes(soid, r->second.need,
 					    h);
     }
@@ -10827,7 +10803,7 @@ hobject_t PrimaryLogPG::earliest_peer_backfill() const
     map<pg_shard_t, BackfillInterval>::const_iterator iter =
       peer_backfill_info.find(peer);
     assert(iter != peer_backfill_info.end());
-    if (cmp(iter->second.begin, e, get_sort_bitwise()) < 0)
+    if (iter->second.begin < e)
       e = iter->second.begin;
   }
   return e;
@@ -10888,7 +10864,6 @@ uint64_t PrimaryLogPG::recover_backfill(
   dout(10) << "recover_backfill (" << max << ")"
            << " bft=" << backfill_targets
 	   << " last_backfill_started " << last_backfill_started
-	   << " sort " << (get_sort_bitwise() ? "bitwise" : "nibblewise")
 	   << (new_backfill ? " new_backfill":"")
 	   << dendl;
   assert(!backfill_targets.empty());
@@ -10899,34 +10874,17 @@ uint64_t PrimaryLogPG::recover_backfill(
     assert(last_backfill_started == earliest_backfill());
     new_backfill = false;
 
-    // initialize BackfillIntervals (with proper sort order)
+    // initialize BackfillIntervals
     for (set<pg_shard_t>::iterator i = backfill_targets.begin();
 	 i != backfill_targets.end();
 	 ++i) {
-      peer_backfill_info[*i].reset(peer_info[*i].last_backfill,
-				   get_sort_bitwise());
+      peer_backfill_info[*i].reset(peer_info[*i].last_backfill);
     }
-    backfill_info.reset(last_backfill_started,
-			get_sort_bitwise());
+    backfill_info.reset(last_backfill_started);
 
-    // initialize comparators
-    backfills_in_flight = set<hobject_t, hobject_t::Comparator>(
-      hobject_t::Comparator(get_sort_bitwise()));
-    pending_backfill_updates = map<hobject_t, pg_stat_t, hobject_t::Comparator>(
-      hobject_t::Comparator(get_sort_bitwise()));
+    backfills_in_flight.clear();
+    pending_backfill_updates.clear();
   }
-
-  // sanity check sort orders
-  assert(backfill_info.sort_bitwise == get_sort_bitwise());
-  for (map<pg_shard_t, BackfillInterval>::iterator i =
-	 peer_backfill_info.begin();
-       i != peer_backfill_info.end();
-       ++i) {
-    assert(i->second.sort_bitwise == get_sort_bitwise());
-    assert(i->second.objects.key_comp().bitwise == get_sort_bitwise());
-  }
-  assert(backfills_in_flight.key_comp().bitwise == get_sort_bitwise());
-  assert(pending_backfill_updates.key_comp().bitwise == get_sort_bitwise());
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
@@ -10947,23 +10905,21 @@ uint64_t PrimaryLogPG::recover_backfill(
   vector<boost::tuple<hobject_t, eversion_t,
                       ObjectContextRef, vector<pg_shard_t> > > to_push;
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
-  set<hobject_t, hobject_t::BitwiseComparator> add_to_stat;
+  set<hobject_t> add_to_stat;
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
        ++i) {
     peer_backfill_info[*i].trim_to(
-      MAX_HOBJ(peer_info[*i].last_backfill, last_backfill_started,
-	       get_sort_bitwise()));
+      std::max(peer_info[*i].last_backfill, last_backfill_started));
   }
   backfill_info.trim_to(last_backfill_started);
 
   while (ops < max) {
-    if (cmp(backfill_info.begin, earliest_peer_backfill(),
-	    get_sort_bitwise()) <= 0 &&
+    if (backfill_info.begin <= earliest_peer_backfill() &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
       hobject_t next = backfill_info.end;
-      backfill_info.reset(next, get_sort_bitwise());
+      backfill_info.reset(next);
       backfill_info.end = hobject_t::get_max();
       update_range(&backfill_info, handle);
       backfill_info.trim();
@@ -10979,7 +10935,7 @@ uint64_t PrimaryLogPG::recover_backfill(
       BackfillInterval& pbi = peer_backfill_info[bt];
 
       dout(20) << " peer shard " << bt << " backfill " << pbi << dendl;
-      if (cmp(pbi.begin, backfill_info.begin, get_sort_bitwise()) <= 0 &&
+      if (pbi.begin <= backfill_info.begin &&
 	  !pbi.extends_to_end() && pbi.empty()) {
 	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;
 	epoch_t e = get_osdmap()->get_epoch();
@@ -11010,7 +10966,7 @@ uint64_t PrimaryLogPG::recover_backfill(
     // the set of targets for which that object applies.
     hobject_t check = earliest_peer_backfill();
 
-    if (cmp(check, backfill_info.begin, get_sort_bitwise()) < 0) {
+    if (check < backfill_info.begin) {
 
       set<pg_shard_t> check_targets;
       for (set<pg_shard_t>::iterator i = backfill_targets.begin();
@@ -11107,8 +11063,7 @@ uint64_t PrimaryLogPG::recover_backfill(
           // Only include peers that we've caught up to their backfill line
 	  // otherwise, they only appear to be missing this object
 	  // because their pbi.begin > backfill_info.begin.
-          if (cmp(backfill_info.begin, pinfo.last_backfill,
-		  get_sort_bitwise()) > 0)
+          if (backfill_info.begin > pinfo.last_backfill)
 	    missing_targs.push_back(bt);
 	  else
 	    skip_targs.push_back(bt);
@@ -11172,10 +11127,10 @@ uint64_t PrimaryLogPG::recover_backfill(
     }
   }
 
-  hobject_t backfill_pos = MIN_HOBJ(backfill_info.begin, earliest_peer_backfill(),
-			  get_sort_bitwise());
+  hobject_t backfill_pos =
+    std::min(backfill_info.begin, earliest_peer_backfill());
 
-  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = add_to_stat.begin();
+  for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
        ++i) {
     ObjectContextRef obc = get_object_context(*i, false);
@@ -11190,8 +11145,7 @@ uint64_t PrimaryLogPG::recover_backfill(
     // ordered before any subsequent updates
     send_remove_op(to_remove[i].get<0>(), to_remove[i].get<1>(), to_remove[i].get<2>());
 
-    if (cmp(to_remove[i].get<0>(), last_backfill_started,
-	    get_sort_bitwise()) <= 0)
+    if (to_remove[i].get<0>() <= last_backfill_started)
       pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
   }
 
@@ -11204,7 +11158,7 @@ uint64_t PrimaryLogPG::recover_backfill(
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
-  for (set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();
+  for (set<hobject_t>::iterator i = backfills_in_flight.begin();
        i != backfills_in_flight.end();
        ++i) {
     dout(20) << *i << " is still in flight" << dendl;
@@ -11214,20 +11168,20 @@ uint64_t PrimaryLogPG::recover_backfill(
     backfill_pos : *(backfills_in_flight.begin());
   hobject_t new_last_backfill = earliest_backfill();
   dout(10) << "starting new_last_backfill at " << new_last_backfill << dendl;
-  for (map<hobject_t, pg_stat_t, hobject_t::Comparator>::iterator i =
+  for (map<hobject_t, pg_stat_t>::iterator i =
 	 pending_backfill_updates.begin();
        i != pending_backfill_updates.end() &&
-	 cmp(i->first, next_backfill_to_complete, get_sort_bitwise()) < 0;
+	 i->first < next_backfill_to_complete;
        pending_backfill_updates.erase(i++)) {
     dout(20) << " pending_backfill_update " << i->first << dendl;
-    assert(cmp(i->first, new_last_backfill, get_sort_bitwise()) > 0);
+    assert(i->first > new_last_backfill);
     for (set<pg_shard_t>::iterator j = backfill_targets.begin();
 	 j != backfill_targets.end();
 	 ++j) {
       pg_shard_t bt = *j;
       pg_info_t& pinfo = peer_info[bt];
       //Add stats to all peers that were missing object
-      if (cmp(i->first, pinfo.last_backfill, get_sort_bitwise()) > 0)
+      if (i->first > pinfo.last_backfill)
         pinfo.stats.add(i->second);
     }
     new_last_backfill = i->first;
@@ -11253,8 +11207,8 @@ uint64_t PrimaryLogPG::recover_backfill(
     pg_shard_t bt = *i;
     pg_info_t& pinfo = peer_info[bt];
 
-    if (cmp(new_last_backfill, pinfo.last_backfill, get_sort_bitwise()) > 0) {
-      pinfo.set_last_backfill(new_last_backfill, get_sort_bitwise());
+    if (new_last_backfill > pinfo.last_backfill) {
+      pinfo.set_last_backfill(new_last_backfill);
       epoch_t e = get_osdmap()->get_epoch();
       MOSDPGBackfill *m = NULL;
       if (pinfo.last_backfill.is_max()) {
@@ -11365,8 +11319,8 @@ void PrimaryLogPG::update_range(
       dout(10) << __func__ << ": updating from version " << e.version
                << dendl;
       const hobject_t &soid = e.soid;
-      if (cmp(soid, bi->begin, get_sort_bitwise()) >= 0 &&
-	  cmp(soid, bi->end, get_sort_bitwise()) < 0) {
+      if (soid >= bi->begin &&
+	  soid < bi->end) {
 	if (e.is_update()) {
 	  dout(10) << __func__ << ": " << e.soid << " updated to version "
 		   << e.version << dendl;
@@ -11448,7 +11402,7 @@ void PrimaryLogPG::check_local()
     return;
 
   // just scan the log.
-  set<hobject_t, hobject_t::BitwiseComparator> did;
+  set<hobject_t> did;
   for (list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
        p != pg_log.get_log().log.rend();
        ++p) {
@@ -11556,7 +11510,7 @@ void PrimaryLogPG::hit_set_remove_all()
     // Once we hit a degraded object just skip
     if (is_degraded_or_backfilling_object(aoid))
       return;
-    if (scrubber.write_blocked_by_scrub(aoid, get_sort_bitwise()))
+    if (scrubber.write_blocked_by_scrub(aoid))
       return;
   }
 
@@ -11675,7 +11629,7 @@ void PrimaryLogPG::hit_set_persist()
     // Once we hit a degraded object just skip further trim
     if (is_degraded_or_backfilling_object(aoid))
       return;
-    if (scrubber.write_blocked_by_scrub(aoid, get_sort_bitwise()))
+    if (scrubber.write_blocked_by_scrub(aoid))
       return;
   }
 
@@ -11709,7 +11663,7 @@ void PrimaryLogPG::hit_set_persist()
     new_hset.using_gmt);
 
   // If the current object is degraded we skip this persist request
-  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
+  if (scrubber.write_blocked_by_scrub(oid))
     return;
 
   hit_set->seal();
@@ -11953,7 +11907,7 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
-    if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid, get_sort_bitwise())) {
+    if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
       dout(20) << __func__ << " skip (scrubbing) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
@@ -12010,8 +11964,8 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
   // See if we've made a full pass over the object hash space
   // This might check at most ls_max objects a second time to notice that
   // we've checked every objects at least once.
-  if (cmp(agent_state->position, agent_state->start, get_sort_bitwise()) < 0 &&
-      cmp(next, agent_state->start, get_sort_bitwise()) >= 0) {
+  if (agent_state->position < agent_state->start &&
+      next >= agent_state->start) {
     dout(20) << __func__ << " wrap around " << agent_state->start << dendl;
     if (total_started == 0)
       need_delay = true;
@@ -12603,7 +12557,7 @@ bool PrimaryLogPG::_range_available_for_scrub(
   next.second = object_contexts.lookup(begin);
   next.first = begin;
   bool more = true;
-  while (more && cmp(next.first, end, get_sort_bitwise()) < 0) {
+  while (more && next.first < end) {
     if (next.second && next.second->is_blocked()) {
       next.second->requeue_scrub_on_unblock = true;
       dout(10) << __func__ << ": scrub delayed, "
@@ -12699,7 +12653,7 @@ unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
  */
 void PrimaryLogPG::scrub_snapshot_metadata(
   ScrubMap &scrubmap,
-  const map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest)
+  const map<hobject_t, pair<uint32_t, uint32_t>> &missing_digest)
 {
   dout(10) << __func__ << dendl;
 
@@ -12718,7 +12672,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
   bufferlist last_data;
 
-  for (map<hobject_t,ScrubMap::object, hobject_t::BitwiseComparator>::reverse_iterator
+  for (map<hobject_t,ScrubMap::object>::reverse_iterator
        p = scrubmap.objects.rbegin(); p != scrubmap.objects.rend(); ++p) {
     const hobject_t& soid = p->first;
     soid_error = inconsistent_snapset_wrapper{soid};
@@ -12992,7 +12946,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
   if (head && head_error.errors)
     scrubber.store->add_snap_error(pool.id, head_error);
 
-  for (map<hobject_t,pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator>::const_iterator p =
+  for (map<hobject_t,pair<uint32_t,uint32_t>>::const_iterator p =
 	 missing_digest.begin();
        p != missing_digest.end();
        ++p) {

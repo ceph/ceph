@@ -3039,7 +3039,7 @@ void OSD::clear_temp_objects()
     ghobject_t next;
     while (1) {
       vector<ghobject_t> objects;
-      store->collection_list(*p, next, ghobject_t::get_max(), true,
+      store->collection_list(*p, next, ghobject_t::get_max(),
 			     store->get_ideal_list_max(),
 			     &objects, &next);
       if (objects.empty())
@@ -3092,7 +3092,7 @@ void OSD::recursive_remove_collection(CephContext* cct,
   SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
-  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), true,
+  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(),
 			 INT_MAX, &objects, 0);
 
   // delete them.
@@ -4763,7 +4763,6 @@ bool remove_dir(
     coll,
     next,
     ghobject_t::get_max(),
-    true,
     store->get_ideal_list_max(),
     &olist,
     &next);
@@ -5907,9 +5906,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       pg->lock();
 
       fout << *pg << std::endl;
-      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mend =
+      std::map<hobject_t, pg_missing_item>::const_iterator mend =
 	pg->pg_log.get_missing().get_items().end();
-      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mi =
+      std::map<hobject_t, pg_missing_item>::const_iterator mi =
 	pg->pg_log.get_missing().get_items().begin();
       for (; mi != mend; ++mi) {
 	fout << mi->first << " -> " << mi->second << std::endl;
@@ -7573,6 +7572,11 @@ void OSD::activate_map()
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
+  if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+    derr << __func__ << " SORTBITWISE flag is not set" << dendl;
+    ceph_abort();
+  }
+
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
     osdmap_subscribe(osdmap->get_epoch() + 1, false);
@@ -8412,7 +8416,7 @@ void OSD::handle_pg_query(OpRequestRef op)
      * before the pg is recreated, we'll just start it off backfilling
      * instead of just empty */
     if (service.deleting_pgs.lookup(pgid))
-      empty.set_last_backfill(hobject_t(), true);
+      empty.set_last_backfill(hobject_t());
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());
@@ -8900,7 +8904,7 @@ void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
     // advance
     pos = _pgid.get_hobj_end(osdmap->get_pg_pool(pos.pool)->get_pg_num());
     dout(20) << __func__ << "  next pg " << pos << dendl;
-  } while (cmp_bitwise(pos, m->end) < 0);
+  } while (pos < m->end);
 }
 
 template<typename T, int MSGTYPE>

@@ -2210,9 +2210,9 @@ struct pg_info_t {
       last_backfill_bitwise(false)
   { }
   
-  void set_last_backfill(hobject_t pos, bool sort) {
+  void set_last_backfill(hobject_t pos) {
     last_backfill = pos;
-    last_backfill_bitwise = sort;
+    last_backfill_bitwise = true;
   }
 
   bool is_empty() const { return last_update.version == 0; }
@@ -3120,7 +3120,7 @@ ostream& operator<<(ostream& out, const pg_missing_item &item);
 
 class pg_missing_const_i {
 public:
-  virtual const map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault> &
+  virtual const map<hobject_t, pg_missing_item> &
     get_items() const = 0;
   virtual const map<version_t, hobject_t> &get_rmissing() const = 0;
   virtual unsigned int num_missing() const = 0;
@@ -3145,7 +3145,7 @@ public:
 };
 template <>
 class ChangeTracker<true> {
-  set<hobject_t, hobject_t::BitwiseComparator> _changed;
+  set<hobject_t> _changed;
 public:
   void changed(const hobject_t &obj) {
     _changed.insert(obj);
@@ -3167,7 +3167,7 @@ public:
 template <bool TrackChanges>
 class pg_missing_set : public pg_missing_const_i {
   using item = pg_missing_item;
-  map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
+  map<hobject_t, item> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
 
@@ -3184,7 +3184,7 @@ public:
       tracker.changed(i.first);
   }
 
-  const map<hobject_t, item, hobject_t::ComparatorWithDefault> &get_items() const override {
+  const map<hobject_t, item> &get_items() const override {
     return missing;
   }
   const map<version_t, hobject_t> &get_rmissing() const override {
@@ -3205,7 +3205,7 @@ public:
     return true;
   }
   bool is_missing(const hobject_t& oid, eversion_t v) const override {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
+    map<hobject_t, item>::const_iterator m =
       missing.find(oid);
     if (m == missing.end())
       return false;
@@ -3215,7 +3215,7 @@ public:
     return true;
   }
   eversion_t have_old(const hobject_t& oid) const override {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
+    map<hobject_t, item>::const_iterator m =
       missing.find(oid);
     if (m == missing.end())
       return eversion_t();
@@ -3235,7 +3235,7 @@ public:
    */
   void add_next_event(const pg_log_entry_t& e) {
     if (e.is_update()) {
-      map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
+      map<hobject_t, item>::iterator missing_it;
       missing_it = missing.find(e.soid);
       bool is_missing_divergent_item = missing_it != missing.end();
       if (e.prior_version == eversion_t() || e.is_clone()) {
@@ -3291,25 +3291,25 @@ public:
   }
 
   void rm(const hobject_t& oid, eversion_t v) {
-    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    std::map<hobject_t, item>::iterator p = missing.find(oid);
     if (p != missing.end() && p->second.need <= v)
       rm(p);
   }
 
-  void rm(std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+  void rm(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
     rmissing.erase(m->second.need.version);
     missing.erase(m);
   }
 
   void got(const hobject_t& oid, eversion_t v) {
-    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    std::map<hobject_t, item>::iterator p = missing.find(oid);
     assert(p != missing.end());
     assert(p->second.need <= v);
     got(p);
   }
 
-  void got(std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+  void got(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
     rmissing.erase(m->second.need.version);
     missing.erase(m);
@@ -3320,7 +3320,7 @@ public:
     unsigned split_bits,
     pg_missing_set *omissing) {
     unsigned mask = ~((~0)<<split_bits);
-    for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
+    for (map<hobject_t, item>::iterator i = missing.begin();
 	 i != missing.end();
       ) {
       if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
@@ -3339,16 +3339,6 @@ public:
     rmissing.clear();
   }
 
-  void resort(bool sort_bitwise) {
-    if (missing.key_comp().bitwise != sort_bitwise) {
-      map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
-      tmp.swap(missing);
-      missing = map<hobject_t, item, hobject_t::ComparatorWithDefault>(
-	hobject_t::ComparatorWithDefault(sort_bitwise));
-      missing.insert(tmp.begin(), tmp.end());
-    }
-  }
-
   void encode(bufferlist &bl) const {
     ENCODE_START(3, 2, bl);
     ::encode(missing, bl);
@@ -3363,8 +3353,8 @@ public:
 
     if (struct_v < 3) {
       // Handle hobject_t upgrade
-      map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
-      for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i =
+      map<hobject_t, item> tmp;
+      for (map<hobject_t, item>::iterator i =
 	     missing.begin();
 	   i != missing.end();
 	) {
@@ -3380,7 +3370,7 @@ public:
       missing.insert(tmp.begin(), tmp.end());
     }
 
-    for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::iterator it =
+    for (map<hobject_t,item>::iterator it =
 	   missing.begin();
 	 it != missing.end();
 	 ++it)
@@ -3390,7 +3380,7 @@ public:
   }
   void dump(Formatter *f) const {
     f->open_array_section("missing");
-    for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::const_iterator p =
+    for (map<hobject_t,item>::const_iterator p =
 	   missing.begin(); p != missing.end(); ++p) {
       f->open_object_section("item");
       f->dump_stream("object") << p->first;
@@ -3462,7 +3452,7 @@ public:
     }
     if (oss && !ok) {
       *oss << "check_missing: " << check_missing << "\n";
-      set<hobject_t, hobject_t::BitwiseComparator> changed;
+      set<hobject_t> changed;
       tracker.get_changed([&](const hobject_t &hoid) { changed.insert(hoid); });
       *oss << "changed: " << changed << "\n";
     }
@@ -4498,7 +4488,7 @@ class ObcLockManager {
       ObjectContext::RWState::State type)
       : obc(obc), type(type) {}
   };
-  map<hobject_t, ObjectLockState, hobject_t::BitwiseComparator> locks;
+  map<hobject_t, ObjectLockState> locks;
 public:
   ObcLockManager() = default;
   ObcLockManager(ObcLockManager &&) = default;
@@ -4616,7 +4606,7 @@ struct ObjectRecoveryInfo {
   object_info_t oi;
   SnapSet ss;
   interval_set<uint64_t> copy_subset;
-  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subset;
+  map<hobject_t, interval_set<uint64_t>> clone_subset;
 
   ObjectRecoveryInfo() : size(0) { }
 
@@ -4745,14 +4735,9 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  bool bitwise; // ephemeral, not encoded
-  map<hobject_t,object, hobject_t::ComparatorWithDefault> objects;
+  map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
-
-  ScrubMap() : bitwise(true) {}
-  ScrubMap(bool bitwise)
-    : bitwise(bitwise), objects(hobject_t::ComparatorWithDefault(bitwise)) {}
 
   void merge_incr(const ScrubMap &l);
   void insert(const ScrubMap &r) {
@@ -4767,16 +4752,6 @@ struct ScrubMap {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl, int64_t pool=-1);
   void dump(Formatter *f) const;
-  void reset_bitwise(bool new_bitwise) {
-    if (bitwise == new_bitwise)
-      return;
-    map<hobject_t, object, hobject_t::ComparatorWithDefault> new_objects(
-      objects.begin(),
-      objects.end(),
-      hobject_t::ComparatorWithDefault(new_bitwise));
-    ::swap(new_objects, objects);
-    bitwise = new_bitwise;
-  }
   static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)

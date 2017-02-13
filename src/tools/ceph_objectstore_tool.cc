@@ -90,7 +90,6 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 				   coll,
 				   next,
 				   ghobject_t::get_max(),
-				   true,
 				   LIST_AT_A_TIME,
 				   &list,
 				   &next);
@@ -621,7 +620,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 
   while (!next.is_max()) {
     vector<ghobject_t> objects;
-    int r = store->collection_list(coll, next, ghobject_t::get_max(), true, 300,
+    int r = store->collection_list(coll, next, ghobject_t::get_max(), 300,
       &objects, &next);
     if (r < 0)
       return r;

@@ -70,7 +70,7 @@ public:
    * Set of headers currently in use
    */
   set<uint64_t> in_use;
-  set<ghobject_t, ghobject_t::BitwiseComparator> map_header_in_use;
+  set<ghobject_t> map_header_in_use;
 
   /**
    * Takes the map_header_in_use entry in constructor, releases in
@@ -331,7 +331,7 @@ private:
   /// Implicit lock on Header->seq
   typedef ceph::shared_ptr<_Header> Header;
   Mutex cache_lock;
-  SimpleLRU<ghobject_t, _Header, ghobject_t::BitwiseComparator> caches;
+  SimpleLRU<ghobject_t, _Header> caches;
 
   string map_header_key(const ghobject_t &oid);
   string header_key(uint64_t seq);
