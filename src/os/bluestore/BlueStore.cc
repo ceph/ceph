@@ -2427,6 +2427,9 @@ void BlueStore::ExtentMap::fault_range(
 	       << " (" << v.length() << " bytes)" << dendl;
       assert(p->dirty == false);
       assert(v.length() == p->shard_info->bytes);
+      onode->c->store->logger->inc(l_bluestore_onode_shard_misses);
+    } else {
+      onode->c->store->logger->inc(l_bluestore_onode_shard_hits);
     }
     ++start;
   }
@@ -3144,6 +3147,14 @@ void BlueStore::_init_logger()
     "Average submit latency");
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
     "Average commit latency");
+  b.add_time_avg(l_bluestore_read_lat, "read_lat",
+    "Average read latency");
+  b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
+    "Average read onode metadata latency");
+  b.add_time_avg(l_bluestore_read_wait_flush_lat, "read_wait_flush_lat",
+    "Average wait flush latency during reads");
+  b.add_time_avg(l_bluestore_read_wait_aio_lat, "read_wait_aio_lat",
+    "Average read latency");
   b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
     "Average compress latency");
   b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
@@ -3179,6 +3190,10 @@ void BlueStore::_init_logger()
     "Sum for onode-lookups hit in the cache");
   b.add_u64(l_bluestore_onode_misses, "bluestore_onode_misses",
     "Sum for onode-lookups missed in the cache");
+  b.add_u64(l_bluestore_onode_shard_hits, "bluestore_onode_shard_hits",
+    "Sum for onode-shard lookups hit in the cache");
+  b.add_u64(l_bluestore_onode_shard_misses, "bluestore_onode_shard_misses",
+    "Sum for onode-shard lookups missed in the cache");
   b.add_u64(l_bluestore_extents, "bluestore_extents",
 	    "Number of extents in cache");
   b.add_u64(l_bluestore_blobs, "bluestore_blobs",
@@ -5427,6 +5442,7 @@ int BlueStore::read(
   uint32_t op_flags,
   bool allow_eio)
 {
+  utime_t start = ceph_clock_now();
   Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -5439,8 +5455,9 @@ int BlueStore::read(
   int r;
   {
     RWLock::RLocker l(c->lock);
-
+    utime_t start1 = ceph_clock_now();
     OnodeRef o = c->get_onode(oid, false);
+    logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start1);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -5462,6 +5479,7 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
+  logger->tinc(l_bluestore_read_lat, ceph_clock_now() - start);
   return r;
 }
 
@@ -5533,9 +5551,13 @@ int BlueStore::_do_read(
     length = o->onode.size - offset;
   }
 
+  utime_t start = ceph_clock_now();
   o->flush();
+  logger->tinc(l_bluestore_read_wait_flush_lat, ceph_clock_now() - start);
 
+  start = ceph_clock_now();
   o->extent_map.fault_range(db, offset, length);
+  logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start);
   _dump_onode(o);
 
   ready_regions_t ready_regions;
@@ -5601,6 +5623,9 @@ int BlueStore::_do_read(
   }
 
   // read raw blob data.  use aio if we have >1 blobs to read.
+  start = ceph_clock_now(); // for the sake of simplicity 
+                                    // measure the whole block below.
+                                    // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct, NULL);
   for (auto& p : blobs2read) {
@@ -5677,6 +5702,7 @@ int BlueStore::_do_read(
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
   }
+  logger->tinc(l_bluestore_read_wait_aio_lat, ceph_clock_now() - start);
 
   // enumerate and decompress desired blobs
   auto p = compressed_blob_bls.begin();
