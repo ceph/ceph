@@ -2689,6 +2689,10 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (e.zones_trace.find(zone_id) != e.zones_trace.end()) {
           continue;
         }
+        if (!e.instance.empty()) {
+          /* skip versioned objects, don't squash versioned operations */
+          continue;
+        }
         auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
         if (squash_entry.first <= e.timestamp) {
           squash_entry = make_pair<>(e.timestamp, e.op);
@@ -2756,11 +2760,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
-        if (make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
+        if (entry->instance.empty() &&
+            make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
           set_status() << "squashed operation, skipping";
           tn->log(20, SSTR("skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": squashed operation"));
-          /* not updating high marker though */
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         tn->set_flag(RGW_SNS_FLAG_ACTIVE);
