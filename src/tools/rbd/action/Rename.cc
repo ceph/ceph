@@ -28,6 +28,8 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
+  at::add_namespace_option(options, at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_namespace_option(options, at::ARGUMENT_MODIFIER_DEST);
 }
 
 int execute(const po::variables_map &vm) {
@@ -41,6 +43,7 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  std::string nspace = utils::get_namespace(vm, at::ARGUMENT_MODIFIER_SOURCE);
 
   std::string dst_image_name;
   std::string dst_snap_name;
@@ -51,6 +54,7 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  std::string dst_nspace = utils::get_namespace(vm, at::ARGUMENT_MODIFIER_DEST);
 
   if (pool_name != dst_pool_name) {
     std::cerr << "rbd: mv/rename across pools not supported" << std::endl
@@ -59,9 +63,16 @@ int execute(const po::variables_map &vm) {
     return -EINVAL;
   }
 
+  if (nspace != dst_nspace) {
+    std::cerr << "rbd: mv/rename across namespaces not supported" << std::endl
+              << "source namespace: " << nspace<< " dest namespace: " << dst_nspace
+              << std::endl;
+    return -EINVAL;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
