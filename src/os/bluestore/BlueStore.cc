@@ -3218,7 +3218,7 @@ void BlueStore::_init_logger()
         "Current bytes in queue");
   b.add_u64(l_bluestore_cur_ops_in_wal_queue, "bluestore_cur_ops_in_wal_queue",
         "Current wal ops in wal queue");
-  b.add_u64(l_bluestore_cur_bytes_in_wal_queue, "l_bluestore_cur_bytes_in_wal_queue",
+  b.add_u64(l_bluestore_cur_bytes_in_wal_queue, "bluestore_cur_bytes_in_wal_queue",
         "Current wal bytes in wal queue");
 
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
