@@ -80,6 +80,11 @@ protected:
                           RDMAWorker *w);
   virtual ~RDMAConnectedSocketImpl();
 
+  static RDMAConnectedSocketImpl *factory(CephContext *cct,
+					  Infiniband *ib,
+					  RDMADispatcher* s,
+					  RDMAWorker *w);
+
   Device *get_device() { return ibdev; }
 
   void pass_wc(std::vector<ibv_wc> &&v);
@@ -116,6 +121,10 @@ protected:
 
  public:
   RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a);
+
+  static RDMAServerSocketImpl *factory(CephContext *cct, Infiniband *ib,
+                                       RDMADispatcher *s, RDMAWorker *w,
+                                       entity_addr_t& a);
 
   virtual int listen(entity_addr_t &sa, const SocketOptions &opt) = 0;
   virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) = 0;

@@ -18,10 +18,22 @@
 #include "RDMAStack.h"
 #include "Device.h"
 #include "RDMAConnTCP.h"
+#include "RDMAConnCM.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
+
+RDMAConnectedSocketImpl *RDMAConnectedSocketImpl::factory(CephContext *cct,
+							  Infiniband *ib,
+							  RDMADispatcher* s,
+							  RDMAWorker *w)
+{
+  if (cct->_conf->ms_async_rdma_cm)
+    return new RDMAConnCM(cct, ib, s, w);
+
+  return new RDMAConnTCP(cct, ib, s, w);
+}
 
 RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
 						 RDMAWorker *w)
