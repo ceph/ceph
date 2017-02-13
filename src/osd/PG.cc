@@ -2301,7 +2301,7 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
   ConnectionRef con = s->con;
   if (!con)   // OSD::ms_handle_reset clears s->con without a lock
     return;
-  Backoff *b = s->have_backoff(info.pgid, begin);
+  BackoffRef b(s->have_backoff(info.pgid, begin));
   if (b) {
     derr << __func__ << " already have backoff for " << s << " begin " << begin
 	 << " " << *b << dendl;
