@@ -173,10 +173,10 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 
   ::encode(pi, bl);
   journaler.append_entry(bl);
+  journaler.wait_for_flush(completion);
 
-  // Note that flush calls are not 1:1 with IOs, Journaler
-  // does its own batching.  So we just call every time.
-  journaler.flush(completion);
+  // It is not necessary to explicitly flush here, because the reader
+  // will get flushes generated inside Journaler::is_readable
 
   // Maybe go ahead and do something with it right away
   _consume();
