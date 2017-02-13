@@ -25,6 +25,10 @@
 #include "mgr/MgrStandby.h"
 
 
+void usage()
+{
+}
+
 /**
  * A short main() which just instantiates a MgrStandby and
  * hands over control to that.
@@ -41,15 +45,16 @@ int main(int argc, const char **argv)
   // For consumption by KeyRing::from_ceph_context in MonClient
   g_conf->set_val("keyring", "$mgr_data/keyring", false);
 
-  MgrStandby mgr;
-
   // Handle --help
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
-    mgr.usage();
+    usage();
     return 0;
   }
 
   global_init_daemonize(g_ceph_context);
+
+  MgrStandby mgr;
+
   global_init_chdir(g_ceph_context);
   common_init_finish(g_ceph_context);
 
