@@ -516,7 +516,6 @@ if [ "$start_mon" -eq 1 ]; then
         plugin dir = $CEPH_LIB
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
-        rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
