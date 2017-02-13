@@ -36,6 +36,7 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDPGPush.h"
@@ -5513,6 +5514,9 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_scan(op);
   case MSG_OSD_PG_BACKFILL:
     return can_discard_backfill(op);
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    return can_discard_replica_op<MOSDPGBackfillRemove,
+				  MSG_OSD_PG_BACKFILL_REMOVE>(op);
   }
   return true;
 }
@@ -5557,6 +5561,11 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<const MOSDPGBackfill*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<const MOSDPGBackfillRemove*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH:
     return !have_same_or_newer_map(

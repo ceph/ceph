@@ -85,6 +85,7 @@ using namespace std;
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDBackoff.h"
+#include "messages/MOSDPGBackfillRemove.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -520,6 +521,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_PG_BACKFILL:
     m = new MOSDPGBackfill;
+    break;
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    m = new MOSDPGBackfillRemove;
     break;
   case MSG_OSD_PG_PUSH:
     m = new MOSDPGPush;
