@@ -73,12 +73,11 @@ public:
                        off_t stream_offset) = 0;
 };
 
-
-
 static const size_t AES_256_KEYSIZE = 256 / 8;
-bool AES_256_ECB_encrypt(const uint8_t* key,
+bool AES_256_ECB_encrypt(CephContext* cct,
+                         const uint8_t* key,
                          size_t key_size,
-                         uint8_t* data_in,
+                         const uint8_t* data_in,
                          uint8_t* data_out,
                          size_t data_size);
 
