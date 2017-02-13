@@ -409,6 +409,8 @@ void MonClient::shutdown()
     waiting_for_session.pop_front();
   }
 
+  timer.shutdown();
+
   if (cur_con)
     cur_con->mark_down();
   cur_con.reset(NULL);
@@ -420,10 +422,6 @@ void MonClient::shutdown()
     finisher.wait_for_empty();
     finisher.stop();
   }
-  monc_lock.Lock();
-  timer.shutdown();
-
-  monc_lock.Unlock();
 }
 
 int MonClient::authenticate(double timeout)
