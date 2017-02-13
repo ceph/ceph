@@ -946,9 +946,6 @@ void Journaler::_assimilate_prefetch()
 
 void Journaler::_issue_read(uint64_t len)
 {
-  // make sure we're fully flushed
-  _do_flush();
-
   // stuck at safe_pos?  (this is needed if we are reading the tail of
   // a journal we are also writing to)
   assert(requested_pos <= safe_pos);
@@ -1024,6 +1021,19 @@ void Journaler::_prefetch()
     ldout(cct, 10) << "_prefetch " << pf << " requested_pos " << requested_pos
 		   << " < target " << target << " (" << raw_target
 		   << "), prefetching " << len << dendl;
+
+    if (flush_pos == safe_pos && write_pos > safe_pos) {
+      // If we are reading and writing the journal, then we may need
+      // to issue a flush if one isn't already in progress.
+      // Avoid doing a flush every time so that if we do write/read/write/read
+      // we don't end up flushing after every write.
+      ldout(cct, 10) << "_prefetch: requested_pos=" << requested_pos
+                     << ", read_pos=" << read_pos
+                     << ", write_pos=" << write_pos
+                     << ", safe_pos=" << safe_pos << dendl;
+      _do_flush();
+    }
+
     _issue_read(len);
   }
 }
