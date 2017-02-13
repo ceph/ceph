@@ -4946,7 +4946,7 @@ bool OSD::ms_handle_reset(Connection *con)
   session->con.reset(NULL);  // break con <-> session ref cycle
   // note that we break session->con *before* the session_handle_reset
   // cleanup below.  this avoids a race between us and
-  // PG::add_backoff, split_backoff, etc.
+  // PG::add_backoff, Session::check_backoff, etc.
   session_handle_reset(session);
   session->put();
   return true;
