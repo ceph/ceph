@@ -1066,6 +1066,10 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
       // fall through
 
     case CEPH_OSD_OP_PGNLS:
+      if (snapid != CEPH_NOSNAP) {
+	result = -EINVAL;
+	break;
+      }
       if (get_osdmap()->raw_pg_to_pg(m->get_pg()) != info.pgid.pgid) {
         dout(10) << " pgnls pg=" << m->get_pg()
 		 << " " << get_osdmap()->raw_pg_to_pg(m->get_pg())
@@ -1115,8 +1119,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  break;
 	}
 
-	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().get_items().empty());
-
 	map<hobject_t, pg_missing_item>::const_iterator missing_iter =
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
@@ -1164,31 +1166,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (candidate.snap == CEPH_SNAPDIR)
 	    continue;
 
-	  if (candidate.snap < snapid)
+	  if (candidate.snap != CEPH_NOSNAP)
 	    continue;
-
-	  if (snapid != CEPH_NOSNAP) {
-	    bufferlist bl;
-	    if (candidate.snap == CEPH_NOSNAP) {
-	      pgbackend->objects_get_attr(
-		candidate,
-		SS_ATTR,
-		&bl);
-	      SnapSet snapset(bl);
-	      if (snapid <= snapset.seq)
-		continue;
-	    } else {
-	      bufferlist attr_bl;
-	      pgbackend->objects_get_attr(
-		candidate, OI_ATTR, &attr_bl);
-	      object_info_t oi(attr_bl);
-	      vector<snapid_t>::iterator i = find(oi.snaps.begin(),
-						  oi.snaps.end(),
-						  snapid);
-	      if (i == oi.snaps.end())
-		continue;
-	    }
-	  }
 
 	  // skip internal namespace
 	  if (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace)
@@ -1258,6 +1237,10 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
       // fall through
 
     case CEPH_OSD_OP_PGLS:
+      if (snapid != CEPH_NOSNAP) {
+	result = -EINVAL;
+	break;
+      }
       if (get_osdmap()->raw_pg_to_pg(m->get_pg()) != info.pgid.pgid) {
         dout(10) << " pgls pg=" << m->get_pg()
 		 << " " << get_osdmap()->raw_pg_to_pg(m->get_pg())
@@ -1339,31 +1322,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (candidate.snap == CEPH_SNAPDIR)
 	    continue;
 
-	  if (candidate.snap < snapid)
+	  if (candidate.snap != CEPH_NOSNAP)
 	    continue;
-
-	  if (snapid != CEPH_NOSNAP) {
-	    bufferlist bl;
-	    if (candidate.snap == CEPH_NOSNAP) {
-	      pgbackend->objects_get_attr(
-		candidate,
-		SS_ATTR,
-		&bl);
-	      SnapSet snapset(bl);
-	      if (snapid <= snapset.seq)
-		continue;
-	    } else {
-	      bufferlist attr_bl;
-	      pgbackend->objects_get_attr(
-		candidate, OI_ATTR, &attr_bl);
-	      object_info_t oi(attr_bl);
-	      vector<snapid_t>::iterator i = find(oi.snaps.begin(),
-						  oi.snaps.end(),
-						  snapid);
-	      if (i == oi.snaps.end())
-		continue;
-	    }
-	  }
 
 	  // skip wrong namespace
 	  if (candidate.get_namespace() != m->get_object_locator().nspace)
