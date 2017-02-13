@@ -382,6 +382,7 @@ public:
   void init(CephContext *cct, char **envp);
   void set(const boost::string_ref& name, const boost::string_ref& val);
   const char *get(const char *name, const char *def_val = NULL);
+  const std::string& get(const std::string& name, bool *exists) const;
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
   size_t get_size(const char *name, size_t def_val = 0);

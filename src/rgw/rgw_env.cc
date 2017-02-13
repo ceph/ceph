@@ -51,6 +51,19 @@ const char *RGWEnv::get(const char *name, const char *def_val)
   return iter->second.c_str();
 }
 
+static std::string empty_str;
+const std::string& RGWEnv::get(const std::string& name,
+			       bool *exists) const
+{
+  const auto& iter = env_map.find(name);
+  if (iter == env_map.end()) {
+    *exists = false;
+    return empty_str;
+  }
+  *exists = true;
+  return iter->second;
+}
+
 int RGWEnv::get_int(const char *name, int def_val)
 {
   map<string, string, ltstr_nocase>::iterator iter = env_map.find(name);
