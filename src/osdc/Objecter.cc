@@ -4801,6 +4801,9 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
 
   c->map_check_error = 0;
 
+  // ignore overlays, just like we do with pg ops
+  c->target.flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+
   if (c->target_osd >= 0) {
     if (!osdmap->exists(c->target_osd)) {
       c->map_check_error = -ENOENT;
