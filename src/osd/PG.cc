@@ -2616,15 +2616,12 @@ void PG::_update_calc_stats()
 	 i != actingbackfill.end();
 	 ++i) {
       const pg_shard_t &p = *i;
-
       bool in_up = (upset.find(p) != upset.end());
-      bool in_acting = (actingset.find(p) != actingset.end());
-      assert(in_up || in_acting);
 
-      // in acting                  Compute total objects excluding num_missing
-      // in acting and not in up    Compute misplaced objects excluding num_missing
-      // in up and not in acting    Compute total objects already backfilled
-      if (in_acting) {
+      // recovery       Compute total objects excluding num_missing
+      //   - not in up  Compute misplaced objects excluding num_missing
+      // backfill       Compute total objects already backfilled
+      if (!is_backfill_targets(p)) {
         unsigned osd_missing;
         // primary handling
         if (p == pg_whoami) {
@@ -2642,8 +2639,6 @@ void PG::_update_calc_stats()
         if (!in_up && num_objects > osd_missing)
 	  misplaced += num_objects - osd_missing;
       } else {
-        assert(in_up && !in_acting);
-
         // If this peer has more objects then it should, ignore them
         backfilled += MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
       }
