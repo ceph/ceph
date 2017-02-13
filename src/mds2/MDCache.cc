@@ -683,7 +683,7 @@ void MDCache::trim(int max, int count)
 
   bool null_straydn = false;
   int unexpirable = 0;
-  list<CDentry*> unexpirables;
+  list<CDentryRef> unexpirables;
 
   do {
     CDentry *dn = static_cast<CDentry*>(dentry_lru.lru_expire());
@@ -696,7 +696,7 @@ void MDCache::trim(int max, int count)
   } while (null_straydn || dentry_lru.lru_get_size() + unexpirable > (unsigned)max);
 
   for (auto dn : unexpirables)
-    dentry_lru_insert(dn);
+    dentry_lru_insert(dn.get());
 
   stray_manager->advance_delayed();
 }

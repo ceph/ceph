@@ -288,8 +288,7 @@ void StrayManager::_purge_stray_purged(CDentry *dn, uint32_t ops_allowance,
     mut->ls = mds->mdlog->get_current_segment();
     mds->mdlog->submit_entry(le, new C_TruncateStrayLogged(this, dn, mut));
   } else {
-    if (in->get_num_ref() != (int)in->is_dirty() ||
-	dn->get_num_ref() != (int)dn->is_dirty() + !!in->get_num_ref() + 1/*PIN_PURGING*/) {
+    if (in->get_num_ref() != (int)in->is_dirty()) {
       // Nobody should be taking new references to an inode when it
       // is being purged (aside from it were 
 
