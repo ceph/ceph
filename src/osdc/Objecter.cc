@@ -3429,10 +3429,12 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
       b.begin = m->begin;
       b.end = m->end;
 
-      // ack
-      Message *r = new MOSDBackoff(CEPH_OSD_BACKOFF_OP_ACK_BLOCK,
-				   m->id, m->begin, m->end,
-				   osdmap->get_epoch());
+      // ack with original backoff's epoch so that the osd can discard this if
+      // there was a pg split.
+      Message *r = new MOSDBackoff(m->pgid,
+				   m->map_epoch,
+				   CEPH_OSD_BACKOFF_OP_ACK_BLOCK,
+				   m->id, m->begin, m->end);
       // this priority must match the MOSDOps from _prepare_osd_op
       r->set_priority(cct->_conf->osd_client_op_priority);
       con->send_message(r);

@@ -6308,7 +6308,7 @@ epoch_t op_required_epoch(OpRequestRef op)
   }
   case CEPH_MSG_OSD_BACKOFF: {
     MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
-    return m->osd_epoch;
+    return m->map_epoch;
   }
   case MSG_OSD_SUBOP:
     return replica_op_required_epoch<MOSDSubOp, MSG_OSD_SUBOP>(op);
