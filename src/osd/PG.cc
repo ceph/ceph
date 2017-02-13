@@ -259,7 +259,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
-  do_sort_bitwise(false),
   last_epoch(0)
 {
 #ifdef PG_DEBUG_REFS
@@ -354,7 +353,7 @@ void PG::proc_replica_log(
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i =
+  for (map<hobject_t, pg_missing_item>::const_iterator i =
 	 omissing.get_items().begin();
        i != omissing.get_items().end();
        ++i) {
@@ -476,7 +475,7 @@ bool PG::search_for_missing(
 {
   unsigned num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing, get_sort_bitwise(), ctx->handle);
+    from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
   if (found_missing &&
@@ -520,7 +519,7 @@ void PG::MissingLoc::add_batch_sources_info(
   ldout(pg->cct, 10) << __func__ << ": adding sources in batch "
 		     << sources.size() << dendl;
   unsigned loop = 0;
-  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
+  for (map<hobject_t, pg_missing_item>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
     if (handle && ++loop >= pg->cct->_conf->osd_loop_before_reset_tphandle) {
@@ -536,13 +535,12 @@ bool PG::MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,
   const pg_missing_t &omissing,
-  bool sort_bitwise,
   ThreadPool::TPHandle* handle)
 {
   bool found_missing = false;
   unsigned loop = 0;
   // found items?
-  for (map<hobject_t,pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
+  for (map<hobject_t,pg_missing_item>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
@@ -559,7 +557,7 @@ bool PG::MissingLoc::add_source_info(
       continue;
     }
     if (!oinfo.last_backfill.is_max() &&
-	oinfo.last_backfill_bitwise != sort_bitwise) {
+	!oinfo.last_backfill_bitwise) {
       ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
 			 << " also missing on osd." << fromosd
 			 << " (last_backfill " << oinfo.last_backfill
@@ -567,7 +565,7 @@ bool PG::MissingLoc::add_source_info(
 			 << dendl;
       continue;
     }
-    if (cmp(p->first, oinfo.last_backfill, sort_bitwise) >= 0) {
+    if (p->first >= oinfo.last_backfill) {
       // FIXME: this is _probably_ true, although it could conceivably
       // be in the undefined region!  Hmm!
       ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
@@ -1656,7 +1654,7 @@ void PG::activate(ObjectStore::Transaction& t,
        */
       bool force_restart_backfill =
 	!pi.last_backfill.is_max() &&
-	pi.last_backfill_bitwise != get_sort_bitwise();
+	!pi.last_backfill_bitwise;
 
       if (pi.last_update == info.last_update && !force_restart_backfill) {
         // empty log
@@ -1702,7 +1700,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
 	pi.last_update = info.last_update;
 	pi.last_complete = info.last_update;
-	pi.set_last_backfill(hobject_t(), get_sort_bitwise());
+	pi.set_last_backfill(hobject_t());
 	pi.last_epoch_started = info.last_epoch_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
@@ -1742,7 +1740,7 @@ void PG::activate(ObjectStore::Transaction& t,
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              ++p)
-	  if (cmp(p->soid, pi.last_backfill, get_sort_bitwise()) <= 0)
+	  if (p->soid <= pi.last_backfill)
 	    pm.add_next_event(*p);
       }
       
@@ -1795,7 +1793,7 @@ void PG::activate(ObjectStore::Transaction& t,
         missing_loc.add_batch_sources_info(complete_shards, ctx->handle);
       } else {
         missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(),
-				    get_sort_bitwise(), ctx->handle);
+				    ctx->handle);
         for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	     i != actingbackfill.end();
 	     ++i) {
@@ -1807,7 +1805,6 @@ void PG::activate(ObjectStore::Transaction& t,
 	    *i,
 	    peer_info[*i],
 	    peer_missing[*i],
-	    get_sort_bitwise(),
             ctx->handle);
         }
       }
@@ -2264,15 +2261,14 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   child->info.purged_snaps = info.purged_snaps;
 
   if (info.last_backfill.is_max()) {
-    child->info.set_last_backfill(hobject_t::get_max(),
-				  info.last_backfill_bitwise);
+    child->info.set_last_backfill(hobject_t::get_max());
   } else {
     // restart backfill on parent and child to be safe.  we could
     // probably do better in the bitwise sort case, but it's more
     // fragile (there may be special work to do on backfill completion
     // in the future).
-    info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
-    child->info.set_last_backfill(hobject_t(), info.last_backfill_bitwise);
+    info.set_last_backfill(hobject_t());
+    child->info.set_last_backfill(hobject_t());
   }
 
   child->info.stats = info.stats;
@@ -2366,11 +2362,11 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
     Mutex::Locker l(backoff_lock);
     auto p = backoffs.lower_bound(begin);
     while (p != backoffs.end()) {
-      int r = cmp_bitwise(p->first, end);
+      int r = cmp(p->first, end);
       dout(20) << __func__ << " ? " << r << " " << p->first
 	       << " " << p->second << dendl;
       // note: must still examine begin=end=p->first case
-      if (r > 0 || (r == 0 && cmp_bitwise(begin, end) < 0)) {
+      if (r > 0 || (r == 0 && begin < end)) {
 	break;
       }
       dout(20) << __func__ << " checking " << p->first
@@ -2378,9 +2374,8 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
       auto q = p->second.begin();
       while (q != p->second.end()) {
 	dout(20) << __func__ << " checking  " << *q << dendl;
-	int r = cmp_bitwise((*q)->begin, begin);
-	if (r == 0 || (r > 0 &&
-		       cmp_bitwise((*q)->end, end) < 0)) {
+	int r = cmp((*q)->begin, begin);
+	if (r == 0 || (r > 0 && (*q)->end < end)) {
 	  bv.push_back(*q);
 	  q = p->second.erase(q);
 	} else {
@@ -2488,7 +2483,7 @@ void PG::split_backoffs(PG *child, unsigned split_bits)
 void PG::clear_backoffs()
 {
   dout(10) << __func__ << " " << dendl;
-  map<hobject_t,set<BackoffRef>,hobject_t::BitwiseComparator> ls;
+  map<hobject_t,set<BackoffRef>> ls;
   {
     Mutex::Locker l(backoff_lock);
     ls.swap(backoffs);
@@ -2924,7 +2919,7 @@ void PG::init(
 
   if (backfill) {
     dout(10) << __func__ << ": Setting backfill" << dendl;
-    info.set_last_backfill(hobject_t(), get_sort_bitwise());
+    info.set_last_backfill(hobject_t());
     info.last_complete = info.last_update;
     pg_log.mark_log_for_rewrite();
   }
@@ -3264,7 +3259,7 @@ void PG::append_log(
      * here past last_backfill.  It's ok for the same reason as
      * above */
     if (transaction_applied &&
-	(cmp(p->soid, info.last_backfill, get_sort_bitwise()) > 0)) {
+	p->soid > info.last_backfill) {
       pg_log.roll_forward(&handler);
     }
   }
@@ -3518,9 +3513,9 @@ void PG::filter_snapc(vector<snapid_t> &snaps)
   }
 }
 
-void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>& m)
+void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m)
 {
-  for (map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator it = m.begin();
+  for (map<hobject_t, list<OpRequestRef>>::iterator it = m.begin();
        it != m.end();
        ++it)
     requeue_ops(it->second);
@@ -3939,7 +3934,7 @@ void PG::_scan_rollback_obs(
 
 void PG::_scan_snaps(ScrubMap &smap) 
 {
-  for (map<hobject_t, ScrubMap::object, hobject_t::BitwiseComparator>::iterator i = smap.objects.begin();
+  for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
        i != smap.objects.end();
        ++i) {
     const hobject_t &hoid = i->first;
@@ -4324,8 +4319,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
       case PG::Scrubber::INACTIVE:
         dout(10) << "scrub start" << dendl;
 
-	scrubber.cleaned_meta_map.reset_bitwise(get_sort_bitwise());
-
         publish_stats_to_osd();
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
@@ -4431,8 +4424,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	for (auto p = projected_log.log.rbegin();
 	     p != projected_log.log.rend();
 	     ++p) {
-          if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
+          if (p->soid >= scrubber.start &&
+	      p->soid < scrubber.end) {
             scrubber.subset_last_update = p->version;
             break;
 	  }
@@ -4442,8 +4435,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 		 pg_log.get_log().log.rbegin();
 	       p != pg_log.get_log().log.rend();
 	       ++p) {
-	    if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-		cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
+	    if (p->soid >= scrubber.start &&
+		p->soid < scrubber.end) {
 	      scrubber.subset_last_update = p->version;
 	      break;
 	    }
@@ -4599,7 +4592,7 @@ void PG::scrub_compare_maps()
 
   // construct authoritative scrub map for type specific scrubbing
   scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
-  map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> missing_digest;
+  map<hobject_t, pair<uint32_t, uint32_t>> missing_digest;
 
   if (acting.size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
@@ -4607,7 +4600,7 @@ void PG::scrub_compare_maps()
     stringstream ss;
 
     // Map from object with errors to good peer
-    map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> authoritative;
+    map<hobject_t, list<pg_shard_t>> authoritative;
     map<pg_shard_t, ScrubMap *> maps;
 
     dout(2) << __func__ << "   osd." << acting[0] << " has "
@@ -4642,7 +4635,7 @@ void PG::scrub_compare_maps()
       osd->clog->error(ss);
     }
 
-    for (map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
       list<pair<ScrubMap::object, pg_shard_t> > good_peers;
@@ -4657,7 +4650,7 @@ void PG::scrub_compare_maps()
 	  good_peers));
     }
 
-    for (map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
       scrubber.cleaned_meta_map.objects.erase(i->first);
@@ -4667,7 +4660,7 @@ void PG::scrub_compare_maps()
     }
   }
 
-  ScrubMap for_meta_scrub(get_sort_bitwise());
+  ScrubMap for_meta_scrub;
   if (scrubber.end.is_max() ||
       scrubber.cleaned_meta_map.objects.empty()) {
     scrubber.cleaned_meta_map.swap(for_meta_scrub);
@@ -4718,7 +4711,7 @@ bool PG::scrub_process_inconsistent()
     osd->clog->error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
-      for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >, hobject_t::BitwiseComparator>::iterator i =
+      for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >>::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
 	   ++i) {
@@ -4947,7 +4940,6 @@ void PG::merge_new_log_entries(
   for (auto &&i: entries) {
     missing_loc.rebuild(
       i.soid,
-      get_sort_bitwise(),
       pg_whoami,
       actingbackfill,
       info,
@@ -5332,7 +5324,7 @@ void PG::on_new_interval()
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
-  do_sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+  assert(osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE));
 
   _on_new_interval();
 }
@@ -5443,9 +5435,6 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
     out << " MUST_SCRUB";
-
-  if (!pg.get_sort_bitwise())
-    out << " NIBBLEWISE";
 
   //out << " (" << pg.pg_log.get_tail() << "," << pg.pg_log.get_head() << "]";
   if (pg.pg_log.get_missing().num_missing()) {

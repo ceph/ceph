@@ -92,7 +92,7 @@ public:
     pg_missing_t init;
     pg_missing_t final;
 
-    set<hobject_t, hobject_t::BitwiseComparator> toremove;
+    set<hobject_t> toremove;
     list<pg_log_entry_t> torollback;
 
   private:
@@ -153,7 +153,7 @@ public:
   };
 
   struct LogHandler : public PGLog::LogEntryHandler {
-    set<hobject_t, hobject_t::BitwiseComparator> removed;
+    set<hobject_t> removed;
     list<pg_log_entry_t> rolledback;
     
     void rollback(
@@ -204,8 +204,8 @@ public:
     }
 
     {
-      set<hobject_t, hobject_t::BitwiseComparator>::const_iterator titer = tcase.toremove.begin();
-      set<hobject_t, hobject_t::BitwiseComparator>::const_iterator hiter = handler.removed.begin();
+      set<hobject_t>::const_iterator titer = tcase.toremove.begin();
+      set<hobject_t>::const_iterator hiter = handler.removed.begin();
       for (; titer != tcase.toremove.end(); ++titer, ++hiter) {
 	EXPECT_EQ(*titer, *hiter);
       }
@@ -490,8 +490,9 @@ TEST_F(PGLogTest, merge_old_entry) {
     list<hobject_t> remove_snap;
 
     info.last_backfill = hobject_t();
-    info.last_backfill.set_hash(1);
+    info.last_backfill.set_hash(100);
     oe.soid.set_hash(2);
+    ASSERT_GT(oe.soid, info.last_backfill);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());

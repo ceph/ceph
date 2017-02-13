@@ -182,7 +182,7 @@ private:
     set extent_set;
 
     bool operator<(const object_extent_set &rhs) const {
-      return cmp_bitwise(oid, rhs.oid) < 0;
+      return oid < rhs.oid;
     }
 
     struct uint_cmp {
@@ -330,10 +330,10 @@ private:
   };
   struct Cmp {
     bool operator()(const hobject_t &oid, const object_extent_set &rhs) const {
-      return cmp_bitwise(oid, rhs.oid) < 0;
+      return oid < rhs.oid;
     }
     bool operator()(const object_extent_set &lhs, const hobject_t &oid) const {
-      return cmp_bitwise(lhs.oid, oid) < 0;
+      return lhs.oid < oid;
     }
   };
 

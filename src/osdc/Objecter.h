@@ -1236,8 +1236,8 @@ public:
 
     bool contained_by(const hobject_t& begin, const hobject_t& end) {
       hobject_t h = get_hobj();
-      int r = cmp_bitwise(h, begin);
-      return r == 0 || (r > 0 && cmp_bitwise(h, end) < 0);
+      int r = cmp(h, begin);
+      return r == 0 || (r > 0 && h < end);
     }
 
     void dump(Formatter *f) const;
@@ -1807,7 +1807,7 @@ public:
     map<ceph_tid_t,CommandOp*> command_ops;
 
     // backoffs
-    map<hobject_t,OSDBackoff,hobject_t::BitwiseComparator> backoffs;
+    map<hobject_t,OSDBackoff> backoffs;
     multimap<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;
