@@ -1022,21 +1022,6 @@ int PrimaryLogPG::do_command(
 
 // ==========================================================
 
-bool PrimaryLogPG::pg_op_must_wait(MOSDOp *op)
-{
-  if (pg_log.get_missing().get_items().empty())
-    return false;
-  for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); ++p) {
-    if (p->op.op == CEPH_OSD_OP_PGLS || p->op.op == CEPH_OSD_OP_PGNLS ||
-	p->op.op == CEPH_OSD_OP_PGLS_FILTER || p->op.op == CEPH_OSD_OP_PGNLS_FILTER) {
-      if (op->get_snapid() != CEPH_NOSNAP) {
-	return true;
-      }
-    }
-  }
-  return false;
-}
-
 void PrimaryLogPG::do_pg_op(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp *>(op->get_req());
@@ -1825,10 +1810,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (op->includes_pg_op()) {
-    if (pg_op_must_wait(m)) {
-      wait_for_all_missing(op);
-      return;
-    }
     return do_pg_op(op);
   }
 
