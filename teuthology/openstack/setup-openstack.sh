@@ -102,15 +102,26 @@ EOF
     return 0
 }
 
+function apt_get_update() {
+    sudo apt-get update
+}
+
 function setup_docker() {
     if test -f /etc/apt/sources.list.d/docker.list ; then
         echo "OK docker is installed"
     else
         sudo apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
         echo deb https://apt.dockerproject.org/repo ubuntu-trusty main | sudo tee -a /etc/apt/sources.list.d/docker.list
-        sudo apt-get update
         sudo apt-get -qq install -y docker-engine
         echo "INSTALLED docker"
+    fi
+}
+
+function setup_salt_master() {
+    if test -f /etc/salt/master ; then
+        echo "OK salt-master is installed"
+    else
+        sudo apt-get -qq install -y salt-master
     fi
 }
 
@@ -514,7 +525,9 @@ function main() {
     local ceph_workbench_branch
 
     local do_setup_keypair=false
+    local do_apt_get_update=false
     local do_setup_docker=false
+    local do_setup_salt_master=false
     local do_ceph_workbench=false
     local do_create_config=false
     local do_setup_dnsmasq=false
@@ -568,7 +581,12 @@ function main() {
                 do_create_config=true
                 ;;
             --setup-docker)
+                do_apt_get_update=true
                 do_setup_docker=true
+                ;;
+            --setup-salt-master)
+                do_apt_get_update=true
+                do_setup_salt_master=true
                 ;;
             --setup-keypair)
                 do_setup_keypair=true
@@ -593,7 +611,9 @@ function main() {
                 do_ceph_workbench=true
                 do_create_config=true
                 do_setup_keypair=true
+                do_apt_get_update=true
                 do_setup_docker=true
+                do_setup_salt_master=true
                 do_setup_dnsmasq=true
                 do_setup_paddles=true
                 do_setup_pulpito=true
@@ -671,8 +691,16 @@ function main() {
         setup_ceph_workbench $ceph_workbench_git_url $ceph_workbench_branch || return 1
     fi
 
+    if $do_apt_get_update ; then
+        apt_get_update || return 1
+    fi
+
     if test $provider != "cloudlab" && $do_setup_docker ; then
         setup_docker || return 1
+    fi
+
+    if $do_setup_salt_master ; then
+        setup_salt_master || return 1
     fi
 
     if $do_setup_dnsmasq ; then
