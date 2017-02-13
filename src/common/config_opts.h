@@ -842,8 +842,10 @@ OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(osd_max_pg_blocked_by, OPT_U32, 16)    // max peer osds to report that are blocking our progress
 OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL, false)  // read fiemap-reported holes and verify they are zeros
-OPTION(osd_peering_aggressive_backoff, OPT_BOOL, false)  // issue aggressive client backoff during peering
-OPTION(osd_recovery_aggressive_backoff, OPT_BOOL, false) // issue aggressive client backoff during per-object recovery
+OPTION(osd_backoff_on_unfound, OPT_BOOL, true)   // object unfound
+OPTION(osd_backoff_on_degraded, OPT_BOOL, false) // [mainly for debug?] object unreadable/writeable
+OPTION(osd_backoff_on_down, OPT_BOOL, true)      // pg in down/incomplete state
+OPTION(osd_backoff_on_peering, OPT_BOOL, false)  // [debug] pg peering
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL, false) // crash osd if client ignores a backoff; useful for debugging
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
