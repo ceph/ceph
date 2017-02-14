@@ -13,6 +13,8 @@
 
 #include "DaemonServer.h"
 
+#include "auth/RotatingKeyRing.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
@@ -117,7 +119,7 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   dout(20) << "got authorizer " << *authorizer << dendl;
   return *authorizer != NULL;
 }
