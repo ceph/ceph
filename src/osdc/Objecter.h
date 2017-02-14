@@ -1401,17 +1401,18 @@ public:
 
   // Pools and statistics
   struct NListContext {
-    int current_pg;
-    collection_list_handle_t cookie;
-    epoch_t current_pg_epoch;
-    int starting_pg_num;
-    bool at_end_of_pool;
-    bool at_end_of_pg;
-    bool sort_bitwise;
+    collection_list_handle_t pos;
 
-    int64_t pool_id;
-    int pool_snap_seq;
-    int max_entries;
+    // these are for !sortbitwise compat only
+    int current_pg = 0;
+    int starting_pg_num = 0;
+    bool sort_bitwise = false;
+
+    bool at_end_of_pool = false; ///< publicly visible end flag
+
+    int64_t pool_id = -1;
+    int pool_snap_seq = 0;
+    uint64_t max_entries = 0;
     string nspace;
 
     bufferlist bl;   // raw data read to here
@@ -1425,30 +1426,14 @@ public:
     // the budget is not get/released on OP basis, instead the budget
     // is acquired before sending the first OP and released upon receiving
     // the last op reply.
-    int ctx_budget;
-
-    NListContext() : current_pg(0),
-		     current_pg_epoch(0),
-		     starting_pg_num(0),
-		     at_end_of_pool(false),
-		     at_end_of_pg(false),
-		     sort_bitwise(false),
-		     pool_id(0),
-		     pool_snap_seq(0),
-		     max_entries(0),
-		     nspace(),
-		     bl(),
-		     list(),
-		     filter(),
-		     extra_info(),
-		     ctx_budget(-1) {}
+    int ctx_budget = -1;
 
     bool at_end() const {
       return at_end_of_pool;
     }
 
     uint32_t get_pg_hash_position() const {
-      return current_pg;
+      return pos.get_hash();
     }
   };
 
@@ -1462,73 +1447,6 @@ public:
     void finish(int r) {
       if (r >= 0) {
 	objecter->_nlist_reply(list_context, r, final_finish, epoch);
-      } else {
-	final_finish->complete(r);
-      }
-    }
-  };
-
-  // Old pgls context we still use for talking to older OSDs
-  struct ListContext {
-    int current_pg;
-    collection_list_handle_t cookie;
-    epoch_t current_pg_epoch;
-    int starting_pg_num;
-    bool at_end_of_pool;
-    bool at_end_of_pg;
-    bool sort_bitwise;
-
-    int64_t pool_id;
-    int pool_snap_seq;
-    int max_entries;
-    string nspace;
-
-    bufferlist bl;   // raw data read to here
-    std::list<pair<object_t, string> > list;
-
-    bufferlist filter;
-
-    bufferlist extra_info;
-
-    // The budget associated with this context, once it is set (>= 0),
-    // the budget is not get/released on OP basis, instead the budget
-    // is acquired before sending the first OP and released upon receiving
-    // the last op reply.
-    int ctx_budget;
-
-    ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
-		    at_end_of_pool(false),
-		    at_end_of_pg(false),
-		    sort_bitwise(false),
-		    pool_id(0),
-		    pool_snap_seq(0),
-		    max_entries(0),
-		    nspace(),
-		    bl(),
-		    list(),
-		    filter(),
-		    extra_info(),
-		    ctx_budget(-1) {}
-
-    bool at_end() const {
-      return at_end_of_pool;
-    }
-
-    uint32_t get_pg_hash_position() const {
-      return current_pg;
-    }
-  };
-
-  struct C_List : public Context {
-    ListContext *list_context;
-    Context *final_finish;
-    Objecter *objecter;
-    epoch_t epoch;
-    C_List(ListContext *lc, Context * finish, Objecter *ob) :
-      list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
-    void finish(int r) {
-      if (r >= 0) {
-	objecter->_list_reply(list_context, r, final_finish, epoch);
       } else {
 	final_finish->complete(r);
       }
@@ -1947,8 +1865,6 @@ private:
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
-  void _list_reply(ListContext *list_context, int r, Context *final_finish,
-		   epoch_t reply_epoch);
 
   void resend_mon_ops();
 
@@ -1982,7 +1898,6 @@ private:
     int op_budget = calc_op_budget(op);
     put_op_budget_bytes(op_budget);
   }
-  void put_list_context_budget(ListContext *list_context);
   void put_nlist_context_budget(NListContext *list_context);
   Throttle op_throttle_bytes, op_throttle_ops;
 
@@ -2813,8 +2728,6 @@ public:
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
-  void list_objects(ListContext *p, Context *onfinish);
-  uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 
   hobject_t enumerate_objects_begin();
   hobject_t enumerate_objects_end();
