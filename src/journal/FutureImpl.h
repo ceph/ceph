@@ -113,6 +113,7 @@ private:
   Contexts m_contexts;
 
   FutureImplPtr prepare_flush(FlushHandlers *flush_handlers);
+  FutureImplPtr prepare_flush(FlushHandlers *flush_handlers, Mutex &lock);
 
   void consistent(int r);
   void finish_unlock();

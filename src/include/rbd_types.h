@@ -13,6 +13,7 @@
 #ifndef CEPH_RBD_TYPES_H
 #define CEPH_RBD_TYPES_H
 
+#include "include/types.h"
 #include "rbd/features.h"
 
 /* New-style rbd image 'foo' consists of objects
@@ -64,8 +65,34 @@
  */
 #define RBD_MIRRORING       "rbd_mirroring"
 
+
+/**
+ * rbd_mirror_leader object is used for pool-level coordination
+ * between rbd-mirror daemons.
+ */
+#define RBD_MIRROR_LEADER	"rbd_mirror_leader"
+
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
+
+/**
+ * Maximum string length of the RBD v2 image id (not including
+ * null termination). This limit was derived from the existing
+ * RBD_MAX_BLOCK_NAME_SIZE limit which needs to hold the "rbd_data."
+ * prefix and null termination.
+ */
+#define RBD_MAX_IMAGE_ID_LENGTH 14
+
+/**
+ * Maximum string length of the RBD block object name prefix (not including
+ * null termination).
+ *
+ * v1 format: rb.<max 8-byte high id>.<max 8-byte low id>.<max 8-byte extra>
+ * v2 format: rbd_data.[<max 19-byte pool id>.]<max 14-byte image id>
+ *
+ * Note: new features might require increasing this maximum prefix length.
+ */
+#define RBD_MAX_BLOCK_NAME_PREFIX_LENGTH 43
 
 #define RBD_COMP_NONE		0
 #define RBD_CRYPT_NONE		0

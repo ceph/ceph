@@ -11,6 +11,7 @@
 #include "Threads.h"
 #include "ImageSync.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::Mirror: " << this << " " \
@@ -103,6 +104,19 @@ private:
   Mirror *mirror;
 };
 
+class LeaderReleaseCommand : public MirrorAdminSocketCommand {
+public:
+  explicit LeaderReleaseCommand(Mirror *mirror) : mirror(mirror) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    mirror->release_leader();
+    return true;
+  }
+
+private:
+  Mirror *mirror;
+};
+
 } // anonymous namespace
 
 class MirrorAdminSocketHook : public AdminSocketHook {
@@ -145,6 +159,13 @@ public:
 				       "flush rbd mirror");
     if (r == 0) {
       commands[command] = new FlushCommand(mirror);
+    }
+
+    command = "rbd mirror leader release";
+    r = admin_socket->register_command(command, command, this,
+				       "release rbd mirror leader");
+    if (r == 0) {
+      commands[command] = new LeaderReleaseCommand(mirror);
     }
   }
 
@@ -234,8 +255,9 @@ void Mirror::run()
     if (!m_manual_stop) {
       update_replayers(m_local_cluster_watcher->get_pool_peers());
     }
-    m_cond.WaitInterval(g_ceph_context, m_lock,
-	utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
+    m_cond.WaitInterval(
+      m_lock,
+      utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
   }
 
   // stop all replayers in parallel
@@ -351,6 +373,21 @@ void Mirror::flush()
   for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
     auto &replayer = it->second;
     replayer->flush();
+  }
+}
+
+void Mirror::release_leader()
+{
+  dout(20) << "enter" << dendl;
+  Mutex::Locker l(m_lock);
+
+  if (m_stopping.read()) {
+    return;
+  }
+
+  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
+    auto &replayer = it->second;
+    replayer->release_leader();
   }
 }
 

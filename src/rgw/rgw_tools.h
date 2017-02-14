@@ -21,6 +21,8 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid
 int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL);
+int rgw_delete_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid,
+                          RGWObjVersionTracker *objv_tracker);
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();

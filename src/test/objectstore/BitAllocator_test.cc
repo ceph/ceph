@@ -118,7 +118,9 @@ TEST(BitAllocator, test_bmap_iter)
   BitMapArea *area = NULL;
   BitMapArea **children = new BitMapArea*[num_items];
   for (i = 0; i < num_items; i++) {
-      children[i] = new BitMapAreaLeaf(BitMapArea::get_span_size(), i, false);
+    children[i] = new BitMapAreaLeaf(
+      g_ceph_context,
+      BitMapArea::get_span_size(g_ceph_context), i, false);
   }
 
   off = 0;
@@ -170,7 +172,7 @@ TEST(BitAllocator, test_bmap_entry)
   int64_t allocated = 0;
   int size = BmapEntry::size();
 
-  BmapEntry *bmap = new BmapEntry(true);
+  BmapEntry *bmap = new BmapEntry(g_ceph_context, true);
 
   // Clear bits one by one and check they are cleared
   for (i = 0; i < size; i++) {
@@ -239,7 +241,7 @@ TEST(BitAllocator, test_bmap_entry)
 
   {
 
-    bmap = new BmapEntry(false);
+    bmap = new BmapEntry(g_ceph_context, false);
     start = -1;
     scanned = 0;
     allocated = 0;
@@ -259,7 +261,7 @@ TEST(BitAllocator, test_bmap_entry)
     delete bmap;
   }
 
-  bmap = new BmapEntry(false);
+  bmap = new BmapEntry(g_ceph_context, false);
   bmap->set_bits(4, BmapEntry::size() - 4);
   bmap_test_assert(bmap->is_allocated(4, BmapEntry::size() - 4));
   bmap_test_assert(!bmap->is_allocated(0, 4));
@@ -274,7 +276,7 @@ TEST(BitAllocator, test_zone_alloc)
   int total_blocks = 1024;
   int64_t allocated = 0;
 
-  BitMapZone *zone = new BitMapZone(total_blocks, 0);
+  BitMapZone *zone = new BitMapZone(g_ceph_context, total_blocks, 0);
 
   // Allocate all blocks and see that it is allocating in order.
   bool lock = zone->lock_excl_try();
@@ -282,9 +284,18 @@ TEST(BitAllocator, test_zone_alloc)
 
   int64_t blk_size = 1024;
   AllocExtentVector extents;
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
   cout << extents.size() << std::endl;
   cout << (int)extents.empty() << std::endl;
   extents.clear();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
+=======
+  cout << extents.size() << std::endl;
+  cout << (int)extents.empty() << std::endl;
+  extents.clear();
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   ExtentList *block_list = new ExtentList(&extents, blk_size);
   allocated = zone->alloc_blocks_dis(zone->size() / 2, 1, 0, 0, block_list);
   bmap_test_assert(allocated == zone->size() / 2);
@@ -295,7 +306,7 @@ TEST(BitAllocator, test_zone_alloc)
     AllocExtentVector extents;
     ExtentList *block_list = new ExtentList(&extents, blk_size);
 
-    zone = new BitMapZone(total_blocks, 0);
+    zone = new BitMapZone(g_ceph_context, total_blocks, 0);
     lock = zone->lock_excl_try();
     bmap_test_assert(lock);
     for (int i = 0; i < zone->size(); i += 4) {
@@ -321,7 +332,7 @@ TEST(BitAllocator, test_zone_alloc)
       for (int64_t j = 0; j <= BmapEntry::size(); j = 1 << j) {
 	extents.clear();
         ExtentList *block_list = new ExtentList(&extents, blk_size);
-        zone = new BitMapZone(total_blocks, 0);
+	zone = new BitMapZone(g_ceph_context, total_blocks, 0);
         lock = zone->lock_excl_try();
         bmap_test_assert(lock);
 
@@ -339,7 +350,7 @@ TEST(BitAllocator, test_zone_alloc)
     {
       extents.clear();
       ExtentList *block_list = new ExtentList(&extents, blk_size);
-      zone = new BitMapZone(total_blocks, 0);
+      zone = new BitMapZone(g_ceph_context, total_blocks, 0);
       lock = zone->lock_excl_try();
 
       for (int iter = 1; iter < 5; iter++) {
@@ -371,12 +382,46 @@ TEST(BitAllocator, test_zone_alloc)
     {
       extents.clear();
       ExtentList *block_list = new ExtentList(&extents, blk_size);
+<<<<<<< HEAD
+<<<<<<< HEAD
+      zone = new BitMapZone(g_ceph_context, total_blocks, 0);
+=======
       zone = new BitMapZone(total_blocks, 0);
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
+=======
+      zone = new BitMapZone(total_blocks, 0);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
       lock = zone->lock_excl_try();
       bmap_test_assert(lock);
 
       block_list->reset();
       allocated = zone->alloc_blocks_dis(total_blocks + 1, total_blocks + 1, 0, 1024, block_list);
+<<<<<<< HEAD
+<<<<<<< HEAD
+      bmap_test_assert(allocated == 0);
+
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list);
+      bmap_test_assert(allocated == 0);
+=======
+      bmap_test_assert(allocated == 0);  
+
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list);
+      bmap_test_assert(allocated == 0);  
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
+
+      block_list->reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 0, 0, block_list);
+      bmap_test_assert(allocated == total_blocks);
+      bmap_test_assert(extents[0].offset == 0);
+
+<<<<<<< HEAD
+      zone->free_blocks(extents[0].offset, allocated);
+=======
+      zone->free_blocks(extents[0].offset, allocated);        
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
+=======
       bmap_test_assert(allocated == 0);  
 
       block_list->reset();
@@ -389,11 +434,19 @@ TEST(BitAllocator, test_zone_alloc)
       bmap_test_assert(extents[0].offset == 0);
 
       zone->free_blocks(extents[0].offset, allocated);        
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
         
       delete block_list;
       extents.clear();
       block_list = new ExtentList(&extents, blk_size, total_blocks / 4 * blk_size);
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
       block_list->reset();
+>>>>>>> unitest_bit_alloc, unittest_alloc: fixes
+=======
+      block_list->reset();
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
       allocated = zone->alloc_blocks_dis(total_blocks, total_blocks / 4, 0, 0, block_list);
       bmap_test_assert(allocated == total_blocks);
       for (int i = 0; i < 4; i++) {
@@ -424,8 +477,8 @@ TEST(BitAllocator, test_bmap_alloc)
     int64_t total_blocks = zone_size * 4;
     int64_t allocated = 0;
 
-    BitAllocator *alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
-   
+    BitAllocator *alloc = new BitAllocator(g_ceph_context, total_blocks,
+					   zone_size, CONCURRENT);
     int64_t alloc_size = 2;
     for (int64_t iter = 0; iter < max_iter; iter++) {
       for (int64_t j = 0; alloc_size <= total_blocks; j++) {
@@ -520,7 +573,8 @@ TEST(BitAllocator, test_bmap_alloc2)
 {
   int64_t total_blocks = 1024 * 4;
   int64_t zone_size = 1024;
-  BitAllocator *alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
+  BitAllocator *alloc = new BitAllocator(g_ceph_context, total_blocks,
+					 zone_size, CONCURRENT);
 
   alloc_extents_max_block(alloc, 1, 16);
   alloc_extents_max_block(alloc, 4, 16);
@@ -573,7 +627,8 @@ TEST(BitAllocator, test_bmap_alloc_concurrent)
 
   bmap_test_assert(total_blocks <= MAX_BLOCKS);
 
-  BitAllocator *alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
+  BitAllocator *alloc = new BitAllocator(g_ceph_context, total_blocks,
+					 zone_size, CONCURRENT);
 
   for (int k = 0; k < 2; k++) {
     cont = k;

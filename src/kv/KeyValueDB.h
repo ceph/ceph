@@ -56,7 +56,13 @@ public:
       const std::string &k,	      ///< [in] Key to set
       const bufferlist &bl    ///< [in] Value to set
       ) = 0;
-
+    virtual void set(
+      const std::string &prefix,
+      const char *k,
+      size_t keylen,
+      const bufferlist& bl) {
+      set(prefix, string(k, keylen), bl);
+    }
 
     /// Removes Keys (via encoded bufferlist)
     void rmkeys(
@@ -88,6 +94,13 @@ public:
       const std::string &prefix,   ///< [in] Prefix to search for
       const std::string &k	      ///< [in] Key to remove
       ) = 0;
+    virtual void rmkey(
+      const std::string &prefix,   ///< [in] Prefix to search for
+      const char *k,	      ///< [in] Key to remove
+      size_t keylen
+      ) {
+      rmkey(prefix, string(k, keylen));
+    }
 
     /// Remove Single Key which exists and was not overwritten.
     /// This API is only related to performance optimization, and should only be 
@@ -154,6 +167,11 @@ public:
     }
     return r;
   }
+  virtual int get(const string &prefix,
+		  const char *key, size_t keylen,
+		  bufferlist *value) {
+    return get(prefix, string(key, keylen), value);
+  }
 
   class GenericIteratorImpl {
   public:
@@ -192,6 +210,12 @@ public:
       }
     }
     virtual int status() = 0;
+    virtual size_t key_size() {
+      return 0;
+    }
+    virtual size_t value_size() {
+      return 0;
+    }
     virtual ~WholeSpaceIteratorImpl() { }
   };
   typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;

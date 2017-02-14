@@ -36,6 +36,7 @@
 
 #include "MDSRank.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
@@ -187,7 +188,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   mds_load_t load = balancer->get_load(now);
 
   if (logger) {
@@ -465,7 +466,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
 
   // hack: thrash exports
   static utime_t start;
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   if (start == utime_t())
     start = now;
   /*double el = now - start;
@@ -477,6 +478,9 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
     if (s.size() < 2 || mdcache->get_num_inodes() < 10)
       break;  // need peers for this to work.
+    if (mdcache->migrator->get_num_exporting() > g_conf->mds_thrash_exports * 5 ||
+	mdcache->migrator->get_export_queue_size() > g_conf->mds_thrash_exports * 10)
+      break;
 
     dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf->mds_thrash_exports << dendl;
 
@@ -507,7 +511,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   // hack: thrash fragments
   for (int i=0; i<g_conf->mds_thrash_fragments; i++) {
     if (!is_active()) break;
-    if (mdcache->get_num_fragmenting_dirs() > 5) break;
+    if (mdcache->get_num_fragmenting_dirs() > 5 * g_conf->mds_thrash_fragments) break;
     dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf->mds_thrash_fragments << dendl;
 
     // pick a random dir inode
@@ -1253,7 +1257,7 @@ void MDSRank::clientreplay_start()
 bool MDSRank::queue_one_replay()
 {
   if (replay_queue.empty()) {
-    clientreplay_done();
+    mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
     return false;
   }
   queue_waiter(replay_queue.front());
@@ -1281,6 +1285,7 @@ void MDSRank::active_start()
   mdcache->start_files_to_recover();
 
   mdcache->reissue_all_caps();
+  mdcache->activate_stray_manager();
 
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }

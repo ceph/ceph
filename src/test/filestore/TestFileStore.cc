@@ -30,7 +30,7 @@ TEST(FileStore, create)
 {
   {
     map<string,string> pm;
-    FileStore fs("a", "b");
+    FileStore fs(g_ceph_context, "a", "b");
     TestFileStore::create_backend(fs, 0);
     fs.collect_metadata(&pm);
     ASSERT_EQ(pm["filestore_backend"], "generic");
@@ -38,7 +38,7 @@ TEST(FileStore, create)
 #if defined(__linux__)
   {
     map<string,string> pm;
-    FileStore fs("a", "b");
+    FileStore fs(g_ceph_context, "a", "b");
     TestFileStore::create_backend(fs, BTRFS_SUPER_MAGIC);
     fs.collect_metadata(&pm);
     ASSERT_EQ(pm["filestore_backend"], "btrfs");
@@ -46,7 +46,7 @@ TEST(FileStore, create)
 # ifdef HAVE_LIBXFS
   {
     map<string,string> pm;
-    FileStore fs("a", "b");
+    FileStore fs(g_ceph_context, "a", "b");
     TestFileStore::create_backend(fs, XFS_SUPER_MAGIC);
     fs.collect_metadata(&pm);
     ASSERT_EQ(pm["filestore_backend"], "xfs");

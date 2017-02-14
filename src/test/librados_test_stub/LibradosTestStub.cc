@@ -24,6 +24,7 @@
 #include "include/assert.h"
 #include "include/compat.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
 namespace {
@@ -557,9 +558,19 @@ int IoCtx::selfmanaged_snap_create(uint64_t *snapid) {
   return ctx->selfmanaged_snap_create(snapid);
 }
 
+void IoCtx::aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletion* c) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_selfmanaged_snap_create(snapid, c->pc);
+}
+
 int IoCtx::selfmanaged_snap_remove(uint64_t snapid) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->selfmanaged_snap_remove(snapid);
+}
+
+void IoCtx::aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion* c) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->aio_selfmanaged_snap_remove(snapid, c->pc);
 }
 
 int IoCtx::selfmanaged_snap_rollback(const std::string& oid,

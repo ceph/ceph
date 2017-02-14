@@ -1150,6 +1150,87 @@ TEST_P(StoreTest, SimpleObjectTest) {
   }
 }
 
+
+
+
+TEST_P(StoreTest, UnalignedBlobReleaseTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  ObjectStore::Sequencer osr("test");
+  coll_t cid;
+
+  g_conf->set_val("bluestore_min_alloc_size", "4096");
+  g_ceph_context->_conf->apply_changes(NULL);
+  int r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount(); //to force min_alloc_size update
+  ASSERT_EQ(r, 0);
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(cid, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(cid, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, bl2, orig;
+    string s(0x600, 'a'), s2(0x6000,'b');
+    bl.append(s);
+    bl2.append(s2);
+    t.write(cid, hoid, 0x9000, 0x6000, bl2);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+  g_conf->set_val("bluestore_min_alloc_size", "16384");
+  g_ceph_context->_conf->apply_changes(NULL);
+  r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount(); //to force min_alloc_size update
+  ASSERT_EQ(r, 0);
+
+    {
+      ObjectStore::Transaction t;
+      t.truncate(cid, hoid, 0xb200);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.truncate(cid, hoid, 0);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_min_alloc_size", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+}
+
 TEST_P(StoreTest, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
@@ -2810,11 +2891,11 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
   hoid2.hobj.pool = -1;
   {
     ObjectStore::Transaction t;
-    t.clone_range(cid, hoid, hoid2, 10, 5, 0);
+    t.clone_range(cid, hoid, hoid2, 10, 5, 10);
     cerr << "Clone range object" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
-    r = store->read(cid, hoid2, 0, 5, newdata);
+    r = store->read(cid, hoid2, 10, 5, newdata);
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(bl_eq(small, newdata));
   }
@@ -3465,7 +3546,8 @@ public:
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
     uint64_t srcoff = u1(*rng);
-    uint64_t dstoff = u1(*rng);
+    // make src and dst offsets match, since that's what the osd does
+    uint64_t dstoff = srcoff; //u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
       srcoff = ROUND_UP_TO(srcoff, write_alignment);
@@ -3800,7 +3882,8 @@ public:
     while (in_flight)
       cond.Wait(lock);
     store->umount();
-    store->fsck(deep);
+    int r = store->fsck(deep);
+    assert(r == 0 || r == -EOPNOTSUPP);
     store->mount();
   }
 
@@ -5583,6 +5666,7 @@ TEST_P(StoreTest, OnodeSizeTracking) {
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "none");
   g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
+  g_ceph_context->_conf->set_val("bluestore_cache_size", "400000000");
   g_ceph_context->_conf->apply_changes(NULL);
   int r = store->umount();
   ASSERT_EQ(r, 0);
@@ -5596,7 +5680,6 @@ TEST_P(StoreTest, OnodeSizeTracking) {
   uint64_t total_bytes, total_bytes2;
   uint64_t total_onodes;
   get_mempool_stats(&total_bytes, &total_onodes);
-  ASSERT_EQ(total_bytes, 0u);
   ASSERT_EQ(total_onodes, 0u);
 
   {
@@ -5640,7 +5723,25 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     f.flush(cout);
     cout << std::endl;
   }
+  {
+    bufferlist bl;
+    for (size_t i = 0; i < obj_size; i += 0x1000) {
+      store->read(cid, hoid, i, 0x1000, bl);
+    }
+  }
+  get_mempool_stats(&total_bytes, &total_onodes);
+  ASSERT_NE(total_bytes, 0u);
+  ASSERT_EQ(total_onodes, 1u);
 
+  {
+    cout <<" mempool dump:\n";
+    JSONFormatter f(true);
+    f.open_object_section("transaction");
+    mempool::dump(&f);
+    f.close_section();
+    f.flush(cout);
+    cout << std::endl;
+  }
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
@@ -5649,10 +5750,94 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  g_ceph_context->_conf->set_val("bluestore_cache_size", "4000000");
   g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 
+}
+
+TEST_P(StoreTest, KVDBHistogramTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  ObjectStore::Sequencer osr("test");
+  int NUM_OBJS = 200;
+  int r = 0;
+  coll_t cid;
+  string base("testobj.");
+  bufferlist a;
+  bufferptr ap(0x1000);
+  memset(ap.c_str(), 'a', 0x1000);
+  a.append(ap);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  for (int i = 0; i < NUM_OBJS; ++i) {
+    ObjectStore::Transaction t;
+    char buf[100];
+    snprintf(buf, sizeof(buf), "%d", i);
+    ghobject_t hoid(hobject_t(sobject_t(base + string(buf), CEPH_NOSNAP)));
+    t.write(cid, hoid, 0, 0x1000, a);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
+  store->generate_db_histogram(f);
+  f->flush(cout);
+  cout << std::endl;
+}
+
+TEST_P(StoreTest, KVDBStatsTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf->set_val("rocksdb_perf", "true");
+  g_conf->set_val("rocksdb_collect_compaction_stats", "true");
+  g_conf->set_val("rocksdb_collect_extended_stats","true");
+  g_conf->set_val("rocksdb_collect_memory_stats","true");
+  g_ceph_context->_conf->apply_changes(NULL);
+  int r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount(); //to force rocksdb stats
+  ASSERT_EQ(r, 0);
+
+  ObjectStore::Sequencer osr("test");
+  int NUM_OBJS = 200;
+  coll_t cid;
+  string base("testobj.");
+  bufferlist a;
+  bufferptr ap(0x1000);
+  memset(ap.c_str(), 'a', 0x1000);
+  a.append(ap);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  for (int i = 0; i < NUM_OBJS; ++i) {
+    ObjectStore::Transaction t;
+    char buf[100];
+    snprintf(buf, sizeof(buf), "%d", i);
+    ghobject_t hoid(hobject_t(sobject_t(base + string(buf), CEPH_NOSNAP)));
+    t.write(cid, hoid, 0, 0x1000, a);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
+  store->get_db_statistics(f);
+  f->flush(cout);
+  cout << std::endl;
+  g_conf->set_val("rocksdb_perf", "false");
+  g_conf->set_val("rocksdb_collect_compaction_stats", "false");
+  g_conf->set_val("rocksdb_collect_extended_stats","false");
+  g_conf->set_val("rocksdb_collect_memory_stats","false");
 }
 
 int main(int argc, char **argv) {
@@ -5668,7 +5853,6 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
-  g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
   //g_ceph_context->_conf->set_val("filestore_fiemap", "true");
   g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
   g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");

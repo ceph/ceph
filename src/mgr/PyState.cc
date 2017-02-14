@@ -22,6 +22,8 @@
 
 #include "PyState.h"
 
+#define dout_context g_ceph_context
+
 PyModules *global_handle = NULL;
 
 

@@ -21,7 +21,7 @@
 
 #include "KStore.h"
 #include "osd/osd_types.h"
-#include "kv.h"
+#include "os/kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
 #include "common/errno.h"
@@ -29,6 +29,7 @@
 #include "common/Formatter.h"
 
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_kstore
 
 /*
@@ -248,7 +249,8 @@ static void get_coll_key_range(const coll_t& cid, int bits,
 
 static int get_key_object(const string& key, ghobject_t *oid);
 
-static void get_object_key(const ghobject_t& oid, string *key)
+static void get_object_key(CephContext* cct, const ghobject_t& oid,
+			   string *key)
 {
   key->clear();
 
@@ -457,7 +459,7 @@ void KStore::OnodeHashLRU::clear()
 }
 
 void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
-				    const ghobject_t& new_oid)
+				  const ghobject_t& new_oid)
 {
   std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
@@ -474,14 +476,14 @@ void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
   OnodeRef o = po->second;
 
   // install a non-existent onode it its place
-  po->second.reset(new Onode(old_oid, o->key));
+  po->second.reset(new Onode(cct, old_oid, o->key));
   lru.push_back(*po->second);
 
   // fix oid, key
   onode_map.insert(make_pair(new_oid, o));
   _touch(o);
   o->oid = new_oid;
-  get_object_key(new_oid, &o->key);
+  get_object_key(cct, new_oid, &o->key);
 }
 
 bool KStore::OnodeHashLRU::get_next(
@@ -562,7 +564,7 @@ KStore::Collection::Collection(KStore *ns, coll_t c)
   : store(ns),
     cid(c),
     lock("KStore::Collection::lock", true, false),
-    onode_map()
+    onode_map(store->cct)
 {
 }
 
@@ -575,8 +577,8 @@ KStore::OnodeRef KStore::Collection::get_onode(
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
     if (!oid.match(cnode.bits, pgid.ps())) {
-      derr << __func__ << " oid " << oid << " not part of " << pgid
-	   << " bits " << cnode.bits << dendl;
+      lderr(store->cct) << __func__ << " oid " << oid << " not part of "
+			<< pgid << " bits " << cnode.bits << dendl;
       ceph_abort();
     }
   }
@@ -586,14 +588,14 @@ KStore::OnodeRef KStore::Collection::get_onode(
     return o;
 
   string key;
-  get_object_key(oid, &key);
+  get_object_key(store->cct, oid, &key);
 
-  dout(20) << __func__ << " oid " << oid << " key "
-	   << pretty_binary_string(key) << dendl;
+  ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
+			<< pretty_binary_string(key) << dendl;
 
   bufferlist v;
   int r = store->db->get(PREFIX_OBJ, key, &v);
-  dout(20) << " r " << r << " v.len " << v.length() << dendl;
+  ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
   Onode *on;
   if (v.length() == 0) {
     assert(r == -ENOENT);
@@ -601,12 +603,12 @@ KStore::OnodeRef KStore::Collection::get_onode(
       return OnodeRef();
 
     // new
-    on = new Onode(oid, key);
+    on = new Onode(store->cct, oid, key);
     on->dirty = true;
   } else {
     // loaded
     assert(r >=0);
-    on = new Onode(oid, key);
+    on = new Onode(store->cct, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
@@ -624,8 +626,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
 #define dout_prefix *_dout << "kstore(" << path << ") "
 
 KStore::KStore(CephContext *cct, const string& path)
-  : ObjectStore(path),
-    cct(cct),
+  : ObjectStore(cct, path),
     db(NULL),
     path_fd(-1),
     fsid_fd(-1),
@@ -638,7 +639,7 @@ KStore::KStore(CephContext *cct, const string& path)
     finisher(cct),
     kv_sync_thread(this),
     kv_stop(false),
-    logger(NULL)
+    logger(nullptr)
 {
   _init_logger();
 }
@@ -654,7 +655,7 @@ KStore::~KStore()
 void KStore::_init_logger()
 {
   // XXX
-  PerfCountersBuilder b(g_ceph_context, "KStore",
+  PerfCountersBuilder b(cct, "KStore",
                         l_kstore_first, l_kstore_last);
   b.add_time_avg(l_kstore_state_prepare_lat, "state_prepare_lat", "Average prepare state latency");
   b.add_time_avg(l_kstore_state_kv_queued_lat, "state_kv_queued_lat", "Average kv_queued state latency");
@@ -662,13 +663,13 @@ void KStore::_init_logger()
   b.add_time_avg(l_kstore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
   b.add_time_avg(l_kstore_state_done_lat, "state_done_lat", "Average done state latency");
   logger = b.create_perf_counters();
-  g_ceph_context->get_perfcounters_collection()->add(logger);
+  cct->get_perfcounters_collection()->add(logger);
 }
 
 void KStore::_shutdown_logger()
 {
   // XXX
-  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  cct->get_perfcounters_collection()->remove(logger);
   delete logger;
 }
 
@@ -804,7 +805,7 @@ int KStore::_open_db(bool create)
 
   string kv_backend;
   if (create) {
-    kv_backend = g_conf->kstore_backend;
+    kv_backend = cct->_conf->kstore_backend;
   } else {
     r = read_meta("kv_backend", &kv_backend);
     if (r < 0) {
@@ -838,16 +839,14 @@ int KStore::_open_db(bool create)
     }
   }
 
-  db = KeyValueDB::create(g_ceph_context,
-			  kv_backend,
-			  fn);
+  db = KeyValueDB::create(cct, kv_backend, fn);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
     return -EIO;
   }
   string options;
   if (kv_backend == "rocksdb")
-    options = g_conf->kstore_rocksdb_options;
+    options = cct->_conf->kstore_rocksdb_options;
   db->init(options);
   stringstream err;
   if (create)
@@ -945,7 +944,7 @@ int KStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
-  r = write_meta("kv_backend", g_conf->kstore_backend);
+  r = write_meta("kv_backend", cct->_conf->kstore_backend);
   if (r < 0)
     goto out_close_db;
 
@@ -973,8 +972,8 @@ int KStore::mount()
 {
   dout(1) << __func__ << " path " << path << dendl;
 
-  if (g_conf->kstore_fsck_on_mount) {
-    int rc = fsck(g_conf->kstore_fsck_on_mount_deep);
+  if (cct->_conf->kstore_fsck_on_mount) {
+    int rc = fsck(cct->_conf->kstore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
   }
@@ -1472,7 +1471,7 @@ int KStore::_collection_list(
     temp = true;
   } else {
     string k;
-    get_object_key(start, &k);
+    get_object_key(cct, start, &k);
     if (start.hobj.is_temp()) {
       temp = true;
       assert(k >= temp_start_key && k < temp_end_key);
@@ -1487,7 +1486,7 @@ int KStore::_collection_list(
   if (end.hobj.is_max()) {
     pend = temp ? temp_end_key : end_key;
   } else {
-    get_object_key(end, &end_key);
+    get_object_key(cct, end, &end_key);
     if (end.hobj.is_temp()) {
       if (temp)
 	pend = end_key;
@@ -1886,7 +1885,7 @@ void KStore::_assign_nid(TransContext *txc, OnodeRef o)
   o->onode.nid = ++nid_last;
   dout(20) << __func__ << " " << o->oid << " nid " << o->onode.nid << dendl;
   if (nid_last > nid_max) {
-    nid_max += g_conf->kstore_nid_prealloc;
+    nid_max += cct->_conf->kstore_nid_prealloc;
     bufferlist bl;
     ::encode(nid_max, bl);
     txc->t->set(PREFIX_SUPER, "nid_max", bl);
@@ -1912,9 +1911,9 @@ void KStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_PREPARE:
       txc->log_state_latency(logger, l_kstore_state_prepare_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
-      if (!g_conf->kstore_sync_transaction) {
+      if (!cct->_conf->kstore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
-	if (g_conf->kstore_sync_submit_transaction) {
+	if (cct->_conf->kstore_sync_submit_transaction) {
           int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
@@ -1989,9 +1988,8 @@ void KStore::_txc_finish_kv(TransContext *txc)
     finisher.queue(txc->oncommit);
     txc->oncommit = NULL;
   }
-  while (!txc->oncommits.empty()) {
-    finisher.queue(txc->oncommits.front());
-    txc->oncommits.pop_front();
+  if (!txc->oncommits.empty()) {
+    finisher.queue(txc->oncommits);
   }
 
   throttle_ops.put(txc->ops);
@@ -2047,7 +2045,7 @@ void KStore::_osr_reap_done(OpSequencer *osr)
     }
 
     if (txc->first_collection) {
-      txc->first_collection->onode_map.trim(g_conf->kstore_onode_map_size);
+      txc->first_collection->onode_map.trim(cct->_conf->kstore_onode_map_size);
     }
 
     osr->q.pop_front();
@@ -2075,14 +2073,14 @@ void KStore::_kv_sync_thread()
     } else {
       dout(20) << __func__ << " committing " << kv_queue.size() << dendl;
       kv_committing.swap(kv_queue);
-      utime_t start = ceph_clock_now(NULL);
+      utime_t start = ceph_clock_now();
       l.unlock();
 
       dout(30) << __func__ << " committing txc " << kv_committing << dendl;
 
       // one transaction to force a sync
       KeyValueDB::Transaction t = db->get_transaction();
-      if (!g_conf->kstore_sync_submit_transaction) {
+      if (!cct->_conf->kstore_sync_submit_transaction) {
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
@@ -2092,7 +2090,7 @@ void KStore::_kv_sync_thread()
       }
       int r = db->submit_transaction_sync(t);
       assert(r == 0);
-      utime_t finish = ceph_clock_now(NULL);
+      utime_t finish = ceph_clock_now();
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " in " << dur << dendl;
@@ -2134,7 +2132,7 @@ int KStore::queue_transactions(
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer;
+    osr = new OpSequencer(cct);
     osr->parent = posr;
     posr->p = osr;
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
@@ -2614,7 +2612,7 @@ int KStore::_do_write(TransContext *txc,
 
   uint64_t stripe_size = o->onode.stripe_size;
   if (!stripe_size) {
-    o->onode.stripe_size = g_conf->kstore_default_stripe_size;
+    o->onode.stripe_size = cct->_conf->kstore_default_stripe_size;
     stripe_size = o->onode.stripe_size;
   }
 
@@ -2844,7 +2842,7 @@ int KStore::_do_remove(TransContext *txc,
   o->exists = false;
   o->onode = kstore_onode_t();
   txc->onodes.erase(o);
-  get_object_key(o->oid, &key);
+  get_object_key(cct, o->oid, &key);
   txc->t->rmkey(PREFIX_OBJ, key);
   return 0;
 }

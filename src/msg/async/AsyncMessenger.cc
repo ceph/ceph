@@ -25,6 +25,10 @@
 #include "common/Timer.h"
 #include "common/errno.h"
 
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "common/EventTrace.h"
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -51,7 +55,7 @@ class Processor::C_processor_accept : public EventCallback {
   }
 };
 
-Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n)
+Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c)
   : msgr(r), net(c), worker(w),
     listen_handler(new C_processor_accept(this)) {}
 
@@ -209,9 +213,13 @@ void Processor::stop()
 
 
 struct StackSingleton {
+  CephContext *cct;
   std::shared_ptr<NetworkStack> stack;
-  StackSingleton(CephContext *c) {
-    stack = NetworkStack::create(c, c->_conf->ms_async_transport_type);
+
+  StackSingleton(CephContext *c): cct(c) {}
+  void ready(std::string &type) {
+    if (!stack)
+      stack = NetworkStack::create(cct, type);
   }
   ~StackSingleton() {
     stack->stop();
@@ -235,7 +243,7 @@ class C_handle_reap : public EventCallback {
  */
 
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
-                               string mname, uint64_t _nonce)
+                               const std::string &type, string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     dispatch_queue(cct, this, mname),
     lock("AsyncMessenger::lock"),
@@ -243,9 +251,16 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
     cluster_protocol(0), stopped(true)
 {
+  std::string transport_type = "posix";
+  if (type.find("rdma") != std::string::npos)
+    transport_type = "rdma";
+  else if (type.find("dpdk") != std::string::npos)
+    transport_type = "dpdk";
+
   ceph_spin_init(&global_seq_lock);
   StackSingleton *single;
-  cct->lookup_or_create_singleton_object<StackSingleton>(single, "AsyncMessenger::NetworkStack");
+  cct->lookup_or_create_singleton_object<StackSingleton>(single, "AsyncMessenger::NetworkStack::"+transport_type);
+  single->ready(transport_type);
   stack = single->stack.get();
   stack->start();
   local_worker = stack->get_worker();
@@ -256,7 +271,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   if (stack->support_local_listen_table())
     processor_num = stack->get_num_worker();
   for (unsigned i = 0; i < processor_num; ++i)
-    processors.push_back(new Processor(this, stack->get_worker(i), cct, _nonce));
+    processors.push_back(new Processor(this, stack->get_worker(i), cct));
 }
 
 /**
@@ -373,6 +388,25 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   for (auto &&p : processors) {
     p->start();
   }
+  return 0;
+}
+
+int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
+{
+  lock.Lock();
+  if (did_bind) {
+    assert(my_inst.addr == bind_addr);
+    return 0;
+  }
+  if (started) {
+    ldout(cct, 10) << __func__ << " already started" << dendl;
+    lock.Unlock();
+    return -1;
+  }
+  ldout(cct, 10) << __func__ << " " << bind_addr << dendl;
+  lock.Unlock();
+
+  set_myaddr(bind_addr);
   return 0;
 }
 
@@ -500,6 +534,12 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
+  FUNCTRACE();
+  if (m && m->get_type() == CEPH_MSG_OSD_OP)
+    OID_EVENT_TRACE(((MOSDOp *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP");
+  else if (m && m->get_type() == CEPH_MSG_OSD_OPREPLY)
+    OID_EVENT_TRACE(((MOSDOpReply *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP_REPLY");
+
   ldout(cct, 1) << __func__ << "--> " << dest.name << " "
       << dest.addr << " -- " << *m << " -- ?+"
       << m->get_data().length() << " " << m << dendl;

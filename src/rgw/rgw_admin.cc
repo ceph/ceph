@@ -39,9 +39,11 @@
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
+#include "rgw_role.h"
 
 using namespace std;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define SECRET_KEY_LEN 40
@@ -173,6 +175,15 @@ void _usage()
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
+  cout << "  role create                create a AWS role for use with STS\n";
+  cout << "  role delete                delete a role\n";
+  cout << "  role get                   get a role\n";
+  cout << "  role list                  list roles with specified path prefix\n";
+  cout << "  role modify                modify the assume role policy of an existing role\n";
+  cout << "  role-policy put            add/update permission policy to role\n";
+  cout << "  role-policy list           list policies attached to a role\n";
+  cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
+  cout << "  role-policy delete         delete policy attached to a role\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -290,6 +301,13 @@ void _usage()
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\nOrphans list-jobs options:\n";
   cout << "   --extra-info              provide extra info in job list\n";
+  cout << "\nRole options:\n";
+  cout << "   --role-name               name of the role to create\n";
+  cout << "   --path                    path to the role\n";
+  cout << "   --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role\n";
+  cout << "   --policy-name             name of the policy document\n";
+  cout << "   --policy-doc              permission policy document\n";
+  cout << "   --path-prefix             path prefix for filtering roles\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -437,6 +455,15 @@ enum {
   OPT_PERIOD_UPDATE,
   OPT_PERIOD_COMMIT,
   OPT_SYNC_STATUS,
+  OPT_ROLE_CREATE,
+  OPT_ROLE_DELETE,
+  OPT_ROLE_GET,
+  OPT_ROLE_MODIFY,
+  OPT_ROLE_LIST,
+  OPT_ROLE_POLICY_PUT,
+  OPT_ROLE_POLICY_LIST,
+  OPT_ROLE_POLICY_GET,
+  OPT_ROLE_POLICY_DELETE,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -472,6 +499,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "region-map") == 0 ||
       strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
+      strcmp(cmd, "role") == 0 ||
+      strcmp(cmd, "role-policy") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "usage") == 0 ||
@@ -830,6 +859,26 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "sync") == 0) {
     if (strcmp(cmd, "status") == 0)
       return OPT_SYNC_STATUS;
+  } else if (strcmp(prev_cmd, "role") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_ROLE_CREATE;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_ROLE_DELETE;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ROLE_GET;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_ROLE_MODIFY;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ROLE_LIST;
+  } else if (strcmp(prev_cmd, "role-policy") == 0) {
+    if (strcmp(cmd, "put") == 0)
+      return OPT_ROLE_POLICY_PUT;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ROLE_POLICY_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ROLE_POLICY_GET;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_ROLE_POLICY_DELETE;
   }
 
   return -EINVAL;
@@ -894,6 +943,44 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
+}
+
+static void show_perm_policy(string perm_policy, Formatter* formatter)
+{
+  formatter->open_object_section("role");
+  formatter->dump_string("Permission policy", perm_policy);
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
+static void show_policy_names(std::vector<string> policy_names, Formatter* formatter)
+{
+  formatter->open_array_section("PolicyNames");
+  for (const auto& it : policy_names) {
+    formatter->dump_string("policyname", it);
+  }
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
+static void show_role_info(RGWRole& role, Formatter* formatter)
+{
+  formatter->open_object_section("role");
+  role.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
+static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
+{
+  formatter->open_array_section("Roles");
+  for (const auto& it : roles) {
+    formatter->open_object_section("role");
+    it.dump(formatter);
+    formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->flush(cout);
 }
 
 static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
@@ -1794,18 +1881,18 @@ static void get_md_sync_status(list<string>& status)
   }
 
   map<int, RGWMetadataLogInfo> master_shards_info;
-  string master_period;
+  string master_period = store->get_current_period_id();
 
-  ret = sync.read_master_log_shards_info(&master_period, &master_shards_info);
+  ret = sync.read_master_log_shards_info(master_period, &master_shards_info);
   if (ret < 0) {
     status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
     return;
   }
 
   map<int, string> shards_behind;
-
   if (sync_status.sync_info.period != master_period) {
-    status.push_back(string("master is on a different period: master_period=" + master_period + " local_period=" + sync_status.sync_info.period));
+    status.push_back(string("master is on a different period: master_period=" +
+                            master_period + " local_period=" + sync_status.sync_info.period));
   } else {
     for (auto local_iter : sync_status.sync_markers) {
       int shard_id = local_iter.first;
@@ -1825,7 +1912,7 @@ static void get_md_sync_status(list<string>& status)
 
   int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
   if (total_behind == 0) {
-    status.push_back("metadata is caught up with master");
+    push_ss(ss, status) << "metadata is caught up with master";
   } else {
     push_ss(ss, status) << "metadata is behind on " << total_behind << " shards";
 
@@ -2237,7 +2324,11 @@ public:
   }
 };
 
-int main(int argc, char **argv)
+#ifdef BUILDING_FOR_EMBEDDED
+extern "C" int cephd_rgw_admin(int argc, const char **argv)
+#else
+int main(int argc, const char **argv)
+#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -2266,6 +2357,7 @@ int main(int argc, char **argv)
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
+  std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
@@ -2702,6 +2794,18 @@ int main(int argc, char **argv)
       index_type_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
       compression_type = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
+      role_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
+      path = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*)NULL)) {
+      assume_role_doc = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--policy-name", (char*)NULL)) {
+      policy_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*)NULL)) {
+      perm_policy_doc = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
+      path_prefix = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3044,7 +3148,7 @@ int main(int argc, char **argv)
 	  cerr << "failed to list realmss: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	formatter->open_object_section("realmss_list");
+	formatter->open_object_section("realms_list");
 	encode_json("default_info", default_id, formatter);
 	encode_json("realms", realms, formatter);
 	formatter->close_section();
@@ -3102,24 +3206,39 @@ int main(int argc, char **argv)
 	  cerr << "no realm name or id provided" << std::endl;
 	  return EINVAL;
 	}
-        if (infile.empty()) {
-	  cerr << "no realm input file provided" << std::endl;
-	  return EINVAL;
-        }
 	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store, false);
-	if (ret < 0) {
+	bool new_realm = false;
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
+	} else if (ret == -ENOENT) {
+	  new_realm = true;
 	}
 	ret = read_decode_json(infile, realm);
 	if (ret < 0) {
 	  return 1;
 	}
-	ret = realm.update();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store realm info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
+	if (!realm_name.empty() && realm.get_name() != realm_name) {
+	  cerr << "mismatch between --rgw-realm " << realm_name << " and json input file name " <<
+	    realm.get_name() << std::endl;
+	  return EINVAL;
+	}
+	/* new realm */
+	if (new_realm) {
+	  cout << "clearing period and epoch for new realm" << std::endl;
+	  realm.clear_current_period_and_epoch();
+	  ret = realm.create();
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't create new realm: " << cpp_strerror(-ret) << std::endl;
+	    return 1;
+	  }
+	} else {
+	  ret = realm.update();
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't store realm info: " << cpp_strerror(-ret) << std::endl;
+	    return 1;
+	  }
 	}
 
         if (set_default) {
@@ -4471,7 +4590,199 @@ int main(int argc, char **argv)
       cout << std::endl;
     }
     return 0;
+  case OPT_ROLE_CREATE:
+    {
+      string uid;
+      user_id.to_str(uid);
+      if (role_name.empty() || assume_role_doc.empty() || uid.empty()) {
+        cerr << "ERROR: one of role name or assume role policy document or uid is empty" << std::endl;
+        return -EINVAL;
+      }
+      /* The following two calls will be replaced by read_decode_json or something
+         similar when the code for AWS Policies is in places */
+      bufferlist bl;
+      int ret = read_input(assume_role_doc, bl);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      JSONParser p;
+      if (!p.parse(bl.c_str(), bl.length())) {
+        cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
+        return -EINVAL;
+      }
+      string trust_policy = bl.to_str();
+      RGWRole role(g_ceph_context, store, role_name, path, trust_policy, uid);
+      ret = role.create(true);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_role_info(role, formatter);
+      return 0;
+    }
+  case OPT_ROLE_DELETE:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.delete_obj();
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "role: " << role_name << " successfully deleted" << std::endl;
+      return 0;
+    }
+  case OPT_ROLE_GET:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      show_role_info(role, formatter);
+      return 0;
+    }
+  case OPT_ROLE_MODIFY:
+    {
+      if (role_name.empty() || assume_role_doc.empty()) {
+        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+      /* The following two calls will be replaced by read_decode_json or something
+         similar when the code for AWS Policies is in place */
+      bufferlist bl;
+      int ret = read_input(assume_role_doc, bl);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      JSONParser p;
+      if (!p.parse(bl.c_str(), bl.length())) {
+        cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
+        return -EINVAL;
+      }
+      string trust_policy = bl.to_str();
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      role.update_trust_policy(trust_policy);
+      ret = role.update();
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Assume role policy document updated successfully for role: " << role_name << std::endl;
+      return 0;
+    }
+  case OPT_ROLE_LIST:
+    {
+      vector<RGWRole> result;
+      ret = RGWRole::get_roles_by_path_prefix(store, g_ceph_context, path_prefix, result);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_roles_info(result, formatter);
+      return 0;
+    }
+  case OPT_ROLE_POLICY_PUT:
+    {
+      if (role_name.empty() || policy_name.empty() || perm_policy_doc.empty()) {
+        cerr << "One of role name, policy name or permission policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+      /* The following two calls will be replaced by read_decode_json or something
+         similar, when code for AWS Policies is in place.*/
+      bufferlist bl;
+      int ret = read_input(perm_policy_doc, bl);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      JSONParser p;
+      if (!p.parse(bl.c_str(), bl.length())) {
+        cout << "ERROR: failed to parse JSON: " << std::endl;
+        return -EINVAL;
+      }
+      string perm_policy;
+      perm_policy = bl.c_str();
 
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      role.set_perm_policy(policy_name, perm_policy);
+      ret = role.update();
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Permission policy attached successfully" << std::endl;
+      return 0;
+    }
+  case OPT_ROLE_POLICY_LIST:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: Role name is empty" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      std::vector<string> policy_names = role.get_role_policy_names();
+      show_policy_names(policy_names, formatter);
+      return 0;
+    }
+  case OPT_ROLE_POLICY_GET:
+    {
+      if (role_name.empty() || policy_name.empty()) {
+        cerr << "ERROR: One of role name or policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      int ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      string perm_policy;
+      ret = role.get_role_policy(policy_name, perm_policy);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_perm_policy(perm_policy, formatter);
+      return 0;
+    }
+  case OPT_ROLE_POLICY_DELETE:
+    {
+      if (role_name.empty() || policy_name.empty()) {
+        cerr << "ERROR: One of role name or policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      ret = role.delete_policy(policy_name);
+      if (ret < 0) {
+        return -ret;
+      }
+      ret = role.update();
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Policy: " << policy_name << " successfully deleted for role: "
+           << role_name << std::endl;
+      return 0;
+  }
   default:
     output_user_info = false;
   }
@@ -6487,7 +6798,7 @@ next:
       cerr << "ERROR: marker was not specified" <<std::endl;
       return EINVAL;
     }
-    utime_t time = ceph_clock_now(NULL);
+    utime_t time = ceph_clock_now();
     if (!date.empty()) {
       ret = parse_date_str(date, time);
       if (ret < 0) {

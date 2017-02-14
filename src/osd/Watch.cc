@@ -9,6 +9,7 @@
 #include "OSD.h"
 #include "PrimaryLogPG.h"
 #include "Watch.h"
+#include "Session.h"
 
 #include "common/config.h"
 
@@ -16,6 +17,7 @@ struct CancelableContext : public Context {
   virtual void cancel() = 0;
 };
 
+#define dout_context osd->cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -240,9 +242,9 @@ public:
   }
   void finish(int) { ceph_abort(); /* not used */ }
   void complete(int) {
-    dout(10) << "HandleWatchTimeout" << dendl;
-    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     OSDService *osd(watch->osd);
+    ldout(osd->cct, 10) << "HandleWatchTimeout" << dendl;
+    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     osd->watch_lock.Unlock();
     pg->lock();
     watch->cb = NULL;
@@ -263,6 +265,7 @@ public:
     canceled = true;
   }
   void finish(int) {
+    OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
     assert(watch->pg->is_locked());
     watch->cb = NULL;
@@ -366,7 +369,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
-  OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
+  Session* sessionref(static_cast<Session*>(con->get_priv()));
   if (sessionref) {
     sessionref->wstate.addWatch(self.lock());
     sessionref->put();
@@ -377,7 +380,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
     }
   }
   if (will_ping) {
-    last_ping = ceph_clock_now(NULL);
+    last_ping = ceph_clock_now();
     register_cb();
   } else {
     unregister_cb();
@@ -412,7 +415,7 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (conn) {
-    OSD::Session* sessionref(static_cast<OSD::Session*>(conn->get_priv()));
+    Session* sessionref(static_cast<Session*>(conn->get_priv()));
     if (sessionref) {
       sessionref->wstate.removeWatch(self.lock());
       sessionref->put();
@@ -449,7 +452,7 @@ void Watch::start_notify(NotifyRef notif)
   assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
   if (will_ping) {
-    utime_t cutoff = ceph_clock_now(NULL);
+    utime_t cutoff = ceph_clock_now();
     cutoff.sec_ref() -= timeout;
     if (last_ping < cutoff) {
       dout(10) << __func__ << " " << notif->notify_id
@@ -529,7 +532,7 @@ void WatchConState::reset(Connection *con)
       if ((*i)->is_connected(con)) {
 	(*i)->disconnect();
       } else {
-	generic_derr << __func__ << " not still connected to " << (*i) << dendl;
+	lgeneric_derr(cct) << __func__ << " not still connected to " << (*i) << dendl;
       }
     }
     pg->unlock();

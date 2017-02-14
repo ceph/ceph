@@ -50,13 +50,14 @@ private:
   void write_data(const char *fmt, ...);
   void dump_value_int(const char *name, const char *fmt, ...);
 
-  char *buf;
-  int len;
-  int max_len;
+  char *buf = nullptr;
+  int len = 0;
+  int max_len = 0;
 
   std::list<struct plain_stack_entry> stack;
-  size_t min_stack_level;
+  size_t min_stack_level = 0;
   bool use_kv;
+  bool wrote_something = 0;
 };
 
 

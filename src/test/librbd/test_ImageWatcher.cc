@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
@@ -135,8 +135,8 @@ public:
   bool wait_for_notifies(librbd::ImageCtx &ictx) {
     Mutex::Locker l(m_callback_lock);
     while (m_notifies.size() < m_notify_acks.size()) {
-      int r = m_callback_cond.WaitInterval(ictx.cct, m_callback_lock,
-					 utime_t(10, 0));
+      int r = m_callback_cond.WaitInterval(m_callback_lock,
+					   utime_t(10, 0));
       if (r != 0) {
 	break;
       }
@@ -238,7 +238,7 @@ struct ProgressContext : public librbd::ProgressContext {
   bool wait(librbd::ImageCtx *ictx, uint64_t offset_, uint64_t total_) {
     Mutex::Locker l(mutex);
     while (!received) {
-      int r = cond.WaitInterval(ictx->cct, mutex, utime_t(10, 0));
+      int r = cond.WaitInterval(mutex, utime_t(10, 0));
       if (r != 0) {
 	break;
       }
@@ -294,64 +294,6 @@ struct RebuildObjectMapTask {
     result = ctx.wait();
   }
 };
-
-TEST_F(TestImageWatcher, NotifyRequestLock) {
-  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  ASSERT_EQ(0, register_image_watch(*ictx));
-
-  m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, {}}};
-  ictx->image_watcher->notify_request_lock();
-
-  C_SaferCond ctx;
-  ictx->image_watcher->flush(&ctx);
-  ctx.wait();
-
-  ASSERT_TRUE(wait_for_notifies(*ictx));
-
-  NotifyOps expected_notify_ops;
-  expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
-  ASSERT_EQ(expected_notify_ops, m_notifies);
-}
-
-TEST_F(TestImageWatcher, NotifyReleasedLock) {
-  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  ASSERT_EQ(0, register_image_watch(*ictx));
-
-  m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK, {}}};
-  ictx->image_watcher->notify_released_lock();
-
-  ASSERT_TRUE(wait_for_notifies(*ictx));
-
-  NotifyOps expected_notify_ops;
-  expected_notify_ops += NOTIFY_OP_RELEASED_LOCK;
-  ASSERT_EQ(expected_notify_ops, m_notifies);
-}
-
-TEST_F(TestImageWatcher, NotifyAcquiredLock) {
-  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  ASSERT_EQ(0, register_image_watch(*ictx));
-
-  m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
-  ictx->image_watcher->notify_acquired_lock();
-
-  ASSERT_TRUE(wait_for_notifies(*ictx));
-
-  NotifyOps expected_notify_ops;
-  expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK;
-  ASSERT_EQ(expected_notify_ops, m_notifies);
-}
 
 TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);

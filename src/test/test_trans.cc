@@ -19,6 +19,7 @@
 #include "global/global_init.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout
@@ -50,7 +51,7 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename << std::endl;
   cout << "#mb " << mb << std::endl;
 
-  ObjectStore *fs = new FileStore(filename, NULL);
+  ObjectStore *fs = new FileStore(cct.get(), filename, NULL);
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;

@@ -63,7 +63,7 @@
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
-
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
@@ -497,10 +497,8 @@ int MDSDaemon::init()
   }
 
   int rotating_auth_attempts = 0;
-  const int max_rotating_auth_attempts = 10;
-
   while (monc->wait_auth_rotating(30.0) < 0) {
-    if (++rotating_auth_attempts <= max_rotating_auth_attempts) {
+    if (++rotating_auth_attempts <= g_conf->max_rotating_auth_attempts) {
       derr << "unable to obtain rotating service keys; retrying" << dendl;
       continue;
     }
@@ -1326,8 +1324,9 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  is_valid = authorize_handler->verify_authorizer(cct, monc->rotating_secrets,
-						  authorizer_data, authorizer_reply, name, global_id, caps_info, session_key);
+  is_valid = authorize_handler->verify_authorizer(
+    cct, monc->rotating_secrets.get(),
+    authorizer_data, authorizer_reply, name, global_id, caps_info, session_key);
 
   if (is_valid) {
     entity_name_t n(con->get_peer_type(), global_id);

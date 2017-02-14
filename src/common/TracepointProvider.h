@@ -36,7 +36,7 @@ public:
     }
 
     inline bool is_enabled() const {
-      return tracepoint_provider->m_enabled;
+      return tracepoint_provider->m_handle != nullptr;
     }
   private:
     TracepointProvider *tracepoint_provider;
@@ -75,7 +75,7 @@ private:
   mutable const char* m_config_keys[2];
 
   Mutex m_lock;
-  bool m_enabled;
+  void* m_handle = nullptr;
 
   void verify_config(const struct md_config_t *conf);
 };

@@ -77,7 +77,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
     delete f;
   }
 
-  return std::move(c);
+  return c;
 }
 
 int get_num_dups(const vector<int>& v)

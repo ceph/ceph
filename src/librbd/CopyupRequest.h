@@ -36,19 +36,22 @@ private:
    *
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v
-   *  STATE_READ_FROM_PARENT
-   *    .   .        |
-   *    .   .        v
-   *    .   .     STATE_OBJECT_MAP . .
-   *    .   .        |               .
-   *    .   .        v               .
-   *    .   . . > STATE_COPYUP       .
-   *    .            |               .
-   *    .            v               .
-   *    . . . . > <finish> < . . . . .
+   *              <start>
+   *                 |
+   *                 v
+   *    . . .STATE_READ_FROM_PARENT. . .
+   *    . .          |                 .
+   *    . .          v                 .
+   *    . .  STATE_OBJECT_MAP_HEAD     v (copy on read /
+   *    . .          |                 .  no HEAD rev. update)
+   *    v v          v                 .
+   *    . .    STATE_OBJECT_MAP. . . . .
+   *    . .          |
+   *    . .          v
+   *    . . . . > STATE_COPYUP
+   *    .            |
+   *    .            v
+   *    . . . . > <finish>
    *
    * @endverbatim
    *
@@ -58,7 +61,8 @@ private:
    */
   enum State {
     STATE_READ_FROM_PARENT,
-    STATE_OBJECT_MAP,
+    STATE_OBJECT_MAP_HEAD, // only update the HEAD revision
+    STATE_OBJECT_MAP,      // update HEAD+snaps (if any)
     STATE_COPYUP
   };
 
@@ -82,8 +86,10 @@ private:
 
   void remove_from_list();
 
+  bool send_object_map_head();
   bool send_object_map();
   bool send_copyup();
+  bool is_copyup_required();
 };
 
 } // namespace librbd

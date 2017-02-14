@@ -316,10 +316,6 @@ namespace librados
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, int op, const bufferlist& val);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, int op, uint64_t v);
     void exec(const char *cls, const char *method, bufferlist& inbl);
     void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
     void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
@@ -397,9 +393,6 @@ namespace librados
     void setxattr(const char *name, const bufferlist& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
-    void clone_range(uint64_t dst_off,
-                     const std::string& src_oid, uint64_t src_off,
-                     size_t len);
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
@@ -522,6 +515,23 @@ namespace librados
       const std::string &start_after,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      int *prval) __attribute__ ((deprecated));  // use v2
+
+    /**
+     * omap_get_vals: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals2(
+      const std::string &start_after,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
       int *prval);
 
     /**
@@ -540,6 +550,26 @@ namespace librados
       const std::string &filter_prefix,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      int *prval) __attribute__ ((deprecated));  // use v2
+
+    /**
+     * omap_get_vals2: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list keys starting after start_after
+     * @param filter_prefix [in] list only keys beginning with filter_prefix
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals2(
+      const std::string &start_after,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
       int *prval);
 
 
@@ -556,7 +586,24 @@ namespace librados
     void omap_get_keys(const std::string &start_after,
                        uint64_t max_return,
                        std::set<std::string> *out_keys,
-                       int *prval);
+                       int *prval) __attribute__ ((deprecated)); // use v2
+
+    /**
+     * omap_get_keys2: keys from the object omap
+     *
+     * Get up to max_return keys beginning after start_after
+     *
+     * @param start_after [in] list keys starting after start_after
+     * @param max_return [in] list no more than max_return keys
+     * @param out_keys [out] place returned values in out_keys on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_keys2(const std::string &start_after,
+			uint64_t max_return,
+			std::set<std::string> *out_keys,
+			bool *pmore,
+			int *prval);
 
     /**
      * omap_get_header: get header from object omap
@@ -709,9 +756,6 @@ namespace librados
     int write_full(const std::string& oid, bufferlist& bl);
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
-    int clone_range(const std::string& dst_oid, uint64_t dst_off,
-                   const std::string& src_oid, uint64_t src_off,
-                   size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
@@ -745,15 +789,31 @@ namespace librados
                       const std::string& start_after,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,
                       const std::string& filter_prefix,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       const std::string& filter_prefix,
+		       uint64_t max_return,
+		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
     int omap_get_keys(const std::string& oid,
                       const std::string& start_after,
                       uint64_t max_return,
                       std::set<std::string> *out_keys);
+    int omap_get_keys2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+		       std::set<std::string> *out_keys,
+		       bool *pmore);
     int omap_get_header(const std::string& oid,
                         bufferlist *bl);
     int omap_get_vals_by_keys(const std::string& oid,
@@ -795,8 +855,10 @@ namespace librados
       __attribute__ ((deprecated));
 
     int selfmanaged_snap_create(uint64_t *snapid);
+    void aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletion *c);
 
     int selfmanaged_snap_remove(uint64_t snapid);
+    void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion *c);
 
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
 
@@ -1125,7 +1187,6 @@ namespace librados
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
-    void set_assert_src_version(const std::string& o, uint64_t ver);
 
     /**
      * Pin/unpin an object in cache tier

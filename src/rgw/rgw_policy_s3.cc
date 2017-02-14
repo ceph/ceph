@@ -8,6 +8,7 @@
 #include "rgw_common.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 class RGWPolicyCondition {
@@ -182,7 +183,7 @@ int RGWPolicy::add_condition(const string& op, const string& first, const string
 
 int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
 {
-  uint64_t now = ceph_clock_now(NULL).sec();
+  uint64_t now = ceph_clock_now().sec();
   if (expires <= now) {
     dout(0) << "NOTICE: policy calculated as expired: " << expiration_str << dendl;
     err_msg = "Policy expired";

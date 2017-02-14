@@ -153,6 +153,9 @@ public:
 
   void show_importing();
   void show_exporting();
+
+  int get_num_exporting() const { return export_state.size(); }
+  int get_export_queue_size() const { return export_queue.size(); }
   
   // -- status --
   int is_exporting(CDir *dir) const {
@@ -300,8 +303,8 @@ public:
   void handle_export_dir(MExportDir *m);
 
 public:
-  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, mds_rank_t oldauth, 
-			   LogSegment *ls, uint64_t log_offset,
+  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+			   mds_rank_t oldauth, LogSegment *ls,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::iterator &blp,

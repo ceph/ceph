@@ -92,7 +92,6 @@ private:
 
   void register_new_pgs();
 
-  void send_pg_creates();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**

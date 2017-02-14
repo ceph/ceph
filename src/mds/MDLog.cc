@@ -31,6 +31,7 @@
 #include "common/errno.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log
@@ -295,7 +296,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 
   le->_segment = ls;
   le->update_segment();
-  le->set_stamp(ceph_clock_now(g_ceph_context));
+  le->set_stamp(ceph_clock_now());
 
   mdsmap_up_features = mds->mdsmap->get_up_features();
   pending_events[ls->seq].push_back(PendingEvent(le, c));
@@ -615,7 +616,7 @@ void MDLog::trim(int m)
   }
 
   // hack: only trim for a few seconds at a time
-  utime_t stop = ceph_clock_now(g_ceph_context);
+  utime_t stop = ceph_clock_now();
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
@@ -624,7 +625,7 @@ void MDLog::trim(int m)
 	   num_events - expiring_events - expired_events > max_events) ||
 	  (segments.size() - expiring_segments.size() - expired_segments.size() > max_segments))) {
     
-    if (stop < ceph_clock_now(g_ceph_context))
+    if (stop < ceph_clock_now())
       break;
 
     int num_expiring_segments = (int)expiring_segments.size();
@@ -1167,9 +1168,9 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
       if (le->get_type() == EVENT_SUBTREEMAP
           || le->get_type() == EVENT_SUBTREEMAP_TEST) {
         ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+        assert(sle != NULL);
         dout(20) << __func__ << " zeroing expire_pos in subtreemap event at "
           << le_pos << " seq=" << sle->event_seq << dendl;
-        assert(sle != NULL);
         sle->expire_pos = 0;
         modified = true;
       }

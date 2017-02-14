@@ -335,11 +335,28 @@ public:
   const pg_pool_t &get_pool() const override {
     return pool.info;
   }
+
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
+
+  bool try_lock_for_read(
+    const hobject_t &hoid,
+    ObcLockManager &manager) override {
+    if (is_missing_object(hoid))
+      return false;
+    auto obc = get_object_context(hoid, false, nullptr);
+    if (!obc)
+      return false;
+    return manager.try_get_read_lock(hoid, obc);
+  }
+
+  void release_locks(ObcLockManager &manager) {
+    release_object_locks(manager);
+  }
+
   void pgb_set_object_snap_mapping(
     const hobject_t &soid,
     const set<snapid_t> &snaps,
@@ -351,7 +368,6 @@ public:
     ObjectStore::Transaction *t) override {
     return clear_object_snap_mapping(t, soid);
   }
-
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,
@@ -504,7 +520,6 @@ public:
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
@@ -512,7 +527,6 @@ public:
 
     MOSDOpReply *reply;
 
-    utime_t readable_stamp;  // when applied on all replicas
     PrimaryLogPG *pg;
 
     int num_read;    ///< count read ops
@@ -545,8 +559,7 @@ public:
       on_committed.emplace_back(std::forward<F>(f));
     }
 
-    bool sent_ack;
-    bool sent_disk;
+    bool sent_reply;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -582,7 +595,7 @@ public:
       num_read(0),
       num_write(0),
       copy_cb(NULL),
-      sent_ack(false), sent_disk(false),
+      sent_reply(false),
       async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {
@@ -811,8 +824,8 @@ protected:
 	if (scrubber.write_blocked_by_scrub(
 	      p.first.get_head(),
 	      get_sort_bitwise())) {
-	  waiting_for_active.splice(
-	    waiting_for_active.begin(),
+	  waiting_for_scrub.splice(
+	    waiting_for_scrub.begin(),
 	    p.second,
 	    p.second.begin(),
 	    p.second.end());
@@ -872,7 +885,6 @@ protected:
   HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
-  map<time_t,HitSetRef> hit_set_flushing; ///< currently being written, not yet readable
 
   void hit_set_clear();     ///< discard any HitSet state
   void hit_set_setup();     ///< initialize HitSet state
@@ -1356,6 +1368,8 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
+
+  void handle_backoff(OpRequestRef& op);
 
   OpContextUPtr trim_object(bool first, const hobject_t &coid);
   void snap_trimmer(epoch_t e) override;

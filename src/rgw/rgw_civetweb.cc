@@ -29,13 +29,23 @@ size_t RGWCivetWeb::write_data(const char *buf, const size_t len)
   return len;
 }
 
-RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
+RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
   : conn(conn),
-    port(port),
     explicit_keepalive(false),
     explicit_conn_close(false),
     txbuf(*this)
 {
+    sockaddr *lsa = mg_get_local_addr(conn);
+    switch(lsa->sa_family) {
+    case AF_INET:
+	port = ntohs(((struct sockaddr_in*)lsa)->sin_port);
+	break;
+    case AF_INET6:
+	port = ntohs(((struct sockaddr_in6*)lsa)->sin6_port);
+	break;
+    default:
+	port = -1;
+    }
 }
 
 size_t RGWCivetWeb::read_data(char *buf, size_t len)
@@ -110,14 +120,12 @@ void RGWCivetWeb::init_env(CephContext *cct)
     env.set("REMOTE_USER", info->remote_user);
   }
 
+  if (port <= 0)
+    lderr(cct) << "init_env: bug: invalid port number" << dendl;
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", port);
   env.set("SERVER_PORT", port_buf);
-
   if (info->is_ssl) {
-    if (port == 0) {
-      strcpy(port_buf,"443");
-    }
     env.set("SERVER_PORT_SECURE", port_buf);
   }
 }

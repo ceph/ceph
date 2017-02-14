@@ -99,13 +99,13 @@ struct failure_info_t {
     }
   }
 
-  void cancel_report(int who) {
+  MonOpRequestRef cancel_report(int who) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end())
-      return;
+      return MonOpRequestRef();
+    MonOpRequestRef ret = p->second.op;
     reporters.erase(p);
-    if (reporters.empty())
-      max_failed_since = utime_t();
+    return ret;
   }
 };
 
@@ -131,10 +131,8 @@ private:
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(utime_t now, int target_osd);
 
-  // map thrashing
-  int thrash_map;
-  int thrash_last_up_osd;
-  bool thrash();
+  // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
+  utime_t last_attempted_minwait_time;
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
@@ -411,7 +409,6 @@ private:
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
 
-  int set_crash_replay_interval(const int64_t pool_id, const uint32_t cri);
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 

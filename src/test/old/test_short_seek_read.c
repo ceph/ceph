@@ -50,10 +50,10 @@ int main(int argc, char **argv)
       so = o + 4096*((rand() % range) );//- range/2);
       //cout << o << " " << so << " " << (so-o) << endl;
 
-      utime_t start = ceph_clock_now(g_ceph_context);
+      utime_t start = ceph_clock_now();
       lseek64(fd, so, SEEK_SET);
       r = ::read(fd, buf, blocks*4096);
-      utime_t end = ceph_clock_now(g_ceph_context);
+      utime_t end = ceph_clock_now();
       timeper += (end-start);
     }
     

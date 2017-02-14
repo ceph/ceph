@@ -51,6 +51,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/xlist.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
@@ -282,6 +283,7 @@ private:
           break;
         default:
 	  derr << *pctx << ": invalid request command" << dendl;
+          c->release();
           return;
       }
     }

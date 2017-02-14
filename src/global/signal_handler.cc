@@ -31,6 +31,8 @@
 extern char *sys_siglist[]; 
 #endif 
 
+#define dout_context g_ceph_context
+
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;
@@ -109,17 +111,19 @@ static void handle_fatal_signal(int signum)
   dout_emergency(buf);
   pidfile_remove();
 
+  // TODO: don't use an ostringstream here. It could call malloc(), which we
+  // don't want inside a signal handler.
+  // Also fix the backtrace code not to allocate memory.
+  BackTrace bt(0);
+  ostringstream oss;
+  bt.print(oss);
+  dout_emergency(oss.str());
+
   // avoid recursion back into logging code if that is where
   // we got the SEGV.
-  if (!g_ceph_context->_log->is_inside_log_lock()) {
-    // TODO: don't use an ostringstream here. It could call malloc(), which we
-    // don't want inside a signal handler.
-    // Also fix the backtrace code not to allocate memory.
-    BackTrace bt(0);
-    ostringstream oss;
-    bt.print(oss);
-    dout_emergency(oss.str());
-
+  if (g_ceph_context &&
+      g_ceph_context->_log &&
+      !g_ceph_context->_log->is_inside_log_lock()) {
     // dump to log.  this uses the heap extensively, but we're better
     // off trying than not.
     derr << buf << std::endl;

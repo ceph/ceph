@@ -1,14 +1,34 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+ceph (12.0.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Wed, 08 Feb 2017 13:57:30 +0000
+=======
+=======
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 ceph (11.2.0-1) stable; urgency=medium
 
   * New upstream release
 
  -- Ceph Release Team <ceph-maintainers@ceph.com>  Thu, 19 Jan 2017 13:07:31 +0000
 
+<<<<<<< HEAD
+>>>>>>> 11.2.0
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 ceph (11.1.1-1) stable; urgency=medium
 
   * New upstream release
 
  -- Ceph Release Team <ceph-maintainers@ceph.com>  Thu, 22 Dec 2016 20:12:35 +0000
+<<<<<<< HEAD
+>>>>>>> 11.1.1
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
 ceph (11.1.0-1) stable; urgency=medium
 

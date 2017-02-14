@@ -26,6 +26,7 @@
 
 #include "PrimaryLogPG.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
@@ -196,8 +197,7 @@ ECBackend::ECBackend(
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll, ch),
-    cct(cct),
+  : PGBackend(cct, pg, store, coll, ch),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   assert((ec_impl->get_data_chunk_count() *
@@ -1445,9 +1445,6 @@ int ECBackend::get_min_avail_to_read_shards(
   // Make sure we don't do redundant reads for recovery
   assert(!for_recovery || !do_redundant_reads);
 
-  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
-    get_parent()->get_missing_loc_shards().find(hoid);
-
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
 
@@ -1485,6 +1482,8 @@ int ECBackend::get_min_avail_to_read_shards(
       }
     }
 
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
+      get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
       for (set<pg_shard_t>::iterator i = miter->second.begin();
 	   i != miter->second.end();
@@ -1884,7 +1883,8 @@ bool ECBackend::try_reads_to_commit()
 
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
   ObjectStore::Transaction empty;
-
+  bool should_write_local = false;
+  ECSubWrite local_write_op;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_actingbackfill_shards().begin();
        i != get_parent()->get_actingbackfill_shards().end();
@@ -1895,7 +1895,7 @@ bool ECBackend::try_reads_to_commit()
       trans.find(i->shard);
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
-    pg_stat_t stats =
+    const pg_stat_t &stats =
       should_send ?
       get_info().stats :
       parent->get_shard_info().find(*i)->second.stats;
@@ -1916,12 +1916,8 @@ bool ECBackend::try_reads_to_commit()
       op->temp_cleared,
       !should_send);
     if (*i == get_parent()->whoami_shard()) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	sop,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+      should_write_local = true;
+      local_write_op.claim(sop);
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
@@ -1929,6 +1925,14 @@ bool ECBackend::try_reads_to_commit()
       get_parent()->send_message_osd_cluster(
 	i->osd, r, get_parent()->get_epoch());
     }
+  }
+  if (should_write_local) {
+      handle_sub_write(
+	get_parent()->whoami_shard(),
+	op->client_op,
+	local_write_op,
+	op->on_local_applied_sync);
+      op->on_local_applied_sync = 0;
   }
 
   for (auto i = op->on_write.begin();

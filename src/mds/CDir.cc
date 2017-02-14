@@ -37,6 +37,7 @@
 #include "include/assert.h"
 #include "include/compat.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
@@ -171,7 +172,7 @@ void CDir::print(ostream& out)
 
 ostream& CDir::print_db_line_prefix(ostream& out) 
 {
-  return out << ceph_clock_now(g_ceph_context) << " mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
+  return out << ceph_clock_now() << " mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
 }
 
 
@@ -189,10 +190,10 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   num_dirty(0), committing_version(0), committed_version(0),
   dir_auth_pins(0), request_pins(0),
   dir_rep(REP_NONE),
-  pop_me(ceph_clock_now(g_ceph_context)),
-  pop_nested(ceph_clock_now(g_ceph_context)),
-  pop_auth_subtree(ceph_clock_now(g_ceph_context)),
-  pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
+  pop_me(ceph_clock_now()),
+  pop_nested(ceph_clock_now()),
+  pop_auth_subtree(ceph_clock_now()),
+  pop_auth_subtree_nested(ceph_clock_now()),
   num_dentries_nested(0), num_dentries_auth_subtree(0),
   num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
@@ -1514,7 +1515,8 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   if (keys.empty()) {
     assert(!c);
-    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->ret2);
+#warning use the pmore arg
+    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, nullptr, &fin->ret2);
   } else {
     assert(c);
     std::set<std::string> str_keys;
@@ -1686,7 +1688,7 @@ CDentry *CDir::_load_dentry(
         }
 
         //in->hack_accessed = false;
-        //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
+        //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
@@ -2073,8 +2075,8 @@ void CDir::_omap_commit(int op_prio)
 	op.omap_rm_keys(to_remove);
 
       cache->mds->objecter->mutate(oid, oloc, op, snapc,
-				   ceph::real_clock::now(g_ceph_context),
-				   0, NULL, gather.new_sub());
+				   ceph::real_clock::now(),
+				   0, gather.new_sub());
 
       write_size = 0;
       to_set.clear();
@@ -2107,8 +2109,8 @@ void CDir::_omap_commit(int op_prio)
     op.omap_rm_keys(to_remove);
 
   cache->mds->objecter->mutate(oid, oloc, op, snapc,
-			       ceph::real_clock::now(g_ceph_context),
-			       0, NULL, gather.new_sub());
+			       ceph::real_clock::now(),
+			       0, gather.new_sub());
 
   gather.activate();
 }
@@ -2940,7 +2942,7 @@ void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
   assert(scrub_infop && !scrub_infop->directory_scrubbing);
 
   scrub_infop->recursive_start.version = get_projected_version();
-  scrub_infop->recursive_start.time = ceph_clock_now(g_ceph_context);
+  scrub_infop->recursive_start.time = ceph_clock_now();
 
   scrub_infop->directories_to_scrub.clear();
   scrub_infop->directories_scrubbing.clear();
@@ -3118,7 +3120,7 @@ bool CDir::scrub_local()
 
   scrub_info();
   if (rval) {
-    scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
+    scrub_infop->last_local.time = ceph_clock_now();
     scrub_infop->last_local.version = get_projected_version();
     scrub_infop->pending_scrub_error = false;
     scrub_infop->last_scrub_dirty = true;

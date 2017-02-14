@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -166,7 +166,11 @@ public:
   void expect_invalidate_cache(MockOperationImageCtx &mock_image_ctx, int r) {
     if (mock_image_ctx.object_cacher != nullptr) {
       EXPECT_CALL(mock_image_ctx, invalidate_cache(true, _))
+<<<<<<< HEAD
+                    .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
+=======
                     .WillOnce(WithArg<1>(CompleteContext(r, NULL)));
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
     }
   }
 

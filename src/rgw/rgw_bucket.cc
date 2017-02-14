@@ -25,6 +25,7 @@
 
 #include "cls/user/cls_user_types.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #define BUCKET_TAG_TIMEOUT 30
@@ -132,9 +133,8 @@ int rgw_read_user_buckets(RGWRados * store,
     if (ret < 0)
       return ret;
 
-    for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
-      RGWBucketEnt e(*q);
-      buckets.add(e);
+    for (const auto& entry : entries) {
+      buckets.add(RGWBucketEnt(user_id, entry));
       total++;
     }
 
@@ -1799,7 +1799,7 @@ int RGWDataChangesLog::list_entries(const real_time& start_time, const real_time
 
 int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
 {
-  if (shard_id > num_shards)
+  if (shard_id >= num_shards)
     return -EINVAL;
 
   string oid = oids[shard_id];
@@ -1873,7 +1873,7 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
 
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(interval, 0));
+    cond.WaitInterval(lock, utime_t(interval, 0));
     lock.Unlock();
   } while (!log->going_down());
 

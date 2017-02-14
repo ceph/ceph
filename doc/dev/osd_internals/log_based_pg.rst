@@ -9,7 +9,7 @@ Why PrimaryLogPG?
 -----------------
 
 Currently, consistency for all ceph pool types is ensured by primary
-log-based replication.  This goes for both erasure-coded and
+log-based replication. This goes for both erasure-coded and
 replicated pools.
 
 Primary log-based replication
@@ -33,7 +33,7 @@ concept of interval changes) and an increasing per-pg version number
 pg_info_t::last_update.  Furthermore, we maintain a log of "recent"
 operations extending back at least far enough to include any
 *unstable* writes (writes which have been started but not committed)
-and and objects which aren't uptodate locally (see recovery and
+and objects which aren't uptodate locally (see recovery and
 backfill).  In practice, the log will extend much further
 (osd_pg_min_log_entries when clean, osd_pg_max_log_entries when not
 clean) because it's handy for quickly performing recovery.
@@ -78,43 +78,36 @@ PGBackend
 So, the fundamental difference between replication and erasure coding
 is that replication can do destructive updates while erasure coding
 cannot.  It would be really annoying if we needed to have two entire
-implementations of PrimaryLogPG, one for each of the two, if there are
-really only a few fundamental differences:
+implementations of PrimaryLogPG, one for each of the two, if there
+are really only a few fundamental differences:
 
-  1. How reads work -- async only, requires remote reads for ec
-  2. How writes work -- either restricted to append, or must
-     write aside and do a tpc
-  3. Whether we choose the oldest or newest possible head entry
-     during peering
-  4. A bit of extra information in the log entry to enable rollback
+#. How reads work -- async only, requires remote reads for ec
+#. How writes work -- either restricted to append, or must write aside and do a
+   tpc
+#. Whether we choose the oldest or newest possible head entry during peering
+#. A bit of extra information in the log entry to enable rollback
 
 and so many similarities
 
-  1. All of the stats and metadata for objects
-  2. The high level locking rules for mixing client IO with recovery
-     and scrub
-  3. The high level locking rules for mixing reads and writes without
-     exposing uncommitted state (which might be rolled back or
-     forgotten later)
-  4. The process, metadata, and protocol needed to determine the set
-     of osds which partcipated in the most recent interval in which we
-     accepted writes
-  5. etc.
+#. All of the stats and metadata for objects
+#. The high level locking rules for mixing client IO with recovery and scrub
+#. The high level locking rules for mixing reads and writes without exposing
+   uncommitted state (which might be rolled back or forgotten later)
+#. The process, metadata, and protocol needed to determine the set of osds
+   which partcipated in the most recent interval in which we accepted writes
+#. etc.
 
-Instead, we choose a few abstractions (and a few kludges) to paper
-over the difference:
+Instead, we choose a few abstractions (and a few kludges) to paper over the differences:
 
-  1. PGBackend
-  2. PGTransaction
-  2. PG::choose_acting chooses between calc_replicated_acting and
-     calc_ec_acting
-  3. Various bits of the write pipeline disallow some operations based
-     on pool type -- like omap operations, class operation reads, and
-		 writes which are not aligned appends (officially, so far)
-     for ec
-  4. Misc other kludges here and there
+#. PGBackend
+#. PGTransaction
+#. PG::choose_acting chooses between calc_replicated_acting and calc_ec_acting
+#. Various bits of the write pipeline disallow some operations based on pool
+   type -- like omap operations, class operation reads, and writes which are
+   not aligned appends (officially, so far) for ec
+#. Misc other kludges here and there
 
-PGBackend and PGTransaction enables abstraction of differences 1, 2,
+PGBackend and PGTransaction enable abstraction of differences 1, 2,
 and the addition of 4 as needed to the log entries.
 
 The replicated implementation is in ReplicatedBackend.h/cc and doesn't
@@ -139,9 +132,8 @@ changes the rules for when peering has enough logs to prove that it
 
 Core Changes:
 
-- PGBackend needs to be able to return
-	IsPG(Recoverable|Readable)Predicate objects to allow the user
-	to make these determinations.
+- | PGBackend needs to be able to return IsPG(Recoverable|Readable)Predicate
+  | objects to allow the user to make these determinations.
 
 Client Reads
 ------------
@@ -163,9 +155,9 @@ Scrub
 
 We currently have two scrub modes with different default frequencies:
 
-1. [shallow] scrub: compares the set of objects and metadata, but not
+#. [shallow] scrub: compares the set of objects and metadata, but not
    the contents
-2. deep scrub: compares the set of objects, metadata, and a crc32 of
+#. deep scrub: compares the set of objects, metadata, and a crc32 of
    the object contents (including omap)
 
 The primary requests a scrubmap from each replica for a particular

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -643,4 +643,41 @@ TEST_F(TestMirroring, MirrorStatusList) {
   images.clear();
   ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 4096, &images));
   ASSERT_EQ(0U, images.size());
+}
+
+TEST_F(TestMirroring, RemoveBootstrapped)
+{
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+
+  uint64_t features = RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
+  int order = 20;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
+                             &order));
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
+  ASSERT_EQ(-EBUSY, m_rbd.remove(m_ioctx, image_name.c_str()));
+
+  // simulate the image is open by rbd-mirror bootstrap
+  uint64_t handle;
+  struct MirrorWatcher : public librados::WatchCtx2 {
+    MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
+    }
+    virtual void handle_notify(uint64_t notify_id, uint64_t cookie,
+                               uint64_t notifier_id, bufferlist& bl) {
+      // received IMAGE_UPDATED notification from remove
+      m_notified = true;
+      m_ioctx.notify_ack(RBD_MIRRORING, notify_id, cookie, bl);
+    }
+    virtual void handle_error(uint64_t cookie, int err) {
+    }
+    librados::IoCtx &m_ioctx;
+    bool m_notified = false;
+  } watcher(m_ioctx);
+  ASSERT_EQ(0, m_ioctx.create(RBD_MIRRORING, false));
+  ASSERT_EQ(0, m_ioctx.watch2(RBD_MIRRORING, &handle, &watcher));
+  // now remove should succeed
+  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  ASSERT_EQ(0, m_ioctx.unwatch2(handle));
+  ASSERT_TRUE(watcher.m_notified);
+  ASSERT_EQ(0, image.close());
 }

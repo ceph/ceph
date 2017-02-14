@@ -70,6 +70,7 @@ protected:
   string path;
 
 public:
+  CephContext* cct;
   /**
    * create - create an ObjectStore instance.
    *
@@ -126,6 +127,7 @@ public:
    * created in ...::queue_transaction(s)
    */
   struct Sequencer_impl : public RefCountedObject {
+    CephContext* cct;
     virtual void flush() = 0;
 
     /**
@@ -143,7 +145,7 @@ public:
       Context *c ///< [in] context to call upon flush/commit
       ) = 0; ///< @return true if idle, false otherwise
 
-    Sequencer_impl() : RefCountedObject(NULL, 0) {}
+    Sequencer_impl(CephContext* cct) : RefCountedObject(NULL, 0), cct(cct)  {}
     virtual ~Sequencer_impl() {}
   };
   typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
@@ -1484,12 +1486,14 @@ public:
   }
 
  public:
-  explicit ObjectStore(const std::string& path_) : path(path_), logger(NULL) {}
+  ObjectStore(CephContext* cct,
+	      const std::string& path_) : path(path_), cct(cct),
+					  logger(nullptr) {}
   virtual ~ObjectStore() {}
 
   // no copying
-  explicit ObjectStore(const ObjectStore& o);
-  const ObjectStore& operator=(const ObjectStore& o);
+  explicit ObjectStore(const ObjectStore& o) = delete;
+  const ObjectStore& operator=(const ObjectStore& o) = delete;
 
   // versioning
   virtual int upgrade() {
@@ -1497,6 +1501,8 @@ public:
   }
 
   virtual void get_db_statistics(Formatter *f) { }
+  virtual void generate_db_histogram(Formatter *f) { }
+  virtual void dump_perf_counters(Formatter *f) {}
 
   virtual string get_type() = 0;
 

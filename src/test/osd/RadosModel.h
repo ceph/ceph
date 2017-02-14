@@ -1286,9 +1286,10 @@ public:
     }
     if (!context->no_omap) {
       op.omap_get_vals_by_keys(omap_requested_keys, &omap_returned_values, 0);
-
-      op.omap_get_keys("", -1, &omap_keys, 0);
-      op.omap_get_vals("", -1, &omap, 0);
+      // NOTE: we're ignore pmore here, which assumes the OSD limit is high
+      // enough for us.
+      op.omap_get_keys2("", -1, &omap_keys, nullptr, nullptr);
+      op.omap_get_vals2("", -1, &omap, nullptr, nullptr);
       op.omap_get_header(&header, 0);
     }
     op.getxattrs(&xattrs, 0);

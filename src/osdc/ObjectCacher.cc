@@ -1027,7 +1027,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
     if (bh->snapc.seq > snapc.seq)
       snapc = bh->snapc;
     if (bh->last_write > last_write)
-      bh->last_write = bh->last_write;
+      last_write = bh->last_write;
   }
 
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
@@ -1234,7 +1234,7 @@ void ObjectCacher::trim()
       break;
 
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
-    assert(bh->is_clean() || bh->is_zero());
+    assert(bh->is_clean() || bh->is_zero() || bh->is_error());
 
     Object *ob = bh->ob;
     bh_remove(ob, bh);
@@ -1850,7 +1850,7 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
-    flusher_cond.WaitInterval(cct, lock, seconds(1));
+    flusher_cond.WaitInterval(lock, seconds(1));
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -2552,7 +2552,7 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
   }
 
   if (s != BufferHead::STATE_ERROR &&
-      bh->get_state() == BufferHead::STATE_ERROR) {
+      state == BufferHead::STATE_ERROR) {
     bh->error = 0;
   }
 

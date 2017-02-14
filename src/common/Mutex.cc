@@ -97,7 +97,7 @@ void Mutex::Lock(bool no_lockdep) {
   if (logger && cct && cct->_conf->mutex_perf_counter) {
     utime_t start;
     // instrumented mutex enabled
-    start = ceph_clock_now(cct);
+    start = ceph_clock_now();
     if (TryLock()) {
       goto out;
     }
@@ -105,7 +105,7 @@ void Mutex::Lock(bool no_lockdep) {
     r = pthread_mutex_lock(&_m);
 
     logger->tinc(l_mutex_wait,
-		 ceph_clock_now(cct) - start);
+		 ceph_clock_now() - start);
   } else {
     r = pthread_mutex_lock(&_m);
   }

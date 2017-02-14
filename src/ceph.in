@@ -257,6 +257,21 @@ def do_basic_help(parser, args):
     """
     hdr('General usage:')
     parser.print_help()
+    print_locally_handled_command_help()
+
+def print_locally_handled_command_help():
+    hdr("Local commands:")
+    print("""
+ping <mon.id>           Send simple presence/life test to a mon
+                        <mon.id> may be 'mon.*' for all mons
+daemon {type.id|path} <cmd>
+                        Same as --admin-daemon, but auto-find admin socket
+daemonperf {type.id | path} [<interval>] [<count>]
+                        Get selected perf stats from daemon/admin socket
+                        Run <count> times (default forever),
+                        once per <interval> seconds (default 1)
+    """, file=sys.stdout)
+
 
 def do_extended_help(parser, args):
     def help_for_sigs(sigs, partial=None):
@@ -541,7 +556,10 @@ def ping_monitor(cluster_handle, name, timeout):
         run_in_thread(cluster_handle.connect, timeout=timeout)
         for m in monids() :
             s = run_in_thread(cluster_handle.ping_monitor, m)
-            print("mon.{0}".format(m) + '\n' + s)
+            if s is None:
+                print("mon.{0}".format(m) + '\n' + "Error connecting to monitor.")
+            else:
+                print("mon.{0}".format(m) + '\n' + s)
     else :
             s = run_in_thread(cluster_handle.ping_monitor, mon_id)
             print(s)

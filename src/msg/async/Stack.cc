@@ -68,6 +68,9 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
     return std::make_shared<DPDKStack>(c, t);
 #endif
 
+  lderr(c) << __func__ << " ms_async_transport_type " << t <<
+    " is not supported! " << dendl;
+  ceph_abort();
   return nullptr;
 }
 
@@ -83,6 +86,10 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
   else if (type == "dpdk")
     return new DPDKWorker(c, i);
 #endif
+
+  lderr(c) << __func__ << " ms_async_transport_type " << type <<
+    " is not supported! " << dendl;
+  ceph_abort();
   return nullptr;
 }
 
@@ -100,7 +107,7 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
 
   for (unsigned i = 0; i < num_workers; ++i) {
     Worker *w = create_worker(cct, type, i);
-    w->center.init(InitEventNumber, i);
+    w->center.init(InitEventNumber, i, type);
     workers.push_back(w);
   }
   cct->register_fork_watcher(this);
@@ -167,7 +174,7 @@ void NetworkStack::stop()
 class C_drain : public EventCallback {
   Mutex drain_lock;
   Cond drain_cond;
-  std::atomic<unsigned> drain_count;
+  unsigned drain_count;
 
  public:
   explicit C_drain(size_t c)
@@ -176,11 +183,11 @@ class C_drain : public EventCallback {
   void do_request(int id) {
     Mutex::Locker l(drain_lock);
     drain_count--;
-    drain_cond.Signal();
+    if (drain_count == 0) drain_cond.Signal();
   }
   void wait() {
     Mutex::Locker l(drain_lock);
-    while (drain_count.load())
+    while (drain_count)
       drain_cond.Wait(drain_lock);
   }
 };

@@ -464,7 +464,7 @@ TEST_F(LibRadosMiscPP, Tmap2OmapPP) {
     map<string, bufferlist> m;
     ObjectReadOperation o;
     o.omap_get_header(&got, NULL);
-    o.omap_get_vals("", 1024, &m, NULL);
+    o.omap_get_vals2("", 1024, &m, nullptr, nullptr);
     ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
 
     // compare header
@@ -651,36 +651,12 @@ TEST_F(LibRadosMiscPP, AioOperatePP) {
   ASSERT_EQ(0, ioctx.aio_operate("foo", my_completion, &o));
   ASSERT_EQ(0, my_completion->wait_for_complete_and_cb());
   ASSERT_EQ(my_aio_complete, true);
+  my_completion->release();
 
   uint64_t size;
   time_t mtime;
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
   ASSERT_EQ(1024U, size);
-}
-
-TEST_F(LibRadosMiscPP, CloneRangePP) {
-  char buf[64];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
-  ioctx.locator_set_key("foo");
-  ASSERT_EQ(0, ioctx.clone_range("bar", 0, "foo", 0, sizeof(buf)));
-  bufferlist bl2;
-  ASSERT_EQ(sizeof(buf), (size_t)ioctx.read("bar", bl2, sizeof(buf), 0));
-  ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-}
-
-TEST_F(LibRadosMisc, CloneRange) {
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ(0, rados_write(ioctx, "src", buf, sizeof(buf), 0));
-  rados_ioctx_locator_set_key(ioctx, "src");
-  ASSERT_EQ(0, rados_clone_range(ioctx, "dst", 0, "src", 0, sizeof(buf)));
-  char buf2[sizeof(buf)];
-  memset(buf2, 0, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "dst", buf2, sizeof(buf2), 0));
-  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
 }
 
 TEST_F(LibRadosMiscPP, AssertExistsPP) {

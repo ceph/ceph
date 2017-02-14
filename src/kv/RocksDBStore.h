@@ -150,6 +150,7 @@ public:
 
   void close();
 
+  void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f);
 
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
@@ -254,9 +255,18 @@ public:
       const string &prefix,
       const string &k,
       const bufferlist &bl) override;
+    void set(
+      const string &prefix,
+      const char *k,
+      size_t keylen,
+      const bufferlist &bl) override;
     void rmkey(
       const string &prefix,
       const string &k) override;
+    void rmkey(
+      const string &prefix,
+      const char *k,
+      size_t keylen) override;
     void rm_single_key(
       const string &prefix,
       const string &k) override;
@@ -279,12 +289,18 @@ public:
     const string &prefix,
     const std::set<string> &key,
     std::map<string, bufferlist> *out
-    );
+    ) override;
   int get(
     const string &prefix,
     const string &key,
     bufferlist *out
-    );
+    ) override;
+  int get(
+    const string &prefix,
+    const char *key,
+    size_t keylen,
+    bufferlist *out) override;
+
 
   class RocksDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
@@ -311,12 +327,34 @@ public:
     bufferlist value();
     bufferptr value_as_ptr();
     int status();
+    size_t key_size() override;
+    size_t value_size() override;
   };
 
   /// Utility
-  static string combine_strings(const string &prefix, const string &value);
+  static string combine_strings(const string &prefix, const string &value) {
+    string out = prefix;
+    out.push_back(0);
+    out.append(value);
+    return out;
+  }
+  static void combine_strings(const string &prefix,
+			      const char *key, size_t keylen,
+			      string *out) {
+    out->reserve(prefix.size() + 1 + keylen);
+    *out = prefix;
+    out->push_back(0);
+    out->append(key, keylen);
+  }
+
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
-  static bufferlist to_bufferlist(rocksdb::Slice in);
+
+  static bufferlist to_bufferlist(rocksdb::Slice in) {
+    bufferlist bl;
+    bl.append(bufferptr(in.data(), in.size()));
+    return bl;
+  }
+
   static string past_prefix(const string &prefix);
 
   class MergeOperatorRouter;

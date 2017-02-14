@@ -181,6 +181,7 @@ public:
   void finish_decode() { }
 
   virtual void encode_payload(uint64_t features) {
+    header.version = HEAD_VERSION;
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/rados/librados.hpp"
@@ -13,6 +13,7 @@ extern void register_test_pool_watcher();
 extern void register_test_rbd_mirror();
 extern void register_test_rbd_mirror_image_deleter();
 extern void register_test_image_sync();
+extern void register_test_leader_watcher();
 
 int main(int argc, char **argv)
 {
@@ -21,6 +22,7 @@ int main(int argc, char **argv)
   register_test_rbd_mirror();
   register_test_rbd_mirror_image_deleter();
   register_test_image_sync();
+  register_test_leader_watcher();
 
   ::testing::InitGoogleTest(&argc, argv);
 

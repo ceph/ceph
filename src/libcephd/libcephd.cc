@@ -7,6 +7,7 @@
 #include "common/PluginRegistry.h"
 #include "compressor/snappy/CompressionPluginSnappy.h"
 #include "compressor/zlib/CompressionPluginZlib.h"
+#include "compressor/zstd/CompressionPluginZstd.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
 #include "erasure-code/isa/ErasureCodePluginIsa.h"
@@ -168,6 +169,13 @@ void cephd_preload_embedded_plugins()
       delete plugin;
     }
     assert(r == 0);
+
+    plugin = new CompressionPluginZstd(g_ceph_context);
+    r = reg->add("compressor", "zstd", plugin);
+    if (r == -EEXIST) {
+      delete plugin;
+    }
+    assert(r == 0);
   }
 }
 
@@ -223,6 +231,9 @@ void cephd_preload_rados_classes(OSD *osd)
 
 extern "C" int cephd_mon(int argc, const char **argv);
 extern "C" int cephd_osd(int argc, const char **argv);
+extern "C" int cephd_mds(int argc, const char **argv);
+extern "C" int cephd_rgw(int argc, const char **argv);
+extern "C" int cephd_rgw_admin(int argc, const char **argv);
 
 int cephd_run_mon(int argc, const char **argv)
 {
@@ -232,4 +243,20 @@ int cephd_run_mon(int argc, const char **argv)
 int cephd_run_osd(int argc, const char **argv)
 {
     return cephd_osd(argc, argv);
+}
+
+int cephd_run_mds(int argc, const char **argv)
+{
+    return cephd_mds(argc, argv);
+}
+
+
+int cephd_run_rgw(int argc, const char **argv)
+{
+    return cephd_rgw(argc, argv);
+}
+
+int cephd_run_rgw_admin(int argc, const char **argv)
+{
+    return cephd_rgw_admin(argc, argv);
 }

@@ -92,8 +92,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   std::string sss(ss.str());
   g_ceph_context->_conf->set_val("public_addr", sss.c_str());
   g_ceph_context->_conf->apply_changes(NULL);
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
   Messenger *rank = Messenger::create(g_ceph_context,
-				      g_conf->ms_type,
+				      public_msgr_type,
 				      entity_name_t::MON(whoami), "tester",
 				      getpid());
   int err = rank->bind(g_ceph_context->_conf->public_addr);

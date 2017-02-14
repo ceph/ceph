@@ -197,7 +197,7 @@ void LogChannel::update_config(map<string,string> &log_to_monitors,
   set_log_prio(prio);
 
   if (to_graylog && !graylog) { /* should but isn't */
-    graylog = ceph::logging::Graylog::Ref(new ceph::logging::Graylog("clog"));
+    graylog = std::make_shared<ceph::logging::Graylog>("clog");
   } else if (!to_graylog && graylog) { /* shouldn't but is */
     graylog.reset();
   }
@@ -238,7 +238,7 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   int lvl = (prio == CLOG_ERROR ? -1 : 0);
   ldout(cct,lvl) << "log " << prio << " : " << s << dendl;
   LogEntry e;
-  e.stamp = ceph_clock_now(cct);
+  e.stamp = ceph_clock_now();
   // seq and who should be set for syslog/graylog/log_to_mon
   e.who = parent->get_myinst();
   e.seq = parent->get_next_seq();

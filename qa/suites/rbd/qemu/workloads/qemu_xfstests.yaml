@@ -3,6 +3,10 @@ tasks:
     all:
       clone: true
       type: block
+<<<<<<< HEAD
+      disks: 3
+=======
       num_rbd: 2
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
       test: http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=qa/run_xfstests_qemu.sh
 exclude_arch: armv7l

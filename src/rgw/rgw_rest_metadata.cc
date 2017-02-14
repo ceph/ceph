@@ -22,6 +22,7 @@
 #include "common/strtol.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 const string RGWOp_Metadata_Get::name() {

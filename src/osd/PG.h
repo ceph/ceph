@@ -34,6 +34,7 @@
 #include "osd_types.h"
 #include "include/xlist.h"
 #include "SnapMapper.h"
+#include "Session.h"
 
 #include "PGLog.h"
 #include "OSDMap.h"
@@ -163,6 +164,7 @@ class PGRecoveryStats {
 };
 
 struct PGPool {
+  CephContext* cct;
   epoch_t cached_epoch;
   int64_t id;
   string name;
@@ -174,8 +176,9 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(OSDMapRef map, int64_t i)
-    : cached_epoch(map->get_epoch()),
+  PGPool(CephContext* cct, OSDMapRef map, int64_t i)
+    : cct(cct),
+      cached_epoch(map->get_epoch()),
       id(i),
       name(map->get_pool_name(id)),
       auid(map->get_pg_pool(id)->auid) {
@@ -374,6 +377,16 @@ public:
       return ret;
     }
 
+    bool have_unfound() const {
+      for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i =
+	     needs_recovery_map.begin();
+	   i != needs_recovery_map.end();
+	   ++i) {
+	if (is_unfound(i->first))
+	  return true;
+      }
+      return false;
+    }
     void clear() {
       needs_recovery_map.clear();
       missing_loc.clear();
@@ -423,12 +436,6 @@ public:
       const set<pg_shard_t> &sources,  ///< [in] a set of resources which can be used for all objects
       ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       );
-
-    /// Returns version needed
-    eversion_t get_version_needed(const hobject_t &hoid) const {
-      assert(needs_recovery_map.count(hoid));
-      return needs_recovery_map.at(hoid).need;
-    }
 
     /// Uses osdmap to update structures for now down sources
     void check_recovery_sources(const OSDMapRef& osdmap);
@@ -515,8 +522,6 @@ public:
   set<hobject_t, hobject_t::BitwiseComparator> recovering_oids;
 #endif
 
-  utime_t replay_until;
-
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   unsigned    state;   // PG_STATE_*
@@ -563,6 +568,7 @@ public:
   // [primary only] content recovery state
  protected:
   struct PriorSet {
+    CephContext* cct;
     const bool ec_pool;
     set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
     set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
@@ -570,22 +576,21 @@ public:
 
     bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
     boost::scoped_ptr<IsPGRecoverablePredicate> pcontdec;
-    PriorSet(bool ec_pool,
+    PriorSet(CephContext* cct,
+	     bool ec_pool,
 	     IsPGRecoverablePredicate *c,
 	     const OSDMap &osdmap,
 	     const map<epoch_t, pg_interval_t> &past_intervals,
 	     const vector<int> &up,
 	     const vector<int> &acting,
 	     const pg_info_t &info,
-	     const PG *debug_pg=NULL);
+	     const PG *debug_pg = nullptr);
 
     bool affected_by_map(const OSDMapRef osdmap, const PG *debug_pg=0) const;
   };
 
   friend std::ostream& operator<<(std::ostream& oss,
 				  const struct PriorSet &prior);
-
-  bool may_need_replay(const OSDMapRef osdmap) const;
 
 
 public:    
@@ -670,7 +675,7 @@ public:
     const char *get_state_name() { return state_name; }
     NamedState(CephContext *cct_, const char *state_name_)
       : state_name(state_name_),
-        enter_time(ceph_clock_now(cct_)) {}
+	enter_time(ceph_clock_now()) {}
     virtual ~NamedState() {}
   };
 
@@ -827,6 +832,7 @@ protected:
 
   // ops waiting on active (require peered as well)
   list<OpRequestRef>            waiting_for_active;
+  list<OpRequestRef>            waiting_for_scrub;
 
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
@@ -850,9 +856,8 @@ protected:
   map<hobject_t, list<Context*>, hobject_t::BitwiseComparator> callbacks_for_degraded_object;
 
   map<eversion_t,
-      list<pair<OpRequestRef, version_t> > > waiting_for_ack, waiting_for_ondisk;
+      list<pair<OpRequestRef, version_t> > > waiting_for_ondisk;
 
-  map<eversion_t,OpRequestRef>   replay_queue;
   void split_ops(PG *child, unsigned split_bits);
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>& m);
@@ -1028,7 +1033,6 @@ public:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool *history_les_bound);
   void build_might_have_unfound();
-  void replay_queued_ops();
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
@@ -1043,7 +1047,7 @@ public:
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
-    return missing_loc.num_unfound() > 0;
+    return missing_loc.have_unfound();
   }
   int get_num_unfound() const {
     return missing_loc.num_unfound();
@@ -1080,6 +1084,30 @@ public:
 
   friend class C_OSD_RepModify_Commit;
 
+  // -- backoff --
+  Mutex backoff_lock;  // orders inside Backoff::lock
+  map<hobject_t,set<BackoffRef>,hobject_t::BitwiseComparator> backoffs;
+
+  void add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end);
+  void release_backoffs(const hobject_t& begin, const hobject_t& end);
+  void release_backoffs(const hobject_t& o) {
+    release_backoffs(o, o);
+  }
+  void clear_backoffs();
+  void split_backoffs(PG *child, unsigned split_bits);
+
+  void add_pg_backoff(SessionRef s) {
+    hobject_t begin = info.pgid.pgid.get_hobj_start();
+    hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+    add_backoff(s, begin, end);
+  }
+  void release_pg_backoffs() {
+    hobject_t begin = info.pgid.pgid.get_hobj_start();
+    hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+    release_backoffs(begin, end);
+  }
+
+  void rm_backoff(BackoffRef b);
 
   // -- scrub --
   struct Scrubber {
@@ -2164,7 +2192,7 @@ public:
   bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
-  bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
+  bool       is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
@@ -2201,6 +2229,7 @@ private:
 
 public:
   static int _prepare_write_info(
+    CephContext* cct,
     map<string,bufferlist> *km,
     epoch_t epoch,
     pg_info_t &info,
@@ -2209,13 +2238,13 @@ public:
     bool dirty_big_info,
     bool dirty_epoch,
     bool try_fast_info,
-    PerfCounters *logger = NULL);
+    PerfCounters *logger = nullptr);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   PGLog::IndexedLog projected_log;
   bool check_in_progress_op(
     const osd_reqid_t &r,
-    eversion_t *replay_version,
+    eversion_t *version,
     version_t *user_version,
     int *return_code) const;
   eversion_t projected_last_update;

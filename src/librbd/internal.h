@@ -107,7 +107,8 @@ namespace librbd {
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     ImageOptions& opts,
              const std::string &non_primary_global_image_id,
-             const std::string &primary_mirror_uuid);
+             const std::string &primary_mirror_uuid,
+             bool skip_mirror_enable);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
@@ -143,6 +144,7 @@ namespace librbd {
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
   int snap_set_limit(ImageCtx *ictx, uint64_t limit);
+  int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp);
   int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
   int get_snap_namespace(ImageCtx *ictx,
 			 const char *snap_name,

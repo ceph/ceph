@@ -203,18 +203,18 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << dendl;
 
-    Context *ctx = util::create_context_callback<
-      C_InvokeAsyncRequest<I>,
-      &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
-        this);
+    Context *ctx = util::create_async_context_callback(
+      image_ctx, util::create_context_callback<
+        C_InvokeAsyncRequest<I>,
+        &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(this));
 
     if (request_lock) {
       // current lock owner doesn't support op -- try to perform
       // the action locally
       request_lock = false;
-      image_ctx.exclusive_lock->request_lock(ctx);
+      image_ctx.exclusive_lock->acquire_lock(ctx);
     } else {
-      image_ctx.exclusive_lock->try_lock(ctx);
+      image_ctx.exclusive_lock->try_acquire_lock(ctx);
     }
     owner_lock.put_read();
   }
@@ -578,6 +578,9 @@ void Operations<I>::execute_rename(const std::string &dest_name,
     // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
     on_finish = new FunctionContext([this, on_finish](int r) {
+        if (m_image_ctx.old_format) {
+          m_image_ctx.image_watcher->set_oid(m_image_ctx.header_oid);
+        }
 	m_image_ctx.image_watcher->register_watch(on_finish);
       });
     on_finish = new FunctionContext([this, dest_name, on_finish](int r) {
@@ -1209,7 +1212,7 @@ int Operations<I>::snap_set_limit(uint64_t limit) {
 	!m_image_ctx.exclusive_lock->is_lock_owner()) {
       C_SaferCond lock_ctx;
 
-      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      m_image_ctx.exclusive_lock->acquire_lock(&lock_ctx);
       r = lock_ctx.wait();
       if (r < 0) {
 	return r;
@@ -1342,8 +1345,9 @@ int Operations<I>::metadata_set(const std::string &key,
   size_t conf_prefix_len = start.size();
 
   if (key.size() > conf_prefix_len && !key.compare(0, conf_prefix_len, start)) {
+    // validate config setting
     string subkey = key.substr(conf_prefix_len, key.size() - conf_prefix_len);
-    int r = cct->_conf->set_val(subkey.c_str(), value);
+    int r = md_config_t().set_val(subkey.c_str(), value);
     if (r < 0) {
       return r;
     }
@@ -1366,7 +1370,7 @@ int Operations<I>::metadata_set(const std::string &key,
 	!m_image_ctx.exclusive_lock->is_lock_owner()) {
       C_SaferCond lock_ctx;
 
-      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      m_image_ctx.exclusive_lock->acquire_lock(&lock_ctx);
       r = lock_ctx.wait();
       if (r < 0) {
 	return r;
@@ -1421,7 +1425,7 @@ int Operations<I>::metadata_remove(const std::string &key) {
         !m_image_ctx.exclusive_lock->is_lock_owner()) {
       C_SaferCond lock_ctx;
 
-      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      m_image_ctx.exclusive_lock->acquire_lock(&lock_ctx);
       r = lock_ctx.wait();
       if (r < 0) {
         return r;
@@ -1466,7 +1470,7 @@ int Operations<I>::prepare_image_update() {
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
          !m_image_ctx.exclusive_lock->accept_requests(&r))) {
-      m_image_ctx.exclusive_lock->try_lock(&ctx);
+      m_image_ctx.exclusive_lock->try_acquire_lock(&ctx);
       trying_lock = true;
     }
   }

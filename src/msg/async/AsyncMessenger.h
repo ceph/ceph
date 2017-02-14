@@ -53,7 +53,7 @@ class Processor {
   class C_processor_accept;
 
  public:
-  Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n);
+  Processor(AsyncMessenger *r, Worker *w, CephContext *c);
   ~Processor() { delete listen_handler; };
 
   void stop();
@@ -82,7 +82,7 @@ public:
    * _nonce A unique ID to use for this AsyncMessenger. It should not
    * be a value that will be repeated if the daemon restarts.
    */
-  AsyncMessenger(CephContext *cct, entity_name_t name,
+  AsyncMessenger(CephContext *cct, entity_name_t name, const std::string &type,
                  string mname, uint64_t _nonce);
 
   /**
@@ -116,6 +116,7 @@ public:
 
   int bind(const entity_addr_t& bind_addr);
   int rebind(const set<int>& avoid_ports);
+  int client_bind(const entity_addr_t& bind_addr);
 
   /** @} Configuration functions */
 
@@ -223,6 +224,8 @@ private:
 
   // the worker run messenger's cron jobs
   Worker *local_worker;
+
+  std::string ms_type;
 
   /// overall lock used for AsyncMessenger data structures
   Mutex lock;

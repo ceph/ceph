@@ -23,7 +23,9 @@
 #endif
 
 #include "common/debug.h"
+#include "common/EventTrace.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev "
@@ -43,7 +45,8 @@ void IOContext::aio_wait()
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 
-BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cbpriv)
+BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
+				 aio_callback_t cb, void *cbpriv)
 {
   string type = "kernel";
   char buf[PATH_MAX + 1];
@@ -57,11 +60,11 @@ BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cb
   dout(1) << __func__ << " path " << path << " type " << type << dendl;
 
   if (type == "kernel") {
-    return new KernelDevice(cb, cbpriv);
+    return new KernelDevice(cct, cb, cbpriv);
   }
 #if defined(HAVE_SPDK)
   if (type == "ust-nvme") {
-    return new NVMEDevice(cb, cbpriv);
+    return new NVMEDevice(cct, cb, cbpriv);
   }
 #endif
 

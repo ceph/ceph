@@ -193,7 +193,7 @@ void XioConnection::send_keepalive_or_ack_internal(bool ack, const utime_t *tp)
     xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
     xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
   } else if (has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
-    utime_t t = ceph_clock_now(msgr->cct);
+    utime_t t = ceph_clock_now();
     t.encode_timeval(&ts);
     xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2);
     xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
@@ -311,7 +311,7 @@ int XioConnection::handle_data_msg(struct xio_session *session,
   ceph_msg_footer footer;
   buffer::list payload, middle, data;
 
-  const utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  const utime_t recv_stamp = ceph_clock_now();
 
   ldout(msgr->cct,4) << __func__ << " " << "msg_seq.size()="  << msg_seq.size() <<
     dendl;
@@ -452,7 +452,7 @@ int XioConnection::handle_data_msg(struct xio_session *session,
 
     /* update timestamps */
     m->set_recv_stamp(recv_stamp);
-    m->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
+    m->set_recv_complete_stamp(ceph_clock_now());
     m->set_seq(header.seq);
 
     /* MP-SAFE */
@@ -511,7 +511,7 @@ int XioConnection::on_msg(struct xio_session *session,
 
   case CEPH_MSGR_TAG_KEEPALIVE:
     ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE" << dendl;
-    set_last_keepalive(ceph_clock_now(nullptr));
+    set_last_keepalive(ceph_clock_now());
     break;
 
   case CEPH_MSGR_TAG_KEEPALIVE2:
@@ -524,7 +524,7 @@ int XioConnection::on_msg(struct xio_session *session,
       utime_t kp_t = utime_t(*t);
       ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE2 with timestamp" << kp_t << dendl;
       send_keepalive_or_ack(true, &kp_t);
-      set_last_keepalive(ceph_clock_now(nullptr));
+      set_last_keepalive(ceph_clock_now());
     }
 
     break;
@@ -855,7 +855,7 @@ int XioLoopbackConnection::send_message(Message *m)
 
 void XioLoopbackConnection::send_keepalive()
 {
-  utime_t t = ceph_clock_now(nullptr);
+  utime_t t = ceph_clock_now();
   set_last_keepalive(t);
   set_last_keepalive_ack(t);
 }

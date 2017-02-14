@@ -63,6 +63,7 @@
 
 using namespace std;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, get_name())
@@ -360,7 +361,8 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::OSD(whoami),
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
 				      ss.str().c_str(), getpid(), 0));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
@@ -449,7 +451,7 @@ class OSDStub : public TestStub
   void boot() {
     dout(1) << __func__ << " boot?" << dendl;
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     if ((last_boot_attempt > 0.0)
 	&& ((now - last_boot_attempt)) <= STUB_BOOT_INTERVAL) {
       dout(1) << __func__ << " backoff and try again later." << dendl;
@@ -465,7 +467,7 @@ class OSDStub : public TestStub
 
   void add_pg(pg_t pgid, epoch_t epoch, pg_t parent) {
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
 
     pg_stat_t s;
     s.created = epoch;
@@ -543,7 +545,7 @@ class OSDStub : public TestStub
   void send_pg_stats() {
     dout(10) << __func__
 	     << " pgs " << pgs.size() << " osdmap " << osdmap << dendl;
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     MPGStats *mstats = new MPGStats(monc.get_fsid(), osdmap.get_epoch(), now);
 
     mstats->set_tid(1);
@@ -577,7 +579,7 @@ class OSDStub : public TestStub
     assert(pgs.count(pgid) > 0);
 
     pg_stat_t &s = pgs[pgid];
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
 
     if (now - s.last_change < 10.0) {
       dout(10) << __func__
@@ -702,7 +704,7 @@ class OSDStub : public TestStub
     dout(10) << __func__
 	     << " send " << num_entries << " log messages" << dendl;
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     int seq = 0;
     for (; num_entries > 0; --num_entries) {
       LogEntry e;
@@ -900,7 +902,7 @@ class OSDStub : public TestStub
 
   bool ms_handle_reset(Connection *con) {
     dout(1) << __func__ << dendl;
-    OSD::Session *session = (OSD::Session *)con->get_priv();
+    Session *session = (Session *)con->get_priv();
     if (!session)
       return false;
     session->put();

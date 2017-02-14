@@ -39,8 +39,8 @@ protected:
     rados_omap_iter_t iter_vals, iter_keys, iter_vals_by_key;
     int r_vals, r_keys, r_vals_by_key;
     rados_read_op_t op = rados_create_read_op();
-    rados_read_op_omap_get_vals(op, NULL, NULL, 100, &iter_vals, &r_vals);
-    rados_read_op_omap_get_keys(op, NULL, 100, &iter_keys, &r_keys);
+    rados_read_op_omap_get_vals2(op, NULL, NULL, 100, &iter_vals, NULL, &r_vals);
+    rados_read_op_omap_get_keys2(op, NULL, 100, &iter_keys, NULL, &r_keys);
     rados_read_op_omap_get_vals_by_keys(op, keys, len,
 					&iter_vals_by_key, &r_vals_by_key);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
@@ -51,8 +51,8 @@ protected:
 
     const char *zeros[len];
     size_t zero_lens[len];
-    memset(zeros, 0, len);
-    memset(zero_lens, 0, len * sizeof(size_t));
+    memset(zeros, 0, sizeof(zeros));
+    memset(zero_lens, 0, sizeof(zero_lens));
     compare_omap_vals(keys, vals, lens, len, iter_vals);
     compare_omap_vals(keys, zeros, zero_lens, len, iter_keys);
     compare_omap_vals(keys, vals, lens, len, iter_vals_by_key);
@@ -159,6 +159,7 @@ TEST_F(CReadOpsTest, AssertExists) {
   ASSERT_EQ(0, rados_aio_read_op_operate(op, ioctx, completion, obj, 0));
   rados_aio_wait_for_complete(completion);
   ASSERT_EQ(-ENOENT, rados_aio_get_return_value(completion));
+  rados_aio_release(completion);
   rados_release_read_op(op);
 
   write_object();
@@ -428,6 +429,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
 			      sizeof(features) - 1, &bytes_read, &rval);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
   EXPECT_EQ(0u, bytes_read);
   EXPECT_EQ(-ERANGE, rval);
 
@@ -488,7 +490,7 @@ TEST_F(CReadOpsTest, Omap) {
   // with no omap entries
   rados_omap_iter_t iter_vals;
   rados_read_op_t rop = rados_create_read_op();
-  rados_read_op_omap_get_vals(rop, "", "", 10, &iter_vals, NULL);
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, NULL);
   ASSERT_EQ(-ENOENT, rados_read_op_operate(rop, ioctx, obj, 0));
   rados_release_read_op(rop);
   compare_omap_vals(NULL, NULL, NULL, 0, iter_vals);
@@ -508,8 +510,8 @@ TEST_F(CReadOpsTest, Omap) {
   rados_omap_iter_t iter_keys;
   int r_vals = -1, r_keys = -1;
   rop = rados_create_read_op();
-  rados_read_op_omap_get_vals(rop, "", "test", 1, &iter_vals, &r_vals);
-  rados_read_op_omap_get_keys(rop, "test", 1, &iter_keys, &r_keys);
+  rados_read_op_omap_get_vals2(rop, "", "test", 1, &iter_vals, NULL, &r_vals);
+  rados_read_op_omap_get_keys2(rop, "test", 1, &iter_keys, NULL, &r_keys);
   ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
   rados_release_read_op(rop);
   EXPECT_EQ(0, r_vals);

@@ -66,7 +66,7 @@ struct MonSession : public RefCountedObject {
     osd_epoch(0),
     auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
-    time_established = ceph_clock_now(g_ceph_context);
+    time_established = ceph_clock_now();
   }
   ~MonSession() {
     //generic_dout(0) << "~MonSession " << this << dendl;

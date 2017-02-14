@@ -8,14 +8,15 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
-Allocator *Allocator::create(string type,
+Allocator *Allocator::create(CephContext* cct, string type,
                              int64_t size, int64_t block_size)
 {
   if (type == "stupid") {
-    return new StupidAllocator;
+    return new StupidAllocator(cct);
   } else if (type == "bitmap") {
-    return new BitMapAllocator(size, block_size);
+    return new BitMapAllocator(cct, size, block_size);
   }
-  derr << "Allocator::" << __func__ << " unknown alloc type " << type << dendl;
-  return NULL;
+  lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
+	     << type << dendl;
+  return nullptr;
 }

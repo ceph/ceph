@@ -18,6 +18,7 @@
 #include "osd/PGLog.h"
 #include "RadosImport.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
 int RadosImport::import(std::string pool, bool no_overwrite)

@@ -2,8 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
-#include "OpenLocalImageRequest.h"
 #include "CloseImageRequest.h"
+#include "IsPrimaryRequest.h"
+#include "OpenLocalImageRequest.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
@@ -15,6 +16,7 @@
 #include "librbd/journal/Policy.h"
 #include <type_traits>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::OpenLocalImageRequest: " \
@@ -100,7 +102,7 @@ void OpenLocalImageRequest<I>::send_open_image() {
   Context *ctx = create_context_callback<
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_open_image>(
       this);
-  (*m_local_image_ctx)->state->open(ctx);
+  (*m_local_image_ctx)->state->open(false, ctx);
 }
 
 template <typename I>
@@ -114,39 +116,51 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
     return;
   }
 
-  send_lock_image();
+  send_is_primary();
 }
 
 template <typename I>
-void OpenLocalImageRequest<I>::send_lock_image() {
-  // deduce the class type for the journal to support unit tests
-  using Journal = typename std::decay<
-    typename std::remove_pointer<decltype(std::declval<I>().journal)>
-    ::type>::type;
-
+void OpenLocalImageRequest<I>::send_is_primary() {
   dout(20) << dendl;
 
-  RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
-  if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
-    derr << ": image does not support exclusive lock" << dendl;
-    send_close_image(false, -EINVAL);
-    return;
-  }
+  Context *ctx = create_context_callback<
+    OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_is_primary>(
+      this);
+  IsPrimaryRequest<I> *request = IsPrimaryRequest<I>::create(*m_local_image_ctx,
+                                                             &m_primary, ctx);
+  request->send();
+}
 
-  // TODO: make an async version
-  bool tag_owner;
-  int r = Journal::is_tag_owner(*m_local_image_ctx, &tag_owner);
+template <typename I>
+void OpenLocalImageRequest<I>::handle_is_primary(int r) {
+  dout(20) << ": r=" << r << dendl;
+
   if (r < 0) {
-    derr << ": failed to query journal: " << cpp_strerror(r) << dendl;
+    derr << ": error querying local image primary status: " << cpp_strerror(r)
+         << dendl;
     send_close_image(false, r);
     return;
   }
 
   // if the local image owns the tag -- don't steal the lock since
   // we aren't going to mirror peer data into this image anyway
-  if (tag_owner) {
+  if (m_primary) {
     dout(10) << ": local image is primary -- skipping image replay" << dendl;
     send_close_image(false, -EREMOTEIO);
+    return;
+  }
+
+  send_lock_image();
+}
+
+template <typename I>
+void OpenLocalImageRequest<I>::send_lock_image() {
+  dout(20) << dendl;
+
+  RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
+  if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
+    derr << ": image does not support exclusive lock" << dendl;
+    send_close_image(false, -EINVAL);
     return;
   }
 
@@ -157,7 +171,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_lock_image>(
       this);
 
-  (*m_local_image_ctx)->exclusive_lock->request_lock(ctx);
+  (*m_local_image_ctx)->exclusive_lock->acquire_lock(ctx);
 }
 
 template <typename I>
@@ -169,11 +183,16 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
        << cpp_strerror(r) << dendl;
     send_close_image(false, r);
     return;
-  } else if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
-             !(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
-    derr << ": image is not locked" << dendl;
-    send_close_image(false, -EBUSY);
-    return;
+  }
+
+  {
+    RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
+    if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
+	!(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
+      derr << ": image is not locked" << dendl;
+      send_close_image(false, -EBUSY);
+      return;
+    }
   }
 
   finish(0);

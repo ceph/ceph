@@ -3099,6 +3099,47 @@ bool pg_interval_t::check_new_interval(
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
+  /*
+   * We have to be careful to gracefully deal with situations like
+   * so. Say we have a power outage or something that takes out both
+   * OSDs, but the monitor doesn't mark them down in the same epoch.
+   * The history may look like
+   *
+   *  1: A B
+   *  2:   B
+   *  3:       let's say B dies for good, too (say, from the power spike) 
+   *  4: A
+   *
+   * which makes it look like B may have applied updates to the PG
+   * that we need in order to proceed.  This sucks...
+   *
+   * To minimize the risk of this happening, we CANNOT go active if
+   * _any_ OSDs in the prior set are down until we send an MOSDAlive
+   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
+   * Then, we have something like
+   *
+   *  1: A B
+   *  2:   B   up_thru[B]=0
+   *  3:
+   *  4: A
+   *
+   * -> we can ignore B, bc it couldn't have gone active (up_thru still 0).
+   *
+   * or,
+   *
+   *  1: A B
+   *  2:   B   up_thru[B]=0
+   *  3:   B   up_thru[B]=2
+   *  4:
+   *  5: A    
+   *
+   * -> we must wait for B, bc it was alive through 2, and could have
+   *    written to the pg.
+   *
+   * If B is really dead, then an administrator will need to manually
+   * intervene by marking the OSD as "lost."
+   */
+
   // remember past interval
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
@@ -3140,7 +3181,7 @@ bool pg_interval_t::check_new_interval(
 	num_acting >= old_pg_pool.min_size &&
         (*could_have_gone_active)(old_acting_shards)) {
       if (out)
-	*out << "generate_past_intervals " << i
+	*out << __func__ << " " << i
 	     << ": not rw,"
 	     << " up_thru " << lastmap->get_up_thru(i.primary)
 	     << " up_from " << lastmap->get_up_from(i.primary)
@@ -3150,7 +3191,7 @@ bool pg_interval_t::check_new_interval(
 	  lastmap->get_up_from(i.primary) <= i.first) {
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " includes interval"
@@ -3166,14 +3207,14 @@ bool pg_interval_t::check_new_interval(
 	// last_epoch_clean timing.
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : includes last_epoch_clean " << last_epoch_clean
 	       << " and presumed to have been rw"
 	       << std::endl;
       } else {
 	i.maybe_went_rw = false;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " does not include interval"
@@ -3182,7 +3223,7 @@ bool pg_interval_t::check_new_interval(
     } else {
       i.maybe_went_rw = false;
       if (out)
-	*out << "generate_past_intervals " << i << " : acting set is too small" << std::endl;
+	*out << __func__ << " " << i << " : acting set is too small" << std::endl;
     }
     return true;
   } else {
@@ -5281,18 +5322,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   if (ceph_osd_op_type_data(op.op.op)) {
     // data extent
     switch (op.op.op) {
-    case CEPH_OSD_OP_STAT:
-    case CEPH_OSD_OP_DELETE:
-    case CEPH_OSD_OP_LIST_WATCHERS:
-    case CEPH_OSD_OP_LIST_SNAPS:
-    case CEPH_OSD_OP_UNDIRTY:
-    case CEPH_OSD_OP_ISDIRTY:
-    case CEPH_OSD_OP_CACHE_FLUSH:
-    case CEPH_OSD_OP_CACHE_TRY_FLUSH:
-    case CEPH_OSD_OP_CACHE_EVICT:
-    case CEPH_OSD_OP_CACHE_PIN:
-    case CEPH_OSD_OP_CACHE_UNPIN:
-      break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;
       break;
@@ -5301,7 +5330,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@"
+	  << (int64_t)op.op.extent.truncate_size;
       break;
     case CEPH_OSD_OP_ROLLBACK:
       out << " " << snapid_t(op.op.snap.snapid);
@@ -5313,6 +5343,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 	out << " gen " << op.op.watch.gen;
       break;
     case CEPH_OSD_OP_NOTIFY:
+    case CEPH_OSD_OP_NOTIFY_ACK:
       out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
@@ -5326,12 +5357,23 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " object_size " << op.op.alloc_hint.expected_object_size
           << " write_size " << op.op.alloc_hint.expected_write_size;
       break;
-    default:
+    case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_SYNC_READ:
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
+    case CEPH_OSD_OP_ZERO:
+    case CEPH_OSD_OP_APPEND:
+    case CEPH_OSD_OP_MAPEXT:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
-	out << " [" << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size << "]";
+	out << " [" << op.op.extent.truncate_seq << "@"
+	    << (int64_t)op.op.extent.truncate_size << "]";
       if (op.op.flags)
 	out << " [" << ceph_osd_op_flag_string(op.op.flags) << "]";
+    default:
+      // don't show any arg info
+      break;
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
@@ -5342,7 +5384,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     if (op.op.xattr.value_len)
       out << " (" << op.op.xattr.value_len << ")";
     if (op.op.op == CEPH_OSD_OP_CMPXATTR)
-      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
+      out << " op " << (int)op.op.xattr.cmp_op
+	  << " mode " << (int)op.op.xattr.cmp_mode;
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
     if (op.op.cls.class_len && op.indata.length()) {
@@ -5367,28 +5410,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_SCRUBLS:
       break;
     }
-  } else if (ceph_osd_op_type_multi(op.op.op)) {
-    switch (op.op.op) {
-    case CEPH_OSD_OP_CLONERANGE:
-      out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
-	  << " from " << op.soid
-	  << " offset " << op.op.clonerange.src_offset;
-      break;
-    case CEPH_OSD_OP_ASSERT_SRC_VERSION:
-      out << " v" << op.op.watch.ver
-	  << " of " << op.soid;
-      break;
-    case CEPH_OSD_OP_SRC_CMPXATTR:
-      out << " " << op.soid;
-      if (op.op.xattr.name_len && op.indata.length()) {
-	out << " ";
-	op.indata.write(0, op.op.xattr.name_len, out);
-      }
-      if (op.op.xattr.value_len)
-	out << " (" << op.op.xattr.value_len << ")";
-      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
-      break;
-    }
   }
   return out;
 }
@@ -5398,9 +5419,6 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 {
   bufferlist::iterator datap = in.begin();
   for (unsigned i = 0; i < ops.size(); i++) {
-    if (ceph_osd_op_type_multi(ops[i].op.op)) {
-      ::decode(ops[i].soid, datap);
-    }
     if (ops[i].op.payload_len) {
       datap.copy(ops[i].op.payload_len, ops[i].indata);
     }
@@ -5410,9 +5428,6 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
 {
   for (unsigned i = 0; i < ops.size(); i++) {
-    if (ceph_osd_op_type_multi(ops[i].op.op)) {
-      ::encode(ops[i].soid, out);
-    }
     if (ops[i].indata.length()) {
       ops[i].op.payload_len = ops[i].indata.length();
       out.append(ops[i].indata);

@@ -53,17 +53,12 @@ MonClient::MonClient(CephContext *cct_) :
   no_keyring_disabled_cephx(false),
   log_client(NULL),
   more_log_pending(false),
-  auth_supported(NULL),
   hunting(true),
   want_monmap(true),
   want_keys(0), global_id(0),
   authenticate_err(0),
-  session_established_context(NULL),
   had_a_connection(false),
   reopen_interval_multiplier(1.0),
-  auth(NULL),
-  keyring(NULL),
-  rotating_secrets(NULL),
   last_mon_command_tid(0),
   version_req_id(0)
 {
@@ -71,11 +66,6 @@ MonClient::MonClient(CephContext *cct_) :
 
 MonClient::~MonClient()
 {
-  delete auth_supported;
-  delete session_established_context;
-  delete auth;
-  delete keyring;
-  delete rotating_secrets;
 }
 
 int MonClient::build_initial_monmap()
@@ -135,7 +125,7 @@ int MonClient::get_monmap_privately()
 
     utime_t interval;
     interval.set_from_double(cct->_conf->mon_client_hunt_interval);
-    map_cond.WaitInterval(cct, monc_lock, interval);
+    map_cond.WaitInterval(monc_lock, interval);
 
     if (monmap.fsid.is_zero() && cur_con) {
       cur_con->mark_down();  // nope, clean that connection up
@@ -358,19 +348,19 @@ int MonClient::init()
   Mutex::Locker l(monc_lock);
 
   string method;
-    if (!cct->_conf->auth_supported.empty())
-      method = cct->_conf->auth_supported;
-    else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
-             entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-             entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
-      method = cct->_conf->auth_cluster_required;
-    else
-      method = cct->_conf->auth_client_required;
-  auth_supported = new AuthMethodList(cct, method);
+  if (!cct->_conf->auth_supported.empty())
+    method = cct->_conf->auth_supported;
+  else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
+    method = cct->_conf->auth_cluster_required;
+  else
+    method = cct->_conf->auth_client_required;
+  auth_supported.reset(new AuthMethodList(cct, method));
   ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << " method " << method << dendl;
 
   int r = 0;
-  keyring = new KeyRing; // initializing keyring anyway
+  keyring.reset(new KeyRing); // initializing keyring anyway
 
   if (auth_supported->is_supported_auth(CEPH_AUTH_CEPHX)) {
     r = keyring->from_ceph_context(cct);
@@ -389,7 +379,8 @@ int MonClient::init()
     return r;
   }
 
-  rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
+  rotating_secrets.reset(
+    new RotatingKeyRing(cct, cct->get_module_type(), keyring.get()));
 
   initialized = true;
 
@@ -448,7 +439,7 @@ int MonClient::authenticate(double timeout)
   if (cur_mon.empty())
     _reopen_session();
 
-  utime_t until = ceph_clock_now(cct);
+  utime_t until = ceph_clock_now();
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
@@ -481,8 +472,8 @@ void MonClient::handle_auth(MAuthReply *m)
   bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
-      delete auth;
-      auth = get_auth_client_handler(cct, m->protocol, rotating_secrets);
+      auth.reset(get_auth_client_handler(cct, m->protocol,
+					 rotating_secrets.get()));
       if (!auth) {
 	ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
 	if (m->result == -ENOTSUP) {
@@ -496,11 +487,10 @@ void MonClient::handle_auth(MAuthReply *m)
       }
       // do not request MGR key unless the mon has the SERVER_KRAKEN
       // feature.  otherwise it will give us an auth error.  note that
-      // we have to check for both the kraken and jewel key because
-      // pre-jewel the kraken feature bit was used for something else.
+      // we have to use the FEATUREMASK because pre-jewel the kraken
+      // feature bit was used for something else.
       if ((want_keys & CEPH_ENTITY_TYPE_MGR) &&
-	  !(m->get_connection()->has_feature(CEPH_FEATURE_SERVER_KRAKEN) &&
-	    m->get_connection()->has_feature(CEPH_FEATURE_SERVER_JEWEL))) {
+	  !(m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_KRAKEN))) {
 	ldout(cct, 1) << __func__
 		      << " not requesting MGR keys from pre-kraken monitor"
 		      << dendl;
@@ -552,8 +542,7 @@ void MonClient::handle_auth(MAuthReply *m)
 	send_log();
       }
       if (session_established_context) {
-        cb = session_established_context;
-        session_established_context = NULL;
+        cb = session_established_context.release();
       }
     }
   
@@ -723,7 +712,7 @@ void MonClient::tick()
     _reopen_session();
   } else if (!cur_mon.empty()) {
     // just renew as needed
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
       ldout(cct, 10) << "renew subs? (now: " << now
 		     << "; renew after: " << sub_renew_after << ") -- "
@@ -786,7 +775,7 @@ void MonClient::_renew_subs()
     _reopen_session();
   else {
     if (sub_renew_sent == utime_t())
-      sub_renew_sent = ceph_clock_now(cct);
+      sub_renew_sent = ceph_clock_now();
 
     MMonSubscribe *m = new MMonSubscribe;
     m->what = sub_new;
@@ -847,7 +836,7 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
   utime_t issued_at_lower_bound = now;
@@ -885,7 +874,7 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   utime_t until = now;
   until += timeout;
 
@@ -903,7 +892,7 @@ int MonClient::wait_auth_rotating(double timeout)
     }
     ldout(cct, 10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
-    now = ceph_clock_now(cct);
+    now = ceph_clock_now();
   }
   ldout(cct, 10) << "wait_auth_rotating done" << dendl;
   return 0;

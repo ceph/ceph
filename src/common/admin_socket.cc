@@ -315,7 +315,7 @@ bool AdminSocket::do_accept()
   }
 
   char cmd[1024];
-  int pos = 0;
+  unsigned pos = 0;
   string c;
   while (1) {
     int ret = safe_read(connection_fd, &cmd[pos], 1);
@@ -353,7 +353,11 @@ bool AdminSocket::do_accept()
 	break;
       }
     }
-    pos++;
+    if (++pos >= sizeof(cmd)) {
+      lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
+      VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+      return false;
+    }
   }
 
   bool rval = false;

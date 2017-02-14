@@ -198,18 +198,32 @@ class WouldBlock(Error):
 class OutOfRange(Error):
     pass
 
-cdef errno_to_exception =  {
-    errno.EPERM      : PermissionError,
-    errno.ENOENT     : ObjectNotFound,
-    errno.EIO        : IOError,
-    errno.ENOSPC     : NoSpace,
-    errno.EEXIST     : ObjectExists,
-    errno.ENODATA    : NoData,
-    errno.EINVAL     : InvalidValue,
-    errno.EOPNOTSUPP : OperationNotSupported,
-    errno.ERANGE     : OutOfRange,
-    errno.EWOULDBLOCK: WouldBlock,
-}
+IF UNAME_SYSNAME == "FreeBSD":
+    cdef errno_to_exception =  {
+        errno.EPERM      : PermissionError,
+        errno.ENOENT     : ObjectNotFound,
+        errno.EIO        : IOError,
+        errno.ENOSPC     : NoSpace,
+        errno.EEXIST     : ObjectExists,
+        errno.ENOATTR    : NoData,
+        errno.EINVAL     : InvalidValue,
+        errno.EOPNOTSUPP : OperationNotSupported,
+        errno.ERANGE     : OutOfRange,
+        errno.EWOULDBLOCK: WouldBlock,
+    }
+ELSE:
+    cdef errno_to_exception =  {
+        errno.EPERM      : PermissionError,
+        errno.ENOENT     : ObjectNotFound,
+        errno.EIO        : IOError,
+        errno.ENOSPC     : NoSpace,
+        errno.EEXIST     : ObjectExists,
+        errno.ENODATA    : NoData,
+        errno.EINVAL     : InvalidValue,
+        errno.EOPNOTSUPP : OperationNotSupported,
+        errno.ERANGE     : OutOfRange,
+        errno.EWOULDBLOCK: WouldBlock,
+    }
 
 
 cdef make_ex(ret, msg):

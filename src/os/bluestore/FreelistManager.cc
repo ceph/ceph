@@ -6,6 +6,7 @@
 #include "BitmapFreelistManager.h"
 
 FreelistManager *FreelistManager::create(
+  CephContext* cct,
   string type,
   KeyValueDB *kvdb,
   string prefix)
@@ -16,9 +17,9 @@ FreelistManager *FreelistManager::create(
   // freelist type until after we open the db.
   assert(prefix == "B");
   if (type == "extent")
-    return new ExtentFreelistManager(kvdb, "B");
+    return new ExtentFreelistManager(cct, kvdb, "B");
   if (type == "bitmap")
-    return new BitmapFreelistManager(kvdb, "B", "b");
+    return new BitmapFreelistManager(cct, kvdb, "B", "b");
   return NULL;
 }
 

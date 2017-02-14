@@ -12,12 +12,15 @@
 #include "bluestore_types.h"
 #include "common/debug.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "bitmapalloc:"
 
 
-BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
+BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
+				 int64_t block_size)
+  : cct(cct)
 {
   assert(ISP2(block_size));
   if (!ISP2(block_size)) {
@@ -27,7 +30,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
     return;
   }
 
-  int64_t zone_size_blks = g_conf->bluestore_bitmapallocator_blocks_per_zone;
+  int64_t zone_size_blks = cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
   assert(ISP2(zone_size_blks));
   if (!ISP2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
@@ -36,7 +39,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
     return;
   }
 
-  int64_t span_size = g_conf->bluestore_bitmapallocator_span_size;
+  int64_t span_size = cct->_conf->bluestore_bitmapallocator_span_size;
   assert(ISP2(span_size));
   if (!ISP2(span_size)) {
     derr << __func__ << " span_size " << span_size
@@ -46,8 +49,8 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   }
 
   m_block_size = block_size;
-  m_bit_alloc = new BitAllocator(device_size / block_size,
-        zone_size_blks, CONCURRENT, true);
+  m_bit_alloc = new BitAllocator(cct, device_size / block_size,
+				 zone_size_blks, CONCURRENT, true);
   assert(m_bit_alloc);
   if (!m_bit_alloc) {
     derr << __func__ << " Unable to intialize Bit Allocator" << dendl;
@@ -107,7 +110,19 @@ void BitMapAllocator::unreserve(uint64_t unused)
 
 int64_t BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
   int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+=======
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 {
 
   assert(!(alloc_unit % m_block_size));
@@ -122,21 +137,65 @@ int64_t BitMapAllocator::allocate(
      << dendl;
 
   return allocate_dis(want_size, alloc_unit / m_block_size,
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
                       max_alloc_size, hint / m_block_size, extents);
+=======
+                      max_alloc_size, hint / m_block_size, extents, count);
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+                      max_alloc_size, hint / m_block_size, extents);
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+                      max_alloc_size, hint / m_block_size, extents);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 }
 
 int64_t BitMapAllocator::allocate_dis(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
   int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+=======
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count)
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 {
   ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
   int64_t num = 0;
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+  *count = 0;
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
   num = m_bit_alloc->alloc_blocks_dis_res(nblks, alloc_unit, hint, &block_list);
   if (num == 0) {
     return -ENOSPC;
   }
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+  *count = block_list.get_extent_count();
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
   return num * m_block_size;
 }

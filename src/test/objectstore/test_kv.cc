@@ -159,7 +159,7 @@ TEST_P(KVTest, PutReopen) {
 TEST_P(KVTest, BenchCommit) {
   int n = 1024;
   ASSERT_EQ(0, db->create_and_open(cout));
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   {
     cout << "priming" << std::endl;
     // prime
@@ -183,7 +183,7 @@ TEST_P(KVTest, BenchCommit) {
     t->set("prefix", "key" + stringify(i), data);
     db->submit_transaction_sync(t);
   }
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   cout << n << " commits in " << dur << ", avg latency " << (dur / (double)n)
        << std::endl;

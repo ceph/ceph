@@ -47,6 +47,7 @@ using namespace std;
 
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 
 namespace {
@@ -439,32 +440,38 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->ms_type : g_conf->ms_cluster_type;
+  Messenger *ms_public = Messenger::create(g_ceph_context, public_msgr_type,
 					   entity_name_t::OSD(whoami), "client",
 					   getpid(),
 					   Messenger::HAS_HEAVY_TRAFFIC |
 					   Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msgr_type,
 					    entity_name_t::OSD(whoami), "cluster",
 					    getpid(),
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
-					     entity_name_t::OSD(whoami), "hbclient",
+  Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, cluster_msgr_type,
+					     entity_name_t::OSD(whoami), "hb_back_client",
 					     getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, public_msgr_type,
+					     entity_name_t::OSD(whoami), "hb_front_client",
+					     getpid(), Messenger::HEARTBEAT);
+  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, cluster_msgr_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
 						   getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, public_msgr_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid(), Messenger::HEARTBEAT);
-  Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
+  Messenger *ms_objecter = Messenger::create(g_ceph_context, public_msgr_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid(), 0);
-  if (!ms_public || !ms_cluster || !ms_hbclient || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
+  if (!ms_public || !ms_cluster || !ms_hb_front_client || !ms_hb_back_client || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
     exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  ms_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_hb_front_client->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_hb_back_client->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
@@ -522,7 +529,9 @@ int main(int argc, const char **argv)
   ms_cluster->set_policy(entity_name_t::TYPE_CLIENT,
 			 Messenger::Policy::stateless_server(0, 0));
 
-  ms_hbclient->set_policy(entity_name_t::TYPE_OSD,
+  ms_hb_front_client->set_policy(entity_name_t::TYPE_OSD,
+			  Messenger::Policy::lossy_client(0, 0));
+  ms_hb_back_client->set_policy(entity_name_t::TYPE_OSD,
 			  Messenger::Policy::lossy_client(0, 0));
   ms_hb_back_server->set_policy(entity_name_t::TYPE_OSD,
 				Messenger::Policy::stateless_server(0, 0));
@@ -539,7 +548,8 @@ int main(int argc, const char **argv)
     exit(1);
 
   if (g_conf->osd_heartbeat_use_min_delay_socket) {
-    ms_hbclient->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+    ms_hb_front_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+    ms_hb_back_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_front_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
   }
@@ -554,12 +564,18 @@ int main(int argc, const char **argv)
   r = ms_hb_back_server->bind(hb_back_addr);
   if (r < 0)
     exit(1);
+  r = ms_hb_back_client->client_bind(hb_back_addr);
+  if (r < 0)
+    exit(1);
 
   // hb front should bind to same ip as public_addr
   entity_addr_t hb_front_addr = g_conf->public_addr;
   if (hb_front_addr.is_ip())
     hb_front_addr.set_port(0);
   r = ms_hb_front_server->bind(hb_front_addr);
+  if (r < 0)
+    exit(1);
+  r = ms_hb_front_client->client_bind(hb_front_addr);
   if (r < 0)
     exit(1);
 
@@ -585,7 +601,8 @@ int main(int argc, const char **argv)
                 whoami,
                 ms_cluster,
                 ms_public,
-                ms_hbclient,
+                ms_hb_front_client,
+                ms_hb_back_client,
                 ms_hb_front_server,
                 ms_hb_back_server,
                 ms_objecter,
@@ -601,7 +618,8 @@ int main(int argc, const char **argv)
   }
 
   ms_public->start();
-  ms_hbclient->start();
+  ms_hb_front_client->start();
+  ms_hb_back_client->start();
   ms_hb_front_server->start();
   ms_hb_back_server->start();
   ms_cluster->start();
@@ -631,7 +649,8 @@ int main(int argc, const char **argv)
     kill(getpid(), SIGTERM);
 
   ms_public->wait();
-  ms_hbclient->wait();
+  ms_hb_front_client->wait();
+  ms_hb_back_client->wait();
   ms_hb_front_server->wait();
   ms_hb_back_server->wait();
   ms_cluster->wait();
@@ -645,7 +664,8 @@ int main(int argc, const char **argv)
   // done
   delete osd;
   delete ms_public;
-  delete ms_hbclient;
+  delete ms_hb_front_client;
+  delete ms_hb_back_client;
   delete ms_hb_front_server;
   delete ms_hb_back_server;
   delete ms_cluster;

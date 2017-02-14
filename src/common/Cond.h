@@ -75,15 +75,15 @@ class Cond {
     return r;
   }
 
-  int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {
-    utime_t when = ceph_clock_now(cct);
+  int WaitInterval(Mutex &mutex, utime_t interval) {
+    utime_t when = ceph_clock_now();
     when += interval;
     return WaitUntil(mutex, when);
   }
 
   template<typename Duration>
-  int WaitInterval(CephContext *cct, Mutex &mutex, Duration interval) {
-    ceph::real_time when(ceph::real_clock::now(cct));
+  int WaitInterval(Mutex &mutex, Duration interval) {
+    ceph::real_time when(ceph::real_clock::now());
     when += interval;
 
     struct timespec ts = ceph::real_clock::to_timespec(when);

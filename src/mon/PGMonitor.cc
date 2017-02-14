@@ -120,7 +120,7 @@ void PGMonitor::tick()
   handle_osd_timeouts();
 
   if (!pg_map.pg_sum_deltas.empty()) {
-    utime_t age = ceph_clock_now(g_ceph_context) - pg_map.stamp;
+    utime_t age = ceph_clock_now() - pg_map.stamp;
     if (age > 2 * g_conf->mon_delta_reset_interval) {
       dout(10) << " clearing pg_map delta (" << age << " > " << g_conf->mon_delta_reset_interval << " seconds old)" << dendl;
       pg_map.clear_delta();
@@ -138,7 +138,7 @@ void PGMonitor::tick()
     ceph::unordered_map<uint64_t,pair<pool_stat_t,utime_t> >::iterator it;
     for (it = pg_map.per_pool_sum_delta.begin();
          it != pg_map.per_pool_sum_delta.end(); ) {
-      utime_t age = ceph_clock_now(g_ceph_context) - it->second.second;
+      utime_t age = ceph_clock_now() - it->second.second;
       if (age > 2*g_conf->mon_delta_reset_interval) {
 	dout(10) << " clearing pg_map delta for pool " << it->first
 	         << " (" << age << " > " << g_conf->mon_delta_reset_interval
@@ -168,93 +168,43 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
     return;
 
   assert(version >= pg_map.version);
+  if (format_version < 1) {
+    derr << __func__ << "unsupported monitor protocol: "
+	 << get_service_name() << ".format_version = "
+	 << format_version << dendl;
+  }
+  assert(format_version >= 1);
 
-  if (format_version == 0) {
-    // old format
+  // pg/osd keys in leveldb
+  // read meta
+  epoch_t last_pg_scan = pg_map.last_pg_scan;
 
-    /* Obtain latest full pgmap version, if available and whose version is
-     * greater than the current pgmap's version.
-     */
-    version_t latest_full = get_version_latest_full();
-    if ((latest_full > 0) && (latest_full > pg_map.version)) {
-      bufferlist latest_bl;
-      int err = get_version_full(latest_full, latest_bl);
-      assert(err == 0);
-      dout(7) << __func__ << " loading latest full pgmap v"
-              << latest_full << dendl;
-      try {
-	PGMap tmp_pg_map;
-	bufferlist::iterator p = latest_bl.begin();
-	tmp_pg_map.decode(p);
-	pg_map = tmp_pg_map;
-      } catch (const std::exception& e) {
-	dout(0) << __func__ << ": error parsing update: "
-	        << e.what() << dendl;
-	assert(0 == "update_from_paxos: error parsing update");
-	return;
-      }
+  while (version > pg_map.version) {
+    // load full state?
+    if (pg_map.version == 0) {
+      dout(10) << __func__ << " v0, read_full" << dendl;
+      read_pgmap_full();
+      goto out;
     }
 
-    // walk through incrementals
-    while (version > pg_map.version) {
-      bufferlist bl;
-      int err = get_version(pg_map.version+1, bl);
-      assert(err == 0);
-      assert(bl.length());
-
-      dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
-      PGMap::Incremental inc;
-      try {
-	bufferlist::iterator p = bl.begin();
-	inc.decode(p);
-      } catch (const std::exception &e)   {
-	dout(0) << "update_from_paxos: error parsing "
-	        << "incremental update: " << e.what() << dendl;
-	assert(0 == "update_from_paxos: error parsing incremental update");
-	return;
-      }
-
-      pg_map.apply_incremental(g_ceph_context, inc);
-
-      dout(10) << pg_map << dendl;
-
-      if (inc.pg_scan)
-	last_sent_pg_create.clear();  // reset pg_create throttle timer
+    // incremental state?
+    dout(10) << __func__ << " read_incremental" << dendl;
+    bufferlist bl;
+    int r = get_version(pg_map.version + 1, bl);
+    if (r == -ENOENT) {
+      dout(10) << __func__ << " failed to read_incremental, read_full" << dendl;
+      read_pgmap_full();
+      goto out;
     }
+    assert(r == 0);
+    apply_pgmap_delta(bl);
+  }
 
-  } else if (format_version == 1) {
-    // pg/osd keys in leveldb
-
-    // read meta
-    epoch_t last_pg_scan = pg_map.last_pg_scan;
-
-    while (version > pg_map.version) {
-      // load full state?
-      if (pg_map.version == 0) {
-	dout(10) << __func__ << " v0, read_full" << dendl;
-	read_pgmap_full();
-	goto out;
-      }
-
-      // incremental state?
-      dout(10) << __func__ << " read_incremental" << dendl;
-      bufferlist bl;
-      int r = get_version(pg_map.version + 1, bl);
-      if (r == -ENOENT) {
-	dout(10) << __func__ << " failed to read_incremental, read_full" << dendl;
-	read_pgmap_full();
-	goto out;
-      }
-      assert(r == 0);
-      apply_pgmap_delta(bl);
-    }
-
-    read_pgmap_meta();
+  read_pgmap_meta();
 
 out:
-    if (last_pg_scan != pg_map.last_pg_scan)
-      last_sent_pg_create.clear();  // reset pg_create throttle timer
-  }
+  if (last_pg_scan != pg_map.last_pg_scan)
+    last_sent_pg_create.clear();  // reset pg_create throttle timer
 
   assert(version == pg_map.version);
 
@@ -286,8 +236,12 @@ void PGMonitor::upgrade_format()
 void PGMonitor::post_paxos_update()
 {
   dout(10) << __func__ << dendl;
-  if (mon->osdmon()->osdmap.get_epoch()) {
-    send_pg_creates();
+  OSDMap& osdmap = mon->osdmon()->osdmap;
+  if (osdmap.get_epoch()) {
+    if (osdmap.get_num_up_osds() > 0) {
+      assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
+      check_subs();
+    }
   }
 }
 
@@ -296,7 +250,7 @@ void PGMonitor::handle_osd_timeouts()
   if (!mon->is_leader())
     return;
 
-  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t now(ceph_clock_now());
   utime_t timeo(g_conf->mon_osd_report_timeout, 0);
   if (now - mon->get_leader_since() < timeo) {
     // We haven't been the leader for long enough to consider OSD timeouts
@@ -477,7 +431,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   version_t version = pending_inc.version;
   dout(10) << __func__ << " v " << version << dendl;
   assert(get_last_committed() + 1 == version);
-  pending_inc.stamp = ceph_clock_now(g_ceph_context);
+  pending_inc.stamp = ceph_clock_now();
 
   uint64_t features = mon->get_quorum_con_features();
 
@@ -701,11 +655,18 @@ bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
     return true;
   }
 
+  if (stats->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << stats->fsid << " != "
+            << mon->monmap->fsid << " for " << *stats << dendl;
+    return true;
+  }
+
   // First, just see if they need a new osdmap. But
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 &&
       mon->osdmon()->is_readable() &&
-      stats->epoch < mon->osdmon()->osdmap.get_epoch())
+      stats->epoch < mon->osdmon()->osdmap.get_epoch() &&
+      !session->proxy_con)
     mon->osdmon()->send_latest_now_nodelete(op, stats->epoch+1);
 
   // Always forward the PGStats to the leader, even if they are the same as
@@ -772,14 +733,14 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
     return false;
   }
 
-  last_osd_report[from] = ceph_clock_now(g_ceph_context);
-
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd." << dendl;
     return false;
   }
+      
+  last_osd_report[from] = ceph_clock_now();
 
   if (!pg_stats_have_changed(from, stats)) {
     dout(10) << " message contains no new osd|pg stats" << dendl;
@@ -928,41 +889,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   propose_pending();
 }
 
-void PGMonitor::send_pg_creates()
-{
-  // We only need to do this old, spammy way of broadcasting create messages
-  // to every osd (even those that aren't connected) if there are old OSDs in
-  // the cluster. As soon as everybody has upgraded we can flipt to the new
-  // behavior instead
-  OSDMap& osdmap = mon->osdmon()->osdmap;
-  if (osdmap.get_num_up_osds() == 0)
-    return;
-
-  if (osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB) {
-    check_subs();
-    return;
-  }
-
-  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size()
-           << " pgs" << dendl;
-
-  utime_t now = ceph_clock_now(g_ceph_context);
-  for (map<int, map<epoch_t, set<pg_t> > >::iterator p =
-         pg_map.creating_pgs_by_osd_epoch.begin();
-       p != pg_map.creating_pgs_by_osd_epoch.end();
-       ++p) {
-    int osd = p->first;
-
-    // throttle?
-    if (last_sent_pg_create.count(osd) &&
-        now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd])
-      continue;
-
-    if (osdmap.is_up(osd))
-      send_pg_creates(osd, NULL, 0);
-  }
-}
-
 epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 {
   dout(30) << __func__ << " " << pg_map.creating_pgs_by_osd_epoch << dendl;
@@ -1000,13 +926,8 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
     return next;
   }
 
-  if (con) {
-    con->send_message(m);
-  } else {
-    assert(mon->osdmon()->osdmap.is_up(osd));
-    mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));
-  }
-  last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
+  con->send_message(m);
+  last_sent_pg_create[osd] = ceph_clock_now();
 
   // sub is current through last + 1
   return last + 1;
@@ -1032,7 +953,7 @@ void PGMonitor::_try_mark_pg_stale(
     dout(10) << " marking pg " << pgid << " stale (acting_primary "
 	     << stat->acting_primary << ")" << dendl;
     stat->state |= PG_STATE_STALE;  
-    stat->last_unstale = ceph_clock_now(g_ceph_context);
+    stat->last_unstale = ceph_clock_now();
   }
 }
 
@@ -1100,6 +1021,12 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
   bool primary = false;
+
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << m->fsid << " != "
+            << mon->monmap->fsid << " for " << *m << dendl;
+    return true;
+  }
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -1424,6 +1351,11 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << m->fsid << " != "
+            << mon->monmap->fsid << " for " << *m << dendl;
+    return true;
+  }
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
@@ -1466,10 +1398,13 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
     {
-      pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
-      s.state = PG_STATE_CREATING;
-      s.created = epoch;
-      s.last_change = ceph_clock_now(g_ceph_context);
+      PGMapUpdater::register_pg(
+	mon->osdmon()->osdmap,
+	pgid,
+	epoch,
+	true,
+	&pg_map,
+	&pending_inc);
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
@@ -1546,7 +1481,7 @@ static void note_stuck_detail(int what,
     if (since == utime_t()) {
       ss << " since forever";
     } else {
-      utime_t dur = ceph_clock_now(g_ceph_context) - since;
+      utime_t dur = ceph_clock_now() - since;
       ss << " for " << dur;
     }
     ss << ", current state " << pg_state_string(p->second.state)
@@ -1612,7 +1547,7 @@ namespace {
       return;
 
     int pgs_count = 0;
-    const utime_t now = ceph_clock_now(nullptr);
+    const utime_t now = ceph_clock_now();
     for (const auto& pg_entry : pg_stats) {
       const auto& pg_stat(pg_entry.second);
       const utime_t time_since_ls = now - pg_stat.last_scrub_stamp;
@@ -1693,7 +1628,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pgs;
-  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t now(ceph_clock_now());
   utime_t cutoff = now - utime_t(g_conf->mon_pg_stuck_threshold, 0);
   uint64_t num_inactive_pgs = 0;
   
@@ -2006,7 +1941,7 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
     }
   }
 
-  utime_t now(ceph_clock_now(g_ceph_context));
+  utime_t now(ceph_clock_now());
   utime_t cutoff = now - utime_t(threshold, 0);
 
   if (!f) {

@@ -20,6 +20,7 @@
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, scrubstack->mdcache->mds)

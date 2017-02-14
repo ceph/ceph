@@ -63,7 +63,7 @@ void LogMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
-  e.stamp = ceph_clock_now(g_ceph_context);
+  e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
   std::stringstream ss;
   ss << "mkfs " << mon->monmap->get_fsid();
@@ -553,7 +553,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
     dout(10) << __func__ << " skipped from " << sv
 	     << " to first_committed " << get_first_committed() << dendl;
     LogEntry le;
-    le.stamp = ceph_clock_now(NULL);
+    le.stamp = ceph_clock_now();
     le.prio = CLOG_WARN;
     ostringstream ss;
     ss << "skipped log messages from " << sv << " to " << get_first_committed();
@@ -730,7 +730,7 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
 		   << channel << "'" << dendl;
 
   if (graylogs.count(channel) == 0) {
-    ceph::logging::Graylog::Ref graylog = ceph::logging::Graylog::Ref(new ceph::logging::Graylog("mon"));
+    auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
 
     graylog->set_fsid(g_conf->fsid);
     graylog->set_hostname(g_conf->host);

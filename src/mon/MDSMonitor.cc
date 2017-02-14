@@ -19,6 +19,7 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 #include "OSDMonitor.h"
+#include "PGMonitor.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
@@ -96,8 +97,8 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
   fs->mds_map.cas_pool = -1;
   fs->mds_map.max_file_size = g_conf->mds_max_file_size;
   fs->mds_map.compat = fsm.compat;
-  fs->mds_map.created = ceph_clock_now(g_ceph_context);
-  fs->mds_map.modified = ceph_clock_now(g_ceph_context);
+  fs->mds_map.created = ceph_clock_now();
+  fs->mds_map.modified = ceph_clock_now();
   fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
@@ -189,7 +190,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // Set 'modified' on maps modified this epoch
   for (auto &i : fsmap.filesystems) {
     if (i.second->mds_map.epoch == fsmap.epoch) {
-      i.second->mds_map.modified = ceph_clock_now(g_ceph_context);
+      i.second->mds_map.modified = ceph_clock_now();
     }
   }
 
@@ -285,7 +286,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
 
   dout(15) << "_note_beacon " << *m << " noting time" << dendl;
-  last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);  
+  last_beacon[gid].stamp = ceph_clock_now();
   last_beacon[gid].seq = seq;
 }
 
@@ -549,7 +550,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     }
 
     // initialize the beacon timer
-    last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
+    last_beacon[gid].stamp = ceph_clock_now();
     last_beacon[gid].seq = seq;
 
     // new incompat?
@@ -621,7 +622,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       dout(4) << __func__ << ": marking rank "
               << info.rank << " damaged" << dendl;
 
-      utime_t until = ceph_clock_now(g_ceph_context);
+      utime_t until = ceph_clock_now();
       until += g_conf->mds_blacklist_interval;
       const auto blacklist_epoch = mon->osdmon()->blacklist(info.addr, until);
       request_proposal(mon->osdmon());
@@ -1262,7 +1263,7 @@ bool MDSMonitor::fail_mds_gid(mds_gid_t gid)
 
   epoch_t blacklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
-    utime_t until = ceph_clock_now(g_ceph_context);
+    utime_t until = ceph_clock_now();
     until += g_conf->mds_blacklist_interval;
     blacklist_epoch = mon->osdmon()->blacklist(info.addr, until);
   }
@@ -1581,6 +1582,15 @@ int MDSMonitor::management_command(
       return -ENOENT;
     }
 
+    string force;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
+    if (force != "--force" && metadata_num_objects > 0) {
+      ss << "pool '" << metadata_name
+	 << "' already contains some objects. Use an empty pool instead.";
+      return -EINVAL;
+    }
+
     string data_name;
     cmd_getval(g_ceph_context, cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
@@ -1641,22 +1651,6 @@ int MDSMonitor::management_command(
     r = _check_pool(metadata, &ss);
     if (r < 0) {
       return r;
-    }
-
-    // Automatically set crash_replay_interval on data pool if it
-    // isn't already set.
-    if (data_pool->get_crash_replay_interval() == 0) {
-      // We will be changing osdmon's state and requesting the osdmon to
-      // propose.  We thus need to make sure the osdmon is writeable before
-      // we do this, waiting if it's not.
-      if (!mon->osdmon()->is_writeable()) {
-        mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
-        return -EAGAIN;
-      }
-
-      r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
-      assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
-      request_proposal(mon->osdmon());
     }
 
     // All checks passed, go ahead and create.
@@ -1749,8 +1743,8 @@ int MDSMonitor::management_command(
     new_fs->mds_map.fs_name = fs->mds_map.fs_name;
     new_fs->mds_map.max_file_size = g_conf->mds_max_file_size;
     new_fs->mds_map.compat = fsmap.compat;
-    new_fs->mds_map.created = ceph_clock_now(g_ceph_context);
-    new_fs->mds_map.modified = ceph_clock_now(g_ceph_context);
+    new_fs->mds_map.created = ceph_clock_now();
+    new_fs->mds_map.modified = ceph_clock_now();
     new_fs->mds_map.session_timeout = g_conf->mds_session_timeout;
     new_fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
     new_fs->mds_map.enabled = true;
@@ -1758,7 +1752,8 @@ int MDSMonitor::management_command(
     // Persist the new FSMap
     pending_fsmap.filesystems[new_fs->fscid] = new_fs;
     return 0;
-  } else if (prefix == "fs set_default") {
+  } else if (prefix == "fs set_default" ||
+	     prefix == "fs set-default") {
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     auto fs = pending_fsmap.get_filesystem(fs_name);
@@ -2623,11 +2618,11 @@ void MDSMonitor::check_sub(Subscription *sub)
       mds_map = &(fsmap.filesystems.at(fscid)->mds_map);
     }
 
+    assert(mds_map != nullptr);
     dout(10) << __func__ << " selected MDS map epoch " <<
       mds_map->epoch << " for namespace " << fscid << " for subscriber "
       << sub->session->inst.name << " who wants epoch " << sub->next << dendl;
 
-    assert(mds_map != nullptr);
     if (sub->next > mds_map->epoch) {
       return;
     }
@@ -2843,7 +2838,7 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
         << " " << ceph_mds_state_name(info.state)
         << " laggy" << dendl;
       pending_fsmap.modify_daemon(info.global_id, [](MDSMap::mds_info_t *info) {
-          info->laggy_since = ceph_clock_now(g_ceph_context);
+          info->laggy_since = ceph_clock_now();
       });
       *mds_propose = true;
   }
@@ -2973,7 +2968,7 @@ void MDSMonitor::tick()
     do_propose |= maybe_expand_cluster(i.second);
   }
 
-  const auto now = ceph_clock_now(g_ceph_context);
+  const auto now = ceph_clock_now();
   if (last_tick.is_zero()) {
     last_tick = now;
   }

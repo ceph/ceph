@@ -119,15 +119,6 @@ struct ObjectOperation {
     osd_op.op.writesame.data_length = bl.length();
     osd_op.indata.claim_append(bl);
   }
-  void add_clone_range(int op, uint64_t off, uint64_t len,
-		       const object_t& srcoid, uint64_t srcoff,
-		       snapid_t srcsnapid) {
-    OSDOp& osd_op = add_op(op);
-    osd_op.op.clonerange.offset = off;
-    osd_op.op.clonerange.length = len;
-    osd_op.op.clonerange.src_offset = srcoff;
-    osd_op.soid = sobject_t(srcoid, srcsnapid);
-  }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.xattr.name_len = (name ? strlen(name) : 0);
@@ -376,12 +367,6 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
-  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len,
-		   uint64_t dst_offset) {
-    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_oid,
-		    src_offset, CEPH_NOSNAP);
-  }
-
   // object attrs
   void getxattr(const char *name, bufferlist *pbl, int *prval) {
     bufferlist bl;
@@ -391,17 +376,39 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   struct C_ObjectOperation_decodevals : public Context {
+    uint64_t max_entries;
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
+    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodevals(std::map<std::string,bufferlist> *pa, int *pr)
-      : pattrs(pa), prval(pr) {}
+    C_ObjectOperation_decodevals(uint64_t m, std::map<std::string,bufferlist> *pa,
+				 bool *pt, int *pr)
+      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
+      if (ptruncated) {
+	*ptruncated = false;
+      }
+    }
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
+	  if (ptruncated) {
+	    std::map<std::string,bufferlist> ignore;
+	    if (!pattrs) {
+	      ::decode(ignore, p);
+	      pattrs = &ignore;
+	    }
+	    if (!p.end()) {
+	      ::decode(*ptruncated, p);
+	    } else {
+	      // the OSD did not provide this.  since old OSDs do not
+	      // enfoce omap result limits either, we can infer it from
+	      // the size of the result
+	      *ptruncated = (pattrs->size() == max_entries);
+	    }
+	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -411,17 +418,39 @@ struct ObjectOperation {
     }
   };
   struct C_ObjectOperation_decodekeys : public Context {
+    uint64_t max_entries;
     bufferlist bl;
     std::set<std::string> *pattrs;
+    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodekeys(std::set<std::string> *pa, int *pr)
-      : pattrs(pa), prval(pr) {}
+    C_ObjectOperation_decodekeys(uint64_t m, std::set<std::string> *pa, bool *pt,
+				 int *pr)
+      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
+      if (ptruncated) {
+	*ptruncated = false;
+      }
+    }
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
+	  if (ptruncated) {
+	    std::set<std::string> ignore;
+	    if (!pattrs) {
+	      ::decode(ignore, p);
+	      pattrs = &ignore;
+	    }
+	    if (!p.end()) {
+	      ::decode(*ptruncated, p);
+	    } else {
+	      // the OSD did not provide this.  since old OSDs do not
+	      // enfoce omap result limits either, we can infer it from
+	      // the size of the result
+	      *ptruncated = (pattrs->size() == max_entries);
+	    }
+	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -505,7 +534,7 @@ struct ObjectOperation {
     if (pattrs || prval) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h
-	= new C_ObjectOperation_decodevals(pattrs, prval);
+	= new C_ObjectOperation_decodevals(0, pattrs, nullptr, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -564,6 +593,7 @@ struct ObjectOperation {
   void omap_get_keys(const string &start_after,
 		     uint64_t max_to_get,
 		     std::set<std::string> *out_set,
+		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     bufferlist bl;
@@ -572,10 +602,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set) {
+    if (prval || ptruncated || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodekeys *h =
-	new C_ObjectOperation_decodekeys(out_set, prval);
+	new C_ObjectOperation_decodekeys(max_to_get, out_set, ptruncated, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -586,6 +616,7 @@ struct ObjectOperation {
 		     const string &filter_prefix,
 		     uint64_t max_to_get,
 		     std::map<std::string, bufferlist> *out_set,
+		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     bufferlist bl;
@@ -595,10 +626,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set) {
+    if (prval || out_set || ptruncated) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(out_set, prval);
+	new C_ObjectOperation_decodevals(max_to_get, out_set, ptruncated, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -617,7 +648,7 @@ struct ObjectOperation {
     if (prval || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(out_set, prval);
+	new C_ObjectOperation_decodevals(0, out_set, nullptr, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -978,26 +1009,11 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_VER);
     osd_op.op.assert_ver.ver = ver;
   }
-  void assert_src_version(const object_t& srcoid, snapid_t srcsnapid,
-			  uint64_t ver) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_SRC_VERSION);
-    osd_op.op.assert_ver.ver = ver;
-    ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
-  }
 
   void cmpxattr(const char *name, const bufferlist& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
     OSDOp& o = *ops.rbegin();
-    o.op.xattr.cmp_op = op;
-    o.op.xattr.cmp_mode = mode;
-  }
-  void src_cmpxattr(const object_t& srcoid, snapid_t srcsnapid,
-		    const char *name, const bufferlist& val,
-		    int op, int mode) {
-    add_xattr(CEPH_OSD_OP_SRC_CMPXATTR, name, val);
-    OSDOp& o = *ops.rbegin();
-    o.soid = sobject_t(srcoid, srcsnapid);
     o.op.xattr.cmp_op = op;
     o.op.xattr.cmp_mode = mode;
   }
@@ -1124,8 +1140,7 @@ private:
   atomic_t inflight_ops;
   atomic_t client_inc;
   uint64_t max_linger_id;
-  atomic_t num_unacked;
-  atomic_t num_uncommitted;
+  atomic_t num_in_flight;
   atomic_t global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
@@ -1210,6 +1225,21 @@ public:
 
     op_target_t() = default;
 
+    hobject_t get_hobj() {
+      return hobject_t(target_oid,
+		       target_oloc.key,
+		       CEPH_NOSNAP,
+		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
+		       target_oloc.pool,
+		       target_oloc.nspace);
+    }
+
+    bool contained_by(const hobject_t& begin, const hobject_t& end) {
+      hobject_t h = get_hobj();
+      int r = cmp_bitwise(h, begin);
+      return r == 0 || (r > 0 && cmp_bitwise(h, end) < 0);
+    }
+
     void dump(Formatter *f) const;
   };
 
@@ -1234,9 +1264,8 @@ public:
     vector<int*> out_rval;
 
     int priority;
-    Context *onack, *oncommit;
+    Context *onfinish;
     uint64_t ontimeout;
-    Context *oncommit_sync; // used internally by watch/notify
 
     ceph_tid_t tid;
     eversion_t replay_version; // for op replay
@@ -1265,7 +1294,7 @@ public:
     osd_reqid_t reqid; // explicitly setting reqid
 
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
-       int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
+       int f, Context *fin, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
       target(o, ol, f),
       con(NULL),
@@ -1273,10 +1302,8 @@ public:
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       priority(0),
-      onack(ac),
-      oncommit(co),
+      onfinish(fin),
       ontimeout(0),
-      oncommit_sync(NULL),
       tid(0),
       attempts(0),
       objver(ov),
@@ -1762,17 +1789,26 @@ public:
   };
 
   // -- osd sessions --
+  struct OSDBackoff {
+    uint64_t id;
+    hobject_t begin, end;
+  };
+
   struct OSDSession : public RefCountedObject {
     boost::shared_mutex lock;
     using lock_guard = std::lock_guard<decltype(lock)>;
     using unique_lock = std::unique_lock<decltype(lock)>;
     using shared_lock = boost::shared_lock<decltype(lock)>;
-    using shunique_lcok = ceph::shunique_lock<decltype(lock)>;
+    using shunique_lock = ceph::shunique_lock<decltype(lock)>;
 
     // pending ops
     map<ceph_tid_t,Op*> ops;
     map<uint64_t, LingerOp*> linger_ops;
     map<ceph_tid_t,CommandOp*> command_ops;
+
+    // backoffs
+    map<hobject_t,OSDBackoff,hobject_t::BitwiseComparator> backoffs;
+    multimap<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;
     int incarnation;
@@ -1957,7 +1993,7 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
-    max_linger_id(0), num_unacked(0), num_uncommitted(0), global_op_flags(0),
+    max_linger_id(0), num_in_flight(0), global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
@@ -2062,6 +2098,7 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
@@ -2176,11 +2213,11 @@ public:
   Op *prepare_mutate_op(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2191,10 +2228,10 @@ public:
   ceph_tid_t mutate(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack,
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
 			      oncommit, objver, reqid);
     ceph_tid_t tid;
     op_submit(o, &tid);
@@ -2208,7 +2245,7 @@ public:
     int *data_offset = NULL,
     uint64_t features = 0) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onack, NULL, objver, data_offset);
+		   CEPH_OSD_FLAG_READ, onack, objver, data_offset);
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
@@ -2241,7 +2278,7 @@ public:
     int *ctx_budget) {
     Op *o = new Op(object_t(), oloc,
 		   op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ,
-		   onack, NULL, NULL);
+		   onack, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
     o->priority = op.priority;
@@ -2328,7 +2365,7 @@ public:
     ops[i].op.op = CEPH_OSD_OP_STAT;
     C_Stat *fin = new C_Stat(psize, pmtime, onfinish);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, fin, 0, objver);
+		   CEPH_OSD_FLAG_READ, fin, objver);
     o->snapid = snap;
     o->outbl = &fin->bl;
     return o;
@@ -2359,7 +2396,7 @@ public:
     ops[i].op.extent.truncate_seq = 0;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, objver);
     o->snapid = snap;
     o->outbl = pbl;
     return o;
@@ -2391,7 +2428,7 @@ public:
     ops[i].op.extent.truncate_seq = trunc_seq;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, objver);
     o->snapid = snap;
     o->outbl = pbl;
     ceph_tid_t tid;
@@ -2410,7 +2447,7 @@ public:
     ops[i].op.extent.truncate_size = 0;
     ops[i].op.extent.truncate_seq = 0;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, objver);
     o->snapid = snap;
     o->outbl = pbl;
     ceph_tid_t tid;
@@ -2429,7 +2466,7 @@ public:
     if (name)
       ops[i].indata.append(name);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, objver);
     o->snapid = snap;
     o->outbl = pbl;
     ceph_tid_t tid;
@@ -2446,7 +2483,7 @@ public:
     ops[i].op.op = CEPH_OSD_OP_GETXATTRS;
     C_GetAttrs *fin = new C_GetAttrs(attrset, onfinish);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, fin, 0, objver);
+		   CEPH_OSD_FLAG_READ, fin, objver);
     o->snapid = snap;
     o->outbl = &fin->bl;
     ceph_tid_t tid;
@@ -2467,10 +2504,10 @@ public:
   ceph_tid_t _modify(const object_t& oid, const object_locator_t& oloc,
 		     vector<OSDOp>& ops, ceph::real_time mtime,
 		     const SnapContext& snapc, int flags,
-		     Context *onack, Context *oncommit,
+		     Context *oncommit,
 		     version_t *objver = NULL) {
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2481,7 +2518,7 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t off, uint64_t len, const SnapContext& snapc,
     const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *onack, Context *oncommit, version_t *objver = NULL,
+    Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2493,7 +2530,7 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     return o;
@@ -2502,10 +2539,10 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t off, uint64_t len, const SnapContext& snapc,
     const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *onack, Context *oncommit, version_t *objver = NULL,
+    Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_write_op(oid, oloc, off, len, snapc, bl, mtime, flags,
-			     onack, oncommit, objver, extra_ops, op_flags);
+			     oncommit, objver, extra_ops, op_flags);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -2514,7 +2551,7 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t len, const SnapContext& snapc,
     const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *onack, Context *oncommit,
+    Context *oncommit,
     version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
@@ -2526,7 +2563,7 @@ public:
     ops[i].op.extent.truncate_seq = 0;
     ops[i].indata = bl;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     return o;
@@ -2535,11 +2572,11 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t len, const SnapContext& snapc,
     const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *onack, Context *oncommit,
+    Context *oncommit,
     version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL) {
     Op *o = prepare_append_op(oid, oloc, len, snapc, bl, mtime, flags,
-			      onack, oncommit, objver, extra_ops);
+			      oncommit, objver, extra_ops);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -2548,7 +2585,7 @@ public:
 			 uint64_t off, uint64_t len, const SnapContext& snapc,
 			 const bufferlist &bl, ceph::real_time mtime, int flags,
 			 uint64_t trunc_size, __u32 trunc_seq,
-			 Context *onack, Context *oncommit,
+			 Context *oncommit,
 			 version_t *objver = NULL,
 			 ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
@@ -2561,7 +2598,7 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2571,7 +2608,7 @@ public:
   Op *prepare_write_full_op(
     const object_t& oid, const object_locator_t& oloc,
     const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
@@ -2582,7 +2619,7 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     return o;
@@ -2590,11 +2627,11 @@ public:
   ceph_tid_t write_full(
     const object_t& oid, const object_locator_t& oloc,
     const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_write_full_op(oid, oloc, snapc, bl, mtime, flags,
-				  onack, oncommit, objver, extra_ops, op_flags);
+				  oncommit, objver, extra_ops, op_flags);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -2603,7 +2640,7 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t write_len, uint64_t off,
     const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
 
@@ -2616,7 +2653,7 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     return o;
@@ -2625,12 +2662,12 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t write_len, uint64_t off,
     const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags, Context *onack,
+    ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
 
     Op *o = prepare_writesame_op(oid, oloc, write_len, off, snapc, bl,
-				 mtime, flags, onack, oncommit, objver,
+				 mtime, flags, oncommit, objver,
 				 extra_ops, op_flags);
 
     ceph_tid_t tid;
@@ -2639,7 +2676,7 @@ public:
   }
   ceph_tid_t trunc(const object_t& oid, const object_locator_t& oloc,
 		   const SnapContext& snapc, ceph::real_time mtime, int flags,
-		   uint64_t trunc_size, __u32 trunc_seq, Context *onack,
+		   uint64_t trunc_size, __u32 trunc_seq,
 		   Context *oncommit, version_t *objver = NULL,
 		   ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
@@ -2649,7 +2686,7 @@ public:
     ops[i].op.extent.truncate_size = trunc_size;
     ops[i].op.extent.truncate_seq = trunc_seq;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2658,7 +2695,7 @@ public:
   }
   ceph_tid_t zero(const object_t& oid, const object_locator_t& oloc,
 		  uint64_t off, uint64_t len, const SnapContext& snapc,
-		  ceph::real_time mtime, int flags, Context *onack, Context *oncommit,
+		  ceph::real_time mtime, int flags, Context *oncommit,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2666,7 +2703,7 @@ public:
     ops[i].op.extent.offset = off;
     ops[i].op.extent.length = len;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2675,15 +2712,14 @@ public:
   }
   ceph_tid_t rollback_object(const object_t& oid, const object_locator_t& oloc,
 			     const SnapContext& snapc, snapid_t snapid,
-			     ceph::real_time mtime, Context *onack, Context *oncommit,
+			     ceph::real_time mtime, Context *oncommit,
 			     version_t *objver = NULL,
 			     ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_ROLLBACK;
     ops[i].op.snap.snapid = snapid;
-    Op *o = new Op(oid, oloc, ops, CEPH_OSD_FLAG_WRITE, onack, oncommit,
-		   objver);
+    Op *o = new Op(oid, oloc, ops, CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2692,7 +2728,7 @@ public:
   }
   ceph_tid_t create(const object_t& oid, const object_locator_t& oloc,
 		    const SnapContext& snapc, ceph::real_time mtime, int global_flags,
-		    int create_flags, Context *onack, Context *oncommit,
+		    int create_flags, Context *oncommit,
 		    version_t *objver = NULL,
 		    ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
@@ -2700,7 +2736,7 @@ public:
     ops[i].op.op = CEPH_OSD_OP_CREATE;
     ops[i].op.flags = create_flags;
     Op *o = new Op(oid, oloc, ops, global_flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2710,13 +2746,13 @@ public:
   Op *prepare_remove_op(
     const object_t& oid, const object_locator_t& oloc,
     const SnapContext& snapc, ceph::real_time mtime, int flags,
-    Context *onack, Context *oncommit,
+    Context *oncommit,
     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_DELETE;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     return o;
@@ -2724,10 +2760,10 @@ public:
   ceph_tid_t remove(
     const object_t& oid, const object_locator_t& oloc,
     const SnapContext& snapc, ceph::real_time mtime, int flags,
-    Context *onack, Context *oncommit,
+    Context *oncommit,
     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     Op *o = prepare_remove_op(oid, oloc, snapc, mtime, flags,
-			      onack, oncommit, objver, extra_ops);
+			      oncommit, objver, extra_ops);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -2736,7 +2772,7 @@ public:
   ceph_tid_t setxattr(const object_t& oid, const object_locator_t& oloc,
 	      const char *name, const SnapContext& snapc, const bufferlist &bl,
 	      ceph::real_time mtime, int flags,
-	      Context *onack, Context *oncommit,
+	      Context *oncommit,
 	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2747,7 +2783,7 @@ public:
       ops[i].indata.append(name);
     ops[i].indata.append(bl);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2757,7 +2793,7 @@ public:
   ceph_tid_t removexattr(const object_t& oid, const object_locator_t& oloc,
 	      const char *name, const SnapContext& snapc,
 	      ceph::real_time mtime, int flags,
-	      Context *onack, Context *oncommit,
+	      Context *oncommit,
 	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2767,7 +2803,7 @@ public:
     if (name)
       ops[i].indata.append(name);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     ceph_tid_t tid;
@@ -2905,15 +2941,14 @@ public:
 
   void sg_write_trunc(vector<ObjectExtent>& extents, const SnapContext& snapc,
 		      const bufferlist& bl, ceph::real_time mtime, int flags,
-		      uint64_t trunc_size, __u32 trunc_seq, Context *onack,
+		      uint64_t trunc_size, __u32 trunc_seq,
 		      Context *oncommit, int op_flags = 0) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset,
 		  extents[0].length, snapc, bl, mtime, flags,
-		  extents[0].truncate_size, trunc_seq, onack, oncommit,
+		  extents[0].truncate_size, trunc_seq, oncommit,
 		  0, 0, op_flags);
     } else {
-      C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin();
 	   p != extents.end();
@@ -2927,19 +2962,17 @@ public:
 	assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
-	      onack ? gack.new_sub():0,
 	      oncommit ? gcom.new_sub():0,
 	      0, 0, op_flags);
       }
-      gack.activate();
       gcom.activate();
     }
   }
 
   void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc,
 		const bufferlist& bl, ceph::real_time mtime, int flags,
-		Context *onack, Context *oncommit, int op_flags = 0) {
-    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, onack, oncommit,
+		Context *oncommit, int op_flags = 0) {
+    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, oncommit,
 		   op_flags);
   }
 

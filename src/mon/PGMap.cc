@@ -12,6 +12,8 @@
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 
+#define dout_context g_ceph_context
+
 // --
 
 void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
@@ -1639,7 +1641,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 
   overall_cache_io_rate_summary(f, &ssr);
   if (!f && ssr.str().length())
-    *out << "  cache io " << ssr.str() << "\n";
+    *out << "   cache io " << ssr.str() << "\n";
 }
 
 void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
@@ -1832,15 +1834,17 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 {
   map<int,float> wm;
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
-  if (r < 0)
+  if (r < 0) {
     return r;
-
-  if(wm.empty())
+  }
+  if (wm.empty()) {
     return 0;
+  }
 
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
-    ceph::unordered_map<int32_t,osd_stat_t>::const_iterator osd_info = osd_stat.find(p->first);
+    ceph::unordered_map<int32_t,osd_stat_t>::const_iterator osd_info =
+      osd_stat.find(p->first);
     if (osd_info != osd_stat.end()) {
       if (osd_info->second.kb == 0 || p->second == 0) {
 	// osd must be out, hence its stats have been zeroed
@@ -1850,10 +1854,14 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 	// calculate proj below.
 	continue;
       }
-      int64_t proj = (int64_t)((double)((osd_info->second).kb_avail * 1024ull) /
-                     (double)p->second);
-      if (min < 0 || proj < min)
+      double unusable = (double)osd_info->second.kb *
+	(1.0 - g_conf->mon_osd_full_ratio);
+      double avail = MAX(0.0, (double)osd_info->second.kb_avail - unusable);
+      avail *= 1024.0;
+      int64_t proj = (int64_t)(avail / (double)p->second);
+      if (min < 0 || proj < min) {
 	min = proj;
+      }
     } else {
       dout(0) << "Cannot get stat of OSD " << p->first << dendl;
     }
@@ -1881,7 +1889,6 @@ void PGMap::dump_pool_stats(const OSDMap &osd_map, stringstream *ss,
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     if (verbose) {
-      tbl.define_column("CATEGORY", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("QUOTA OBJECTS", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("QUOTA BYTES", TextTable::LEFT, TextTable::LEFT);
     }
@@ -1955,8 +1962,6 @@ void PGMap::dump_pool_stats(const OSDMap &osd_map, stringstream *ss,
       tbl << pool_name
           << pool_id;
       if (verbose) {
-	tbl << "-";
-
         if (pool->quota_max_objects == 0)
           tbl << "N/A";
         else
@@ -2171,7 +2176,7 @@ void PGMapUpdater::register_pg(
     stats.last_deep_scrub_stamp = ps.last_deep_scrub_stamp;
     stats.last_clean_scrub_stamp = ps.last_clean_scrub_stamp;
   } else {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     stats.last_fresh = now;
     stats.last_active = now;
     stats.last_change = now;

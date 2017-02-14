@@ -1,10 +1,15 @@
+add_library(rbd_mirror_types STATIC
+  leader_watcher/Types.cc)
+
 set(rbd_mirror_internal
   ClusterWatcher.cc
   ImageReplayer.cc
   ImageDeleter.cc
   ImageSync.cc
   ImageSyncThrottler.cc
+  LeaderWatcher.cc
   Mirror.cc
+  MirrorStatusWatcher.cc
   PoolWatcher.cc
   Replayer.cc
   Threads.cc
@@ -13,6 +18,7 @@ set(rbd_mirror_internal
   image_replayer/CloseImageRequest.cc
   image_replayer/CreateImageRequest.cc
   image_replayer/EventPreprocessor.cc
+  image_replayer/IsPrimaryRequest.cc
   image_replayer/OpenImageRequest.cc
   image_replayer/OpenLocalImageRequest.cc
   image_replayer/ReplayStatusFormatter.cc
@@ -29,6 +35,7 @@ add_executable(rbd-mirror
   main.cc)
 target_link_libraries(rbd-mirror
   rbd_mirror_internal
+  rbd_mirror_types
   rbd_api
   rbd_internal
   rbd_types

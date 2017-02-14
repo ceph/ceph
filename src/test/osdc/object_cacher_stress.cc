@@ -300,7 +300,7 @@ int correctness_test(uint64_t delay_ns)
   std::cout << "wrote dirtying data" << std::endl;
 
   std::cout << "Waiting to read data into cache" << std::endl;
-  r = frontreadcond.wait();
+  frontreadcond.wait();
   verify_finisher.wait();
 
   std::cout << "Validating data" << std::endl;

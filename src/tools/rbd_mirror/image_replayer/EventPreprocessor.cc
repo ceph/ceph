@@ -13,6 +13,7 @@
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 
 #undef dout_prefix

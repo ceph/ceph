@@ -404,9 +404,22 @@ CEPH_RBD_API int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit);
  */
 CEPH_RBD_API int rbd_snap_set_limit(rbd_image_t image, uint64_t limit);
 
+/**
+ * Get the timestamp of a snapshot for an image. 
+ *
+ * @param snap_id the snap id of a snapshot of input image.
+ * @param timestamp the timestamp of input snapshot.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, struct timespec *timestamp);
+
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
+
+CEPH_RBD_API int rbd_flatten_with_progress(rbd_image_t image,
+                                           librbd_progress_fn_t cb,
+                                           void *cbdata);
 
 /**
  * List all images that are cloned from the image at the

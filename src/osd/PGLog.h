@@ -258,10 +258,10 @@ public:
 
     bool get_request(
       const osd_reqid_t &r,
-      eversion_t *replay_version,
+      eversion_t *version,
       version_t *user_version,
       int *return_code) const {
-      assert(replay_version);
+      assert(version);
       assert(user_version);
       assert(return_code);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
@@ -270,7 +270,7 @@ public:
       }
       p = caller_ops.find(r);
       if (p != caller_ops.end()) {
-	*replay_version = p->second->version;
+	*version = p->second->version;
 	*user_version = p->second->user_version;
 	*return_code = p->second->return_code;
 	return true;
@@ -288,7 +288,7 @@ public:
 	     i != p->second->extra_reqids.end();
 	     ++i) {
 	  if (i->first == r) {
-	    *replay_version = p->second->version;
+	    *version = p->second->version;
 	    *user_version = i->second;
 	    *return_code = p->second->return_code;
 	    return true;
@@ -475,6 +475,7 @@ public:
     }
 
     void trim(
+      CephContext* cct,
       eversion_t s,
       set<eversion_t> *trimmed);
 
@@ -558,8 +559,8 @@ public:
   PGLog(CephContext *cct, DoutPrefixProvider *dpp = 0) :
     prefix_provider(dpp),
     dirty_from(eversion_t::max()),
-    writeout_from(eversion_t::max()), 
-    cct(cct), 
+    writeout_from(eversion_t::max()),
+    cct(cct),
     pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
     touched_log(false),
     clear_divergent_priors(false) {}
@@ -1240,9 +1241,9 @@ public:
 	      continue;
 	    if (i.second.need > log.tail ||
 	      cmp(i.first, info.last_backfill, info.last_backfill_bitwise) > 0) {
-	      derr << __func__ << ": invalid missing set entry found "
-		   << i.first
-		   << dendl;
+	      lderr(dpp->get_cct()) << __func__ << ": invalid missing set entry found "
+				    << i.first
+				    << dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
 	    bufferlist bv;
@@ -1308,5 +1309,5 @@ public:
     ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
   }
 };
-  
+
 #endif // CEPH_PG_LOG_H

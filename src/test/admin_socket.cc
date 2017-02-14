@@ -105,6 +105,20 @@ TEST(AdminSocket, SendNoOp) {
   ASSERT_EQ(true, asoct.shutdown());
 }
 
+TEST(AdminSocket, SendTooLongRequest) {
+  std::unique_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
+  string version;
+  string request(16384, 'a');
+  //if admin_socket cannot handle it, segfault will happened.
+  ASSERT_NE("", client.do_request(request, &version));
+  ASSERT_EQ(true, asoct.shutdown());
+}
+
 class MyTest : public AdminSocketHook {
   bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) {
     std::vector<std::string> args;

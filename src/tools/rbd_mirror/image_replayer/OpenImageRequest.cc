@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include <type_traits>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::OpenImageRequest: " \
@@ -44,7 +45,7 @@ void OpenImageRequest<I>::send_open_image() {
   Context *ctx = create_context_callback<
     OpenImageRequest<I>, &OpenImageRequest<I>::handle_open_image>(
       this);
-  (*m_image_ctx)->state->open(ctx);
+  (*m_image_ctx)->state->open(false, ctx);
 }
 
 template <typename I>

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -20,12 +20,14 @@
 #include "librbd/journal/OpenRequest.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/journal/PromoteRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>
 #include <list>
 #include <boost/scope_exit.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
 namespace librbd {
@@ -181,12 +183,26 @@ public:
 
 OpenRequest<MockJournalImageCtx> *OpenRequest<MockJournalImageCtx>::s_instance = nullptr;
 
+
+template <>
+class PromoteRequest<MockJournalImageCtx> {
+public:
+  static PromoteRequest s_instance;
+  static PromoteRequest *create(MockJournalImageCtx *image_ctx, bool force,
+                                Context *on_finish) {
+    return &s_instance;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+PromoteRequest<MockJournalImageCtx> PromoteRequest<MockJournalImageCtx>::s_instance;
+
 } // namespace journal
 } // namespace librbd
 
 // template definitions
 #include "librbd/Journal.cc"
-template class librbd::Journal<librbd::MockJournalImageCtx>;
 
 using ::testing::_;
 using ::testing::DoAll;
@@ -264,7 +280,7 @@ public:
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, remove_listener(_));
     EXPECT_CALL(mock_journaler, shut_down(_))
-                  .WillOnce(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_get_max_append_size(::journal::MockJournaler &mock_journaler,
@@ -308,7 +324,7 @@ public:
 
   void expect_stop_replay(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, stop_replay(_))
-                  .WillOnce(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_shut_down_replay(MockJournalImageCtx &mock_image_ctx,
@@ -344,7 +360,7 @@ public:
     EXPECT_CALL(mock_journal_replay, decode(_, _))
                   .WillOnce(Return(0));
     EXPECT_CALL(mock_journal_replay, process(_, _, _))
-                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, NULL)),
+                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, static_cast<ContextWQ*>(NULL))),
                                   WithArg<2>(Invoke(this, &TestMockJournal::save_commit_context))));
   }
 
@@ -354,7 +370,7 @@ public:
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, stop_append(_))
-                  .WillOnce(CompleteContext(r, NULL));
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
   }
 
   void expect_committed(::journal::MockJournaler &mock_journaler,
@@ -384,7 +400,7 @@ public:
 
   void expect_flush_commit_position(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, flush_commit_position(_))
-                  .WillOnce(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
   }
 
   int when_open(MockJournal &mock_journal) {

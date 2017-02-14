@@ -46,9 +46,10 @@ using namespace std;
 
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-void usage()
+static void usage()
 {
   cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
@@ -85,7 +86,11 @@ static void handle_mds_signal(int signum)
     mds->handle_signal(signum);
 }
 
-int main(int argc, const char **argv) 
+#ifdef BUILDING_FOR_EMBEDDED
+extern "C" int cephd_mds(int argc, const char **argv)
+#else
+int main(int argc, const char **argv)
+#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -138,7 +143,8 @@ int main(int argc, const char **argv)
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
 
-  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)

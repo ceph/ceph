@@ -134,13 +134,14 @@ private:
 public:
   /// Constructor.
   HashIndex(
+    CephContext* cct,
     coll_t collection,     ///< [in] Collection
     const char *base_path, ///< [in] Path to the index root.
     int merge_at,          ///< [in] Merge threshhold.
     int split_multiple,	   ///< [in] Split threshhold.
     uint32_t index_version,///< [in] Index version
     double retry_probability=0) ///< [in] retry probability
-    : LFNIndex(collection, base_path, index_version, retry_probability),
+    : LFNIndex(cct, collection, base_path, index_version, retry_probability),
       merge_threshold(merge_at),
       split_multiplier(split_multiple) {}
 

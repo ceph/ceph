@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = true;
     }*/
-  DBObjectMap omap(store);
+  DBObjectMap omap(cct.get(), store);
   stringstream out;
   int r = store->open(out);
   if (r < 0) {

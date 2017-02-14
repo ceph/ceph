@@ -66,7 +66,7 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   mon->monmap->decode(monmap_bl);
 
   if (mon->store->exists("mkfs", "monmap")) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->erase("mkfs", "monmap");
     mon->store->apply_transaction(t);
   }
@@ -78,7 +78,7 @@ void MonmapMonitor::create_pending()
 {
   pending_map = *mon->monmap;
   pending_map.epoch++;
-  pending_map.last_changed = ceph_clock_now(g_ceph_context);
+  pending_map.last_changed = ceph_clock_now();
   dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
 }
 
@@ -161,7 +161,7 @@ void MonmapMonitor::on_active()
        single-threaded process and, truth be told, no one else relies on this
        thing besides us.
      */
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(Monitor::MONITOR_NAME, "joined", 1);
     mon->store->apply_transaction(t);
     mon->has_ever_joined = true;
@@ -455,7 +455,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      */
 
     pending_map.add(name, addr);
-    pending_map.last_changed = ceph_clock_now(g_ceph_context);
+    pending_map.last_changed = ceph_clock_now();
     ss << "adding mon." << name << " at " << addr;
     propose = true;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
@@ -507,7 +507,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     entity_addr_t addr = pending_map.get_addr(name);
     pending_map.remove(name);
-    pending_map.last_changed = ceph_clock_now(g_ceph_context);
+    pending_map.last_changed = ceph_clock_now();
     ss << "removing mon." << name << " at " << addr
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
@@ -556,7 +556,7 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   if (pending_map.contains(join->addr))
     pending_map.remove(pending_map.get_name(join->addr));
   pending_map.add(join->name, join->addr);
-  pending_map.last_changed = ceph_clock_now(g_ceph_context);
+  pending_map.last_changed = ceph_clock_now();
   return true;
 }
 
@@ -590,21 +590,6 @@ void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
 	     << " is down (out of quorum)";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
-      }
-    }
-  }
-  if (g_conf->mon_warn_on_old_mons && !mon->get_classic_mons().empty()) {
-    ostringstream ss;
-    ss << "some monitors are running older code";
-    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-    if (detail) {
-      for (set<int>::const_iterator i = mon->get_classic_mons().begin();
-	  i != mon->get_classic_mons().end();
-	  ++i) {
-	ostringstream ss;
-	ss << "mon." << mon->monmap->get_name(*i)
-	     << " only supports the \"classic\" command set";
-	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
   }

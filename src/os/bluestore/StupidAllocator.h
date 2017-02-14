@@ -11,6 +11,7 @@
 #include "os/bluestore/bluestore_types.h"
 
 class StupidAllocator : public Allocator {
+  CephContext* cct;
   std::mutex lock;
 
   int64_t num_free;     ///< total bytes in freelist
@@ -24,7 +25,7 @@ class StupidAllocator : public Allocator {
   void _insert_free(uint64_t offset, uint64_t len);
 
 public:
-  StupidAllocator();
+  StupidAllocator(CephContext* cct);
   ~StupidAllocator();
 
   int reserve(uint64_t need);
@@ -32,7 +33,20 @@ public:
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+=======
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents,
+    int *count);
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
 
   int64_t allocate_int(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,

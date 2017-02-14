@@ -28,6 +28,7 @@
 #include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::" << *this << " " \
@@ -224,6 +225,21 @@ private:
   AdminSocket *admin_socket;
   Commands commands;
 };
+
+uint32_t calculate_replay_delay(const utime_t &event_time,
+                                int mirroring_replay_delay) {
+    if (mirroring_replay_delay <= 0) {
+      return 0;
+    }
+
+    utime_t now = ceph_clock_now();
+    if (event_time + mirroring_replay_delay <= now) {
+      return 0;
+    }
+
+    // ensure it is rounded up when converting to integer
+    return (event_time + mirroring_replay_delay - now) + 1;
+}
 
 } // anonymous namespace
 
@@ -604,6 +620,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
   Context *ctx = new FunctionContext([this, r, desc](int _r) {
       {
         Mutex::Locker locker(m_lock);
+        assert(m_state == STATE_STARTING);
         m_state = STATE_STOPPING;
         if (r < 0 && r != -ECANCELED) {
           derr << "start failed: " << cpp_strerror(r) << dendl;
@@ -643,6 +660,7 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
   bool running = true;
+  bool canceled_task = false;
   {
     Mutex::Locker locker(m_lock);
 
@@ -665,6 +683,14 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
         std::swap(m_on_stop_finish, on_finish);
         m_stop_requested = true;
         m_manual_stop = manual;
+
+	Mutex::Locker timer_locker(m_threads->timer_lock);
+        if (m_delayed_preprocess_task != nullptr) {
+          canceled_task = m_threads->timer->cancel_event(
+            m_delayed_preprocess_task);
+          assert(canceled_task);
+          m_delayed_preprocess_task = nullptr;
+        }
       }
     }
   }
@@ -673,6 +699,11 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   if (bootstrap_request != nullptr) {
     bootstrap_request->cancel();
     bootstrap_request->put();
+  }
+
+  if (canceled_task) {
+    m_event_replay_tracker.finish_op();
+    on_replay_interrupted();
   }
 
   if (!running) {
@@ -1029,18 +1060,45 @@ void ImageReplayer<I>::preprocess_entry() {
     return;
   }
 
+  uint32_t delay = calculate_replay_delay(
+    m_event_entry.timestamp, m_local_image_ctx->mirroring_replay_delay);
+  if (delay == 0) {
+    handle_preprocess_entry_ready(0);
+    return;
+  }
+
+  dout(20) << "delaying replay by " << delay << " sec" << dendl;
+
+  Mutex::Locker timer_locker(m_threads->timer_lock);
+  assert(m_delayed_preprocess_task == nullptr);
+  m_delayed_preprocess_task = new FunctionContext(
+    [this](int r) {
+      assert(m_threads->timer_lock.is_locked());
+      m_delayed_preprocess_task = nullptr;
+      m_threads->work_queue->queue(
+        create_context_callback<ImageReplayer,
+        &ImageReplayer<I>::handle_preprocess_entry_ready>(this), 0);
+    });
+  m_threads->timer->add_event_after(delay, m_delayed_preprocess_task);
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_preprocess_entry_ready(int r) {
+  dout(20) << "r=" << r << dendl;
+  assert(r == 0);
+
   if (!m_event_preprocessor->is_required(m_event_entry)) {
     process_entry();
     return;
   }
 
   Context *ctx = create_context_callback<
-    ImageReplayer, &ImageReplayer<I>::handle_preprocess_entry>(this);
+    ImageReplayer, &ImageReplayer<I>::handle_preprocess_entry_safe>(this);
   m_event_preprocessor->preprocess(&m_event_entry, ctx);
 }
 
 template <typename I>
-void ImageReplayer<I>::handle_preprocess_entry(int r) {
+void ImageReplayer<I>::handle_preprocess_entry_safe(int r) {
   dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
@@ -1057,6 +1115,12 @@ template <typename I>
 void ImageReplayer<I>::process_entry() {
   dout(20) << "processing entry tid=" << m_replay_entry.get_commit_tid()
            << dendl;
+
+  // stop replaying events if stop has been requested
+  if (on_replay_interrupted()) {
+    m_event_replay_tracker.finish_op();
+    return;
+  }
 
   Context *on_ready = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
@@ -1372,7 +1436,7 @@ void ImageReplayer<I>::shut_down(int r) {
           m_local_journal->stop_external_replay();
           m_local_replay = nullptr;
 
-          delete m_event_preprocessor;
+          EventPreprocessor<I>::destroy(m_event_preprocessor);
           m_event_preprocessor = nullptr;
           ctx->complete(0);
         });
@@ -1441,7 +1505,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
   m_local_ioctx.close();
   m_remote_ioctx.close();
 
-  delete m_replay_status_formatter;
+  ReplayStatusFormatter<I>::destroy(m_replay_status_formatter);
   m_replay_status_formatter = nullptr;
 
   Context *on_start = nullptr;
@@ -1451,6 +1515,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     std::swap(on_start, m_on_start_finish);
     std::swap(on_stop, m_on_stop_finish);
     m_stop_requested = false;
+    assert(m_delayed_preprocess_task == nullptr);
     assert(m_state == STATE_STOPPING);
     m_state = STATE_STOPPED;
   }

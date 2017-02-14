@@ -31,7 +31,7 @@ public:
 
   MOSDPGTrim() : Message(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGTrim(version_t mv, spg_t p, eversion_t tt) :
-    Message(MSG_OSD_PG_TRIM),
+    Message(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION),
     epoch(mv), pgid(p), trim_to(tt) { }
 private:
   ~MOSDPGTrim() {}

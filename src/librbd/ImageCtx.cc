@@ -545,12 +545,12 @@ struct C_InvalidateCache : public Context {
 			  cls::rbd::SnapshotNamespace in_snap_namespace,
 			  snap_t id, uint64_t in_size,
 			  parent_info parent, uint8_t protection_status,
-                          uint64_t flags)
+                          uint64_t flags, utime_t timestamp)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
     SnapInfo info(in_snap_name, in_snap_namespace,
-		  in_size, parent, protection_status, flags);
+		  in_size, parent, protection_status, flags, timestamp);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
@@ -967,7 +967,8 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_pool", false)(
         "rbd_journal_max_payload_bytes", false)(
         "rbd_journal_max_concurrent_object_sets", false)(
-        "rbd_mirroring_resync_after_disconnect", false);
+        "rbd_mirroring_resync_after_disconnect", false)(
+        "rbd_mirroring_replay_delay", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1025,6 +1026,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_max_payload_bytes);
     ASSIGN_OPTION(journal_max_concurrent_object_sets);
     ASSIGN_OPTION(mirroring_resync_after_disconnect);
+    ASSIGN_OPTION(mirroring_replay_delay);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

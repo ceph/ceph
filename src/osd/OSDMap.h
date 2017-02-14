@@ -275,12 +275,10 @@ private:
   }
 
   // no copying
-  /* oh, how i long for c++11...
 private:
   OSDMap(const OSDMap& other) = default;
-  const OSDMap& operator=(const OSDMap& other) = default;
+  OSDMap& operator=(const OSDMap& other) = default;
 public:
-  */
 
   void deepish_copy_from(const OSDMap& o) {
     *this = o;
@@ -527,6 +525,8 @@ public:
   }
   
   int get_next_up_osd_after(int n) const {
+    if (get_max_osd() == 0)
+      return -1;
     for (int i = n + 1; i != n; ++i) {
       if (i >= get_max_osd())
 	i = 0;
@@ -539,6 +539,8 @@ public:
   }
 
   int get_previous_up_osd_before(int n) const {
+    if (get_max_osd() == 0)
+      return -1;
     for (int i = n - 1; i != n; --i) {
       if (i < 0)
 	i = get_max_osd() - 1;
@@ -609,6 +611,11 @@ public:
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
     return pool->get_pg_num();
+  }
+
+  bool pg_exists(pg_t pgid) const {
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    return p && pgid.ps() < p->get_pg_num();
   }
 
 private:

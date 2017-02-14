@@ -37,11 +37,35 @@ public:
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
 			   uint64_t max_alloc_size, int64_t hint,
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
 			   AllocExtentVector *extents) = 0;
 
   int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
 		   int64_t hint, AllocExtentVector *extents) {
     return allocate(want_size, alloc_unit, want_size, hint, extents);
+=======
+			   AllocExtentVector *extents, int *count) = 0;
+
+  int allocate(uint64_t want_size, uint64_t alloc_unit,
+               int64_t hint, AllocExtentVector *extents, int *count) {
+    return allocate(want_size, alloc_unit, want_size, hint, extents, count);
+>>>>>>> os/bluestore: return blocks allocated from allocate()
+=======
+			   AllocExtentVector *extents) = 0;
+
+  int allocate(uint64_t want_size, uint64_t alloc_unit,
+               int64_t hint, AllocExtentVector *extents) {
+    return allocate(want_size, alloc_unit, want_size, hint, extents);
+>>>>>>> os/bluestore: drop useless count arg to allocate
+=======
+			   AllocExtentVector *extents) = 0;
+
+  int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
+		   int64_t hint, AllocExtentVector *extents) {
+    return allocate(want_size, alloc_unit, want_size, hint, extents);
+>>>>>>> ce8edcfed6cd908779efd229202eab1232d16f1c
   }
 
   virtual int release(
@@ -55,7 +79,8 @@ public:
   virtual uint64_t get_free() = 0;
 
   virtual void shutdown() = 0;
-  static Allocator *create(string type, int64_t size, int64_t block_size);
+  static Allocator *create(CephContext* cct, string type, int64_t size,
+			   int64_t block_size);
 };
 
 #endif

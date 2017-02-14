@@ -16,6 +16,8 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
 
@@ -42,8 +44,9 @@ inline const char *get_lock_type_name(int t) {
 }
 
 #include "include/memory.h"
+
 struct MutationImpl;
-typedef ceph::shared_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 extern "C" {
 #include "locks.h"

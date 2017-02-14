@@ -30,9 +30,6 @@
 #include "include/assert.h"
 
 class MemStore : public ObjectStore {
-private:
-  CephContext *const cct;
-
 public:
   struct Object : public RefCountedObject {
     std::mutex xattr_mutex;
@@ -241,8 +238,7 @@ private:
 
 public:
   MemStore(CephContext *cct, const string& path)
-    : ObjectStore(path),
-      cct(cct),
+    : ObjectStore(cct, path),
       coll_lock("MemStore::coll_lock"),
       finisher(cct),
       used_bytes(0) {}
@@ -258,6 +254,10 @@ public:
 
   int mount() override;
   int umount() override;
+
+  int fsck(bool deep) override {
+    return 0;
+  }
 
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;

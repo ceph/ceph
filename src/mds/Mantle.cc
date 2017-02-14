@@ -19,6 +19,7 @@
 
 #include <fstream>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds_balancer
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_balancer
@@ -116,7 +117,7 @@ int Mantle::balance(const string &script,
     /* push values into this mds's table; setfield assigns key/pops val */
     for (map<string, double>::const_iterator it = metrics[i].begin();
          it != metrics[i].end();
-         it++) {
+         ++it) {
       lua_pushnumber(L, it->second);
       lua_setfield(L, -2, it->first.c_str());
     }

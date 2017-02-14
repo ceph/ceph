@@ -4,6 +4,8 @@
 #include "include/types.h"
 #include "common/bloom_filter.hpp"
 
+MEMPOOL_DEFINE_FACTORY(unsigned char, byte, bloom_filter);
+
 void bloom_filter::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);

@@ -450,7 +450,7 @@ double eventcenter_poll()
 {
   int count = 1000000;
   EventCenter center(g_ceph_context);
-  center.init(1000, 0);
+  center.init(1000, 0, "posix");
   center.set_owner();
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -467,7 +467,7 @@ class CenterWorker : public Thread {
  public:
   EventCenter center;
   explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
-    center.init(100, 0);
+    center.init(100, 0, "posix");
   }
   void stop() {
     done = true;
@@ -889,7 +889,7 @@ double perf_ceph_clock_now()
   int count = 100000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    ceph_clock_now(g_ceph_context);
+    ceph_clock_now();
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;

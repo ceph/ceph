@@ -71,6 +71,8 @@ TEST(AES, Encrypt) {
   int err;
   err = memcmp(cipher_s, want_cipher, sizeof(want_cipher));
   ASSERT_EQ(0, err);
+
+  delete kh;
 }
 
 TEST(AES, Decrypt) {
@@ -109,6 +111,8 @@ TEST(AES, Decrypt) {
   int err;
   err = memcmp(plaintext_s, want_plaintext, sizeof(want_plaintext));
   ASSERT_EQ(0, err);
+
+  delete kh;
 }
 
 TEST(AES, Loop) {
@@ -136,6 +140,8 @@ TEST(AES, Loop) {
       int r = kh->encrypt(plaintext, cipher, &error);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
+
+      delete kh;
     }
     plaintext.clear();
 
@@ -146,6 +152,8 @@ TEST(AES, Loop) {
       int r = ckh->decrypt(cipher, plaintext, &error);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
+
+      delete ckh;
     }
   }
 
@@ -158,14 +166,14 @@ TEST(AES, Loop) {
 TEST(AES, LoopKey) {
   bufferptr k(16);
   get_random_bytes(k.c_str(), k.length());
-  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(NULL), k);
+  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(), k);
 
   bufferlist data;
   bufferptr r(128);
   get_random_bytes(r.c_str(), r.length());
   data.append(r);
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   int n = 100000;
 
   for (int i=0; i<n; ++i) {
@@ -175,7 +183,7 @@ TEST(AES, LoopKey) {
     ASSERT_EQ(r, 0);
   }
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   cout << n << " encoded in " << dur << std::endl;
 }

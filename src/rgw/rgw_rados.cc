@@ -72,6 +72,7 @@ using namespace librados;
 
 #include "compressor/Compressor.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -1287,7 +1288,7 @@ void RGWPeriod::update(const RGWZoneGroupMap& map)
 {
   ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << id << dendl;
   for (std::map<string, RGWZoneGroup>::const_iterator iter = map.zonegroups.begin();
-       iter != map.zonegroups.end(); iter++) {
+       iter != map.zonegroups.end(); ++iter) {
     period_map.zonegroups_by_api[iter->second.api_name] = iter->second;
     period_map.zonegroups[iter->second.get_name()] = iter->second;
   }
@@ -1463,6 +1464,7 @@ int get_zones_pool_names_set(CephContext* cct,
       pool_names.insert(zone.user_email_pool.name);
       pool_names.insert(zone.user_swift_pool.name);
       pool_names.insert(zone.user_uid_pool.name);
+      pool_names.insert(zone.roles_pool.name);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
@@ -1530,6 +1532,7 @@ int RGWZoneParams::fix_pool_names()
   user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
   user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
   user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
+  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.roles", roles_pool.name);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
@@ -2286,6 +2289,7 @@ struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
   struct put_obj_aio_info info;
   info = pending.front();
   pending.pop_front();
+  pending_size -= info.size;
   return info;
 }
 
@@ -2324,7 +2328,7 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait)
+int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait)
 {
   bool _wait = need_to_wait;
 
@@ -2332,9 +2336,11 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool
     struct put_obj_aio_info info;
     info.handle = handle;
     info.obj = obj;
+    info.size = size;
+    pending_size += size;
     pending.push_back(info);
   }
-  size_t orig_size = pending.size();
+  size_t orig_size = pending_size;
 
   /* first drain complete IOs */
   while (pending_has_completed()) {
@@ -2346,12 +2352,16 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool
   }
 
   /* resize window in case messages are draining too fast */
-  if (orig_size - pending.size() >= max_chunks) {
-    max_chunks++;
+  if (orig_size - pending_size >= window_size) {
+    window_size += store->ctx()->_conf->rgw_max_chunk_size;
+    uint64_t max_window_size = store->ctx()->_conf->rgw_put_obj_max_window_size;
+    if (window_size > max_window_size) {
+      window_size = max_window_size;
+    }
   }
 
   /* now throttle. Note that need_to_wait should only affect the first IO operation */
-  if (pending.size() > max_chunks || _wait) {
+  if (pending_size > window_size || _wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
@@ -2371,6 +2381,15 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   *pobj = cur_obj;
 
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
+}
+
+int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
+{
+  RGWPutObjProcessor::prepare(store, oid_rand);
+
+  window_size = store->ctx()->_conf->rgw_put_obj_min_window_size;
+
+  return 0;
 }
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
@@ -2414,7 +2433,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
 
 int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, oid_rand);
+  RGWPutObjProcessor_Aio::prepare(store, oid_rand);
 
   int r = store->get_max_chunk_size(bucket, &max_chunk_size);
   if (r < 0) {
@@ -2491,13 +2510,14 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     }
     bufferlist bl;
     pending_data_bl.splice(0, max_write_size, &bl);
+    uint64_t write_len = bl.length();
     int r = write_data(bl, data_ofs, &handle, &obj, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
       return r;
     }
-    data_ofs += bl.length();
-    r = throttle_data(handle, obj, false);
+    data_ofs += write_len;
+    r = throttle_data(handle, obj, write_len, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
       return r;
@@ -2714,7 +2734,18 @@ RGWObjState *RGWObjectCtx::get_state(rgw_obj& obj) {
 void RGWObjectCtx::invalidate(rgw_obj& obj)
 {
   RWLock::WLocker wl(lock);
-  objs_state.erase(obj);
+  auto iter = objs_state.find(obj);
+  if (iter == objs_state.end()) {
+    return;
+  }
+  bool is_atomic = iter->second.is_atomic;
+  bool prefetch_data = iter->second.prefetch_data;
+  
+  objs_state.erase(iter);
+
+  auto& s = objs_state[obj];
+  s.is_atomic = is_atomic;
+  s.prefetch_data = prefetch_data;
 }
 
 void RGWObjectCtx::set_atomic(rgw_obj& obj) {
@@ -2855,7 +2886,7 @@ void *RGWRadosThread::Worker::entry() {
   utime_t interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
 
   do {
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     int r = processor->process();
     if (r < 0) {
       dout(0) << "ERROR: processor->process() returned error r=" << r << dendl;
@@ -2864,7 +2895,7 @@ void *RGWRadosThread::Worker::entry() {
     if (processor->going_down())
       break;
 
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
     end -= start;
 
     uint64_t cur_msec = processor->interval_msec();
@@ -2881,7 +2912,7 @@ void *RGWRadosThread::Worker::entry() {
       wait_time -= end;
 
       lock.Lock();
-      cond.WaitInterval(cct, lock, wait_time);
+      cond.WaitInterval(lock, wait_time);
       lock.Unlock();
     } else {
       lock.Lock();
@@ -3577,7 +3608,7 @@ int RGWRados::replace_region_with_zonegroup()
       }
     }
     for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
-         iter ++) {
+         ++iter) {
       ldout(cct, 0) << "Converting zone" << iter->first << dendl;
       RGWZoneParams zoneparams(iter->first, iter->first);
       zoneparams.set_id(iter->first);
@@ -3679,10 +3710,23 @@ int RGWRados::init_zg_from_period(bool *initialized)
   if (iter != current_period.get_map().zonegroups.end()) {
     ldout(cct, 20) << "using current period zonegroup " << zonegroup.get_name() << dendl;
     zonegroup = iter->second;
+    ret = zonegroup.init(cct, this, false);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed init zonegroup: " << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
     ret = zone_params.init(cct, this);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
+    } if (ret ==-ENOENT && zonegroup.get_name() == default_zonegroup_name) {
+      ldout(cct, 10) << " Using default name "<< default_zone_name << dendl;
+      zone_params.set_name(default_zone_name);
+      ret = zone_params.init(cct, this);
+      if (ret < 0 && ret != -ENOENT) {
+       ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
+       return ret;
+      }
     }
   }
   for (iter = current_period.get_map().zonegroups.begin();
@@ -3698,7 +3742,11 @@ int RGWRados::init_zg_from_period(bool *initialized)
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	if (zonegroup.get_id() == zg.get_id()) {
 	  zonegroup.master_zone = master->second.id;
-	  zonegroup.update();
+	  ret = zonegroup.update();
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error updating zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
 	} else {
 	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
 	  ret = fixed_zg.init(cct, this);
@@ -3707,7 +3755,11 @@ int RGWRados::init_zg_from_period(bool *initialized)
 	    return ret;
 	  }
 	  fixed_zg.master_zone = master->second.id;
-	  fixed_zg.update();
+	  ret = fixed_zg.update();
+	  if (ret < 0) {
+	    ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
 	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for master_zone=" <<
@@ -3761,7 +3813,11 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
 	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing master_zone, setting zone " <<
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	zonegroup.master_zone = master->second.id;
-	zonegroup.update();
+	ret = zonegroup.update();
+	if (ret < 0) {
+	  ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
           "master_zone=" << zonegroup.master_zone << dendl;
@@ -5096,21 +5152,20 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
 
   result->clear();
 
-  rgw_obj marker_obj, end_marker_obj, prefix_obj;
-  marker_obj.set_instance(params.marker.instance);
-  marker_obj.set_ns(params.ns);
-  marker_obj.set_obj(params.marker.name);
+  rgw_bucket b;
+  rgw_obj marker_obj(b, params.marker);
+  rgw_obj end_marker_obj(b, params.end_marker);
+  rgw_obj prefix_obj;
+  rgw_obj_key cur_end_marker;
+  if (!params.ns.empty()) {
+    marker_obj.set_ns(params.ns);
+    end_marker_obj.set_ns(params.ns);
+    end_marker_obj.get_index_key(&cur_end_marker);
+  }
   rgw_obj_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  end_marker_obj.set_instance(params.end_marker.instance);
-  end_marker_obj.set_ns(params.ns);
-  end_marker_obj.set_obj(params.end_marker.name);
-  rgw_obj_key cur_end_marker;
-  if (params.ns.empty()) { /* no support for end marker for namespaced objects */
-    end_marker_obj.get_index_key(&cur_end_marker);
-  }
-  const bool cur_end_marker_valid = !cur_end_marker.empty();
+  const bool cur_end_marker_valid = !params.end_marker.empty();
 
   prefix_obj.set_ns(params.ns);
   prefix_obj.set_obj(params.prefix);
@@ -5186,8 +5241,8 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       }
 
       if (count < max) {
-        params.marker = obj;
-        next_marker = obj;
+        params.marker = key;
+        next_marker = key;
       }
 
       if (params.filter && !params.filter->filter(obj.name, key.name))
@@ -5360,7 +5415,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {
-      info.creation_time = ceph::real_clock::now(cct);
+      info.creation_time = ceph::real_clock::now();
     } else {
       info.creation_time = creation_time;
     }
@@ -6270,9 +6325,11 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
-                                        map<string, bufferlist>& attrs)
+int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
+                                           map<string, bufferlist>& attrs, bool assume_noent,
+                                           void *_index_op)
 {
+  RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   rgw_bucket bucket;
   rgw_rados_ref ref;
   RGWRados *store = target->get_store();
@@ -6280,7 +6337,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   ObjectWriteOperation op;
 
   RGWObjState *state;
-  int r = target->get_state(&state, false);
+  int r = target->get_state(&state, false, assume_noent);
   if (r < 0)
     return r;
 
@@ -6298,7 +6355,12 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   bool is_olh = state->is_olh;
 
   bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
-  r = target->prepare_atomic_modification(op, reset_obj, meta.ptag, meta.if_match, meta.if_nomatch, false);
+
+  const string *ptag = meta.ptag;
+  if (!ptag && !index_op->get_optag()->empty()) {
+    ptag = index_op->get_optag();
+  }
+  r = target->prepare_atomic_modification(op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false);
   if (r < 0)
     return r;
 
@@ -6372,7 +6434,6 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   if (!op.size())
     return 0;
 
-  string index_tag;
   uint64_t epoch;
   int64_t poolid;
 
@@ -6381,28 +6442,26 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
 
   bool versioned_target = (meta.olh_epoch > 0 || !obj.get_instance().empty());
 
-  index_tag = state->write_tag;
-
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
-  RGWBucketInfo& bucket_info = target->get_bucket_info();
-
-  RGWRados::Bucket bop(store, bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
-
   if (versioned_op) {
-    index_op.set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
+    index_op->set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
   }
 
-
-  r = index_op.prepare(CLS_RGW_OP_ADD);
-  if (r < 0)
-    return r;
+  if (!index_op->is_prepared()) {
+    r = index_op->prepare(CLS_RGW_OP_ADD, &state->write_tag);
+    if (r < 0)
+      return r;
+  }
 
   r = ref.ioctx.operate(ref.oid, &op);
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
                 before and now it does */
+    if (r == -EEXIST && assume_noent) {
+      target->invalidate_state();
+      return r;
+    }
     goto done_cancel;
   }
 
@@ -6414,7 +6473,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
 
-  r = index_op.complete(poolid, epoch, size, accounted_size,
+  r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type, &acl_bl,
                         meta.category, meta.remove_objs);
   if (r < 0)
@@ -6454,7 +6513,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   return 0;
 
 done_cancel:
-  int ret = index_op.cancel();
+  int ret = index_op->cancel();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: index_op.cancel()() returned ret=" << ret << dendl;
   }
@@ -6495,6 +6554,28 @@ done_cancel:
     }
   }
 
+  return r;
+}
+
+int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
+                                           map<string, bufferlist>& attrs)
+{
+  RGWBucketInfo& bucket_info = target->get_bucket_info();
+
+  RGWRados::Bucket bop(target->get_store(), bucket_info);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
+
+  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
+  int r;
+  if (assume_noent) {
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op);
+    if (r == -EEXIST) {
+      assume_noent = false;
+    }
+  }
+  if (!assume_noent) {
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op);
+  }
   return r;
 }
 
@@ -6712,6 +6793,7 @@ public:
     do {
       void *handle = NULL;
       rgw_obj obj;
+      uint64_t size = bl.length();
       int ret = filter->handle_data(bl, ofs, &handle, &obj, &again);
       if (ret < 0)
         return ret;
@@ -6723,7 +6805,7 @@ public:
         ret = opstate->renew_state();
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
-          int r = filter->throttle_data(handle, obj, false);
+          int r = filter->throttle_data(handle, obj, size, false);
           if (r < 0) {
             ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
           }
@@ -6734,7 +6816,7 @@ public:
         need_opstate = false;
       }
 
-      ret = filter->throttle_data(handle, obj, false);
+      ret = filter->throttle_data(handle, obj, size, false);
       if (ret < 0)
         return ret;
     } while (again);
@@ -7647,7 +7729,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       if (ret < 0) {
         return ret;
       }
-      ret = processor.throttle_data(handle, obj, false);
+      ret = processor.throttle_data(handle, obj, end - ofs + 1, false);
       if (ret < 0)
         return ret;
     } while (again);
@@ -8258,12 +8340,12 @@ int RGWRados::Object::Delete::delete_obj()
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
   index_op.set_bilog_flags(params.bilog_flags);
 
 
-  r = index_op.prepare(CLS_RGW_OP_DEL);
+  r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag);
   if (r < 0)
     return r;
 
@@ -8369,7 +8451,7 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   }
 
   RGWRados::Bucket bop(this, bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
   real_time removed_mtime;
   int r = index_op.complete_del(-1 /* pool */, 0, removed_mtime, NULL);
@@ -8484,7 +8566,7 @@ int RGWRados::get_system_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState
   return ret;
 }
 
-int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh)
+int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent)
 {
   bool need_follow_olh = follow_olh && !obj.have_instance();
 
@@ -8500,7 +8582,11 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
 
   s->obj = obj;
 
-  int r = RGWRados::raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL);
+  int r = -ENOENT;
+
+  if (!assume_noent) {
+    r = RGWRados::raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL);
+  }
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -8626,12 +8712,12 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   return 0;
 }
 
-int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh)
+int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent)
 {
   int ret;
 
   do {
-    ret = get_obj_state_impl(rctx, obj, state, follow_olh);
+    ret = get_obj_state_impl(rctx, obj, state, follow_olh, assume_noent);
   } while (ret == -EAGAIN);
 
   return ret;
@@ -8787,9 +8873,9 @@ int RGWRados::append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
   return 0;
 }
 
-int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh)
+int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh, bool assume_noent)
 {
-  return store->get_obj_state(&ctx, obj, pstate, follow_olh);
+  return store->get_obj_state(&ctx, obj, pstate, follow_olh, assume_noent);
 }
 
 void RGWRados::Object::invalidate_state()
@@ -9021,13 +9107,13 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
 
   bufferlist bl;
   RGWRados::Bucket bop(this, bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
   if (state) {
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
     state->write_tag = tag;
-    r = index_op.prepare(CLS_RGW_OP_ADD);
+    r = index_op.prepare(CLS_RGW_OP_ADD, &state->write_tag);
 
     if (r < 0)
       return r;
@@ -9259,7 +9345,7 @@ int RGWRados::SystemObject::Read::stat(RGWObjVersionTracker *objv_tracker)
                                 stat_params.lastmod, stat_params.obj_size, objv_tracker);
 }
 
-int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
+int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_tag)
 {
   if (blind) {
     return 0;
@@ -9272,15 +9358,20 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
     return ret;
   }
 
-  if (obj_state && obj_state->write_tag.length()) {
-    optag = string(obj_state->write_tag.c_str(), obj_state->write_tag.length());
+  if (write_tag && write_tag->length()) {
+    optag = string(write_tag->c_str(), write_tag->length());
   } else {
     if (optag.empty()) {
       append_rand_alpha(store->ctx(), optag, optag, 32);
     }
   }
 
-  return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags);
+  int r = store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags);
+  if (r < 0) {
+    return r;
+  }
+  prepared = true;
+  return 0;
 }
 
 int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
@@ -11809,7 +11900,7 @@ int RGWRados::process_lc()
 
 int RGWRados::process_expire_objects()
 {
-  obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now(cct));
+  obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now());
   return 0;
 }
 
@@ -12645,7 +12736,7 @@ int RGWStateLog::store_entry(const string& client_id, const string& op_id, const
   if (check_state) {
     cls_statelog_check_state(op, client_id, op_id, object, *check_state);
   }
-  utime_t ts = ceph_clock_now(store->ctx());
+  utime_t ts = ceph_clock_now();
   bufferlist nobl;
   cls_statelog_add(op, client_id, op_id, object, ts, state, (bl ? *bl : nobl));
   r = ioctx.operate(oid, &op);
@@ -12952,9 +13043,9 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
 
   if (keep_index_consistent) {
     RGWRados::Bucket bop(this, bucket_info);
-    RGWRados::Bucket::UpdateIndex index_op(&bop, obj, astate);
+    RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-    ret = index_op.prepare(CLS_RGW_OP_DEL);
+    ret = index_op.prepare(CLS_RGW_OP_DEL, &astate->write_tag);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to prepare index op with ret=" << ret << dendl;
       return ret;
@@ -13006,3 +13097,4 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
     return 0;
   }
 }
+

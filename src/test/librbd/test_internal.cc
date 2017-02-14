@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "cls/rbd/cls_rbd_types.h"
 #include "test/librbd/test_fixture.h"
@@ -82,7 +82,7 @@ TEST_F(TestInternal, OpenByID) {
    close_image(ictx);
 
    ictx = new librbd::ImageCtx("", id, nullptr, m_ioctx, true);
-   ASSERT_EQ(0, ictx->state->open());
+   ASSERT_EQ(0, ictx->state->open(false));
    ASSERT_EQ(ictx->name, m_image_name);
    close_image(ictx);
 }
@@ -100,7 +100,7 @@ TEST_F(TestInternal, IsExclusiveLockOwner) {
   C_SaferCond ctx;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&ctx);
+    ictx->exclusive_lock->try_acquire_lock(&ctx);
   }
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -317,7 +317,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
   C_SaferCond ctx;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ictx->exclusive_lock->try_lock(&ctx);
+    ictx->exclusive_lock->try_acquire_lock(&ctx);
   }
 
   ASSERT_EQ(0, ctx.wait());
@@ -360,7 +360,7 @@ TEST_F(TestInternal, MultipleResize) {
     C_SaferCond ctx;
     {
       RWLock::WLocker l(ictx->owner_lock);
-      ictx->exclusive_lock->try_lock(&ctx);
+      ictx->exclusive_lock->try_acquire_lock(&ctx);
     }
 
     RWLock::RLocker owner_locker(ictx->owner_lock);

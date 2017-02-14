@@ -24,6 +24,7 @@
 #include "messages/MPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDBackoff.h"
 #include "messages/MOSDMap.h"
 
 #include "messages/MPoolOp.h"
@@ -48,6 +49,7 @@
 #include "common/scrub_types.h"
 #include "include/str_list.h"
 #include "common/errno.h"
+#include "common/EventTrace.h"
 
 using ceph::real_time;
 using ceph::real_clock;
@@ -70,8 +72,7 @@ enum {
   l_osdc_op_send,
   l_osdc_op_send_bytes,
   l_osdc_op_resend,
-  l_osdc_op_ack,
-  l_osdc_op_commit,
+  l_osdc_op_reply,
 
   l_osdc_op,
   l_osdc_op_r,
@@ -247,8 +248,7 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_send, "op_send", "Sent operations");
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data");
     pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
-    pcb.add_u64_counter(l_osdc_op_ack, "op_ack", "Commit callbacks");
-    pcb.add_u64_counter(l_osdc_op_commit, "op_commit", "Operation commits");
+    pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
     pcb.add_u64_counter(l_osdc_op_r, "op_r",
@@ -555,9 +555,7 @@ void Objecter::_send_linger(LingerOp *info,
   watchl.unlock();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 NULL, NULL,
-		 info->pobjver);
-  o->oncommit_sync = oncommit;
+		 oncommit, info->pobjver);
   o->outbl = poutbl;
   o->snapid = info->snap;
   o->snapc = info->snapc;
@@ -691,8 +689,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 NULL, NULL, NULL);
-  o->oncommit_sync = onack;
+		 onack, NULL, NULL);
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
@@ -971,6 +968,10 @@ bool Objecter::ms_dispatch(Message *m)
     // these we exlusively handle
   case CEPH_MSG_OSD_OPREPLY:
     handle_osd_op_reply(static_cast<MOSDOpReply*>(m));
+    return true;
+
+  case CEPH_MSG_OSD_BACKOFF:
+    handle_osd_backoff(static_cast<MOSDBackoff*>(m));
     return true;
 
   case CEPH_MSG_WATCH_NOTIFY:
@@ -1457,14 +1458,8 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
       ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
 		     << " concluding pool " << op->target.base_pgid.pool()
 		     << " dne" << dendl;
-      if (op->onack) {
-	op->onack->complete(-ENOENT);
-      }
-      if (op->oncommit) {
-	op->oncommit->complete(-ENOENT);
-      }
-      if (op->oncommit_sync) {
-	op->oncommit_sync->complete(-ENOENT);
+      if (op->onfinish) {
+	op->onfinish->complete(-ENOENT);
       }
 
       OSDSession *s = op->session;
@@ -1699,6 +1694,7 @@ int Objecter::_get_session(int osd, OSDSession **session, shunique_lock& sul)
   OSDSession *s = new OSDSession(cct, osd);
   osd_sessions[osd] = s;
   s->con = messenger->get_connection(osdmap->get_inst(osd));
+  s->con->set_priv(s->get());
   logger->inc(l_osdc_osd_session_open);
   logger->inc(l_osdc_osd_sessions, osd_sessions.size());
   s->get();
@@ -1736,10 +1732,12 @@ void Objecter::_reopen_session(OSDSession *s)
   ldout(cct, 10) << "reopen_session osd." << s->osd << " session, addr now "
 		 << inst << dendl;
   if (s->con) {
+    s->con->set_priv(NULL);
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
   s->con = messenger->get_connection(inst);
+  s->con->set_priv(s->get());
   s->incarnation++;
   logger->inc(l_osdc_osd_session_open);
 }
@@ -1750,6 +1748,7 @@ void Objecter::close_session(OSDSession *s)
 
   ldout(cct, 10) << "close_session for osd." << s->osd << dendl;
   if (s->con) {
+    s->con->set_priv(NULL);
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
@@ -1953,6 +1952,10 @@ void Objecter::_kick_requests(OSDSession *session,
 			      map<uint64_t, LingerOp *>& lresend)
 {
   // rwlock is locked unique
+
+  // clear backoffs
+  session->backoffs.clear();
+  session->backoffs_by_id.clear();
 
   // resend ops
   map<ceph_tid_t,Op*> resend;  // resend in tid order
@@ -2211,15 +2214,10 @@ void Objecter::_send_op_account(Op *op)
   inflight_ops.inc();
 
   // add to gather set(s)
-  if (op->onack) {
-    num_unacked.inc();
+  if (op->onfinish) {
+    num_in_flight.inc();
   } else {
-    ldout(cct, 20) << " note: not requesting ack" << dendl;
-  }
-  if (op->oncommit || op->oncommit_sync) {
-    num_uncommitted.inc();
-  } else {
-    ldout(cct, 20) << " note: not requesting commit" << dendl;
+    ldout(cct, 20) << " note: not requesting reply" << dendl;
   }
 
   logger->inc(l_osdc_op_active);
@@ -2251,7 +2249,6 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_DELETE: code = l_osdc_osdop_delete; break;
     case CEPH_OSD_OP_MAPEXT: code = l_osdc_osdop_mapext; break;
     case CEPH_OSD_OP_SPARSE_READ: code = l_osdc_osdop_sparse_read; break;
-    case CEPH_OSD_OP_CLONERANGE: code = l_osdc_osdop_clonerange; break;
     case CEPH_OSD_OP_GETXATTR: code = l_osdc_osdop_getxattr; break;
     case CEPH_OSD_OP_SETXATTR: code = l_osdc_osdop_setxattr; break;
     case CEPH_OSD_OP_CMPXATTR: code = l_osdc_osdop_cmpxattr; break;
@@ -2279,7 +2276,6 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_CALL: code = l_osdc_osdop_call; break;
     case CEPH_OSD_OP_WATCH: code = l_osdc_osdop_watch; break;
     case CEPH_OSD_OP_NOTIFY: code = l_osdc_osdop_notify; break;
-    case CEPH_OSD_OP_SRC_CMPXATTR: code = l_osdc_osdop_src_cmpxattr; break;
     }
     if (code)
       logger->inc(code);
@@ -2398,8 +2394,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   sl.unlock();
   put_session(s);
 
-  ldout(cct, 5) << num_unacked.read() << " unacked, " << num_uncommitted.read()
-		<< " uncommitted" << dendl;
+  ldout(cct, 5) << num_in_flight.read() << " in flight" << dendl;
 }
 
 int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
@@ -2424,20 +2419,10 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
   ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
 		 << dendl;
   Op *op = p->second;
-  if (op->onack) {
-    op->onack->complete(r);
-    op->onack = NULL;
-    num_unacked.dec();
-  }
-  if (op->oncommit || op->oncommit_sync)
-    num_uncommitted.dec();
-  if (op->oncommit) {
-    op->oncommit->complete(r);
-    op->oncommit = NULL;
-  }
-  if (op->oncommit_sync) {
-    op->oncommit_sync->complete(r);
-    op->oncommit_sync = NULL;
+  if (op->onfinish) {
+    num_in_flight.dec();
+    op->onfinish->complete(r);
+    op->onfinish = NULL;
   }
   _op_cancel_map_check(op);
   _finish_op(op, r);
@@ -2986,14 +2971,9 @@ void Objecter::_cancel_linger_op(Op *op)
   ldout(cct, 15) << "cancel_op " << op->tid << dendl;
 
   assert(!op->should_resend);
-  if (op->onack) {
-    delete op->onack;
-    num_unacked.dec();
-  }
-  if (op->oncommit || op->oncommit_sync) {
-    delete op->oncommit;
-    delete op->oncommit_sync;
-    num_uncommitted.dec();
+  if (op->onfinish) {
+    delete op->onfinish;
+    num_in_flight.dec();
   }
 
   _finish_op(op, 0);
@@ -3044,10 +3024,8 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
-  if (op->oncommit || op->oncommit_sync)
+  if (op->onfinish)
     flags |= CEPH_OSD_FLAG_ONDISK;
-  if (op->onack)
-    flags |= CEPH_OSD_FLAG_ACK;
 
   if (!honor_osdmap_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
@@ -3091,6 +3069,26 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
 {
   // rwlock is locked
   // op->session->lock is locked
+
+  // backoff?
+  hobject_t hoid = op->target.get_hobj();
+  auto q = op->session->backoffs.lower_bound(hoid);
+  if (q != op->session->backoffs.begin()) {
+    --q;
+    if (cmp_bitwise(hoid, q->second.end) >= 0) {
+      ++q;
+    }
+  }
+  if (q != op->session->backoffs.end()) {
+    ldout(cct, 20) << __func__ << " ? " << q->first << " [" << q->second.begin
+		   << "," << q->second.end << ")" << dendl;
+    int r = cmp_bitwise(hoid, q->second.begin);
+    if (r == 0 || (r > 0 && cmp_bitwise(hoid, q->second.end) < 0)) {
+      ldout(cct, 10) << __func__ << " backoff on " << hoid << ", queuing "
+		     << op << " tid " << op->tid << dendl;
+      return;
+    }
+  }
 
   if (!m) {
     assert(op->tid > 0);
@@ -3191,26 +3189,22 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // get pio
   ceph_tid_t tid = m->get_tid();
 
-  int osd_num = (int)m->get_source().num();
-
   shunique_lock sul(rwlock, ceph::acquire_shared);
   if (!initialized.read()) {
     m->put();
     return;
   }
 
-  map<int, OSDSession *>::iterator siter = osd_sessions.find(osd_num);
-  if (siter == osd_sessions.end()) {
-    ldout(cct, 7) << "handle_osd_op_reply " << tid
-		  << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ?
-						  " onnvram":" ack"))
-		  << " ... unknown osd" << dendl;
+  ConnectionRef con = m->get_connection();
+  OSDSession *s = static_cast<OSDSession*>(con->get_priv());
+  if (!s || s->con != con) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    if (s) {
+      s->put();
+    }
     m->put();
     return;
   }
-
-  OSDSession *s = siter->second;
-  get_session(s);
 
   OSDSession::unique_lock sl(s->lock);
 
@@ -3239,11 +3233,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (retry_writes_after_first_reply && op->attempts == 1 &&
       (op->target.flags & CEPH_OSD_FLAG_WRITE)) {
     ldout(cct, 7) << "retrying write after first reply: " << tid << dendl;
-    if (op->onack) {
-      num_unacked.dec();
-    }
-    if (op->oncommit || op->oncommit_sync) {
-      num_uncommitted.dec();
+    if (op->onfinish) {
+      num_in_flight.dec();
     }
     _session_op_remove(s, op);
     sl.unlock();
@@ -3272,17 +3263,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // have, but that is better than doing callbacks out of order.
   }
 
-  Context *onack = 0;
-  Context *oncommit = 0;
+  Context *onfinish = 0;
 
   int rc = m->get_result();
 
   if (m->is_redirect_reply()) {
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
-    if (op->onack)
-      num_unacked.dec();
-    if (op->oncommit || op->oncommit_sync)
-      num_uncommitted.dec();
+    if (op->onfinish)
+      num_in_flight.dec();
     _session_op_remove(s, op);
     sl.unlock();
     put_session(s);
@@ -3362,43 +3350,23 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
   }
 
-  // ack|commit -> ack
-  if (op->onack) {
-    ldout(cct, 15) << "handle_osd_op_reply ack" << dendl;
-    op->replay_version = m->get_replay_version();
-    onack = op->onack;
-    op->onack = 0;  // only do callback once
-    num_unacked.dec();
-    logger->inc(l_osdc_op_ack);
+  // NOTE: we assume that since we only request ONDISK ever we will
+  // only ever get back one (type of) ack ever.
+
+  if (op->onfinish) {
+    num_in_flight.dec();
+    onfinish = op->onfinish;
+    op->onfinish = NULL;
   }
-  if (m->is_ondisk() || rc) {
-    if (op->oncommit) {
-      ldout(cct, 15) << "handle_osd_op_reply safe" << dendl;
-      oncommit = op->oncommit;
-      op->oncommit = NULL;
-      num_uncommitted.dec();
-      logger->inc(l_osdc_op_commit);
-    }
-    if (op->oncommit_sync) {
-      ldout(cct, 15) << "handle_osd_op_reply safe (sync)" << dendl;
-      op->oncommit_sync->complete(rc);
-      op->oncommit_sync = NULL;
-      num_uncommitted.dec();
-      logger->inc(l_osdc_op_commit);
-    }
-  }
+  logger->inc(l_osdc_op_reply);
 
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  // done with this tid?
-  if (!op->onack && !op->oncommit && !op->oncommit_sync) {
-    ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
-    _finish_op(op, 0);
-  }
+  ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
+  _finish_op(op, 0);
 
-  ldout(cct, 5) << num_unacked.read() << " unacked, " << num_uncommitted.read()
-		<< " uncommitted" << dendl;
+  ldout(cct, 5) << num_in_flight.read() << " in flight" << dendl;
 
   // serialize completions
   if (completion_lock.mutex()) {
@@ -3407,11 +3375,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   sl.unlock();
 
   // do callbacks
-  if (onack) {
-    onack->complete(rc);
-  }
-  if (oncommit) {
-    oncommit->complete(rc);
+  if (onfinish) {
+    onfinish->complete(rc);
   }
   if (completion_lock.mutex()) {
     completion_lock.unlock();
@@ -3421,6 +3386,90 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   put_session(s);
 }
 
+void Objecter::handle_osd_backoff(MOSDBackoff *m)
+{
+  ldout(cct, 10) << __func__ << " " << *m << dendl;
+  shunique_lock sul(rwlock, ceph::acquire_shared);
+  if (!initialized.read()) {
+    m->put();
+    return;
+  }
+
+  ConnectionRef con = m->get_connection();
+  OSDSession *s = static_cast<OSDSession*>(con->get_priv());
+  if (!s || s->con != con) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    m->put();
+    return;
+  }
+
+  get_session(s);
+  s->put();  // from get_priv() above
+
+  OSDSession::unique_lock sl(s->lock);
+
+  switch (m->op) {
+  case CEPH_OSD_BACKOFF_OP_BLOCK:
+    {
+      // register
+      OSDBackoff& b = s->backoffs[m->begin];
+      s->backoffs_by_id.insert(make_pair(m->id, &b));
+      b.id = m->id;
+      b.begin = m->begin;
+      b.end = m->end;
+
+      // ack
+      Message *r = new MOSDBackoff(CEPH_OSD_BACKOFF_OP_ACK_BLOCK,
+				   m->id, m->begin, m->end,
+				   osdmap->get_epoch());
+      // this priority must match the MOSDOps from _prepare_osd_op
+      r->set_priority(cct->_conf->osd_client_op_priority);
+      con->send_message(r);
+    }
+    break;
+
+  case CEPH_OSD_BACKOFF_OP_UNBLOCK:
+    {
+      auto p = s->backoffs_by_id.find(m->id);
+      while (p != s->backoffs_by_id.end() &&
+	     p->second->id == m->id) {
+	OSDBackoff *b = p->second;
+	if (b->begin != m->begin &&
+	    b->end != m->end) {
+	  lderr(cct) << __func__ << " got id " << m->id << " unblock on ["
+		     << m->begin << "," << m->end << ") but backoff is ["
+		     << b->begin << "," << b->end << ")" << dendl;
+	  // hrmpf, unblock it anyway.
+	}
+	ldout(cct, 10) << __func__ << " unblock backoff " << b->id
+		       << " [" << b->begin << "," << b->end
+		       << ")" << dendl;
+	s->backoffs.erase(b->begin);
+	p = s->backoffs_by_id.erase(p);
+
+	// check for any ops to resend
+	for (auto& q : s->ops) {
+	  int r = q.second->target.contained_by(m->begin, m->end);
+	  ldout(cct, 20) << __func__ <<  " contained_by " << r << " on "
+			 << q.second->target.get_hobj() << dendl;
+	  if (r) {
+	    _send_op(q.second);
+	  }
+	}
+      }
+    }
+    break;
+
+  default:
+    ldout(cct, 10) << __func__ << " unrecognized op " << (int)m->op << dendl;
+  }
+
+  sul.unlock();
+  sl.unlock();
+
+  m->put();
+  put_session(s);
+}
 
 uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
 				      uint32_t pos)
@@ -3970,6 +4019,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
+  FUNCTRACE();
   shunique_lock sul(rwlock, acquire_shared);
   if (!initialized.read()) {
     sul.unlock();
@@ -4316,31 +4366,24 @@ bool Objecter::ms_handle_reset(Connection *con)
   if (!initialized.read())
     return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    int osd = osdmap->identify_osd(con->get_peer_addr());
-    if (osd >= 0) {
-      ldout(cct, 1) << "ms_handle_reset on osd." << osd << dendl;
+    OSDSession *session = static_cast<OSDSession*>(con->get_priv());
+    if (session) {
+      ldout(cct, 1) << "ms_handle_reset " << con << " session " << session
+		    << " osd." << session->osd << dendl;
       unique_lock wl(rwlock);
       if (!initialized.read()) {
 	wl.unlock();
 	return false;
       }
-      map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
-      if (p != osd_sessions.end()) {
-	OSDSession *session = p->second;
-	map<uint64_t, LingerOp *> lresend;
-	OSDSession::unique_lock sl(session->lock);
-	_reopen_session(session);
-	_kick_requests(session, lresend);
-	sl.unlock();
-	_linger_ops_resend(lresend, wl);
-	wl.unlock();
-	maybe_request_map();
-      } else {
-	wl.unlock();
-      }
-    } else {
-      ldout(cct, 10) << "ms_handle_reset on unknown osd addr "
-		     << con->get_peer_addr() << dendl;
+      map<uint64_t, LingerOp *> lresend;
+      OSDSession::unique_lock sl(session->lock);
+      _reopen_session(session);
+      _kick_requests(session, lresend);
+      sl.unlock();
+      _linger_ops_resend(lresend, wl);
+      wl.unlock();
+      maybe_request_map();
+      session->put();
     }
     return true;
   }
@@ -4648,23 +4691,21 @@ void Objecter::blacklist_self(bool set)
 
 void Objecter::handle_command_reply(MCommandReply *m)
 {
-  int osd_num = (int)m->get_source().num();
-
   unique_lock wl(rwlock);
   if (!initialized.read()) {
     m->put();
     return;
   }
 
-  map<int, OSDSession *>::iterator siter = osd_sessions.find(osd_num);
-  if (siter == osd_sessions.end()) {
-    ldout(cct, 10) << "handle_command_reply tid " << m->get_tid()
-		   << " osd not found" << dendl;
+  ConnectionRef con = m->get_connection();
+  OSDSession *s = static_cast<OSDSession*>(con->get_priv());
+  if (!s || s->con != con) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     m->put();
+    if (s)
+      s->put();
     return;
   }
-
-  OSDSession *s = siter->second;
 
   OSDSession::shared_lock sl(s->lock);
   map<ceph_tid_t,CommandOp*>::iterator p = s->command_ops.find(m->get_tid());
@@ -4673,6 +4714,8 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << " not found" << dendl;
     m->put();
     sl.unlock();
+    if (s)
+      s->put();
     return;
   }
 
@@ -4685,16 +4728,21 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << dendl;
     m->put();
     sl.unlock();
+    if (s)
+      s->put();
     return;
   }
-  if (c->poutbl)
+  if (c->poutbl) {
     c->poutbl->claim(m->get_data());
+  }
 
   sl.unlock();
 
 
   _finish_command(c, m->r, m->rs);
   m->put();
+  if (s)
+    s->put();
 }
 
 int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)

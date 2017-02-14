@@ -79,7 +79,7 @@ namespace rgw {
       int ret = ldap_initialize(&tldap, uri.c_str());
       if (ret == LDAP_SUCCESS) {
 	unsigned long ldap_ver = LDAP_VERSION3;
-	ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION,
+	ret = ldap_set_option(tldap, LDAP_OPT_PROTOCOL_VERSION,
 			      (void*) &ldap_ver);
 	if (ret == LDAP_SUCCESS) {
 	  ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());

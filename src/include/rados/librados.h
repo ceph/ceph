@@ -166,7 +166,10 @@ enum {
  * -- or to the same cluster with different users -- requires
  * different cluster handles.
  */
+#ifndef VOIDPTR_RADOS_T
+#define VOIDPTR_RADOS_T
 typedef void *rados_t;
+#endif //VOIDPTR_RADOS_T
 
 /**
  * @typedef rados_config_t
@@ -334,6 +337,14 @@ typedef void *rados_write_op_t;
  *   rados_aio_read_op_operate()
  */
 typedef void *rados_read_op_t;
+
+/**
+ * @typedef rados_completion_t
+ * Represents the state of an asynchronous operation - it contains the
+ * return value once the operation completes, and can be used to block
+ * until the operation is complete or safe.
+ */
+typedef void *rados_completion_t;
 
 /**
  * Get the version of librados.
@@ -934,9 +945,6 @@ CEPH_RADOS_API int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf,
  * operations of the io context - until a different locator key is
  * set, all objects in this io context will be placed in the same pg.
  *
- * This is useful if you need to do clone_range operations, which must
- * be done with the source and destination objects in the same pg.
- *
  * @param io the io context to change
  * @param key the key to use as the object locator, or NULL to discard
  * any previously set key
@@ -1203,6 +1211,10 @@ CEPH_RADOS_API void rados_ioctx_snap_set_read(rados_ioctx_t io,
  */
 CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
                                                        rados_snap_t *snapid);
+CEPH_RADOS_API void
+rados_aio_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
+                                        rados_snap_t *snapid,
+                                        rados_completion_t completion);
 
 /**
  * Remove a self-managed snapshot
@@ -1216,6 +1228,10 @@ CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
  */
 CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
                                                        rados_snap_t snapid);
+CEPH_RADOS_API void
+rados_aio_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
+                                        rados_snap_t snapid,
+                                        rados_completion_t completion);
 
 /**
  * Rollback an object to a self-managed snapshot
@@ -1374,28 +1390,6 @@ CEPH_RADOS_API int rados_write_full(rados_ioctx_t io, const char *oid,
 CEPH_RADOS_API int rados_writesame(rados_ioctx_t io, const char *oid,
                                    const char *buf, size_t data_len,
                                    size_t write_len, uint64_t off);
-
-/**
- * Efficiently copy a portion of one object to another
- *
- * If the underlying filesystem on the OSD supports it, this will be a
- * copy-on-write clone.
- *
- * The src and dest objects must be in the same pg. To ensure this,
- * the io context should have a locator key set (see
- * rados_ioctx_locator_set_key()).
- *
- * @param io the context in which the data is cloned
- * @param dst the name of the destination object
- * @param dst_off the offset within the destination object (in bytes)
- * @param src the name of the source object
- * @param src_off the offset within the source object (in bytes)
- * @param len how much data to copy
- * @returns 0 on success, negative error code on failure
- */
-CEPH_RADOS_API int rados_clone_range(rados_ioctx_t io, const char *dst,
-                                     uint64_t dst_off, const char *src,
-                                     uint64_t src_off, size_t len);
 
 /**
  * Append *len* bytes from *buf* into the *oid* object. The value of
@@ -1714,14 +1708,6 @@ CEPH_RADOS_API int rados_exec(rados_ioctx_t io, const char *oid,
  *
  * @{
  */
-
-/**
- * @typedef rados_completion_t
- * Represents the state of an asynchronous operation - it contains the
- * return value once the operation completes, and can be used to block
- * until the operation is complete or safe.
- */
-typedef void *rados_completion_t;
 
 /**
  * @typedef rados_callback_t
@@ -3116,7 +3102,29 @@ CEPH_RADOS_API void rados_read_op_omap_get_vals(rados_read_op_t read_op,
 				                const char *filter_prefix,
 				                uint64_t max_return,
 				                rados_omap_iter_t *iter,
-				                int *prval);
+				                int *prval)
+  __attribute__((deprecated)); /* use v2 below */
+
+/**
+ * Start iterating over key/value pairs on an object.
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param filter_prefix list only keys beginning with filter_prefix
+ * @param max_return list no more than max_return key/value pairs
+ * @param iter where to store the iterator
+ * @param pmore flag indicating whether there are more keys to fetch
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_read_op_omap_get_vals2(rados_read_op_t read_op,
+						 const char *start_after,
+						 const char *filter_prefix,
+						 uint64_t max_return,
+						 rados_omap_iter_t *iter,
+						 unsigned char *pmore,
+						 int *prval);
 
 /**
  * Start iterating over keys on an object.
@@ -3134,7 +3142,28 @@ CEPH_RADOS_API void rados_read_op_omap_get_keys(rados_read_op_t read_op,
 				                const char *start_after,
 				                uint64_t max_return,
 				                rados_omap_iter_t *iter,
-				                int *prval);
+				                int *prval)
+  __attribute__((deprecated)); /* use v2 below */
+
+/**
+ * Start iterating over keys on an object.
+ *
+ * They will be returned sorted by key, and the iterator
+ * will fill in NULL for all values if specified.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param max_return list no more than max_return keys
+ * @param iter where to store the iterator
+ * @param pmore flag indicating whether there are more keys to fetch
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_read_op_omap_get_keys2(rados_read_op_t read_op,
+						 const char *start_after,
+						 uint64_t max_return,
+						 rados_omap_iter_t *iter,
+						 unsigned char *pmore,
+						 int *prval);
 
 /**
  * Start iterating over specific key/value pairs
