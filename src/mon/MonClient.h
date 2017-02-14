@@ -119,7 +119,7 @@ private:
 
   entity_addr_t my_addr;
 
-  Mutex monc_lock;
+  mutable Mutex monc_lock;
   SafeTimer timer;
   Finisher finisher;
 
@@ -340,23 +340,23 @@ public:
     return my_addr;
   }
 
-  const uuid_d& get_fsid() {
+  const uuid_d& get_fsid() const {
     return monmap.fsid;
   }
 
-  entity_addr_t get_mon_addr(unsigned i) {
+  entity_addr_t get_mon_addr(unsigned i) const {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
       return monmap.get_addr(i);
     return entity_addr_t();
   }
-  entity_inst_t get_mon_inst(unsigned i) {
+  entity_inst_t get_mon_inst(unsigned i) const {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
       return monmap.get_inst(i);
     return entity_inst_t();
   }
-  int get_num_mon() {
+  int get_num_mon() const {
     Mutex::Locker l(monc_lock);
     return monmap.size();
   }
