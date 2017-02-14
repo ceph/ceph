@@ -5768,18 +5768,13 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "expecting value 'true' or '1'";
       return -EINVAL;
     }
-  } else if (var == "debug_white_box_testing_ec_overwrites") {
+  } else if (var == "allow_ec_overwrites") {
+    if (!p.is_erasure()) {
+      ss << "ec overwrites can only be enabled for an erasure coded pool";
+      return -EINVAL;
+    }
     if (val == "true" || (interr.empty() && n == 1)) {
-      if (cct->check_experimental_feature_enabled(
-	    "debug_white_box_testing_ec_overwrites")) {
 	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
-      } else {
-	ss << "debug_white_box_testing_ec_overwrites is an experimental feature "
-	   << "and must be enabled.  Note, this feature does not yet actually "
-	   << "work.  This flag merely enables some of the preliminary support "
-	   << "for testing purposes.";
-	return -ENOTSUP;
-      }
     } else if (val == "false" || (interr.empty() && n == 0)) {
       ss << "ec overwrites cannot be disabled once enabled";
       return -EINVAL;
