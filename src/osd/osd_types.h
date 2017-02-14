@@ -1448,7 +1448,7 @@ public:
   }
   uint64_t required_alignment() const { return stripe_width; }
 
-  bool is_hacky_ecoverwrites() const {
+  bool allows_ecoverwrites() const {
     return has_flag(FLAG_EC_OVERWRITES);
   }
 

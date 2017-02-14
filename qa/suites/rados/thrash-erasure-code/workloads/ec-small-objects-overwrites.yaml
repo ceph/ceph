@@ -14,7 +14,7 @@ tasks:
     objects: 1024
     size: 16384
     ec_pool: true
-    erasure_code_use_hacky_overwrites: true
+    erasure_code_use_overwrites: true
     op_weights:
       read: 100
       write: 100
