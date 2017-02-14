@@ -2311,10 +2311,10 @@ private:
 			CollectionRef& d,
 			unsigned bits, int rem);
 
-  void op_queue_reserve_throttle(TransContext *txc);
-  void op_queue_release_throttle(TransContext *txc);
-  void op_queue_reserve_wal_throttle(TransContext *txc);
-  void op_queue_release_wal_throttle(TransContext *txc);
+  void _op_queue_reserve_throttle(TransContext *txc);
+  void _op_queue_release_throttle(TransContext *txc);
+  void _op_queue_reserve_wal_throttle(TransContext *txc);
+  void _op_queue_release_wal_throttle(TransContext *txc);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
