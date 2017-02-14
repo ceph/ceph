@@ -1045,6 +1045,12 @@ function test_mon_mon()
   [ -s $TEMP_DIR/monmap.$$ ]
   # ceph mon tell
   ceph mon_status
+
+  # test mon features
+  ceph mon feature list
+  ceph mon feature set kraken --yes-i-really-mean-it
+  expect_false ceph mon feature set abcd
+  expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
 function test_mon_osd()
