@@ -7139,7 +7139,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
   if (!txc->oncommits.empty()) {
     finishers[n]->queue(txc->oncommits);
   }
-  op_queue_release_throttle(txc);
+  _op_queue_release_throttle(txc);
 }
 
 void BlueStore::BSPerfTracker::update_from_perfcounters(
@@ -7178,7 +7178,7 @@ void BlueStore::_txc_finish(TransContext *txc)
     txc->removed_collections.pop_front();
   }
 
-  op_queue_release_wal_throttle(txc);
+  _op_queue_release_wal_throttle(txc);
 
   OpSequencerRef osr = txc->osr;
   {
@@ -7627,8 +7627,8 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
-  op_queue_reserve_throttle(txc);
-  op_queue_reserve_wal_throttle(txc);
+  _op_queue_reserve_throttle(txc);
+  _op_queue_reserve_wal_throttle(txc);
 
   if (handle)
     handle->reset_tp_timeout();
@@ -7642,7 +7642,7 @@ int BlueStore::queue_transactions(
   return 0;
 }
 
-void BlueStore::op_queue_reserve_throttle(TransContext *txc)
+void BlueStore::_op_queue_reserve_throttle(TransContext *txc)
 {
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
@@ -7651,7 +7651,7 @@ void BlueStore::op_queue_reserve_throttle(TransContext *txc)
   logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
 }
 
-void BlueStore::op_queue_release_throttle(TransContext *txc)
+void BlueStore::_op_queue_release_throttle(TransContext *txc)
 {
   throttle_ops.put(txc->ops);
   throttle_bytes.put(txc->bytes);
@@ -7660,7 +7660,7 @@ void BlueStore::op_queue_release_throttle(TransContext *txc)
   logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
 }
 
-void BlueStore::op_queue_reserve_wal_throttle(TransContext *txc)
+void BlueStore::_op_queue_reserve_wal_throttle(TransContext *txc)
 {
   throttle_wal_ops.get(txc->ops);
   throttle_wal_bytes.get(txc->bytes);
@@ -7669,7 +7669,7 @@ void BlueStore::op_queue_reserve_wal_throttle(TransContext *txc)
   logger->set(l_bluestore_cur_bytes_in_wal_queue, throttle_wal_bytes.get_current());
 }
 
-void BlueStore::op_queue_release_wal_throttle(TransContext *txc)
+void BlueStore::_op_queue_release_wal_throttle(TransContext *txc)
 {
   throttle_wal_ops.put(txc->ops);
   throttle_wal_bytes.put(txc->bytes);
