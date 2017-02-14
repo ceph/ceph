@@ -1,0 +1,22 @@
+meta:
+- desc: "Build the ceph cluster using ceph-ansible"
+
+overrides:                                                                                                                                                                                                  
+   ceph_ansible:                                                                                                                                                                                            
+     vars:                                                                                                                                                                                                  
+        ceph_conf_overrides:                                                                                                                                                                                
+          global:                                                                                                                                                                                           
+            osd default pool size: 2                                                                                                                                                                        
+            mon pg warn min per osd: 2                                                                                                                                                                      
+        ceph_dev: true                                                                                                                                                                                      
+        ceph_dev_key: https://download.ceph.com/keys/autobuild.asc                                                                                                                                          
+        ceph_origin: upstream                                                                                                                                                                               
+        ceph_test: true                                                                                                                                                                                     
+        journal_collocation: true                                                                                                                                                                           
+        journal_size: 1024                                                                                                                                                                                  
+        osd_auto_discovery: false 
+
+tasks:
+- ssh-keys:
+- ceph_ansible:
+- install.ship_utilities:
