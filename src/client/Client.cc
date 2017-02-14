@@ -210,10 +210,14 @@ vinodeno_t Client::_map_faked_ino(ino_t ino)
   vinodeno_t vino;
   if (ino == 1)
     vino = root->vino();
-  else if (faked_ino_map.count(ino))
-    vino = faked_ino_map[ino];
   else
-    vino = vinodeno_t(0, CEPH_NOSNAP);
+  {
+    auto ino_it = faked_ino_map.find(ino);
+    if (ino_it != faked_ino_map.end())
+      vino = ino_it->second;
+    else
+      vino = vinodeno_t(0, CEPH_NOSNAP);
+  }
   ldout(cct, 10) << "map_faked_ino " << ino << " -> " << vino << dendl;
   return vino;
 }
@@ -817,8 +821,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 {
   Inode *in;
   bool was_new = false;
-  if (inode_map.count(st->vino)) {
-    in = inode_map[st->vino];
+  auto inode_map_it = inode_map.find(st->vino);
+  if (inode_map_it != inode_map.end()) {
+    in = inode_map_it->second;
     ldout(cct, 12) << "add_update_inode had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
   } else {
     in = new Inode(this, st->vino, &st->layout);
@@ -954,8 +959,9 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 				    Dentry *old_dentry)
 {
   Dentry *dn = NULL;
-  if (dir->dentries.count(dname))
-    dn = dir->dentries[dname];
+  auto dentry = dir->dentries.find(dname);
+  if (dentry != dir->dentries.end())
+    dn = dentry->second;
 
   ldout(cct, 12) << "insert_dentry_inode '" << dname << "' vino " << in->vino()
 		 << " in dir " << dir->parent_inode->vino() << " dn " << dn
@@ -1150,8 +1156,9 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
 				   request->perms);
       Dentry *dn;
-      if (diri->dir->dentries.count(dname)) {
-	Dentry *olddn = diri->dir->dentries[dname];
+      auto dentry = diri->dir->dentries.find(dname);
+      if (dentry != diri->dir->dentries.end()) {
+	Dentry *olddn = dentry->second;
 	if (olddn->inode != in) {
 	  // replace incorrect dentry
 	  unlink(olddn, true, true);  // keep dir, dentry
@@ -1319,8 +1326,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
                           (op == CEPH_MDS_OP_RENAME) ? request->old_dentry() : NULL);
     } else {
       Dentry *dn = NULL;
-      if (diri->dir && diri->dir->dentries.count(dname)) {
-	dn = diri->dir->dentries[dname];
+      auto dentry = diri->dir->dentries.find(dname);
+      if (diri->dir && (dentry != diri->dir->dentries.end())) {
+	dn = dentry->second;
 	if (dn->inode) {
 	  diri->dir_ordered_count++;
 	  clear_dir_complete_and_ordered(diri, false);
@@ -1341,8 +1349,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     // fake it for snap lookup
     vinodeno_t vino = ist.vino;
     vino.snapid = CEPH_SNAPDIR;
-    assert(inode_map.count(vino));
-    diri = inode_map[vino];
+    auto inode_map_it = inode_map.find(vino);
+    assert(inode_map_it != inode_map.end());
+    diri = inode_map_it->second;
     
     string dname = request->path.last_dentry();
     
@@ -1450,8 +1459,9 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
   
     if (is_hash && S_ISDIR(in->mode) && !in->fragmap.empty()) {
       frag_t fg = in->dirfragtree[hash];
-      if (in->fragmap.count(fg)) {
-        mds = in->fragmap[fg];
+      auto fragmap_it = in->fragmap.find(fg);
+      if (fragmap_it != in->fragmap.end()) {
+        mds = fragmap_it->second;
         ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
         goto out;
       }
@@ -1803,8 +1813,9 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
-  if (in->caps.count(mds)) {
-    Cap *caps = in->caps[mds];
+  auto caps_it = in->caps.find(mds);
+  if (caps_it != in->caps.end()) {
+    Cap *caps = caps_it->second;
     drop &= ~(in->dirty_caps | get_caps_used(in));
     if ((drop & caps->issued) &&
 	!(unless & caps->issued)) {
@@ -1895,17 +1906,19 @@ void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
 
 bool Client::have_open_session(mds_rank_t mds)
 {
+  auto sessions_it = mds_sessions.find(mds);
   return
-    mds_sessions.count(mds) &&
-    (mds_sessions[mds]->state == MetaSession::STATE_OPEN ||
-     mds_sessions[mds]->state == MetaSession::STATE_STALE);
+    (sessions_it != mds_sessions.end() &&
+    (sessions_it->second->state == MetaSession::STATE_OPEN ||
+     sessions_it->second->state == MetaSession::STATE_STALE));
 }
 
 MetaSession *Client::_get_mds_session(mds_rank_t mds, Connection *con)
 {
-  if (mds_sessions.count(mds) == 0)
+  auto sessions_it = mds_sessions.find(mds);
+  if (sessions_it == mds_sessions.end())
     return NULL;
-  MetaSession *s = mds_sessions[mds];
+  MetaSession *s = sessions_it->second;
   if (s->con != con)
     return NULL;
   return s;
@@ -1913,8 +1926,9 @@ MetaSession *Client::_get_mds_session(mds_rank_t mds, Connection *con)
 
 MetaSession *Client::_get_or_open_mds_session(mds_rank_t mds)
 {
-  if (mds_sessions.count(mds))
-    return mds_sessions[mds];
+  auto sessions_it = mds_sessions.find(mds);
+  if (sessions_it != mds_sessions.end())
+    return sessions_it->second;
   return _open_mds_session(mds);
 }
 
@@ -1970,18 +1984,20 @@ void Client::update_metadata(std::string const &k, std::string const &v)
   Mutex::Locker l(client_lock);
   assert(initialized);
 
-  if (metadata.count(k)) {
+  auto metadata_it = metadata.find(k);
+  if (metadata_it != metadata.end()) {
     ldout(cct, 1) << __func__ << " warning, overriding metadata field '" << k
-      << "' from '" << metadata[k] << "' to '" << v << "'" << dendl;
+      << "' from '" << metadata_it->second << "' to '" << v << "'" << dendl;
   }
 
-  metadata[k] = v;
+  metadata_it->second = v;
 }
 
 MetaSession *Client::_open_mds_session(mds_rank_t mds)
 {
   ldout(cct, 10) << "_open_mds_session mds." << mds << dendl;
-  assert(mds_sessions.count(mds) == 0);
+  auto sessions_it = mds_sessions.find(mds);
+  assert(sessions_it == mds_sessions.end());
   MetaSession *session = new MetaSession;
   session->mds_num = mds;
   session->seq = 0;
@@ -1989,12 +2005,13 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   session->mds_state = MDSMap::STATE_NULL;
-  mds_sessions[mds] = session;
+  sessions_it->second = session;
 
   // Maybe skip sending a request to open if this MDS daemon
   // has previously sent us a REJECT.
-  if (rejected_by_mds.count(mds)) {
-    if (rejected_by_mds[mds] == session->inst) {
+  auto rejected_it = rejected_by_mds.find(mds);
+  if (rejected_it != rejected_by_mds.end()) {
+    if (rejected_it->second == session->inst) {
       ldout(cct, 4) << "_open_mds_session mds." << mds << " skipping "
                        "because we were rejected" << dendl;
       return session;
@@ -2143,8 +2160,9 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   request->mds = mds;
 
   Inode *in = request->inode();
-  if (in && in->caps.count(mds))
-    request->sent_on_mseq = in->caps[mds]->mseq;
+  auto caps_it = in->caps.find(mds);
+  if (in && (caps_it != in->caps.end()))
+    request->sent_on_mseq = caps_it->second->mseq;
 
   session->requests.push_back(&request->item);
 
@@ -2202,13 +2220,14 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   }
   ceph_tid_t tid = fwd->get_tid();
 
-  if (mds_requests.count(tid) == 0) {
+  auto requests_it = mds_requests.find(tid);
+  if (requests_it == mds_requests.end()) {
     ldout(cct, 10) << "handle_client_request_forward no pending request on tid " << tid << dendl;
     fwd->put();
     return;
   }
 
-  MetaRequest *request = mds_requests[tid];
+  MetaRequest *request = requests_it->second;
   assert(request);
 
   // reset retry counter
@@ -2254,7 +2273,8 @@ void Client::handle_client_reply(MClientReply *reply)
   ceph_tid_t tid = reply->get_tid();
   bool is_safe = reply->is_safe();
 
-  if (mds_requests.count(tid) == 0) {
+  auto requests_it = mds_requests.find(tid);
+  if (requests_it == mds_requests.end()) {
     lderr(cct) << "handle_client_reply no pending request on tid " << tid
 	       << " safe is:" << is_safe << dendl;
     reply->put();
@@ -2263,7 +2283,7 @@ void Client::handle_client_reply(MClientReply *reply)
 
   ldout(cct, 20) << "handle_client_reply got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
-  MetaRequest *request = mds_requests[tid];
+  MetaRequest *request = requests_it->second;
   if (!request) {
     ldout(cct, 0) << "got an unknown reply (probably duplicate) on tid " << tid << " from mds "
       << mds_num << " safe: " << is_safe << dendl;
@@ -2647,9 +2667,10 @@ void Client::send_reconnect(MetaSession *session)
        p != inode_map.end();
        ++p) {
     Inode *in = p->second;
-    if (in->caps.count(mds)) {
+    auto caps_it = in->caps.find(mds);
+    if (caps_it != in->caps.end()) {
       ldout(cct, 10) << " caps on " << p->first
-	       << " " << ccap_string(in->caps[mds]->issued)
+	       << " " << ccap_string(caps_it->second->issued)
 	       << " wants " << ccap_string(in->caps_wanted())
 	       << dendl;
       filepath path;
@@ -2659,7 +2680,7 @@ void Client::send_reconnect(MetaSession *session)
       bufferlist flockbl;
       _encode_filelocks(in, flockbl);
 
-      Cap *cap = in->caps[mds];
+      Cap *cap = caps_it->second;
       cap->seq = 0;  // reset seq.
       cap->issue_seq = 0;  // reset seq.
       cap->mseq = 0;  // reset seq.
@@ -2818,18 +2839,20 @@ void Client::handle_lease(MClientLease *m)
 
   Inode *in;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
-  if (inode_map.count(vino) == 0) {
+  auto inode_it = inode_map.find(vino);
+  if (inode_it == inode_map.end()) {
     ldout(cct, 10) << " don't have vino " << vino << dendl;
     goto revoke;
   }
-  in = inode_map[vino];
+  in = inode_it->second;
 
   if (m->get_mask() & CEPH_LOCK_DN) {
-    if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
+    auto dentry = in->dir->dentries.find(m->dname);
+    if (!in->dir || (dentry == in->dir->dentries.end())) {
       ldout(cct, 10) << " don't have dir|dentry " << m->get_ino() << "/" << m->dname <<dendl;
       goto revoke;
     }
-    Dentry *dn = in->dir->dentries[m->dname];
+    Dentry *dn = dentry->second;
     ldout(cct, 10) << " revoked DN lease on " << dn << dendl;
     dn->lease_mds = -1;
   }
@@ -3778,8 +3801,9 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 {
   Cap *cap = 0;
   mds_rank_t mds = mds_session->mds_num;
-  if (in->caps.count(mds)) {
-    cap = in->caps[mds];
+  auto caps_it = in->caps.find(mds);
+  if (caps_it != in->caps.end()) {
+    cap = caps_it->second;
 
     /*
      * auth mds of the inode changed. we received the cap export
@@ -4303,11 +4327,12 @@ SnapRealm *Client::get_snap_realm(inodeno_t r)
 
 SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
 {
-  if (snap_realms.count(r) == 0) {
+  auto snap_realms_it = snap_realms.find(r);
+  if (snap_realms_it == snap_realms.end()) {
     ldout(cct, 20) << "get_snap_realm_maybe " << r << " fail" << dendl;
     return NULL;
   }
-  SnapRealm *realm = snap_realms[r];
+  SnapRealm *realm = snap_realms_it->second;
   ldout(cct, 20) << "get_snap_realm_maybe " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
@@ -4469,8 +4494,10 @@ void Client::handle_snap(MClientSnap *m)
 	 p != m->split_inos.end();
 	 ++p) {
       vinodeno_t vino(*p, CEPH_NOSNAP);
-      if (inode_map.count(vino)) {
-	Inode *in = inode_map[vino];
+
+      auto inode_it = inode_map.find(vino);
+      if (inode_it != inode_map.end()) {
+	Inode *in = inode_it->second;
 	if (!in->snaprealm || in->snaprealm == realm)
 	  continue;
 	if (in->snaprealm->created > info.created()) {
@@ -4532,9 +4559,9 @@ void Client::handle_quota(MClientQuota *m)
   ldout(cct, 10) << "handle_quota " << *m << " from mds." << mds << dendl;
 
   vinodeno_t vino(m->ino, CEPH_NOSNAP);
-  if (inode_map.count(vino)) {
-    Inode *in = NULL;
-    in = inode_map[vino];
+  auto inode_it = inode_map.find(vino);
+  if (inode_it != inode_map.end()) {
+    Inode *in = inode_it->second;
 
     if (in) {
       in->quota = m->quota;
@@ -4570,8 +4597,9 @@ void Client::handle_caps(MClientCaps *m)
 
   Inode *in = 0;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
-  if (inode_map.count(vino))
-    in = inode_map[vino];
+  auto inode_it = inode_map.find(vino);
+  if (inode_it != inode_map.end())
+    in = inode_it->second;
   if (!in) {
     if (m->get_op() == CEPH_CAP_OP_IMPORT) {
       ldout(cct, 5) << "handle_caps don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
@@ -4600,13 +4628,14 @@ void Client::handle_caps(MClientCaps *m)
     handle_cap_import(session, in, m);
   }
 
-  if (in->caps.count(mds) == 0) {
+  auto caps_it = in->caps.find(mds);
+  if (caps_it == in->caps.end()) {
     ldout(cct, 5) << "handle_caps don't have " << *in << " cap on mds." << mds << dendl;
     m->put();
     return;
   }
 
-  Cap *cap = in->caps[mds];
+  Cap *cap = caps_it->second;
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
@@ -4629,8 +4658,9 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
   Cap *cap = NULL;
   UserPerm cap_perms;
-  if (m->peer.cap_id && in->caps.count(peer_mds)) {
-    cap = in->caps[peer_mds];
+  auto caps_it = in->caps.find(peer_mds);
+  if (m->peer.cap_id && (caps_it != in->caps.end())) {
+    cap = caps_it->second;
     if (cap) {
       cap_perms = cap->latest_perms;
     }
@@ -4663,16 +4693,18 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 		<< " EXPORT from mds." << mds << dendl;
 
   Cap *cap = NULL;
-  if (in->caps.count(mds))
-    cap = in->caps[mds];
+  auto caps_it = in->caps.find(mds);
+  if (caps_it != in->caps.end())
+    cap = caps_it->second;
 
   const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
 
   if (cap && cap->cap_id == m->get_cap_id()) {
     if (m->peer.cap_id) {
       MetaSession *tsession = _get_or_open_mds_session(peer_mds);
-      if (in->caps.count(peer_mds)) {
-	Cap *tcap = in->caps[peer_mds];
+      caps_it = in->caps.find(peer_mds);
+      if (caps_it != in->caps.end()) {
+	Cap *tcap = caps_it->second;
 	if (tcap->cap_id != m->peer.cap_id ||
 	    ceph_seq_cmp(tcap->seq, m->peer.seq) < 0) {
 	  tcap->cap_id = m->peer.cap_id;
@@ -4789,8 +4821,9 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
   assert(in->caps[mds]);
   snapid_t follows = m->get_snap_follows();
 
+  auto snaps_it = in->cap_snaps.find(follows);
   if (in->cap_snaps.count(follows)) {
-    CapSnap &capsnap = in->cap_snaps.at(follows);
+    CapSnap &capsnap = snaps_it->second;
     if (m->get_client_tid() != capsnap.flush_tid) {
       ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap.flush_tid << dendl;
     } else {
@@ -5983,11 +6016,12 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 
     if (!dn->inode || dn->inode->caps_issued_mask(mask)) {
       // is dn lease valid?
+      auto session = mds_sessions.find(dn->lease_mds);
       utime_t now = ceph_clock_now();
       if (dn->lease_mds >= 0 &&
 	  dn->lease_ttl > now &&
-	  mds_sessions.count(dn->lease_mds)) {
-	MetaSession *s = mds_sessions[dn->lease_mds];
+	  session != mds_sessions.end()) {
+	MetaSession *s = session->second;
 	if (s->cap_ttl > now &&
 	    s->cap_gen == dn->lease_gen) {
 	  // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
@@ -6046,16 +6080,18 @@ int Client::get_or_create(Inode *dir, const char* name,
   // lookup
   ldout(cct, 20) << "get_or_create " << *dir << " name " << name << dendl;
   dir->open_dir();
-  if (dir->dir->dentries.count(name)) {
-    Dentry *dn = dir->dir->dentries[name];
+  auto dentry = dir->dir->dentries.find(name);
+  if (dentry != dir->dir->dentries.end()) {
+    Dentry *dn = dentry->second;
     
     // is dn lease valid?
+    auto session = mds_sessions.find(dn->lease_mds);
     utime_t now = ceph_clock_now();
     if (dn->inode &&
 	dn->lease_mds >= 0 &&
 	dn->lease_ttl > now &&
-	mds_sessions.count(dn->lease_mds)) {
-      MetaSession *s = mds_sessions[dn->lease_mds];
+	(session != mds_sessions.end())) {
+      MetaSession *s = session->second;
       if (s->cap_ttl > now &&
 	  s->cap_gen == dn->lease_gen) {
 	if (expect_null)
@@ -7926,8 +7962,9 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
     // allocate a integer file descriptor
     assert(fh);
     r = get_fd();
-    assert(fd_map.count(r) == 0);
-    fd_map[r] = fh;
+    auto fd_it = fd_map.find(r);
+    assert(fd_it == fd_map.end());
+    fd_it->second = fh;
   }
   
  out:
@@ -9842,7 +9879,8 @@ Inode *Client::open_snapdir(Inode *diri)
 {
   Inode *in;
   vinodeno_t vino(diri->ino, CEPH_SNAPDIR);
-  if (!inode_map.count(vino)) {
+  auto inode_it = inode_map.find(vino);
+  if (inode_it == inode_map.end()) {
     in = new Inode(this, vino, &diri->layout);
 
     in->ino = diri->ino;
@@ -9864,7 +9902,7 @@ Inode *Client::open_snapdir(Inode *diri)
       _assign_faked_ino(in);
     ldout(cct, 10) << "open_snapdir created snapshot inode " << *in << dendl;
   } else {
-    in = inode_map[vino];
+    in = inode_it->second;
     ldout(cct, 10) << "open_snapdir had snapshot inode " << *in << dendl;
   }
   return in;
@@ -10345,13 +10383,14 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   if (r == 0) {
     string n(name);
     r = -ENODATA;
-   if (in->xattrs.count(n)) {
-      r = in->xattrs[n].length();
+    auto xattr = in->xattrs.find(n);
+    if (xattr != in->xattrs.end()) {
+      r = xattr->second.length();
       if (r > 0 && size != 0) {
-	if (size >= (unsigned)r)
-	  memcpy(value, in->xattrs[n].c_str(), r);
-	else
-	  r = -ERANGE;
+        if (size >= (unsigned)r)
+	      memcpy(value, xattr->second.c_str(), r);
+      else
+	    r = -ERANGE;
       }
     }
   }
@@ -12979,8 +13018,9 @@ int Client::check_pool_perm(Inode *in, int need)
 int Client::_posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want)
 {
   if (acl_type == POSIX_ACL) {
-    if (in->xattrs.count(ACL_EA_ACCESS)) {
-      const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
+    auto xattr = in->xattrs.find(ACL_EA_ACCESS);
+    if (xattr != in->xattrs.end()) {
+      const bufferptr& access_acl = xattr->second;
 
       return posix_acl_permits(access_acl, in->uid, in->gid, perms, want);
     }
@@ -12998,8 +13038,9 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
     goto out;
 
   if (acl_type == POSIX_ACL) {
-    if (in->xattrs.count(ACL_EA_ACCESS)) {
-      const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
+    auto xattr = in->xattrs.find(ACL_EA_ACCESS);
+    if (xattr != in->xattrs.end()) {
+      const bufferptr& access_acl = xattr->second;
       bufferptr acl(access_acl.c_str(), access_acl.length());
       r = posix_acl_access_chmod(acl, mode);
       if (r < 0)
@@ -13028,10 +13069,11 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
     goto out;
 
   if (acl_type == POSIX_ACL) {
-    if (dir->xattrs.count(ACL_EA_DEFAULT)) {
+    auto xattr = dir->xattrs.find(ACL_EA_DEFAULT);
+    if (xattr != dir->xattrs.end()) {
       map<string, bufferptr> xattrs;
 
-      const bufferptr& default_acl = dir->xattrs[ACL_EA_DEFAULT];
+      const bufferptr& default_acl = xattr->second;
       bufferptr acl(default_acl.c_str(), default_acl.length());
       r = posix_acl_inherit_mode(acl, mode);
       if (r < 0)
@@ -13046,7 +13088,7 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
       }
 
       if (S_ISDIR(*mode))
-	xattrs[ACL_EA_DEFAULT] = dir->xattrs[ACL_EA_DEFAULT];
+	xattrs[ACL_EA_DEFAULT] = xattr->second;
 
       r = xattrs.size();
       if (r > 0)

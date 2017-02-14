@@ -205,8 +205,9 @@ void Inode::touch_cap(Cap *cap)
 
 void Inode::try_touch_cap(mds_rank_t mds)
 {
-  if (caps.count(mds))
-    touch_cap(caps[mds]);
+  auto cap = caps.find(mds);
+  if (cap != caps.end())
+    touch_cap(cap->second);
 }
 
 bool Inode::caps_issued_mask(unsigned mask)
