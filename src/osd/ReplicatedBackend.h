@@ -245,7 +245,6 @@ private:
 
   struct pull_complete_info {
     hobject_t hoid;
-    ObjectContextRef obc;
     object_stat_sum_t stat;
   };
   bool handle_pull_response(
