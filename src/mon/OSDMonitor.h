@@ -297,6 +297,7 @@ private:
 			      const string& profile) const;
   int normalize_profile(const string& profilename, 
 			ErasureCodeProfile &profile,
+			bool force,
 			ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,

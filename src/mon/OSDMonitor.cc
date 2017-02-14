@@ -4893,8 +4893,9 @@ void OSDMonitor::check_legacy_ec_plugin(const string& plugin, const string& prof
   }
 }
 
-int OSDMonitor::normalize_profile(const string& profilename, 
-				  ErasureCodeProfile &profile, 
+int OSDMonitor::normalize_profile(const string& profilename,
+				  ErasureCodeProfile &profile,
+				  bool force,
 				  ostream *ss)
 {
   ErasureCodeInterfaceRef erasure_code;
@@ -4904,10 +4905,39 @@ int OSDMonitor::normalize_profile(const string& profilename,
   int err = instance.factory(plugin->second,
 			     g_conf->get_val<std::string>("erasure_code_dir"),
 			     profile, &erasure_code, ss);
-  if (err)
+  if (err) {
     return err;
+  }
 
-  return erasure_code->init(profile, ss);
+  err = erasure_code->init(profile, ss);
+  if (err) {
+    return err;
+  }
+
+  auto it = profile.find("stripe_unit");
+  if (it != profile.end()) {
+    string err_str;
+    uint32_t stripe_unit = strict_si_cast<uint32_t>(it->second.c_str(), &err_str);
+    if (!err_str.empty()) {
+      *ss << "could not parse stripe_unit '" << it->second
+	  << "': " << err_str << std::endl;
+      return -EINVAL;
+    }
+    uint32_t data_chunks = erasure_code->get_data_chunk_count();
+    uint32_t chunk_size = erasure_code->get_chunk_size(stripe_unit * data_chunks);
+    if (chunk_size != stripe_unit) {
+      *ss << "stripe_unit " << stripe_unit << " does not match ec profile "
+	  << "alignment. Would be padded to " << chunk_size
+	  << std::endl;
+      return -EINVAL;
+    }
+    if ((stripe_unit % 4096) != 0 && !force) {
+      *ss << "stripe_unit should be a multiple of 4096 bytes for best performance."
+	  << "use --force to override this check" << std::endl;
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
@@ -5130,12 +5160,22 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
+      ErasureCodeProfile profile =
+	osdmap.get_erasure_code_profile(erasure_code_profile);
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
-      uint32_t desired_stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-      if (err == 0)
-	*stripe_width = erasure_code->get_data_chunk_count() *
-	  erasure_code->get_chunk_size(desired_stripe_width);
+      if (err)
+	break;
+      uint32_t data_chunks = erasure_code->get_data_chunk_count();
+      uint32_t stripe_unit = g_conf->osd_pool_erasure_code_stripe_unit;
+      auto it = profile.find("stripe_unit");
+      if (it != profile.end()) {
+	string err_str;
+	stripe_unit = strict_si_cast<uint32_t>(it->second.c_str(), &err_str);
+	assert(err_str.empty());
+      }
+      *stripe_width = data_chunks *
+	erasure_code->get_chunk_size(stripe_unit * data_chunks);
     }
     break;
   default:
@@ -6831,14 +6871,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (err)
 	  goto reply;
       }
-      err = normalize_profile(name, profile_map, &ss);
+      err = normalize_profile(name, profile_map, force, &ss);
       if (err)
 	goto reply;
 
       if (osdmap.has_erasure_code_profile(name)) {
 	ErasureCodeProfile existing_profile_map =
 	  osdmap.get_erasure_code_profile(name);
-	err = normalize_profile(name, existing_profile_map, &ss);
+	err = normalize_profile(name, existing_profile_map, force, &ss);
 	if (err)
 	  goto reply;
 
@@ -6892,7 +6932,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						      &ss);
 	if (err)
 	  goto reply;
-	err = normalize_profile(name, profile_map, &ss);
+	err = normalize_profile(name, profile_map, true, &ss);
 	if (err)
 	  goto reply;
 	dout(20) << "erasure code profile set " << profile << "="
