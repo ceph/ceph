@@ -510,7 +510,6 @@ static int do_map()
   int fd[2];
   int nbd;
 
-  uint8_t old_format;
   librbd::image_info_t info;
 
   Preforker forker;
@@ -658,10 +657,6 @@ static int do_map()
     r = -errno;
     goto close_nbd;
   }
-
-  r = image.old_format(&old_format);
-  if (r < 0)
-    goto close_nbd;
 
   {
     uint64_t handle;
