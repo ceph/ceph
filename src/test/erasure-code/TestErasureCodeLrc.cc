@@ -615,8 +615,8 @@ TEST(ErasureCodeLrc, encode_decode)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
+  unsigned int chunk_size = g_conf->osd_pool_erasure_code_stripe_unit;
+  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;
@@ -745,8 +745,8 @@ TEST(ErasureCodeLrc, encode_decode_2)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
+  unsigned int chunk_size = g_conf->osd_pool_erasure_code_stripe_unit;
+  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;

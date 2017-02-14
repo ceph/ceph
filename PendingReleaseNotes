@@ -78,7 +78,6 @@
    still works.  See the documentation page "Mount CephFS in your
    file systems table" for details.
 
-
 12.0.1
 ------
 
@@ -106,3 +105,9 @@
 * The RGW api for getting object torrent has changed its params from 'get_torrent'
   to 'torrent' so that it can be compatible with Amazon S3. Now the request for 
   object torrent is like 'GET /ObjectName?torrent'.
+
+* The configuration option "osd pool erasure code stripe width" has
+  been replaced by "osd pool erasure code stripe unit", and given the
+  ability to be overridden by the erasure code profile setting
+  "stripe_unit". For more details see "Erasure Code Profiles" in the
+  documentation.
