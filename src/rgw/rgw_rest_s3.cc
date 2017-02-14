@@ -10,6 +10,8 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
+#include "auth/Crypto.h"
+#include "include/ceph_fs.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/tokenizer.hpp>
@@ -3175,7 +3177,8 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   /* neither keystone and rados enabled; warn and exit! */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
       !store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-      !store->ctx()->_conf->rgw_s3_auth_use_ldap) {
+      !store->ctx()->_conf->rgw_s3_auth_use_ldap &&
+      !store->ctx()->_conf->rgw_s3_auth_use_sts) {
     dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
     return -EPERM;
   }
@@ -4372,13 +4375,51 @@ rgw::auth::s3::STSVersion2ndEngine::authenticate(const std::string& access_key_i
                                                   const std::string& session_token,
                                                   const req_state* const s) const
 {
+  // For the time being the key will be part of ceph.conf
+  std::string key = std::move(cct->_conf->rgw_s3_auth_sts_key);
+
   //Decode the session token
-  std::string decoded_str = rgw::from_base64(session_token);
+  std::string decoded_str;
+  bufferlist input, decoded_op;
+  input.append(session_token);
+  decoded_op.decode_base64(input);
+  decoded_op.append('\0');
+  decoded_str = decoded_op.c_str();
+
   std::map<std::string, std::string> decoded_token_map;
+
+  //Decrypt the session token
+  std::string decrypted_str;
+  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  if (! cryptohandler) {
+    return result_t::deny(-EPERM);
+  }
+  bufferptr bp(key.c_str(), key.length());
+  int ret = cryptohandler->validate_secret(bp);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: Invalid secret key" << dendl;
+    return result_t::deny(-EPERM);
+  }
+  string error;
+  auto* keyhandler = cryptohandler->get_key_handler(bp, error);
+  if (! keyhandler) {
+    return result_t::deny(-EPERM);
+  }
+  error.clear();
+  bufferlist en_input, dec_output;
+  en_input.append(decoded_str);
+  ret = keyhandler->decrypt(en_input, dec_output, &error);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: Decryption failed: " << error << dendl;
+    return result_t::deny(-EPERM);
+  } else {
+    dec_output.append('\0');
+    decrypted_str = dec_output.c_str();
+  }
 
   //Extract useful info (like expiration time, secret key) from the token
   boost::char_separator<char> sep("&");
-  boost::tokenizer<boost::char_separator<char>> tokens(decoded_str, sep);
+  boost::tokenizer<boost::char_separator<char>> tokens(decrypted_str, sep);
   for (const auto& t : tokens) {
     auto pos = t.find("=");
     if (pos != string::npos) {
@@ -4408,7 +4449,7 @@ rgw::auth::s3::STSVersion2ndEngine::authenticate(const std::string& access_key_i
   }
 
   std::string digest;
-  int ret = rgw_get_s3_header_digest(string_to_sign, secret_key, digest);
+  ret = rgw_get_s3_header_digest(string_to_sign, secret_key, digest);
   if (ret < 0) {
     return result_t::deny(-EPERM);
   }
