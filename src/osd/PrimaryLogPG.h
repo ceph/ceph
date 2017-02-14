@@ -257,8 +257,7 @@ public:
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info,
-    const object_stat_sum_t &stat
+    const ObjectRecoveryInfo &recovery_info
     ) override;
   void begin_peer_recover(
     pg_shard_t peer,
