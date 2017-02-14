@@ -2895,7 +2895,7 @@ void FileStore::_do_transaction(
 	} else if (r == -ENOSPC) {
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
+	  msg = "ENOSPC from disk filesystem, misconfigured cluster";
 	} else if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	} else if (r == -EPERM) {
