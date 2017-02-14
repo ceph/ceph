@@ -4940,7 +4940,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 bool OSD::ms_handle_reset(Connection *con)
 {
   Session *session = (Session *)con->get_priv();
-  dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
+  dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset(con);
@@ -4959,7 +4959,7 @@ bool OSD::ms_handle_refused(Connection *con)
     return false;
 
   Session *session = (Session *)con->get_priv();
-  dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
+  dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
   int type = con->get_peer_type();
@@ -5005,7 +5005,7 @@ void OSD::start_boot()
     heartbeat_kick();
     return;
   }
-  dout(1) << "We are healthy, booting" << dendl;
+  dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
