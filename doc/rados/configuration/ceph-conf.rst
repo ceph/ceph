@@ -524,7 +524,6 @@ To invoke a cluster other than the default ``ceph`` cluster, use the
 
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
-.. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
