@@ -20,6 +20,17 @@ endif ()
 
 if (RDMA_FOUND)
   message(STATUS "Found libibverbs: ${RDMA_LIBRARY}")
+
+  include(CheckCXXSourceCompiles)
+  CHECK_CXX_SOURCE_COMPILES("
+    #include <infiniband/verbs.h>
+    int main() {
+      struct ibv_context* ctxt;
+      struct ibv_exp_gid_attr gid_attr;
+      ibv_exp_query_gid_attr(ctxt, 1, 0, &gid_attr);
+      return 0;
+    } " HAVE_IBV_EXP)
+
 else ()
   message(STATUS "Not Found libibverbs: ${RDMA_LIBRARY}")
   if (RDMA_FIND_REQUIRED)
