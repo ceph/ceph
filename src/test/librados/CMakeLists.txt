@@ -61,15 +61,6 @@ set_target_properties(ceph_test_rados_api_list PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_list
   rados_a global ${UNITTEST_LIBS} radostest)
 
-# ceph_test_rados_api_nlist
-add_executable(ceph_test_rados_api_nlist
-  nlist.cc
-  )
-set_target_properties(ceph_test_rados_api_nlist PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_nlist
-  rados_a ${UNITTEST_LIBS} radostest)
-
 # ceph_test_rados_api_pool
 add_executable(ceph_test_rados_api_pool
   pool.cc
