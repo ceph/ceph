@@ -7334,7 +7334,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	if (r == -ENOSPC)
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
+	  msg = "ENOSPC from bluestore, misconfigured cluster";
 
 	if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
