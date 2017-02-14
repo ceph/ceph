@@ -80,7 +80,7 @@ struct AioObjectRequest<librbd::MockTestImageCtx> : public AioObjectRequestHandl
     assert(s_instance == nullptr);
     s_instance = this;
   }
-  ~AioObjectRequest() {
+  ~AioObjectRequest() override {
     s_instance = nullptr;
   }
 
@@ -110,7 +110,7 @@ struct AioObjectRead<librbd::MockTestImageCtx> : public AioObjectRequest<librbd:
     assert(s_instance == nullptr);
     s_instance = this;
   }
-  ~AioObjectRead() {
+  ~AioObjectRead() override {
     s_instance = nullptr;
   }
 

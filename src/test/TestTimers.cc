@@ -31,7 +31,7 @@ public:
   {
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     array_lock.Lock();
     cout << "TestContext " << num << std::endl;
@@ -39,7 +39,7 @@ public:
     array_lock.Unlock();
   }
 
-  virtual ~TestContext()
+  ~TestContext() override
   {
   }
 
@@ -55,7 +55,7 @@ public:
   {
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     array_lock.Lock();
     cout << "StrictOrderTestContext " << num << std::endl;
@@ -63,7 +63,7 @@ public:
     array_lock.Unlock();
   }
 
-  virtual ~StrictOrderTestContext()
+  ~StrictOrderTestContext() override
   {
   }
 };

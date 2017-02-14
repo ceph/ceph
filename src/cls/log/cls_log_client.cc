@@ -88,7 +88,7 @@ class LogListCtx : public ObjectOperationCompletion {
 public:
   LogListCtx(list<cls_log_entry> *_entries, string *_marker, bool *_truncated) :
                                       entries(_entries), marker(_marker), truncated(_truncated) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_log_list_ret ret;
       try {
@@ -128,7 +128,7 @@ class LogInfoCtx : public ObjectOperationCompletion {
   cls_log_header *header;
 public:
   explicit LogInfoCtx(cls_log_header *_header) : header(_header) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_log_info_ret ret;
       try {

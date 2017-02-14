@@ -494,14 +494,14 @@ static void get_wal_key(uint64_t seq, string *out)
 // merge operators
 
 struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
-  virtual void merge_nonexistent(
+  void merge_nonexistent(
     const char *rdata, size_t rlen, std::string *new_value) override {
     *new_value = std::string(rdata, rlen);
   }
-  virtual void merge(
+  void merge(
     const char *ldata, size_t llen,
     const char *rdata, size_t rlen,
-    std::string *new_value) {
+    std::string *new_value) override {
     assert(llen == rlen);
     assert((rlen % 8) == 0);
     new_value->resize(rlen);
@@ -514,7 +514,7 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
   }
   // We use each operator name and each prefix to construct the
   // overall RocksDB operator name for consistency check at open time.
-  virtual string name() const {
+  string name() const override {
     return "int64_array";
   }
 };

@@ -242,7 +242,7 @@ public:
   int verify_permission() override { return 0; }
   void execute() override;
   void send_response() override;
-  const string name() { return "get_realm"; }
+  const string name() override { return "get_realm"; }
 };
 
 void RGWOp_Realm_Get::execute()
@@ -277,7 +277,7 @@ void RGWOp_Realm_Get::send_response()
 
 class RGWHandler_Realm : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() { return new RGWOp_Realm_Get; }
+  RGWOp *op_get() override { return new RGWOp_Realm_Get; }
 };
 
 RGWRESTMgr_Realm::RGWRESTMgr_Realm()

@@ -36,7 +36,7 @@ public:
     m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock));
   }
 
-  ~TestClusterWatcher() {
+  ~TestClusterWatcher() override {
     m_cluster->wait_for_latest_osdmap();
     for (auto& pool : m_pools) {
       EXPECT_EQ(0, m_cluster->pool_delete(pool.c_str()));

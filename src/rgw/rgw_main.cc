@@ -149,7 +149,7 @@ static void check_curl()
 class C_InitTimeout : public Context {
 public:
   C_InitTimeout() {}
-  void finish(int r) {
+  void finish(int r) override {
     derr << "Initialization timeout, failed to initialize" << dendl;
     exit(1);
   }

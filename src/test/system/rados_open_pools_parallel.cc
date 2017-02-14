@@ -59,11 +59,11 @@ public:
   {
   }
 
-  ~StRadosOpenPool()
+  ~StRadosOpenPool() override
   {
   }
 
-  int run()
+  int run() override
   {
     rados_t cl;
     RETURN1_IF_NONZERO(rados_create(&cl, NULL));

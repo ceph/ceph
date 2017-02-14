@@ -44,7 +44,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   struct Remove : public _Op {
     set<string> to_remove;
     explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
-    void operate(map<string, bufferlist> *store) {
+    void operate(map<string, bufferlist> *store) override {
       for (set<string>::iterator i = to_remove.begin();
 	   i != to_remove.end();
 	   ++i) {
@@ -55,7 +55,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   struct Insert : public _Op {
     map<string, bufferlist> to_insert;
     explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
-    void operate(map<string, bufferlist> *store) {
+    void operate(map<string, bufferlist> *store) override {
       for (map<string, bufferlist>::iterator i = to_insert.begin();
 	   i != to_insert.end();
 	   ++i) {
@@ -67,7 +67,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   struct Callback : public _Op {
     Context *context;
     explicit Callback(Context *c) : context(c) {}
-    void operate(map<string, bufferlist> *store) {
+    void operate(map<string, bufferlist> *store) override {
       context->complete(0);
     }
   };
@@ -77,13 +77,13 @@ public:
     list<Op> ops;
     list<Op> callbacks;
   public:
-    void set_keys(const map<string, bufferlist> &i) {
+    void set_keys(const map<string, bufferlist> &i) override {
       ops.push_back(Op(new Insert(i)));
     }
-    void remove_keys(const set<string> &r) {
+    void remove_keys(const set<string> &r) override {
       ops.push_back(Op(new Remove(r)));
     }
-    void add_callback(Context *c) {
+    void add_callback(Context *c) override {
       callbacks.push_back(Op(new Callback(c)));
     }
   };
@@ -103,7 +103,7 @@ private:
   public:
     explicit Doer(PausyAsyncMap *parent) :
       parent(parent), lock("Doer lock"), stopping(0), paused(false) {}
-    virtual void *entry() {
+    void *entry() override {
       while (1) {
 	list<Op> ops;
 	{
@@ -167,12 +167,12 @@ public:
   PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
     doer.create("doer");
   }
-  ~PausyAsyncMap() {
+  ~PausyAsyncMap() override {
     doer.join();
   }
   int get_keys(
     const set<string> &keys,
-    map<string, bufferlist> *out) {
+    map<string, bufferlist> *out) override {
     Mutex::Locker l(lock);
     for (set<string>::const_iterator i = keys.begin();
 	 i != keys.end();
@@ -185,7 +185,7 @@ public:
   }
   int get_next(
     const string &key,
-    pair<string, bufferlist> *next) {
+    pair<string, bufferlist> *next) override {
     Mutex::Locker l(lock);
     map<string, bufferlist>::iterator j = store.upper_bound(key);
     if (j != store.end()) {
@@ -213,7 +213,7 @@ public:
     public:
       OnFinish(Mutex *lock, Cond *cond, bool *done)
 	: lock(lock), cond(cond), done(done) {}
-      void finish(int) {
+      void finish(int) override {
 	Mutex::Locker l(*lock);
 	*done = true;
 	cond->Signal();
@@ -364,7 +364,7 @@ public:
       cur = next.first;
     }
   }
-  virtual void SetUp() {
+  void SetUp() override {
     driver.reset(new PausyAsyncMap());
     cache.reset(new MapCacher::MapCacher<string, bufferlist>(driver.get()));
     names.clear();
@@ -374,7 +374,7 @@ public:
       names.insert(random_string(1 + (random_size() % 10)));
     }
   }
-  virtual void TearDown() {
+  void TearDown() override {
     driver->stop();
     cache.reset();
     driver.reset();
@@ -587,12 +587,12 @@ protected:
   map<pg_t, ceph::shared_ptr<MapperVerifier> > mappers;
   uint32_t pgnum;
 
-  virtual void SetUp() {
+  void SetUp() override {
     driver.reset(new PausyAsyncMap());
     pgnum = 0;
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     driver->stop();
     mappers.clear();
     driver.reset();

@@ -46,7 +46,7 @@ public:
     }
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     BOOST_SCOPE_EXIT((&m_throttle) (&r))
     {

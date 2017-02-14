@@ -43,12 +43,12 @@ public:
     Py_INCREF(python_completion);
   }
 
-  ~MonCommandCompletion()
+  ~MonCommandCompletion() override
   {
     Py_DECREF(python_completion);
   }
 
-  void finish(int r)
+  void finish(int r) override
   {
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();

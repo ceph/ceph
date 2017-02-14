@@ -31,25 +31,25 @@ public:
 
   ErasureCodeTest(unsigned int _k, unsigned int _m, unsigned int _chunk_size) :
     k(_k), m(_m), chunk_size(_chunk_size) {}
-  virtual ~ErasureCodeTest() {}
+  ~ErasureCodeTest() override {}
 
-  virtual int init(ErasureCodeProfile &profile, ostream *ss) {
+  int init(ErasureCodeProfile &profile, ostream *ss) override {
     return 0;
   }
 
-  virtual unsigned int get_chunk_count() const { return k + m; }
-  virtual unsigned int get_data_chunk_count() const { return k; }
-  virtual unsigned int get_chunk_size(unsigned int object_size) const {
+  unsigned int get_chunk_count() const override { return k + m; }
+  unsigned int get_data_chunk_count() const override { return k; }
+  unsigned int get_chunk_size(unsigned int object_size) const override {
     return chunk_size;
   }
-  virtual int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded) {
+  int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded) override {
     encode_chunks_encoded = *encoded;
     return 0;
   }
-  virtual int create_ruleset(const string &name,
+  int create_ruleset(const string &name,
 			     CrushWrapper &crush,
-			     ostream *ss) const { return 0; }
+			     ostream *ss) const override { return 0; }
 
 };
 

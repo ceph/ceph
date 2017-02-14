@@ -61,7 +61,7 @@ class VersionReadCtx : public ObjectOperationCompletion {
   obj_version *objv;
 public:
   explicit VersionReadCtx(obj_version *_objv) : objv(_objv) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_version_read_ret ret;
       try {

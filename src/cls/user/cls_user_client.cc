@@ -49,7 +49,7 @@ class ClsUserListCtx : public ObjectOperationCompletion {
 public:
   ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated, int *_pret) :
                                       entries(_entries), marker(_marker), truncated(_truncated), pret(_pret) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_user_list_buckets_ret ret;
       try {
@@ -97,12 +97,12 @@ class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
   int *pret;
 public:
   ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx, int *_pret) : header(_h), ret_ctx(_ctx), pret(_pret) {}
-  ~ClsUserGetHeaderCtx() {
+  ~ClsUserGetHeaderCtx() override {
     if (ret_ctx) {
       ret_ctx->put();
     }
   }
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_user_get_header_ret ret;
       try {

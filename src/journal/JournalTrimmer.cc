@@ -22,8 +22,8 @@ struct JournalTrimmer::C_RemoveSet : public Context {
 
   C_RemoveSet(JournalTrimmer *_journal_trimmer, uint64_t _object_set,
               uint8_t _splay_width);
-  virtual void complete(int r);
-  virtual void finish(int r) {
+  void complete(int r) override;
+  void finish(int r) override {
     journal_trimmer->handle_set_removed(r, object_set);
     journal_trimmer->m_async_op_tracker.finish_op();
   }

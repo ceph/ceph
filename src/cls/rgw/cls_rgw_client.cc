@@ -24,8 +24,8 @@ private:
   int *ret_code;
 public:
   ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { assert(data); }
-  ~ClsBucketIndexOpCtx() {}
-  void handle_completion(int r, bufferlist& outbl) {
+  ~ClsBucketIndexOpCtx() override {}
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       try {
         bufferlist::iterator iter = outbl.begin();
@@ -520,10 +520,10 @@ class GetDirHeaderCompletion : public ObjectOperationCompletion {
   RGWGetDirHeader_CB *ret_ctx;
 public:
   explicit GetDirHeaderCompletion(RGWGetDirHeader_CB *_ctx) : ret_ctx(_ctx) {}
-  ~GetDirHeaderCompletion() {
+  ~GetDirHeaderCompletion() override {
     ret_ctx->put();
   }
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     struct rgw_cls_list_ret ret;
     try {
       bufferlist::iterator iter = outbl.begin();

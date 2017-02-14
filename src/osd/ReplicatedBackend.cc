@@ -42,7 +42,7 @@ class PG_SendMessageOnConn: public Context {
     PGBackend::Listener *pg,
     Message *reply,
     ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
-  void finish(int) {
+  void finish(int) override {
     pg->send_message_osd_cluster(reply, conn.get());
   }
 };
@@ -54,7 +54,7 @@ class PG_RecoveryQueueAsync : public Context {
   PG_RecoveryQueueAsync(
     PGBackend::Listener *pg,
     GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
-  void finish(int) {
+  void finish(int) override {
     pg->schedule_recovery_work(c.release());
   }
 };
@@ -65,7 +65,7 @@ struct ReplicatedBackend::C_OSD_RepModifyApply : public Context {
   RepModifyRef rm;
   C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
     : pg(pg), rm(r) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->sub_op_modify_applied(rm);
   }
 };
@@ -75,7 +75,7 @@ struct ReplicatedBackend::C_OSD_RepModifyCommit : public Context {
   RepModifyRef rm;
   C_OSD_RepModifyCommit(ReplicatedBackend *pg, RepModifyRef r)
     : pg(pg), rm(r) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->sub_op_modify_commit(rm);
   }
 };
@@ -320,11 +320,11 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
   int r;
   Context *c;
   AsyncReadCallback(int r, Context *c) : r(r), c(c) {}
-  void finish(ThreadPool::TPHandle&) {
+  void finish(ThreadPool::TPHandle&) override {
     c->complete(r);
     c = NULL;
   }
-  ~AsyncReadCallback() {
+  ~AsyncReadCallback() override {
     delete c;
   }
 };
@@ -366,7 +366,7 @@ class C_OSD_OnOpCommit : public Context {
 public:
   C_OSD_OnOpCommit(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
     : pg(pg), op(op) {}
-  void finish(int) {
+  void finish(int) override {
     pg->op_commit(op);
   }
 };
@@ -377,7 +377,7 @@ class C_OSD_OnOpApplied : public Context {
 public:
   C_OSD_OnOpApplied(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
     : pg(pg), op(op) {}
-  void finish(int) {
+  void finish(int) override {
     pg->op_applied(op);
   }
 };
@@ -877,7 +877,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
   C_ReplicatedBackend_OnPullComplete(ReplicatedBackend *bc, int priority)
     : bc(bc), priority(priority) {}
 
-  void finish(ThreadPool::TPHandle &handle) {
+  void finish(ThreadPool::TPHandle &handle) override {
     ReplicatedBackend::RPGHandle *h = bc->_open_recovery_op();
     for (auto &&i: to_continue) {
       if (!bc->start_pushes(i.hoid, i.obc, h)) {

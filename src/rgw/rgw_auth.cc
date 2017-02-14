@@ -41,23 +41,23 @@ rgw_auth_transform_old_authinfo(req_state * const s)
         is_admin(is_admin) {
     }
 
-    uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const {
+    uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
       return rgw_perms_from_aclspec_default_strategy(id, aclspec);
     }
 
-    bool is_admin_of(const rgw_user& acct_id) const {
+    bool is_admin_of(const rgw_user& acct_id) const override {
       return is_admin;
     }
 
-    bool is_owner_of(const rgw_user& acct_id) const {
+    bool is_owner_of(const rgw_user& acct_id) const override {
       return id == acct_id;
     }
 
-    uint32_t get_perm_mask() const {
+    uint32_t get_perm_mask() const override {
       return perm_mask;
     }
 
-    void to_str(std::ostream& out) const {
+    void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", perm_mask=" << perm_mask
           << ", is_admin=" << is_admin << ")";

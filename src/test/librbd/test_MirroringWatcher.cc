@@ -39,7 +39,7 @@ using ::testing::WithArg;
 
 class TestMirroringWatcher : public TestFixture {
 public:
-  virtual void SetUp() {
+  void SetUp() override {
     TestFixture::SetUp();
 
     bufferlist bl;
@@ -58,7 +58,7 @@ public:
     }
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     if (m_image_watcher != nullptr) {
       C_SaferCond ctx;
       m_image_watcher->unregister_watch(&ctx);

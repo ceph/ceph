@@ -2640,7 +2640,7 @@ class RGWWatcher : public librados::WatchCtx2 {
     RGWWatcher *watcher;
     public:
       explicit C_ReinitWatch(RGWWatcher *_watcher) : watcher(_watcher) {}
-      void finish(int r) {
+      void finish(int r) override {
         watcher->reinit();
       }
   };
@@ -2649,7 +2649,7 @@ public:
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
-		     bufferlist& bl) {
+		     bufferlist& bl) override {
     ldout(rados->ctx(), 10) << "RGWWatcher::handle_notify() "
 			    << " notify_id " << notify_id
 			    << " cookie " << cookie
@@ -2660,7 +2660,7 @@ public:
     bufferlist reply_bl; // empty reply payload
     rados->control_pool_ctx.notify_ack(oid, notify_id, cookie, reply_bl);
   }
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     lderr(rados->ctx()) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
     rados->remove_watcher(index);
@@ -2832,7 +2832,7 @@ class RGWRadosThread {
 
   public:
     Worker(CephContext *_cct, RGWRadosThread *_p) : cct(_cct), processor(_p), lock("RGWRadosThread::Worker") {}
-    void *entry();
+    void *entry() override;
     void stop() {
       Mutex::Locker l(lock);
       cond.Signal();
@@ -2928,14 +2928,14 @@ class RGWMetaNotifier : public RGWRadosThread {
   RGWMetaNotifierManager notify_mgr;
   RGWMetadataLog *const log;
 
-  uint64_t interval_msec() {
+  uint64_t interval_msec() override {
     return cct->_conf->rgw_md_notify_interval_msec;
   }
 public:
   RGWMetaNotifier(RGWRados *_store, RGWMetadataLog* log)
     : RGWRadosThread(_store), notify_mgr(_store), log(log) {}
 
-  int process();
+  int process() override;
 };
 
 int RGWMetaNotifier::process()
@@ -2960,13 +2960,13 @@ int RGWMetaNotifier::process()
 class RGWDataNotifier : public RGWRadosThread {
   RGWDataNotifierManager notify_mgr;
 
-  uint64_t interval_msec() {
+  uint64_t interval_msec() override {
     return cct->_conf->rgw_md_notify_interval_msec;
   }
 public:
   RGWDataNotifier(RGWRados *_store) : RGWRadosThread(_store), notify_mgr(_store) {}
 
-  int process();
+  int process() override;
 };
 
 int RGWDataNotifier::process()
@@ -2995,19 +2995,19 @@ int RGWDataNotifier::process()
 class RGWSyncProcessorThread : public RGWRadosThread {
 public:
   RGWSyncProcessorThread(RGWRados *_store) : RGWRadosThread(_store) {}
-  virtual ~RGWSyncProcessorThread() {}
-  virtual int init() = 0 ;
-  virtual int process() = 0;
+  ~RGWSyncProcessorThread() override {}
+  int init() override = 0 ;
+  int process() override = 0;
 };
 
 class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
 {
   RGWMetaSyncStatusManager sync;
 
-  uint64_t interval_msec() {
+  uint64_t interval_msec() override {
     return 0; /* no interval associated, it'll run once until stopped */
   }
-  void stop_process() {
+  void stop_process() override {
     sync.stop();
   }
 public:
@@ -3021,7 +3021,7 @@ public:
   }
   RGWMetaSyncStatusManager* get_manager() { return &sync; }
 
-  int init() {
+  int init() override {
     int ret = sync.init();
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: sync.init() returned " << ret << dendl;
@@ -3030,7 +3030,7 @@ public:
     return 0;
   }
 
-  int process() {
+  int process() override {
     sync.run();
     return 0;
   }
@@ -3041,7 +3041,7 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
   RGWDataSyncStatusManager sync;
   bool initialized;
 
-  uint64_t interval_msec() {
+  uint64_t interval_msec() override {
     if (initialized) {
       return 0; /* no interval associated, it'll run once until stopped */
     } else {
@@ -3049,7 +3049,7 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
       return DATA_SYNC_INIT_WAIT_SEC * 1000;
     }
   }
-  void stop_process() {
+  void stop_process() override {
     sync.stop();
   }
 public:
@@ -3065,11 +3065,11 @@ public:
   }
   RGWDataSyncStatusManager* get_manager() { return &sync; }
 
-  int init() {
+  int init() override {
     return 0;
   }
 
-  int process() {
+  int process() override {
     while (!initialized) {
       if (going_down()) {
         return 0;
@@ -6767,7 +6767,7 @@ public:
                        progress_data(_progress_data),
                        extra_data_len(0),
                        data_len(0) {}
-  int handle_data(bufferlist& bl, off_t ofs, off_t len) {
+  int handle_data(bufferlist& bl, off_t ofs, off_t len) override {
     if (progress_cb) {
       progress_cb(ofs, progress_data);
     }
@@ -6826,7 +6826,7 @@ public:
 
   bufferlist& get_extra_data() { return extra_data_bl; }
 
-  void set_extra_data_len(uint64_t len) {
+  void set_extra_data_len(uint64_t len) override {
     extra_data_len = len;
   }
 
@@ -6972,7 +6972,7 @@ class RGWGetExtraDataCB : public RGWGetDataCB {
   bufferlist extra_data;
 public:
   RGWGetExtraDataCB() {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     if (extra_data.length() < extra_data_len) {
       off_t max = extra_data_len - extra_data.length();
       if (max > bl_len) {
@@ -9700,7 +9700,7 @@ struct get_obj_data : public RefCountedObject {
       total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
       client_cb(NULL),
       throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
-  virtual ~get_obj_data() { } 
+  ~get_obj_data() override { } 
   void set_cancelled(int r) {
     cancelled.set(1);
     err_code.set(r);
@@ -10983,7 +10983,7 @@ public:
     : cb(_cb), pendings(_pendings), stats(), ret_code(0), should_cb(true),
     lock("RGWGetBucketStatsContext") {}
 
-  void handle_response(int r, rgw_bucket_dir_header& header) {
+  void handle_response(int r, rgw_bucket_dir_header& header) override {
     Mutex::Locker l(lock);
     if (should_cb) {
       if ( r >= 0) {
@@ -11039,7 +11039,7 @@ public:
   explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
     : cb(cb) {}
 
-  void handle_response(int r, cls_user_header& header) {
+  void handle_response(int r, cls_user_header& header) override {
     const cls_user_stats& hs = header.stats;
     if (r >= 0) {
       RGWStorageStats stats;
@@ -11580,7 +11580,7 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
   string prefix;
 
   explicit RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
-  virtual bool filter(string& name, string& key) {
+  bool filter(string& name, string& key) override {
     return (prefix.compare(key.substr(0, prefix.size())) == 0);
   }
 };

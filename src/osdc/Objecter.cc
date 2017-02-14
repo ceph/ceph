@@ -159,7 +159,7 @@ class Objecter::RequestStateHook : public AdminSocketHook {
 public:
   explicit RequestStateHook(Objecter *objecter);
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-            bufferlist& out);
+            bufferlist& out) override;
 };
 
 /**
@@ -172,14 +172,14 @@ class ObjectOperation::C_TwoContexts : public Context {
 public:
   C_TwoContexts(Context *first, Context *second) :
     first(first), second(second) {}
-  void finish(int r) {
+  void finish(int r) override {
     first->complete(r);
     second->complete(r);
     first = NULL;
     second = NULL;
   }
 
-  virtual ~C_TwoContexts() {
+  ~C_TwoContexts() override {
     delete first;
     delete second;
   }
@@ -621,7 +621,7 @@ struct C_DoWatchError : public Context {
     info->get();
     info->_queued_async();
   }
-  void finish(int r) {
+  void finish(int r) override {
     Objecter::unique_lock wl(objecter->rwlock);
     bool canceled = info->canceled;
     wl.unlock();
@@ -880,7 +880,7 @@ struct C_DoWatchNotify : public Context {
     info->_queued_async();
     msg->get();
   }
-  void finish(int r) {
+  void finish(int r) override {
     objecter->_do_watch_notify(info, msg);
   }
 };
@@ -1830,7 +1830,7 @@ struct C_Objecter_GetVersion : public Context {
   Context *fin;
   C_Objecter_GetVersion(Objecter *o, Context *c)
     : objecter(o), oldest(0), newest(0), fin(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       objecter->get_latest_version(oldest, newest, fin);
     } else if (r == -EAGAIN) { // try again as instructed
@@ -3820,7 +3820,7 @@ struct C_SelfmanagedSnap : public Context {
   snapid_t *psnapid;
   Context *fin;
   C_SelfmanagedSnap(snapid_t *ps, Context *f) : psnapid(ps), fin(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r == 0) {
       bufferlist::iterator p = bl.begin();
       ::decode(*psnapid, p);
@@ -4995,7 +4995,7 @@ struct C_EnumerateReply : public Context {
     epoch(0), budget(0)
   {}
 
-  void finish(int r) {
+  void finish(int r) override {
     objecter->_enumerate_reply(
       bl, r, end, pool_id, budget, epoch, result, next, on_finish);
   }

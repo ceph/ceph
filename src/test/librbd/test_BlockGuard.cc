@@ -33,7 +33,7 @@ public:
 
   typedef BlockGuard<Operation> OpBlockGuard;
 
-  virtual void SetUp() override {
+  void SetUp() override {
     TestFixture::SetUp();
     m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
   }

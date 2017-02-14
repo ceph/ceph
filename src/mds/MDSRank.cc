@@ -284,7 +284,7 @@ class C_MDS_VoidFn : public MDSInternalContext
     assert(fn_);
   }
 
-  void finish(int r)
+  void finish(int r) override
   {
     (mds->*fn)();
   }
@@ -907,7 +907,7 @@ class C_MDS_BootStart : public MDSInternalContext {
 public:
   C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n)
     : MDSInternalContext(m), nextstep(n) {}
-  void finish(int r) {
+  void finish(int r) override {
     mds->boot_start(nextstep, r);
   }
 };
@@ -1055,7 +1055,7 @@ class MDSRank::C_MDS_StandbyReplayRestartFinish : public MDSIOContext {
 public:
   C_MDS_StandbyReplayRestartFinish(MDSRank *mds_, uint64_t old_read_pos_) :
     MDSIOContext(mds_), old_read_pos(old_read_pos_) {}
-  void finish(int r) {
+  void finish(int r) override {
     mds->_standby_replay_restart_finish(r, old_read_pos);
   }
 };
@@ -1104,7 +1104,7 @@ inline void MDSRank::standby_replay_restart()
 class MDSRank::C_MDS_StandbyReplayRestart : public MDSInternalContext {
 public:
   explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(!r);
     mds->standby_replay_restart();
   }
@@ -1788,7 +1788,7 @@ public:
     MDSDaemon::send_command_reply(m, mds, r, bl, out_str);
     m->put();
   }
-  void finish (int r) {
+  void finish (int r) override {
     send(r, "");
   }
 };

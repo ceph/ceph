@@ -27,9 +27,9 @@ protected:
 
 public:
   explicit WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
-  virtual ~WholeSpaceMemIterator() { }
+  ~WholeSpaceMemIterator() override { }
 
-  int seek_to_first() {
+  int seek_to_first() override {
     if (db->db.empty()) {
       it = db->db.end();
       ready = false;
@@ -40,7 +40,7 @@ public:
     return 0;
   }
 
-  int seek_to_first(const string &prefix) {
+  int seek_to_first(const string &prefix) override {
     it = db->db.lower_bound(make_pair(prefix, ""));
     if (db->db.empty() || (it == db->db.end())) {
       it = db->db.end();
@@ -51,7 +51,7 @@ public:
     return 0;
   }
 
-  int seek_to_last() {
+  int seek_to_last() override {
     it = db->db.end();
     if (db->db.empty()) {
       ready = false;
@@ -63,7 +63,7 @@ public:
     return 0;
   }
 
-  int seek_to_last(const string &prefix) {
+  int seek_to_last(const string &prefix) override {
     string tmp(prefix);
     tmp.append(1, (char) 0);
     it = db->db.upper_bound(make_pair(tmp,""));
@@ -78,7 +78,7 @@ public:
     return 0;
   }
 
-  int lower_bound(const string &prefix, const string &to) {
+  int lower_bound(const string &prefix, const string &to) override {
     it = db->db.lower_bound(make_pair(prefix,to));
     if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
@@ -92,7 +92,7 @@ public:
     return 0;
   }
 
-  int upper_bound(const string &prefix, const string &after) {
+  int upper_bound(const string &prefix, const string &after) override {
     it = db->db.upper_bound(make_pair(prefix,after));
     if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
@@ -104,7 +104,7 @@ public:
     return 0;
   }
 
-  bool valid() {
+  bool valid() override {
     return ready && (it != db->db.end());
   }
 
@@ -112,7 +112,7 @@ public:
     return ready && (it == db->db.begin());
   }
 
-  int prev() {
+  int prev() override {
     if (!begin() && ready)
       --it;
     else
@@ -120,38 +120,38 @@ public:
     return 0;
   }
 
-  int next() {
+  int next() override {
     if (valid())
       ++it;
     return 0;
   }
 
-  string key() {
+  string key() override {
     if (valid())
       return (*it).first.second;
     else
       return "";
   }
 
-  pair<string,string> raw_key() {
+  pair<string,string> raw_key() override {
     if (valid())
       return (*it).first;
     else
       return make_pair("", "");
   }
   
-  bool raw_key_is_prefixed(const string &prefix) {
+  bool raw_key_is_prefixed(const string &prefix) override {
     return prefix == (*it).first.first;
   }
 
-  bufferlist value() {
+  bufferlist value() override {
     if (valid())
       return (*it).second;
     else
       return bufferlist();
   }
 
-  int status() {
+  int status() override {
     return 0;
   }
 };
@@ -240,7 +240,7 @@ public:
 
   explicit WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
     WholeSpaceMemIterator(db) { }
-  ~WholeSpaceSnapshotMemIterator() {
+  ~WholeSpaceSnapshotMemIterator() override {
     delete db;
   }
 };

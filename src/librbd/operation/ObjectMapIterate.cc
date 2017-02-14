@@ -42,7 +42,7 @@ public:
     m_io_ctx.snap_set_read(CEPH_SNAPDIR);
   }
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     I &image_ctx = this->m_image_ctx;
     if (should_complete(r)) {
       ldout(image_ctx.cct, 20) << m_oid << " C_VerifyObjectCallback completed "
@@ -52,7 +52,7 @@ public:
     }
   }
 
-  virtual int send() {
+  int send() override {
     send_list_snaps();
     return 0;
   }

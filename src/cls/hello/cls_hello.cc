@@ -252,7 +252,7 @@ static int bad_writer(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 class PGLSHelloFilter : public PGLSFilter {
   string val;
 public:
-  int init(bufferlist::iterator& params) {
+  int init(bufferlist::iterator& params) override {
     try {
       ::decode(xattr, params);
       ::decode(val, params);
@@ -262,9 +262,9 @@ public:
     return 0;
   }
 
-  virtual ~PGLSHelloFilter() {}
-  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata)
+  ~PGLSHelloFilter() override {}
+  bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) override
   {
     if (val.size() != xattr_data.length())
       return false;

@@ -249,7 +249,7 @@ TEST(BufferRaw, ostream) {
 #ifdef CEPH_HAVE_SPLICE
 class TestRawPipe : public ::testing::Test {
 protected:
-  virtual void SetUp() {
+  void SetUp() override {
     len = 4;
     ::unlink(FILENAME);
     snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
@@ -257,7 +257,7 @@ protected:
     fd = ::open(FILENAME, O_RDONLY);
     assert(fd >= 0);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     ::close(fd);
     ::unlink(FILENAME);
   }
