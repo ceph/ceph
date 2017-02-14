@@ -892,6 +892,10 @@ namespace librados
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
                                    const bufferlist &filter);
+
+    /// Start enumerating objects for a specific pg 
+    NObjectIterator nobjects_begin(uint32_t *pgid);
+
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 

@@ -1090,6 +1090,29 @@ CEPH_RADOS_API void rados_object_list_slice(rados_ioctx_t io,
 CEPH_RADOS_API int rados_objects_list_open(rados_ioctx_t io,
                                            rados_list_ctx_t *ctx);
 
+
+ /**
+ * Start listing objects in a specific pg
+ *
+ * @param io the pool to list from
+ * @param ctx the handle to store list context in
+ * @param pgid id of the pg to list
+ * @returns 0 on success, negative error code on failure
+ */
+
+CEPH_RADOS_API int rados_nobjects_list_open_pg(rados_ioctx_t io, rados_list_ctx_t *listh, uint32_t pgid);
+
+ /**
+ * Start listing objects in a specific pg
+ *
+ * @param io the pool to list from
+ * @param ctx the handle to store list context in
+ * @param pgid id of the pg to list
+ * @returns 0 on success, negative error code on failure
+ */
+
+CEPH_RADOS_API int rados_objects_list_open_pg(rados_ioctx_t io, rados_list_ctx_t *listh, uint32_t pgid);
+
 /**
  * @warning Deprecated: Use rados_nobjects_list_get_pg_hash_position() instead
  */

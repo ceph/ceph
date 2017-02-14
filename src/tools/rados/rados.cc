@@ -76,6 +76,7 @@ void usage(ostream& out)
 "                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
+"   pgls -pg pgid                    list objects in a specific pg \n\n"
 "   chown 123                        change the pool owner to auid 123\n"
 "\n"
 "POOL SNAP COMMANDS\n"
@@ -165,6 +166,8 @@ void usage(ostream& out)
 "   -p pool\n"
 "   --pool=pool\n"
 "        select given pool by name\n"
+"   -pg pgid\n"
+"        select given pg\n"
 "   --target-pool=pool\n"
 "        select target pool by name\n"
 "   -b op_size\n"
@@ -1605,6 +1608,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int ret;
   bool create_pool = false;
   const char *pool_name = NULL;
+  const char *pgid = NULL;
   const char *target_pool_name = NULL;
   string oloc, target_oloc, nspace, target_nspace;
   int concurrent_ios = 16;
@@ -1658,6 +1662,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("pool");
   if (i != opts.end()) {
     pool_name = i->second.c_str();
+  }
+  i = opts.find("pgid");
+  if (i != opts.end()) {
+    pgid = i->second.c_str();
   }
   i = opts.find("target_pool");
   if (i != opts.end()) {
@@ -2186,6 +2194,95 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       formatter->flush(*outstream);
       if (pretty_format)
 	*outstream << std::endl;
+      formatter->flush(*outstream);
+    }
+    if (!stdout)
+      delete outstream;
+  }
+  else if (strcmp(nargs[0], "pgls") == 0) {
+    if (!pool_name) {
+      cerr << "pool name was not specified" << std::endl;
+      ret = -1;
+      goto out;
+    }
+
+    if (!pgid) {
+      cerr << "pgid was not specified" << std::endl;
+      ret = -1;
+      goto out;
+    }
+
+    if (wildcard)
+      io_ctx.set_namespace(all_nspaces);
+    bool use_stdout = (nargs.size() < 3) || (strcmp(nargs[1], "-") == 0);
+    ostream *outstream;
+    if(use_stdout)
+      outstream = &cout;
+    else
+      outstream = new ofstream(nargs[1]);
+
+    //we need to check whether it's a valid pgid
+    //pgid should be hexadecimal
+    char *p;
+    uint32_t pg = strtoul(pgid, &p, 16);
+    if (*p != 0) {
+      cerr << "pgid was not valid" << std::endl;
+      ret = -1;
+      goto out;
+    }
+
+    {
+      if (formatter)
+        formatter->open_array_section("objects");
+      try {
+        librados::NObjectIterator i = io_ctx.nobjects_begin(&pg);
+        librados::NObjectIterator i_end = io_ctx.nobjects_end();
+        for (; i != i_end; ++i) {
+          if (use_striper) {
+            // in case of --striper option, we only list striped
+            // objects, so we only display the first object of
+            // each, without its suffix '.000...000'
+            size_t l = i->get_oid().length();
+            if (l <= 17 ||
+                (0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) continue;
+          }
+          if (!formatter) {
+            // Only include namespace in output when wildcard specified
+            if (wildcard)
+              *outstream << i->get_nspace() << "\t";
+            if (use_striper) {
+              *outstream << i->get_oid().substr(0, i->get_oid().length()-17);
+            } else {
+              *outstream << i->get_oid();
+            }
+            if (i->get_locator().size())
+              *outstream << "\t" << i->get_locator();
+            *outstream << std::endl;
+          } else {
+            formatter->open_object_section("object");
+            formatter->dump_string("namespace", i->get_nspace());
+            if (use_striper) {
+              formatter->dump_string("name", i->get_oid().substr(0, i->get_oid().length()-17));
+            } else {
+              formatter->dump_string("name", i->get_oid());
+            }
+            if (i->get_locator().size())
+              formatter->dump_string("locator", i->get_locator());
+            formatter->close_section(); //object
+          }
+        }
+      }
+      catch (const std::runtime_error& e) {
+        cerr << e.what() << std::endl;
+        ret = -1;
+        goto out;
+      }
+    }
+    if (formatter) {
+      formatter->close_section(); //objects
+      formatter->flush(*outstream);
+      if (pretty_format)
+        *outstream << std::endl;
       formatter->flush(*outstream);
     }
     if (!stdout)
@@ -3582,6 +3679,8 @@ int main(int argc, const char **argv)
       opts["prefix"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-pg", (char*)NULL)) {
+      opts["pgid"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
       opts["target_pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {

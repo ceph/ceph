@@ -1804,6 +1804,29 @@ TRACEPOINT_EVENT(librados, rados_nobjects_list_next_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_nobjects_list_open_pg_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint32_t, pgid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer_hex(uint32_t, pgid, pgid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_open_pg_exit,
+    TP_ARGS(
+        int, retval,
+        rados_list_ctx_t, listctx,
+        uint32_t, pgid),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+        ctf_integer_hex(uint32_t, pgid, pgid)
+    )
+)
+
+
 TRACEPOINT_EVENT(librados, rados_objects_list_open_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx),
@@ -1819,6 +1842,28 @@ TRACEPOINT_EVENT(librados, rados_objects_list_open_exit,
     TP_FIELDS(
         ctf_integer(int, retval, retval)
         ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_open_pg_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint32_t, pgid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer_hex(uint32_t, pgid, pgid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_open_pg_exit,
+    TP_ARGS(
+        int, retval,
+        rados_list_ctx_t, listctx,
+        uint32_t, pgid),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+        ctf_integer_hex(uint32_t, pgid, pgid)
     )
 )
 

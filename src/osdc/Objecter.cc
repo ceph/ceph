@@ -3500,6 +3500,15 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
 	   << " list_context->cookie " << list_context->cookie << dendl;
 
   if (list_context->at_end_of_pg) {
+    if (true == list_context->listing_single_pg) {
+       // we just list a single pg, so we can just return here to avoid the following pgs
+       ldout(cct, 10) << "finished listing pg " << list_context->current_pg << dendl;
+       list_context->at_end_of_pool = true;
+       put_nlist_context_budget(list_context);
+
+       onfinish->complete(0);
+       return;
+    }
     list_context->at_end_of_pg = false;
     ++list_context->current_pg;
     list_context->current_pg_epoch = 0;
@@ -3656,6 +3665,16 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
 	   << " list_context->cookie " << list_context->cookie << dendl;
 
   if (list_context->at_end_of_pg) {
+    if (true == list_context->listing_single_pg){
+        ldout(cct, 10) << "finished listing pg " << list_context->current_pg << dendl;
+
+        // we just list a single pg, so we can just return here to avoid the following pgs
+        list_context->at_end_of_pool = true;
+        put_list_context_budget(list_context);
+        onfinish->complete(0);
+        return;
+    }
+
     list_context->at_end_of_pg = false;
     ++list_context->current_pg;
     list_context->current_pg_epoch = 0;
