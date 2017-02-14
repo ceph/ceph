@@ -13,20 +13,21 @@
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
+  int add_grants(RGWRados *store,
+                 const std::vector<std::string>& uids,
+                 uint32_t perm);
+
 public:
-  explicit RGWAccessControlPolicy_SWIFT(CephContext * const cct)
+  explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFT() {}
+  ~RGWAccessControlPolicy_SWIFT() = default;
 
-  void add_grants(RGWRados *store,
-                  const std::vector<std::string>& uids,
-                  uint32_t perm);
-  bool create(RGWRados *store,
-              const rgw_user& id,
-              const std::string& name,
-              const std::string& read_list,
-              const std::string& write_list);
+  int create(RGWRados *store,
+             const rgw_user& id,
+             const std::string& name,
+             const std::string& read_list,
+             const std::string& write_list);
   void to_str(std::string& read, std::string& write);
 };
 
