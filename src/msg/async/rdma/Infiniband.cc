@@ -945,8 +945,10 @@ void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
 
 Infiniband::QueuePair::~QueuePair()
 {
-  if (qp)
+  if (qp) {
+    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
     assert(!ibv_destroy_qp(qp));
+  }
 }
 
 /**
