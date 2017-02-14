@@ -476,6 +476,7 @@ int Client::init()
   messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
 
+  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   int r = monclient->init();
   if (r < 0) {
     // need to do cleanup because we're in an intermediate init state
@@ -487,8 +488,6 @@ int Client::init()
     return r;
   }
   objecter->start();
-
-  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
 
   // logger
   PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
@@ -12729,7 +12728,7 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-  *authorizer = monclient->auth->build_authorizer(dest_type);
+  *authorizer = monclient->build_authorizer(dest_type);
   return true;
 }
 
