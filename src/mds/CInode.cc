@@ -1421,6 +1421,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFILE:
     if (is_auth()) {
       ::encode(inode.version, bl);
+      ::encode(inode.ctime, bl);
       ::encode(inode.mtime, bl);
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
@@ -1504,11 +1505,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IXATTR:
     ::encode(inode.version, bl);
+    ::encode(inode.ctime, bl);
     ::encode(xattrs, bl);
     break;
 
   case CEPH_LOCK_ISNAP:
     ::encode(inode.version, bl);
+    ::encode(inode.ctime, bl);
     encode_snap(bl);
     break;
 
@@ -1520,6 +1523,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
+      ::encode(inode.ctime, bl);
       ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       ::encode(inode.quota, bl);
     }
@@ -1617,6 +1621,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFILE:
     if (!is_auth()) {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.mtime, p);
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
@@ -1751,12 +1757,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IXATTR:
     ::decode(inode.version, p);
+    ::decode(tm, p);
+    if (inode.ctime < tm) inode.ctime = tm;
     ::decode(xattrs, p);
     break;
 
   case CEPH_LOCK_ISNAP:
     {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       snapid_t seq = 0;
       if (snaprealm)
 	seq = snaprealm->srnode.seq;
@@ -1774,6 +1784,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.layout, p);
       ::decode(inode.quota, p);
     }
