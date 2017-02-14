@@ -2260,17 +2260,11 @@ void Client::handle_client_reply(MClientReply *reply)
     reply->put();
     return;
   }
+  MetaRequest *request = mds_requests.at(tid);
 
   ldout(cct, 20) << "handle_client_reply got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
-  MetaRequest *request = mds_requests[tid];
-  if (!request) {
-    ldout(cct, 0) << "got an unknown reply (probably duplicate) on tid " << tid << " from mds "
-      << mds_num << " safe: " << is_safe << dendl;
-    reply->put();
-    return;
-  }
-    
+
   if (request->got_unsafe && !is_safe) {
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
