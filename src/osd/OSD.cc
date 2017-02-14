@@ -5029,13 +5029,13 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
-    dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
+    derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-    dout(1) << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
-	    << dendl;
+    derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
+	 << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-    dout(1) << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
-	    << dendl;
+    derr << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
+	 << dendl;
   } else if (!monc->monmap.get_required_features().contains_all(
 	       ceph::features::mon::FEATURE_LUMINOUS)) {
     derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
