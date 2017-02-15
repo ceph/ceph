@@ -17,6 +17,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/CopyupRequest.h"
 #include "librbd/io/ImageRequest.h"
+#include "librbd/io/ReadResult.h"
 
 #include <boost/bind.hpp>
 #include <boost/optional.hpp>
@@ -327,7 +328,8 @@ void ObjectReadRequest<I>::read_from_parent(Extents&& parent_extents)
                             << " extents " << parent_extents
                             << dendl;
   ImageRequest<>::aio_read(image_ctx->parent, parent_completion,
-                           std::move(parent_extents), nullptr, &m_read_data, 0);
+                           std::move(parent_extents),
+                           ReadResult{&m_read_data}, 0);
 }
 
 /** write **/

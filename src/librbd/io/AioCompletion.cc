@@ -44,30 +44,9 @@ void AioCompletion::finalize(ssize_t rval)
   assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
-  ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << ", "
-                 << "read_buf=" << reinterpret_cast<void*>(read_buf) << ", "
-                 << "real_bl=" <<  reinterpret_cast<void*>(read_bl) << dendl;
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << dendl;
   if (rval >= 0 && aio_type == AIO_TYPE_READ) {
-    if (read_buf && !read_bl) {
-      destriper.assemble_result(cct, read_buf, read_buf_len);
-    } else {
-      // FIXME: make the destriper write directly into a buffer so
-      // that we avoid shuffling pointers and copying zeros around.
-      bufferlist bl;
-      destriper.assemble_result(cct, bl, true);
-
-      if (read_buf) {
-        assert(bl.length() == read_buf_len);
-        bl.copy(0, read_buf_len, read_buf);
-        ldout(cct, 20) << "copied resulting " << bl.length()
-                       << " bytes to " << (void*)read_buf << dendl;
-      }
-      if (read_bl) {
-        ldout(cct, 20) << " moving resulting " << bl.length()
-                       << " bytes to bl " << (void*)read_bl << dendl;
-        read_bl->claim(bl);
-      }
-    }
+    read_result.assemble_result(cct);
   }
 }
 

@@ -8,7 +8,7 @@
 #include "include/buffer_fwd.h"
 #include "common/snap_types.h"
 #include "osd/osd_types.h"
-#include "librbd/io/AioCompletion.h"
+#include "librbd/io/Types.h"
 #include <list>
 #include <utility>
 #include <vector>
@@ -20,6 +20,7 @@ namespace io {
 
 class AioCompletion;
 class ObjectRequestHandle;
+class ReadResult;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageRequest {
@@ -29,10 +30,8 @@ public:
   virtual ~ImageRequest() {}
 
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
-                       Extents &&image_extents, char *buf, bufferlist *pbl,
+                       Extents &&image_extents, ReadResult &&read_result,
                        int op_flags);
-  static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                        size_t len, const char *buf, int op_flags);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
@@ -43,9 +42,7 @@ public:
     return false;
   }
 
-  void start_op() {
-    m_aio_comp->start_op();
-  }
+  void start_op();
 
   void send();
   void fail(int r);
@@ -82,11 +79,8 @@ public:
   using typename ImageRequest<ImageCtxT>::Extents;
 
   ImageReadRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-                   Extents &&image_extents, char *buf, bufferlist *pbl,
-                   int op_flags)
-    : ImageRequest<ImageCtxT>(image_ctx, aio_comp, std::move(image_extents)),
-      m_buf(buf), m_pbl(pbl), m_op_flags(op_flags) {
-  }
+                   Extents &&image_extents, ReadResult &&read_result,
+                   int op_flags);
 
 protected:
   virtual void send_request() override;
@@ -157,12 +151,6 @@ class ImageWriteRequest : public AbstractImageWriteRequest<ImageCtxT> {
 public:
   using typename ImageRequest<ImageCtxT>::Extents;
 
-  ImageWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                    size_t len, const char *buf, int op_flags)
-    : AbstractImageWriteRequest<ImageCtxT>(image_ctx, aio_comp, {{off, len}}),
-      m_op_flags(op_flags) {
-    m_bl.append(buf, len);
-  }
   ImageWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                     Extents &&image_extents, bufferlist &&bl, int op_flags)
     : AbstractImageWriteRequest<ImageCtxT>(image_ctx, aio_comp,

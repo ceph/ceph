@@ -42,6 +42,7 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 #include "librbd/operation/TrimRequest.h"
 
@@ -2092,7 +2093,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
 
       // coordinate through AIO WQ to ensure lock is acquired if needed
       m_dest->io_work_queue->aio_write(comp, m_offset, m_bl->length(),
-                                       m_bl->c_str(),
+                                       std::move(*m_bl),
                                        LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
 
@@ -2148,8 +2149,8 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       auto comp = io::AioCompletion::create_and_start(ctx, src,
                                                       io::AIO_TYPE_READ);
-      io::ImageRequest<>::aio_read(src, comp, {{offset, len}}, nullptr, bl,
-                                   fadvise_flags);
+      io::ImageRequest<>::aio_read(src, comp, {{offset, len}},
+                                   io::ReadResult{bl}, fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -2374,8 +2375,8 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       C_SaferCond ctx;
       auto c = io::AioCompletion::create_and_start(&ctx, ictx,
                                                    io::AIO_TYPE_READ);
-      io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}}, nullptr, &bl,
-                                      0);
+      io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}},
+                                   io::ReadResult{&bl}, 0);
 
       int ret = ctx.wait();
       if (ret < 0) {

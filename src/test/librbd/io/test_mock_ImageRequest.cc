@@ -202,8 +202,11 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_WRITE);
-  MockImageWriteRequest mock_aio_image_write(mock_image_ctx, aio_comp, 0, 1, "1",
-                                         0);
+
+  bufferlist bl;
+  bl.append("1");
+  MockImageWriteRequest mock_aio_image_write(mock_image_ctx, aio_comp,
+                                             {{0, 1}}, std::move(bl), 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_write.send();

@@ -32,6 +32,7 @@
 #include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/types.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/ImageSyncThrottler.h"
@@ -306,7 +307,9 @@ public:
                        size_t len)
   {
     size_t written;
-    written = ictx->io_work_queue->write(off, len, test_data, 0);
+    bufferlist bl;
+    bl.append(std::string(test_data, len));
+    written = ictx->io_work_queue->write(off, len, std::move(bl), 0);
     printf("wrote: %d\n", (int)written);
     ASSERT_EQ(len, written);
   }
@@ -318,7 +321,8 @@ public:
     char *result = (char *)malloc(len + 1);
 
     ASSERT_NE(static_cast<char *>(NULL), result);
-    read = ictx->io_work_queue->read(off, len, result, 0);
+    read = ictx->io_work_queue->read(
+      off, len, librbd::io::ReadResult{result, len}, 0);
     printf("read: %d\n", (int)read);
     ASSERT_EQ(len, static_cast<size_t>(read));
     result[len] = '\0';
