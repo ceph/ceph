@@ -330,7 +330,7 @@ bool ImageDeleter::process_image_delete() {
 
     ImageCtx *imgctx = new ImageCtx("", m_active_delete->local_image_id,
                                     nullptr, ioctx, false);
-    r = imgctx->state->open();
+    r = imgctx->state->open(false);
     if (r < 0) {
       derr << "error opening image id " << m_active_delete->local_image_id
            << ": " << cpp_strerror(r) << dendl;

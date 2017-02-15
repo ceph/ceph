@@ -60,7 +60,7 @@ int TestFixture::open_image(const std::string &image_name,
   *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open();
+  return (*ictx)->state->open(false);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,

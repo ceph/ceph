@@ -69,7 +69,7 @@ public:
     EXPECT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, 1 << 20));
     ImageCtx *ictx = new ImageCtx(m_image_name, "", "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open());
+    EXPECT_EQ(0, ictx->state->open(false));
     m_local_image_id = ictx->id;
 
     cls::rbd::MirrorImage mirror_image(GLOBAL_IMAGE_ID,
@@ -112,7 +112,7 @@ public:
     if (!ictx) {
       ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                           false);
-      r = ictx->state->open();
+      r = ictx->state->open(false);
       close = (r == 0);
     }
 
@@ -133,7 +133,7 @@ public:
     if (!ictx) {
       ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                           false);
-      EXPECT_EQ(0, ictx->state->open());
+      EXPECT_EQ(0, ictx->state->open(false));
       close = true;
     }
 
@@ -147,7 +147,7 @@ public:
   void create_snapshot(std::string snap_name="snap1", bool protect=false) {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open());
+    EXPECT_EQ(0, ictx->state->open(false));
     promote_image(ictx);
 
     EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str()));
@@ -163,7 +163,7 @@ public:
   std::string create_clone() {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open());
+    EXPECT_EQ(0, ictx->state->open(false));
     promote_image(ictx);
 
     EXPECT_EQ(0, ictx->operations->snap_create("snap1"));
@@ -175,7 +175,7 @@ public:
     std::string clone_id;
     ImageCtx *ictx_clone = new ImageCtx("clone1", "", "", m_local_io_ctx,
                                         false);
-    EXPECT_EQ(0, ictx_clone->state->open());
+    EXPECT_EQ(0, ictx_clone->state->open(false));
     clone_id = ictx_clone->id;
     cls::rbd::MirrorImage mirror_image(GLOBAL_CLONE_IMAGE_ID,
                                 MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
@@ -193,7 +193,7 @@ public:
   void check_image_deleted() {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(-ENOENT, ictx->state->open());
+    EXPECT_EQ(-ENOENT, ictx->state->open(false));
     delete ictx;
 
     cls::rbd::MirrorImage mirror_image;
@@ -417,7 +417,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
 TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
   ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                 false);
-  EXPECT_EQ(0, ictx->state->open());
+  EXPECT_EQ(0, ictx->state->open(false));
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
@@ -436,7 +436,7 @@ TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
 TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
   ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                 false);
-  EXPECT_EQ(0, ictx->state->open());
+  EXPECT_EQ(0, ictx->state->open(false));
 
   m_deleter->set_failed_timer_interval(2);
 
@@ -464,7 +464,7 @@ TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
 TEST_F(TestImageDeleter, Delete_Is_Idempotent) {
   ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                 false);
-  EXPECT_EQ(0, ictx->state->open());
+  EXPECT_EQ(0, ictx->state->open(false));
 
   m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);

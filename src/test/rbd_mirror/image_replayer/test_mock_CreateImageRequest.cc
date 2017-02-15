@@ -198,7 +198,7 @@ public:
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_ctx->name,
 						    "", "", m_remote_io_ctx,
                                                     false);
-      ictx->state->open();
+      ictx->state->open(false);
       EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str()));
       EXPECT_EQ(0, ictx->operations->snap_protect(snap_name.c_str()));
       ictx->state->close();
