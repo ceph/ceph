@@ -274,17 +274,17 @@ class RGWMetadataTopHandler : public RGWMetadataHandler {
 public:
   RGWMetadataTopHandler() {}
 
-  virtual string get_type() { return string(); }
+  string get_type() override { return string(); }
 
-  virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-                  real_time mtime, JSONObj *obj, sync_type_t sync_type) { return -ENOTSUP; }
+  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) override { return -ENOTSUP; }
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+                  real_time mtime, JSONObj *obj, sync_type_t sync_type) override { return -ENOTSUP; }
 
-  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {}
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {}
 
-  virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) { return -ENOTSUP; }
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override { return -ENOTSUP; }
 
-  virtual int list_keys_init(RGWRados *store, void **phandle) {
+  int list_keys_init(RGWRados *store, void **phandle) override {
     iter_data *data = new iter_data;
     store->meta_mgr->get_sections(data->sections);
     data->iter = data->sections.begin();
@@ -293,7 +293,7 @@ public:
 
     return 0;
   }
-  virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)  {
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override  {
     iter_data *data = static_cast<iter_data *>(handle);
     for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
       keys.push_back(*data->iter);
@@ -303,7 +303,7 @@ public:
 
     return 0;
   }
-  virtual void list_keys_complete(void *handle) {
+  void list_keys_complete(void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
     delete data;

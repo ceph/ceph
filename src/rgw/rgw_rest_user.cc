@@ -17,13 +17,13 @@ class RGWOp_User_Info : public RGWRESTOp {
 public:
   RGWOp_User_Info() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "get_user_info"; }
+  const string name() override { return "get_user_info"; }
 };
 
 void RGWOp_User_Info::execute()
@@ -58,13 +58,13 @@ class RGWOp_User_Create : public RGWRESTOp {
 public:
   RGWOp_User_Create() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "create_user"; }
+  const string name() override { return "create_user"; }
 };
 
 void RGWOp_User_Create::execute()
@@ -191,13 +191,13 @@ class RGWOp_User_Modify : public RGWRESTOp {
 public:
   RGWOp_User_Modify() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "modify_user"; }
+  const string name() override { return "modify_user"; }
 };
 
 void RGWOp_User_Modify::execute()
@@ -287,13 +287,13 @@ class RGWOp_User_Remove : public RGWRESTOp {
 public:
   RGWOp_User_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "remove_user"; }
+  const string name() override { return "remove_user"; }
 };
 
 void RGWOp_User_Remove::execute()
@@ -322,13 +322,13 @@ class RGWOp_Subuser_Create : public RGWRESTOp {
 public:
   RGWOp_Subuser_Create() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "create_subuser"; }
+  const string name() override { return "create_subuser"; }
 };
 
 void RGWOp_Subuser_Create::execute()
@@ -401,13 +401,13 @@ class RGWOp_Subuser_Modify : public RGWRESTOp {
 public:
   RGWOp_Subuser_Modify() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "modify_subuser"; }
+  const string name() override { return "modify_subuser"; }
 };
 
 void RGWOp_Subuser_Modify::execute()
@@ -466,13 +466,13 @@ class RGWOp_Subuser_Remove : public RGWRESTOp {
 public:
   RGWOp_Subuser_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "remove_subuser"; }
+  const string name() override { return "remove_subuser"; }
 };
 
 void RGWOp_Subuser_Remove::execute()
@@ -507,13 +507,13 @@ class RGWOp_Key_Create : public RGWRESTOp {
 public:
   RGWOp_Key_Create() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "create_access_key"; }
+  const string name() override { return "create_access_key"; }
 };
 
 void RGWOp_Key_Create::execute()
@@ -571,13 +571,13 @@ class RGWOp_Key_Remove : public RGWRESTOp {
 public:
   RGWOp_Key_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "remove_access_key"; }
+  const string name() override { return "remove_access_key"; }
 };
 
 void RGWOp_Key_Remove::execute()
@@ -624,13 +624,13 @@ class RGWOp_Caps_Add : public RGWRESTOp {
 public:
   RGWOp_Caps_Add() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "add_user_caps"; }
+  const string name() override { return "add_user_caps"; }
 };
 
 void RGWOp_Caps_Add::execute()
@@ -660,13 +660,13 @@ class RGWOp_Caps_Remove : public RGWRESTOp {
 public:
   RGWOp_Caps_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "remove_user_caps"; }
+  const string name() override { return "remove_user_caps"; }
 };
 
 void RGWOp_Caps_Remove::execute()
@@ -715,13 +715,13 @@ class RGWOp_Quota_Info : public RGWRESTOp {
 public:
   RGWOp_Quota_Info() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "get_quota_info"; }
+  const string name() override { return "get_quota_info"; }
 };
 
 
@@ -782,13 +782,13 @@ class RGWOp_Quota_Set : public RGWRESTOp {
 public:
   RGWOp_Quota_Set() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "set_quota_info"; }
+  const string name() override { return "set_quota_info"; }
 };
 
 /**

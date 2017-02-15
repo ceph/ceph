@@ -14,7 +14,7 @@ class RGWCompletionManager::WaitContext : public Context {
   void *opaque;
 public:
   WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
-  void finish(int r) {
+  void finish(int r) override {
     manager->_wakeup(opaque);
   }
 };

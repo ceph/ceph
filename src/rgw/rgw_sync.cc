@@ -195,7 +195,7 @@ public:
                                                                  sync_env(_sync_env),
                                                                  period(period), num_shards(_num_shards),
                                                                  mdlog_info(_mdlog_info), shard_id(0) {}
-  bool spawn_next();
+  bool spawn_next() override;
 };
 
 class RGWListRemoteMDLogCR : public RGWShardCollectCR {
@@ -220,7 +220,7 @@ public:
     shards.swap(_shards);
     iter = shards.begin();
   }
-  bool spawn_next();
+  bool spawn_next() override;
 };
 
 RGWRemoteMetaLog::~RGWRemoteMetaLog()
@@ -377,7 +377,7 @@ class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
   bool *truncated;
 
 protected:
-  int _send_request() {
+  int _send_request() override {
     real_time from_time;
     real_time end_time;
 
@@ -427,7 +427,7 @@ public:
     }
   }
 
-  int send_request() {
+  int send_request() override {
     marker = *pmarker;
     req = new RGWAsyncReadMDLogEntries(this, stack->create_completion_notifier(),
                                        sync_env->store, mdlog, shard_id, &marker,
@@ -436,7 +436,7 @@ public:
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int ret = req->get_ret_status();
     if (ret >= 0 && !entries->empty()) {
      *pmarker = marker;
@@ -460,7 +460,7 @@ public:
     : RGWCoroutine(env->store->ctx()), env(env), http_op(NULL),
       period(period), shard_id(_shard_id), shard_info(_shard_info) {}
 
-  int operate() {
+  int operate() override {
     auto store = env->store;
     RGWRESTConn *conn = store->rest_master_conn;
     reenter(this) {
@@ -520,7 +520,7 @@ public:
     : RGWSimpleCoroutine(env->store->ctx()), sync_env(env), http_op(NULL),
       period(period), shard_id(_shard_id), marker(_marker), max_entries(_max_entries), result(_result) {}
 
-  int send_request() {
+  int send_request() override {
     RGWRESTConn *conn = sync_env->conn;
     RGWRados *store = sync_env->store;
 
@@ -555,7 +555,7 @@ public:
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int ret = http_op->wait(result);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
@@ -606,7 +606,7 @@ public:
     }
   }
 
-  int operate() {
+  int operate() override {
     int ret;
     reenter(this) {
       yield {
@@ -702,7 +702,7 @@ public:
 
   }
 
-  int handle_data(rgw_meta_sync_info& data);
+  int handle_data(rgw_meta_sync_info& data) override;
 };
 
 int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
@@ -781,7 +781,7 @@ public:
               std::back_inserter(sections));
   }
 
-  int operate() {
+  int operate() override {
     RGWRESTConn *conn = sync_env->conn;
 
     reenter(this) {
@@ -928,7 +928,7 @@ public:
 						      pbl(_pbl) {
   }
 
-  int operate() {
+  int operate() override {
     RGWRESTConn *conn = sync_env->conn;
     reenter(this) {
       yield {
@@ -969,7 +969,7 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   string raw_key;
   bufferlist bl;
 protected:
-  int _send_request() {
+  int _send_request() override {
     int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
@@ -1005,14 +1005,14 @@ public:
     }
   }
 
-  int send_request() {
+  int send_request() override {
     req = new RGWAsyncMetaStoreEntry(this, stack->create_completion_notifier(),
 			           sync_env->store, raw_key, bl);
     sync_env->async_rados->queue(req);
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     return req->get_ret_status();
   }
 };
@@ -1021,7 +1021,7 @@ class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   RGWRados *store;
   string raw_key;
 protected:
-  int _send_request() {
+  int _send_request() override {
     int ret = store->meta_mgr->remove(raw_key);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
@@ -1054,14 +1054,14 @@ public:
     }
   }
 
-  int send_request() {
+  int send_request() override {
     req = new RGWAsyncMetaRemoveEntry(this, stack->create_completion_notifier(),
 			           sync_env->store, raw_key);
     sync_env->async_rados->queue(req);
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int r = req->get_ret_status();
     if (r == -ENOENT) {
       r = 0;
@@ -1087,7 +1087,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     if (index_pos > 0) {
       sync_marker.pos = index_pos;
@@ -1220,7 +1220,7 @@ public:
     }
   }
 
-  int operate();
+  int operate() override;
 
   int state_init();
   int state_read_shard_status();
@@ -1305,7 +1305,7 @@ public:
     marker_tracker = mt;
   }
 
-  int operate() {
+  int operate() override {
     int r;
     while (true) {
       switch (sync_marker.state) {
@@ -1654,12 +1654,12 @@ public:
       pool(_pool), period(period), mdlog(mdlog), shard_id(_shard_id),
       sync_marker(_marker), period_marker(std::move(period_marker)) {}
 
-  RGWCoroutine *alloc_cr() {
+  RGWCoroutine *alloc_cr() override {
     return new RGWMetaSyncShardCR(sync_env, pool, period, mdlog, shard_id,
                                   sync_marker, period_marker, backoff_ptr());
   }
 
-  RGWCoroutine *alloc_finisher_cr() {
+  RGWCoroutine *alloc_finisher_cr() override {
     RGWRados *store = sync_env->store;
     return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, pool,
                                                                sync_env->shard_obj_name(shard_id), &sync_marker);
@@ -1691,7 +1691,7 @@ public:
       pool(sync_env->store->get_zone_params().log_pool),
       cursor(cursor), sync_status(_sync_status) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       // loop through one period at a time
       for (;;) {

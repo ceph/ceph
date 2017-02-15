@@ -14,12 +14,12 @@ class RGWOp_Usage_Get : public RGWRESTOp {
 public:
   RGWOp_Usage_Get() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_READ);
   }
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "get_usage"; }
+  const string name() override { return "get_usage"; }
 };
 
 void RGWOp_Usage_Get::execute() {
@@ -58,12 +58,12 @@ class RGWOp_Usage_Delete : public RGWRESTOp {
 public:
   RGWOp_Usage_Delete() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_WRITE);
   }
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "trim_usage"; }
+  const string name() override { return "trim_usage"; }
 };
 
 void RGWOp_Usage_Delete::execute() {
