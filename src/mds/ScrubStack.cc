@@ -256,7 +256,7 @@ class C_InodeValidated : public MDSInternalContext
       : MDSInternalContext(mds), stack(stack_), target(target_)
     {}
 
-    void finish(int r)
+    void finish(int r) override
     {
       stack->_validate_inode_done(target, r, result);
     }

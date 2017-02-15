@@ -39,10 +39,10 @@
 class C_LoggedAck : public MDSLogContextBase {
   MDSTableClient *tc;
   version_t tid;
-  MDSRank *get_mds() { return tc->mds; }
+  MDSRank *get_mds() override { return tc->mds; }
 public:
   C_LoggedAck(MDSTableClient *a, version_t t) : tc(a), tid(t) {}
-  void finish(int r) {
+  void finish(int r) override {
     tc->_logged_ack(tid);
   }
 };

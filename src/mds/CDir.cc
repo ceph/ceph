@@ -49,7 +49,7 @@ class CDirContext : public MDSInternalContextBase
 {
 protected:
   CDir *dir;
-  MDSRank* get_mds() {return dir->cache->mds;}
+  MDSRank* get_mds() override {return dir->cache->mds;}
 
 public:
   explicit CDirContext(CDir *d) : dir(d) {
@@ -62,7 +62,7 @@ class CDirIOContext : public MDSIOContextBase
 {
 protected:
   CDir *dir;
-  MDSRank* get_mds() {return dir->cache->mds;}
+  MDSRank* get_mds() override {return dir->cache->mds;}
 
 public:
   explicit CDirIOContext(CDir *d) : dir(d) {
@@ -1494,7 +1494,7 @@ public:
 
   C_IO_Dir_OMAP_Fetched(CDir *d, MDSInternalContextBase *f) :
     CDirIOContext(d), fin(f), ret1(0), ret2(0), ret3(0) { }
-  void finish(int r) {
+  void finish(int r) override {
     // check the correctness of backtrace
     if (r >= 0 && ret3 != -ECANCELED)
       dir->inode->verify_diri_backtrace(btbl, ret3);
@@ -1975,7 +1975,7 @@ class C_IO_Dir_Committed : public CDirIOContext {
   version_t version;
 public:
   C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
-  void finish(int r) {
+  void finish(int r) override {
     dir->_committed(r, version);
   }
 };
@@ -2763,7 +2763,7 @@ CDir *CDir::get_frozen_tree_root()
 class C_Dir_AuthUnpin : public CDirContext {
   public:
   explicit C_Dir_AuthUnpin(CDir *d) : CDirContext(d) {}
-  void finish(int r) {
+  void finish(int r) override {
     dir->auth_unpin(dir->get_inode());
   }
 };

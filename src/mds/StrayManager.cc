@@ -38,7 +38,7 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
 class StrayManagerIOContext : public virtual MDSIOContextBase {
 protected:
   StrayManager *sm;
-  virtual MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return sm->mds;
   }
@@ -49,7 +49,7 @@ public:
 class StrayManagerLogContext : public virtual MDSLogContextBase {
 protected:
   StrayManager *sm;
-  virtual MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return sm->mds;
   }
@@ -60,7 +60,7 @@ public:
 class StrayManagerContext : public virtual MDSInternalContextBase {
 protected:
   StrayManager *sm;
-  virtual MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return sm->mds;
   }
@@ -80,7 +80,7 @@ class C_IO_PurgeStrayPurged : public StrayManagerIOContext {
 public:
   C_IO_PurgeStrayPurged(StrayManager *sm_, CDentry *d, bool oh, uint32_t ops) : 
     StrayManagerIOContext(sm_), dn(d), only_head(oh), ops_allowance(ops) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
     sm->_purge_stray_purged(dn, ops_allowance, only_head);
   }
@@ -188,7 +188,7 @@ class C_PurgeStrayLogged : public StrayManagerLogContext {
 public:
   C_PurgeStrayLogged(StrayManager *sm_, CDentry *d, version_t v, LogSegment *s) : 
     StrayManagerLogContext(sm_), dn(d), pdv(v), ls(s) { }
-  void finish(int r) {
+  void finish(int r) override {
     sm->_purge_stray_logged(dn, pdv, ls);
   }
 };
@@ -199,7 +199,7 @@ class C_TruncateStrayLogged : public StrayManagerLogContext {
 public:
   C_TruncateStrayLogged(StrayManager *sm, CDentry *d, LogSegment *s) :
     StrayManagerLogContext(sm), dn(d), ls(s) { }
-  void finish(int r) {
+  void finish(int r) override {
     sm->_truncate_stray_logged(dn, ls);
   }
 };
@@ -365,7 +365,7 @@ class C_StraysFetched : public StrayManagerContext {
 public:
   C_StraysFetched(StrayManager *sm_) :
     StrayManagerContext(sm_) { }
-  void finish(int r) {
+  void finish(int r) override {
     sm->_advance();
   }
 };
@@ -486,7 +486,7 @@ class C_OpenSnapParents : public StrayManagerContext {
   public:
     C_OpenSnapParents(StrayManager *sm_, CDentry *dn_, bool t, uint32_t ops) :
       StrayManagerContext(sm_), dn(dn_), trunc(t), ops_required(ops) { }
-    void finish(int r) {
+    void finish(int r) override {
       sm->_process(dn, trunc, ops_required);
     }
 };
@@ -586,7 +586,7 @@ void StrayManager::notify_stray_removed()
 struct C_EvalStray : public StrayManagerContext {
   CDentry *dn;
   C_EvalStray(StrayManager *sm_, CDentry *d) : StrayManagerContext(sm_), dn(d) {}
-  void finish(int r) {
+  void finish(int r) override {
     sm->eval_stray(dn);
   }
 };
@@ -594,7 +594,7 @@ struct C_EvalStray : public StrayManagerContext {
 struct C_MDC_EvalStray : public StrayManagerContext {
   CDentry *dn;
   C_MDC_EvalStray(StrayManager *sm_, CDentry *d) : StrayManagerContext(sm_), dn(d) {}
-  void finish(int r) {
+  void finish(int r) override {
     sm->eval_stray(dn);
   }
 };
