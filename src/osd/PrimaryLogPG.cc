@@ -118,11 +118,11 @@ protected:
    * results.get<1>() is a pointer to a CopyResults object, which you are
    * responsible for deleting.
    */
-  virtual void finish(CopyCallbackResults results_) = 0;
+  void finish(CopyCallbackResults results_) override = 0;
 
 public:
   /// Provide the final size of the copied object to the CopyCallback
-  virtual ~CopyCallback() {}
+  ~CopyCallback() {}
 };
 
 template <typename T>
@@ -133,7 +133,7 @@ class PrimaryLogPG::BlessedGenContext : public GenContext<T> {
 public:
   BlessedGenContext(PrimaryLogPG *pg, GenContext<T> *c, epoch_t e)
     : pg(pg), c(c), e(e) {}
-  void finish(T t) {
+  void finish(T t) override {
     pg->lock();
     if (pg->pg_has_reset_since(e))
       c.reset();
@@ -156,7 +156,7 @@ class PrimaryLogPG::BlessedContext : public Context {
 public:
   BlessedContext(PrimaryLogPG *pg, Context *c, epoch_t e)
     : pg(pg), c(c), e(e) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->lock();
     if (pg->pg_has_reset_since(e))
       c.reset();
@@ -177,7 +177,7 @@ class PrimaryLogPG::C_PG_ObjectContext : public Context {
   public:
   C_PG_ObjectContext(PrimaryLogPG *p, ObjectContext *o) :
     pg(p), obc(o) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->object_context_destructor_callback(obc);
   }
 };
@@ -189,7 +189,7 @@ class PrimaryLogPG::C_OSD_OndiskWriteUnlock : public Context {
     ObjectContextRef o,
     ObjectContextRef o2 = ObjectContextRef(),
     ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
-  void finish(int r) {
+  void finish(int r) override {
     obc->ondisk_write_unlock();
     if (obc2)
       obc2->ondisk_write_unlock();
@@ -204,7 +204,7 @@ struct OnReadComplete : public Context {
   OnReadComplete(
     PrimaryLogPG *pg,
     PrimaryLogPG::OpContext *ctx) : pg(pg), opcontext(ctx) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r < 0)
       opcontext->async_read_result = r;
     opcontext->finish_read(pg);
@@ -218,7 +218,7 @@ class PrimaryLogPG::C_OSD_AppliedRecoveredObject : public Context {
   public:
   C_OSD_AppliedRecoveredObject(PrimaryLogPG *p, ObjectContextRef o) :
     pg(p), obc(o) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->_applied_recovered_object(obc);
   }
 };
@@ -232,7 +232,7 @@ class PrimaryLogPG::C_OSD_CommittedPushedObject : public Context {
     PrimaryLogPG *p, epoch_t epoch, eversion_t lc) :
     pg(p), epoch(epoch), last_complete(lc) {
   }
-  void finish(int r) {
+  void finish(int r) override {
     pg->_committed_pushed_object(epoch, last_complete);
   }
 };
@@ -242,7 +242,7 @@ class PrimaryLogPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
   public:
   explicit C_OSD_AppliedRecoveredObjectReplica(PrimaryLogPG *p) :
     pg(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->_applied_recovered_object_replica();
   }
 };
@@ -282,7 +282,7 @@ public:
       ctx(ctx_) {}
   ~CopyFromCallback() {}
 
-  virtual void finish(PrimaryLogPG::CopyCallbackResults results_) {
+  void finish(PrimaryLogPG::CopyCallbackResults results_) override {
     results = results_.get<1>();
     int r = results_.get<0>();
     retval = r;
@@ -678,7 +678,7 @@ void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
 class PGLSPlainFilter : public PGLSFilter {
   string val;
 public:
-  virtual int init(bufferlist::iterator &params)
+  int init(bufferlist::iterator &params) override
   {
     try {
       ::decode(xattr, params);
@@ -689,9 +689,9 @@ public:
 
     return 0;
   }
-  virtual ~PGLSPlainFilter() {}
-  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata);
+  ~PGLSPlainFilter() {}
+  bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) override;
 };
 
 class PGLSParentFilter : public PGLSFilter {
@@ -701,7 +701,7 @@ public:
   PGLSParentFilter(CephContext* cct) : cct(cct) {
     xattr = "_parent";
   }
-  virtual int init(bufferlist::iterator &params)
+  int init(bufferlist::iterator &params) override
   {
     try {
       ::decode(parent_ino, params);
@@ -712,9 +712,9 @@ public:
 
     return 0;
   }
-  virtual ~PGLSParentFilter() {}
-  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata);
+  ~PGLSParentFilter() {}
+  bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) override;
 };
 
 bool PGLSParentFilter::filter(const hobject_t &obj,
@@ -2604,7 +2604,7 @@ struct C_ProxyRead : public Context {
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0), prdop(prd), start(ceph_clock_now())
   {}
-  void finish(int r) {
+  void finish(int r) override {
     if (prdop->canceled)
       return;
     pg->lock();
@@ -2799,7 +2799,7 @@ struct C_ProxyWrite_Commit : public Context {
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0), pwop(pw)
   {}
-  void finish(int r) {
+  void finish(int r) override {
     if (pwop->canceled)
       return;
     pg->lock();
@@ -2947,7 +2947,7 @@ public:
       pg(pg_),
       start(ceph_clock_now()) {}
 
-  virtual void finish(PrimaryLogPG::CopyCallbackResults results) {
+  void finish(PrimaryLogPG::CopyCallbackResults results) override {
     PrimaryLogPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
     pg->finish_promote(r, results_data, obc);
@@ -4146,7 +4146,7 @@ struct FillInVerifyExtent : public Context {
 		     OSDService *osd, hobject_t soid, __le32 flags) :
     r(r), rval(rv), outdatap(blp), maybe_crc(mc),
     size(size), osd(osd), soid(soid), flags(flags) {}
-  void finish(int len) {
+  void finish(int len) override {
     *rval = len;
     *r = len;
     if (len < 0)
@@ -4173,7 +4173,7 @@ struct ToSparseReadResult : public Context {
   ceph_le64& len;
   ToSparseReadResult(bufferlist& bl, uint64_t offset, ceph_le64& len):
     data_bl(bl), data_offset(offset),len(len) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r < 0) return;
     len = r;
     bufferlist outdata;
@@ -6946,7 +6946,7 @@ struct C_Copyfrom : public Context {
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0), cop(c)
   {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r == -ECANCELED)
       return;
     pg->lock();
@@ -6965,7 +6965,7 @@ struct C_CopyFrom_AsyncReadCb : public Context {
   size_t len;
   C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features, bool classic) :
     osd_op(osd_op), features(features), classic(classic), len(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(len > 0);
     assert(len <= reply_obj.data.length());
     bufferlist bl;
@@ -7872,7 +7872,7 @@ struct C_Flush : public Context {
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0), start(ceph_clock_now())
   {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r == -ECANCELED)
       return;
     pg->lock();
@@ -8304,7 +8304,7 @@ class C_OSD_RepopApplied : public Context {
 public:
   C_OSD_RepopApplied(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
   : pg(pg), repop(repop) {}
-  void finish(int) {
+  void finish(int) override {
     pg->repop_all_applied(repop.get());
   }
 };
@@ -8327,7 +8327,7 @@ class C_OSD_RepopCommit : public Context {
 public:
   C_OSD_RepopCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
     : pg(pg), repop(repop) {}
-  void finish(int) {
+  void finish(int) override {
     pg->repop_all_committed(repop.get());
   }
 };

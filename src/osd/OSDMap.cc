@@ -2530,7 +2530,7 @@ public:
   }
 
 protected:
-  virtual void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) {
+  void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) override {
 
     *tbl << qi.id
 	 << weightf_t(qi.weight);
@@ -2583,7 +2583,7 @@ public:
   }
 
 protected:
-  virtual void dump_item_fields(const CrushTreeDumper::Item &qi, Formatter *f) {
+  void dump_item_fields(const CrushTreeDumper::Item &qi, Formatter *f) override {
     Parent::dump_item_fields(qi, f);
     if (!qi.is_bucket())
     {

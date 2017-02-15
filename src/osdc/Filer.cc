@@ -43,7 +43,7 @@ public:
   ceph::real_time mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o),
 					    size(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r == -ENOENT) {
       r = 0;
       assert(size == 0);
@@ -338,7 +338,7 @@ struct C_PurgeRange : public Context {
   Filer *filer;
   PurgeRange *pr;
   C_PurgeRange(Filer *f, PurgeRange *p) : filer(f), pr(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     filer->_do_purge_range(pr, 1);
   }
 };
