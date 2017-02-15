@@ -6565,11 +6565,20 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
     assert(dn->is_auth());
   }
 
+  // If replica dentry is not readable, it's likely we will receive
+  // MDentryLink/MDentryUnlink message soon (It's possible we first
+  // receive a MDentryUnlink message, then MDentryLink message)
+  // MDentryLink message only replicates an inode, so we should
+  // avoid trimming the inode's parent dentry. This is because that
+  // unconnected replicas are problematic for subtree migration.
+  if (!dn->is_auth() && !dn->lock.can_read(-1) &&
+      !dn->get_dir()->get_inode()->is_stray())
+    return true;
+
   // adjust the dir state
   // NOTE: we can safely remove a clean, null dentry without effecting
   //       directory completeness.
   // (check this _before_ we unlink the inode, below!)
-  bool null_dentry = false;
   bool clear_complete = false;
   if (!(dnl->is_null() && dn->is_clean()))
     clear_complete = true;
@@ -6586,7 +6595,6 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
       return true; // purging stray instead of trimming
   } else {
     assert(dnl->is_null());
-    null_dentry = true;
   }
 
   if (dn->is_auth()) {
@@ -6595,16 +6603,6 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
     }
   } else {
     // notify dentry authority.
-
-    // If null replica dentry is not readable, it's likely we will
-    // receive a MDentryLink message soon. MDentryLink message only
-    // replicates an inode, so we should avoid trimming the inode's
-    // parent dentry. This is because that unconnected replicas are
-    // problematic for subtree migration.
-    if (null_dentry && !dn->lock.can_read(-1) &&
-	!dn->get_dir()->get_inode()->is_stray())
-      return true;
-
     mds_authority_t auth = dn->authority();
     
     for (int p=0; p<2; p++) {
