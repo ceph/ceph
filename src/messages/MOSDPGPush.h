@@ -15,10 +15,9 @@
 #ifndef MOSDPGPUSH_H
 #define MOSDPGPUSH_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
-class MOSDPGPush : public Message {
+class MOSDPGPush : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
@@ -46,13 +45,20 @@ public:
     return cost;
   }
 
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
   void set_cost(uint64_t c) {
     cost = c;
   }
 
-  MOSDPGPush() :
-    Message(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
-    cost(0)
+  MOSDPGPush()
+    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
+      cost(0)
     {}
 
   virtual void decode_payload() {

@@ -15,10 +15,9 @@
 #ifndef CEPH_MOSDPGSCAN_H
 #define CEPH_MOSDPGSCAN_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
-class MOSDPGScan : public Message {
+class MOSDPGScan : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
@@ -41,6 +40,13 @@ public:
   pg_shard_t from;
   spg_t pgid;
   hobject_t begin, end;
+
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -79,10 +85,11 @@ public:
     ::encode(pgid.shard, payload);
   }
 
-  MOSDPGScan() : Message(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGScan()
+    : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGScan(__u32 o, pg_shard_t from,
 	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en)
-    : Message(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
       from(from),

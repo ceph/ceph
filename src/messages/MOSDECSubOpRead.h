@@ -15,11 +15,10 @@
 #ifndef MOSDECSUBOPREAD_H
 #define MOSDECSUBOPREAD_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpRead : public Message {
+class MOSDECSubOpRead : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
@@ -31,9 +30,15 @@ public:
   int get_cost() const {
     return 0;
   }
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
-  MOSDECSubOpRead() :
-    Message(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
+  MOSDECSubOpRead()
+    : MOSDFastDispatchOp(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   virtual void decode_payload() {

@@ -857,7 +857,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target);
+  _calc_target(&info->target, nullptr);
 
   // Create LingerOp<->OSDSession relation
   int r = _get_session(info->target.osd, &s, sul);
@@ -1069,7 +1069,8 @@ void Objecter::_scan_requests(OSDSession *s,
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
-    int r = _calc_target(&op->target);
+    int r = _calc_target(&op->target,
+			 op->session ? op->session->con.get() : nullptr);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!force_resend &&
@@ -1297,7 +1298,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (!op->session) {
-      _calc_target(&op->target);
+      _calc_target(&op->target, nullptr);
       OSDSession *s = NULL;
       int const r = _get_session(op->target.osd, &s, sul);
       assert(r == 0);
@@ -2292,7 +2293,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool check_for_latest_map = _calc_target(&op->target)
+  bool check_for_latest_map = _calc_target(&op->target, nullptr)
     == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
@@ -2309,7 +2310,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
       // map changed; recalculate mapping
       ldout(cct, 10) << __func__ << " relock raced with osdmap, recalc target"
 		     << dendl;
-      check_for_latest_map = _calc_target(&op->target)
+      check_for_latest_map = _calc_target(&op->target, nullptr)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
@@ -2655,21 +2656,27 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::_calc_target(op_target_t *t, bool any_change)
+int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 {
   // rwlock is locked
-
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
+  ldout(cct,20) << __func__ << " base " << t->base_oid << " " << t->base_oloc
+		<< " precalc_pgid " << (int)t->precalc_pgid
+		<< " pgid " << t->base_pgid
+		<< (is_read ? " is_read" : "")
+		<< (is_write ? " is_write" : "")
+		<< dendl;
 
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   if (!pi) {
     t->osd = -1;
     return RECALC_OP_TARGET_POOL_DNE;
   }
+  ldout(cct,30) << __func__ << "  base pi " << pi
+		<< " pg_num " << pi->get_pg_num() << dendl;
 
   bool force_resend = false;
-  bool need_check_tiering = false;
   if (osdmap->get_epoch() == pi->last_force_op_resend) {
     if (t->last_force_resend < pi->last_force_op_resend) {
       t->last_force_resend = pi->last_force_op_resend;
@@ -2678,41 +2685,28 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       force_resend = true;
     }
   }
-  if (t->target_oid.name.empty() || force_resend) {
-    t->target_oid = t->base_oid;
-    need_check_tiering = true;
-  }
-  if (t->target_oloc.empty() || force_resend) {
-    t->target_oloc = t->base_oloc;
-    need_check_tiering = true;
-  }
 
-  if (need_check_tiering &&
-      (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
+  // apply tiering
+  t->target_oid = t->base_oid;
+  t->target_oloc = t->base_oloc;
+  if ((t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
     if (is_read && pi->has_read_tier())
       t->target_oloc.pool = pi->read_tier;
     if (is_write && pi->has_write_tier())
       t->target_oloc.pool = pi->write_tier;
+    pi = osdmap->get_pg_pool(t->target_oloc.pool);
+    if (!pi) {
+      t->osd = -1;
+      return RECALC_OP_TARGET_POOL_DNE;
+    }
   }
 
   pg_t pgid;
   if (t->precalc_pgid) {
-    assert(t->base_oid.name.empty()); // make sure this is a listing op
-    ldout(cct, 10) << __func__ << " have " << t->base_pgid << " pool "
-		   << osdmap->have_pg_pool(t->base_pgid.pool()) << dendl;
-    if (!osdmap->have_pg_pool(t->base_pgid.pool())) {
-      t->osd = -1;
-      return RECALC_OP_TARGET_POOL_DNE;
-    }
-    if (osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-      // if the SORTBITWISE flag is set, we know all OSDs are running
-      // jewel+.
-      pgid = t->base_pgid;
-    } else {
-      // legacy behavior.  pre-jewel OSDs will fail if we send a
-      // full-hash pgid value.
-      pgid = osdmap->raw_pg_to_pg(t->base_pgid);
-    }
+    assert(t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    assert(t->base_oid.name.empty()); // make sure this is a pg op
+    assert(t->base_oloc.pool == (int64_t)t->base_pgid.pool());
+    pgid = t->base_pgid;
   } else {
     int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
 					   pgid);
@@ -2721,6 +2715,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
+  ldout(cct,20) << __func__ << " target " << t->target_oid << " "
+		<< t->target_oloc << " -> pgid " << pgid << dendl;
+  ldout(cct,30) << __func__ << "  target pi " << pi
+		<< " pg_num " << pi->get_pg_num() << dendl;
 
   int size = pi->size;
   int min_size = pi->min_size;
@@ -2731,6 +2729,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 			       &acting, &acting_primary);
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
+  pg_t prev_pgid(prev_seed, pgid.pool());
   if (any_change && pg_interval_t::is_new_interval(
 	t->acting_primary,
 	acting_primary,
@@ -2748,7 +2747,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	pg_num,
 	t->sort_bitwise,
 	sort_bitwise,
-	pg_t(prev_seed, pgid.pool(), pgid.preferred()))) {
+	prev_pgid)) {
     force_resend = true;
   }
 
@@ -2759,11 +2758,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->paused = false;
     need_resend = true;
   }
-
   if (t->pgid != pgid ||
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
 	t->used_replica || any_change) ||
+      (con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) &&
+       prev_pgid.is_split(t->pg_num, pg_num, nullptr)) ||
       force_resend) {
     t->pgid = pgid;
     t->acting = acting;
@@ -2774,9 +2774,14 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->min_size = min_size;
     t->pg_num = pg_num;
     t->pg_num_mask = pi->get_pg_num_mask();
+    osdmap->get_primary_shard(
+      pg_t(ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask), pgid.pool()),
+      &t->actual_pgid);
     t->sort_bitwise = sort_bitwise;
     ldout(cct, 10) << __func__ << " "
-		   << " pgid " << pgid << " acting " << acting << dendl;
+		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
+		   << " acting " << acting
+		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
     if (acting_primary == -1) {
       t->osd = -1;
@@ -2830,7 +2835,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   shunique_lock& sul)
 {
-  _calc_target(target);
+  _calc_target(target, nullptr);
   return _get_session(target->osd, s, sul);
 }
 
@@ -2939,8 +2944,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
 {
   // rwlock is locked unique
 
-  int r = _calc_target(&linger_op->target,
-		       true);
+  int r = _calc_target(&linger_op->target, nullptr, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
@@ -3033,9 +3037,9 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   op->target.paused = false;
   op->stamp = ceph::mono_clock::now();
 
+  hobject_t hobj = op->target.get_hobj();
   MOSDOp *m = new MOSDOp(client_inc.read(), op->tid,
-			 op->target.target_oid, op->target.target_oloc,
-			 op->target.pgid,
+			 hobj, op->target.actual_pgid,
 			 osdmap->get_epoch(),
 			 flags, op->features);
 
@@ -3046,9 +3050,6 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->ops = op->ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
-
-  if (op->replay_version != eversion_t())
-    m->set_version(op->replay_version);  // we're replaying this op!
 
   if (op->priority)
     m->set_priority(op->priority);
@@ -3072,21 +3073,25 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
 
   // backoff?
   hobject_t hoid = op->target.get_hobj();
-  auto q = op->session->backoffs.lower_bound(hoid);
-  if (q != op->session->backoffs.begin()) {
-    --q;
-    if (hoid >= q->second.end) {
-      ++q;
+  auto p = op->session->backoffs.find(op->target.actual_pgid);
+  if (p != op->session->backoffs.end()) {
+    auto q = p->second.lower_bound(hoid);
+    if (q != p->second.begin()) {
+      --q;
+      if (hoid >= q->second.end) {
+	++q;
+      }
     }
-  }
-  if (q != op->session->backoffs.end()) {
-    ldout(cct, 20) << __func__ << " ? " << q->first << " [" << q->second.begin
-		   << "," << q->second.end << ")" << dendl;
-    int r = cmp(hoid, q->second.begin);
-    if (r == 0 || (r > 0 && hoid < q->second.end)) {
-      ldout(cct, 10) << __func__ << " backoff on " << hoid << ", queuing "
-		     << op << " tid " << op->tid << dendl;
-      return;
+    if (q != p->second.end()) {
+      ldout(cct, 20) << __func__ << " ? " << q->first << " [" << q->second.begin
+		     << "," << q->second.end << ")" << dendl;
+      int r = cmp(hoid, q->second.begin);
+      if (r == 0 || (r > 0 && hoid < q->second.end)) {
+	ldout(cct, 10) << __func__ << " backoff " << op->target.actual_pgid
+		       << " id " << q->second.id << " on " << hoid
+		       << ", queuing " << op << " tid " << op->tid << dendl;
+	return;
+      }
     }
   }
 
@@ -3095,7 +3100,16 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
     m = _prepare_osd_op(op);
   }
 
-  ldout(cct, 15) << "_send_op " << op->tid << " to osd." << op->session->osd
+  if (op->target.actual_pgid != m->get_spg()) {
+    ldout(cct, 10) << __func__ << " " << op->tid << " pgid change from "
+		   << m->get_spg() << " to " << op->target.actual_pgid
+		   << ", updating and reencoding" << dendl;
+    m->set_spg(op->target.actual_pgid);
+    m->clear_payload();  // reencode
+  }
+
+  ldout(cct, 15) << "_send_op " << op->tid << " to "
+		 << op->target.actual_pgid << " on osd." << op->session->osd
 		 << dendl;
 
   ConnectionRef con = op->session->con;
@@ -3223,8 +3237,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   ldout(cct, 7) << "handle_osd_op_reply " << tid
 		<< (m->is_ondisk() ? " ondisk" :
 		    (m->is_onnvram() ? " onnvram" : " ack"))
-		<< " v " << m->get_replay_version() << " uv "
-		<< m->get_user_version()
+		<< " uv " << m->get_user_version()
 		<< " in " << m->get_pg()
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
@@ -3414,16 +3427,19 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   case CEPH_OSD_BACKOFF_OP_BLOCK:
     {
       // register
-      OSDBackoff& b = s->backoffs[m->begin];
+      OSDBackoff& b = s->backoffs[m->pgid][m->begin];
       s->backoffs_by_id.insert(make_pair(m->id, &b));
+      b.pgid = m->pgid;
       b.id = m->id;
       b.begin = m->begin;
       b.end = m->end;
 
-      // ack
-      Message *r = new MOSDBackoff(CEPH_OSD_BACKOFF_OP_ACK_BLOCK,
-				   m->id, m->begin, m->end,
-				   osdmap->get_epoch());
+      // ack with original backoff's epoch so that the osd can discard this if
+      // there was a pg split.
+      Message *r = new MOSDBackoff(m->pgid,
+				   m->map_epoch,
+				   CEPH_OSD_BACKOFF_OP_ACK_BLOCK,
+				   m->id, m->begin, m->end);
       // this priority must match the MOSDOps from _prepare_osd_op
       r->set_priority(cct->_conf->osd_client_op_priority);
       con->send_message(r);
@@ -3433,31 +3449,43 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   case CEPH_OSD_BACKOFF_OP_UNBLOCK:
     {
       auto p = s->backoffs_by_id.find(m->id);
-      while (p != s->backoffs_by_id.end() &&
-	     p->second->id == m->id) {
+      if (p != s->backoffs_by_id.end()) {
 	OSDBackoff *b = p->second;
 	if (b->begin != m->begin &&
 	    b->end != m->end) {
-	  lderr(cct) << __func__ << " got id " << m->id << " unblock on ["
+	  lderr(cct) << __func__ << " got " << m->pgid << " id " << m->id
+		     << " unblock on ["
 		     << m->begin << "," << m->end << ") but backoff is ["
 		     << b->begin << "," << b->end << ")" << dendl;
 	  // hrmpf, unblock it anyway.
 	}
-	ldout(cct, 10) << __func__ << " unblock backoff " << b->id
+	ldout(cct, 10) << __func__ << " unblock backoff " << b->pgid
+		       << " id " << b->id
 		       << " [" << b->begin << "," << b->end
 		       << ")" << dendl;
-	s->backoffs.erase(b->begin);
-	p = s->backoffs_by_id.erase(p);
+	auto spgp = s->backoffs.find(b->pgid);
+	assert(spgp != s->backoffs.end());
+	spgp->second.erase(b->begin);
+	if (spgp->second.empty()) {
+	  s->backoffs.erase(spgp);
+	}
+	s->backoffs_by_id.erase(p);
 
 	// check for any ops to resend
 	for (auto& q : s->ops) {
-	  int r = q.second->target.contained_by(m->begin, m->end);
-	  ldout(cct, 20) << __func__ <<  " contained_by " << r << " on "
-			 << q.second->target.get_hobj() << dendl;
-	  if (r) {
-	    _send_op(q.second);
+	  if (q.second->target.actual_pgid == m->pgid) {
+	    int r = q.second->target.contained_by(m->begin, m->end);
+	    ldout(cct, 20) << __func__ <<  " contained_by " << r << " on "
+			   << q.second->target.get_hobj() << dendl;
+	    if (r) {
+	      _send_op(q.second);
+	    }
 	  }
 	}
+      } else {
+	lderr(cct) << __func__ << " " << m->pgid << " id " << m->id
+		   << " unblock on ["
+		   << m->begin << "," << m->end << ") but backoff dne" << dendl;
       }
     }
     break;
@@ -4629,6 +4657,9 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
 
   c->map_check_error = 0;
 
+  // ignore overlays, just like we do with pg ops
+  c->target.flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+
   if (c->target_osd >= 0) {
     if (!osdmap->exists(c->target_osd)) {
       c->map_check_error = -ENOENT;
@@ -4642,7 +4673,7 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     }
     c->target.osd = c->target_osd;
   } else {
-    int ret = _calc_target(&(c->target), true);
+    int ret = _calc_target(&(c->target), nullptr, true);
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";

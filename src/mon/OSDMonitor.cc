@@ -5222,6 +5222,9 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -E2BIG;
     }
     p.set_pg_num(n);
+    // force pre-luminous clients to resend their ops, since they
+    // don't understand that split PGs now form a new interval.
+    p.last_force_op_resend_preluminous = pending_inc.epoch;
   } else if (var == "pgp_num") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
@@ -7520,9 +7523,9 @@ done:
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->read_tier = overlaypool_id;
     np->write_tier = overlaypool_id;
-    np->last_force_op_resend = pending_inc.epoch;
+    np->set_last_force_op_resend(pending_inc.epoch);
     pg_pool_t *noverlay_p = pending_inc.get_new_pool(overlaypool_id, overlay_p);
-    noverlay_p->last_force_op_resend = pending_inc.epoch;
+    noverlay_p->set_last_force_op_resend(pending_inc.epoch);
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
     if (overlay_p->cache_mode == pg_pool_t::CACHEMODE_NONE)
       ss <<" (WARNING: overlay pool cache_mode is still NONE)";
@@ -7556,16 +7559,16 @@ done:
     if (np->has_read_tier()) {
       const pg_pool_t *op = osdmap.get_pg_pool(np->read_tier);
       pg_pool_t *nop = pending_inc.get_new_pool(np->read_tier,op);
-      nop->last_force_op_resend = pending_inc.epoch;
+      nop->set_last_force_op_resend(pending_inc.epoch);
     }
     if (np->has_write_tier()) {
       const pg_pool_t *op = osdmap.get_pg_pool(np->write_tier);
       pg_pool_t *nop = pending_inc.get_new_pool(np->write_tier, op);
-      nop->last_force_op_resend = pending_inc.epoch;
+      nop->set_last_force_op_resend(pending_inc.epoch);
     }
     np->clear_read_tier();
     np->clear_write_tier();
-    np->last_force_op_resend = pending_inc.epoch;
+    np->set_last_force_op_resend(pending_inc.epoch);
     ss << "there is now (or already was) no overlay for '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -7799,8 +7802,8 @@ done:
     np->tiers.insert(tierpool_id);
     np->read_tier = np->write_tier = tierpool_id;
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
-    np->last_force_op_resend = pending_inc.epoch;
-    ntp->last_force_op_resend = pending_inc.epoch;
+    np->set_last_force_op_resend(pending_inc.epoch);
+    ntp->set_last_force_op_resend(pending_inc.epoch);
     ntp->tier_of = pool_id;
     ntp->cache_mode = mode;
     ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;

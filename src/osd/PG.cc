@@ -1862,18 +1862,18 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   OSDCap& caps = session->caps;
   session->put();
 
-  const string &key = req->get_object_locator().key.empty() ?
-                      req->get_oid().name :
-                      req->get_object_locator().key;
+  const string &key = req->get_hobj().get_key().empty() ?
+    req->get_oid().name :
+    req->get_hobj().get_key();
 
-  bool cap = caps.is_capable(pool.name, req->get_object_locator().nspace,
+  bool cap = caps.is_capable(pool.name, req->get_hobj().nspace,
                              pool.auid, key,
 			     op->need_read_cap(),
 			     op->need_write_cap(),
 			     op->classes());
 
   dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
-		   << " " << req->get_object_locator().nspace
+		   << " " << req->get_hobj().nspace
 	   << ") owner=" << pool.auid
 	   << " need_read_cap=" << op->need_read_cap()
 	   << " need_write_cap=" << op->need_write_cap()
@@ -2210,27 +2210,6 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   }
 }
 
-void PG::split_ops(PG *child, unsigned split_bits) {
-  unsigned match = child->info.pgid.ps();
-  assert(waiting_for_all_missing.empty());
-  assert(waiting_for_cache_not_full.empty());
-  assert(waiting_for_unreadable_object.empty());
-  assert(waiting_for_degraded_object.empty());
-  assert(waiting_for_ondisk.empty());
-  assert(waiting_for_active.empty());
-  assert(waiting_for_scrub.empty());
-
-  osd->dequeue_pg(this, &waiting_for_peered);
-
-  OSD::split_list(
-    &waiting_for_peered, &(child->waiting_for_peered), match, split_bits);
-  {
-    Mutex::Locker l(map_lock); // to avoid a race with the osd dispatch
-    OSD::split_list(
-      &waiting_for_map, &(child->waiting_for_map), match, split_bits);
-  }
-}
-
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
   child->update_snap_mapper_bits(split_bits);
@@ -2304,14 +2283,10 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   // History
   child->past_intervals = past_intervals;
 
-  split_ops(child, split_bits);
   _split_into(child_pgid, child, split_bits);
 
-  // release all backoffs so that Objecter doesn't need to handle unblock
-  // on split backoffs
+  // release all backoffs for simplicity
   release_backoffs(hobject_t(), hobject_t::get_max());
-  // split any remaining (deleting) backoffs among child PGs
-  split_backoffs(child, split_bits);
 
   child->on_new_interval();
 
@@ -2326,7 +2301,7 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
   ConnectionRef con = s->con;
   if (!con)   // OSD::ms_handle_reset clears s->con without a lock
     return;
-  Backoff *b = s->have_backoff(begin);
+  BackoffRef b(s->have_backoff(info.pgid, begin));
   if (b) {
     derr << __func__ << " already have backoff for " << s << " begin " << begin
 	 << " " << *b << dendl;
@@ -2334,24 +2309,19 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
   }
   Mutex::Locker l(backoff_lock);
   {
-    Mutex::Locker l(s->backoff_lock);
-    b = new Backoff(this, s, ++s->backoff_seq, begin, end);
-    auto& ls = s->backoffs[begin];
-    if (ls.empty()) {
-      ++s->backoff_count;
-    }
-    assert(s->backoff_count == (int)s->backoffs.size());
-    ls.insert(b);
+    b = new Backoff(info.pgid, this, s, ++s->backoff_seq, begin, end);
     backoffs[begin].insert(b);
+    s->add_backoff(b);
     dout(10) << __func__ << " session " << s << " added " << *b << dendl;
   }
   con->send_message(
     new MOSDBackoff(
+      info.pgid,
+      get_osdmap()->get_epoch(),
       CEPH_OSD_BACKOFF_OP_BLOCK,
       b->id,
       begin,
-      end,
-      get_osdmap()->get_epoch()));
+      end));
 }
 
 void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
@@ -2398,11 +2368,12 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
       if (con) {   // OSD::ms_handle_reset clears s->con without a lock
 	con->send_message(
 	  new MOSDBackoff(
+	    info.pgid,
+	    get_osdmap()->get_epoch(),
 	    CEPH_OSD_BACKOFF_OP_UNBLOCK,
 	    b->id,
 	    b->begin,
-	    b->end,
-	    get_osdmap()->get_epoch()));
+	    b->end));
       }
       if (b->is_new()) {
 	b->state = Backoff::STATE_DELETING;
@@ -2411,71 +2382,6 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
 	b->session.reset();
       }
       b->pg.reset();
-    }
-  }
-}
-
-void PG::split_backoffs(PG *child, unsigned split_bits)
-{
-  dout(10) << __func__ << " split_bits " << split_bits << " child "
-	   << child->info.pgid.pgid << dendl;
-  unsigned mask = ~((~0)<<split_bits);
-  vector<BackoffRef> backoffs_to_dup;   // pg backoffs
-  vector<BackoffRef> backoffs_to_move;  // oid backoffs
-  {
-    Mutex::Locker l(backoff_lock);
-    auto p = backoffs.begin();
-    while (p != backoffs.end()) {
-      if (p->first == info.pgid.pgid.get_hobj_start()) {
-	// if it is a full PG we always dup it for the child.
-	for (auto& q : p->second) {
-	  dout(10) << __func__ << " pg backoff " << p->first
-		   << " " << q << dendl;
-	  backoffs_to_dup.push_back(q);
-	}
-      } else {
-	// otherwise, we move it to the child only if falls into the
-	// childs hash range.
-	if ((p->first.get_hash() & mask) == child->info.pgid.pgid.ps()) {
-	  for (auto& q : p->second) {
-	    dout(20) << __func__ << " will move " << p->first
-		     << " " << q << dendl;
-	    backoffs_to_move.push_back(q);
-	  }
-	  p = backoffs.erase(p);
-	  continue;
-	} else {
-	  dout(20) << __func__ << " will not move " << p->first
-		   << " " << p->second << dendl;
-	}
-      }
-      ++p;
-    }
-  }
-  for (auto b : backoffs_to_dup) {
-    SessionRef s;
-    {
-      Mutex::Locker l(b->lock);
-      b->end = info.pgid.pgid.get_hobj_end(split_bits);
-      dout(10) << __func__ << " pg backoff " << *b << dendl;
-      s = b->session;
-    }
-    if (s) {
-      child->add_pg_backoff(b->session);
-    } else {
-      dout(20) << __func__ << "  didn't dup pg backoff, session is null"
-	       << dendl;
-    }
-  }
-  for (auto b : backoffs_to_move) {
-    Mutex::Locker l(b->lock);
-    if (b->pg == this) {
-      dout(10) << __func__ << " move backoff " << *b << " to child" << dendl;
-      b->pg = child;
-      child->backoffs[b->begin].insert(b);
-    } else {
-      dout(20) << __func__ << " move backoff " << *b << " nowhere... pg is null"
-	       << dendl;
     }
   }
 }
@@ -5211,6 +5117,11 @@ void PG::start_peering_interval(
       dirty_info = true;
       dirty_big_info = true;
       info.history.same_interval_since = osdmap->get_epoch();
+      if (info.pgid.pgid.is_split(lastmap->get_pg_num(info.pgid.pgid.pool()),
+				  osdmap->get_pg_num(info.pgid.pgid.pool()),
+				  nullptr)) {
+	info.history.last_epoch_split = osdmap->get_epoch();
+      }
     }
   }
 
@@ -5468,11 +5379,24 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if (m->get_map_epoch() < pool.info.last_force_op_resend &&
-      m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
-    dout(7) << __func__ << " sent before last_force_op_resend "
-	    << pool.info.last_force_op_resend << ", dropping" << *m << dendl;
-    return true;
+  if (m->get_connection()->has_feature(CEPH_FEATURE_RESEND_ON_SPLIT)) {
+    if (m->get_map_epoch() < pool.info.get_last_force_op_resend()) {
+      dout(7) << __func__ << " sent before last_force_op_resend "
+	      << pool.info.last_force_op_resend << ", dropping" << *m << dendl;
+      return true;
+    }
+    if (m->get_map_epoch() < info.history.last_epoch_split) {
+      dout(7) << __func__ << " pg split in "
+	      << info.history.last_epoch_split << ", dropping" << dendl;
+      return true;
+    }
+  } else if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
+    if (m->get_map_epoch() < pool.info.get_last_force_op_resend_preluminous()) {
+      dout(7) << __func__ << " sent before last_force_op_resend_preluminous "
+	      << pool.info.last_force_op_resend_preluminous
+	      << ", dropping" << *m << dendl;
+      return true;
+    }
   }
 
   return false;

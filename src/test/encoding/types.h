@@ -558,8 +558,6 @@ MESSAGE(MOSDPGCreate)
 MESSAGE(MOSDPGInfo)
 #include "messages/MOSDPGLog.h"
 MESSAGE(MOSDPGLog)
-#include "messages/MOSDPGMissing.h"
-MESSAGE(MOSDPGMissing)
 #include "messages/MOSDPGNotify.h"
 MESSAGE(MOSDPGNotify)
 #include "messages/MOSDPGQuery.h"
