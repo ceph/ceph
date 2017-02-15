@@ -1,0 +1,47 @@
+set-cdn-repo:
+    rhbuild: '2.0'
+overrides:
+  ceph-ansible:
+    vars:
+      ceph_stable: true
+      ceph_origin: distro
+      ceph_stable_rh_storage: true
+      journal_collocation: true
+      journal_size: 1024
+      osd_auto_discovery: false
+      ceph_test: true
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - osd.3
+  - osd.4
+  - osd.5
+- - mon.c
+  - osd.6
+  - osd.7
+  - osd.8
+- - osd.9
+  - osd.10
+  - osd.11
+- - mds.a
+- - client.0
+tasks:
+- ssh-keys:
+- ceph-ansible:
+    rhbuild: '2.0'
+- install.ship_utilities:
+- upgrades:
+    rhbuild: latest
+- workunit:
+    branch: jewel
+    clients:
+      client.0:
+      - rados/load-gen-big.sh
+- workunit:
+    branch: jewel
+    clients:
+      client.0:
+      - rbd/test_librbd.sh
