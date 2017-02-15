@@ -361,7 +361,7 @@ TEST(LibCephFS, DirLs) {
 
   // test getdents
   struct dirent *getdents_entries;
-  getdents_entries = (struct dirent *)malloc(r * sizeof(*getdents_entries));
+  getdents_entries = (struct dirent *)malloc((r + 2) * sizeof(*getdents_entries));
 
   int count = 0;
   std::vector<std::string> found;
