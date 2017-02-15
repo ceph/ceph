@@ -317,13 +317,13 @@ protected:
     JournalPlayer *journal;
     explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
 
-    virtual void get() {}
-    virtual void put() {}
+    void get() override {}
+    void put() override {}
 
-    virtual void handle_entries_available() {
+    void handle_entries_available() override {
       journal->handle_replay_ready();
     }
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       journal->handle_replay_complete(r);
     }
   };
@@ -388,7 +388,7 @@ public:
     m_s() {
   }
 
-  int exec() {
+  int exec() override {
     int r = JournalPlayer::exec();
     m_s.print();
     return r;
@@ -409,7 +409,7 @@ private:
   };
 
   int process_entry(::journal::ReplayEntry replay_entry,
-		    uint64_t tag_id) {
+		    uint64_t tag_id) override {
     m_s.total++;
     if (m_verbose) {
       std::cout << "Entry: tag_id=" << tag_id << ", commit_tid="
@@ -486,7 +486,7 @@ public:
     m_s() {
   }
 
-  int exec() {
+  int exec() override {
     std::string header("# journal_id: " + m_journal_id + "\n");
     int r;
     r = safe_write(m_fd, header.c_str(), header.size());
@@ -514,7 +514,7 @@ private:
   };
 
   int process_entry(::journal::ReplayEntry replay_entry,
-		    uint64_t tag_id) {
+		    uint64_t tag_id) override {
     m_s.total++;
     int type = -1;
     bufferlist entry = replay_entry.get_data();

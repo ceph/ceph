@@ -284,7 +284,7 @@ public:
   typedef OpenLocalImageRequest<librbd::MockTestImageCtx> MockOpenLocalImageRequest;
   typedef std::list<cls::journal::Tag> Tags;
 
-  void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;

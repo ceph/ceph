@@ -43,7 +43,7 @@ class StatusCommand : public MirrorAdminSocketCommand {
 public:
   explicit StatusCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     mirror->print_status(f, ss);
     return true;
   }
@@ -56,7 +56,7 @@ class StartCommand : public MirrorAdminSocketCommand {
 public:
   explicit StartCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     mirror->start();
     return true;
   }
@@ -69,7 +69,7 @@ class StopCommand : public MirrorAdminSocketCommand {
 public:
   explicit StopCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     mirror->stop();
     return true;
   }
@@ -82,7 +82,7 @@ class RestartCommand : public MirrorAdminSocketCommand {
 public:
   explicit RestartCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     mirror->restart();
     return true;
   }
@@ -95,7 +95,7 @@ class FlushCommand : public MirrorAdminSocketCommand {
 public:
   explicit FlushCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     mirror->flush();
     return true;
   }
@@ -108,7 +108,7 @@ class LeaderReleaseCommand : public MirrorAdminSocketCommand {
 public:
   explicit LeaderReleaseCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     mirror->release_leader();
     return true;
   }
@@ -169,7 +169,7 @@ public:
     }
   }
 
-  ~MirrorAdminSocketHook() {
+  ~MirrorAdminSocketHook() override {
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
@@ -178,7 +178,7 @@ public:
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);

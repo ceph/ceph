@@ -24,12 +24,12 @@ public:
   {
   }
 
-  virtual ~RbdWatchCtx() {}
+  ~RbdWatchCtx() override {}
 
-  virtual void handle_notify(uint64_t notify_id,
+  void handle_notify(uint64_t notify_id,
                              uint64_t cookie,
                              uint64_t notifier_id,
-                             bufferlist& bl) {
+                             bufferlist& bl) override {
     std::cout << m_image_name << " received notification: notify_id="
               << notify_id << ", cookie=" << cookie << ", notifier_id="
               << notifier_id << ", bl.length=" << bl.length() << std::endl;
@@ -37,7 +37,7 @@ public:
     m_io_ctx.notify_ack(m_header_oid, notify_id, cookie, reply);
   }
 
-  virtual void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     std::cerr << m_image_name << " received error: cookie=" << cookie << ", "
               << "err=" << cpp_strerror(err) << std::endl;
   }
