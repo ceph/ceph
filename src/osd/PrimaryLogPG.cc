@@ -7906,20 +7906,26 @@ int PrimaryLogPG::start_flush(
   }
 
   /**
-   * In general, we need to send two deletes and a copyfrom.
+   * In general, we need to send a delete and a copyfrom.
    * Consider snapc 10:[10, 9, 8, 4, 3, 2]:[10(10, 9), 4(4,3,2)]
    * where 4 is marked as clean.  To flush 10, we have to:
-   * 1) delete 4:[4,3,2] -- ensure head is created at cloneid 4
-   * 2) delete (8-1):[4,3,2] -- ensure that the object does not exist at 8
-   * 3) copyfrom 8:[8,4,3,2] -- flush object excluding snap 8
+   * 1) delete 4:[4,3,2] -- Logically, the object does not exist after 4
+   * 2) copyfrom 8:[8,4,3,2] -- flush object after snap 8
    *
-   * The second delete is required in case at some point in the past
-   * there had been a clone 7(7,6), which we had flushed.  Without
-   * the second delete, the object would appear in the base pool to
-   * have existed.
+   * There is a complicating case.  Supposed there had been a clone 7
+   * for snaps [7, 6] which has been trimmed since they no longer exist.
+   * In the base pool, we'd have 5:[4,3,2]:[4(4,3,2)]+head.  When we submit
+   * the delete, the snap will be promoted to 5, and the head will become
+   * a snapdir.  When the copy-from goes through, we'll end up with
+   * 8:[8,4,3,2]:[4(4,3,2)]+head.
+   *
+   * Another complication is the case where there is an interval change
+   * after doing the delete and the flush but before marking the object
+   * clean.  We'll happily delete head and then recreate it at the same
+   * sequence number, which works out ok.
    */
 
-  SnapContext snapc, dsnapc, dsnapc2;
+  SnapContext snapc, dsnapc;
   if (snapset.seq != 0) {
     if (soid.snap == CEPH_NOSNAP) {
       snapc.seq = snapset.seq;
@@ -7939,19 +7945,13 @@ int PrimaryLogPG::start_flush(
       }
     }
 
-    if (prev_snapc != snapc.seq) {
-      dsnapc = snapset.get_ssc_as_of(prev_snapc);
-      snapid_t first_snap_after_prev_snapc =
-	snapset.get_first_snap_after(prev_snapc, snapc.seq);
-      dsnapc2 = snapset.get_ssc_as_of(
-	first_snap_after_prev_snapc - 1);
-    }
+    dsnapc = snapset.get_ssc_as_of(prev_snapc);
   }
 
   object_locator_t base_oloc(soid);
   base_oloc.pool = pool.info.tier_of;
 
-  if (dsnapc.seq > 0 && dsnapc.seq < snapc.seq) {
+  if (dsnapc.seq < snapc.seq) {
     ObjectOperation o;
     o.remove();
     osd->objecter->mutate(
@@ -7961,22 +7961,6 @@ int PrimaryLogPG::start_flush(
       dsnapc,
       ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
-       CEPH_OSD_FLAG_ORDERSNAP |
-       CEPH_OSD_FLAG_ENFORCE_SNAPC),
-      NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
-  }
-
-  if (dsnapc2.seq > dsnapc.seq && dsnapc2.seq < snapc.seq) {
-    ObjectOperation o;
-    o.remove();
-    osd->objecter->mutate(
-      soid.oid,
-      base_oloc,
-      o,
-      dsnapc2,
-      ceph::real_clock::from_ceph_timespec(oi.mtime),
-      (CEPH_OSD_FLAG_IGNORE_OVERLAY |
-       CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
   }
