@@ -4,13 +4,13 @@
 #include "librbd/image/CloseRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -61,7 +61,7 @@ void CloseRequest<I>::handle_shut_down_update_watchers(int r) {
 template <typename I>
 void CloseRequest<I>::send_unregister_image_watcher() {
   if (m_image_ctx->image_watcher == nullptr) {
-    send_shut_down_aio_queue();
+    send_shut_down_io_queue();
     return;
   }
 
@@ -84,21 +84,21 @@ void CloseRequest<I>::handle_unregister_image_watcher(int r) {
                << dendl;
   }
 
-  send_shut_down_aio_queue();
+  send_shut_down_io_queue();
 }
 
 template <typename I>
-void CloseRequest<I>::send_shut_down_aio_queue() {
+void CloseRequest<I>::send_shut_down_io_queue() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  m_image_ctx->aio_work_queue->shut_down(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_shut_down_aio_queue>(this));
+  m_image_ctx->io_work_queue->shut_down(create_context_callback<
+    CloseRequest<I>, &CloseRequest<I>::handle_shut_down_io_queue>(this));
 }
 
 template <typename I>
-void CloseRequest<I>::handle_shut_down_aio_queue(int r) {
+void CloseRequest<I>::handle_shut_down_io_queue(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 

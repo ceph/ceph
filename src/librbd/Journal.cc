@@ -2,13 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/Journal.h"
-#include "librbd/AioImageRequestWQ.h"
-#include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/journal/OpenRequest.h"
-#include "librbd/journal/PromoteRequest.h"
-#include "librbd/journal/Replay.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
 #include "journal/Policy.h"
@@ -19,8 +14,13 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
-#include "librbd/journal/RemoveRequest.h"
+#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectRequest.h"
 #include "librbd/journal/CreateRequest.h"
+#include "librbd/journal/OpenRequest.h"
+#include "librbd/journal/PromoteRequest.h"
+#include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/Replay.h"
 
 #include <boost/scope_exit.hpp>
 #include <utility>
@@ -828,7 +828,7 @@ void Journal<I>::flush_commit_position(Context *on_finish) {
 template <typename I>
 uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                         const bufferlist &bl,
-                                        const AioObjectRequests &requests,
+                                        const IOObjectRequests &requests,
                                         bool flush_entry) {
   assert(m_max_append_size > journal::AioWriteEvent::get_fixed_size());
   uint64_t max_write_data_size =
@@ -861,7 +861,7 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
 
 template <typename I>
 uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
-                                     const AioObjectRequests &requests,
+                                     const IOObjectRequests &requests,
                                      uint64_t offset, size_t length,
                                      bool flush_entry) {
   bufferlist bl;
@@ -874,7 +874,7 @@ uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
 template <typename I>
 uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const Bufferlists &bufferlists,
-                                      const AioObjectRequests &requests,
+                                      const IOObjectRequests &requests,
                                       uint64_t offset, size_t length,
                                       bool flush_entry) {
   assert(!bufferlists.empty());
@@ -1547,7 +1547,7 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
                << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
   }
 
-  AioObjectRequests aio_object_requests;
+  IOObjectRequests aio_object_requests;
   Contexts on_safe_contexts;
   {
     Mutex::Locker event_locker(m_event_lock);
@@ -1576,7 +1576,7 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "completing tid=" << tid << dendl;
-  for (AioObjectRequests::iterator it = aio_object_requests.begin();
+  for (IOObjectRequests::iterator it = aio_object_requests.begin();
        it != aio_object_requests.end(); ++it) {
     if (r < 0) {
       // don't send aio requests if the journal fails -- bubble error up

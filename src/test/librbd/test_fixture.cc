@@ -3,11 +3,11 @@
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/stringify.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -123,7 +123,7 @@ int TestFixture::unlock_image() {
 }
 
 int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
-  int r = ictx.aio_work_queue->write(0, 0, "", 0);
+  int r = ictx.io_work_queue->write(0, 0, "", 0);
   if (r != 0) {
     return r;
   }

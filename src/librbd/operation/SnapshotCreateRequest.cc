@@ -5,11 +5,11 @@
 #include "librbd/operation/SnapshotCreateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -68,7 +68,7 @@ void SnapshotCreateRequest<I>::send_suspend_aio() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  image_ctx.aio_work_queue->block_writes(create_context_callback<
+  image_ctx.io_work_queue->block_writes(create_context_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_suspend_aio>(this));
 }
@@ -81,7 +81,7 @@ Context *SnapshotCreateRequest<I>::handle_suspend_aio(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
-    image_ctx.aio_work_queue->unblock_writes();
+    image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
@@ -110,7 +110,7 @@ Context *SnapshotCreateRequest<I>::handle_append_op_event(int *result) {
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    image_ctx.aio_work_queue->unblock_writes();
+    image_ctx.io_work_queue->unblock_writes();
     lderr(cct) << "failed to commit journal entry: " << cpp_strerror(*result)
                << dendl;
     return this->create_context_finisher(*result);
@@ -142,7 +142,7 @@ Context *SnapshotCreateRequest<I>::handle_allocate_snap_id(int *result) {
 
   if (*result < 0) {
     save_result(result);
-    image_ctx.aio_work_queue->unblock_writes();
+    image_ctx.io_work_queue->unblock_writes();
     lderr(cct) << "failed to allocate snapshot id: " << cpp_strerror(*result)
                << dendl;
     return this->create_context_finisher(*result);
@@ -214,7 +214,7 @@ Context *SnapshotCreateRequest<I>::send_create_object_map() {
   if (image_ctx.object_map == nullptr || m_skip_object_map) {
     image_ctx.snap_lock.put_read();
 
-    image_ctx.aio_work_queue->unblock_writes();
+    image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(0);
   }
 
@@ -240,7 +240,7 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
 
   assert(*result == 0);
 
-  image_ctx.aio_work_queue->unblock_writes();
+  image_ctx.io_work_queue->unblock_writes();
   return this->create_context_finisher(0);
 }
 
@@ -268,7 +268,7 @@ Context *SnapshotCreateRequest<I>::handle_release_snap_id(int *result) {
   assert(m_ret_val < 0);
   *result = m_ret_val;
 
-  image_ctx.aio_work_queue->unblock_writes();
+  image_ctx.io_work_queue->unblock_writes();
   return this->create_context_finisher(m_ret_val);
 }
 

@@ -8,7 +8,7 @@
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
-#include "librbd/AioCompletion.h"
+#include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
@@ -17,8 +17,8 @@
 
 namespace librbd {
 
-class AioCompletion;
 class ImageCtx;
+namespace io { struct AioCompletion; }
 
 namespace journal {
 
@@ -176,12 +176,12 @@ private:
                                       Context *on_safe, OpEvent **op_event);
   void handle_op_complete(uint64_t op_tid, int r);
 
-  AioCompletion *create_aio_modify_completion(Context *on_ready,
-                                              Context *on_safe,
-                                              aio_type_t aio_type,
-                                              bool *flush_required);
-  AioCompletion *create_aio_flush_completion(Context *on_safe);
-  void handle_aio_completion(AioCompletion *aio_comp);
+  io::AioCompletion *create_aio_modify_completion(Context *on_ready,
+                                                  Context *on_safe,
+                                                  io::aio_type_t aio_type,
+                                                  bool *flush_required);
+  io::AioCompletion *create_aio_flush_completion(Context *on_safe);
+  void handle_aio_completion(io::AioCompletion *aio_comp);
 
 };
 
