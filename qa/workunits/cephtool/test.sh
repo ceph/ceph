@@ -989,7 +989,7 @@ function test_mon_mds()
 
   # We should be permitted to use an EC pool with overwrites enabled
   # as the data pool...
-  ceph osd pool set mds-ec-pool debug_white_box_testing_ec_overwrites true --yes-i-really-mean-it
+  ceph osd pool set mds-ec-pool allow_ec_overwrites true
   ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   fail_all_mds $FS_NAME
   ceph fs rm $FS_NAME --yes-i-really-mean-it
