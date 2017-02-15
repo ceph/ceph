@@ -95,7 +95,10 @@ class MessengerClient {
         if (inflight > uint64_t(concurrent)) {
           cond.Wait(lock);
         }
-        MOSDOp *m = new MOSDOp(client_inc.read(), 0, oid, oloc, pgid, 0, 0, 0);
+	hobject_t hobj(oid, oloc.key, CEPH_NOSNAP, pgid.ps(), pgid.pool(),
+		       oloc.nspace);
+	spg_t spgid(pgid);
+        MOSDOp *m = new MOSDOp(client_inc.read(), 0, hobj, spgid, 0, 0, 0);
         m->write(0, msg_len, data);
         inflight++;
         conn->send_message(m);

@@ -1208,8 +1208,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    continue;
 
 	  // skip wrong namespace
-	  if (m->get_object_locator().nspace != librados::all_nspaces &&
-               candidate.get_namespace() != m->get_object_locator().nspace)
+	  if (m->get_hobj().nspace != librados::all_nspaces &&
+               candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
@@ -1379,7 +1379,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  }
 
 	  // skip wrong namespace
-	  if (candidate.get_namespace() != m->get_object_locator().nspace)
+	  if (candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
@@ -1598,7 +1598,7 @@ void PrimaryLogPG::handle_backoff(OpRequestRef& op)
   }
   dout(10) << __func__ << " backoff ack id " << m->id
 	   << " [" << begin << "," << end << ")" << dendl;
-  session->ack_backoff(cct, m->id, begin, end);
+  session->ack_backoff(cct, m->pgid, m->id, begin, end);
 }
 
 void PrimaryLogPG::do_request(
@@ -1619,10 +1619,8 @@ void PrimaryLogPG::do_request(
     session->put();  // get_priv takes a ref, and so does the SessionRef
 
     if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
-      Backoff *b = session->have_backoff(info.pgid.pgid.get_hobj_start());
-      if (b) {
-	dout(10) << " have backoff " << *b << " " << *m << dendl;
-	assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);
+      if (session->check_backoff(cct, info.pgid,
+				 info.pgid.pgid.get_hobj_start(), m)) {
 	return;
       }
 
@@ -1630,7 +1628,7 @@ void PrimaryLogPG::do_request(
 	is_down() ||
 	is_incomplete() ||
 	(!is_active() && is_peered());
-      if (g_conf->osd_peering_aggressive_backoff && !backoff) {
+      if (g_conf->osd_backoff_on_peering && !backoff) {
 	if (is_peering()) {
 	  backoff = true;
 	}
@@ -1767,9 +1765,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   dout(20) << __func__ << ": op " << *m << dendl;
 
-  hobject_t head(m->get_oid(), m->get_object_locator().key,
-		 CEPH_NOSNAP, m->get_pg().ps(),
-		 info.pgid.pool(), m->get_object_locator().nspace);
+  hobject_t head = m->get_hobj();
+  head.snap = CEPH_NOSNAP;
 
   bool can_backoff =
     m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF);
@@ -1782,10 +1779,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
     session->put();  // get_priv() takes a ref, and so does the intrusive_ptr
 
-    Backoff *b = session->have_backoff(head);
-    if (b) {
-      dout(10) << __func__ << " have backoff " << *b << " " << *m << dendl;
-      assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);
+    if (session->check_backoff(cct, info.pgid, head, m)) {
       return;
     }
   }
@@ -1843,16 +1837,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
-  if (m->get_object_locator().key.size() >
-      cct->_conf->osd_max_object_name_len) {
+  if (m->get_hobj().get_key().size() > cct->_conf->osd_max_object_name_len) {
     dout(4) << "do_op locator is longer than "
 	    << cct->_conf->osd_max_object_name_len
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
-  if (m->get_object_locator().nspace.size() >
-      cct->_conf->osd_max_object_namespace_len) {
+  if (m->get_hobj().nspace.size() > cct->_conf->osd_max_object_namespace_len) {
     dout(4) << "do_op namespace is longer than "
 	    << cct->_conf->osd_max_object_namespace_len
 	    << " bytes" << dendl;
@@ -1934,8 +1926,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // missing object?
   if (is_unreadable_object(head)) {
     if (can_backoff &&
-	(g_conf->osd_recovery_aggressive_backoff ||
-	 missing_loc.is_unfound(head))) {
+	(g_conf->osd_backoff_on_degraded ||
+	 (g_conf->osd_backoff_on_unfound && missing_loc.is_unfound(head)))) {
       add_backoff(session, head, head);
       maybe_kick_recovery(head);
     } else {
@@ -1946,7 +1938,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // degraded object?
   if (write_ordered && is_degraded_or_backfilling_object(head)) {
-    if (can_backoff && g_conf->osd_recovery_aggressive_backoff) {
+    if (can_backoff && g_conf->osd_backoff_on_degraded) {
       add_backoff(session, head, head);
     } else {
       wait_for_degraded_object(head, op);
@@ -2036,12 +2028,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   ObjectContextRef obc;
   bool can_create = op->may_write() || op->may_cache();
   hobject_t missing_oid;
-  hobject_t oid(m->get_oid(),
-		m->get_object_locator().key,
-		m->get_snapid(),
-		m->get_pg().ps(),
-		m->get_object_locator().get_pool(),
-		m->get_object_locator().nspace);
+  const hobject_t& oid = m->get_hobj();
 
   // io blocked on obc?
   if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
@@ -2368,7 +2355,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
   }
 
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  const object_locator_t& oloc = m->get_object_locator();
+  const object_locator_t oloc = m->get_object_locator();
 
   if (op->need_skip_handle_cache()) {
     return cache_result_t::NOOP;
@@ -2626,12 +2613,7 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op)
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
 
-  hobject_t soid(m->get_oid(),
-		 m->get_object_locator().key,
-		 m->get_snapid(),
-		 m->get_pg().ps(),
-		 m->get_object_locator().get_pool(),
-		 m->get_object_locator().nspace);
+  const hobject_t& soid = m->get_hobj();
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
 
   // pass through some original flags that make sense.
@@ -2821,12 +2803,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
   oloc.pool = pool.info.tier_of;
   SnapContext snapc(m->get_snap_seq(), m->get_snaps());
 
-  hobject_t soid(m->get_oid(),
-		 m->get_object_locator().key,
-		 missing_oid.snap,
-		 m->get_pg().ps(),
-		 m->get_object_locator().get_pool(),
-		 m->get_object_locator().nspace);
+  const hobject_t& soid = m->get_hobj();
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 

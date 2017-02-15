@@ -16,50 +16,65 @@
 #ifndef CEPH_MOSDBACKOFF_H
 #define CEPH_MOSDBACKOFF_H
 
-#include "msg/Message.h"
+#include "MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
 
-class MOSDBackoff : public Message {
+class MOSDBackoff : public MOSDFastDispatchOp {
 public:
+  const int HEAD_VERSION = 1;
+  const int COMPAT_VERSION = 1;
+
+  spg_t pgid;
+  epoch_t map_epoch = 0;
   uint8_t op = 0;           ///< CEPH_OSD_BACKOFF_OP_*
   uint64_t id = 0;          ///< unique id within this session
   hobject_t begin, end;     ///< [) range to block, unless ==, block single obj
-  epoch_t osd_epoch = 0;
 
-  MOSDBackoff() : Message(CEPH_MSG_OSD_BACKOFF) {}
-  MOSDBackoff(uint8_t op_, uint64_t id_,
-	      hobject_t begin_, hobject_t end_, epoch_t ep)
-    : Message(CEPH_MSG_OSD_BACKOFF),
+  spg_t get_spg() const override {
+    return pgid;
+  }
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+
+  MOSDBackoff()
+    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDBackoff(spg_t pgid_, epoch_t ep, uint8_t op_, uint64_t id_,
+	      hobject_t begin_, hobject_t end_)
+    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
+      pgid(pgid_),
+      map_epoch(ep),
       op(op_),
       id(id_),
       begin(begin_),
-      end(end_),
-      osd_epoch(ep) { }
+      end(end_) { }
 
   void encode_payload(uint64_t features) override {
+    ::encode(pgid, payload);
+    ::encode(map_epoch, payload);
     ::encode(op, payload);
     ::encode(id, payload);
     ::encode(begin, payload);
     ::encode(end, payload);
-    ::encode(osd_epoch, payload);
   }
 
   void decode_payload() override {
     auto p = payload.begin();
+    ::decode(pgid, p);
+    ::decode(map_epoch, p);
     ::decode(op, p);
     ::decode(id, p);
     ::decode(begin, p);
     ::decode(end, p);
-    ::decode(osd_epoch, p);
   }
 
   const char *get_type_name() const override { return "osd_backoff"; }
 
   void print(ostream& out) const override {
-    out << "osd_backoff(" << ceph_osd_backoff_op_name(op)
+    out << "osd_backoff(" << pgid << " " << ceph_osd_backoff_op_name(op)
 	<< " id " << id
 	<< " [" << begin << "," << end << ")"
-	<< " epoch " << osd_epoch << ")";
+	<< " e" << map_epoch << ")";
   }
 };
 

@@ -587,13 +587,22 @@ public:
 
 
   /****   mapping facilities   ****/
-  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const;
-  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) const {
+  int map_to_pg(
+    int64_t pool,
+    const string& name,
+    const string& key,
+    const string& nspace,
+    pg_t *pg) const;
+  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc,
+			   pg_t &pg) const;
+  pg_t object_locator_to_pg(const object_t& oid,
+			    const object_locator_t& loc) const {
     pg_t pg;
     int ret = object_locator_to_pg(oid, loc, pg);
     assert(ret == 0);
     return pg;
   }
+
 
   static object_locator_t file_to_object_locator(const file_layout_t& layout) {
     return object_locator_t(layout.pool_id, layout.pool_ns);
@@ -647,7 +656,8 @@ private:
    *  map to up and acting. Fills in whatever fields are non-NULL.
    */
   void _pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
-                             vector<int> *acting, int *acting_primary) const;
+                             vector<int> *acting, int *acting_primary,
+			     bool raw_pg_to_pg = true) const;
 
 public:
   /***
@@ -769,14 +779,17 @@ public:
     return -1;  // we fail!
   }
 
-  bool is_acting_osd_shard(pg_t pg, int osd, shard_id_t shard) const {
+  /*
+   * check whether an spg_t maps to a particular osd
+   */
+  bool is_acting_osd_shard(spg_t pg, int osd) const {
     vector<int> acting;
-    int nrep = pg_to_acting_osds(pg, acting);
-    if (shard == shard_id_t::NO_SHARD)
-      return calc_pg_role(osd, acting, nrep) >= 0;
-    if (shard >= (int)acting.size())
+    _pg_to_up_acting_osds(pg.pgid, NULL, NULL, &acting, NULL, false);
+    if (pg.shard == shard_id_t::NO_SHARD)
+      return calc_pg_role(osd, acting, acting.size()) >= 0;
+    if (pg.shard >= (int)acting.size())
       return false;
-    return acting[shard] == osd;
+    return acting[pg.shard] == osd;
   }
 
 

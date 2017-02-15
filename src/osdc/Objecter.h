@@ -1193,7 +1193,8 @@ public:
     ///< explcit pg target, if any
     pg_t base_pgid;
 
-    pg_t pgid; ///< last pg we mapped to
+    pg_t pgid; ///< last (raw) pg we mapped to
+    spg_t actual_pgid; ///< last (actual) spg_t we mapped to
     unsigned pg_num = 0; ///< last pg_num we mapped to
     unsigned pg_num_mask = 0; ///< last pg_num_mask we mapped to
     vector<int> up; ///< set of up osds for last pg we mapped to
@@ -1268,7 +1269,6 @@ public:
     uint64_t ontimeout;
 
     ceph_tid_t tid;
-    eversion_t replay_version; // for op replay
     int attempts;
 
     version_t *objver;
@@ -1708,6 +1708,7 @@ public:
 
   // -- osd sessions --
   struct OSDBackoff {
+    spg_t pgid;
     uint64_t id;
     hobject_t begin, end;
   };
@@ -1725,8 +1726,8 @@ public:
     map<ceph_tid_t,CommandOp*> command_ops;
 
     // backoffs
-    map<hobject_t,OSDBackoff> backoffs;
-    multimap<uint64_t,OSDBackoff*> backoffs_by_id;
+    map<spg_t,map<hobject_t,OSDBackoff>> backoffs;
+    map<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;
     int incarnation;
@@ -1810,7 +1811,7 @@ public:
   bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t,
+  int _calc_target(op_target_t *t, Connection *con,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   shunique_lock& lc);
@@ -2192,7 +2193,9 @@ public:
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
     Op *o = new Op(object_t(), oloc,
-		   op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ,
+		   op.ops,
+		   flags | global_op_flags.read() | CEPH_OSD_FLAG_READ |
+		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
 		   onack, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);

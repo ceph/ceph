@@ -213,7 +213,6 @@ class ObjectStore;
 class FuseStore;
 class OSDMap;
 class MLog;
-class MOSDPGMissing;
 class Objecter;
 
 class Watch;
@@ -1406,7 +1405,7 @@ public:
     switch (op->get_req()->get_type()) {
     case CEPH_MSG_OSD_OP:
       return (static_cast<MOSDOp*>(
-		op->get_req())->get_pg().m_seed & mask) == match;
+		op->get_req())->get_raw_pg().m_seed & mask) == match;
     }
     return false;
   }

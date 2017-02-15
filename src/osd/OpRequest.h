@@ -22,34 +22,8 @@
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include "include/memory.h"
+#include "osd/osd_types.h"
 #include "common/TrackedOp.h"
-
-/**
- * osd request identifier
- *
- * caller name + incarnation# + tid to unique identify this request.
- */
-struct osd_reqid_t {
-  entity_name_t name; // who
-  ceph_tid_t         tid;
-  int32_t       inc;  // incarnation
-
-  osd_reqid_t()
-    : tid(0), inc(0) {}
-  osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
-    : name(a), tid(t), inc(i) {}
-
-  DENC(osd_reqid_t, v, p) {
-    DENC_START(2, 2, p);
-    denc(v.name, p);
-    denc(v.tid, p);
-    denc(v.inc, p);
-    DENC_FINISH(p);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<osd_reqid_t*>& o);
-};
-WRITE_CLASS_DENC(osd_reqid_t)
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference

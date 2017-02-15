@@ -85,7 +85,6 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
-#include "messages/MOSDPGMissing.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDECSubOpWrite.h"
@@ -1424,7 +1423,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	      << m->get_map_epoch() << ", dropping" << dendl;
       return;
     }
-    pg_t _pgid = m->get_pg();
+    pg_t _pgid = m->get_raw_pg();
     spg_t pgid;
     if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
       _pgid = opmap->raw_pg_to_pg(_pgid);
@@ -1438,7 +1437,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
   clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-	       << " pg " << m->get_pg()
+	       << " pg " << m->get_raw_pg()
 	       << " to osd." << whoami
 	       << " not " << pg->acting
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
@@ -4949,7 +4948,7 @@ bool OSD::ms_handle_reset(Connection *con)
   session->con.reset(NULL);  // break con <-> session ref cycle
   // note that we break session->con *before* the session_handle_reset
   // cleanup below.  this avoids a race between us and
-  // PG::add_backoff, split_backoff, etc.
+  // PG::add_backoff, Session::check_backoff, etc.
   session_handle_reset(session);
   session->put();
   return true;
@@ -6311,7 +6310,7 @@ epoch_t op_required_epoch(OpRequestRef op)
   }
   case CEPH_MSG_OSD_BACKOFF: {
     MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
-    return m->osd_epoch;
+    return m->map_epoch;
   }
   case MSG_OSD_SUBOP:
     return replica_op_required_epoch<MOSDSubOp, MSG_OSD_SUBOP>(op);
@@ -6386,11 +6385,6 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_PG_TRIM:
     handle_pg_trim(op);
     break;
-  case MSG_OSD_PG_MISSING:
-    assert(0 ==
-	   "received MOSDPGMissing; this message is supposed to be unused!?!");
-    break;
-
   case MSG_OSD_BACKFILL_RESERVE:
     handle_pg_backfill_reserve(op);
     break;
@@ -6527,7 +6521,15 @@ void OSD::_dispatch(Message *m)
 
     // -- need OSDMap --
 
-  default:
+  case MSG_OSD_PG_CREATE:
+  case MSG_OSD_PG_NOTIFY:
+  case MSG_OSD_PG_QUERY:
+  case MSG_OSD_PG_LOG:
+  case MSG_OSD_PG_REMOVE:
+  case MSG_OSD_PG_INFO:
+  case MSG_OSD_PG_TRIM:
+  case MSG_OSD_BACKFILL_RESERVE:
+  case MSG_OSD_RECOVERY_RESERVE:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
       // no map?  starting up?
@@ -7534,7 +7536,7 @@ void OSD::consume_map()
   for (set<spg_t>::iterator p = pgs_to_check.begin();
        p != pgs_to_check.end();
        ++p) {
-    if (!(osdmap->is_acting_osd_shard(p->pgid, whoami, p->shard))) {
+    if (!(osdmap->is_acting_osd_shard(spg_t(p->pgid, p->shard), whoami))) {
       set<Session*> concerned_sessions;
       get_sessions_possibly_interested_in_pg(*p, &concerned_sessions);
       for (set<Session*>::iterator i = concerned_sessions.begin();
@@ -8781,16 +8783,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     client_session->put();
   }
 
-  if (cct->_conf->osd_debug_drop_op_probability > 0 &&
-      !m->get_source().is_mds()) {
-    if ((double)rand() / (double)RAND_MAX < cct->_conf->osd_debug_drop_op_probability) {
-      dout(0) << "handle_op DEBUG artificially dropping op " << *m << dendl;
-      return;
-    }
-  }
-
   // calc actual pgid
-  pg_t _pgid = m->get_pg();
+  pg_t _pgid = m->get_raw_pg();
   int64_t pool = _pgid.pool();
 
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
@@ -8828,7 +8822,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->have_pg_pool(pgid.pool())) {
     dout(7) << "dropping request; pool did not exist" << dendl;
     clog->warn() << m->get_source_inst() << " invalid " << m->get_reqid()
-		      << " pg " << m->get_pg()
+		      << " pg " << m->get_raw_pg()
 		      << " to osd." << whoami
 		      << " in e" << osdmap->get_epoch()
 		      << ", client e" << m->get_map_epoch()
@@ -8839,7 +8833,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-		 << " pg " << m->get_pg()
+		 << " pg " << m->get_raw_pg()
 		 << " to osd." << whoami
 		 << " in e" << osdmap->get_epoch()
 		 << ", client e" << m->get_map_epoch()
@@ -8875,38 +8869,10 @@ void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
   }
 
   // map hobject range to PG(s)
-  bool queued = false;
-  hobject_t pos = m->begin;
-  do {
-    pg_t _pgid(pos.get_hash(), pos.pool);
-    if (osdmap->have_pg_pool(pos.pool)) {
-      _pgid = osdmap->raw_pg_to_pg(_pgid);
-    }
-    if (!osdmap->have_pg_pool(_pgid.pool())) {
-      // missing pool -- drop
-      return;
-    }
-    spg_t pgid;
-    if (osdmap->get_primary_shard(_pgid, &pgid)) {
-      dout(10) << __func__ << " pos " << pos << " pgid " << pgid << dendl;
-      PGRef pg = get_pg_or_queue_for_pg(pgid, op, s);
-      if (pg) {
-	if (!queued) {
-	  enqueue_op(pg, op);
-	  queued = true;
-	} else {
-	  // use a fresh OpRequest
-	  m->get();	// take a ref for the new OpRequest
-	  OpRequestRef newop(op_tracker.create_request<OpRequest, Message*>(m));
-	  newop->mark_event("duplicated original op for another pg");
-	  enqueue_op(pg, newop);
-	}
-      }
-    }
-    // advance
-    pos = _pgid.get_hobj_end(osdmap->get_pg_pool(pos.pool)->get_pg_num());
-    dout(20) << __func__ << "  next pg " << pos << dendl;
-  } while (pos < m->end);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op, s);
+  if (pg) {
+    enqueue_op(pg, op);
+  }
 }
 
 template<typename T, int MSGTYPE>
