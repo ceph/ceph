@@ -559,7 +559,7 @@ struct ceph_osd_request_head {
   }
 
   void clear_buffers() override {
-    ops.clear();
+    OSDOp::clear_data(ops);
   }
 
   const char *get_type_name() const override { return "osd_op"; }
