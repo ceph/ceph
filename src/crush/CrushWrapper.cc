@@ -1219,6 +1219,10 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   if (features & CEPH_FEATURE_CRUSH_TUNABLES5) {
     ::encode(crush->chooseleaf_stable, bl);
   }
+
+  // device classes
+  ::encode(class_map, bl);
+  ::encode(class_name, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1310,6 +1314,12 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     }
     if (!blp.end()) {
       ::decode(crush->chooseleaf_stable, blp);
+    }
+    if (!blp.end()) {
+      ::decode(class_map, blp);
+      ::decode(class_name, blp);
+      for (auto &c : class_name)
+	class_rname[c.second] = c.first;
     }
     finalize();
   }
@@ -1436,6 +1446,9 @@ void CrushWrapper::dump(Formatter *f) const
       sprintf(name, "device%d", i);
       f->dump_string("name", name);
     }
+    const char *device_class = get_item_class(i);
+    if (device_class != NULL)
+      f->dump_string("class", device_class);
     f->close_section();
   }
   f->close_section();

@@ -45,6 +45,13 @@ static void print_item_name(ostream& out, int t, CrushWrapper &crush)
     out << "bucket" << (-1-t);
 }
 
+static void print_item_class(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *c = crush.get_item_class(t);
+  if (c)
+    out << " class " << c;
+}
+
 static void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 {
   const char *name = crush.get_rule_name(t);
@@ -208,6 +215,7 @@ int CrushCompiler::decompile(ostream &out)
   for (int i=0; i<crush.get_max_devices(); i++) {
     out << "device " << i << " ";
     print_item_name(out, i, crush);
+    print_item_class(out, i, crush);
     out << "\n";
   }
   
@@ -361,7 +369,15 @@ int CrushCompiler::parse_device(iter_t const& i)
   item_id[name] = id;
   id_item[id] = name;
 
-  if (verbose) err << "device " << id << " '" << name << "'" << std::endl;
+  if (verbose) err << "device " << id << " '" << name << "'";
+
+  if (i->children.size() > 3) {
+    string c = string_node(i->children[4]);
+    crush.set_item_class(id, c);
+    if (verbose) err << " class" << " '" << c << "'" << std::endl;
+  } else {
+    if (verbose) err << std::endl;
+  }
   return 0;
 }
 
