@@ -104,7 +104,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 	    PaxosService *ps;
 	  public:
 	    explicit C_Propose(PaxosService *p) : ps(p) { }
-	    void finish(int r) {
+	    void finish(int r) override {
 	      ps->proposal_timer = 0;
 	      if (r >= 0)
 		ps->propose_pending();
@@ -226,7 +226,7 @@ void PaxosService::propose_pending()
     PaxosService *ps;
   public:
     explicit C_Committed(PaxosService *p) : ps(p) { }
-    void finish(int r) {
+    void finish(int r) override {
       ps->proposing = false;
       if (r >= 0)
 	ps->_active();
@@ -303,7 +303,7 @@ void PaxosService::_active()
       PaxosService *svc;
     public:
       explicit C_Active(PaxosService *s) : svc(s) {}
-      void finish(int r) {
+      void finish(int r) override {
 	if (r >= 0)
 	  svc->_active();
       }

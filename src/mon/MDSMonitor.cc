@@ -1515,7 +1515,7 @@ class FlagSetHandler : public FileSystemCommandHandler
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     string flag_name;
     cmd_getval(g_ceph_context, cmdmap, "flag_name", flag_name);
@@ -1799,12 +1799,12 @@ public:
     : FileSystemCommandHandler("fs set")
   {}
 
-  virtual int handle(
+  int handle(
       Monitor *mon,
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     std::string fs_name;
     if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -2046,7 +2046,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     string poolname;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
@@ -2105,7 +2105,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     string poolname;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
@@ -2185,14 +2185,14 @@ class LegacyHandler : public T
     legacy_prefix = new_prefix;
   }
 
-  virtual std::string const &get_prefix() {return legacy_prefix;}
+  std::string const &get_prefix() override {return legacy_prefix;}
 
   int handle(
       Monitor *mon,
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     auto fs = fsmap.get_legacy_filesystem();
     if (fs == nullptr) {

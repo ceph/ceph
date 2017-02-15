@@ -708,7 +708,7 @@ struct PGMonitor::C_Stats : public C_MonOp {
           MonOpRequestRef op,
           MonOpRequestRef op_ack)
     : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
-  void _finish(int r) {
+  void _finish(int r) override {
     if (r >= 0) {
       pgmon->_updated_stats(op, stats_op_ack);
     } else if (r == -ECANCELED) {
@@ -830,7 +830,7 @@ struct RetryCheckOSDMap : public Context {
   epoch_t epoch;
   RetryCheckOSDMap(PGMonitor *p, epoch_t e) : pgmon(p), epoch(e) {
   }
-  void finish(int r) {
+  void finish(int r) override {
     if (r == -ECANCELED)
       return;
 
