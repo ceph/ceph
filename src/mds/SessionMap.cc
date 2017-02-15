@@ -34,7 +34,7 @@ class SessionMapIOContext : public MDSIOContextBase
 {
   protected:
     SessionMap *sessionmap;
-    MDSRank *get_mds() {return sessionmap->mds;}
+    MDSRank *get_mds() override {return sessionmap->mds;}
   public:
     explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       assert(sessionmap != NULL);
@@ -94,7 +94,7 @@ public:
   C_IO_SM_Load(SessionMap *cm, const bool f)
     : SessionMapIOContext(cm), first(f), header_r(0), values_r(0) {}
 
-  void finish(int r) {
+  void finish(int r) override {
     sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals);
   }
 };
@@ -275,7 +275,7 @@ class C_IO_SM_LoadLegacy : public SessionMapIOContext {
 public:
   bufferlist bl;
   explicit C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
-  void finish(int r) {
+  void finish(int r) override {
     sessionmap->_load_legacy_finish(r, bl);
   }
 };
@@ -338,7 +338,7 @@ class C_IO_SM_Save : public SessionMapIOContext {
   version_t version;
 public:
   C_IO_SM_Save(SessionMap *cm, version_t v) : SessionMapIOContext(cm), version(v) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     sessionmap->_save_finish(version);
   }
@@ -675,7 +675,7 @@ class C_IO_SM_Save_One : public SessionMapIOContext {
 public:
   C_IO_SM_Save_One(SessionMap *cm, MDSInternalContextBase *on_safe_)
     : SessionMapIOContext(cm), on_safe(on_safe_) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r != 0) {
       get_mds()->handle_write_error(r);
     } else {

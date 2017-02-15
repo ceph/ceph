@@ -100,8 +100,8 @@ struct C_SR_RetryOpenParents : public MDSInternalContextBase {
     sr(s), first(f), last(l), parent_last(pl),  parent(p), fin(c) {
     sr->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
   }
-  MDSRank *get_mds() { return sr->mdcache->mds; }
-  void finish(int r) {
+  MDSRank *get_mds() override { return sr->mdcache->mds; }
+  void finish(int r) override {
     if (r < 0)
       sr->_remove_missing_parent(parent_last, parent, r);
     if (sr->_open_parents(fin, first, last))
