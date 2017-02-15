@@ -1115,7 +1115,53 @@ Keystone Settings
 :Type: Boolean
 :Default: ``true``
 
+Barbican Settings
+=================
+
+``rgw barbican url``
+
+:Description: The URL for the Barbican server.
+:Type: String
+:Default: None
+
+``rgw keystone barbican user``
+
+:Description: The name of the OpenStack user with access to the `Barbican`_
+              secrets used for `Encryption`_.
+:Type: String
+:Default: None
+
+``rgw keystone barbican password``
+
+:Description: The password associated with the `Barbican`_ user.
+:Type: String
+:Default: None
+
+``rgw keystone barbican tenant``
+
+:Description: The name of the OpenStack tenant associated with the `Barbican`_
+              user when using OpenStack Identity API v2.
+:Type: String
+:Default: None
+
+``rgw keystone barbican project``
+
+:Description: The name of the OpenStack project associated with the `Barbican`_
+              user when using OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+``rgw keystone barbican domain``
+
+:Description: The name of the OpenStack domain associated with the `Barbican`_
+              user when using OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle
+.. _Barbican: ../barbican
+.. _Encryption: ../encryption
