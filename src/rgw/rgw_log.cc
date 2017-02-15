@@ -12,6 +12,7 @@
 #include "rgw_acl.h"
 #include "rgw_rados.h"
 #include "rgw_client_io.h"
+#include "rgw_rest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -250,6 +251,15 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("total_time", total_time);
   formatter->dump_string("user_agent",  entry.user_agent);
   formatter->dump_string("referrer",  entry.referrer);
+  if (entry.x_headers.size() > 0) {
+    formatter->open_array_section("http_x_headers");
+    for (const auto& iter: entry.x_headers) {
+      formatter->open_object_section(iter.first.c_str());
+      formatter->dump_string(iter.first.c_str(), iter.second);
+      formatter->close_section();
+    }
+    formatter->close_section();
+  }
   formatter->close_section();
 }
 
@@ -290,7 +300,8 @@ void OpsLogSocket::log(struct rgw_log_entry& entry)
   append_output(bl);
 }
 
-int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog)
+int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
+	       const string& op_name, OpsLogSocket *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
@@ -338,6 +349,18 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   set_param_str(s, "HTTP_REFERRER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
+
+  /* custom header logging */
+  if (rest) {
+    if (rest->log_x_headers()) {
+      for (const auto& iter : s->info.env->get_map()) {
+	if (rest->log_x_header(iter.first)) {
+	  entry.x_headers.insert(
+	    rgw_log_entry::headers_map::value_type(iter.first, iter.second));
+	}
+      }
+    }
+  }
 
   entry.user = s->user->user_id.to_str();
   if (s->object_acl)
