@@ -87,7 +87,7 @@
 class MigratorContext : public MDSInternalContextBase {
 protected:
   Migrator *mig;
-  MDSRank *get_mds() {
+  MDSRank *get_mds() override {
     return mig->mds;
   }
 public:
@@ -99,7 +99,7 @@ public:
 class MigratorLogContext : public MDSLogContextBase {
 protected:
   Migrator *mig;
-  MDSRank *get_mds() {
+  MDSRank *get_mds() override {
     return mig->mds;
   }
 public:
@@ -167,7 +167,7 @@ class C_MDC_EmptyImport : public MigratorContext {
   CDir *dir;
 public:
   C_MDC_EmptyImport(Migrator *m, CDir *d) : MigratorContext(m), dir(d) {}
-  void finish(int r) {
+  void finish(int r) override {
     mig->export_empty_import(dir);
   }
 };
@@ -692,7 +692,7 @@ public:
 	MigratorContext(m), ex(e), tid(t) {
           assert(ex != NULL);
         }
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r >= 0)
       mig->export_frozen(ex, tid);
   }
@@ -892,7 +892,7 @@ public:
    : MigratorContext(m), dir(d), tid(t) {
     assert(dir != NULL);
   }
-  void finish(int r) {
+  void finish(int r) override {
     mig->export_sessions_flushed(dir, tid);
   }
 };
@@ -1190,7 +1190,7 @@ public:
     MigratorContext(m), dir(d), tid(t) {
       assert(dir != NULL);
     }
-  void finish(int r) {
+  void finish(int r) override {
     mig->export_go_synced(dir, tid);
   }
 };
@@ -1544,7 +1544,7 @@ class C_MDS_ExportFinishLogged : public MigratorLogContext {
   CDir *dir;
 public:
   C_MDS_ExportFinishLogged(Migrator *m, CDir *d) : MigratorLogContext(m), dir(d) {}
-  void finish(int r) {
+  void finish(int r) override {
     mig->export_logged_finish(dir);
   }
 };
@@ -2229,7 +2229,7 @@ public:
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
     MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
   }
-  void finish(int r) {
+  void finish(int r) override {
     mig->import_logged_start(df, dir, from, imported_client_map, sseqmap);
   }
 };
@@ -3084,7 +3084,7 @@ public:
   map<client_t,uint64_t> sseqmap;
 
   C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorLogContext(m), in(i), from(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     mig->logged_import_caps(in, from, peer_exports, client_map, sseqmap);
   }  
 };

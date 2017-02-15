@@ -30,11 +30,11 @@ class C_MDC_Recover : public MDSIOContextBase {
 protected:
   RecoveryQueue *rq;
   CInode *in;
-  void finish(int r) {
+  void finish(int r) override {
     rq->_recovered(in, r, size, mtime);
   }
 
-  MDSRank *get_mds() {
+  MDSRank *get_mds() override {
     return rq->mds;
   }
 
