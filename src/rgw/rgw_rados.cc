@@ -6205,7 +6205,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
    *
    * TODO: delegate this check to un upper layer and compare with ACLs. */
   if (bucket_info.owner != archive_binfo.owner) {
-    return -EPERM;
+    return 0;
   }
 
   /* This code will be executed on latest version of the object. */
