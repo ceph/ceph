@@ -53,7 +53,7 @@ struct C_NotifyUpdate : public Context {
     : image_ctx(image_ctx), on_finish(on_finish) {
   }
 
-  virtual void complete(int r) override {
+  void complete(int r) override {
     CephContext *cct = image_ctx.cct;
     if (notified) {
       if (r == -ETIMEDOUT) {
@@ -81,7 +81,7 @@ struct C_NotifyUpdate : public Context {
     notified = true;
     image_ctx.notify_update(this);
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
     on_finish->complete(r);
   }
 };
@@ -299,7 +299,7 @@ struct C_InvokeAsyncRequest : public Context {
     complete(r);
   }
 
-  virtual void finish(int r) override {
+  void finish(int r) override {
     if (filter_error_codes.count(r) != 0) {
       r = 0;
     }

@@ -75,7 +75,7 @@ using namespace std;
 class ServerContext : public MDSInternalContextBase {
   protected:
   Server *server;
-  MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return server->mds;
   }
@@ -89,13 +89,13 @@ class ServerContext : public MDSInternalContextBase {
 class ServerLogContext : public MDSLogContextBase {
 protected:
   Server *server;
-  MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return server->mds;
   }
 
   MDRequestRef mdr;
-  void pre_finish(int r) {
+  void pre_finish(int r) override {
     if (mdr)
       mdr->mark_event("journal_committed: ");
   }
@@ -240,7 +240,7 @@ public:
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
     if (fin) {
@@ -585,7 +585,7 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
 }
 
 class C_MDS_TerminatedSessions : public ServerContext {
-  void finish(int r) {
+  void finish(int r) override {
     server->terminating_sessions = false;
   }
   public:
@@ -2451,7 +2451,7 @@ class C_MDS_TryFindInode : public ServerContext {
   MDRequestRef mdr;
 public:
   C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r == -ESTALE) // :( find_ino_peers failed
       server->respond_to_request(mdr, r);
     else
@@ -2798,7 +2798,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 struct C_MDS_LookupIno2 : public ServerContext {
   MDRequestRef mdr;
   C_MDS_LookupIno2(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_lookup_ino_2(mdr, r);
   }
 };
@@ -3115,7 +3115,7 @@ class C_MDS_openc_finish : public ServerLogContext {
 public:
   C_MDS_openc_finish(Server *s, MDRequestRef& r, CDentry *d, CInode *ni, snapid_t f) :
     ServerLogContext(s, r), dn(d), newi(ni), follows(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
 
     dn->pop_projected_linkage();
@@ -3576,7 +3576,7 @@ public:
   C_MDS_inode_update_finish(Server *s, MDRequestRef& r, CInode *i,
 			    bool sm=false, bool cr=false) :
     ServerLogContext(s, r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
 
     // apply
@@ -4485,7 +4485,7 @@ public:
 
   C_MDS_inode_xattr_update_finish(Server *s, MDRequestRef& r, CInode *i) :
     ServerLogContext(s, r), in(i) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
 
     // apply
@@ -4646,7 +4646,7 @@ class C_MDS_mknod_finish : public ServerLogContext {
 public:
   C_MDS_mknod_finish(Server *s, MDRequestRef& r, CDentry *d, CInode *ni) :
     ServerLogContext(s, r), dn(d), newi(ni) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
 
     // link the inode
@@ -4988,7 +4988,7 @@ public:
 			  version_t dnpv_, version_t tipv_) :
     ServerLogContext(s, r), dn(d), targeti(ti),
     dnpv(dnpv_), tipv(tipv_) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     server->_link_local_finish(mdr, dn, targeti, dnpv, tipv);
   }
@@ -5064,7 +5064,7 @@ public:
   C_MDS_link_remote_finish(Server *s, MDRequestRef& r, bool i, CDentry *d, CInode *ti) :
     ServerLogContext(s, r), inc(i), dn(d), targeti(ti),
     dpv(d->get_projected_version()) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     server->_link_remote_finish(mdr, inc, dn, targeti, dpv);
   }
@@ -5185,7 +5185,7 @@ class C_MDS_SlaveLinkPrep : public ServerLogContext {
 public:
   C_MDS_SlaveLinkPrep(Server *s, MDRequestRef& r, CInode *t) :
     ServerLogContext(s, r), targeti(t) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     server->_logged_slave_link(mdr, targeti);
   }
@@ -5197,7 +5197,7 @@ class C_MDS_SlaveLinkCommit : public ServerContext {
 public:
   C_MDS_SlaveLinkCommit(Server *s, MDRequestRef& r, CInode *t) :
     ServerContext(s), mdr(r), targeti(t) { }
-  void finish(int r) {
+  void finish(int r) override {
     server->_commit_slave_link(mdr, r, targeti);
   }
 };
@@ -5304,7 +5304,7 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
 
 struct C_MDS_CommittedSlave : public ServerLogContext {
   C_MDS_CommittedSlave(Server *s, MDRequestRef& m) : ServerLogContext(s, m) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_committed_slave(mdr);
   }
 };
@@ -5346,7 +5346,7 @@ void Server::_committed_slave(MDRequestRef& mdr)
 struct C_MDS_LoggedLinkRollback : public ServerLogContext {
   MutationRef mut;
   C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : ServerLogContext(s, r), mut(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_link_rollback_finish(mut, mdr);
   }
 };
@@ -5617,7 +5617,7 @@ public:
   C_MDS_unlink_local_finish(Server *s, MDRequestRef& r, CDentry *d, CDentry *sd) :
     ServerLogContext(s, r), dn(d), straydn(sd),
     dnpv(d->get_projected_version()) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     server->_unlink_local_finish(mdr, dn, straydn, dnpv);
   }
@@ -5787,7 +5787,7 @@ struct C_MDS_SlaveRmdirPrep : public ServerLogContext {
   CDentry *dn, *straydn;
   C_MDS_SlaveRmdirPrep(Server *s, MDRequestRef& r, CDentry *d, CDentry *st)
     : ServerLogContext(s, r), dn(d), straydn(st) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_logged_slave_rmdir(mdr, dn, straydn);
   }
 };
@@ -5796,7 +5796,7 @@ struct C_MDS_SlaveRmdirCommit : public ServerContext {
   MDRequestRef mdr;
   C_MDS_SlaveRmdirCommit(Server *s, MDRequestRef& r)
     : ServerContext(s), mdr(r) { }
-  void finish(int r) {
+  void finish(int r) override {
     server->_commit_slave_rmdir(mdr, r);
   }
 };
@@ -5971,7 +5971,7 @@ struct C_MDS_LoggedRmdirRollback : public ServerLogContext {
   CDentry *straydn;
   C_MDS_LoggedRmdirRollback(Server *s, MDRequestRef& m, metareqid_t mr, CDentry *d, CDentry *st)
     : ServerLogContext(s, m), reqid(mr), dn(d), straydn(st) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_rmdir_rollback_finish(mdr, reqid, dn, straydn);
   }
 };
@@ -6137,7 +6137,7 @@ public:
 		      CDentry *sdn, CDentry *ddn, CDentry *stdn) :
     ServerLogContext(s, r),
     srcdn(sdn), destdn(ddn), straydn(stdn) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     server->_rename_finish(mdr, srcdn, destdn, straydn);
   }
@@ -7150,7 +7150,7 @@ class C_MDS_SlaveRenamePrep : public ServerLogContext {
 public:
   C_MDS_SlaveRenamePrep(Server *s, MDRequestRef& m, CDentry *sr, CDentry *de, CDentry *st) :
     ServerLogContext(s, m), srcdn(sr), destdn(de), straydn(st) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 };
@@ -7161,7 +7161,7 @@ class C_MDS_SlaveRenameCommit : public ServerContext {
 public:
   C_MDS_SlaveRenameCommit(Server *s, MDRequestRef& m, CDentry *sr, CDentry *de, CDentry *st) :
     ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_commit_slave_rename(mdr, r, srcdn, destdn, straydn);
   }
 };
@@ -7171,7 +7171,7 @@ class C_MDS_SlaveRenameSessionsFlushed : public ServerContext {
 public:
   C_MDS_SlaveRenameSessionsFlushed(Server *s, MDRequestRef& r) :
     ServerContext(s), mdr(r) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_slave_rename_sessions_flushed(mdr);
   }
 };
@@ -7600,7 +7600,7 @@ struct C_MDS_LoggedRenameRollback : public ServerLogContext {
 			     CDentry *st, bool f) :
     ServerLogContext(s, r), mut(m), srcdn(sd), srcdnpv(pv), destdn(dd),
     straydn(st), finish_mdr(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_rename_rollback_finish(mut, mdr, srcdn, srcdnpv,
 				    destdn, straydn, finish_mdr);
   }
@@ -8090,7 +8090,7 @@ struct C_MDS_mksnap_finish : public ServerLogContext {
   SnapInfo info;
   C_MDS_mksnap_finish(Server *s, MDRequestRef& r, CInode *di, SnapInfo &i) :
     ServerLogContext(s, r), diri(di), info(i) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_mksnap_finish(mdr, diri, info);
   }
 };
@@ -8242,7 +8242,7 @@ struct C_MDS_rmsnap_finish : public ServerLogContext {
   snapid_t snapid;
   C_MDS_rmsnap_finish(Server *s, MDRequestRef& r, CInode *di, snapid_t sn) :
     ServerLogContext(s, r), diri(di), snapid(sn) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_rmsnap_finish(mdr, diri, snapid);
   }
 };
@@ -8368,7 +8368,7 @@ struct C_MDS_renamesnap_finish : public ServerLogContext {
   snapid_t snapid;
   C_MDS_renamesnap_finish(Server *s, MDRequestRef& r, CInode *di, snapid_t sn) :
     ServerLogContext(s, r), diri(di), snapid(sn) {}
-  void finish(int r) {
+  void finish(int r) override {
     server->_renamesnap_finish(mdr, diri, snapid);
   }
 };

@@ -1093,7 +1093,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       obc.ondisk_read_lock();
       return NULL;
     }
@@ -1108,7 +1108,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       obc.ondisk_write_lock();
       return NULL;
     }

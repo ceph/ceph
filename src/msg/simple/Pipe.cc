@@ -85,10 +85,10 @@ public:
       stop_delayed_delivery(false),
       delay_dispatching(false),
       stop_fast_dispatching_flag(false) { }
-  ~DelayedDelivery() {
+  ~DelayedDelivery() override {
     discard();
   }
-  void *entry();
+  void *entry() override;
   void queue(utime_t release, Message *m) {
     Mutex::Locker l(delay_lock);
     delay_queue.push_back(make_pair(release, m));

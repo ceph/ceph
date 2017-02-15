@@ -46,7 +46,7 @@ public:
     : ThreadPool(cct, "librbd::Journal", "tp_librbd_journ", 1) {
     start();
   }
-  virtual ~ThreadPoolSingleton() {
+  ~ThreadPoolSingleton() override {
     stop();
   }
 };
@@ -75,7 +75,7 @@ struct C_IsTagOwner : public Context {
                               {})) {
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     ldout(cct, 20) << this << " C_IsTagOwner::" << __func__ << ": r=" << r
 		   << dendl;
     if (r < 0) {
@@ -1738,11 +1738,11 @@ struct C_RefreshTags : public Context {
       lock("librbd::Journal::C_RefreshTags::lock") {
     async_op_tracker.start_op();
   }
-  virtual ~C_RefreshTags() {
+  ~C_RefreshTags() override {
      async_op_tracker.finish_op();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     on_finish->complete(r);
   }
 };

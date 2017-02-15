@@ -52,11 +52,11 @@ public:
   {
   }
 
-  ~RadosDeleteObjectsR()
+  ~RadosDeleteObjectsR() override
   {
   }
 
-  int run(void)
+  int run(void) override
   {
     int ret_val = 0;
     rados_t cl;
@@ -137,11 +137,11 @@ public:
   {
   }
 
-  ~RadosAddObjectsR()
+  ~RadosAddObjectsR() override
   {
   }
 
-  int run(void)
+  int run(void) override
   {
     int ret_val = 0;
     rados_t cl;

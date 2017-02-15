@@ -46,7 +46,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
     EXPECT_EQ("", connect_cluster_pp(*m_cluster));
   }
 
-  ~TestPoolWatcher() {
+  ~TestPoolWatcher() override {
     m_cluster->wait_for_latest_osdmap();
     for (auto& pool : m_pools) {
       EXPECT_EQ(0, m_cluster->pool_delete(pool.c_str()));

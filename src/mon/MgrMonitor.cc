@@ -106,7 +106,7 @@ class C_Updated : public Context {
 public:
   C_Updated(MgrMonitor *a, MonOpRequestRef c) :
     mm(a), op(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       // Success 
     } else if (r == -ECANCELED) {

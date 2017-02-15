@@ -39,13 +39,13 @@ public:
   TestMirroring() {}
 
 
-  virtual void TearDown() {
+  void TearDown() override {
     unlock_image();
 
     TestFixture::TearDown();
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
   }
 
@@ -662,13 +662,13 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   struct MirrorWatcher : public librados::WatchCtx2 {
     MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
     }
-    virtual void handle_notify(uint64_t notify_id, uint64_t cookie,
-                               uint64_t notifier_id, bufferlist& bl) {
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                               uint64_t notifier_id, bufferlist& bl) override {
       // received IMAGE_UPDATED notification from remove
       m_notified = true;
       m_ioctx.notify_ack(RBD_MIRRORING, notify_id, cookie, bl);
     }
-    virtual void handle_error(uint64_t cookie, int err) {
+    void handle_error(uint64_t cookie, int err) override {
     }
     librados::IoCtx &m_ioctx;
     bool m_notified = false;

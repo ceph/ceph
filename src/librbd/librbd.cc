@@ -78,7 +78,7 @@ struct C_OpenComplete : public Context {
     comp->init_time(ictx, librbd::AIO_TYPE_OPEN);
     comp->get();
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenComplete::finish: r=" << r << dendl;
     if (reopen) {
       delete reinterpret_cast<librbd::ImageCtx*>(*ictxp);
@@ -103,7 +103,7 @@ struct C_OpenAfterCloseComplete : public Context {
 			   void **ictxp)
     : ictx(ictx), comp(comp), ictxp(ictxp) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenAfterCloseComplete::finish: r=" << r
 			 << dendl;
     ictx->state->open(false, new C_OpenComplete(ictx, comp, ictxp, true));
@@ -118,7 +118,7 @@ struct C_CloseComplete : public Context {
     comp->init_time(ictx, librbd::AIO_TYPE_CLOSE);
     comp->get();
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     ldout(cct, 20) << "C_CloseComplete::finish: r=" << r << dendl;
     if (r < 0) {
       comp->fail(r);
@@ -138,7 +138,7 @@ struct C_UpdateWatchCB : public librbd::UpdateWatchCtx {
   C_UpdateWatchCB(rbd_update_callback_t watch_cb, void *arg) :
     watch_cb(watch_cb), arg(arg) {
   }
-  void handle_notify() {
+  void handle_notify() override {
     watch_cb(arg);
   }
 };
@@ -187,7 +187,7 @@ namespace librbd {
       : m_fn(fn), m_data(data)
     {
     }
-    int update_progress(uint64_t offset, uint64_t src_size)
+    int update_progress(uint64_t offset, uint64_t src_size) override
     {
       return m_fn(offset, src_size, m_data);
     }

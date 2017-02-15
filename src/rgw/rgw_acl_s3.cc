@@ -97,7 +97,7 @@ class ACLID_S3 : public XMLObj
 {
 public:
   ACLID_S3() {}
-  ~ACLID_S3() {}
+  ~ACLID_S3() override {}
   string& to_str() { return data; }
 };
 
@@ -105,21 +105,21 @@ class ACLURI_S3 : public XMLObj
 {
 public:
   ACLURI_S3() {}
-  ~ACLURI_S3() {}
+  ~ACLURI_S3() override {}
 };
 
 class ACLEmail_S3 : public XMLObj
 {
 public:
   ACLEmail_S3() {}
-  ~ACLEmail_S3() {}
+  ~ACLEmail_S3() override {}
 };
 
 class ACLDisplayName_S3 : public XMLObj
 {
 public:
  ACLDisplayName_S3() {}
- ~ACLDisplayName_S3() {}
+ ~ACLDisplayName_S3() override {}
 };
 
 bool ACLOwner_S3::xml_end(const char *el) {

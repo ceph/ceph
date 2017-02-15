@@ -417,7 +417,7 @@ namespace {
   public:
     CrushWalker(const CrushWrapper *crush, unsigned max_id)
       : Parent(crush), max_id(max_id) {}
-    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) {
+    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) override {
       int type = -1;
       if (qi.is_bucket()) {
 	if (!crush->get_item_name(qi.id)) {

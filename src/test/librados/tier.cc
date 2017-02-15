@@ -67,7 +67,7 @@ class LibRadosTwoPoolsPP : public RadosTestPP
 {
 public:
   LibRadosTwoPoolsPP() {};
-  virtual ~LibRadosTwoPoolsPP() {};
+  ~LibRadosTwoPoolsPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
@@ -78,14 +78,14 @@ protected:
   }
   static std::string cache_pool_name;
 
-  virtual void SetUp() {
+  void SetUp() override {
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
@@ -2742,7 +2742,7 @@ class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
   LibRadosTwoPoolsECPP() {};
-  virtual ~LibRadosTwoPoolsECPP() {};
+  ~LibRadosTwoPoolsECPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
@@ -2753,14 +2753,14 @@ protected:
   }
   static std::string cache_pool_name;
 
-  virtual void SetUp() {
+  void SetUp() override {
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 

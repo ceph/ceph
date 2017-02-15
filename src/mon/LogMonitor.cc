@@ -315,7 +315,7 @@ struct LogMonitor::C_Log : public C_MonOp {
   LogMonitor *logmon;
   C_Log(LogMonitor *p, MonOpRequestRef o) :
     C_MonOp(o), logmon(p) {}
-  void _finish(int r) {
+  void _finish(int r) override {
     if (r == -ECANCELED) {
       return;
     }

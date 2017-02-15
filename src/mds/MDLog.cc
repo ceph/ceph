@@ -91,9 +91,9 @@ void MDLog::set_write_iohint(unsigned iohint_flags)
 class C_MDL_WriteError : public MDSIOContextBase {
   protected:
   MDLog *mdlog;
-  MDSRank *get_mds() {return mdlog->mds;}
+  MDSRank *get_mds() override {return mdlog->mds;}
 
-  void finish(int r) {
+  void finish(int r) override {
     MDSRank *mds = get_mds();
     // assume journal is reliable, so don't choose action based on
     // g_conf->mds_action_on_write_error.
@@ -202,7 +202,7 @@ class C_ReopenComplete : public MDSInternalContext {
   MDSInternalContextBase *on_complete;
 public:
   C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdlog->append();
     on_complete->complete(r);
   }
@@ -339,10 +339,10 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 class C_MDL_Flushed : public MDSLogContextBase {
 protected:
   MDLog *mdlog;
-  MDSRank *get_mds() {return mdlog->mds;}
+  MDSRank *get_mds() override {return mdlog->mds;}
   MDSInternalContextBase *wrapped;
 
-  void finish(int r) {
+  void finish(int r) override {
     if (wrapped)
       wrapped->complete(r);
   }
@@ -678,7 +678,7 @@ class C_MaybeExpiredSegment : public MDSInternalContext {
   public:
   C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
     MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
-  void finish(int res) {
+  void finish(int res) override {
     if (res < 0)
       mdlog->mds->handle_write_error(res);
     mdlog->_maybe_expired(ls, op_prio);
