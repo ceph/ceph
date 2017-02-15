@@ -31,7 +31,7 @@ public:
 	  bufferlist *pbl, uint64_t delay_ns=0)
     : m_cct(cct), m_con(c), m_delay(delay_ns * std::chrono::nanoseconds(1)),
       m_lock(lock), m_bl(pbl), m_off(off) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::this_thread::sleep_for(m_delay);
     if (m_bl) {
       buffer::ptr bp(r);

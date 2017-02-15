@@ -1538,7 +1538,7 @@ struct C_PG_ActivateCommitted : public Context {
   epoch_t activation_epoch;
   C_PG_ActivateCommitted(PG *p, epoch_t e, epoch_t ae)
     : pg(p), epoch(e), activation_epoch(ae) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->_activate_committed(epoch, activation_epoch);
   }
 };
@@ -2053,7 +2053,7 @@ unsigned PG::get_scrub_priority()
 struct C_PG_FinishRecovery : public Context {
   PGRef pg;
   explicit C_PG_FinishRecovery(PG *p) : pg(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     pg->_finish_recovery(this);
   }
 };

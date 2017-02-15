@@ -2049,7 +2049,7 @@ struct C_JournaledAhead : public Context {
 
   C_JournaledAhead(FileStore *f, FileStore::OpSequencer *os, FileStore::Op *o, Context *ondisk):
     fs(f), osr(os), o(o), ondisk(ondisk) { }
-  void finish(int r) {
+  void finish(int r) override {
     fs->_journaled_ahead(osr, o, ondisk);
   }
 };
@@ -3807,7 +3807,7 @@ public:
   {
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     BackTrace *bt = new BackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";

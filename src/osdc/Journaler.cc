@@ -33,7 +33,7 @@ class Journaler::C_DelayFlush : public Context {
   Journaler *journaler;
   public:
   C_DelayFlush(Journaler *j) : journaler(j) {}
-  void finish(int r) {
+  void finish(int r) override {
     journaler->_do_delayed_flush();
   }
 };
@@ -112,7 +112,7 @@ class Journaler::C_ReadHead : public Context {
 public:
   bufferlist bl;
   explicit C_ReadHead(Journaler *l) : ls(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_read_head(r, bl);
   }
 };
@@ -124,7 +124,7 @@ public:
   bufferlist bl;
   C_RereadHead(Journaler *l, Context *onfinish_) : ls (l),
 						   onfinish(onfinish_) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_reread_head(r, bl, onfinish);
   }
 };
@@ -134,7 +134,7 @@ class Journaler::C_ProbeEnd : public Context {
 public:
   uint64_t end;
   explicit C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_probe_end(r, end);
   }
 };
@@ -146,7 +146,7 @@ public:
   uint64_t end;
   C_ReProbe(Journaler *l, C_OnFinisher *onfinish_) :
     ls(l), onfinish(onfinish_), end(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_reprobe(r, end, onfinish);
   }
 };
@@ -380,7 +380,7 @@ class Journaler::C_RereadHeadProbe : public Context
 public:
   C_RereadHeadProbe(Journaler *l, C_OnFinisher *finish) :
     ls(l), final_finish(finish) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_reread_head_and_probe(r, final_finish);
   }
 };
@@ -412,7 +412,7 @@ public:
   C_OnFinisher *oncommit;
   C_WriteHead(Journaler *l, Header& h_, C_OnFinisher *c) : ls(l), h(h_),
 							   oncommit(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_write_head(r, h, oncommit);
   }
 };
@@ -484,7 +484,7 @@ class Journaler::C_Flush : public Context {
 public:
   C_Flush(Journaler *l, int64_t s, ceph::real_time st)
     : ls(l), start(s), stamp(st) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_flush(r, start, stamp);
   }
 };
@@ -749,7 +749,7 @@ struct C_Journaler_Prezero : public Context {
   uint64_t from, len;
   C_Journaler_Prezero(Journaler *j, uint64_t f, uint64_t l)
     : journaler(j), from(f), len(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     journaler->_finish_prezero(r, from, len);
   }
 };
@@ -848,7 +848,7 @@ class Journaler::C_Read : public Context {
 public:
   bufferlist bl;
   C_Read(Journaler *j, uint64_t o, uint64_t l) : ls(j), offset(o), length(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_read(r, offset, length, bl);
   }
 };
@@ -858,7 +858,7 @@ class Journaler::C_RetryRead : public Context {
 public:
   explicit C_RetryRead(Journaler *l) : ls(l) {}
 
-  void finish(int r) {
+  void finish(int r) override {
     // Should only be called from waitfor_safe i.e. already inside lock
     // (ls->lock is locked
     ls->_prefetch();
@@ -1109,7 +1109,7 @@ class Journaler::C_EraseFinish : public Context {
   C_OnFinisher *completion;
   public:
   C_EraseFinish(Journaler *j, C_OnFinisher *c) : journaler(j), completion(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     journaler->_finish_erase(r, completion);
   }
 };
@@ -1228,7 +1228,7 @@ class Journaler::C_Trim : public Context {
   uint64_t to;
 public:
   C_Trim(Journaler *l, int64_t t) : ls(l), to(t) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_trim(r, to);
   }
 };
