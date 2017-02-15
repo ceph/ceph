@@ -33,6 +33,10 @@ public:
     return Base::get_axis_bucket_ranges(axis_config);
   }
 
+  const typename Base::axis_config_d& get_axis_config(int num) {
+    return Base::m_axes_config[num];
+  }
+
   template <typename F1, typename F2, typename F3>
   void visit_values(F1 f1, F2 f2, F3 f3) {
     Base::visit_values(f1, f2, f3);
@@ -95,6 +99,43 @@ TEST(PerfHistogram, ZeroedInitially) {
   for (int x = 0; x < XS; ++x) {
     for (int y = 0; y < YS; ++y) {
       ASSERT_EQ(0UL, h.read_bucket(x, y));
+    }
+  }
+}
+
+TEST(PerfHistogram, Copy) {
+  PerfHistogramAccessor<2> h1{x_axis, y_axis};
+  h1.inc_bucket(1, 1);
+  h1.inc_bucket(2, 3);
+  h1.inc_bucket(4, 5);
+
+  PerfHistogramAccessor<2> h2 = h1;
+
+  const int cx = 1;
+  const int cy = 2;
+
+  h1.inc_bucket(cx, cy);
+
+  // Axes configuration must be equal
+  for (int i = 0; i < 2; i++) {
+    const auto& ac1 = h1.get_axis_config(i);
+    const auto& ac2 = h2.get_axis_config(i);
+    ASSERT_EQ(ac1.m_name, ac2.m_name);
+    ASSERT_EQ(ac1.m_scale_type, ac2.m_scale_type);
+    ASSERT_EQ(ac1.m_min, ac2.m_min);
+    ASSERT_EQ(ac1.m_quant_size, ac2.m_quant_size);
+    ASSERT_EQ(ac1.m_buckets, ac2.m_buckets);
+  }
+
+  // second histogram must have histogram values equal to the first
+  // one at the time of copy
+  for (int x = 0; x < XS; x++) {
+    for (int y = 0; y < YS; y++) {
+      if (x == cx && y == cy) {
+        ASSERT_NE(h1.read_bucket(x, y), h2.read_bucket(x, y));
+      } else {
+        ASSERT_EQ(h1.read_bucket(x, y), h2.read_bucket(x, y));
+      }
     }
   }
 }
