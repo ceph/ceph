@@ -64,8 +64,8 @@ def task(ctx, config):
     # Remove any .yml files from /usr/share/ceph-ansible for collision
     ceph_installer.run(args=[
             'sudo',
-            'rm ',
-            '-rf',
+            'rm',
+            '-f',
             run.Raw('/usr/share/ceph-ansible/*.yml')
             ])
     # debug print new playbook
