@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/io/AioCompletion.h"
 #include <errno.h>
 
 #include "common/ceph_context.h"
@@ -12,7 +13,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
-#include "librbd/AioCompletion.h"
 #include "librbd/Journal.h"
 
 #ifdef WITH_LTTNG
@@ -23,14 +23,15 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::AioCompletion: "
+#define dout_prefix *_dout << "librbd::io::AioCompletion: "
 
 namespace librbd {
+namespace io {
 
 int AioCompletion::wait_for_complete() {
   tracepoint(librbd, aio_wait_for_complete_enter, this);
   lock.Lock();
-  while (state != STATE_COMPLETE)
+  while (state != AIO_STATE_COMPLETE)
     cond.Wait(lock);
   lock.Unlock();
   tracepoint(librbd, aio_wait_for_complete_exit, 0);
@@ -101,7 +102,7 @@ void AioCompletion::complete() {
     ictx->journal->commit_io_event(journal_tid, rval);
   }
 
-  state = STATE_CALLBACK;
+  state = AIO_STATE_CALLBACK;
   if (complete_cb) {
     lock.Unlock();
     complete_cb(rbd_comp, complete_arg);
@@ -115,7 +116,7 @@ void AioCompletion::complete() {
     ictx->event_socket.notify();
   }
 
-  state = STATE_COMPLETE;
+  state = AIO_STATE_COMPLETE;
   cond.Signal();
 
   // note: possible for image to be closed after op marked finished
@@ -138,7 +139,8 @@ void AioCompletion::start_op(bool ignore_type) {
   Mutex::Locker locker(lock);
   assert(ictx != nullptr);
   assert(!async_op.started());
-  if (state == STATE_PENDING && (ignore_type || aio_type != AIO_TYPE_FLUSH)) {
+  if (state == AIO_STATE_PENDING &&
+      (ignore_type || aio_type != AIO_TYPE_FLUSH)) {
     async_op.start_op(*ictx);
   }
 }
@@ -197,7 +199,7 @@ void AioCompletion::complete_request(ssize_t r)
 
 void AioCompletion::associate_journal_event(uint64_t tid) {
   Mutex::Locker l(lock);
-  assert(state == STATE_PENDING);
+  assert(state == AIO_STATE_PENDING);
   journal_tid = tid;
 }
 
@@ -206,7 +208,7 @@ bool AioCompletion::is_complete() {
   bool done;
   {
     Mutex::Locker l(lock);
-    done = this->state == STATE_COMPLETE;
+    done = this->state == AIO_STATE_COMPLETE;
   }
   tracepoint(librbd, aio_is_complete_exit, done);
   return done;
@@ -221,4 +223,5 @@ ssize_t AioCompletion::get_return_value() {
   return r;
 }
 
+} // namespace io
 } // namespace librbd

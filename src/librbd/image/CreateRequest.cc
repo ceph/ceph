@@ -8,12 +8,12 @@
 #include "include/assert.h"
 #include "librbd/Utils.h"
 #include "common/ceph_context.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/Journal.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/EnableRequest.h"
+#include "librbd/io/AioCompletion.h"
 #include "journal/Journaler.h"
 
 #define dout_subsys ceph_subsys_rbd

@@ -1,28 +1,34 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_COPYUP_REQUEST_H
-#define CEPH_LIBRBD_COPYUP_REQUEST_H
+#ifndef CEPH_LIBRBD_IO_COPYUP_REQUEST_H
+#define CEPH_LIBRBD_IO_COPYUP_REQUEST_H
 
 #include "librbd/AsyncOperation.h"
+#include "include/atomic.h"
 #include "include/int_types.h"
+#include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "librbd/io/Types.h"
+#include <string>
+#include <vector>
 
 namespace librbd {
 
-struct AioCompletion;
-template <typename I> class AioObjectRequest;
 struct ImageCtx;
+
+namespace io {
+
+struct AioCompletion;
+template <typename I> class ObjectRequest;
 
 class CopyupRequest {
 public:
-  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
-
   CopyupRequest(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
                 Extents &&image_extents);
   ~CopyupRequest();
 
-  void append_request(AioObjectRequest<ImageCtx> *req);
+  void append_request(ObjectRequest<ImageCtx> *req);
 
   void send();
 
@@ -72,7 +78,7 @@ private:
   Extents m_image_extents;
   State m_state;
   ceph::bufferlist m_copyup_data;
-  vector<AioObjectRequest<ImageCtx> *> m_pending_requests;
+  std::vector<ObjectRequest<ImageCtx> *> m_pending_requests;
   atomic_t m_pending_copyups;
 
   AsyncOperation m_async_op;
@@ -92,6 +98,7 @@ private:
   bool is_copyup_required();
 };
 
+} // namespace io
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_COPYUP_REQUEST_H
+#endif // CEPH_LIBRBD_IO_COPYUP_REQUEST_H

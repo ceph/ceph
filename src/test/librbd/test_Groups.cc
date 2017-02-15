@@ -12,12 +12,12 @@
 #include "common/RWLock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
-#include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/WatchNotifyTypes.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/assign/std/set.hpp>
@@ -35,7 +35,7 @@ using namespace ceph;
 using namespace boost::assign;
 using namespace librbd::watch_notify;
 
-void register_test_consistency_groups() {
+void register_test_groups() {
 }
 
 class TestLibCG : public TestFixture {

@@ -11,25 +11,25 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 
-#include "librbd/AioImageRequestWQ.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/exclusive_lock/AutomaticPolicy.h"
-#include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/StandardPolicy.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
 #include "librbd/LibrbdWriteback.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
+#include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/journal/StandardPolicy.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -189,7 +189,7 @@ struct C_InvalidateCache : public Context {
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      aio_work_queue(nullptr), op_work_queue(nullptr),
+      io_work_queue(nullptr), op_work_queue(nullptr),
       asok_hook(nullptr)
   {
     md_ctx.dup(p);
@@ -200,9 +200,9 @@ struct C_InvalidateCache : public Context {
     memset(&header, 0, sizeof(header));
 
     ThreadPool *thread_pool_singleton = get_thread_pool_instance(cct);
-    aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
-                                           cct->_conf->rbd_op_thread_timeout,
-                                           thread_pool_singleton);
+    io_work_queue = new io::ImageRequestWQ(
+      this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
+      thread_pool_singleton);
     op_work_queue = new ContextWQ("librbd::op_work_queue",
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
@@ -242,12 +242,12 @@ struct C_InvalidateCache : public Context {
     md_ctx.aio_flush();
     data_ctx.aio_flush();
     op_work_queue->drain();
-    aio_work_queue->drain();
+    io_work_queue->drain();
 
     delete journal_policy;
     delete exclusive_lock_policy;
     delete op_work_queue;
-    delete aio_work_queue;
+    delete io_work_queue;
     delete operations;
     delete state;
   }
