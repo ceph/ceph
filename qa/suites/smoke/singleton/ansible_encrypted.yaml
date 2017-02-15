@@ -15,7 +15,6 @@ overrides:
       ceph_stable: true
       ceph_stable_rh_storage: true
       ceph_test: true
-      journal_collocation: true
       journal_size: 1024
       osd_auto_discovery: false
 roles:
