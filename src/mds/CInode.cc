@@ -58,7 +58,7 @@ class CInodeIOContext : public MDSIOContextBase
 {
 protected:
   CInode *in;
-  MDSRank *get_mds() {return in->mdcache->mds;}
+  MDSRank *get_mds() override {return in->mdcache->mds;}
 public:
   explicit CInodeIOContext(CInode *in_) : in(in_) {
     assert(in != NULL);
@@ -943,7 +943,7 @@ struct C_IO_Inode_Stored : public CInodeIOContext {
   version_t version;
   Context *fin;
   C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     in->_stored(r, version, fin);
   }
 };
@@ -1033,7 +1033,7 @@ struct C_IO_Inode_Fetched : public CInodeIOContext {
   bufferlist bl, bl2;
   Context *fin;
   C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     // Ignore 'r', because we fetch from two places, so r is usually ENOENT
     in->_fetched(bl, bl2, fin);
   }
@@ -1126,7 +1126,7 @@ struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   version_t version;
   Context *fin;
   C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     in->_stored_backtrace(r, version, fin);
   }
 };
@@ -1866,8 +1866,8 @@ protected:
   CInode *in;
   CDir *dir;
   MutationRef mut;
-  MDSRank *get_mds() {return in->mdcache->mds;}
-  void finish(int r) {
+  MDSRank *get_mds() override {return in->mdcache->mds;}
+  void finish(int r) override {
     in->_finish_frag_update(dir, mut);
   }    
 
@@ -4016,7 +4016,7 @@ next:
       return true;
     }
 
-    void _done() {
+    void _done() override {
       if ((!results->raw_stats.checked || results->raw_stats.passed) &&
 	  (!results->backtrace.checked || results->backtrace.passed) &&
 	  (!results->inode.checked || results->inode.passed))
