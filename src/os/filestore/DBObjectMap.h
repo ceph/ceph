@@ -212,7 +212,7 @@ public:
   int upgrade_to_v2();
 
   /// Consistency check, debug, there must be no parallel writes
-  int check(std::ostream &out);
+  int check(std::ostream &out, bool repair = false);
 
   /// Ensure that all previous operations are durable
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0);

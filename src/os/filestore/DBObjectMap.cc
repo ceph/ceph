@@ -54,7 +54,7 @@ static void append_escaped(const string &in, string *out)
   }
 }
 
-int DBObjectMap::check(std::ostream &out)
+int DBObjectMap::check(std::ostream &out, bool repair)
 {
   int errors = 0;
   map<uint64_t, uint64_t> parent_to_num_children;
@@ -77,17 +77,24 @@ int DBObjectMap::check(std::ostream &out)
            complete_iter->next()) {
          if (prev && prev >= complete_iter->key()) {
              out << "Bad complete for " << header.oid << std::endl;
-             errors++;
              complete_error = true;
              break;
          }
          prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
       }
       if (complete_error) {
-        out << "Complete mapping:" << std::endl;
+        out << "Complete mapping for " << header.seq << " :" << std::endl;
         for (complete_iter->seek_to_first(); complete_iter->valid();
              complete_iter->next()) {
           out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
+        }
+        if (repair) {
+          KeyValueDB::Transaction t = db->get_transaction();
+          t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
+          db->submit_transaction(t);
+          out << "Cleared complete mapping to repair" << std::endl;
+        } else {
+          errors++;  // Only count when not repaired
         }
       }
 
@@ -1048,6 +1055,12 @@ int DBObjectMap::init(bool do_upgrade)
     // New store
     state.v = 2;
     state.seq = 1;
+  }
+  ostringstream ss;
+  int errors = check(ss, true);
+  if (errors) {
+    dout(5) << ss.str() << dendl;
+    return -EINVAL;
   }
   dout(20) << "(init)dbobjectmap: seq is " << state.seq << dendl;
   return 0;
