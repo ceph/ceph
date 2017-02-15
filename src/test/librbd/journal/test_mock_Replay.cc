@@ -28,18 +28,18 @@ template <>
 struct ImageRequest<MockReplayImageCtx> {
   static ImageRequest *s_instance;
 
-  MOCK_METHOD5(aio_write, void(AioCompletion *c, uint64_t off, size_t len,
-                               const char *buf, int op_flags));
+  MOCK_METHOD4(aio_write, void(AioCompletion *c, const Extents &image_extents,
+                               const bufferlist &bl, int op_flags));
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
-                        uint64_t off, size_t len, const char *buf,
+                        Extents &&image_extents, bufferlist &&bl,
                         int op_flags) {
     assert(s_instance != nullptr);
-    s_instance->aio_write(c, off, len, buf, op_flags);
+    s_instance->aio_write(c, image_extents, bl, op_flags);
   }
 
   MOCK_METHOD3(aio_discard, void(AioCompletion *c, uint64_t off, uint64_t len));
-  static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c, uint64_t off,
-                          uint64_t len) {
+  static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
+                          uint64_t off, uint64_t len) {
     assert(s_instance != nullptr);
     s_instance->aio_discard(c, off, len);
   }
@@ -80,6 +80,11 @@ using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::StrEq;
 using ::testing::WithArgs;
+
+MATCHER_P(BufferlistEqual, str, "") {
+  bufferlist bl(arg);
+  return (strncmp(bl.c_str(), str, strlen(str)) == 0);
+}
 
 MATCHER_P(CStrEq, str, "") {
   return (strncmp(arg, str, strlen(str)) == 0);
@@ -133,7 +138,7 @@ public:
                         io::AioCompletion **aio_comp, uint64_t off,
                         uint64_t len, const char *data) {
     EXPECT_CALL(mock_io_image_request,
-                aio_write(_, off, len, CStrEq(data), _))
+                aio_write(_, io::Extents{{off, len}}, BufferlistEqual(data), _))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 

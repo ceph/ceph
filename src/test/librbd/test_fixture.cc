@@ -123,7 +123,7 @@ int TestFixture::unlock_image() {
 }
 
 int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
-  int r = ictx.io_work_queue->write(0, 0, "", 0);
+  int r = ictx.io_work_queue->write(0, 0, {}, 0);
   if (r != 0) {
     return r;
   }

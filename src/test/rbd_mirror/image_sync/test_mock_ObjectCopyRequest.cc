@@ -10,6 +10,7 @@
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ReadResult.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -55,7 +56,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
     bufferlist bl;
     bl.append(std::string(len, '1'));
 
-    int r = image_ctx->io_work_queue->write(off, len, bl.c_str(), 0);
+    int r = image_ctx->io_work_queue->write(off, len, std::move(bl), 0);
     ASSERT_EQ(static_cast<int>(len), r);
 
     interval_set<uint64_t> w;
@@ -265,16 +266,16 @@ public:
 
       bufferlist remote_bl;
       remote_bl.append(std::string(object_size, '1'));
-      r = m_remote_image_ctx->io_work_queue->read(0, object_size,
-                                                  remote_bl.c_str(), 0);
+      r = m_remote_image_ctx->io_work_queue->read(
+        0, object_size, librbd::io::ReadResult{&remote_bl}, 0);
       if (r < 0) {
         return r;
       }
 
       bufferlist local_bl;
       local_bl.append(std::string(object_size, '1'));
-      r = m_local_image_ctx->io_work_queue->read(0, object_size,
-                                                 local_bl.c_str(), 0);
+      r = m_local_image_ctx->io_work_queue->read(
+        0, object_size, librbd::io::ReadResult{&local_bl}, 0);
       if (r < 0) {
         return r;
       }
