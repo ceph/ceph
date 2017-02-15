@@ -46,7 +46,7 @@ public:
     }
   }
 
-  TestOp *next(RadosTestContext &context)
+  TestOp *next(RadosTestContext &context) override
   {
     TestOp *retval = NULL;
 

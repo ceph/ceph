@@ -529,7 +529,7 @@ class AgentTimeoutCB : public Context {
   PGRef pg;
 public:
   explicit AgentTimeoutCB(PGRef _pg) : pg(_pg) {}
-  void finish(int) {
+  void finish(int) override {
     pg->agent_choose_mode_restart();
   }
 };
@@ -1784,7 +1784,7 @@ class OSDSocketHook : public AdminSocketHook {
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     bool r = osd->asok_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -4989,7 +4989,7 @@ struct C_OSD_GetVersion : public Context {
   OSD *osd;
   uint64_t oldest, newest;
   explicit C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r >= 0)
       osd->_got_mon_epochs(oldest, newest);
   }
@@ -6797,7 +6797,7 @@ struct C_OnMapCommit : public Context {
   MOSDMap *msg;
   C_OnMapCommit(OSD *o, epoch_t f, epoch_t l, MOSDMap *m)
     : osd(o), first(f), last(l), msg(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     osd->_committed_osd_maps(first, last, msg);
   }
 };
@@ -6810,7 +6810,7 @@ struct C_OnMapApply : public Context {
 	       const list<OSDMapRef> &pinned_maps,
 	       epoch_t e)
     : service(service), pinned_maps(pinned_maps), e(e) {}
-  void finish(int r) {
+  void finish(int r) override {
     service->clear_map_bl_cache_pins(e);
   }
 };
@@ -7905,7 +7905,7 @@ struct C_OpenPGs : public Context {
   C_OpenPGs(set<PGRef>& p, ObjectStore *s, OSD* o) : store(s), osd(o) {
     pgs.swap(p);
   }
-  void finish(int r) {
+  void finish(int r) override {
     RWLock::RLocker l(osd->pg_map_lock);
     for (auto p : pgs) {
       if (osd->pg_map.count(p->info.pgid)) {
@@ -8703,7 +8703,7 @@ public:
     osd(osd), name(n), con(con), osdmap(osdmap), map_epoch(map_epoch) {
   }
 
-  void finish(ThreadPool::TPHandle& tp) {
+  void finish(ThreadPool::TPHandle& tp) override {
     Session *session = static_cast<Session *>(
         con->get_priv());
     epoch_t last_sent_epoch;
@@ -9172,7 +9172,7 @@ struct C_CompleteSplits : public Context {
   set<boost::intrusive_ptr<PG> > pgs;
   C_CompleteSplits(OSD *osd, const set<boost::intrusive_ptr<PG> > &in)
     : osd(osd), pgs(in) {}
-  void finish(int r) {
+  void finish(int r) override {
     Mutex::Locker l(osd->osd_lock);
     if (osd->is_stopping())
       return;
