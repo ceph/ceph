@@ -367,6 +367,7 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 
   if (r < 0) {
     ldout(cct, 1) << __func__ << " try connecting failed." << dendl;
+    delete p;
     return r;
   }
   std::unique_ptr<RDMAConnectedSocketImpl> csi(p);
