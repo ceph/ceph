@@ -183,7 +183,7 @@ class ObjectOpCompletionCtx : public Context {
   bufferlist bl;
 public:
   explicit ObjectOpCompletionCtx(librados::ObjectOperationCompletion *c) : completion(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     completion->handle_completion(r, bl);
     delete completion;
   }
@@ -1602,7 +1602,7 @@ struct AioUnlockCompletion : public librados::ObjectOperationCompletion {
   AioUnlockCompletion(librados::AioCompletion *c) : completion(c->pc) {
     completion->get();
   };
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     rados_callback_t cb = completion->callback_complete;
     void *cb_arg = completion->callback_complete_arg;
     cb(completion, cb_arg);
@@ -4621,7 +4621,7 @@ struct C_WatchCB : public librados::WatchCtx {
   rados_watchcb_t wcb;
   void *arg;
   C_WatchCB(rados_watchcb_t _wcb, void *_arg) : wcb(_wcb), arg(_arg) {}
-  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
+  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) override {
     wcb(opcode, ver, arg);
   }
 };
@@ -4650,10 +4650,10 @@ struct C_WatchCB2 : public librados::WatchCtx2 {
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_gid,
-		     bufferlist& bl) {
+		     bufferlist& bl) override {
     wcb(arg, notify_id, cookie, notifier_gid, bl.c_str(), bl.length());
   }
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     if (errcb)
       errcb(arg, cookie, err);
   }
@@ -5424,7 +5424,7 @@ public:
 	      size_t *bytes_read,
 	      int *prval) : out_buf(out_buf), out_len(out_len),
 			    bytes_read(bytes_read), prval(prval) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (out_bl.length() > out_len) {
       if (prval)
 	*prval = -ERANGE;
@@ -5460,7 +5460,7 @@ public:
   bufferlist out_bl;
   C_out_buffer(char **out_buf, size_t *out_len) : out_buf(out_buf),
 						  out_len(out_len) {}
-  void finish(int r) {
+  void finish(int r) override {
     // ignore r since we don't know the meaning of return values
     // from custom class methods
     do_out_buffer(out_bl, out_buf, out_len);
@@ -5513,7 +5513,7 @@ class C_OmapIter : public Context {
   RadosOmapIter *iter;
 public:
   explicit C_OmapIter(RadosOmapIter *iter) : iter(iter) {}
-  void finish(int r) {
+  void finish(int r) override {
     iter->i = iter->values.begin();
   }
 };
@@ -5522,7 +5522,7 @@ class C_XattrsIter : public Context {
   librados::RadosXattrsIter *iter;
 public:
   explicit C_XattrsIter(librados::RadosXattrsIter *iter) : iter(iter) {}
-  void finish(int r) {
+  void finish(int r) override {
     iter->i = iter->attrset.begin();
   }
 };
@@ -5590,7 +5590,7 @@ struct C_OmapKeysIter : public Context {
   RadosOmapIter *iter;
   std::set<std::string> keys;
   explicit C_OmapKeysIter(RadosOmapIter *iter) : iter(iter) {}
-  void finish(int r) {
+  void finish(int r) override {
     // map each key to an empty bl
     for (std::set<std::string>::const_iterator i = keys.begin();
 	 i != keys.end(); ++i) {
