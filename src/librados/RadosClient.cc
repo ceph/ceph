@@ -396,7 +396,7 @@ struct C_aio_watch_flush_Complete : public Context {
     c->get();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     c->lock.Lock();
     c->rval = r;
     c->complete = true;

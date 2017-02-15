@@ -51,7 +51,7 @@ struct C_notify_Finish : public Context {
     linger_op->notify_result_bl = &reply_bl;
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     ldout(cct, 10) << __func__ << " completed notify (linger op "
                    << linger_op << "), r = " << r << dendl;
@@ -84,7 +84,7 @@ struct C_aio_linger_cancel : public Context {
   {
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     objecter->linger_cancel(linger_op);
   }
@@ -101,7 +101,7 @@ struct C_aio_linger_Complete : public Context {
     c->get();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (cancel || r < 0)
       c->io->client->finisher.queue(new C_aio_linger_cancel(c->io->objecter,
                                                             linger_op));
@@ -137,7 +137,7 @@ struct C_aio_notify_Complete : public C_aio_linger_Complete {
     complete_unlock(r);
   }
 
-  virtual void complete(int r) override {
+  void complete(int r) override {
     // invoked by C_notify_Finish (or C_aio_notify_Ack on failure)
     lock.Lock();
     finished = true;
@@ -170,7 +170,7 @@ struct C_aio_notify_Ack : public Context {
   {
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     ldout(cct, 10) << __func__ << " linger op " << oncomplete->linger_op << " "
                    << "acked (" << r << ")" << dendl;
@@ -192,7 +192,7 @@ struct C_aio_selfmanaged_snap_op_Complete : public Context {
     c->get();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     c->lock.Lock();
     c->rval = r;
     c->complete = true;
@@ -216,7 +216,7 @@ struct C_aio_selfmanaged_snap_create_Complete : public C_aio_selfmanaged_snap_op
       dest_snapid(dest_snapid) {
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       *dest_snapid = snapid;
     }
@@ -888,7 +888,7 @@ class C_ObjectOperation : public Context {
 public:
   ::ObjectOperation m_ops;
   explicit C_ObjectOperation(Context *c) : m_ctx(c) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_ctx->complete(r);
   }
 private:
@@ -1566,7 +1566,7 @@ struct WatchInfo : public Objecter::WatchContext {
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
-		     bufferlist& bl) {
+		     bufferlist& bl) override {
     ldout(ioctx->client->cct, 10) << __func__ << " " << notify_id
 				  << " cookie " << cookie
 				  << " notifier_id " << notifier_id
@@ -1583,7 +1583,7 @@ struct WatchInfo : public Objecter::WatchContext {
       ioctx->notify_ack(oid, notify_id, cookie, empty);
     }
   }
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     ldout(ioctx->client->cct, 10) << __func__ << " cookie " << cookie
 				  << " err " << err
 				  << dendl;
