@@ -1240,7 +1240,7 @@ void MDSRank::clientreplay_start()
 bool MDSRank::queue_one_replay()
 {
   if (replay_queue.empty()) {
-    clientreplay_done();
+    mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
     return false;
   }
   queue_waiter(replay_queue.front());
