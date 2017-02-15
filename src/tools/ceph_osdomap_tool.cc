@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     ("debug", "Additional debug output from DBObjectMap")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
-     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers], mandatory")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair], mandatory")
     ;
   po::positional_options_description p;
   p.add("command", 1);
@@ -109,6 +109,9 @@ int main(int argc, char **argv) {
     std::cerr << "Output: " << out.str() << std::endl;
     goto done;
   }
+  // We don't call omap.init() here because it will repair
+  // the DBObjectMap which we might want to examine for diagnostic
+  // reasons.  Instead use --command repair.
   r = 0;
 
 
@@ -157,14 +160,15 @@ int main(int argc, char **argv) {
 	j->value().hexdump(std::cout);
       }
     }
-  } else if (cmd == "check") {
-    r = omap.check(std::cout);
+  } else if (cmd == "check" || cmd == "repair") {
+    bool repair = (cmd == "repair");
+    r = omap.check(std::cout, repair);
     if (r > 0) {
       std::cerr << "check got " << r << " error(s)" << std::endl;
       r = 1;
       goto done;
     }
-    std::cout << "check succeeded" << std::endl;
+    std::cout << (repair ? "repair" : "check") << " succeeded" << std::endl;
   } else if (cmd == "dump-headers") {
     vector<DBObjectMap::_Header> headers;
     r = omap.list_object_headers(&headers);
