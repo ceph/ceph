@@ -110,7 +110,7 @@ struct Trimmer : public ObjectModDesc::Visitor {
     PGBackend *pg,
     ObjectStore::Transaction *t)
     : soid(soid), pg(pg), t(t) {}
-  void rmobject(version_t old_version) {
+  void rmobject(version_t old_version) override {
     pg->trim_rollback_object(
       soid,
       old_version,

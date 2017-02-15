@@ -3126,7 +3126,7 @@ public:
   unsigned seq;
   int64_t poolid;
   explicit MixedGenerator(int64_t p) : seq(0), poolid(p) {}
-  ghobject_t create_object(gen_type *gen) {
+  ghobject_t create_object(gen_type *gen) override {
     char buf[100];
     snprintf(buf, sizeof(buf), "OBJ_%u", seq);
     string name(buf);
@@ -3188,7 +3188,7 @@ public:
     C_SyntheticOnReadable(SyntheticWorkloadState *state, ghobject_t hoid)
       : state(state), hoid(hoid) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(state->lock);
       EnterExit ee("onreadable finish");
       ASSERT_TRUE(state->in_flight_objects.count(hoid));
@@ -3215,7 +3215,7 @@ public:
 		       ghobject_t oid, ghobject_t noid)
       : state(state), oid(oid), noid(noid) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(state->lock);
       EnterExit ee("stash finish");
       ASSERT_TRUE(state->in_flight_objects.count(oid));
@@ -3242,7 +3242,7 @@ public:
                        ghobject_t oid, ghobject_t noid)
       : state(state), oid(oid), noid(noid) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(state->lock);
       EnterExit ee("clone finish");
       ASSERT_TRUE(state->in_flight_objects.count(oid));

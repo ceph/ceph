@@ -28,9 +28,9 @@
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
   PGLogTest() : PGLog(g_ceph_context) {}
-  virtual void SetUp() { }
+  void SetUp() override { }
 
-  virtual void TearDown() {
+  void TearDown() override {
     clear();
   }
 
@@ -157,20 +157,20 @@ public:
     list<pg_log_entry_t> rolledback;
     
     void rollback(
-      const pg_log_entry_t &entry) {
+      const pg_log_entry_t &entry) override {
       rolledback.push_back(entry);
     }
     void rollforward(
-      const pg_log_entry_t &entry) {}
+      const pg_log_entry_t &entry) override {}
     void remove(
-      const hobject_t &hoid) {
+      const hobject_t &hoid) override {
       removed.insert(hoid);
     }
     void try_stash(const hobject_t &, version_t) override {
       // lost/unfound cases are not tested yet
     }
     void trim(
-      const pg_log_entry_t &entry) {}
+      const pg_log_entry_t &entry) override {}
   };
 
   template <typename missing_t>
@@ -276,11 +276,11 @@ struct TestHandler : public PGLog::LogEntryHandler {
   explicit TestHandler(list<hobject_t> &removed) : removed(removed) {}
 
   void rollback(
-    const pg_log_entry_t &entry) {}
+    const pg_log_entry_t &entry) override {}
   void rollforward(
-    const pg_log_entry_t &entry) {}
+    const pg_log_entry_t &entry) override {}
   void remove(
-    const hobject_t &hoid) {
+    const hobject_t &hoid) override {
     removed.push_back(hoid);
   }
   void cant_rollback(const pg_log_entry_t &entry) {}
@@ -288,7 +288,7 @@ struct TestHandler : public PGLog::LogEntryHandler {
     // lost/unfound cases are not tested yet
   }
   void trim(
-    const pg_log_entry_t &entry) {}
+    const pg_log_entry_t &entry) override {}
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
