@@ -58,28 +58,37 @@ public:
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_applied(
-    ceph_tid_t tid, eversion_t version);
+    ceph_tid_t tid,
+    eversion_t version,
+    const ZTracer::Trace &trace);
   void sub_write_committed(
-    ceph_tid_t tid, eversion_t version, eversion_t last_complete);
+    ceph_tid_t tid,
+    eversion_t version,
+    eversion_t last_complete,
+    const ZTracer::Trace &trace);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
+    const ZTracer::Trace &trace,
     Context *on_local_applied_sync = 0
     );
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
-    ECSubReadReply *reply
+    ECSubReadReply *reply,
+    const ZTracer::Trace &trace
     );
   void handle_sub_write_reply(
     pg_shard_t from,
-    const ECSubWriteReply &op
+    const ECSubWriteReply &op,
+    const ZTracer::Trace &trace
     );
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    RecoveryMessages *m
+    RecoveryMessages *m,
+    const ZTracer::Trace &trace
     );
 
   /// @see ReadOp below
@@ -370,6 +379,8 @@ public:
     // of the available shards.
     bool for_recovery;
 
+    ZTracer::Trace trace;
+
     map<hobject_t, read_request_t> to_read;
     map<hobject_t, read_result_t> complete;
 
@@ -447,6 +458,7 @@ public:
     vector<pg_log_entry_t> log_entries;
     ceph_tid_t tid;
     osd_reqid_t reqid;
+    ZTracer::Trace trace;
 
     eversion_t roll_forward_to; /// Soon to be generated internally
 
