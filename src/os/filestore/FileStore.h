@@ -499,7 +499,8 @@ public:
 				const SequencerPosition &spos);
 
   /// close a replay guard opened with in_progress=true
-  void _close_replay_guard(int fd, const SequencerPosition& spos);
+  void _close_replay_guard(int fd, const SequencerPosition& spos,
+			   const ghobject_t *oid=0);
   void _close_replay_guard(const coll_t& cid, const SequencerPosition& spos);
 
   /**
