@@ -28,7 +28,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;

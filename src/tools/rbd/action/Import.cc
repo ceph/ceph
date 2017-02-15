@@ -46,7 +46,7 @@ public:
     }
   }
 
-  virtual void finish(int r)
+  void finish(int r) override
   {
     if (r < 0) {
       std::cerr << "rbd: error writing to destination image at offset "

@@ -46,7 +46,7 @@ class TestMockImageReplayerEventPreprocessor : public TestMockFixture {
 public:
   typedef EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;

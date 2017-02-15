@@ -62,7 +62,7 @@ public:
       m_pool(pools[pool_idx]) {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
 
@@ -111,7 +111,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     I &image_ctx = this->m_image_ctx;
     CephContext *cct = image_ctx.cct;
 

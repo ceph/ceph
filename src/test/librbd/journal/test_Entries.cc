@@ -32,18 +32,18 @@ public:
       : lock("ReplayHandler::lock"), entries_available(false), complete(false) {
     }
 
-    virtual void get() {
+    void get() override {
     }
-    virtual void put() {
+    void put() override {
     }
 
-    virtual void handle_entries_available()  {
+    void handle_entries_available() override  {
       Mutex::Locker locker(lock);
       entries_available = true;
       cond.Signal();
     }
 
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       Mutex::Locker locker(lock);
       complete = true;
       cond.Signal();
@@ -53,7 +53,7 @@ public:
   ReplayHandler m_replay_handler;
   Journalers m_journalers;
 
-  virtual void TearDown() {
+  void TearDown() override {
     for (Journalers::iterator it = m_journalers.begin();
          it != m_journalers.end(); ++it) {
       journal::Journaler *journaler = *it;

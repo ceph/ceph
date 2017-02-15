@@ -75,7 +75,7 @@ protected:
   typedef boost::tuple<uint64_t, size_t, bool> Diff;
   typedef std::list<Diff> Diffs;
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     CephContext *cct = m_image_ctx.cct;
     if (r == 0 && m_snap_ret < 0) {
       r = m_snap_ret;

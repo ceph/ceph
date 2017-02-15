@@ -205,7 +205,7 @@ public:
   typedef OpenImageRequest<librbd::MockTestImageCtx> MockOpenImageRequest;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
