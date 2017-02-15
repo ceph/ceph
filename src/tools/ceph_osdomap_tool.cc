@@ -161,6 +161,7 @@ int main(int argc, char **argv) {
     r = omap.check(std::cout);
     if (r > 0) {
       std::cerr << "check got " << r << " error(s)" << std::endl;
+      r = 1;
       goto done;
     }
     std::cout << "check succeeded" << std::endl;
@@ -176,8 +177,10 @@ int main(int argc, char **argv) {
       std::cout << i << std::endl;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
+    r = 1;
     goto done;
   }
+  r = 0;
 
   done:
   return r;
