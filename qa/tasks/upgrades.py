@@ -50,12 +50,29 @@ def task(ctx, config):
         'ceph-ansible'])
     time.sleep(4)
     # Replace the old files at same location
+    # debug print old playbook
+    ceph_installer.run(args=[
+            'cat',
+            'ceph-ansible/rolling_update.yml',
+            ])
     ceph_installer.run(args=[
         'cp',
         '-R',
         '/usr/share/ceph-ansible',
         '.'
         ])
+    # Remove any .yml files from /usr/share/ceph-ansible for collision
+    ceph_installer.run(args=[
+            'sudo',
+            'rm ',
+            '-rf',
+            run.Raw('/usr/share/ceph-ansible/*.yml')
+            ])
+    # debug print new playbook
+    ceph_installer.run(args=[
+            'cat',
+            'ceph-ansible/rolling_update.yml',
+            ])
     upg_cmd = ['cd', 'ceph-ansible', run.Raw(';'),
                'ansible-playbook', '-e', 'ireallymeanit=yes',
                '-vv', '-i', 'inven.yml', 'rolling_update.yml']
