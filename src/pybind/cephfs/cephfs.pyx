@@ -361,7 +361,7 @@ cdef class LibCephFS(object):
         if conf is not None and not isinstance(conf, dict):
             raise TypeError("conf must be dict or None")
         cstr(conffile, 'configfile', opt=True)
-        auth_id = cstr(auth_id, 'configfile', opt=True)
+        auth_id = cstr(auth_id, 'auth_id', opt=True)
 
         cdef:
             char* _auth_id = opt_str(auth_id)
