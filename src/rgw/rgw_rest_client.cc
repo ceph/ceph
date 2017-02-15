@@ -319,7 +319,7 @@ class RGWRESTStreamOutCB : public RGWGetDataCB {
   RGWRESTStreamWriteRequest *req;
 public:
   explicit RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len); /* callback for object iteration when sending data */
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override; /* callback for object iteration when sending data */
 };
 
 int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
@@ -797,7 +797,7 @@ class StreamIntoBufferlist : public RGWGetDataCB {
   bufferlist& bl;
 public:
   StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
     bl.claim_append(inbl);
     return bl_len;
   }

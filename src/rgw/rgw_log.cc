@@ -98,7 +98,7 @@ class UsageLogger {
     UsageLogger *logger;
   public:
     explicit C_UsageLogTimeout(UsageLogger *_l) : logger(_l) {}
-    void finish(int r) {
+    void finish(int r) override {
       logger->flush();
       logger->set_timer();
     }

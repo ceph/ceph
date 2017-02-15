@@ -698,7 +698,7 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
 
 class RGWSetBucketVersioningParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -901,7 +901,7 @@ class RGWLocationConstraint : public XMLObj
 public:
   RGWLocationConstraint() {}
   ~RGWLocationConstraint() {}
-  bool xml_end(const char *el) {
+  bool xml_end(const char *el) override {
     if (!el)
       return false;
 
@@ -922,7 +922,7 @@ public:
 
 class RGWCreateBucketParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -2545,7 +2545,7 @@ void RGWGetRequestPayment_ObjStore_S3::send_response()
 
 class RGWSetRequestPaymentParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
