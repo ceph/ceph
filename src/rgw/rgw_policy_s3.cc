@@ -47,7 +47,7 @@ public:
 
 class RGWPolicyCondition_StrEqual : public RGWPolicyCondition {
 protected:
-  bool check(const string& first, const string& second, string& msg) {
+  bool check(const string& first, const string& second, string& msg) override {
     bool ret = first.compare(second) == 0;
     if (!ret) {
       msg = "Policy condition failed: eq";
@@ -58,7 +58,7 @@ protected:
 
 class RGWPolicyCondition_StrStartsWith : public RGWPolicyCondition {
 protected:
-  bool check(const string& first, const string& second, string& msg) {
+  bool check(const string& first, const string& second, string& msg) override {
     bool ret = first.compare(0, second.size(), second) == 0;
     if (!ret) {
       msg = "Policy condition failed: starts-with";

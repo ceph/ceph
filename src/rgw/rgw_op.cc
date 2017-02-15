@@ -62,7 +62,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
-  bool filter(string& name, string& key) {
+  bool filter(string& name, string& key) override {
     int len = name.size();
     if (len < 6)
       return false;
@@ -2576,14 +2576,14 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand) override;
   int do_complete(size_t accounted_size, const string& etag, real_time *mtime,
                   real_time set_mtime, map<string, bufferlist>& attrs,
                   real_time delete_at, const char *if_match,
                   const char *if_nomatch) override;
 
 public:
-  bool immutable_head() { return true; }
+  bool immutable_head() override { return true; }
   RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
@@ -2757,9 +2757,9 @@ class RGWPutObj_CB : public RGWGetDataCB
   RGWPutObj *op;
 public:
   RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
-  virtual ~RGWPutObj_CB() {}
+  ~RGWPutObj_CB() {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     return op->get_data_cb(bl, bl_ofs, bl_len);
   }
 };
