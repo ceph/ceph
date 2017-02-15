@@ -1738,6 +1738,69 @@ namespace librbd {
       op->exec("rbd", "mirror_image_status_remove_down", bl);
     }
 
+    void mirror_instances_list_start(librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "mirror_instances_list", bl);
+    }
+
+    int mirror_instances_list_finish(bufferlist::iterator *iter,
+                                     std::vector<std::string> *instance_ids) {
+      instance_ids->clear();
+      try {
+	::decode(*instance_ids, *iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_instances_list(librados::IoCtx *ioctx,
+                              std::vector<std::string> *instance_ids) {
+      librados::ObjectReadOperation op;
+      mirror_instances_list_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_MIRROR_LEADER, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      r = mirror_instances_list_finish(&iter, instance_ids);
+      if (r < 0) {
+	return r;
+      }
+      return 0;
+    }
+
+    void mirror_instances_add(librados::ObjectWriteOperation *op,
+                              const std::string &instance_id) {
+      bufferlist bl;
+      ::encode(instance_id, bl);
+      op->exec("rbd", "mirror_instances_add", bl);
+    }
+
+    int mirror_instances_add(librados::IoCtx *ioctx,
+                             const std::string &instance_id) {
+      librados::ObjectWriteOperation op;
+      mirror_instances_add(&op, instance_id);
+      return ioctx->operate(RBD_MIRROR_LEADER, &op);
+    }
+
+    void mirror_instances_remove(librados::ObjectWriteOperation *op,
+                                 const std::string &instance_id) {
+      bufferlist bl;
+      ::encode(instance_id, bl);
+      op->exec("rbd", "mirror_instances_remove", bl);
+    }
+
+    int mirror_instances_remove(librados::IoCtx *ioctx,
+                                const std::string &instance_id) {
+      librados::ObjectWriteOperation op;
+      mirror_instances_remove(&op, instance_id);
+      return ioctx->operate(RBD_MIRROR_LEADER, &op);
+    }
+
     // Consistency groups functions
     int group_create(librados::IoCtx *ioctx, const std::string &oid)
     {
