@@ -633,7 +633,7 @@ protected:
     }
   }
 
-  virtual void dump_item(const CrushTreeDumper::Item &qi, F *f) {
+  void dump_item(const CrushTreeDumper::Item &qi, F *f) override {
     if (!tree && qi.is_bucket())
       return;
 
@@ -784,7 +784,7 @@ protected:
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
   using OSDUtilizationDumper<TextTable>::dump_item;
-  virtual void dump_item(const CrushTreeDumper::Item &qi,
+  void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
 			 int64_t kb,
 			 int64_t kb_used,
@@ -792,7 +792,7 @@ protected:
 			 double& util,
 			 double& var,
 			 const size_t num_pgs,
-			 TextTable *tbl) {
+			 TextTable *tbl) override {
     *tbl << qi.id
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
@@ -868,7 +868,7 @@ public:
 
 protected:
   using OSDUtilizationDumper<Formatter>::dump_item;
-  virtual void dump_item(const CrushTreeDumper::Item &qi,
+  void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
 			 int64_t kb,
 			 int64_t kb_used,
@@ -876,7 +876,7 @@ protected:
 			 double& util,
 			 double& var,
 			 const size_t num_pgs,
-			 Formatter *f) {
+			 Formatter *f) override {
     f->open_object_section("item");
     CrushTreeDumper::dump_item_fields(crush, qi, f);
     f->dump_float("reweight", reweight);
@@ -1520,7 +1520,7 @@ public:
     MonOpRequestRef op)
     : C_MonOp(op), osdmon(osdmon) {}
 
-  void _finish(int) {
+  void _finish(int) override {
     MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
     osdmon->mon->send_reply(
       op,

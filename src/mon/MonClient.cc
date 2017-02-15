@@ -748,7 +748,7 @@ void MonClient::schedule_tick()
   struct C_Tick : public Context {
     MonClient *monc;
     explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) {
+    void finish(int r) override {
       monc->tick();
     }
   };
@@ -1025,7 +1025,7 @@ int MonClient::start_mon_command(const vector<string>& cmd,
       MonClient *monc;
       public:
       C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
-      void finish(int r) {
+      void finish(int r) override {
 	monc->_cancel_mon_command(tid, -ETIMEDOUT);
       }
     };
