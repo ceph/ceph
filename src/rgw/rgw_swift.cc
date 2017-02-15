@@ -617,10 +617,28 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
    * about account is neccessary to obtain its bucket tenant. Without that,
    * the access would be limited to accounts with empty tenant. */
   string bucket_tenant;
-  if (!s->account_name.empty()) {
+  if (! s->account_name.empty()) {
     RGWUserInfo uinfo;
+    const rgw_user acct_user(s->account_name);
 
-    if (rgw_get_user_info_by_uid(store, s->account_name, uinfo) < 0) {
+    ldout(s->cct, 20) << "temp url: loading RGWUserInfo for rgw_user="
+                      << acct_user << dendl;
+
+    if (acct_user.tenant.empty()) {
+      rgw_user tenanted_acct_user(acct_user);
+      tenanted_acct_user.tenant = acct_user.id;
+
+      /* The account name specified in the URL doesn't have the tenant part.
+       * This means we have to handle the special case for Keystone-created
+       * accounts when the "rgw_keystone_implicit_tenants" was turned on.
+       * For more details about this mechanism please refer to the comment
+       * in RGWSwift::update_user_info(). */
+      if (rgw_get_user_info_by_uid(store, tenanted_acct_user, uinfo) < 0) {
+        if (rgw_get_user_info_by_uid(store, acct_user, uinfo) < 0) {
+          return -EPERM;
+        }
+      }
+    } else if (rgw_get_user_info_by_uid(store, acct_user, uinfo) < 0) {
       return -EPERM;
     }
 
