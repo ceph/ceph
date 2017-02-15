@@ -64,7 +64,7 @@ public:
     }
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     int ret = m_callback();
     if (m_comp != NULL) {
       if (m_finisher != NULL) {
