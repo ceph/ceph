@@ -206,7 +206,7 @@ std::string get_namespace(const po::variables_map &vm, at::ArgumentModifier mod)
 {
   std::string nspace;
   std::string nspace_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
-    at::DEST_NAMESPACE : at::NAMESPACE);
+    at::DEST_NAMESPACE : at::NAMESPACE_NAME);
 
   if (vm.count(nspace_key)) {
     nspace = vm[nspace_key].as<std::string>();
@@ -216,6 +216,24 @@ std::string get_namespace(const po::variables_map &vm, at::ArgumentModifier mod)
     nspace = at::DEFAULT_NAMESPACE;
   }
   return nspace;
+}
+
+int get_special_namespace(const po::variables_map &vm,
+			  std::string *nspace_name,
+			  std::string prefix) {
+  if (nullptr == nspace_name) return -EINVAL;
+
+  std::string nspace_key = prefix + "-" + at::NAMESPACE_NAME;
+
+  if (vm.count(nspace_key)) {
+    *nspace_name = vm[nspace_key].as<std::string>();
+  }
+
+  if (nspace_name->empty()) {
+    *nspace_name = std::string("");
+  }
+
+  return 0;
 }
 
 int get_special_pool_group_names(const po::variables_map &vm,

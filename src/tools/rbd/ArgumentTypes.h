@@ -50,7 +50,7 @@ static const std::string IMAGE_ID("image-id");
 static const std::string CONFIG_PATH("conf");
 static const std::string POOL_NAME("pool");
 static const std::string DEST_POOL_NAME("dest-pool");
-static const std::string NAMESPACE("namespace");
+static const std::string NAMESPACE_NAME("namespace");
 static const std::string DEST_NAMESPACE("dest-namespace");
 static const std::string IMAGE_NAME("image");
 static const std::string DEST_IMAGE_NAME("dest");
@@ -133,6 +133,8 @@ std::string get_description_prefix(ArgumentModifier modifier);
 
 void add_special_pool_option(boost::program_options::options_description *opt,
 			     std::string prefix);
+void add_special_namespace_option(boost::program_options::options_description *opt,
+				  std::string prefix);
 
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,

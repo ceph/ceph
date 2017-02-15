@@ -108,6 +108,9 @@ std::string get_pool_name(const boost::program_options::variables_map &vm,
 std::string get_namespace(const boost::program_options::variables_map &vm,
 			  argument_types::ArgumentModifier mod = argument_types::ARGUMENT_MODIFIER_SOURCE);
 
+int get_special_namespace(const boost::program_options::variables_map &vm, std::string *nspace_name,
+			  std::string prefix);
+
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
