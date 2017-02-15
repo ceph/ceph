@@ -827,7 +827,7 @@ class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
   LibRadosTwoPoolsECPP() {};
-  virtual ~LibRadosTwoPoolsECPP() {};
+  ~LibRadosTwoPoolsECPP() {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
@@ -841,12 +841,12 @@ protected:
   }
   static std::string src_pool_name;
 
-  virtual void SetUp() {
+  void SetUp() override {
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
     src_ioctx.set_namespace(nspace);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     // wait for maps to settle before next test
     cluster.wait_for_latest_osdmap();
 
