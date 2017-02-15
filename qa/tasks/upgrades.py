@@ -58,7 +58,7 @@ def task(ctx, config):
         ])
     upg_cmd = ['cd', 'ceph-ansible', run.Raw(';'),
                'ansible-playbook', '-e', 'ireallymeanit=yes',
-               '-vv', '-i', 'hosts', 'rolling_update.yml']
+               '-vv', '-i', 'inven.yml', 'rolling_update.yml']
 
     ceph_installer.run(args=upg_cmd, timeout=4200)
     yield
