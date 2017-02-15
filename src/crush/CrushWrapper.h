@@ -54,6 +54,9 @@ public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
+  std::map<int32_t, int32_t> class_map; /* item id -> class id */
+  std::map<int32_t, string> class_name; /* class id -> class name */
+  std::map<string, int32_t> class_rname; /* class name -> class id */
 
 private:
   struct crush_map *crush;
@@ -391,6 +394,44 @@ public:
     name_map[i] = name;
     if (have_rmaps)
       name_rmap[name] = i;
+    return 0;
+  }
+
+  const char *get_class_name(int i) const {
+    std::map<int,string>::const_iterator p = class_name.find(i);
+    if (p != class_name.end())
+      return p->second.c_str();
+    return 0;
+  }
+  int get_class_id(const string& name) const {
+    std::map<string,int>::const_iterator p = class_rname.find(name);
+    if (p != class_rname.end())
+      return p->second;
+    else
+      return -EINVAL;
+  }
+  int get_or_create_class_id(const string& name) {
+    int c = get_class_id(name);
+    if (c < 0) {
+      int i = class_name.size();
+      class_name[i] = name;
+      class_rname[name] = i;
+      return i;
+    } else {
+      return c;
+    }
+  }
+
+  const char *get_item_class(int t) const {
+    std::map<int,int>::const_iterator p = class_map.find(t);
+    if (p == class_map.end())
+      return 0;
+    return get_class_name(p->second);
+  }
+  int set_item_class(int i, const string& name) {
+    if (!is_valid_crush_name(name))
+      return -EINVAL;
+    class_map[i] = get_or_create_class_id(name);
     return 0;
   }
 

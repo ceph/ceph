@@ -108,7 +108,7 @@ struct crush_grammar : public grammar<crush_grammar>
       tunable = str_p("tunable") >> name >> posint;
 
       // devices
-      device = str_p("device") >> posint >> name;
+      device = str_p("device") >> posint >> name >> !( str_p("class") >> name );
 
       // bucket types
       bucket_type = str_p("type") >> posint >> name;
