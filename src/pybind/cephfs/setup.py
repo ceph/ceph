@@ -106,7 +106,7 @@ def check_sanity():
         compiler.link_executable(
             objects=link_objects,
             output_progname=os.path.join(tmp_dir, 'cephfs_dummy'),
-            libraries=['cephfs', 'rados'],
+            libraries=['cephfs'],
             output_dir=tmp_dir,
         )
 
@@ -180,7 +180,7 @@ setup(
                 [source],
                 include_dirs=flags['cflags']['I'],
                 library_dirs=flags['ldflags']['L'],
-                libraries=['rados', 'cephfs'] + flags['ldflags']['l'],
+                libraries=['cephfs'] + flags['ldflags']['l'],
                 extra_compile_args=flags['cflags']['extras'] + flags['ldflags']['extras'],
             )
         ],
