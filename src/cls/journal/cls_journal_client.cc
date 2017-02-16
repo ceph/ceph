@@ -54,7 +54,7 @@ struct C_ClientList : public C_AioExec {
     rados_completion->release();
   }
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     if (r < 0) {
       finish(r);
       return;
@@ -81,7 +81,7 @@ struct C_ClientList : public C_AioExec {
     }
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     on_finish->complete(r);
     delete this;
   }
@@ -115,7 +115,7 @@ struct C_ImmutableMetadata : public C_AioExec {
     rados_completion->release();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r == 0) {
       try {
         bufferlist::iterator iter = outbl.begin();
@@ -155,7 +155,7 @@ struct C_MutableMetadata : public C_AioExec {
     rados_completion->release();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r == 0) {
       try {
         bufferlist::iterator iter = outbl.begin();

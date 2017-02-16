@@ -51,19 +51,19 @@ class LockdepObs : public md_config_obs_t {
 public:
   explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
   }
-  virtual ~LockdepObs() {
+  ~LockdepObs() {
     if (m_registered) {
       lockdep_unregister_ceph_context(m_cct);
     }
   }
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {"lockdep", NULL};
     return KEYS;
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     if (conf->lockdep && !m_registered) {
       lockdep_register_ceph_context(m_cct);
       m_registered = true;
@@ -97,7 +97,7 @@ public:
   }
 
   // md_config_obs_t
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
       "mempool_debug",
       NULL
@@ -106,7 +106,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     if (changed.count("mempool_debug")) {
       mempool::set_debug_mode(cct->_conf->mempool_debug);
     }
@@ -114,7 +114,7 @@ public:
 
   // AdminSocketHook
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     if (command == "dump_mempools") {
       std::unique_ptr<Formatter> f(Formatter::create(format));
       f->open_object_section("mempools");
@@ -140,7 +140,7 @@ public:
 
   ~CephContextServiceThread() {}
 
-  void *entry()
+  void *entry() override
   {
     while (1) {
       Mutex::Locker l(_lock);
@@ -203,7 +203,7 @@ class LogObs : public md_config_obs_t {
 public:
   explicit LogObs(ceph::logging::Log *l) : log(l) {}
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
       "log_file",
       "log_max_new",
@@ -224,7 +224,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     // stderr
     if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
       int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
@@ -287,7 +287,7 @@ class CephContextObs : public md_config_obs_t {
 public:
   explicit CephContextObs(CephContext *cct) : cct(cct) {}
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
       "enable_experimental_unrecoverable_data_corrupting_features",
       "crush_location",
@@ -297,7 +297,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
       ceph_spin_lock(&cct->_feature_lock);
@@ -364,7 +364,7 @@ public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     m_cct->do_command(command, cmdmap, format, &out);
     return true;
   }

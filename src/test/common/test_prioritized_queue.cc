@@ -19,13 +19,13 @@ protected:
   enum { item_size  = 100, };
   vector<Item> items;
 
-  virtual void SetUp() {
+  void SetUp() override {
     for (int i = 0; i < item_size; i++) {
       items.push_back(Item(i));
     }
     std::random_shuffle(items.begin(), items.end());
   }
-  virtual void TearDown() {
+  void TearDown() override {
     items.clear();
   }
 };
