@@ -293,6 +293,17 @@ public:
   bool undamaged(const fs_cluster_id_t fscid, const mds_rank_t rank);
 
   /**
+   * Initialize a Filesystem and assign a fscid.  Update legacy_client_fscid
+   * to point to the new filesystem if it's the only one.
+   *
+   * Caller must already have validated all arguments vs. the existing
+   * FSMap and OSDMap contents.
+   */
+  void create_filesystem(const std::string &name,
+                         int64_t metadata_pool, int64_t data_pool,
+                         uint64_t features);
+
+  /**
    * Mutator helper for Filesystem objects: expose a non-const
    * Filesystem pointer to `fn` and update epochs appropriately.
    */

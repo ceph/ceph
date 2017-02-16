@@ -229,6 +229,44 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
   //out << ", " << stopped.size() << " stopped";
 }
 
+
+void FSMap::create_filesystem(const std::string &name,
+                              int64_t metadata_pool, int64_t data_pool,
+                              uint64_t features)
+{
+  auto fs = std::make_shared<Filesystem>();
+  fs->mds_map.fs_name = name;
+  fs->mds_map.max_mds = 1;
+  fs->mds_map.data_pools.insert(data_pool);
+  fs->mds_map.metadata_pool = metadata_pool;
+  fs->mds_map.cas_pool = -1;
+  fs->mds_map.max_file_size = g_conf->mds_max_file_size;
+  fs->mds_map.compat = compat;
+  fs->mds_map.created = ceph_clock_now();
+  fs->mds_map.modified = ceph_clock_now();
+  fs->mds_map.session_timeout = g_conf->mds_session_timeout;
+  fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
+  fs->mds_map.enabled = true;
+  if (features & CEPH_FEATURE_SERVER_JEWEL) {
+    fs->fscid = next_filesystem_id++;
+    // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
+    // have initialized next_filesystem_id such that it's never used here.
+    assert(fs->fscid != FS_CLUSTER_ID_ANONYMOUS);
+  } else {
+    // Use anon fscid because this will get thrown away when encoding
+    // as legacy MDSMap for legacy mons.
+    assert(filesystems.empty());
+    fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
+  }
+  filesystems[fs->fscid] = fs;
+
+  // Created first filesystem?  Set it as the one
+  // for legacy clients to use
+  if (filesystems.size() == 1) {
+    legacy_client_fscid = fs->fscid;
+  }
+}
+
 void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 			list<pair<health_status_t,string> > *detail) const
 {
