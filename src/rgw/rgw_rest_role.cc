@@ -77,9 +77,7 @@ void RGWCreateRole::execute()
   if (op_ret < 0) {
     return;
   }
-  string uid;
-  s->user->user_id.to_str(uid);
-  RGWRole role(s->cct, store, role_name, role_path, trust_policy, uid);
+  RGWRole role(s->cct, store, role_name, role_path, trust_policy, s->user->user_id.tenant);
   op_ret = role.create(true);
 
   if (op_ret == -EEXIST) {

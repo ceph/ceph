@@ -2814,15 +2814,6 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
-  if (tenant.empty()) {
-    tenant = user_id.tenant;
-  } else {
-    if (user_id.empty()) {
-      cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
-      return EINVAL;
-    }
-    user_id.tenant = tenant;
-  }
 
   if (args.empty()) {
     return usage();
@@ -2862,6 +2853,15 @@ int main(int argc, const char **argv)
       }
     }
 
+    if (tenant.empty()) {
+      tenant = user_id.tenant;
+    } else {
+      if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE) {
+        cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
+        return EINVAL;
+      }
+      user_id.tenant = tenant;
+    }
     /* check key parameter conflict */
     if ((!access_key.empty()) && gen_access_key) {
         cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
@@ -4593,10 +4593,8 @@ int main(int argc, const char **argv)
     return 0;
   case OPT_ROLE_CREATE:
     {
-      string uid;
-      user_id.to_str(uid);
-      if (role_name.empty() || assume_role_doc.empty() || uid.empty()) {
-        cerr << "ERROR: one of role name or assume role policy document or uid is empty" << std::endl;
+      if (role_name.empty() || assume_role_doc.empty()) {
+        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
         return -EINVAL;
       }
       /* The following two calls will be replaced by read_decode_json or something
@@ -4613,7 +4611,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       string trust_policy = bl.to_str();
-      RGWRole role(g_ceph_context, store, role_name, path, trust_policy, uid);
+      RGWRole role(g_ceph_context, store, role_name, path, trust_policy, tenant);
       ret = role.create(true);
       if (ret < 0) {
         return -ret;

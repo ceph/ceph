@@ -17,7 +17,7 @@ class RGWRole
   string creation_date;
   string trust_policy;
   map<string, string> perm_policy_map;
-  string uid;
+  string tenant;
 
   int store_info(bool exclusive);
   int store_name(bool exclusive);
@@ -33,13 +33,13 @@ public:
           string name,
           string path,
           string trust_policy,
-          string uid)
+          string tenant)
   : cct(cct),
     store(store),
     name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
-    uid(std::move(uid)) {
+    tenant(std::move(tenant)) {
     if (this->path.empty())
       this->path = "/";
   }
