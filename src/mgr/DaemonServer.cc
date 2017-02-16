@@ -24,6 +24,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
 
 #define dout_context g_ceph_context
@@ -920,6 +921,148 @@ bool DaemonServer::handle_command(MCommand *m)
 	  });
       });
     cmdctx->reply(r, "");
+    return true;
+  } else if (prefix == "pg force-recovery" ||
+  	       prefix == "pg force-backfill" ||
+  	       prefix == "pg cancel-force-recovery" ||
+  	       prefix == "pg cancel-force-backfill") {
+    string forceop = prefix.substr(3, string::npos);
+    list<pg_t> parsed_pgs;
+    map<int, list<pg_t> > osdpgs;
+
+    // figure out actual op just once
+    int actual_op = 0;
+    if (forceop == "force-recovery") {
+      actual_op = OFR_RECOVERY;
+    } else if (forceop == "force-backfill") {
+      actual_op = OFR_BACKFILL;
+    } else if (forceop == "cancel-force-backfill") {
+      actual_op = OFR_BACKFILL | OFR_CANCEL;
+    } else if (forceop == "cancel-force-recovery") {
+      actual_op = OFR_RECOVERY | OFR_CANCEL;
+    }
+
+    // covnert pg names to pgs, discard any invalid ones while at it
+    {
+      // we don't want to keep pgidstr and pgidstr_nodup forever
+      vector<string> pgidstr;
+      // get pgids to process and prune duplicates
+      cmd_getval(g_ceph_context, cmdctx->cmdmap, "pgid", pgidstr);
+      set<string> pgidstr_nodup(pgidstr.begin(), pgidstr.end());
+      if (pgidstr.size() != pgidstr_nodup.size()) {
+	// move elements only when there were duplicates, as this
+	// reorders them
+	pgidstr.resize(pgidstr_nodup.size());
+	auto it = pgidstr_nodup.begin();
+	for (size_t i = 0 ; i < pgidstr_nodup.size(); i++) {
+	  pgidstr[i] = std::move(*it++);
+	}
+      }
+
+      cluster_state.with_pgmap([&](const PGMap& pg_map) {
+	for (auto& pstr : pgidstr) {
+	  pg_t parsed_pg;
+	  if (!parsed_pg.parse(pstr.c_str())) {
+	    ss << "invalid pgid '" << pstr << "'; ";
+	    r = -EINVAL;
+	  } else {
+	    auto workit = pg_map.pg_stat.find(parsed_pg);
+	    if (workit == pg_map.pg_stat.end()) {
+	      ss << "pg " << pstr << " not exists; ";
+	      r = -ENOENT;
+	    } else {
+	      pg_stat_t workpg = workit->second;
+
+	      // discard pgs for which user requests are pointless
+	      switch (actual_op)
+	      {
+		case OFR_RECOVERY:
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING)) == 0) {
+		    // don't return error, user script may be racing with cluster. not fatal.
+		    ss << "pg " << pstr << " doesn't require recovery; ";
+		    continue;
+		  } else  if (workpg.state & PG_STATE_FORCED_RECOVERY) {
+		    ss << "pg " << pstr << " recovery already forced; ";
+		    // return error, as it may be a bug in user script
+		    r = -EINVAL;
+		    continue;
+		  }
+		  break;
+		case OFR_BACKFILL:
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL)) == 0) {
+		    ss << "pg " << pstr << " doesn't require backfilling; ";
+		    continue;
+		  } else  if (workpg.state & PG_STATE_FORCED_BACKFILL) {
+		    ss << "pg " << pstr << " backfill already forced; ";
+		    r = -EINVAL;
+		    continue;
+		  }
+		  break;
+		case OFR_BACKFILL | OFR_CANCEL:
+		  if ((workpg.state & PG_STATE_FORCED_BACKFILL) == 0) {
+		    ss << "pg " << pstr << " backfill not forced; ";
+		    continue;
+		  }
+		  break;
+		case OFR_RECOVERY | OFR_CANCEL:
+		  if ((workpg.state & PG_STATE_FORCED_RECOVERY) == 0) {
+		    ss << "pg " << pstr << " recovery not forced; ";
+		    continue;
+		  }
+		  break;
+		default:
+		  assert(0 == "actual_op value is not supported");
+	      }
+
+	      parsed_pgs.push_back(std::move(parsed_pg));
+	    }
+	  }
+	}
+
+	// group pgs to process by osd
+	for (auto& pgid : parsed_pgs) {
+	  auto workit = pg_map.pg_stat.find(pgid);
+	  if (workit != pg_map.pg_stat.end()) {
+	    pg_stat_t workpg = workit->second;
+	    set<int32_t> osds(workpg.up.begin(), workpg.up.end());
+	    osds.insert(workpg.acting.begin(), workpg.acting.end());
+	    for (auto i : osds) {
+	      osdpgs[i].push_back(pgid);
+	    }
+	  }
+	}
+
+      });
+    }
+
+    // respond with error only when no pgs are correct
+    // yes, in case of mixed errors, only the last one will be emitted,
+    // but the message presented will be fine
+    if (parsed_pgs.size() != 0) {
+      // clear error to not confuse users/scripts
+      r = 0;
+    }
+
+    // optimize the command -> messages conversion, use only one message per distinct OSD
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+      for (auto& i : osdpgs) {
+	if (osdmap.is_up(i.first)) {
+	  vector<pg_t> pgvec(make_move_iterator(i.second.begin()), make_move_iterator(i.second.end()));
+	  auto p = osd_cons.find(i.first);
+	  if (p == osd_cons.end()) {
+	    ss << "osd." << i.first << " is not currently connected";
+	    r = -EAGAIN;
+	    continue;
+	  }
+	  for (auto& con : p->second) {
+	    con->send_message(new MOSDForceRecovery(monc->get_fsid(), pgvec, actual_op));
+	  }
+	  ss << "instructing pg(s) " << i.second << " on osd." << i.first << " to " << forceop << "; ";
+	}
+      }
+    });
+    ss << std::endl;
+    cmdctx->reply(r, ss);
     return true;
   } else {
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
