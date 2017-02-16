@@ -7377,7 +7377,6 @@ void MDCache::check_memory_usage()
 	   << " total " << last.get_total()
 	   << ", rss " << last.get_rss()
 	   << ", heap " << last.get_heap()
-	   << ", malloc " << last.malloc << " mmap " << last.mmap
 	   << ", baseline " << baseline.get_heap()
 	   << ", buffers " << (buffer::get_total_alloc() >> 10)
 	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
@@ -7386,7 +7385,6 @@ void MDCache::check_memory_usage()
 
   mds->mlogger->set(l_mdm_rss, last.get_rss());
   mds->mlogger->set(l_mdm_heap, last.get_heap());
-  mds->mlogger->set(l_mdm_malloc, last.malloc);
 
   if (num_inodes_with_caps > g_conf->mds_cache_size) {
     float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
