@@ -5373,6 +5373,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
   dout(10) << "handle_pg_stats_ack " << dendl;
 
   if (!require_mon_peer(ack)) {
+    ack->put();
     return;
   }
 
@@ -5456,8 +5457,10 @@ void OSD::flush_pg_stats()
 
 void OSD::handle_command(MMonCommand *m)
 {
-  if (!require_mon_peer(m))
+  if (!require_mon_peer(m)) {
+    m->put();
     return;
+  }
 
   Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), NULL);
   command_wq.queue(c);
@@ -6575,8 +6578,10 @@ void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
-  if (!require_mon_peer(m))
+  if (!require_mon_peer(m)) {
+    m->put();
     return;
+  }
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     m->put();
@@ -7616,13 +7621,12 @@ void OSD::activate_map()
   take_waiters(waiting_for_osdmap);
 }
 
-bool OSD::require_mon_peer(Message *m)
+bool OSD::require_mon_peer(const Message *m)
 {
   if (!m->get_connection()->peer_is_mon()) {
     dout(0) << "require_mon_peer received from non-mon "
 	    << m->get_connection()->get_peer_addr()
 	    << " " << *m << dendl;
-    m->put();
     return false;
   }
   return true;
@@ -7789,16 +7793,9 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   dout(10) << "handle_pg_create " << *m << dendl;
 
-  /* we have to hack around require_mon_peer's interface limits, so
-   * grab an extra reference before going in. If the peer isn't
-   * a Monitor, the reference is put for us (and then cleared
-   * up automatically by our OpTracker infrastructure). Otherwise,
-   * we put the extra ref ourself.
-   */
-  if (!require_mon_peer(op->get_req()->get())) {
+  if (!require_mon_peer(op->get_req())) {
     return;
   }
-  op->get_req()->put();
 
   if (!require_same_or_newer_map(op, m->epoch, false))
     return;
