@@ -1017,6 +1017,13 @@ void OSDMap::get_blacklist(list<pair<entity_addr_t,utime_t> > *bl) const
    std::copy(blacklist.begin(), blacklist.end(), std::back_inserter(*bl));
 }
 
+void OSDMap::get_blacklist(std::set<entity_addr_t> *bl) const
+{
+  for (const auto &i : blacklist) {
+    bl->insert(i.first);
+  }
+}
+
 void OSDMap::set_max_osd(int m)
 {
   int o = max_osd;
