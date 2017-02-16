@@ -491,7 +491,7 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   return 0;
 }
 
-static int do_map()
+static int do_map(int argc, const char *argv[])
 {
   int r;
 
@@ -512,6 +512,15 @@ static int do_map()
   librbd::image_info_t info;
 
   Preforker forker;
+
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_DAEMON,
+                         CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  g_ceph_context->_conf->set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -710,8 +719,6 @@ close_ret:
 
 static int do_unmap()
 {
-  common_init_finish(g_ceph_context);
-
   int nbd = open_device(devpath.c_str());
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << devpath << std::endl;
@@ -753,8 +760,6 @@ static int do_list_mapped_devices()
   int m = 0;
   int fd[2];
 
-  common_init_finish(g_ceph_context);
-
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
     int r = -errno;
     cerr << "rbd-nbd: socketpair failed: " << cpp_strerror(-r) << std::endl;
@@ -793,11 +798,7 @@ static int rbd_nbd(int argc, const char *argv[])
   vector<const char*> args;
 
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON,
-			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  md_config_t().parse_argv(args);
 
   std::vector<const char*>::iterator i;
   std::ostringstream err;
@@ -888,7 +889,7 @@ static int rbd_nbd(int argc, const char *argv[])
         return EXIT_FAILURE;
       }
 
-      r = do_map();
+      r = do_map(argc, argv);
       if (r < 0)
         return EXIT_FAILURE;
       break;
