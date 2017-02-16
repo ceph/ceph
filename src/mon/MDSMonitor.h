@@ -152,7 +152,6 @@ class MDSMonitor : public PaxosService {
 
   map<mds_gid_t, Metadata> pending_metadata;
 
-  int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
   mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
 
   // When did the mon last call into our tick() method?  Used for detecting

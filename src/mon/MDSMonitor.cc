@@ -86,45 +86,6 @@ void MDSMonitor::print_map(FSMap &m, int dbl)
   *_dout << dendl;
 }
 
-void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
-    int metadata_pool, int data_pool)
-{
-  auto fs = std::make_shared<Filesystem>();
-  fs->mds_map.fs_name = name;
-  fs->mds_map.max_mds = 1;
-  fs->mds_map.data_pools.insert(data_pool);
-  fs->mds_map.metadata_pool = metadata_pool;
-  fs->mds_map.cas_pool = -1;
-  fs->mds_map.max_file_size = g_conf->mds_max_file_size;
-  fs->mds_map.compat = fsm.compat;
-  fs->mds_map.created = ceph_clock_now();
-  fs->mds_map.modified = ceph_clock_now();
-  fs->mds_map.session_timeout = g_conf->mds_session_timeout;
-  fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
-  fs->mds_map.enabled = true;
-  if (mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL) {
-    fs->fscid = fsm.next_filesystem_id++;
-    // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
-    // have initialized next_filesystem_id such that it's never used here.
-    assert(fs->fscid != FS_CLUSTER_ID_ANONYMOUS);
-  } else {
-    // Use anon fscid because this will get thrown away when encoding
-    // as legacy MDSMap for legacy mons.
-    assert(fsm.filesystems.empty());
-    fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
-  }
-  fsm.filesystems[fs->fscid] = fs;
-
-  // Created first filesystem?  Set it as the one
-  // for legacy clients to use
-  if (fsm.filesystems.size() == 1) {
-    fsm.legacy_client_fscid = fs->fscid;
-  }
-
-  print_map(fsm);
-}
-
-
 // service methods
 void MDSMonitor::create_initial()
 {
@@ -1375,9 +1336,13 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
       r = h->handle(mon, pending_fsmap, op, cmdmap, ss);
       if (r == -EAGAIN) {
         // message has been enqueued for retry; return.
-        dout(4) << __func__ << " enqueue for retry by management_command" << dendl;
+        dout(4) << __func__ << " enqueue for retry by prepare_command" << dendl;
         return false;
       } else {
+        if (r == 0) {
+          // On successful updates, print the updated map
+          print_map(pending_fsmap);
+        }
         // Successful or not, we're done: respond.
         goto out;
       }
@@ -1449,59 +1414,6 @@ out:
 }
 
 
-/**
- * Return 0 if the pool is suitable for use with CephFS, or
- * in case of errors return a negative error code, and populate
- * the passed stringstream with an explanation.
- */
-int MDSMonitor::_check_pool(
-    const int64_t pool_id,
-    std::stringstream *ss) const
-{
-  assert(ss != NULL);
-
-  const pg_pool_t *pool = mon->osdmon()->osdmap.get_pg_pool(pool_id);
-  if (!pool) {
-    *ss << "pool id '" << pool_id << "' does not exist";
-    return -ENOENT;
-  }
-
-  const string& pool_name = mon->osdmon()->osdmap.get_pool_name(pool_id);
-
-  if (pool->is_erasure()) {
-    // EC pools are only acceptable with a cache tier overlay
-    if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
-      *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
-         << " is an erasure-code pool";
-      return -EINVAL;
-    }
-
-    // That cache tier overlay must be writeback, not readonly (it's the
-    // write operations like modify+truncate we care about support for)
-    const pg_pool_t *write_tier = mon->osdmon()->osdmap.get_pg_pool(
-        pool->write_tier);
-    assert(write_tier != NULL);  // OSDMonitor shouldn't allow DNE tier
-    if (write_tier->cache_mode == pg_pool_t::CACHEMODE_FORWARD
-        || write_tier->cache_mode == pg_pool_t::CACHEMODE_READONLY) {
-      *ss << "EC pool '" << pool_name << "' has a write tier ("
-          << mon->osdmon()->osdmap.get_pool_name(pool->write_tier)
-          << ") that is configured "
-             "to forward writes.  Use a cache mode such as 'writeback' for "
-             "CephFS";
-      return -EINVAL;
-    }
-  }
-
-  if (pool->is_tier()) {
-    *ss << " pool '" << pool_name << "' (id '" << pool_id
-      << "') is already in use as a cache tier.";
-    return -EINVAL;
-  }
-
-  // Nothing special about this pool, so it is permissible
-  return 0;
-}
-
 class FlagSetHandler : public FileSystemCommandHandler
 {
   public:
@@ -1551,29 +1463,21 @@ class FlagSetHandler : public FileSystemCommandHandler
   }
 };
 
-/**
- * Handle a command for creating or removing a filesystem.
- *
- * @retval 0        Command was successfully handled and has side effects
- * @retval -EAGAIN  Message has been queued for retry
- * @retval -ENOSYS  Unknown command
- * @retval < 0      An error has occurred; **ss** may have been set.
- */
-int MDSMonitor::management_command(
-    MonOpRequestRef op,
-    std::string const &prefix,
-    map<string, cmd_vartype> &cmdmap,
-    std::stringstream &ss)
+class FsNewHandler : public FileSystemCommandHandler
 {
-  op->mark_mdsmon_event(__func__);
+  public:
+  FsNewHandler()
+    : FileSystemCommandHandler("fs new")
+  {
+  }
 
-  if (prefix == "mds newfs") {
-    // newfs is the legacy command that in single-filesystem times
-    // used to be equivalent to doing an "fs rm ; fs new".  We
-    // can't do this in a sane way in multi-filesystem world.
-    ss << "'newfs' no longer available.  Please use 'fs new'.";
-    return -EINVAL;
-  } else if (prefix == "fs new") {
+  int handle(
+      Monitor *mon,
+      FSMap &fsmap,
+      MonOpRequestRef op,
+      map<string, cmd_vartype> &cmdmap,
+      std::stringstream &ss)
+  {
     string metadata_name;
     cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
     int64_t metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
@@ -1600,10 +1504,10 @@ int MDSMonitor::management_command(
         // commmands that refer to FS by name in future.
         ss << "Filesystem name may not be empty";
         return -EINVAL;
-    } else if (pending_fsmap.get_filesystem(fs_name)) {
-      auto fs = pending_fsmap.get_filesystem(fs_name);
-      if (*(fs->mds_map.data_pools.begin()) == data
-          && fs->mds_map.metadata_pool == metadata) {
+    } else if (fsmap.get_filesystem(fs_name)) {
+      auto fs = fsmap.get_filesystem(fs_name);
+      if (*(fs->mds_map.get_data_pools().begin()) == data
+          && fs->mds_map.get_metadata_pool() == metadata) {
         // Identical FS created already, this is a no-op
         ss << "filesystem '" << fs_name << "' already exists";
         return 0;
@@ -1622,8 +1526,8 @@ int MDSMonitor::management_command(
       return -EINVAL;
     }
 
-    if (pending_fsmap.filesystem_count() > 0
-        && !pending_fsmap.get_enable_multiple()) {
+    if (fsmap.filesystem_count() > 0
+        && !fsmap.get_enable_multiple()) {
       ss << "Creation of multiple filesystems is disabled.  To enable "
             "this experimental feature, use 'ceph fs flag set enable_multiple "
             "true'";
@@ -1640,20 +1544,47 @@ int MDSMonitor::management_command(
     // we believe we must.  bailing out *after* we request the proposal is
     // bad business as we could have changed the osdmon's state and ending up
     // returning an error to the user.
-    int r = _check_pool(data, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, data, &ss);
     if (r < 0) {
       return r;
     }
 
-    r = _check_pool(metadata, &ss);
+    r = _check_pool(mon->osdmon()->osdmap, metadata, &ss);
     if (r < 0) {
       return r;
     }
 
     // All checks passed, go ahead and create.
-    create_new_fs(pending_fsmap, fs_name, metadata, data);
+    fsmap.create_filesystem(fs_name, metadata, data,
+                            mon->get_quorum_con_features());
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
     return 0;
+  }
+};
+
+
+/**
+ * Handle a command for creating or removing a filesystem.
+ *
+ * @retval 0        Command was successfully handled and has side effects
+ * @retval -EAGAIN  Message has been queued for retry
+ * @retval -ENOSYS  Unknown command
+ * @retval < 0      An error has occurred; **ss** may have been set.
+ */
+int MDSMonitor::management_command(
+    MonOpRequestRef op,
+    std::string const &prefix,
+    map<string, cmd_vartype> &cmdmap,
+    std::stringstream &ss)
+{
+  op->mark_mdsmon_event(__func__);
+
+  if (prefix == "mds newfs") {
+    // newfs is the legacy command that in single-filesystem times
+    // used to be equivalent to doing an "fs rm ; fs new".  We
+    // can't do this in a sane way in multi-filesystem world.
+    ss << "'newfs' no longer available.  Please use 'fs new'.";
+    return -EINVAL;
   } else if (prefix == "fs rm") {
     // Check caller has correctly named the FS to delete
     // (redundant while there is only one FS, but command
@@ -3071,6 +3002,7 @@ MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
         "mds remove_data_pool"));
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds rm_data_pool"));
+  handlers.push_back(std::make_shared<FsNewHandler>());
 }
 
 void MDSMonitor::on_restart()
