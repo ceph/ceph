@@ -2180,7 +2180,7 @@ public:
     const vector<int>& acting,
     int acting_primary,
     const pg_history_t& history,
-    pg_interval_map_t& pim,
+    const pg_interval_map_t& pim,
     bool backfill,
     ObjectStore::Transaction *t);
 

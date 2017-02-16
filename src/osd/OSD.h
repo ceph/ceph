@@ -2063,7 +2063,7 @@ protected:
     vector<int>& up, int up_primary,
     vector<int>& acting, int acting_primary,
     pg_history_t history,
-    pg_interval_map_t& pi,
+    const pg_interval_map_t& pi,
     ObjectStore::Transaction& t);
   PG   *_lookup_qlock_pg(spg_t pgid);
 
@@ -2074,7 +2074,7 @@ protected:
   void handle_pg_peering_evt(
     spg_t pgid,
     const pg_history_t& orig_history,
-    pg_interval_map_t& pi,
+    const pg_interval_map_t& pi,
     epoch_t epoch,
     PG::CephPeeringEvtRef evt);
   

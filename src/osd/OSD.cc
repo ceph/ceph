@@ -3281,7 +3281,7 @@ PG *OSD::_create_lock_pg(
   vector<int>& up, int up_primary,
   vector<int>& acting, int acting_primary,
   pg_history_t history,
-  pg_interval_map_t& pi,
+  const pg_interval_map_t& pi,
   ObjectStore::Transaction& t)
 {
   assert(osd_lock.is_locked());
@@ -3669,7 +3669,7 @@ void OSD::build_past_intervals_parallel()
 void OSD::handle_pg_peering_evt(
   spg_t pgid,
   const pg_history_t& orig_history,
-  pg_interval_map_t& pi,
+  const pg_interval_map_t& pi,
   epoch_t epoch,
   PG::CephPeeringEvtRef evt)
 {
