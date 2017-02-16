@@ -38,7 +38,7 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
 class C_Watch : public WatchCtx {
 public:
   C_Watch() {}
-  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
+  void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) override {
     cout << "C_Watch::notify() opcode=" << (int)opcode << " ver=" << ver << std::endl;
   }
 };

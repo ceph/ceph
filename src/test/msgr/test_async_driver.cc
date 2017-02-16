@@ -65,7 +65,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
   EventDriver *driver;
 
   EventDriverTest(): driver(0) {}
-  virtual void SetUp() {
+  void SetUp() override {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
 #ifdef HAVE_EPOLL
     if (strcmp(GetParam(), "epoll"))
@@ -79,7 +79,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
       driver = new SelectDriver(g_ceph_context);
     driver->init(NULL, 100);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     delete driver;
   }
 };
@@ -250,7 +250,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
 class FakeEvent : public EventCallback {
 
  public:
-  void do_request(int fd_or_id) {}
+  void do_request(int fd_or_id) override {}
 };
 
 TEST(EventCenterTest, FileEventExpansion) {
@@ -283,7 +283,7 @@ class Worker : public Thread {
     done = true; 
     center.wakeup();
   }
-  void* entry() {
+  void* entry() override {
     center.set_owner();
     while (!done)
       center.process_events(1000000);
@@ -298,7 +298,7 @@ class CountEvent: public EventCallback {
 
  public:
   CountEvent(atomic_t *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     lock->Lock();
     count->dec();
     cond->Signal();

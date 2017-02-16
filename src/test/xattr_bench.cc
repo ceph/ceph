@@ -66,7 +66,7 @@ public:
     (*in_progress)++;
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     Mutex::Locker l(*lock);
     (*in_progress)--;
     cond->Signal();

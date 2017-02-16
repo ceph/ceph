@@ -20,7 +20,7 @@ public:
   int *result;
   C_Checker(bool* _finish_called, int *r) :
     finish_called(_finish_called), result(r) {}
-  void finish(int r) { *finish_called = true; *result = r; }
+  void finish(int r) override { *finish_called = true; *result = r; }
 };
 
 TEST(ContextGather, Constructor) {

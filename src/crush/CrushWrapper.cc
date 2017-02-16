@@ -1687,7 +1687,7 @@ public:
   }
 
 protected:
-  virtual void dump_item(const CrushTreeDumper::Item &qi, ostream *out) {
+  void dump_item(const CrushTreeDumper::Item &qi, ostream *out) override {
     *out << qi.id << "\t"
 	 << weightf_t(qi.weight) << "\t";
 

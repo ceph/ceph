@@ -40,7 +40,7 @@ using std::string;
 class RocksDBStore::MergeOperatorRouter : public rocksdb::AssociativeMergeOperator {
   RocksDBStore& store;
   public:
-  const char *Name() const {
+  const char *Name() const override {
     // Construct a name that rocksDB will validate against. We want to
     // do this in a way that doesn't constrain the ordering of calls
     // to set_merge_operator, so sort the merge operators and then
@@ -59,11 +59,11 @@ class RocksDBStore::MergeOperatorRouter : public rocksdb::AssociativeMergeOperat
 
   MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
 
-  virtual bool Merge(const rocksdb::Slice& key,
+  bool Merge(const rocksdb::Slice& key,
                      const rocksdb::Slice* existing_value,
                      const rocksdb::Slice& value,
                      std::string* new_value,
-                     rocksdb::Logger* logger) const {
+                     rocksdb::Logger* logger) const override {
     // Check each prefix
     for (auto& p : store.merge_ops) {
       if (p.first.compare(0, p.first.length(),
@@ -105,7 +105,7 @@ public:
   }
 
   // Write an entry to the log file with the specified format.
-  void Logv(const char* format, va_list ap) {
+  void Logv(const char* format, va_list ap) override {
     Logv(rocksdb::INFO_LEVEL, format, ap);
   }
 
@@ -114,7 +114,7 @@ public:
   // of *this (see @SetInfoLogLevel and @GetInfoLogLevel) will not be
   // printed.
   void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
-	    va_list ap) {
+	    va_list ap) override {
     int v = rocksdb::NUM_INFO_LOG_LEVELS - log_level - 1;
     dout(v);
     char buf[65536];

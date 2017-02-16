@@ -40,17 +40,17 @@ class ServerDispatcher : public Dispatcher {
     OpWQ(time_t timeout, time_t suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueue<Message>("ServerDispatcher::OpWQ", timeout, suicide_timeout, tp) {}
 
-    bool _enqueue(Message *m) {
+    bool _enqueue(Message *m) override {
       messages.push_back(m);
       return true;
     }
-    void _dequeue(Message *m) {
+    void _dequeue(Message *m) override {
       ceph_abort();
     }
-    bool _empty() {
+    bool _empty() override {
       return messages.empty();
     }
-    Message *_dequeue() {
+    Message *_dequeue() override {
       if (messages.empty())
 	return NULL;
       Message *m = messages.front();
@@ -63,8 +63,8 @@ class ServerDispatcher : public Dispatcher {
       m->get_connection()->send_message(reply);
       m->put();
     }
-    void _process_finish(Message *m) { }
-    void _clear() {
+    void _process_finish(Message *m) override { }
+    void _clear() override {
       assert(messages.empty());
     }
   } op_wq;
@@ -78,8 +78,8 @@ class ServerDispatcher : public Dispatcher {
   ~ServerDispatcher() {
     op_tp.stop();
   }
-  bool ms_can_fast_dispatch_any() const { return true; }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch(Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
       return true;
@@ -88,20 +88,20 @@ class ServerDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) {}
-  void ms_handle_fast_accept(Connection *con) {}
-  bool ms_dispatch(Message *m) { return true; }
-  bool ms_handle_reset(Connection *con) { return true; }
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con) { return false; }
-  void ms_fast_dispatch(Message *m) {
+  void ms_handle_fast_connect(Connection *con) override {}
+  void ms_handle_fast_accept(Connection *con) override {}
+  bool ms_dispatch(Message *m) override { return true; }
+  bool ms_handle_reset(Connection *con) override { return true; }
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override { return false; }
+  void ms_fast_dispatch(Message *m) override {
     usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;
     op_wq.queue(m);
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key) override {
     isvalid = true;
     return true;
   }

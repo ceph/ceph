@@ -74,7 +74,7 @@ class StateLogListCtx : public ObjectOperationCompletion {
 public:
   StateLogListCtx(list<cls_statelog_entry> *_entries, string *_marker, bool *_truncated) :
                                       entries(_entries), marker(_marker), truncated(_truncated) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_statelog_list_ret ret;
       try {

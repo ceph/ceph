@@ -2221,7 +2221,7 @@ public:
     (*ref)++;
     lock.Unlock();
   }
-  void finish(int) {
+  void finish(int) override {
     lock.Lock();
     (*ref)--;
     cond.Signal();

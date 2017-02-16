@@ -22,7 +22,7 @@ static sem_t sem;
 class WatchNotifyTestCtx : public WatchCtx
 {
 public:
-    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
+    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) override
     {
       sem_post(&sem);
     }

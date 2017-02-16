@@ -28,7 +28,7 @@ struct C_Flush : public Context {
       pending_flushes(_pending_flushes), ret_val(0) {
   }
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     if (r < 0 && ret_val == 0) {
       ret_val = r;
     }
@@ -38,7 +38,7 @@ struct C_Flush : public Context {
       delete this;
     }
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
   }
 };
 
