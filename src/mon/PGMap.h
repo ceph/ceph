@@ -124,6 +124,7 @@ public:
   mutable epoch_t min_last_epoch_clean;
   ceph::unordered_map<int,int> blocked_by_sum;
   ceph::unordered_map<int,set<pg_t> > pg_by_osd;
+  ceph::unordered_map<int,int> num_primary_pg_by_osd;
 
   utime_t stamp;
 
@@ -251,6 +252,15 @@ public:
     if (p != pg_pool_sum.end())
       return p->second;
     return pool_stat_t();
+  }
+
+  int get_num_primary_pg_by_osd(int osd) const {
+    assert(osd >= 0);
+    int num = 0;
+    auto it = num_primary_pg_by_osd.find(osd);
+    if (it != num_primary_pg_by_osd.end())
+      num = it->second;
+    return num;
   }
 
   void update_pg(pg_t pgid, bufferlist& bl);
