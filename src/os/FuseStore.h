@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <mutex>
+#include <functional>
 
 #include "common/Thread.h"
 #include "include/buffer.h"
