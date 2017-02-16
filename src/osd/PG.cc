@@ -2796,7 +2796,7 @@ void PG::init(
   const vector<int>& newup, int new_up_primary,
   const vector<int>& newacting, int new_acting_primary,
   const pg_history_t& history,
-  pg_interval_map_t& pi,
+  const pg_interval_map_t& pi,
   bool backfill,
   ObjectStore::Transaction *t)
 {
@@ -2815,7 +2815,7 @@ void PG::init(
     new_acting_primary);
 
   info.history = history;
-  past_intervals.swap(pi);
+  past_intervals = pi;
 
   info.stats.up = up;
   info.stats.up_primary = new_up_primary;
