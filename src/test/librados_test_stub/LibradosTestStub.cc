@@ -356,6 +356,28 @@ IoCtx::~IoCtx() {
   close();
 }
 
+IoCtx::IoCtx(const IoCtx& rhs) {
+  io_ctx_impl = rhs.io_ctx_impl;
+  if (io_ctx_impl) {
+    TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+    ctx->get();
+  }
+}
+
+IoCtx& IoCtx::operator=(const IoCtx& rhs) {
+  if (io_ctx_impl) {
+    TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+    ctx->put();
+  }
+
+  io_ctx_impl = rhs.io_ctx_impl;
+  if (io_ctx_impl) {
+    TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+    ctx->get();
+  }
+  return *this;
+}
+
 int IoCtx::aio_flush() {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   ctx->aio_flush();

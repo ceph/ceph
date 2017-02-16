@@ -265,9 +265,9 @@ public:
     m_image_replayer = new MockImageReplayer(
       m_threads, m_image_deleter, m_image_sync_throttler,
       rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-      rbd::mirror::RadosRef(new librados::Rados(m_remote_io_ctx)),
-      "local_mirror_uuid", "remote_mirror_uuid", m_local_io_ctx.get_id(),
-      m_remote_io_ctx.get_id(), m_remote_image_ctx->id, "global image id");
+      "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
+    m_image_replayer->add_remote_image(
+      "remote_mirror_uuid", m_remote_image_ctx->id, m_remote_io_ctx);
   }
 
   virtual void TearDown() {

@@ -199,7 +199,6 @@ void ImageDeleter::run() {
 void ImageDeleter::schedule_image_delete(RadosRef local_rados,
                                          int64_t local_pool_id,
                                          const std::string& local_image_id,
-                                         const std::string& local_image_name,
                                          const std::string& global_image_id) {
   dout(20) << "enter" << dendl;
 
@@ -207,14 +206,14 @@ void ImageDeleter::schedule_image_delete(RadosRef local_rados,
 
   auto del_info = find_delete_info(local_pool_id, global_image_id);
   if (del_info != nullptr) {
-    dout(20) << "image " << local_image_name << " (" << global_image_id << ") "
+    dout(20) << "image " << local_image_id << " (" << global_image_id << ") "
              << "was already scheduled for deletion" << dendl;
     return;
   }
 
   m_delete_queue.push_front(unique_ptr<DeleteInfo>(
         new DeleteInfo(local_rados, local_pool_id, local_image_id,
-                       local_image_name, global_image_id)));
+                       global_image_id)));
   m_delete_queue_cond.Signal();
 }
 
@@ -234,6 +233,9 @@ void ImageDeleter::wait_for_scheduled_deletion(int64_t local_pool_id,
     ctx->complete(0);
     return;
   }
+
+  dout(20) << "local_pool_id=" << local_pool_id << ", "
+           << "global_image_id=" << global_image_id << dendl;
 
   if ((*del_info)->on_delete != nullptr) {
     (*del_info)->on_delete->complete(-ESTALE);
@@ -414,8 +416,9 @@ bool ImageDeleter::process_image_delete() {
   librbd::NoOpProgressContext ctx;
   r = librbd::remove(ioctx, "", m_active_delete->local_image_id, ctx, true);
   if (r < 0 && r != -ENOENT) {
-    derr << "error removing image " << m_active_delete->local_image_name
-         << " from local pool: " << cpp_strerror(r) << dendl;
+    derr << "error removing image " << m_active_delete->local_image_id << " "
+         << "(" << m_active_delete->global_image_id << ") from local pool: "
+         << cpp_strerror(r) << dendl;
     enqueue_failed_delete(r);
     return true;
   }
@@ -435,8 +438,9 @@ bool ImageDeleter::process_image_delete() {
     return true;
   }
 
-  dout(10) << "Successfully deleted image: "
-           << m_active_delete->local_image_name << dendl;
+  dout(10) << "Successfully deleted image "
+           << m_active_delete->local_image_id << " "
+           << "(" << m_active_delete->global_image_id << ")" << dendl;
 
   complete_active_delete(0);
   return true;
@@ -603,7 +607,7 @@ vector<string> ImageDeleter::get_delete_queue_items() {
 
   Mutex::Locker l(m_delete_lock);
   for (const auto& del_info : m_delete_queue) {
-    items.push_back(del_info->local_image_name);
+    items.push_back(del_info->local_image_id);
   }
 
   return items;
@@ -614,7 +618,7 @@ vector<pair<string, int> > ImageDeleter::get_failed_queue_items() {
 
   Mutex::Locker l(m_delete_lock);
   for (const auto& del_info : m_failed_queue) {
-    items.push_back(make_pair(del_info->local_image_name,
+    items.push_back(make_pair(del_info->local_image_id,
                               del_info->error_code));
   }
 

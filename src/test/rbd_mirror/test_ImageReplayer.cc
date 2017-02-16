@@ -133,9 +133,9 @@ public:
   void create_replayer() {
     m_replayer = new ImageReplayerT(m_threads, m_image_deleter, m_image_sync_throttler,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
-      rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
-      m_local_mirror_uuid, m_remote_mirror_uuid, m_local_ioctx.get_id(),
-      m_remote_pool_id, m_remote_image_id, "global image id");
+      m_local_mirror_uuid, m_local_ioctx.get_id(), "global image id");
+    m_replayer->add_remote_image(m_remote_mirror_uuid, m_remote_image_id,
+                                 m_remote_ioctx);
   }
 
   void start()

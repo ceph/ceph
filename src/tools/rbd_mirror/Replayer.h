@@ -55,15 +55,10 @@ public:
   void release_leader();
 
 private:
-  typedef PoolWatcher::ImageId ImageId;
-  typedef PoolWatcher::ImageIds ImageIds;
-
   void init_local_mirroring_images();
   void set_sources(const ImageIds &image_ids);
 
-  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
-                            const std::string &image_id,
-                            const boost::optional<std::string>& image_name);
+  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
   int init_rados(const std::string &cluster_name, const std::string &client_name,
@@ -98,25 +93,7 @@ private:
   std::string m_asok_hook_name;
   ReplayerAdminSocketHook *m_asok_hook;
 
-  struct InitImageInfo {
-    std::string global_id;
-    std::string id;
-    std::string name;
-
-    InitImageInfo(const std::string& global_id, const std::string &id = "",
-                  const std::string &name = "")
-      : global_id(global_id), id(id), name(name) {
-    }
-
-    inline bool operator==(const InitImageInfo &rhs) const {
-      return (global_id == rhs.global_id && id == rhs.id && name == rhs.name);
-    }
-    inline bool operator<(const InitImageInfo &rhs) const {
-      return global_id < rhs.global_id;
-    }
-  };
-
-  std::set<InitImageInfo> m_init_images;
+  std::set<ImageId> m_init_image_ids;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;
