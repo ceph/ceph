@@ -927,7 +927,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     reply->set_priority(m->get_priority());
     reply->pgid = get_info().pgid;
     reply->map_epoch = m->map_epoch;
-    reply->pulls.swap(replies);
+    reply->set_pulls(&replies);
     reply->compute_cost(cct);
 
     t.register_on_complete(
@@ -945,11 +945,11 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
   pg_shard_t from = m->from;
 
   map<pg_shard_t, vector<PushOp> > replies;
-  for (vector<PullOp>::iterator i = m->pulls.begin();
-       i != m->pulls.end();
-       ++i) {
+  vector<PullOp> pulls;
+  m->take_pulls(&pulls);
+  for (auto& i : pulls) {
     replies[from].push_back(PushOp());
-    handle_pull(from, *i, &(replies[from].back()));
+    handle_pull(from, i, &(replies[from].back()));
   }
   send_pushes(m->get_priority(), replies);
 }
@@ -1971,7 +1971,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
     msg->set_priority(prio);
     msg->pgid = get_parent()->primary_spg_t();
     msg->map_epoch = get_osdmap()->get_epoch();
-    msg->pulls.swap(i->second);
+    msg->set_pulls(&i->second);
     msg->compute_cost(cct);
     get_parent()->send_message_osd_cluster(msg, con);
   }
