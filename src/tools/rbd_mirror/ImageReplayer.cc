@@ -267,27 +267,19 @@ template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads *threads,
                              shared_ptr<ImageDeleter> image_deleter,
                              ImageSyncThrottlerRef<I> image_sync_throttler,
-                             RadosRef local, RadosRef remote,
-			     const std::string &local_mirror_uuid,
-			     const std::string &remote_mirror_uuid,
-			     int64_t local_pool_id,
-			     int64_t remote_pool_id,
-			     const std::string &remote_image_id,
+                             RadosRef local,
+                             const std::string &local_mirror_uuid,
+                             int64_t local_pool_id,
                              const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
   m_image_sync_throttler(image_sync_throttler),
   m_local(local),
-  m_remote(remote),
   m_local_mirror_uuid(local_mirror_uuid),
-  m_remote_mirror_uuid(remote_mirror_uuid),
-  m_remote_pool_id(remote_pool_id),
   m_local_pool_id(local_pool_id),
-  m_remote_image_id(remote_image_id),
   m_global_image_id(global_image_id),
-  m_name(stringify(remote_pool_id) + "/" + remote_image_id),
-  m_lock("rbd::mirror::ImageReplayer " + stringify(remote_pool_id) + " " +
-	 remote_image_id),
+  m_lock("rbd::mirror::ImageReplayer " + stringify(local_pool_id) + " " +
+	 global_image_id),
   m_progress_cxt(this),
   m_journal_listener(new JournalListener(this)),
   m_remote_listener(this)
@@ -297,11 +289,11 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
   // re-registered using "remote_pool_name/remote_image_name" name.
 
   std::string pool_name;
-  int r = m_remote->pool_reverse_lookup(m_remote_pool_id, &pool_name);
+  int r = m_local->pool_reverse_lookup(m_local_pool_id, &pool_name);
   if (r < 0) {
-    derr << "error resolving remote pool " << m_remote_pool_id
+    derr << "error resolving local pool " << m_local_pool_id
 	 << ": " << cpp_strerror(r) << dendl;
-    pool_name = stringify(m_remote_pool_id);
+    pool_name = stringify(m_local_pool_id);
   }
   m_name = pool_name + "/" + m_global_image_id;
 
@@ -328,6 +320,32 @@ ImageReplayer<I>::~ImageReplayer()
 }
 
 template <typename I>
+void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
+                                        const std::string &image_id,
+                                        librados::IoCtx &io_ctx) {
+  Mutex::Locker locker(m_lock);
+
+  RemoteImage remote_image(mirror_uuid, image_id, io_ctx);
+  auto it = m_remote_images.find(remote_image);
+  if (it == m_remote_images.end()) {
+    m_remote_images.insert(remote_image);
+  }
+}
+
+template <typename I>
+void ImageReplayer<I>::remove_remote_image(const std::string &mirror_uuid,
+                                           const std::string &image_id) {
+  Mutex::Locker locker(m_lock);
+  m_remote_images.erase({mirror_uuid, image_id});
+}
+
+template <typename I>
+bool ImageReplayer<I>::remote_images_empty() const {
+  Mutex::Locker locker(m_lock);
+  return m_remote_images.empty();
+}
+
+template <typename I>
 void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
   dout(20) << r << " " << desc << dendl;
 
@@ -351,11 +369,17 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
       dout(5) << "stopped manually, ignoring start without manual flag"
 	      << dendl;
       r = -EPERM;
+    } else if (m_remote_images.empty()) {
+      derr << "no remote images associated with replayer" << dendl;
+      r = -EINVAL;
     } else {
       m_state = STATE_STARTING;
       m_last_r = 0;
       m_state_desc.clear();
       m_manual_stop = false;
+
+      // TODO bootstrap will need to support multiple remote images
+      m_remote_image = *m_remote_images.begin();
 
       if (on_finish != nullptr) {
         assert(m_on_start_finish == nullptr);
@@ -369,14 +393,6 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     if (on_finish) {
       on_finish->complete(r);
     }
-    return;
-  }
-
-  r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
-  if (r < 0) {
-    derr << "error opening ioctx for remote pool " << m_remote_pool_id
-	 << ": " << cpp_strerror(r) << dendl;
-    on_start_fail(r, "error opening remote pool");
     return;
   }
 
@@ -395,9 +411,10 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
 
   m_remote_journaler = new Journaler(m_threads->work_queue,
                                      m_threads->timer,
-				     &m_threads->timer_lock, m_remote_ioctx,
-				     m_remote_image_id, m_local_mirror_uuid,
-                                     settings);
+				     &m_threads->timer_lock,
+                                     m_remote_image.io_ctx,
+                                     m_remote_image.image_id,
+                                     m_local_mirror_uuid, settings);
   bootstrap();
 }
 
@@ -410,10 +427,10 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
-    m_local_ioctx, m_remote_ioctx, m_image_sync_throttler,
-    &m_local_image_ctx, m_local_image_name, m_remote_image_id,
+    m_local_ioctx, m_remote_image.io_ctx, m_image_sync_throttler,
+    &m_local_image_ctx, m_local_image_name, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
-    &m_threads->timer_lock, m_local_mirror_uuid, m_remote_mirror_uuid,
+    &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
     m_remote_journaler, &m_client_meta, ctx, &m_do_resync, &m_progress_cxt);
 
   {
@@ -1008,7 +1025,7 @@ void ImageReplayer<I>::allocate_local_tag() {
   std::string mirror_uuid = m_replay_tag_data.mirror_uuid;
   if (mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID ||
       mirror_uuid == m_local_mirror_uuid) {
-    mirror_uuid = m_remote_mirror_uuid;
+    mirror_uuid = m_remote_image.mirror_uuid;
   } else if (mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID) {
     dout(5) << "encountered image demotion: stopping" << dendl;
     Mutex::Locker locker(m_lock);
@@ -1017,7 +1034,7 @@ void ImageReplayer<I>::allocate_local_tag() {
 
   librbd::journal::TagPredecessor predecessor(m_replay_tag_data.predecessor);
   if (predecessor.mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
-    predecessor.mirror_uuid = m_remote_mirror_uuid;
+    predecessor.mirror_uuid = m_remote_image.mirror_uuid;
   } else if (predecessor.mirror_uuid == m_local_mirror_uuid) {
     predecessor.mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
   }
@@ -1495,7 +1512,6 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       m_image_deleter->schedule_image_delete(m_local,
                                              m_local_pool_id,
                                              m_local_image_id,
-                                             m_local_image_name,
                                              m_global_image_id);
       m_stopping_for_resync = false;
     }
@@ -1503,7 +1519,6 @@ void ImageReplayer<I>::handle_shut_down(int r) {
 
   dout(20) << "stop complete" << dendl;
   m_local_ioctx.close();
-  m_remote_ioctx.close();
 
   ReplayStatusFormatter<I>::destroy(m_replay_status_formatter);
   m_replay_status_formatter = nullptr;
