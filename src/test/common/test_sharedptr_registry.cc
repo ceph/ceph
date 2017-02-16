@@ -53,7 +53,7 @@ public:
     {
     }
     
-    virtual void *entry() {
+    void *entry() override {
       switch(in_method) {
       case LOOKUP_OR_CREATE:
 	if (value) 
@@ -303,7 +303,7 @@ public:
     int value;
   };
 
-  virtual void SetUp() {
+  void SetUp() override {
     died = UNDEFINED;
   }
 };

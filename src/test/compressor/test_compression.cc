@@ -56,11 +56,11 @@ public:
     g_ceph_context->_conf->apply_changes(NULL);
   }
 
-  void SetUp() {
+  void SetUp() override {
     compressor = Compressor::create(g_ceph_context, plugin);
     ASSERT_TRUE(compressor);
   }
-  void TearDown() {
+  void TearDown() override {
     compressor.reset();
   }
 };

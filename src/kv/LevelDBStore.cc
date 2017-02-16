@@ -27,7 +27,7 @@ public:
   }
 
   // Write an entry to the log file with the specified format.
-  void Logv(const char* format, va_list ap) {
+  void Logv(const char* format, va_list ap) override {
     dout(1);
     char buf[65536];
     vsnprintf(buf, sizeof(buf), format, ap);

@@ -38,8 +38,8 @@ class MessengerClient {
 
    public:
     ClientDispatcher(uint64_t delay, ClientThread *t): Dispatcher(g_ceph_context), think_time(delay), thread(t) {}
-    bool ms_can_fast_dispatch_any() const { return true; }
-    bool ms_can_fast_dispatch(Message *m) const {
+    bool ms_can_fast_dispatch_any() const override { return true; }
+    bool ms_can_fast_dispatch(Message *m) const override {
       switch (m->get_type()) {
       case CEPH_MSG_OSD_OPREPLY:
         return true;
@@ -48,16 +48,16 @@ class MessengerClient {
       }
     }
 
-    void ms_handle_fast_connect(Connection *con) {}
-    void ms_handle_fast_accept(Connection *con) {}
-    bool ms_dispatch(Message *m) { return true; }
-    void ms_fast_dispatch(Message *m);
-    bool ms_handle_reset(Connection *con) { return true; }
-    void ms_handle_remote_reset(Connection *con) {}
-    bool ms_handle_refused(Connection *con) { return false; }
+    void ms_handle_fast_connect(Connection *con) override {}
+    void ms_handle_fast_accept(Connection *con) override {}
+    bool ms_dispatch(Message *m) override { return true; }
+    void ms_fast_dispatch(Message *m) override;
+    bool ms_handle_reset(Connection *con) override { return true; }
+    void ms_handle_remote_reset(Connection *con) override {}
+    bool ms_handle_refused(Connection *con) override { return false; }
     bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                               bufferlist& authorizer, bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key) {
+                              bool& isvalid, CryptoKey& session_key) override {
       isvalid = true;
       return true;
     }
@@ -89,7 +89,7 @@ class MessengerClient {
       memset(ptr.c_str(), 0, msg_len);
       data.append(ptr);
     }
-    void *entry() {
+    void *entry() override {
       lock.Lock();
       for (int i = 0; i < ops; ++i) {
         if (inflight > uint64_t(concurrent)) {

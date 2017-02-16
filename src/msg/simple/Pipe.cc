@@ -88,7 +88,7 @@ public:
   ~DelayedDelivery() {
     discard();
   }
-  void *entry();
+  void *entry() override;
   void queue(utime_t release, Message *m) {
     Mutex::Locker l(delay_lock);
     delay_queue.push_back(make_pair(release, m));

@@ -2978,7 +2978,7 @@ private:
   InodeRef inode;
 public:
   C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(client->client_lock.is_locked_by_me());
     if (r != 0) {
       client_t const whoami = client->whoami;  // For the benefit of ldout prefix
@@ -3626,7 +3626,7 @@ public:
     else
       ino = in->vino();
   }
-  void finish(int r) {
+  void finish(int r) override {
     // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
     assert(!client->client_lock.is_locked_by_me());
     client->_async_invalidate(ino, offset, length);
@@ -3933,7 +3933,7 @@ private:
   Client *client;
 public:
   explicit C_Client_Remount(Client *c) : client(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert (r == 0);
     r = client->remount_cb(client->callback_handle);
     if (r != 0) {
@@ -4828,7 +4828,7 @@ public:
       if (!del)
 	ino.ino = inodeno_t();
   }
-  void finish(int r) {
+  void finish(int r) override {
     // _async_dentry_invalidate is responsible for its own locking
     assert(!client->client_lock.is_locked_by_me());
     client->_async_dentry_invalidate(dirino, ino, name);
@@ -5805,7 +5805,7 @@ class C_C_Tick : public Context {
   Client *client;
 public:
   explicit C_C_Tick(Client *c) : client(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     // Called back via Timer, which takes client_lock for us
     assert(client->client_lock.is_locked_by_me());
     client->tick();
@@ -12434,7 +12434,7 @@ public:
   C_Client_RequestInterrupt(Client *c, MetaRequest *r) : client(c), req(r) {
     req->get();
   }
-  void finish(int r) {
+  void finish(int r) override {
     Mutex::Locker l(client->client_lock);
     assert(req->head.op == CEPH_MDS_OP_SETFILELOCK);
     client->_interrupt_filelock(req);

@@ -18,14 +18,14 @@ public:
     return stringify(++_journal_id);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     RadosTestFixture::SetUp();
     m_journal_id = get_temp_journal_id();
     m_journaler = new journal::Journaler(m_work_queue, m_timer, &m_timer_lock,
                                          m_ioctx, m_journal_id, CLIENT_ID, {});
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     delete m_journaler;
     RadosTestFixture::TearDown();
   }
