@@ -21,12 +21,12 @@ class MOSDPGPull : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
+  vector<PullOp> pulls;
 
 public:
   pg_shard_t from;
   spg_t pgid;
   epoch_t map_epoch;
-  vector<PullOp> pulls;
   uint64_t cost;
 
   epoch_t get_map_epoch() const override {
@@ -34,6 +34,13 @@ public:
   }
   spg_t get_spg() const override {
     return pgid;
+  }
+
+  void take_pulls(vector<PullOp> *outpulls) {
+    outpulls->swap(pulls);
+  }
+  void set_pulls(vector<PullOp> *inpulls) {
+    inpulls->swap(pulls);
   }
 
   MOSDPGPull()
@@ -82,9 +89,9 @@ public:
 
   void print(ostream& out) const {
     out << "MOSDPGPull(" << pgid
-	<< " " << map_epoch
-	<< " " << pulls;
-    out << ")";
+	<< " e" << map_epoch
+	<< " cost " << cost
+	<< ")";
   }
 };
 
