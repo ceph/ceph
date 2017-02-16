@@ -281,6 +281,11 @@ keys would be used when configuring the secondary zone::
   }
 
 
+.. note:: Please note that system users have super user privileges over the
+          entire zone, and will not behave like normal users for rest operations
+          like creating buckets, objects etc. as the output would contain
+          additional json fields for maintaining metadata.
+
 
 Update the period
 -----------------
