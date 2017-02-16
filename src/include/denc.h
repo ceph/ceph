@@ -46,9 +46,9 @@
 
 template<typename T, typename VVV=void>
 struct denc_traits {
-  enum { supported = 0 };
-  enum { featured = false };
-  enum { bounded = false };
+  static constexpr bool supported = false;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = false;
 };
 
 
@@ -89,9 +89,9 @@ struct denc_traits {
 
     template<>
     struct denc_traits<T> {
-      enum { supported = true };
-      enum { bounded = false };
-      enum { featured = false };
+      static constexpr bool supported = true;
+      static constexpr bool bounded = false;
+      static constexpr bool featured = false;
       static void bound_encode(const T &o, size_t& p, uint64_t f=0);
       static void encode(const T &o, buffer::list::contiguous_appender& p,
 		         uint64_t f=0);
@@ -102,9 +102,9 @@ struct denc_traits {
 
     template<>
     struct denc_traits<T> {
-      enum { supported = true };
-      enum { bounded = false };
-      enum { featured = true };
+      static constexpr bool supported = true;
+      static constexpr bool bounded = false;
+      static constexpr bool featured = true;
       static void bound_encode(const T &o, size_t& p, uint64_t f);
       static void encode(const T &o, buffer::list::contiguous_appender& p,
 		         uint64_t f);
@@ -170,9 +170,9 @@ struct denc_traits {
 #define WRITE_RAW_DENC(type)						\
   template<>								\
   struct denc_traits<type> {						\
-    enum { supported = 2 };						\
-    enum { featured = false };						\
-    enum { bounded = true };						\
+    static constexpr bool supported = true;				\
+    static constexpr bool featured = false;				\
+    static constexpr bool bounded = true;				\
     static void bound_encode(const type &o, size_t& p, uint64_t f=0) {	\
       p += sizeof(type);						\
     }									\
@@ -203,16 +203,18 @@ WRITE_RAW_DENC(int8_t);
 // itype == internal type
 // otype == external type, i.e., the type on the wire
 
-// NOTE: set supported == 2 instead of true.  This prevents these from
-// getting glued into the legacy encode/decode methods; the overhead
-// of setting up a contiguous_appender etc is likely to be slower.
+// NOTE: the overload resolution ensures that the legacy encode/decode methods
+// defined for int types is prefered to the ones  defined using the specialized
+// template, and hence get selected. This machinary prevents these these from
+// getting glued into the legacy encode/decode methods; the overhead of setting
+// up a contiguous_appender etc is likely to be slower.
 
 #define WRITE_INT_DENC(itype, etype)					\
   template<>								\
   struct denc_traits<itype> {						\
-    enum { supported = 2 };						\
-    enum { featured = false };						\
-    enum { bounded = true };						\
+    static constexpr bool supported = true;				\
+    static constexpr bool featured = false;				\
+    static constexpr bool bounded = true;				\
     static void bound_encode(const itype &o, size_t& p, uint64_t f=0) {	\
       p += sizeof(etype);						\
     }									\
@@ -457,7 +459,7 @@ inline void denc_lba(uint64_t& v, bufferptr::iterator& p) {
 // denc top-level methods that call into denc_traits<T> methods
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported != 0 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type denc(
   const T& o,
   size_t& p,
@@ -466,7 +468,7 @@ inline typename std::enable_if<traits::supported != 0 &&
   traits::bound_encode(o, p);
 }
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported != 0 &&
+inline typename std::enable_if<traits::supported &&
 			       traits::featured>::type denc(
   const T& o,
   size_t& p,
@@ -476,7 +478,7 @@ inline typename std::enable_if<traits::supported != 0 &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported != 0 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type denc(
   const T& o,
   buffer::list::contiguous_appender& p,
@@ -485,7 +487,7 @@ inline typename std::enable_if<traits::supported != 0 &&
   traits::encode(o, p);
 }
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported != 0 &&
+inline typename std::enable_if<traits::supported &&
 			       traits::featured>::type denc(
   const T& o,
   buffer::list::contiguous_appender& p,
@@ -495,7 +497,7 @@ inline typename std::enable_if<traits::supported != 0 &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported != 0 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type denc(
   T& o,
   buffer::ptr::iterator& p,
@@ -504,7 +506,7 @@ inline typename std::enable_if<traits::supported != 0 &&
   traits::decode(o, p);
 }
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported != 0 &&
+inline typename std::enable_if<traits::supported &&
 			       traits::featured>::type denc(
   T& o,
   buffer::ptr::iterator& p,
@@ -522,9 +524,9 @@ inline typename std::enable_if<traits::supported != 0 &&
 //
 template<typename A>
 struct denc_traits<std::basic_string<char,std::char_traits<char>,A>> {
-  enum { supported = true };
-  enum { featured = false };
-  enum { bounded = false };
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = false;
   static void bound_encode(const std::basic_string<char,
 			   std::char_traits<char>,A>& s, size_t& p,
 			   uint64_t f=0) {
@@ -553,9 +555,9 @@ struct denc_traits<std::basic_string<char,std::char_traits<char>,A>> {
 //
 template<>
 struct denc_traits<bufferptr> {
-  enum { supported = 2 };
-  enum { featured = false };
-  enum { bounded = false };
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = false;
   static void bound_encode(const bufferptr& v, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + v.length();
   }
@@ -576,9 +578,9 @@ struct denc_traits<bufferptr> {
 //
 template<>
 struct denc_traits<bufferlist> {
-  enum { supported = 2 };
-  enum { featured = false };
-  enum { bounded = false };
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = false;
   static void bound_encode(const bufferlist& v, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + v.length();
   }
@@ -601,14 +603,14 @@ struct denc_traits<bufferlist> {
 template<typename A, typename B>
 struct denc_traits<
   std::pair<A, B>,
-  typename std::enable_if<denc_traits<A>::supported != 0 &&
-			  denc_traits<B>::supported != 0>::type> {
+  typename std::enable_if<denc_traits<A>::supported &&
+			  denc_traits<B>::supported>::type> {
   typedef denc_traits<A> a_traits;
   typedef denc_traits<B> b_traits;
 
-  enum { supported = true };
-  enum { featured = a_traits::featured || b_traits::featured };
-  enum { bounded = a_traits::bounded && b_traits::bounded };
+  static constexpr bool supported = true;
+  static constexpr bool featured = a_traits::featured || b_traits::featured ;
+  static constexpr bool bounded = a_traits::bounded && b_traits::bounded;
 
   template<typename AA=A>
   static typename std::enable_if<sizeof(AA) &&
@@ -657,9 +659,9 @@ namespace _denc {
   public:
     using traits = denc_traits<T>;
 
-    enum { supported = true };
-    enum { featured = traits::featured };
-    enum { bounded = false };
+    static constexpr bool supported = true;
+    static constexpr bool featured = traits::featured;
+    static constexpr bool bounded = false;
 
     template<typename U=T>
     static typename std::enable_if<sizeof(U) &&
@@ -800,7 +802,7 @@ namespace _denc {
 template<typename T, typename ...Ts>
 struct denc_traits<
   std::list<T, Ts...>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  typename std::enable_if<denc_traits<T>::supported>::type>
   : public _denc::container_base<std::list,
 				 _denc::pushback_details<std::list<T, Ts...>>,
 				 T, Ts...> {};
@@ -808,7 +810,7 @@ struct denc_traits<
 template<typename T, typename ...Ts>
 struct denc_traits<
   std::vector<T, Ts...>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  typename std::enable_if<denc_traits<T>::supported>::type>
   : public _denc::container_base<std::vector,
 				 _denc::pushback_details<std::vector<T, Ts...>>,
 				 T, Ts...> {};
@@ -827,7 +829,7 @@ namespace _denc {
 template<typename T, typename ...Ts>
 struct denc_traits<
   std::set<T, Ts...>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  typename std::enable_if<denc_traits<T>::supported>::type>
   : public _denc::container_base<std::set,
 				 _denc::setlike_details<std::set<T, Ts...>>,
 				 T, Ts...> {};
@@ -835,7 +837,7 @@ struct denc_traits<
 template<typename T, typename ...Ts>
 struct denc_traits<
   boost::container::flat_set<T, Ts...>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type>
+  typename std::enable_if<denc_traits<T>::supported>::type>
   : public _denc::container_base<
   boost::container::flat_set,
   _denc::setlike_details<boost::container::flat_set<T, Ts...>>,
@@ -856,8 +858,8 @@ namespace _denc {
 template<typename A, typename B, typename ...Ts>
 struct denc_traits<
   std::map<A, B, Ts...>,
-  typename std::enable_if<denc_traits<A>::supported != 0 &&
-			  denc_traits<B>::supported != 0>::type>
+  typename std::enable_if<denc_traits<A>::supported &&
+			  denc_traits<B>::supported>::type>
   : public _denc::container_base<std::map,
 				 _denc::maplike_details<std::map<A, B, Ts...>>,
 				 A, B, Ts...> {};
@@ -865,8 +867,8 @@ struct denc_traits<
 template<typename A, typename B, typename ...Ts>
 struct denc_traits<
   boost::container::flat_map<A, B, Ts...>,
-  typename std::enable_if<denc_traits<A>::supported != 0 &&
-			  denc_traits<B>::supported != 0>::type>
+  typename std::enable_if<denc_traits<A>::supported &&
+			  denc_traits<B>::supported>::type>
   : public _denc::container_base<
   boost::container::flat_map,
   _denc::maplike_details<boost::container::flat_map<
@@ -876,15 +878,15 @@ struct denc_traits<
 template<typename T, size_t N>
 struct denc_traits<
   std::array<T, N>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
+  typename std::enable_if<denc_traits<T>::supported>::type> {
 private:
   using container = std::array<T, N>;
 public:
   using traits = denc_traits<T>;
 
-  enum { supported = true };
-  enum { featured = traits::featured };
-  enum { bounded = traits::bounded };
+  static constexpr bool supported = true;
+  static constexpr bool featured = traits::featured;
+  static constexpr bool bounded = traits::bounded;
 
   template<typename U=T>
   static typename std::enable_if<sizeof(U) &&
@@ -995,7 +997,7 @@ namespace _denc {
 template<typename ...Ts>
 struct denc_traits<
   std::tuple<Ts...>,
-  typename std::enable_if<_denc::tuple_traits<Ts...>::supported != 0>::type> {
+  typename std::enable_if<_denc::tuple_traits<Ts...>::supported>::type> {
 private:
   static_assert(sizeof...(Ts) > 0,
 		"Zero-length tuples are not supported.");
@@ -1088,9 +1090,9 @@ private:
 public:
   using traits = _denc::tuple_traits<Ts...>;
 
-  enum { supported = true };
-  enum { featured = traits::featured };
-  enum { bounded = traits::bounded };
+  static constexpr bool supported = true;
+  static constexpr bool featured = traits::featured;
+  static constexpr bool bounded = traits::bounded;
 
 
   template<typename U = traits>
@@ -1147,12 +1149,12 @@ public:
 template<typename T>
 struct denc_traits<
   boost::optional<T>,
-  typename std::enable_if<denc_traits<T>::supported != 0>::type> {
+  typename std::enable_if<denc_traits<T>::supported>::type> {
   using traits = denc_traits<T>;
 
-  enum { supported = true };
-  enum { featured = traits::featured };
-  enum { bounded = false };
+  static constexpr bool supported = true;
+  static constexpr bool featured = traits::featured;
+  static constexpr bool bounded = false;
 
   template<typename U = T>
   static typename std::enable_if<sizeof(U) && !featured>::type
@@ -1226,9 +1228,9 @@ struct denc_traits<
 
 template<>
 struct denc_traits<boost::none_t> {
-  enum { supported = true };
-  enum { featured = false };
-  enum { bounded = true };
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
 
   static void bound_encode(const boost::none_t& v, size_t& p) {
     denc(*(bool *)nullptr, p);
@@ -1250,9 +1252,9 @@ struct denc_traits<boost::none_t> {
 #define WRITE_CLASS_DENC_BOUNDED(T) _DECLARE_CLASS_DENC(T, true)
 #define _DECLARE_CLASS_DENC(T, b)					\
   template<> struct denc_traits<T> {					\
-    enum { supported = true };						\
-    enum { featured = false };						\
-    enum { bounded = b };						\
+    static constexpr bool supported = true;				\
+    static constexpr bool featured = false;				\
+    static constexpr bool bounded = b;					\
     static void bound_encode(const T& v, size_t& p, uint64_t f=0) {	\
       v.bound_encode(p);						\
     }									\
@@ -1269,9 +1271,9 @@ struct denc_traits<boost::none_t> {
 #define WRITE_CLASS_DENC_FEATURED_BOUNDED(T) _DECLARE_CLASS_DENC_FEATURED(T, true)
 #define _DECLARE_CLASS_DENC_FEATURED(T, b)				\
   template<> struct denc_traits<T> {					\
-    enum { supported = true };						\
-    enum { featured = true };						\
-    enum { bounded = b };						\
+    static constexpr bool supported = true;				\
+    static constexpr bool featured = true;				\
+    static constexpr bool bounded = b;					\
     static void bound_encode(const T& v, size_t& p, uint64_t f) {	\
       v.bound_encode(p, f);						\
     }									\
@@ -1292,7 +1294,7 @@ struct denc_traits<boost::none_t> {
 // and decode by calling into denc_traits<> methods (when present).
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported == 1 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type encode(
   const T& o,
   bufferlist& bl,
@@ -1305,7 +1307,7 @@ inline typename std::enable_if<traits::supported == 1 &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported == 1 &&
+inline typename std::enable_if<traits::supported &&
 			       traits::featured>::type encode(
   const T& o, bufferlist& bl,
   uint64_t features)
@@ -1317,7 +1319,7 @@ inline typename std::enable_if<traits::supported == 1 &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported == 1 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type decode(
   T& o,
   bufferlist::iterator& p)
@@ -1337,7 +1339,7 @@ inline typename std::enable_if<traits::supported == 1 &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported == 1 &&
+inline typename std::enable_if<traits::supported &&
 			       traits::featured>::type decode(
   T& o,
   bufferlist::iterator& p)
@@ -1354,7 +1356,7 @@ inline typename std::enable_if<traits::supported == 1 &&
 
 // nohead variants
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported == 1 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type encode_nohead(
   const T& o,
   bufferlist& bl)
@@ -1366,7 +1368,7 @@ inline typename std::enable_if<traits::supported == 1 &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported == 1 &&
+inline typename std::enable_if<traits::supported &&
 			       !traits::featured>::type decode_nohead(
   size_t num,
   T& o,
