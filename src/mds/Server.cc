@@ -318,6 +318,7 @@ Session *Server::get_session(Message *m)
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv;
+  bool blacklisted = false;
   Session *session = get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
@@ -345,6 +346,17 @@ void Server::handle_client_session(MClientSession *m)
     }
     assert(session->is_closed() ||
 	   session->is_closing());
+
+    blacklisted = mds->objecter->with_osdmap(
+        [session](const OSDMap &osd_map) -> bool {
+          return osd_map.is_blacklisted(session->info.inst.addr);
+        });
+
+    if (blacklisted) {
+      dout(10) << "ignoring blacklisted client " << session->info.inst.addr << dendl;
+      m->put();
+      return;
+    }
 
     session->set_client_metadata(m->client_meta);
     dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
@@ -759,6 +771,32 @@ void Server::kill_session(Session *session, Context *on_safe)
       on_safe->complete(0);
     }
   }
+}
+
+size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
+{
+  std::list<Session*> victims;
+  const auto sessions = mds->sessionmap.get_sessions();
+  for (const auto p : sessions)  {
+    if (!p.first.is_client()) {
+      // Do not apply OSDMap blacklist to MDS daemons, we find out
+      // about their death via MDSMap.
+      continue;
+    }
+
+    Session *s = p.second;
+    if (blacklist.count(s->info.inst.addr)) {
+      victims.push_back(s);
+    }
+  }
+
+  for (const auto s : victims) {
+    kill_session(s, nullptr);
+  }
+
+  dout(10) << "apply_blacklist: killed " << victims.size() << dendl;
+
+  return victims.size();
 }
 
 void Server::journal_close_session(Session *session, int state, Context *on_safe)

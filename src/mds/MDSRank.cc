@@ -1338,6 +1338,18 @@ void MDSRank::reconnect_start()
     reopen_log();
   }
 
+  // Drop any blacklisted clients from the SessionMap before going
+  // into reconnect, so that we don't wait for them.
+  objecter->enable_blacklist_events();
+  std::set<entity_addr_t> blacklist;
+  objecter->with_osdmap([this, &blacklist](const OSDMap& o) {
+      o.get_blacklist(&blacklist);
+  });
+  auto killed = server->apply_blacklist(blacklist);
+  dout(4) << "reconnect_start: killed " << killed << " blacklisted sessions ("
+          << blacklist.size() << " blacklist entries, "
+          << sessionmap.get_sessions().size() << ")" << dendl;
+
   server->reconnect_clients(new C_MDS_VoidFn(this, &MDSRank::reconnect_done));
   finish_contexts(g_ceph_context, waiting_for_reconnect);
 }
@@ -1507,6 +1519,9 @@ void MDSRank::boot_create()
   // ok now journal it
   mdlog->journal_segment_subtree_map(fin.new_sub());
   mdlog->flush();
+
+  // Usually we do this during reconnect, but creation skips that.
+  objecter->enable_blacklist_events();
 
   fin.activate();
 }
@@ -2598,6 +2613,13 @@ void MDSRankDispatcher::handle_osd_map()
   server->handle_osd_map();
 
   purge_queue.update_op_limit(*mdsmap);
+
+  std::set<entity_addr_t> newly_blacklisted;
+  objecter->consume_blacklist_events(&newly_blacklisted);
+  auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
+  dout(4) << "handle_osd_map epoch " << epoch << ", "
+          << newly_blacklisted.size() << " new blacklist entries" << dendl;
+  server->apply_blacklist(newly_blacklisted);
 
   // By default the objecter only requests OSDMap updates on use,
   // we would like to always receive the latest maps in order to

@@ -122,6 +122,7 @@ public:
   void terminate_sessions();
   void find_idle_sessions();
   void kill_session(Session *session, Context *on_safe);
+  size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
   void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
