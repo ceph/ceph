@@ -342,6 +342,7 @@ void PGMap::calc_stats()
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
   pg_by_osd.clear();
+  num_primary_pg_by_osd.clear();
 
   for (ceph::unordered_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
        p != pg_stat.end();
@@ -470,6 +471,9 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
     pg_by_osd[*p].insert(pgid);
   for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
     pg_by_osd[*p].insert(pgid);
+
+  if (s.up_primary >= 0)
+    num_primary_pg_by_osd[s.up_primary]++;
 }
 
 void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
@@ -524,6 +528,12 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     oset.erase(pgid);
     if (oset.empty())
       pg_by_osd.erase(*p);
+  }
+
+  if (s.up_primary >= 0) {
+    auto it = num_primary_pg_by_osd.find(s.up_primary);
+    if (it != num_primary_pg_by_osd.end() && it->second > 0)
+      it->second--;
   }
 }
 
@@ -956,6 +966,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("HB_PEERS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("PG_SUM", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PRIMARY_PG_SUM", TextTable::LEFT, TextTable::RIGHT);
 
   for (ceph::unordered_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
@@ -966,6 +977,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
         << si_t(p->second.kb << 10)
         << p->second.hb_peers
         << get_num_pg_by_osd(p->first)
+        << get_num_primary_pg_by_osd(p->first)
         << TextTable::endrow;
   }
 
