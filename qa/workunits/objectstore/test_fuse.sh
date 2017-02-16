@@ -2,7 +2,7 @@
 
 if ! id -u | grep -q '^0$'; then
     echo "not root, re-running self via sudo"
-    sudo PATH=$PATH TYPE=$TYPE $0 || echo FAIL
+    sudo PATH=$PATH TYPE=$TYPE $0
     exit 0
 fi
 
