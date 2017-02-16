@@ -74,7 +74,7 @@ void MDLog::create_logger()
   plb.add_u64(l_mdl_expos, "expos", "Journaler xpire position");
   plb.add_u64(l_mdl_wrpos, "wrpos", "Journaler  write position");
   plb.add_u64(l_mdl_rdpos, "rdpos", "Journaler  read position");
-  plb.add_u64(l_mdl_jlat, "jlat", "Journaler flush latency");
+  plb.add_time_avg(l_mdl_jlat, "jlat", "Journaler flush latency");
 
   plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
 
