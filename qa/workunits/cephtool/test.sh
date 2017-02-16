@@ -986,6 +986,20 @@ function test_mon_mds()
 
   fail_all_mds $FS_NAME
   ceph fs rm $FS_NAME --yes-i-really-mean-it
+
+  # We should be permitted to use an EC pool with overwrites enabled
+  # as the data pool...
+  ceph osd pool set mds-ec-pool debug_white_box_testing_ec_overwrites true --yes-i-really-mean-it
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
+  fail_all_mds $FS_NAME
+  ceph fs rm $FS_NAME --yes-i-really-mean-it
+
+  # ...but not as the metadata pool
+  set +e
+  ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  set -e
+
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   # Create a FS and check that we can subsequently add a cache tier to it
@@ -1006,6 +1020,8 @@ function test_mon_mds()
   # Clean up FS
   fail_all_mds $FS_NAME
   ceph fs rm $FS_NAME --yes-i-really-mean-it
+
+
 
   ceph mds stat
   # ceph mds tell mds.a getmap
