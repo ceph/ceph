@@ -493,11 +493,11 @@ class RadosWatchCtx : public librados::WatchCtx2 {
   string name;
 public:
   RadosWatchCtx(IoCtx& io, const char *imgname) : ioctx(io), name(imgname) {}
-  virtual ~RadosWatchCtx() {}
+  ~RadosWatchCtx() {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
-		     bufferlist& bl) {
+		     bufferlist& bl) override {
     cout << "NOTIFY"
 	 << " cookie " << cookie
 	 << " notify_id " << notify_id
@@ -506,7 +506,7 @@ public:
     bl.hexdump(cout);
     ioctx.notify_ack(name, notify_id, cookie, bl);
   }
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     cout << "ERROR"
 	 << " cookie " << cookie
 	 << " err " << cpp_strerror(err)
@@ -886,15 +886,15 @@ class RadosBencher : public ObjBencher {
   OpWriteDest write_destination;
 
 protected:
-  int completions_init(int concurrentios) {
+  int completions_init(int concurrentios) override {
     completions = new librados::AioCompletion *[concurrentios];
     return 0;
   }
-  void completions_done() {
+  void completions_done() override {
     delete[] completions;
     completions = NULL;
   }
-  int create_completion(int slot, void (*cb)(void *, void*), void *arg) {
+  int create_completion(int slot, void (*cb)(void *, void*), void *arg) override {
     completions[slot] = rados.aio_create_completion((void *) arg, 0, cb);
 
     if (!completions[slot])
@@ -902,18 +902,18 @@ protected:
 
     return 0;
   }
-  void release_completion(int slot) {
+  void release_completion(int slot) override {
     completions[slot]->release();
     completions[slot] = 0;
   }
 
   int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len,
-	       size_t offset) {
+	       size_t offset) override {
     return io_ctx.aio_read(oid, completions[slot], pbl, len, 0);
   }
 
   int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len,
-		size_t offset) {
+		size_t offset) override {
     librados::ObjectWriteOperation op;
 
     if (write_destination & OP_WRITE_DEST_OBJ) {
@@ -941,33 +941,33 @@ protected:
     return io_ctx.aio_operate(oid, completions[slot], &op);
   }
 
-  int aio_remove(const std::string& oid, int slot) {
+  int aio_remove(const std::string& oid, int slot) override {
     return io_ctx.aio_remove(oid, completions[slot]);
   }
 
-  int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
+  int sync_read(const std::string& oid, bufferlist& bl, size_t len) override {
     return io_ctx.read(oid, bl, len, 0);
   }
-  int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
+  int sync_write(const std::string& oid, bufferlist& bl, size_t len) override {
     return io_ctx.write_full(oid, bl);
   }
 
-  int sync_remove(const std::string& oid) {
+  int sync_remove(const std::string& oid) override {
     return io_ctx.remove(oid);
   }
 
-  bool completion_is_done(int slot) {
+  bool completion_is_done(int slot) override {
     return completions[slot]->is_safe();
   }
 
-  int completion_wait(int slot) {
+  int completion_wait(int slot) override {
     return completions[slot]->wait_for_safe_and_cb();
   }
-  int completion_ret(int slot) {
+  int completion_ret(int slot) override {
     return completions[slot]->get_return_value();
   }
 
-  bool get_objects(std::list<Object>* objects, int num) {
+  bool get_objects(std::list<Object>* objects, int num) override {
     int count = 0;
 
     if (!iterator_valid) {
@@ -992,7 +992,7 @@ protected:
     return true;
   }
 
-  void set_namespace( const std::string& ns) {
+  void set_namespace( const std::string& ns) override {
     io_ctx.set_namespace(ns);
   }
 

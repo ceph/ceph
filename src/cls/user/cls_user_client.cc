@@ -49,7 +49,7 @@ class ClsUserListCtx : public ObjectOperationCompletion {
 public:
   ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated, int *_pret) :
                                       entries(_entries), marker(_marker), truncated(_truncated), pret(_pret) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_user_list_buckets_ret ret;
       try {
@@ -102,7 +102,7 @@ public:
       ret_ctx->put();
     }
   }
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_user_get_header_ret ret;
       try {

@@ -258,7 +258,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     ~raw_combined() {
       dec_total_alloc(len);
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return create(len, alignment);
     }
 
@@ -314,7 +314,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       dec_total_alloc(len);
       bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_malloc(len);
     }
   };
@@ -337,7 +337,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       dec_total_alloc(len);
       bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_mmap_pages(len);
     }
   };
@@ -362,7 +362,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_posix_aligned(len, align);
     }
   };
@@ -448,7 +448,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	    << buffer::get_total_alloc() << bendl;
     }
 
-    bool can_zero_copy() const {
+    bool can_zero_copy() const override {
       return true;
     }
 
@@ -465,7 +465,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return 0;
     }
 
-    int zero_copy_to_fd(int fd, loff_t *offset) {
+    int zero_copy_to_fd(int fd, loff_t *offset) override {
       assert(!source_consumed);
       int flags = SPLICE_F_NONBLOCK;
       ssize_t r = safe_splice_exact(pipefds[0], NULL, fd, offset, len, flags);
@@ -478,13 +478,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return 0;
     }
 
-    buffer::raw* clone_empty() {
+    buffer::raw* clone_empty() override {
       // cloning doesn't make sense for pipe-based buffers,
       // and is only used by unit tests for other types of buffers
       return NULL;
     }
 
-    char *get_data() {
+    char *get_data() override {
       if (data)
 	return data;
       return copy_pipe(pipefds);
@@ -601,7 +601,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       dec_total_alloc(len);
       bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_char(len);
     }
   };
@@ -618,10 +618,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     raw_unshareable(unsigned l, char *b) : raw(b, l) {
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_char(len);
     }
-    bool is_shareable() {
+    bool is_shareable() override {
       return false; // !shareable, will force make_shareable()
     }
     ~raw_unshareable() {
@@ -635,7 +635,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
     ~raw_static() {}
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new buffer::raw_char(len);
     }
   };
@@ -646,7 +646,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     raw_claim_buffer(const char *b, unsigned l, deleter d)
         : raw((char*)b, l), del(std::move(d)) { }
     ~raw_claim_buffer() {}
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new buffer::raw_char(len);
     }
   };

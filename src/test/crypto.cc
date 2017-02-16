@@ -11,7 +11,7 @@
 
 class CryptoEnvironment: public ::testing::Environment {
 public:
-  void SetUp() {
+  void SetUp() override {
     ceph::crypto::init(g_ceph_context);
   }
 };

@@ -56,11 +56,11 @@ struct Observer : public md_config_obs_t {
     keys[1] = NULL;
   }
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     return (const char **)keys;
   }
   void handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed) {
+			  const std::set <std::string> &changed) override {
     // do nothing.
   }
 };

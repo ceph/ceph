@@ -36,7 +36,7 @@ protected:
         instance.lock.Unlock();
     }
 
-    virtual void *entry() {
+    void *entry() override {
       ErasureCodeProfile profile;
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;

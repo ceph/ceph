@@ -50,7 +50,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       usleep(5);
       waited = throttle.get(count);
       throttle.put(count);

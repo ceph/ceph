@@ -539,7 +539,7 @@ class ClsLua : public ::testing::Test {
       ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
     }
 
-    virtual void SetUp() {
+    void SetUp() override {
       /* Grab test names to build unique objects */
       const ::testing::TestInfo* const test_info =
         ::testing::UnitTest::GetInstance()->current_test_info();
@@ -553,7 +553,7 @@ class ClsLua : public ::testing::Test {
       oid = ss_oid.str();
     }
 
-    virtual void TearDown() {
+    void TearDown() override {
     }
 
     /*

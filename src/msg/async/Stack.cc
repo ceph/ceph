@@ -180,7 +180,7 @@ class C_drain : public EventCallback {
   explicit C_drain(size_t c)
       : drain_lock("C_drain::drain_lock"),
         drain_count(c) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     Mutex::Locker l(drain_lock);
     drain_count--;
     if (drain_count == 0) drain_cond.Signal();

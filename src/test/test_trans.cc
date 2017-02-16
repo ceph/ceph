@@ -25,7 +25,7 @@
 #define dout_prefix *_dout
 
 struct Foo : public Thread {
-  void *entry() {
+  void *entry() override {
     dout(0) << "foo started" << dendl;
     sleep(1);
     dout(0) << "foo asserting 0" << dendl;

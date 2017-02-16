@@ -111,7 +111,7 @@ public:
                    bool *_truncated)
     : entries(_entries), marker(_marker), truncated(_truncated) {}
 
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_timeindex_list_ret ret;
       try {

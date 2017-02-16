@@ -53,7 +53,7 @@ public:
       value(_value),
       in_method(_in_method) { }
 
-    virtual void * entry() {
+    void * entry() override {
       switch (in_method) {
       case LOWER_BOUND:
         ptr = cache.lower_bound(key);

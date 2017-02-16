@@ -33,11 +33,11 @@ using ::testing::StrEq;
 
 class DNSResolverTest : public ::testing::Test {
   protected:
-    virtual void SetUp() {
+    void SetUp() override {
       g_ceph_context->_conf->subsys.set_log_level(dout_subsys, TEST_DEBUG);
     }
 
-    virtual void TearDown()  {
+    void TearDown() override  {
       DNSResolver::get_instance(nullptr);
     }
 };

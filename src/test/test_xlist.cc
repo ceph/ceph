@@ -26,13 +26,13 @@ protected:
   // for filling up an ItemList
   Refs refs;
 
-  virtual void SetUp() {
+  void SetUp() override {
     for (int i = 0; i < 13; i++) {
       items.push_back(new Item(i));
       refs.push_back(&items.back()->xitem);
     }
   }
-  virtual void TearDown() {
+  void TearDown() override {
     for (Items::iterator i = items.begin(); i != items.end(); ++i) {
       delete *i;
     }
