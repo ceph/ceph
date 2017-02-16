@@ -3,7 +3,6 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
-	$(LIBRGW) \
 	$(LIBRADOS) \
 	$(LIBRBD_TYPES) \
 	$(LIBOSD_TYPES) \
@@ -26,6 +25,9 @@ ceph_dencoder_CXXFLAGS += -DWITH_RBD
 endif
 if WITH_RADOSGW
 ceph_dencoder_CXXFLAGS += -DWITH_RADOSGW
+ceph_dencoder_LDADD += \
+	$(LIBRGW) \
+	$(LIBRGW_DEPS) 
 endif
 
 
