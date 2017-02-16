@@ -2230,7 +2230,7 @@ protected:
 		    vector<pair<pg_notify_t, pg_interval_map_t> > >& info_map,
 		OSDMapRef map);
 
-  bool require_mon_peer(Message *m);
+  bool require_mon_peer(const Message *m);
   bool require_osd_peer(Message *m);
   /***
    * Verifies that we were alive in the given epoch, and that
