@@ -291,7 +291,8 @@ public:
 
   size_t send_status(const int status,
                      const char* const status_name) override {
-    if (204 == status || 304 == status) {
+    if ((204 == status || 304 == status) &&
+        ! g_conf->rgw_print_prohibited_content_length) {
       action = ContentLengthAction::INHIBIT;
     } else {
       action = ContentLengthAction::FORWARD;
