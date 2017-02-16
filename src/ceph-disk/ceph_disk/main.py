@@ -4476,6 +4476,9 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
+        ('/etc/ceph', 'ceph', 'ceph', True, True),
+        ('/var/run/ceph', 'ceph', 'ceph', True, True),
+        ('/var/log/ceph', 'ceph', 'ceph', True, True),
         ('/var/lib/ceph', 'ceph', 'ceph', True, False),
     ]
 
