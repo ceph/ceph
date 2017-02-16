@@ -2824,7 +2824,7 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
   const MOSDOp *m = static_cast<const MOSDOp*>(pwop->op->get_req());
   assert(m != NULL);
 
-  if (m->wants_ondisk() && !pwop->sent_disk) {
+  if (!pwop->sent_reply) {
     // send commit.
     MOSDOpReply *reply = pwop->ctx->reply;
     if (reply)
@@ -2836,21 +2836,8 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     dout(10) << " sending commit on " << pwop << " " << reply << dendl;
     osd->send_message_osd_client(reply, m->get_connection());
-    pwop->sent_disk = true;
+    pwop->sent_reply = true;
     pwop->ctx->op->mark_commit_sent();
-  } else if (m->wants_ack() && !pwop->sent_ack && !pwop->sent_disk) {
-    // send ack
-    MOSDOpReply *reply = pwop->ctx->reply;
-    if (reply)
-      pwop->ctx->reply = NULL;
-    else {
-      reply = new MOSDOpReply(m, r, get_osdmap()->get_epoch(), 0, true);
-      reply->set_reply_versions(eversion_t(), pwop->user_version);
-    }
-    reply->add_flags(CEPH_OSD_FLAG_ACK);
-    dout(10) << " sending ack on " << pwop << " " << reply << dendl;
-    osd->send_message_osd_client(reply, m->get_connection());
-    pwop->sent_ack = true;
   }
 
   delete pwop->ctx;
@@ -3133,7 +3120,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	log_op_stats(
 	  ctx);
 
-      if (m && (m->wants_ondisk() || m->wants_ack()) && !ctx->sent_reply) {
+      if (m && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
 	if (reply)
 	  ctx->reply = NULL;
@@ -8311,7 +8298,6 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
 
   if (m)
     dout(10) << "eval_repop " << *repop
-	     << " wants=" << (m->wants_ack() ? "a":"") << (m->wants_ondisk() ? "d":"")
 	     << (repop->rep_done ? " DONE" : "")
 	     << dendl;
   else
