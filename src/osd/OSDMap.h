@@ -345,6 +345,7 @@ public:
 
   bool is_blacklisted(const entity_addr_t& a) const;
   void get_blacklist(list<pair<entity_addr_t,utime_t > > *bl) const;
+  void get_blacklist(std::set<entity_addr_t> *bl) const;
 
   string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
