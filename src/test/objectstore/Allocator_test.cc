@@ -5,6 +5,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 #include <iostream>
+#include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
 
 #include "common/Mutex.h"
