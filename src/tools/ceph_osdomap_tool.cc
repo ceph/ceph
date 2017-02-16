@@ -161,9 +161,11 @@ int main(int argc, char **argv) {
       }
     }
   } else if (cmd == "check" || cmd == "repair") {
+    ostringstream ss;
     bool repair = (cmd == "repair");
-    r = omap.check(std::cout, repair);
+    r = omap.check(ss, repair);
     if (r > 0) {
+      std::cerr << ss.str() << std::endl;
       std::cerr << "check got " << r << " error(s)" << std::endl;
       r = 1;
       goto done;
