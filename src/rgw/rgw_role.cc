@@ -78,7 +78,7 @@ int RGWRole::create(bool exclusive)
   id = uuid_str;
 
   //arn
-  arn = role_arn_prefix + uid + ":role" + path + name;
+  arn = role_arn_prefix + tenant + ":role" + path + name;
 
   // Creation time
   real_clock::time_point t = real_clock::now();
