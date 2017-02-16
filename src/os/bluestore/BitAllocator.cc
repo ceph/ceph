@@ -791,6 +791,13 @@ bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
     return false;
   }
 
+  int64_t child_used_blocks = child->get_used_blocks();
+  int64_t child_total_blocks = child->size();
+  if ((child_total_blocks - child_used_blocks) < required) {
+    child->unlock();
+    return false;
+  }
+
   return true;
 }
 
@@ -1101,6 +1108,14 @@ bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, int64_t required, boo
     child->unlock();
     return false;
   }
+
+  int64_t child_used_blocks = child->get_used_blocks();
+  int64_t child_total_blocks = child->size();
+  if ((child_total_blocks - child_used_blocks) < required) {
+    child->unlock();
+    return false;
+  }
+
   return true;
 }
 
@@ -1338,6 +1353,12 @@ bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
     return false;
   }
 
+  int64_t child_used_blocks = child->get_used_blocks();
+  int64_t child_total_blocks = child->size();
+  if ((child_total_blocks - child_used_blocks) < required) {
+    child->unlock();
+    return false;
+  }
 
   return true;
 }
