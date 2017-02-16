@@ -13,7 +13,6 @@
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
 #include <ostream>
-#include <boost/scoped_ptr.hpp>
 #include "include/assert.h"
 #include "os/bluestore/bluestore_types.h"
 
