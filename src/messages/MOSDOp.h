@@ -232,13 +232,6 @@ public:
   }
 
   bool has_flag(__u32 flag) const { return flags & flag; };
-  bool wants_ack() const { return flags & CEPH_OSD_FLAG_ACK; }
-  bool wants_ondisk() const { return flags & CEPH_OSD_FLAG_ONDISK; }
-  bool wants_onnvram() const { return flags & CEPH_OSD_FLAG_ONNVRAM; }
-
-  void set_want_ack(bool b) { flags |= CEPH_OSD_FLAG_ACK; }
-  void set_want_onnvram(bool b) { flags |= CEPH_OSD_FLAG_ONNVRAM; }
-  void set_want_ondisk(bool b) { flags |= CEPH_OSD_FLAG_ONDISK; }
 
   bool is_retry_attempt() const { return flags & CEPH_OSD_FLAG_RETRY; }
   void set_retry_attempt(unsigned a) { 
