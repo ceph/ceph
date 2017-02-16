@@ -4,9 +4,11 @@
 
 ``client acl type``
 
-:Description: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to enable POSIX ACL, or an empty string.
+:Description: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to enable POSIX ACL, or an empty string. This option only takes effect when the
+``fuse_default_permissions`` is set to ``false``.
+
 :Type: String
-:Default: ``""`` (empty string)
+:Default: ``""`` (no ACL enforcement)
 
 ``client cache mid``
 
@@ -32,12 +34,6 @@
 :Type: Boolean
 :Default: ``false``
 
-``client_debug_getattr_caps``
-
-:Description: Check if the reply from the MDS contains required capabilities.
-:Type: Boolean
-:Default: ``false``
-
 ``client_dirsize_rbytes``
 
 :Description: If set to `true`, use the recursive size of a directory (that is, total of all descendants).
@@ -52,9 +48,9 @@
 
 ``client_metadata``
 
-:Description: Comma-delimited strings for client metadata sent to each MDS.
+:Description: Comma-delimited strings for client metadata sent to each MDS, in addition to the automatically generated version, host name, and other metadata.
 :Type: String
-:Default: ``""`` (empty string)
+:Default: ``""`` (no additional metadata)
 
 ``client_mount_gid``
 
@@ -106,9 +102,9 @@
 
 ``client_oc_size``
 
-:Description: Set how many megabytes of data will the client cache.
+:Description: Set how many bytes of data will the client cache.
 :Type: Integer
-:Default: ``209715200`` (200MB)
+:Default: ``209715200`` (200 MB)
 
 ``client_oc_target_dirty``
 
@@ -164,12 +160,6 @@
 :Type: Float
 :Default: ``1.0`` (seconds)
 
-``client_trace``
-
-:Description: Trace the file path for all file operations. The output is designed to be used by the Ceph `synthetic client <../man/8/ceph-syn>`.
-:Type: String
-:Default: ``""`` (disabled)
-
 ``client_use_random_mds``
 
 :Description: Choose random MDS for each request.
@@ -178,7 +168,7 @@
 
 ``fuse_default_permissions``
 
-:Description: When set to ``true``, the FUSE client enforces permissions. When set to ``false``, the ``ceph-fuse`` utility enforces the permissions. Set to `false` together with the ``client acl type=posix_acl`` option to enable POSIX ACL.
+:Description: When set to ``false``, ``ceph-fuse`` utility checks does its own permissions checking, instead of relying on the permissions enforcement in FUSE. Set to ``false`` together with the ``client acl type=posix_acl`` option to enable POSIX ACL.
 :Type: Boolean
 :Default: ``true``
 
@@ -186,6 +176,18 @@ Developer Options
 #################
 
 .. important:: These options are internal. They are listed here only to complete the list of options.
+
+``client_debug_getattr_caps``
+
+:Description: Check if the reply from the MDS contains required capabilities.
+:Type: Boolean
+:Default: ``false``
+
+``client_debug_inject_tick_delay``
+
+:Description: Add artificial delay between client ticks.
+:Type: Integer
+:Default: ``0``
 
 ``client_inject_fixed_oldest_tid``
 
@@ -199,8 +201,9 @@ Developer Options
 :Type: Boolean
 :Default: ``false``
 
-``client_debug_inject_tick_delay``
+``client_trace``
 
-:Description: Add artificial delay between client ticks.
-:Type: Integer
-:Default: ``0``
+:Description: The path to the trace file for all file operations. The output is designed to be used by the Ceph `synthetic client <../man/8/ceph-syn>`.
+:Type: String
+:Default: ``""`` (disabled)
+
