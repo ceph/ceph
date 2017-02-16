@@ -24,6 +24,8 @@ test -d $MNT && fusermount -u $MNT || true
 rmdir $MNT || true
 mkdir $MNT
 
+export CEPH_ARGS=--enable_experimental_unrecoverable_data_corrupting_features=bluestore
+
 $COT --op mkfs --data-path $DATA --type $TYPE
 $COT --op fuse --data-path $DATA --mountpoint $MNT &
 
