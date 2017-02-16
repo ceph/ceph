@@ -1338,6 +1338,10 @@ bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
     return false;
   }
 
+  if ((m_total_blocks - m_used_blocks) < required) {
+    child->unlock();
+    return false;
+  }
 
   return true;
 }
