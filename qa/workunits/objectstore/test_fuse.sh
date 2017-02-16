@@ -6,7 +6,7 @@ if ! id -u | grep -q '^0$'; then
     exit 0
 fi
 
-function expect_false()
+expect_false()
 {
         set -x
         if "$@"; then return 1; else return 0; fi
