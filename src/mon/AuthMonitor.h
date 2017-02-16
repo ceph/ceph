@@ -114,7 +114,7 @@ private:
   void upgrade_format();
 
   void export_keyring(KeyRing& keyring);
-  void import_keyring(KeyRing& keyring);
+  int import_keyring(KeyRing& keyring);
 
   void push_cephx_inc(KeyServerData::Incremental& auth_inc) {
     Incremental inc;

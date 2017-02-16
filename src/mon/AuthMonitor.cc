@@ -652,11 +652,15 @@ void AuthMonitor::export_keyring(KeyRing& keyring)
   mon->key_server.export_keyring(keyring);
 }
 
-void AuthMonitor::import_keyring(KeyRing& keyring)
+int AuthMonitor::import_keyring(KeyRing& keyring)
 {
   for (map<EntityName, EntityAuth>::iterator p = keyring.get_keys().begin();
        p != keyring.get_keys().end();
        ++p) {
+    if (p->second.caps.empty()) {
+      dout(0) << "import: no caps supplied" << dendl;
+      return -EINVAL;
+    }
     KeyServerData::Incremental auth_inc;
     auth_inc.name = p->first;
     auth_inc.auth = p->second;
@@ -665,6 +669,7 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
     dout(30) << "    " << auth_inc.auth << dendl;
     push_cephx_inc(auth_inc);
   }
+  return 0;
 }
 
 bool AuthMonitor::prepare_command(MonOpRequestRef op)
@@ -731,7 +736,13 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       rs = err;
       goto done;
     }
-    import_keyring(keyring);
+    err = import_keyring(keyring);
+    if (err < 0) {
+      ss << "auth import: no caps supplied";
+      getline(ss, rs);
+      mon->reply_command(op, -EINVAL, rs, get_last_committed());
+      return true;
+    }
     ss << "imported keyring";
     getline(ss, rs);
     err = 0;
