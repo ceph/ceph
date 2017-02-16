@@ -733,7 +733,6 @@ bool ECBackend::handle_message(
   case MSG_OSD_EC_WRITE_REPLY: {
     MOSDECSubOpWriteReply *op = static_cast<MOSDECSubOpWriteReply*>(
       _op->get_req());
-    op->set_priority(priority);
     handle_sub_write_reply(op->op.from, op->op);
     return true;
   }
@@ -743,7 +742,6 @@ bool ECBackend::handle_message(
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = get_parent()->get_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op));
-    op->set_priority(priority);
     get_parent()->send_message_osd_cluster(
       op->op.from.osd, reply, get_parent()->get_epoch());
     return true;
