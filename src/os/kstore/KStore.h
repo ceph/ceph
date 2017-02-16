@@ -553,6 +553,10 @@ public:
   objectstore_perf_stat_t get_cur_stats() {
     return objectstore_perf_stat_t();
   }
+  const PerfCounters* get_perf_counters() const {
+    return logger;
+  }
+
 
   int queue_transactions(
     Sequencer *osr,

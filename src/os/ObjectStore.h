@@ -99,8 +99,6 @@ public:
     const string& path,
     uuid_d *fsid);
 
-  Logger *logger;
-
   /**
    * Fetch Object Store statistics.
    *
@@ -109,6 +107,14 @@ public:
    * This appears to be called with nothing locked.
    */
   virtual objectstore_perf_stat_t get_cur_stats() = 0;
+
+  /**
+   * Fetch Object Store performance counters.
+   *
+   *
+   * This appears to be called with nothing locked.
+   */
+  virtual const PerfCounters* get_perf_counters() const = 0;
 
   /**
    * a sequencer orders transactions
@@ -1487,8 +1493,7 @@ public:
 
  public:
   ObjectStore(CephContext* cct,
-	      const std::string& path_) : path(path_), cct(cct),
-					  logger(nullptr) {}
+	      const std::string& path_) : path(path_), cct(cct) {}
   virtual ~ObjectStore() {}
 
   // no copying

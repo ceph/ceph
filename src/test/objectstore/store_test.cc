@@ -20,6 +20,7 @@
 #include <sys/mount.h>
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
+#include "os/bluestore/BlueStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -1236,6 +1237,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     return;
   g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->set_val("bluestore_min_alloc_size", "65536");
+ 
+ // just a big number to disble gc
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "100000");
   g_ceph_context->_conf->apply_changes(NULL);
   int r = store->umount();
   ASSERT_EQ(r, 0);
@@ -1474,6 +1478,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.compressed);
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_min_alloc_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
@@ -5727,7 +5732,7 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     ASSERT_EQ(r, 0);
   }
   g_ceph_context->_conf->set_val("bluestore_cache_size", "4000000");
-  g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
+  g_conf->set_val("bluestore_min_alloc_size", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 
@@ -5814,6 +5819,169 @@ TEST_P(StoreTest, KVDBStatsTest) {
   g_conf->set_val("rocksdb_collect_compaction_stats", "false");
   g_conf->set_val("rocksdb_collect_extended_stats","false");
   g_conf->set_val("rocksdb_collect_memory_stats","false");
+}
+
+TEST_P(StoreTest, garbageCollection) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  int buf_len = 256 * 1024;
+  int overlap_offset = 64 * 1024;
+  int write_offset = buf_len;
+  if (string(GetParam()) != "bluestore")
+    return;
+
+#define WRITE_AT(offset, _length) {\
+      ObjectStore::Transaction t;\
+      if ((uint64_t)_length != bl.length()) { \
+        buffer::ptr p(bl.c_str(), _length);\
+        bufferlist bl_tmp;\
+        bl_tmp.push_back(p);\
+        t.write(cid, hoid, offset, bl_tmp.length(), bl_tmp);\
+      } else {\
+        t.write(cid, hoid, offset, bl.length(), bl);\
+      }\
+      r = apply_transaction(store, &osr, std::move(t));\
+      ASSERT_EQ(r, 0);\
+  }
+  g_conf->set_val("bluestore_min_alloc_size", "65536");
+  g_conf->set_val("bluestore_compression_min_blob_size", "262144");
+  g_conf->set_val("bluestore_compression_mode", "force");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 5, in);
+    ASSERT_EQ(-ENOENT, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  std::string data;
+  data.resize(buf_len);
+
+  {
+    { 
+      bool exists = store->exists(cid, hoid);
+      ASSERT_TRUE(!exists);
+
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+
+      exists = store->exists(cid, hoid);
+      ASSERT_EQ(true, exists);
+    } 
+    bufferlist bl;
+
+    for(size_t i = 0; i < data.size(); i++)
+      data[i] = i % 256;
+
+    bl.append(data);
+
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(0, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset - 2 * overlap_offset, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0u);
+    }
+
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset - overlap_offset, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x10000u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset - 3 * overlap_offset, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x20000u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset + 1, overlap_offset-1);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x20000u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset + 1, overlap_offset);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x3ffffu);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(0, buf_len-1);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40001u);
+    }
+    g_conf->set_val("bluestore_gc_enable_total_threshold", "1"); //forbid GC when saving = 0
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(1, overlap_offset-2);
+      WRITE_AT(overlap_offset * 2 + 1, overlap_offset-2);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40001u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(overlap_offset + 1, overlap_offset-2);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x0);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40007u);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      cerr << "Cleaning" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
+  g_conf->set_val("bluestore_compression_min_blob_size", "131072");
+  g_conf->set_val("bluestore_compression_mode", "none");
+  g_conf->set_val("bluestore_min_blob_size", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
 }
 
 int main(int argc, char **argv) {

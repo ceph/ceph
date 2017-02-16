@@ -112,6 +112,7 @@ enum {
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
   l_bluestore_extent_compress,
+  l_bluestore_gc_merged,
   l_bluestore_last
 };
 
@@ -636,11 +637,11 @@ public:
       return a.logical_offset == b.logical_offset;
     }
 
-    uint32_t blob_start() {
+    uint32_t blob_start() const {
       return logical_offset - blob_offset;
     }
 
-    uint32_t blob_end() {
+    uint32_t blob_end() const {
       return blob_start() + blob->get_blob().get_logical_length();
     }
 
@@ -650,7 +651,7 @@ public:
 
     // return true if any piece of the blob is out of
     // the given range [o, o + l].
-    bool blob_escapes_range(uint32_t o, uint32_t l) {
+    bool blob_escapes_range(uint32_t o, uint32_t l) const {
       return blob_start() < o || blob_end() > o + l;
     }
   };
@@ -787,6 +788,7 @@ public:
 
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
+    extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
     /// add a new Extent
     void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
@@ -815,6 +817,113 @@ public:
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
+  };
+
+  /// Compressed Blob Garbage collector
+  /*
+  The primary idea of the collector is to estimate a difference between
+  allocation units(AU) currently present for compressed blobs and new AUs
+  required to store that data uncompressed. 
+  Estimation is performed for protrusive extents within a logical range
+  determined by a concatenation of old_extents collection and specific(current)
+  write request.
+  The root cause for old_extents use is the need to handle blob ref counts
+  properly. Old extents still hold blob refs and hence we need to traverse
+  the collection to determine if blob to be released.
+  Protrusive extents are extents that fit into the blob set in action
+  (ones that are below the logical range from above) but not removed totally
+  due to the current write. 
+  E.g. for
+  extent1 <loffs = 100, boffs = 100, len  = 100> -> 
+    blob1<compressed, len_on_disk=4096, logical_len=8192>
+  extent2 <loffs = 200, boffs = 200, len  = 100> ->
+    blob2<raw, len_on_disk=4096, llen=4096>
+  extent3 <loffs = 300, boffs = 300, len  = 100> ->
+    blob1<compressed, len_on_disk=4096, llen=8192>
+  extent4 <loffs = 4096, boffs = 0, len  = 100>  ->
+    blob3<raw, len_on_disk=4096, llen=4096>
+  write(300~100)
+  protrusive extents are within the following ranges <0~300, 400~8192-400>
+  In this case existing AUs that might be removed due to GC (i.e. blob1) 
+  use 2x4K bytes.
+  And new AUs expected after GC = 0 since extent1 to be merged into blob2.
+  Hence we should do a collect.
+  */
+  class GarbageCollector
+  {
+  public:
+    /// return amount of allocation units that might be saved due to GC
+    int64_t estimate(
+      uint64_t offset,
+      uint64_t length,
+      const ExtentMap& extent_map,
+      const extent_map_t& old_extents,
+      uint64_t min_alloc_size);
+
+    /// return a collection of extents to perform GC on
+    const vector<AllocExtent>& get_extents_to_collect() const {
+      return extents_to_collect;
+    }
+    GarbageCollector(CephContext* _cct) : cct(_cct) {}
+
+  private:
+    struct BlobInfo {
+      uint64_t referenced_bytes = 0;    ///< amount of bytes referenced in blob
+      int64_t expected_allocations = 0; ///< new alloc units required 
+                                        ///< in case of gc fulfilled
+      bool collect_candidate = false;   ///< indicate if blob has any extents 
+                                        ///< eligible for GC.
+      extent_map_t::const_iterator first_lextent; ///< points to the first 
+                                                  ///< lextent referring to 
+                                                  ///< the blob if any.
+                                                  ///< collect_candidate flag 
+                                                  ///< determines the validity
+      extent_map_t::const_iterator last_lextent;  ///< points to the last 
+                                                  ///< lextent referring to 
+                                                  ///< the blob if any.
+
+      BlobInfo(uint64_t ref_bytes) :
+        referenced_bytes(ref_bytes) {
+      }
+    };
+    CephContext* cct;
+    map<Blob*, BlobInfo> affected_blobs; ///< compressed blobs and their ref_map
+                                         ///< copies that are affected by the
+                                         ///< specific write
+
+    vector<AllocExtent> extents_to_collect; ///< protrusive extents that should
+                                            ///< be collected if GC takes place
+
+    boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
+                                                ///<  unit when traversing 
+                                                ///< protrusive extents. 
+                                                ///< Other extents mapped to
+                                                ///< this AU to be ignored 
+                                                ///< (except the case where
+                                                ///< uncompressed extent follows
+                                                ///< compressed one - see below).
+    BlobInfo* blob_info_counted = nullptr; ///< set if previous allocation unit
+                                           ///< caused expected_allocations
+					   ///< counter increment at this blob.
+                                           ///< if uncompressed extent follows 
+                                           ///< a decrement for the 
+                                	   ///< expected_allocations counter 
+                                           ///< is needed
+    int64_t expected_allocations = 0;      ///< new alloc units required in case
+                                           ///< of gc fulfilled
+    int64_t expected_for_release = 0;      ///< alloc units currently used by
+                                           ///< compressed blobs that might
+                                           ///< gone after GC
+    uint64_t gc_start_offset;              ///starting offset for GC
+    uint64_t gc_end_offset;                ///ending offset for GC
+
+  protected:
+    void process_protrusive_extents(const BlueStore::ExtentMap& extent_map, 
+				    uint64_t start_offset,
+				    uint64_t end_offset,
+				    uint64_t start_touch_offset,
+				    uint64_t end_touch_offset,
+				    uint64_t min_alloc_size);
   };
 
   struct OnodeSpace;
@@ -2068,6 +2177,9 @@ public:
     perf_tracker.update_from_perfcounters(*logger);
     return perf_tracker.get_cur_stats();
   }
+  const PerfCounters* get_perf_counters() const {
+    return logger;
+  }
 
   int queue_transactions(
     Sequencer *osr,
@@ -2220,6 +2332,12 @@ private:
                       uint64_t length,
                       bufferlist& bl,
                       WriteContext *wctx);
+  void _do_garbage_collection(TransContext *txc,
+			      CollectionRef& c,
+			      OnodeRef o,
+			      uint64_t offset,
+			      uint64_t length,
+			      WriteContext *wctx);
 
   int _touch(TransContext *txc,
 	     CollectionRef& c,
