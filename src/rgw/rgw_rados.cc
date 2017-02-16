@@ -6157,11 +6157,14 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   r = get_bucket_info(obj_ctx, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, NULL);
   if (r < 0) {
     ldout(cct, 10) << "failed to read dest bucket info: r=" << r << dendl;
+    if (r == -ENOENT) {
+      return -ERR_PRECONDITION_FAILED;
+    }
     return r;
   }
 
   if (dest_bucket_info.owner != bucket_info.owner) {
-    return -EPERM;
+    return -ERR_PRECONDITION_FAILED;
   }
 
   rgw_obj dest_obj(dest_bucket_info.bucket, buf);
