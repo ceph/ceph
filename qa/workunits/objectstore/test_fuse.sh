@@ -2,11 +2,11 @@
 
 if ! id -u | grep -q '^0$'; then
     echo "not root, re-running self via sudo"
-    sudo PATH=$PATH TYPE=$TYPE $0 || echo FAIL
+    sudo PATH=$PATH TYPE=$TYPE $0
     exit 0
 fi
 
-function expect_false()
+expect_false()
 {
         set -x
         if "$@"; then return 1; else return 0; fi
@@ -23,6 +23,8 @@ mkdir -p $DATA
 test -d $MNT && fusermount -u $MNT || true
 rmdir $MNT || true
 mkdir $MNT
+
+export CEPH_ARGS=--enable_experimental_unrecoverable_data_corrupting_features=bluestore
 
 $COT --op mkfs --data-path $DATA --type $TYPE
 $COT --op fuse --data-path $DATA --mountpoint $MNT &
