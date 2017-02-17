@@ -21,8 +21,8 @@
 
 class MOSDBackoff : public MOSDFastDispatchOp {
 public:
-  const int HEAD_VERSION = 1;
-  const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;
   epoch_t map_epoch = 0;
