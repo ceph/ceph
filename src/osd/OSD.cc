@@ -948,7 +948,6 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                                   epoch_t epoch, const OSDMapRef& osdmap,
                                   const epoch_t *sent_epoch_p)
 {
-  bool should_send = false;
   dout(20) << "should_share_map "
            << name << " " << con->get_peer_addr()
            << " " << epoch << dendl;
@@ -961,7 +960,7 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                << *sent_epoch_p
                << " versus osdmap epoch " << osdmap->get_epoch() << dendl;
       if (*sent_epoch_p < osdmap->get_epoch()) {
-        should_send = true;
+        return true;
       } // else we don't need to send it out again
     }
   }
@@ -979,11 +978,11 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
       dout(10) << name << " " << con->get_peer_addr()
                << " has old map " << epoch << " < "
                << osdmap->get_epoch() << dendl;
-      should_send = true;
+      return true;
     }
   }
 
-  return should_send;
+  return false;
 }
 
 void OSDService::share_map(
@@ -6775,7 +6774,8 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
     if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
       service.publish_superblock(superblock);
       write_superblock(t);
-      store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+      int tr = store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+      assert(tr == 0);
       num = 0;
       if (!skip_maps) {
 	// skip_maps leaves us with a range of old maps if we fail to remove all
@@ -8435,11 +8435,11 @@ void OSD::_remove_pg(PG *pg)
   pg->on_removal(&rmt);
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
-
-  store->queue_transaction(
+  int tr = store->queue_transaction(
     pg->osr.get(), std::move(rmt), NULL, 
     new ContainerContext<
       SequencerRef>(pg->osr));
+  assert(tr == 0);
 
   DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
     pg->info.pgid,
@@ -8476,28 +8476,30 @@ void OSDService::_maybe_queue_recovery() {
 
 bool OSDService::_recover_now(uint64_t *available_pushes)
 {
+  if (available_pushes)
+      *available_pushes = 0;
+
+  if (ceph_clock_now() < defer_recovery_until) {
+    dout(15) << __func__ << " defer until " << defer_recovery_until << dendl;
+    return false;
+  }
+
+  if (recovery_paused) {
+    dout(15) << __func__ << " paused" << dendl;
+    return false;
+  }
+
   uint64_t max = cct->_conf->osd_recovery_max_active;
   if (max <= recovery_ops_active + recovery_ops_reserved) {
-    dout(15) << "_recover_now active " << recovery_ops_active
+    dout(15) << __func__ << " active " << recovery_ops_active
 	     << " + reserved " << recovery_ops_reserved
 	     << " >= max " << max << dendl;
-    if (available_pushes)
-      *available_pushes = 0;
     return false;
   }
 
   if (available_pushes)
     *available_pushes = max - recovery_ops_active - recovery_ops_reserved;
 
-  if (ceph_clock_now() < defer_recovery_until) {
-    dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
-    return false;
-  }
-
-  if (recovery_paused) {
-    dout(15) << "_recover_now paused" << dendl;
-    return false;
-  }
   return true;
 }
 
