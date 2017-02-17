@@ -249,7 +249,7 @@ public:
   typedef librbd::journal::Replay<librbd::MockTestImageCtx> MockReplay;
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -270,7 +270,7 @@ public:
       "remote_mirror_uuid", m_remote_image_ctx->id, m_remote_io_ctx);
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     delete m_image_replayer;
 
     TestMockFixture::TearDown();

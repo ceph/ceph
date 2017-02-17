@@ -53,7 +53,7 @@ namespace librbd {
     C_ReadRequest(CephContext *cct, Context *c, Mutex *cache_lock)
       : m_cct(cct), m_ctx(c), m_cache_lock(cache_lock) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
         Mutex::Locker cache_locker(*m_cache_lock);
@@ -72,8 +72,8 @@ namespace librbd {
     C_OrderedWrite(CephContext *cct, LibrbdWriteback::write_result_d *result,
 		   LibrbdWriteback *wb)
       : m_cct(cct), m_result(result), m_wb_handler(wb) {}
-    virtual ~C_OrderedWrite() {}
-    virtual void finish(int r) {
+    ~C_OrderedWrite() override {}
+    void finish(int r) override {
       ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
       {
 	Mutex::Locker l(m_wb_handler->m_lock);
@@ -116,7 +116,7 @@ namespace librbd {
                      << journal_tid << " safe" << dendl;
     }
 
-    virtual void complete(int r) {
+    void complete(int r) override {
       if (request_sent || r < 0) {
         if (request_sent && r == 0) {
           // only commit IO events that are safely recorded to the backing image
@@ -131,7 +131,7 @@ namespace librbd {
       }
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
     }
 
     void commit_io_event_extent(int r) {
@@ -179,7 +179,7 @@ namespace librbd {
         length(length) {
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
       // all IO operations are flushed prior to closing the journal
       assert(image_ctx->journal != nullptr);
 

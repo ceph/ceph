@@ -57,13 +57,13 @@ template <typename I>
 struct ReplayHandler : public ::journal::ReplayHandler {
   ImageReplayer<I> *replayer;
   ReplayHandler(ImageReplayer<I> *replayer) : replayer(replayer) {}
-  virtual void get() {}
-  virtual void put() {}
+  void get() override {}
+  void put() override {}
 
-  virtual void handle_entries_available() {
+  void handle_entries_available() override {
     replayer->handle_replay_ready();
   }
-  virtual void handle_complete(int r) {
+  void handle_complete(int r) override {
     std::stringstream ss;
     if (r < 0) {
       ss << "replay completed with error: " << cpp_strerror(r);
@@ -83,7 +83,7 @@ class StatusCommand : public ImageReplayerAdminSocketCommand {
 public:
   explicit StatusCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->print_status(f, ss);
     return true;
   }
@@ -97,7 +97,7 @@ class StartCommand : public ImageReplayerAdminSocketCommand {
 public:
   explicit StartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->start(nullptr, true);
     return true;
   }
@@ -111,7 +111,7 @@ class StopCommand : public ImageReplayerAdminSocketCommand {
 public:
   explicit StopCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->stop(nullptr, true);
     return true;
   }
@@ -125,7 +125,7 @@ class RestartCommand : public ImageReplayerAdminSocketCommand {
 public:
   explicit RestartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->restart();
     return true;
   }
@@ -139,7 +139,7 @@ class FlushCommand : public ImageReplayerAdminSocketCommand {
 public:
   explicit FlushCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     C_SaferCond cond;
     replayer->flush(&cond);
     int r = cond.wait();
@@ -199,7 +199,7 @@ public:
     }
   }
 
-  ~ImageReplayerAdminSocketHook() {
+  ~ImageReplayerAdminSocketHook() override {
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
@@ -208,7 +208,7 @@ public:
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);

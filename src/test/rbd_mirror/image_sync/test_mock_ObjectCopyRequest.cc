@@ -71,7 +71,7 @@ class TestMockImageSyncObjectCopyRequest : public TestMockFixture {
 public:
   typedef ObjectCopyRequest<librbd::MockTestImageCtx> MockObjectCopyRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;

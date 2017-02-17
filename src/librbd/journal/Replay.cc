@@ -104,7 +104,7 @@ struct ExecuteOp : public Context {
     image_ctx.operations->execute_metadata_remove(event.key, on_op_complete);
   }
 
-  virtual void finish(int r) override {
+  void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     if (r < 0) {
       lderr(cct) << ": ExecuteOp::" << __func__ << ": r=" << r << dendl;
@@ -126,11 +126,11 @@ struct C_RefreshIfRequired : public Context {
   C_RefreshIfRequired(I &image_ctx, Context *on_finish)
     : image_ctx(image_ctx), on_finish(on_finish) {
   }
-  virtual ~C_RefreshIfRequired() {
+  ~C_RefreshIfRequired() override {
     delete on_finish;
   }
 
-  virtual void finish(int r) override {
+  void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     Context *ctx = on_finish;
     on_finish = nullptr;

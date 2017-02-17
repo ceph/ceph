@@ -35,7 +35,7 @@ struct C_UnwatchAndFlush : public Context {
     : rados(io_ctx), on_finish(on_finish) {
   }
 
-  virtual void complete(int r) override {
+  void complete(int r) override {
     if (ret_val == 0 && r < 0) {
       ret_val = r;
     }
@@ -60,7 +60,7 @@ struct C_UnwatchAndFlush : public Context {
     ctx->complete(r);
   }
 
-  virtual void finish(int r) override {
+  void finish(int r) override {
   }
 };
 

@@ -234,7 +234,7 @@ public:
   TestMockJournal() : m_lock("lock") {
   }
 
-  ~TestMockJournal() {
+  ~TestMockJournal() override {
     assert(m_commit_contexts.empty());
   }
 
@@ -250,7 +250,7 @@ public:
                    const ReplayAction &replay_action)
       : replay_handler(replay_handler), replay_action(replay_action) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       if (replay_action) {
         replay_action(*replay_handler);
       }
@@ -1239,13 +1239,13 @@ TEST_F(TestMockJournal, CloseListenerEvent) {
 
   struct Listener : public journal::Listener {
     C_SaferCond ctx;
-    virtual void handle_close() {
+    void handle_close() override {
       ctx.complete(0);
     }
-    virtual void handle_resync() {
+    void handle_resync() override {
       ADD_FAILURE() << "unexpected resync request";
     }
-    virtual void handle_promoted() {
+    void handle_promoted() override {
       ADD_FAILURE() << "unexpected promotion event";
     }
   } listener;
@@ -1273,13 +1273,13 @@ TEST_F(TestMockJournal, ResyncRequested) {
 
   struct Listener : public journal::Listener {
     C_SaferCond ctx;
-    virtual void handle_close() {
+    void handle_close() override {
       ADD_FAILURE() << "unexpected close action";
     }
-    virtual void handle_resync() {
+    void handle_resync() override {
       ctx.complete(0);
     }
-    virtual void handle_promoted() {
+    void handle_promoted() override {
       ADD_FAILURE() << "unexpected promotion event";
     }
   } listener;
@@ -1325,13 +1325,13 @@ TEST_F(TestMockJournal, ForcePromoted) {
 
   struct Listener : public journal::Listener {
     C_SaferCond ctx;
-    virtual void handle_close() {
+    void handle_close() override {
       ADD_FAILURE() << "unexpected close action";
     }
-    virtual void handle_resync() {
+    void handle_resync() override {
       ADD_FAILURE() << "unexpected resync event";
     }
-    virtual void handle_promoted() {
+    void handle_promoted() override {
       ctx.complete(0);
     }
   } listener;

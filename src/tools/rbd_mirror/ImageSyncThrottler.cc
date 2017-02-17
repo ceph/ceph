@@ -41,7 +41,7 @@ struct ImageSyncThrottler<ImageCtxT>::C_SyncHolder : public Context {
       m_local_pool_image_id(local_pool_image_id), m_on_finish(on_finish) {
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_sync_throttler->handle_sync_finished(this);
     m_on_finish->complete(r);
   }
