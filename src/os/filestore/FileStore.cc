@@ -718,6 +718,14 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   }
   buf0->total = buf.f_blocks * buf.f_bsize;
   buf0->available = buf.f_bavail * buf.f_bsize;
+  // Adjust for writes pending in the journal
+  if (journal) {
+    uint64_t estimate = journal->get_journal_size_estimate();
+    if (buf0->available > estimate)
+      buf0->available -= estimate;
+    else
+      buf0->available = 0;
+  }
   return 0;
 }
 
