@@ -169,12 +169,17 @@ class Infiniband {
       int add(uint32_t num);
       void take_back(std::vector<Chunk*> &ck);
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes);
+      Chunk *get_chunk_by_buffer(const char *c) {
+        uint32_t idx = (c - base) / chunk_size;
+        Chunk *chunk = reinterpret_cast<Chunk*>(chunk_base + sizeof(Chunk) * idx);
+        return chunk;
+      }
 
       MemoryManager& manager;
       uint32_t chunk_size;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
-      std::set<Chunk*> all_chunks;
+      std::set<const char*> all_buffers;
       char* base;
       char* chunk_base;
     };
@@ -188,8 +193,15 @@ class Infiniband {
     void return_tx(std::vector<Chunk*> &chunks);
     int get_send_buffers(std::vector<Chunk*> &c, size_t bytes);
     int get_channel_buffers(std::vector<Chunk*> &chunks, size_t bytes);
-    int is_tx_chunk(Chunk* c) { return send->all_chunks.count(c);}
-    int is_rx_chunk(Chunk* c) { return channel->all_chunks.count(c);}
+    // TODO: optimize via address judgement
+    bool is_tx_buffer(const char* c) { return send->all_buffers.count(c); }
+    bool is_rx_buffer(const char* c) { return channel->all_buffers.count(c); }
+    Chunk *get_tx_chunk_by_buffer(const char *c) {
+      return send->get_chunk_by_buffer(c);
+    }
+    uint32_t get_tx_chunk_size() const {
+      return send->chunk_size;
+    }
 
     bool enabled_huge_page;
 
@@ -349,9 +361,9 @@ class Infiniband {
   MemoryManager* get_memory_manager() { return memory_manager; }
   Device* get_device() { return device; }
   int get_async_fd() { return device->ctxt->async_fd; }
-  int recall_chunk(Chunk* c);
-  int is_tx_chunk(Chunk* c) { return memory_manager->is_tx_chunk(c); }
-  int is_rx_chunk(Chunk* c) { return memory_manager->is_rx_chunk(c); }
+  bool is_tx_buffer(const char* c) { return memory_manager->is_tx_buffer(c);}
+  bool is_rx_buffer(const char* c) { return memory_manager->is_rx_buffer(c);}
+  Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);
 };

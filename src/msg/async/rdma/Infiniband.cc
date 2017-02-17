@@ -593,7 +593,7 @@ int Infiniband::MemoryManager::Cluster::add(uint32_t num)
     assert(m);
     new(chunk) Chunk(m, chunk_size, base+offset);
     free_chunks.push_back(chunk);
-    all_chunks.insert(chunk);
+    all_buffers.insert(chunk->buffer);
     ptr += sizeof(Chunk);
   }
   return 0;
@@ -769,20 +769,6 @@ ibv_srq* Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_s
 int Infiniband::get_tx_buffers(std::vector<Chunk*> &c, size_t bytes)
 {
   return memory_manager->get_send_buffers(c, bytes);
-}
-
-int Infiniband::recall_chunk(Chunk* c)
-{
-  if (memory_manager->is_rx_chunk(c)) {
-    post_chunk(c);  
-    return 1;
-  } else if (memory_manager->is_tx_chunk(c)) {
-    vector<Chunk*> v;
-    v.push_back(c);
-    memory_manager->return_tx(v);  
-    return 2;
-  }
-  return -1;
 }
 
 /**
