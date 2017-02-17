@@ -140,25 +140,37 @@ it into the metadata pool.
     cephfs-data-scan scan_extents <data pool>
     cephfs-data-scan scan_inodes <data pool>
 
-This command may take a very long time if there are many
-files or very large files in the data pool.  To accelerate
-the process, run multiple instances of the tool.  Decide on
-a number of workers, and pass each worker a number within
-the range 0-(N_workers - 1), like so:
+This command may take a *very long* time if there are many
+files or very large files in the data pool.
+
+To accelerate the process, run multiple instances of the tool.
+
+Decide on a number of workers, and pass each worker a number within
+the range 0-(worker_m - 1).
+
+The example below shows how to run 4 workers simultaneously:
 
 ::
 
     # Worker 0
-    cephfs-data-scan scan_extents --worker_n 0 --worker_m 1 <data pool>
+    cephfs-data-scan scan_extents --worker_n 0 --worker_m 4 <data pool>
     # Worker 1
-    cephfs-data-scan scan_extents --worker_n 1 --worker_m 1<data pool> 1 1
+    cephfs-data-scan scan_extents --worker_n 1 --worker_m 4 <data pool>
+    # Worker 2
+    cephfs-data-scan scan_extents --worker_n 2 --worker_m 4 <data pool>
+    # Worker 3
+    cephfs-data-scan scan_extents --worker_n 3 --worker_m 4 <data pool>
 
     # Worker 0
-    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 1 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 4 <data pool>
     # Worker 1
-    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 1 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 4 <data pool>
+    # Worker 2
+    cephfs-data-scan scan_inodes --worker_n 2 --worker_m 4 <data pool>
+    # Worker 3
+    cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4 <data pool>
 
-It is important to ensure that all workers have completed the
+It is **important** to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
 
 After completing the metadata recovery, you may want to run cleanup
