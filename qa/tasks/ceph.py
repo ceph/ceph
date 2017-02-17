@@ -1242,12 +1242,6 @@ def restart(ctx, config):
         ctx.daemons.get_daemon(type_, id_, cluster).restart()
         clusters.add(cluster)
 
-    if config.get('wait-for-healthy', True):
-        for cluster in clusters:
-            healthy(ctx=ctx, config=dict(cluster=cluster))
-    if config.get('wait-for-osds-up', False):
-        for cluster in clusters:
-            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     manager = ctx.managers['ceph']
     for dmon in daemons:
         if '.' in dmon:
@@ -1255,6 +1249,13 @@ def restart(ctx, config):
             if dm_parts[1].isdigit():
                 if dm_parts[0] == 'osd':
                     manager.mark_down_osd(int(dm_parts[1]))
+
+    if config.get('wait-for-healthy', True):
+        for cluster in clusters:
+            healthy(ctx=ctx, config=dict(cluster=cluster))
+    if config.get('wait-for-osds-up', False):
+        for cluster in clusters:
+            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     yield
 
 
