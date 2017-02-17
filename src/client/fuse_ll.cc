@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <sys/file.h>
@@ -38,6 +38,8 @@
 #include <fuse.h>
 #include <fuse_lowlevel.h>
 
+#define dout_context g_ceph_context
+
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
 #define FINO_STAG(x) ((x) >> 48)
 #define MAKE_FINO(i,s) ((i) | ((s) << 48))
@@ -48,6 +50,59 @@
 #define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+
+
+void print(int ch,const char * sentence){
+   FILE *fptr;
+   char *type;
+   switch(ch){
+   case 0:
+        type="mknod";
+        break;
+   case 1:
+        type="mkdir";
+        break;
+   case 2:
+        type="rmdir";
+        break;
+   case 3:
+        type="rename";
+        break;
+   case 4:
+        type="write";
+        break;
+   case 5:
+        type="unlink";
+        break;
+   case 6:
+	type="lookup";
+	break;
+
+   }
+   fptr = fopen("program.txt", "a");
+   if(fptr == NULL)
+   {
+      printf("Error!");
+      exit(1);
+   }
+   fprintf(fptr,"%s\t",type);
+   fprintf(fptr,"%s\n", sentence);
+   fclose(fptr);
+}
+
+void print_parent(fuse_ino_t parent_no){
+   FILE *fptr;
+
+   fptr = fopen("program.txt", "a");
+   if(fptr == NULL)
+   {
+      printf("Error!");
+      exit(1);
+   }
+
+   fprintf(fptr,"%ld\n", parent_no);
+   fclose(fptr);
+}
 
 static uint32_t new_encode_dev(dev_t dev)
 {
@@ -149,6 +204,8 @@ static CephFuse::Handle *fuse_ll_req_prepare(fuse_req_t req)
 
 static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  print(6,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
@@ -161,6 +218,7 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, perms);
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    print_parent(fe.ino);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
@@ -243,6 +301,7 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 #endif
   )
 {
+
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
@@ -361,6 +420,8 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode, dev_t rdev)
 {
+  print(0,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i2, *i1 = cfuse->iget(parent);
@@ -388,6 +449,8 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode)
 {
+  print(1,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i2, *i1;
@@ -434,6 +497,8 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  print(5,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
@@ -448,6 +513,8 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  print(2,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
@@ -751,6 +818,8 @@ static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   mode_t mode, struct fuse_file_info *fi)
 {
+  print(0,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i1 = cfuse->iget(parent), *i2;
