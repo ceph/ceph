@@ -1645,12 +1645,12 @@ TEST_F(TestClsRbd, mirror_image_status) {
     librados::IoCtx *m_ioctx;
 
     WatchCtx(librados::IoCtx *ioctx) : m_ioctx(ioctx) {}
-    virtual void handle_notify(uint64_t notify_id, uint64_t cookie,
-			     uint64_t notifier_id, bufferlist& bl_) {
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+			     uint64_t notifier_id, bufferlist& bl_) override {
       bufferlist bl;
       m_ioctx->notify_ack(RBD_MIRRORING, notify_id, cookie, bl);
     }
-    virtual void handle_error(uint64_t cookie, int err) {}
+    void handle_error(uint64_t cookie, int err) override {}
   };
 
   map<std::string, cls::rbd::MirrorImage> images;

@@ -37,7 +37,7 @@ struct C_BlacklistClient : public Context {
       expire_seconds(expire_seconds), on_finish(on_finish) {
   }
 
-  virtual void finish(int r) override {
+  void finish(int r) override {
     librados::Rados rados(ioctx);
     r = rados.blacklist_add(locker_address, expire_seconds);
     on_finish->complete(r);

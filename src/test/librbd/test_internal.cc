@@ -27,7 +27,7 @@ public:
 
   typedef std::vector<std::pair<std::string, bool> > Snaps;
 
-  virtual void TearDown() {
+  void TearDown() override {
     unlock_image();
     for (Snaps::iterator iter = m_snaps.begin(); iter != m_snaps.end(); ++iter) {
       librbd::ImageCtx *ictx;
@@ -69,7 +69,7 @@ public:
 
 class DummyContext : public Context {
 public:
-  virtual void finish(int r) {
+  void finish(int r) override {
   }
 };
 

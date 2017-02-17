@@ -32,11 +32,11 @@ namespace {
 
 struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 
-  virtual bool may_auto_request_lock() {
+  bool may_auto_request_lock() override {
     return false;
   }
 
-  virtual int lock_requested(bool force) {
+  int lock_requested(bool force) override {
     // TODO: interlock is being requested (e.g. local promotion)
     // Wait for demote event from peer or abort replay on forced
     // promotion.
@@ -51,15 +51,15 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
   MirrorJournalPolicy(ContextWQ *work_queue) : work_queue(work_queue) {
   }
 
-  virtual bool append_disabled() const {
+  bool append_disabled() const override {
     // avoid recording any events to the local journal
     return true;
   }
-  virtual bool journal_disabled() const {
+  bool journal_disabled() const override {
     return false;
   }
 
-  virtual void allocate_tag_on_lock(Context *on_finish) {
+  void allocate_tag_on_lock(Context *on_finish) override {
     // rbd-mirror will manually create tags by copying them from the peer
     work_queue->queue(on_finish, 0);
   }

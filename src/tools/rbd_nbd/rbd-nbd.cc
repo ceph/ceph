@@ -337,7 +337,7 @@ private:
       ,func(_func)
     {}
   protected:
-    virtual void* entry()
+    void* entry() override
     {
       (server.*func)();
       server.shutdown();
@@ -428,9 +428,9 @@ public:
     , size(_size)
   { }
 
-  virtual ~NBDWatchCtx() {}
+  ~NBDWatchCtx() override {}
 
-  virtual void handle_notify()
+  void handle_notify() override
   {
     librbd::image_info_t info;
     if (image.stat(info, sizeof(info)) == 0) {

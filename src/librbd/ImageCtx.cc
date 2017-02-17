@@ -59,7 +59,7 @@ public:
                  "rbd_op_threads") {
     start();
   }
-  virtual ~ThreadPoolSingleton() {
+  ~ThreadPoolSingleton() override {
     stop();
   }
 };
@@ -86,7 +86,7 @@ struct C_FlushCache : public Context {
   C_FlushCache(ImageCtx *_image_ctx, Context *_on_safe)
     : image_ctx(_image_ctx), on_safe(_on_safe) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     // successful cache flush indicates all IO is now safe
     image_ctx->flush_cache(on_safe);
   }
@@ -99,7 +99,7 @@ struct C_ShutDownCache : public Context {
   C_ShutDownCache(ImageCtx *_image_ctx, Context *_on_finish)
     : image_ctx(_image_ctx), on_finish(_on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     image_ctx->object_cacher->stop();
     on_finish->complete(r);
   }
@@ -116,7 +116,7 @@ struct C_InvalidateCache : public Context {
     : image_ctx(_image_ctx), purge_on_error(_purge_on_error),
       reentrant_safe(_reentrant_safe), on_finish(_on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     assert(image_ctx->cache_lock.is_locked());
     CephContext *cct = image_ctx->cct;
 

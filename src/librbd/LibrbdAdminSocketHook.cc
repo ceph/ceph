@@ -23,7 +23,7 @@ class FlushCacheCommand : public LibrbdAdminSocketCommand {
 public:
   explicit FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
-  bool call(stringstream *ss) {
+  bool call(stringstream *ss) override {
     int r = flush(ictx);
     if (r < 0) {
       *ss << "flush: " << cpp_strerror(r);
@@ -40,7 +40,7 @@ struct InvalidateCacheCommand : public LibrbdAdminSocketCommand {
 public:
   explicit InvalidateCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
-  bool call(stringstream *ss) {
+  bool call(stringstream *ss) override {
     int r = invalidate_cache(ictx);
     if (r < 0) {
       *ss << "invalidate_cache: " << cpp_strerror(r);

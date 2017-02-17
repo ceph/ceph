@@ -62,8 +62,8 @@ public:
       : test(test), oid(oid), lock("C_WatchCtx::lock"), notified(false) {
     }
 
-    virtual void handle_notify(uint64_t notify_id, uint64_t cookie,
-                               uint64_t notifier_id, bufferlist& bl_) {
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                               uint64_t notifier_id, bufferlist& bl_) override {
       bufferlist bl;
       test->m_remote_ioctx.notify_ack(oid, notify_id, cookie, bl);
 
@@ -72,7 +72,7 @@ public:
       cond.Signal();
     }
 
-    virtual void handle_error(uint64_t cookie, int err) {
+    void handle_error(uint64_t cookie, int err) override {
       ASSERT_EQ(0, err);
     }
   };
@@ -118,7 +118,7 @@ public:
     m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
   }
 
-  ~TestImageReplayer()
+  ~TestImageReplayer() override 
   {
     unwatch();
 

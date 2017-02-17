@@ -65,7 +65,7 @@ class StatusCommand : public ImageDeleterAdminSocketCommand {
 public:
   explicit StatusCommand(ImageDeleter *image_del) : image_del(image_del) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     image_del->print_status(f, ss);
     return true;
   }
@@ -75,14 +75,14 @@ private:
 };
 
 struct DeleteJournalPolicy : public librbd::journal::Policy {
-  virtual bool append_disabled() const {
+  bool append_disabled() const override {
     return true;
   }
-  virtual bool journal_disabled() const {
+  bool journal_disabled() const override {
     return false;
   }
 
-  virtual void allocate_tag_on_lock(Context *on_finish) {
+  void allocate_tag_on_lock(Context *on_finish) override {
     on_finish->complete(0);
   }
 };
@@ -106,7 +106,7 @@ public:
 
   }
 
-  ~ImageDeleterAdminSocketHook() {
+  ~ImageDeleterAdminSocketHook() override {
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
@@ -115,7 +115,7 @@ public:
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);

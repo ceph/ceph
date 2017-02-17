@@ -50,7 +50,7 @@ class StatusCommand : public ReplayerAdminSocketCommand {
 public:
   explicit StatusCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->print_status(f, ss);
     return true;
   }
@@ -63,7 +63,7 @@ class StartCommand : public ReplayerAdminSocketCommand {
 public:
   explicit StartCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->start();
     return true;
   }
@@ -76,7 +76,7 @@ class StopCommand : public ReplayerAdminSocketCommand {
 public:
   explicit StopCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->stop(true);
     return true;
   }
@@ -89,7 +89,7 @@ class RestartCommand : public ReplayerAdminSocketCommand {
 public:
   explicit RestartCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->restart();
     return true;
   }
@@ -102,7 +102,7 @@ class FlushCommand : public ReplayerAdminSocketCommand {
 public:
   explicit FlushCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->flush();
     return true;
   }
@@ -115,7 +115,7 @@ class LeaderReleaseCommand : public ReplayerAdminSocketCommand {
 public:
   explicit LeaderReleaseCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->release_leader();
     return true;
   }
@@ -177,7 +177,7 @@ public:
     }
   }
 
-  ~ReplayerAdminSocketHook() {
+  ~ReplayerAdminSocketHook() override {
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
@@ -186,7 +186,7 @@ public:
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);

@@ -38,7 +38,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     uint64_t snap_id = m_snap_ids[m_snap_id_idx];
     if (snap_id == CEPH_NOSNAP) {
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);

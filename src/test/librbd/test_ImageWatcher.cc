@@ -58,10 +58,10 @@ public:
       return m_parent.m_ioctx.unwatch2(m_handle);
     }
 
-    virtual void handle_notify(uint64_t notify_id,
+    void handle_notify(uint64_t notify_id,
                                uint64_t cookie,
                                uint64_t notifier_id,
-                               bufferlist& bl) {
+                               bufferlist& bl) override {
       try {
 	int op;
 	bufferlist payload;
@@ -93,7 +93,7 @@ public:
       }
     }
 
-    virtual void handle_error(uint64_t cookie, int err) {
+    void handle_error(uint64_t cookie, int err) override {
       std::cerr << "ERROR: " << cookie << ", " << cpp_strerror(err)
 		<< std::endl; 
     }
@@ -108,7 +108,7 @@ public:
     uint64_t m_handle;
   };
 
-  virtual void TearDown() {
+  void TearDown() override {
     deregister_image_watch();
     TestFixture::TearDown();
   }
@@ -226,7 +226,7 @@ struct ProgressContext : public librbd::ProgressContext {
   ProgressContext() : mutex("ProgressContext::mutex"), received(false),
                       offset(0), total(0) {}
 
-  virtual int update_progress(uint64_t offset_, uint64_t total_) {
+  int update_progress(uint64_t offset_, uint64_t total_) override {
     Mutex::Locker l(mutex);
     offset = offset_;
     total = total_;
