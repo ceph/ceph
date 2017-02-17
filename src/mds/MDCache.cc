@@ -3070,7 +3070,6 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
     }
   }
 
-  kick_discovers(who);
   kick_open_ino_peers(who);
   kick_find_ino_peers(who);
 
