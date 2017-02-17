@@ -8635,6 +8635,12 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
 
 void MDCache::handle_open_ino(MMDSOpenIno *m, int err)
 {
+  if (mds->get_state() < MDSMap::STATE_REJOIN &&
+      mds->get_want_state() != CEPH_MDS_STATE_REJOIN) {
+    m->put();
+    return;
+  }
+
   dout(10) << "handle_open_ino " << *m << " err " << err << dendl;
 
   inodeno_t ino = m->ino;
@@ -8835,6 +8841,11 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
 
 void MDCache::handle_find_ino(MMDSFindIno *m)
 {
+  if (mds->get_state() < MDSMap::STATE_REJOIN) {
+    m->put();
+    return;
+  }
+
   dout(10) << "handle_find_ino " << *m << dendl;
   MMDSFindInoReply *r = new MMDSFindInoReply(m->tid);
   CInode *in = get_inode(m->ino);
@@ -9705,18 +9716,22 @@ void MDCache::kick_discovers(mds_rank_t who)
 void MDCache::handle_discover(MDiscover *dis) 
 {
   mds_rank_t whoami = mds->get_nodeid();
-  mds_rank_t from = mds_rank_t(dis->get_source_inst().name._num);
+  mds_rank_t from = mds_rank_t(dis->get_source().num());
 
   assert(from != whoami);
 
   if (mds->get_state() <= MDSMap::STATE_REJOIN) {
-    mds_rank_t from = mds_rank_t(dis->get_source().num());
+    if (mds->get_state() < MDSMap::STATE_REJOIN &&
+	mds->get_want_state() != CEPH_MDS_STATE_REJOIN) {
+      dis->put();
+      return;
+    }
+
     // proceed if requester is in the REJOIN stage, the request is from parallel_fetch().
     // delay processing request from survivor because we may not yet choose lock states.
-    if (mds->get_state() < MDSMap::STATE_REJOIN ||
-	!mds->mdsmap->is_rejoin(from)) {
+    if (!mds->mdsmap->is_rejoin(from)) {
       dout(0) << "discover_reply not yet active(|still rejoining), delaying" << dendl;
-      mds->wait_for_active(new C_MDS_RetryMessage(mds, dis));
+      mds->wait_for_replay(new C_MDS_RetryMessage(mds, dis));
       return;
     }
   }
