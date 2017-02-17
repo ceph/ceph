@@ -291,7 +291,7 @@ utime_t Beacon::get_laggy_until() const
   return laggy_until;
 }
 
-void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const &newstate)
 {
   Mutex::Locker l(lock);
 
