@@ -472,6 +472,8 @@ private:
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
+  off64_t get_journal_size_estimate();
+
   // reads
 
   /// Result code for read_entry

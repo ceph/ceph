@@ -2232,3 +2232,15 @@ void FileJournal::corrupt_header_magic(
     (reinterpret_cast<char*>(&h.magic2) - reinterpret_cast<char*>(&h));
   corrupt(wfd, corrupt_at);
 }
+
+off64_t FileJournal::get_journal_size_estimate()
+{
+  off64_t size, start = header.start;
+  if (write_pos < start) {
+    size = (max_size - start) + write_pos;
+  } else {
+    size = write_pos - start;
+  }
+  dout(20) << __func__ << " journal size=" << size << dendl;
+  return size;
+}

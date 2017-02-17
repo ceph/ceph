@@ -706,9 +706,19 @@ int FileStore::statfs(struct statfs *buf)
     assert(r != -ENOENT);
     return r;
   }
+  // Adjust for writes pending in the journal
+  if (journal) {
+    fsblkcnt_t estimate = DIV_ROUND_UP(journal->get_journal_size_estimate(), buf->f_bsize);
+    if (buf->f_bavail > estimate) {
+      buf->f_bavail -= estimate;
+      buf->f_bfree -= estimate;
+    } else {
+      buf->f_bavail = 0;
+      buf->f_bfree = 0;
+    }
+  }
   return 0;
 }
-
 
 void FileStore::new_journal()
 {

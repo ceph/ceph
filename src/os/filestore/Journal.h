@@ -81,6 +81,8 @@ public:
 
   virtual int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) = 0;
 
+  virtual off64_t get_journal_size_estimate() { return 0; }
+
   // reads/recovery
 
 };
