@@ -961,6 +961,7 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                << " versus osdmap epoch " << osdmap->get_epoch() << dendl;
       if (*sent_epoch_p < osdmap->get_epoch()) {
         should_send = true;
+        return should_send;
       } // else we don't need to send it out again
     }
   }
@@ -1755,7 +1756,7 @@ void OSD::handle_signal(int signum)
 int OSD::pre_init()
 {
   Mutex::Locker lock(osd_lock);
-  if (is_stopping())
+  if (is_stopping()) 
     return 0;
 
   if (store->test_mount_in_use()) {
@@ -6714,7 +6715,8 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
     if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
       service.publish_superblock(superblock);
       write_superblock(t);
-      store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+      int tr = store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+      assert(tr == 0);
       num = 0;
       if (!skip_maps) {
 	// skip_maps leaves us with a range of old maps if we fail to remove all
@@ -8366,10 +8368,11 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
-  store->queue_transaction(
+  int tr = store->queue_transaction(
     pg->osr.get(), std::move(rmt), NULL, 
     new ContainerContext<
       SequencerRef>(pg->osr));
+  assert(tr == 0);
 
   DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
     pg->info.pgid,
@@ -8444,6 +8447,16 @@ void OSDService::_maybe_queue_recovery() {
 
 bool OSDService::_recover_now(uint64_t *available_pushes)
 {
+  if (recovery_paused) {
+    dout(15) << "_recover_now paused" << dendl;
+    return false;
+  }
+
+  if (ceph_clock_now(cct) < defer_recovery_until) {
+    dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
+    return false;
+  }
+
   uint64_t max = cct->_conf->osd_recovery_max_active;
   if (max <= recovery_ops_active + recovery_ops_reserved) {
     dout(15) << "_recover_now active " << recovery_ops_active
@@ -8457,15 +8470,7 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
   if (available_pushes)
     *available_pushes = max - recovery_ops_active - recovery_ops_reserved;
 
-  if (ceph_clock_now(cct) < defer_recovery_until) {
-    dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
-    return false;
-  }
 
-  if (recovery_paused) {
-    dout(15) << "_recover_now paused" << dendl;
-    return false;
-  }
   return true;
 }
 
