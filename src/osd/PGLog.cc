@@ -35,8 +35,10 @@ PGLog::IndexedLog PGLog::IndexedLog::split_out_child(
   pg_t child_pgid,
   unsigned split_bits)
 {
+  unindex();
   IndexedLog ret(pg_log_t::split_out_child(child_pgid, split_bits));
   index();
+  ret.index();
   reset_rollback_info_trimmed_to_riter();
   return ret;
 }
