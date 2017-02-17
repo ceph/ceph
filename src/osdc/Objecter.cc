@@ -1697,7 +1697,7 @@ int Objecter::_get_session(int osd, OSDSession **session, shunique_lock& sul)
   s->con = messenger->get_connection(osdmap->get_inst(osd));
   s->con->set_priv(s->get());
   logger->inc(l_osdc_osd_session_open);
-  logger->inc(l_osdc_osd_sessions, osd_sessions.size());
+  logger->set(l_osdc_osd_sessions, osd_sessions.size());
   s->get();
   *session = s;
   ldout(cct, 20) << __func__ << " s=" << s << " osd=" << osd << " "
