@@ -427,9 +427,6 @@ int Pipe::accept()
       goto fail_unlocked;
     }
 
-    // sanitize features
-    connect.features = connect.features;
-
     authorizer.clear();
     if (connect.authorizer_len) {
       bp = buffer::create(connect.authorizer_len);
@@ -1160,9 +1157,6 @@ int Pipe::connect()
       ldout(msgr->cct,2) << "connect read reply " << cpp_strerror(rc) << dendl;
       goto fail;
     }
-
-    // sanitize features
-    reply.features = reply.features;
 
     ldout(msgr->cct,20) << "connect got reply tag " << (int)reply.tag
 			<< " connect_seq " << reply.connect_seq
