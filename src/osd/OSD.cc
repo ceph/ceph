@@ -735,9 +735,9 @@ void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
   }
   last_msg = now;
   if (cur_state == FULL)
-    clog->error() << "OSD full dropping all updates " << (int)(ratio * 100) << "% full";
+    clog->error() << "OSD full dropping all updates " << (int)roundf(ratio * 100) << "% full";
   else
-    clog->warn() << "OSD near full (" << (int)(ratio * 100) << "%)";
+    clog->warn() << "OSD near full (" << (int)roundf(ratio * 100) << "%)";
 }
 
 bool OSDService::check_failsafe_full()
