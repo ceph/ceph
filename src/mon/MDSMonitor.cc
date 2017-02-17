@@ -1582,27 +1582,17 @@ int MDSMonitor::management_command(
       return -ENOENT;
     }
 
-    string force;
-    cmd_getval(g_ceph_context,cmdmap, "force", force);
-    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
-    if (force != "--force" && metadata_num_objects > 0) {
-      ss << "pool '" << metadata_name
-	 << "' already contains some objects. Use an empty pool instead.";
-      return -EINVAL;
-    }
-
     string data_name;
     cmd_getval(g_ceph_context, cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
     if (data < 0) {
       ss << "pool '" << data_name << "' does not exist";
       return -ENOENT;
-    }
-    if (data == 0) {
+    } else if (data == 0) {
       ss << "pool '" << data_name << "' has id 0, which CephFS does not allow. Use another pool or recreate it to get a non-zero pool id.";
       return -EINVAL;
     }
-   
+
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
@@ -1610,9 +1600,7 @@ int MDSMonitor::management_command(
         // commmands that refer to FS by name in future.
         ss << "Filesystem name may not be empty";
         return -EINVAL;
-    }
-
-    if (pending_fsmap.get_filesystem(fs_name)) {
+    } else if (pending_fsmap.get_filesystem(fs_name)) {
       auto fs = pending_fsmap.get_filesystem(fs_name);
       if (*(fs->mds_map.data_pools.begin()) == data
           && fs->mds_map.metadata_pool == metadata) {
@@ -1621,8 +1609,17 @@ int MDSMonitor::management_command(
         return 0;
       } else {
         ss << "filesystem already exists with name '" << fs_name << "'";
-        return -EINVAL;
+        return -EEXIST;
       }
+    }
+
+    string force;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
+    if (force != "--force" && metadata_num_objects > 0) {
+      ss << "pool '" << metadata_name
+	 << "' already contains some objects. Use an empty pool instead.";
+      return -EINVAL;
     }
 
     if (pending_fsmap.filesystem_count() > 0
