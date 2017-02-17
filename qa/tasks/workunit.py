@@ -308,7 +308,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
     srcdir = '{cdir}/qa/workunits'.format(cdir=clonedir)
 
-    git_url = teuth_config.get_ceph_qa_suite_git_url()
+    git_url = teuth_config.get_ceph_git_url()
     try:
         remote.run(
             logger=log.getChild(role),
