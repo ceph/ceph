@@ -10133,4 +10133,11 @@ void BlueStore::generate_db_histogram(Formatter *f)
   dout(20) << __func__ << " finished in " << duration << " seconds" << dendl;
 
 }
+
+void BlueStore::flush_cache()
+{
+  for (auto i : cache_shards) {
+    i->trim_all();
+  }
+}
 // ===========================================

@@ -1019,6 +1019,10 @@ public:
     void trim(uint64_t target_bytes, float target_meta_ratio,
 	      float bytes_per_onode);
 
+    void trim_all() {
+      _trim(0, 0);
+    }
+
     virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
 
     virtual void add_stats(uint64_t *onodes, uint64_t *extents,
@@ -1990,6 +1994,7 @@ public:
 
   void get_db_statistics(Formatter *f) override;
   void generate_db_histogram(Formatter *f) override;
+  void flush_cache() override;
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
