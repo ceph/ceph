@@ -19,6 +19,7 @@
 #include "include/atomic.h"
 #include "include/int_types.h"
 
+#include <array>
 #include <memory>
 
 class PerfHistogramCommon {
@@ -133,7 +134,7 @@ protected:
   std::unique_ptr<atomic64_t[]> m_rawData;
 
   /// Configuration of axes
-  axis_config_d m_axes_config[DIM];
+  std::array<axis_config_d, DIM> m_axes_config;
 
   /// Dump histogram counters to a formatter
   void dump_formatted_values(ceph::Formatter *f) const {
@@ -145,8 +146,8 @@ protected:
   /// Get number of all histogram counters
   int64_t get_raw_size() {
     int64_t ret = 1;
-    for (int i = 0; i < DIM; ++i) {
-      ret *= m_axes_config[i].m_buckets;
+    for (const auto &ac : m_axes_config) {
+      ret *= ac.m_buckets;
     }
     return ret;
   }
