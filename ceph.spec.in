@@ -14,7 +14,7 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_with ocf
+%bcond_without ocf
 %bcond_without cephfs_java
 %if 0%{?suse_version}
 %bcond_with ceph_test_package
