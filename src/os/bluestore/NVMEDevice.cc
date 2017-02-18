@@ -947,7 +947,6 @@ int NVMEDevice::aio_read(
     bufferlist *pbl,
     IOContext *ioc)
 {
-  uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
