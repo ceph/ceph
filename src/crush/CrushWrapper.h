@@ -1089,8 +1089,11 @@ public:
   }
 
   int device_class_clone(int original, int device_class, int *clone);
+  int populate_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class();
+  int cleanup_classes();
+
   void start_choose_profile() {
     free(crush->choose_tries);
     /*
