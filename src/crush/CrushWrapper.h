@@ -672,6 +672,15 @@ public:
   int remove_item(CephContext *cct, int id, bool unlink_only);
 
   /**
+   * recursively remove buckets starting at item and stop removing
+   * when a bucket is in use.
+   *
+   * @param item id to remove
+   * @return 0 on success, negative on error
+   */
+  int remove_unused_root(int item);
+
+  /**
    * remove all instances of an item nested beneath a certain point from the map
    *
    * @param cct cct

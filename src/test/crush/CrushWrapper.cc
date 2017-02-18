@@ -941,6 +941,37 @@ TEST(CrushWrapper, distance) {
   ASSERT_EQ(1, c.get_common_ancestor_distance(g_ceph_context, 3, p));
 }
 
+TEST(CrushWrapper, remove_unused_root) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "rack");
+  c.set_type_name(3, "root");
+
+  int weight = 1;
+
+  map<string,string> loc;
+  loc["host"] = "b1";
+  loc["rack"] = "r11";
+  loc["root"] = "default";
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  item = 2;
+  loc["host"] = "b2";
+  loc["rack"] = "r12";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
+
+  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("r11"));
+  ASSERT_TRUE(c.name_exists("r12"));
+  ASSERT_EQ(c.remove_unused_root(c.get_item_id("default")), 0);
+  ASSERT_FALSE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("r11"));
+  ASSERT_FALSE(c.name_exists("r12"));
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);

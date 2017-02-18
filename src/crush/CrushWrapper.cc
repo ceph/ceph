@@ -235,6 +235,31 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   return true;
 }
 
+int CrushWrapper::remove_unused_root(int item)
+{
+  if (_bucket_is_in_use(item))
+    return 0;
+
+  crush_bucket *b = get_bucket(item);
+  if (IS_ERR(b))
+    return -ENOENT;
+
+  for (unsigned n = 0; n < b->size; n++) {
+    if (b->items[n] >= 0)
+      continue;
+    int r = remove_unused_root(b->items[n]);
+    if (r < 0)
+      return r;
+  }
+
+  crush_remove_bucket(crush, b);
+  name_map.erase(item);
+  have_rmaps = false;
+  if (class_bucket.count(item) != 0)
+    class_bucket.erase(item);
+  return 0;
+}
+
 int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 {
   ldout(cct, 5) << "remove_item " << item << (unlink_only ? " unlink_only":"") << dendl;
