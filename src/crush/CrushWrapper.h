@@ -374,7 +374,7 @@ public:
     build_rmaps();
     return name_rmap.count(name);
   }
-  bool item_exists(int i) {
+  bool item_exists(int i) const {
     return name_map.count(i);
   }
   int get_item_id(const string& name) const {
