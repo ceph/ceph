@@ -56,7 +56,19 @@ struct denc_traits {
 //#include <iostream>
 //using std::cout;
 
+template<typename T>
+struct bounded_t {
+  bounded_t() = default;
+  bounded_t(const T&) {}
+  bounded_t(T&) {}
+  bounded_t(T&&) {}
+};
 
+
+// For C++14 ad above:
+//
+// template<typename T>
+// constexpr bounded_t<T> bounded{};
 
 /*
 
@@ -173,7 +185,7 @@ struct denc_traits {
     enum { supported = 2 };						\
     enum { featured = false };						\
     enum { bounded = true };						\
-    static void bound_encode(const type &o, size_t& p, uint64_t f=0) {	\
+    static void bound_encode(bounded_t<type>, size_t& p, uint64_t f=0) { \
       p += sizeof(type);						\
     }									\
     static void encode(const type &o,					\
@@ -213,7 +225,7 @@ WRITE_RAW_DENC(int8_t);
     enum { supported = 2 };						\
     enum { featured = false };						\
     enum { bounded = true };						\
-    static void bound_encode(const itype &o, size_t& p, uint64_t f=0) {	\
+    static void bound_encode(bounded_t<itype>, size_t& p, uint64_t f=0) { \
       p += sizeof(etype);						\
     }									\
     static void encode(const itype &o, buffer::list::contiguous_appender& p, \
@@ -458,6 +470,7 @@ inline void denc_lba(uint64_t& v, bufferptr::iterator& p) {
 
 template<typename T, typename traits=denc_traits<T>>
 inline typename std::enable_if<traits::supported != 0 &&
+			       !traits::bounded &&
 			       !traits::featured>::type denc(
   const T& o,
   size_t& p,
@@ -467,12 +480,60 @@ inline typename std::enable_if<traits::supported != 0 &&
 }
 template<typename T, typename traits=denc_traits<T>>
 inline typename std::enable_if<traits::supported != 0 &&
+			       !traits::bounded &&
 			       traits::featured>::type denc(
   const T& o,
   size_t& p,
   uint64_t f)
 {
   traits::bound_encode(o, p, f);
+}
+
+template<typename T, typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported != 0 &&
+			       traits::bounded &&
+			       !traits::featured>::type denc(
+  bounded_t<T>,
+  size_t& p,
+  uint64_t f=0)
+{
+  traits::bound_encode(bounded_t<T>{}, p);
+}
+template<typename T, typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported != 0 &&
+			       traits::bounded &&
+			       traits::featured>::type denc(
+  bounded_t<T>,
+  size_t& p,
+  uint64_t f)
+{
+  traits::bound_encode(bounded_t<T>{}, p, f);
+}
+
+// Due to the laws of Template Inferrence, our implicit reference
+// swallowing on bounded_t won't work on the top-level calls. (The
+// template needs to be a candidate before attempts to implicitly
+// constructed a bounded_t{} from the reference can work.)
+
+template<typename T, typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported != 0 &&
+			       traits::bounded &&
+			       !traits::featured>::type denc(
+  const T&,
+  size_t& p,
+  uint64_t f=0)
+{
+  traits::bound_encode(bounded_t<T>{}, p);
+}
+template<typename T, typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported != 0 &&
+			       traits::bounded &&
+			       traits::featured>::type denc(
+  const T&,
+  size_t& p,
+  uint64_t f)
+{
+  traits::bound_encode(bounded_t<T>{}, p, f);
 }
 
 template<typename T, typename traits=denc_traits<T>>
@@ -612,6 +673,7 @@ struct denc_traits<
 
   template<typename AA=A>
   static typename std::enable_if<sizeof(AA) &&
+				 !bounded &&
 				 !featured>::type
   bound_encode(const std::pair<A,B>& v, size_t& p) {
     denc(v.first, p);
@@ -619,10 +681,28 @@ struct denc_traits<
   }
   template<typename AA=A>
   static typename std::enable_if<sizeof(AA) &&
+				 !bounded &&
 				 featured, void>::type
   bound_encode(const std::pair<A,B>& v, size_t& p, uint64_t f) {
     denc(v.first, p, f);
     denc(v.second, p, f);
+  }
+
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 bounded &&
+				 !featured>::type
+  bound_encode(bounded_t<std::pair<A,B>>, size_t& p) {
+    denc(bounded_t<A>{}, p);
+    denc(bounded_t<B>{}, p);
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 bounded &&
+				 featured, void>::type
+  bound_encode(bounded_t<std::pair<A,B>>, size_t& p, uint64_t f) {
+    denc(bounded_t<A>{}, p, f);
+    denc(bounded_t<B>{}, p, f);
   }
 
   template<typename AA=A>
@@ -677,7 +757,7 @@ namespace _denc {
 				   !traits::featured, void>::type
     bound_encode(const container& s, size_t& p) {
       size_t elem_size = 0;
-      denc(*(const T*)nullptr, elem_size);
+      denc(bounded_t<T>{}, elem_size);
       p += sizeof(uint32_t) + elem_size * s.size();
     }
     template<typename U=T>
@@ -696,7 +776,7 @@ namespace _denc {
 				   traits::featured>::type
     bound_encode(const container& s, size_t& p, uint64_t f) {
       size_t elem_size = 0;
-      denc(*(const T*)nullptr, elem_size, f);
+      denc(bounded_t<T>{}, elem_size, f);
       p += sizeof(uint32_t) + elem_size * s.size();
     }
 
@@ -898,9 +978,9 @@ public:
   static typename std::enable_if<sizeof(U) &&
 				 traits::bounded &&
 				 !traits::featured, void>::type
-  bound_encode(const container& s, size_t& p) {
+  bound_encode(bounded_t<container>, size_t& p) {
     size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size);
+    denc(bounded_t<T>{}, elem_size);
     p += elem_size * N;
   }
   template<typename U=T>
@@ -915,10 +995,10 @@ public:
   static typename std::enable_if<sizeof(U) &&
 				 traits::bounded &&
 				 traits::featured>::type
-  bound_encode(const container& s, size_t& p, uint64_t f) {
+  bound_encode(bounded_t<container>, size_t& p, uint64_t f) {
     size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size, f);
-    p += sizeof(uint32_t) + elem_size * s.size();
+    denc(bounded_t<T>{}, elem_size, f);
+    p += elem_size * N;
   }
 
   template<typename U=T>
@@ -1014,15 +1094,15 @@ private:
   }
 
   template<typename T, size_t I, size_t J, size_t ...Is>
-  static void bound_encode_helper_nfb(const T& s, size_t& p,
+  static void bound_encode_helper_nfb(bounded_t<T>, size_t& p,
 				      _denc::indices<I, J, Is...>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p);
-    bound_encode_helper_nfb(s, p, _denc::indices<J, Is...>{});
+    denc(bounded_t<typename std::tuple_element<I, T>::type>{}, p);
+    bound_encode_helper_nfb(bounded_t<T>{}, p, _denc::indices<J, Is...>{});
   }
   template<typename T, size_t I>
-  static void bound_encode_helper_nfb(const T& s, size_t& p,
+  static void bound_encode_helper_nfb(bounded_t<T>, size_t& p,
 				      _denc::indices<I>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p);
+    denc(bounded_t<typename std::tuple_element<I, T>::type>{}, p);
   }
 
   template<typename T, size_t I, size_t J, size_t ...Is>
@@ -1038,15 +1118,15 @@ private:
   }
 
   template<typename T, size_t I, size_t J, size_t ...Is>
-  static void bound_encode_helper_fb(const T& s, size_t& p, uint64_t f,
+  static void bound_encode_helper_fb(bounded_t<T>, size_t& p, uint64_t f,
 				     _denc::indices<I, J, Is...>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p);
-    bound_encode_helper_fb(s, p, f, _denc::indices<J, Is...>{});
+    denc(bounded_t<typename std::tuple_element<I, T>::type>{}, p);
+    bound_encode_helper_fb(bounded_t<T>{}, p, f, _denc::indices<J, Is...>{});
   }
   template<typename T, size_t I>
-  static void bound_encode_helper_fb(const T& s, size_t& p, uint64_t f,
+  static void bound_encode_helper_fb(bounded_t<T>, size_t& p, uint64_t f,
 				     _denc::indices<I>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p, f);
+    denc(bounded_t<typename std::tuple_element<I, T>::type>{}, p, f);
   }
 
   template<typename T, size_t I, size_t J, size_t ...Is>
@@ -1104,8 +1184,9 @@ public:
   static typename std::enable_if<U::supported &&
 				 traits::bounded &&
 				 !traits::featured, void>::type
-  bound_encode(const container& s, size_t& p) {
-    bound_encode_helper_nfb(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+  bound_encode(bounded_t<container>, size_t& p) {
+    bound_encode_helper_nfb(bounded_t<container>{}, p,
+			    _denc::build_indices_t<sizeof...(Ts)>{});
   }
   template<typename U = traits>
   static typename std::enable_if<U::traits &&
@@ -1118,8 +1199,9 @@ public:
   static typename std::enable_if<U::traits &&
 				 traits::bounded &&
 				 traits::featured>::type
-  bound_encode(const container& s, size_t& p, uint64_t f) {
-    bound_encode_helper_fb(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+  bound_encode(bounded_t<container>, size_t& p, uint64_t f) {
+    bound_encode_helper_fb(bounded_t<container>{}, p,
+			   _denc::build_indices_t<sizeof...(Ts)>{});
   }
 
   template<typename U = traits>
@@ -1155,18 +1237,37 @@ struct denc_traits<
   enum { bounded = false };
 
   template<typename U = T>
-  static typename std::enable_if<sizeof(U) && !featured>::type
+  static typename std::enable_if<sizeof(U) && !traits::bounded &&
+				 !featured>::type
   bound_encode(const boost::optional<T>& v, size_t& p) {
-    denc(*(bool *)nullptr, p);
+    denc(bounded_t<bool>{}, p);
     if (v)
       denc(*v, p);
   }
   template<typename U = T>
-  static typename std::enable_if<sizeof(U) && featured>::type
+  static typename std::enable_if<sizeof(U) &&
+				 !traits::bounded &&
+				 featured>::type
   bound_encode(const boost::optional<T>& v, size_t& p, uint64_t f) {
-    denc(*(bool *)nullptr, p);
+    denc(bounded_t<bool>{}, p);
     if (v)
       denc(*v, p);
+  }
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && traits::bounded &&
+				 !featured>::type
+  bound_encode(const boost::optional<T>& v, size_t& p) {
+    denc(bounded_t<bool>{}, p);
+    if (v)
+      denc(bounded_t<T>{}, p);
+  }
+  template<typename U = T>
+  static typename std::enable_if<sizeof(U) && traits::bounded &&
+				 featured>::type
+  bound_encode(const boost::optional<T>& v, size_t& p, uint64_t f) {
+    denc(bounded_t<bool>{}, p);
+    if (v)
+      denc(bounded_t<T>{}, p);
   }
 
   template<typename U = T>
@@ -1230,8 +1331,8 @@ struct denc_traits<boost::none_t> {
   enum { featured = false };
   enum { bounded = true };
 
-  static void bound_encode(const boost::none_t& v, size_t& p) {
-    denc(*(bool *)nullptr, p);
+  static void bound_encode(bounded_t<boost::none_t>, size_t& p) {
+    denc(bounded_t<bool>{}, p);
   }
 
   static void encode(const boost::none_t& v,
@@ -1246,13 +1347,11 @@ struct denc_traits<boost::none_t> {
 // Write denc_traits<> for a class that defines bound_encode/encode/decode
 // methods.
 
-#define WRITE_CLASS_DENC(T) _DECLARE_CLASS_DENC(T, false)
-#define WRITE_CLASS_DENC_BOUNDED(T) _DECLARE_CLASS_DENC(T, true)
-#define _DECLARE_CLASS_DENC(T, b)					\
+#define WRITE_CLASS_DENC(T)						\
   template<> struct denc_traits<T> {					\
     enum { supported = true };						\
     enum { featured = false };						\
-    enum { bounded = b };						\
+    enum { bounded = false };						\
     static void bound_encode(const T& v, size_t& p, uint64_t f=0) {	\
       v.bound_encode(p);						\
     }									\
@@ -1265,15 +1364,48 @@ struct denc_traits<boost::none_t> {
     }									\
   };
 
-#define WRITE_CLASS_DENC_FEATURED(T) _DECLARE_CLASS_DENC_FEATURED(T, false)
-#define WRITE_CLASS_DENC_FEATURED_BOUNDED(T) _DECLARE_CLASS_DENC_FEATURED(T, true)
-#define _DECLARE_CLASS_DENC_FEATURED(T, b)				\
+#define WRITE_CLASS_DENC_BOUNDED(T)					\
+  template<> struct denc_traits<T> {					\
+    enum { supported = true };						\
+    enum { featured = false };						\
+    enum { bounded = true };						\
+    static void bound_encode(bounded_t<T>, size_t& p, uint64_t f=0) {	\
+      T::bound_encode(p);						\
+    }									\
+    static void encode(const T& v, buffer::list::contiguous_appender& p, \
+		       uint64_t f=0) {					\
+      v.encode(p);							\
+    }									\
+    static void decode(T& v, buffer::ptr::iterator& p, uint64_t f=0) {	\
+      v.decode(p);							\
+    }									\
+  };
+
+
+#define WRITE_CLASS_DENC_FEATURED(T)					\
   template<> struct denc_traits<T> {					\
     enum { supported = true };						\
     enum { featured = true };						\
-    enum { bounded = b };						\
+    enum { bounded = false };						\
     static void bound_encode(const T& v, size_t& p, uint64_t f) {	\
       v.bound_encode(p, f);						\
+    }									\
+    static void encode(const T& v, buffer::list::contiguous_appender& p, \
+		       uint64_t f) {					\
+      v.encode(p, f);							\
+    }									\
+    static void decode(T& v, buffer::ptr::iterator& p, uint64_t f=0) {	\
+      v.decode(p, f);							\
+    }									\
+  };
+
+#define WRITE_CLASS_DENC_FEATURED_BOUNDED(T)				\
+  template<> struct denc_traits<T> {					\
+    enum { supported = true };						\
+    enum { featured = true };						\
+    enum { bounded = true };						\
+    static void bound_encode(bounded_t<T>, size_t& p, uint64_t f) {	\
+      T::bound_encode(p, f);						\
     }									\
     static void encode(const T& v, buffer::list::contiguous_appender& p, \
 		       uint64_t f) {					\
@@ -1484,6 +1616,25 @@ inline typename std::enable_if<traits::supported == 1 &&
   boost::is_same<T,const Type>::value>::type				\
   _denc_friend(T& v, P& p)
 
+#define DENC_BOUNDED(Type, v, p)					\
+  DENC_HELPERS								\
+  static void bound_encode(size_t& p) {					\
+    _denc_friend(bounded_t<Type>{}, p);					\
+  }									\
+  void encode(bufferlist::contiguous_appender& p) const {		\
+    _denc_friend(*this, p);						\
+  }									\
+  void decode(buffer::ptr::iterator& p) {				\
+    _denc_friend(*this, p);						\
+  }									\
+  template<typename T, typename P>					\
+  friend typename std::enable_if<boost::is_same<T,Type>::value ||	\
+  boost::is_same<T,const Type>::value>::type				\
+  _denc_friend(T& v, P& p)
+
+#define DENC_BOUND_ENCODE(Type, p)				\
+  friend void _denc_friend(bounded_t<Type>, std::size_t& p)
+
 #define DENC_FEATURED(Type, v, p, f)					\
   DENC_HELPERS								\
   void bound_encode(size_t& p, uint64_t f) const {			\
@@ -1499,5 +1650,25 @@ inline typename std::enable_if<traits::supported == 1 &&
   friend typename std::enable_if<boost::is_same<T,Type>::value ||	\
   boost::is_same<T,const Type>::value>::type				\
   _denc_friend(T& v, P& p, uint64_t f)
+
+#define DENC_FEATURED_BOUNDED(Type, v, p, f)				\
+  DENC_HELPERS								\
+  static void bound_encode(size_t& p, uint64_t f) {			\
+    _denc_friend(bounded_t<Type>{}, p, f);				\
+  }									\
+  void encode(bufferlist::contiguous_appender& p, uint64_t f) const {	\
+    _denc_friend(*this, p, f);						\
+  }									\
+  void decode(buffer::ptr::iterator& p, uint64_t f=0) {			\
+    _denc_friend(*this, p, f);						\
+  }									\
+  template<typename T, typename P>					\
+  friend typename std::enable_if<boost::is_same<T,Type>::value ||	\
+  boost::is_same<T,const Type>::value>::type				\
+  _denc_friend(T& v, P& p, uint64_t f)
+
+
+#define DENC_FEATURED_BOUND_ENCODE(type, p, f)				\
+  friend void _denc_friend(bounded_t<type>, std::size_t& p, uint64_t f)
 
 #endif
