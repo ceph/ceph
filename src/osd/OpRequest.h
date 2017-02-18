@@ -111,6 +111,7 @@ public:
   epoch_t sent_epoch;
   bool hitset_inserted;
   Message *get_req() const { return request; }
+  Message *get_nonconst_req() { return request; }
 
   const char *state_string() const {
     switch(latest_flag_point) {
