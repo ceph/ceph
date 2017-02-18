@@ -560,7 +560,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
       } else {
         oss << "osd." << p->first << " weight "
             << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000;
+            << (float)new_weight / (float)0x10000 << "\n";
       }
       if (++num_changed >= max_osds)
 	break;
@@ -579,7 +579,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	}
         oss << "osd." << p->first << " weight "
             << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000;
+            << (float)new_weight / (float)0x10000 << "\n";
 	if (++num_changed >= max_osds)
 	  break;
       }
