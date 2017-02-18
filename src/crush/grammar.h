@@ -124,7 +124,7 @@ struct crush_grammar : public grammar<crush_grammar>
       bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}';
 
       // rules
-      step_take = str_p("take") >> name;
+      step_take = str_p("take") >> name >> !( str_p("class") >> name );
       step_set_choose_tries = str_p("set_choose_tries") >> posint;
       step_set_choose_local_tries = str_p("set_choose_local_tries") >> posint;
       step_set_choose_local_fallback_tries = str_p("set_choose_local_fallback_tries") >> posint;
