@@ -14,7 +14,7 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_with ocf
+%bcond_without ocf
 %bcond_without cephfs_java
 %bcond_with tests
 %bcond_with xio
