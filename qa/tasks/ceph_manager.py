@@ -297,6 +297,8 @@ class Thrasher:
                 output = proc.stderr.getvalue()
                 if 'Couldn\'t find pool' in output:
                     continue
+                if proc.exitstatus == 1 and 'Invalid syntax, missing command' in output:
+                    continue
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool apply-layout-settings"
                                     " failed with {status}".format(status=proc.exitstatus))
