@@ -1951,6 +1951,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     service.dumps_scrub(f);
   } else if (command == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
+  } else if (command == "flush_store_cache") {
+    store->flush_cache();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2422,8 +2424,16 @@ void OSD::final_init()
 				     "print scheduled scrubs");
   assert(r == 0);
 
-  r = admin_socket->register_command("calc_objectstore_db_histogram", "calc_objectstore_db_histogram", asok_hook,
-					 "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
+  r = admin_socket->register_command("calc_objectstore_db_histogram",
+                                     "calc_objectstore_db_histogram",
+                                     asok_hook,
+                                     "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
+  assert(r == 0);
+
+  r = admin_socket->register_command("flush_store_cache",
+                                     "flush_store_cache",
+                                     asok_hook,
+                                     "Flush bluestore internal cache");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
@@ -2783,6 +2793,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("get_heap_property");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
+  cct->get_admin_socket()->unregister_command("flush_store_cache");
   delete asok_hook;
   asok_hook = NULL;
 

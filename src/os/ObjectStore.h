@@ -1507,6 +1507,7 @@ public:
 
   virtual void get_db_statistics(Formatter *f) { }
   virtual void generate_db_histogram(Formatter *f) { }
+  virtual void flush_cache() { }
   virtual void dump_perf_counters(Formatter *f) {}
 
   virtual string get_type() = 0;
