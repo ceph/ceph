@@ -818,6 +818,8 @@ int CrushWrapper::get_item_weight(int id) const
     crush_bucket *b = crush->buckets[bidx];
     if (b == NULL)
       continue;
+    if (b->id == id)
+      return b->weight;
     for (unsigned i = 0; i < b->size; i++)
       if (b->items[i] == id)
 	return crush_get_bucket_item_weight(b, i);
