@@ -20,7 +20,9 @@
 #include <sys/mount.h>
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
+#if defined(HAVE_LIBAIO)
 #include "os/bluestore/BlueStore.h"
+#endif
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -1232,6 +1234,7 @@ TEST_P(StoreTest, UnalignedBlobReleaseTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+#if defined(HAVE_LIBAIO)
 TEST_P(StoreTest, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
@@ -1679,6 +1682,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
 }
+#endif
 
 TEST_P(StoreTest, ManySmallWrite) {
   ObjectStore::Sequencer osr("test");
@@ -5345,6 +5349,7 @@ TEST_P(StoreTest, TryMoveRename) {
   ASSERT_EQ(store->stat(cid, hoid2, &st), 0);
 }
 
+#if defined(HAVE_LIBAIO)
 TEST_P(StoreTest, BluestoreOnOffCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -5525,6 +5530,7 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     ASSERT_EQ(r, 0);
   }
 }
+#endif
 
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
@@ -5532,7 +5538,9 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "memstore",
     "filestore",
+#if defined(HAVE_LIBAIO)
     "bluestore",
+#endif
     "kstore"));
 
 #else
@@ -5821,6 +5829,7 @@ TEST_P(StoreTest, KVDBStatsTest) {
   g_conf->set_val("rocksdb_collect_memory_stats","false");
 }
 
+#if defined(HAVE_LIBAIO)
 TEST_P(StoreTest, garbageCollection) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -5983,6 +5992,7 @@ TEST_P(StoreTest, garbageCollection) {
   g_conf->set_val("bluestore_min_blob_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 }
+#endif
 
 int main(int argc, char **argv) {
   vector<const char*> args;
