@@ -104,6 +104,28 @@ bool CrushWrapper::is_v5_rule(unsigned ruleid) const
   return false;
 }
 
+int CrushWrapper::split_id_class(int i, int *idout, int *classout) const
+{
+  if (!item_exists(i))
+    return -EINVAL;
+  string name = get_item_name(i);
+  size_t pos = name.find("~");
+  if (pos == string::npos) {
+    *idout = i;
+    *classout = -1;
+    return 0;
+  }
+  string name_no_class = name.substr(0, pos);
+  if (!name_exists(name_no_class))
+    return -ENOENT;
+  string class_name = name.substr(pos + 1);
+  if (!class_exists(class_name))
+    return -ENOENT;
+  *idout = get_item_id(name_no_class);
+  *classout = get_class_id(class_name);
+  return 0;
+}
+
 int CrushWrapper::can_rename_item(const string& srcname,
                                   const string& dstname,
                                   ostream *ss) const
