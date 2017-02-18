@@ -2104,6 +2104,12 @@ public:
   }
 };
 
+template<>
+void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj);
+
+template<>
+void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj);
+
 struct RGWObjectCtx {
   RGWRados *store;
   void *user_ctx;
@@ -3135,7 +3141,7 @@ public:
 
   int get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
-                    bool follow_olh, assume_noent = false);
+                    bool follow_olh, bool assume_noent = false);
   int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state) {
     return get_obj_state(rctx, bucket_info, obj, state, true);
   }

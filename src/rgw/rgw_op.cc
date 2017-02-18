@@ -5503,8 +5503,7 @@ void RGWSetAttrs::execute()
   if (op_ret < 0)
     return;
 
-  rgw_obj obj(s->bucket, s->object.name);
-  obj.set_instance(s->object.instance);
+  rgw_obj obj(s->bucket, s->object);
 
   store->set_atomic(s->obj_ctx, obj);
 
