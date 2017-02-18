@@ -218,7 +218,7 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   if (_search_item_exists(item)) {
     return false;
   }
-  if (item < 0 && _bucket_is_in_use(cct, item)) {
+  if (item < 0 && _bucket_is_in_use(item)) {
     return false;
   }
 
@@ -253,7 +253,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
     }
-    if (_bucket_is_in_use(cct, item)) {
+    if (_bucket_is_in_use(item)) {
       return -EBUSY;
     }
   }
@@ -295,7 +295,7 @@ bool CrushWrapper::_search_item_exists(int item) const
   return false;
 }
 
-bool CrushWrapper::_bucket_is_in_use(CephContext *cct, int item)
+bool CrushWrapper::_bucket_is_in_use(int item)
 {
   for (unsigned i = 0; i < crush->max_rules; ++i) {
     crush_rule *r = crush->rules[i];
@@ -347,7 +347,7 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
   ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
 		<< (unlink_only ? " unlink_only":"") << dendl;
 
-  if (!unlink_only && _bucket_is_in_use(cct, item)) {
+  if (!unlink_only && _bucket_is_in_use(item)) {
     return -EBUSY;
   }
 
