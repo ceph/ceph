@@ -91,10 +91,10 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_pool& pool
   return 0;
 }
 
-int rgw_delete_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid,
+int rgw_delete_system_obj(RGWRados *rgwstore, rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker)
 {
-  rgw_obj obj(bucket, oid);
+  rgw_raw_obj obj(pool, oid);
   return rgwstore->delete_system_obj(obj, objv_tracker);
 }
 

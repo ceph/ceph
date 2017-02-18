@@ -186,6 +186,36 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, IoCtx& ioctx, b
   return 0;
 }
 
+template<>
+void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj) {
+  RWLock::WLocker wl(lock);
+  auto iter = objs_state.find(obj);
+  if (iter == objs_state.end()) {
+    return;
+  }
+  bool is_atomic = iter->second.is_atomic;
+  bool prefetch_data = iter->second.prefetch_data;
+
+  objs_state.erase(iter);
+
+  if (is_atomic || prefetch_data) {
+    auto& s = objs_state[obj];
+    s.is_atomic = is_atomic;
+    s.prefetch_data = prefetch_data;
+  }
+}
+
+template<>
+void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj) {
+  RWLock::WLocker wl(lock);
+  auto iter = objs_state.find(obj);
+  if (iter == objs_state.end()) {
+    return;
+  }
+
+  objs_state.erase(iter);
+}
+
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
   encode_json("default_zonegroup", default_zonegroup, f);
 }
@@ -5062,7 +5092,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
   rgw_obj_index_key cur_end_marker;
   if (!params.ns.empty()) {
     end_marker_obj = rgw_obj_key(params.end_marker.name, params.end_marker.instance, params.ns);
-    end_marker_obj.set_ns(params.ns);
+    end_marker_obj.ns = params.ns;
     end_marker_obj.get_index_key(&cur_end_marker);
   }
   rgw_obj_index_key cur_marker;
@@ -8337,7 +8367,7 @@ int RGWRados::delete_raw_obj(const rgw_raw_obj& obj)
 
 int RGWRados::delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
-  if (obj.get_object().empty()) {
+  if (obj.empty()) {
     ldout(cct, 1) << "delete_system_obj got empty object name "
         << obj << ", returning EINVAL" << dendl;
     return -EINVAL;
